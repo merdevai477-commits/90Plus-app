@@ -1,0 +1,1 @@
+export default WebVideoPlayer; // من الكود أعلاه

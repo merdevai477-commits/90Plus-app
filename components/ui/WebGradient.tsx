@@ -1,0 +1,1 @@
+export default WebGradient; // من الكود أعلاه
