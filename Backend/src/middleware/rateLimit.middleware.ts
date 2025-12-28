@@ -10,11 +10,11 @@ import { Request, Response } from 'express';
 /**
  * General API rate limiter
  * Increased limits to handle normal app usage
- * 1000 requests per minute in development, 500 per 15 minutes in production
+ * 2000 requests per 15 minutes in production, 1000 per minute in development
  */
 export const generalLimiter = rateLimit({
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
-    max: process.env.NODE_ENV === 'production' ? 500 : 1000, // 500 prod (was 100), 1000 dev
+    max: process.env.NODE_ENV === 'production' ? 2000 : 1000, // 2000 prod (was 500), 1000 dev
     message: {
         status: 'ERROR',
         message: 'Too many requests, please try again later',
@@ -25,6 +25,26 @@ export const generalLimiter = rateLimit({
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
     keyGenerator: (req: Request) => {
         // If user is authenticated, use their ID to allow more requests per user
+        const userId = (req as any).auth?.userId;
+        return userId ? `user:${userId}` : req.ip || 'unknown';
+    },
+});
+
+/**
+ * Lenient rate limiter for high-frequency endpoints
+ * 5000 requests per 15 minutes in production for endpoints like live matches, notifications
+ */
+export const lenientLimiter = rateLimit({
+    windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
+    max: process.env.NODE_ENV === 'production' ? 5000 : 3000, // 5000 prod, 3000 dev
+    message: {
+        status: 'ERROR',
+        message: 'Too many requests, please try again later',
+        retryAfter: process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => {
         const userId = (req as any).auth?.userId;
         return userId ? `user:${userId}` : req.ip || 'unknown';
     },
@@ -113,6 +133,7 @@ export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean =
 
 export default {
     generalLimiter,
+    lenientLimiter,
     authLimiter,
     webhookLimiter,
     strictLimiter,

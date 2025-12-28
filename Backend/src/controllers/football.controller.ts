@@ -200,7 +200,11 @@ export class FootballController {
 
   /**
    * GET /api/football/fixtures/live - Get live fixtures
+   * ✅ Uses memory cache with 5 minutes TTL to reduce API calls
    */
+  private static liveFixturesCache: { data: any[]; timestamp: number } | null = null;
+  private static readonly LIVE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
     try {
       if (!footballService.isConfigured()) {
@@ -211,12 +215,37 @@ export class FootballController {
         return;
       }
 
+      // Check cache first
+      const now = Date.now();
+      if (
+        FootballController.liveFixturesCache &&
+        now - FootballController.liveFixturesCache.timestamp < FootballController.LIVE_CACHE_TTL
+      ) {
+        logger.debug('📦 Returning live fixtures from cache');
+        res.json({
+          status: 'SUCCESS',
+          results: FootballController.liveFixturesCache.data.length,
+          response: FootballController.liveFixturesCache.data,
+          cached: true,
+        });
+        return;
+      }
+
+      // Fetch from API
+      logger.debug('📡 Fetching live fixtures from API');
       const fixtures = await footballService.getLiveFixtures();
+
+      // Update cache
+      FootballController.liveFixturesCache = {
+        data: fixtures,
+        timestamp: now,
+      };
 
       res.json({
         status: 'SUCCESS',
         results: fixtures.length,
         response: fixtures,
+        cached: false,
       });
     } catch (error) {
       FootballController.handleError(res, error);

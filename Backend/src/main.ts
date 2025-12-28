@@ -105,6 +105,20 @@ if (!isProduction) {
     });
 }
 
+// Upload timeout middleware - 15 minutes for upload routes
+const UPLOAD_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+app.use(`${API_PREFIX}/upload`, (req: Request, res: Response, next: NextFunction) => {
+    req.setTimeout(UPLOAD_TIMEOUT, () => {
+        if (!res.headersSent) {
+            res.status(408).json({
+                status: 'ERROR',
+                message: 'Upload timeout - request took too long',
+            });
+        }
+    });
+    next();
+});
+
 // ============================================
 // ROUTES
 // ============================================
@@ -147,10 +161,15 @@ import { LeagueMatchWatcherService } from './services/league-match-watcher.servi
 import { PredictionWatcherService } from './services/prediction-watcher.service';
 
 // Import rate limiters
-import { generalLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
+import { generalLimiter, lenientLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
 
 // Apply general rate limiting to all API routes
 app.use(`${API_PREFIX}`, generalLimiter);
+
+// Apply lenient rate limiting to high-frequency endpoints (before route registration)
+app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
+app.use(`${API_PREFIX}/notifications`, lenientLimiter);
+app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
 
 // Register routes
 app.use(`${API_PREFIX}/users`, userRoutes);
@@ -341,6 +360,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 // Create HTTP server for both Express and WebSocket
 const httpServer = createServer(app);
+
+// Increase server timeout for uploads (15 minutes)
+httpServer.timeout = 15 * 60 * 1000; // 15 minutes
+httpServer.keepAliveTimeout = 10 * 60 * 1000; // 10 minutes
+httpServer.headersTimeout = 11 * 60 * 1000; // 11 minutes (must be > keepAliveTimeout)
 
 async function startServer() {
     try {
