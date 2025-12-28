@@ -119,14 +119,36 @@ export class WebSocketService {
             return this.io;
         }
 
+        // Get CORS origins from environment (same as Express CORS)
+        const isProduction = process.env.NODE_ENV === 'production';
+        const corsOrigins = isProduction
+            ? [
+                  process.env.CORS_ORIGIN || 'https://api.90plus.app',
+                  'https://90plus.app',
+                  /^https:\/\/.*\.90plus\.app$/,
+              ]
+            : [
+                  process.env.CORS_ORIGIN || 'http://localhost:8081',
+                  'http://192.168.1.7:8081',
+                  'http://localhost:3000',
+                  'exp://192.168.1.7:8081',
+                  /^https:\/\/.*\.ngrok-free\.app$/,
+                  /^https:\/\/.*\.ngrok\.io$/,
+                  /^https:\/\/.*\.ngrok\.app$/,
+                  /^https:\/\/.*\.railway\.app$/,
+                  /^https:\/\/.*\.up\.railway\.app$/,
+                  /^ninetyplusapp:\/\//,
+              ];
+
         this.io = new Server(server, {
             cors: {
-                origin: '*', // Allow all origins in development
+                origin: corsOrigins,
                 credentials: true,
                 methods: ['GET', 'POST'],
             },
             pingTimeout: 60000,
             pingInterval: 25000,
+            transports: ['websocket', 'polling'], // Support both transports
         });
 
         this.setupEventHandlers();
