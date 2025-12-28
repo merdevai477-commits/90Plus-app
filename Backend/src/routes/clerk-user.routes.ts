@@ -4,12 +4,13 @@ import { ClerkUserService } from '../services/clerk-user.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
+import { userSyncLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
-// Simple in-memory cache for user profiles (2 minutes TTL)
+// Simple in-memory cache for user profiles (5 minutes TTL - increased for better performance)
 const userCache = new Map<string, { data: any; timestamp: number }>();
-const USER_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Helper to invalidate user cache
 export const invalidateUserCache = (clerkUserId: string) => {
@@ -19,8 +20,9 @@ export const invalidateUserCache = (clerkUserId: string) => {
 /**
  * GET /api/clerk/me
  * Get current user profile (protected) - WITH CACHING
+ * Uses userSyncLimiter for more lenient rate limiting
  */
-router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
 

@@ -134,6 +134,7 @@ import coinsRoutes from './routes/coins.routes';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
+import { LeagueMatchWatcherService } from './services/league-match-watcher.service';
 import { PredictionWatcherService } from './services/prediction-watcher.service';
 
 // Import rate limiters
@@ -341,6 +342,7 @@ async function startServer() {
             if (process.env.FOOTBALL_API_KEY) {
                 MatchWatcherService.start();
                 PredictionWatcherService.start(); // ✅ Start prediction watcher
+                LeagueMatchWatcherService.start(); // ✅ Start league match watcher
                 // ✅ OPTIMIZATION 4: Start background preload service
                 backgroundPreloadService.start();
                 logger.info('✅ Background preload service started');
@@ -360,6 +362,7 @@ process.on('SIGINT', async () => {
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
     stopKeepAlive();
     await prisma.$disconnect();

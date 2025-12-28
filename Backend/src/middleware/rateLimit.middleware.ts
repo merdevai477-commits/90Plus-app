@@ -71,6 +71,24 @@ export const strictLimiter = rateLimit({
 });
 
 /**
+ * User sync rate limiter (for /clerk/me endpoint)
+ * More lenient than general limiter since this is called frequently during app usage
+ * 200 requests per 15 minutes in production, 1000 per minute in development
+ */
+export const userSyncLimiter = rateLimit({
+    windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
+    max: process.env.NODE_ENV === 'production' ? 200 : 1000, // 200 prod, 1000 dev
+    message: {
+        status: 'ERROR',
+        message: 'Too many requests, please try again later',
+        retryAfter: process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: skipRateLimitForTrusted,
+});
+
+/**
  * Skip rate limiting for certain conditions
  */
 export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean => {
@@ -86,5 +104,6 @@ export default {
     authLimiter,
     webhookLimiter,
     strictLimiter,
+    userSyncLimiter,
     skipRateLimitForTrusted,
 };
