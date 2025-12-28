@@ -131,6 +131,7 @@ import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import coinsRoutes from './routes/coins.routes';
+import quizRoutes from './routes/quiz.routes';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
@@ -158,6 +159,7 @@ app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
+app.use(`${API_PREFIX}/quiz`, quizRoutes);
 
 app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
     const timestamp = new Date().toISOString();

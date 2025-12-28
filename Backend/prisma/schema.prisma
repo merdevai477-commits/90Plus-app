@@ -89,6 +89,7 @@ model User {
   sessions          Session[]
   refreshTokens     RefreshToken[]
   quizAttempts      QuizAttempt[]
+  quizAnswers       UserQuizAnswer[]
   notifications     Notification[]
   reels             Reel[]
   comments          Comment[]
@@ -302,9 +303,14 @@ model QuizQuestion {
   correctAnswer String
   difficulty    Difficulty
   points        Int        @default(10)
+  imageUrl      String?
+  imageType     String?    // player, club, stadium, trophy, manager, flag
+  hint          String?
+  timeLimit     Int        @default(15) // بالثواني
   createdAt     DateTime   @default(now())
 
   category QuizCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  answers  UserQuizAnswer[]
 
   @@index([categoryId])
   @@index([difficulty])
@@ -323,17 +329,45 @@ model QuizAttempt {
   categoryId     String
   score          Int
   totalQuestions Int
+  correctAnswers Int
   coinsEarned    Int
+  xpEarned       Int      @default(0)
+  streak         Int      @default(0)
+  bestStreak     Int      @default(0)
+  timeTaken      Int      // إجمالي الوقت بالثواني
   completedAt    DateTime @default(now())
+  canRetryAt     DateTime // موعد السماح بإعادة المحاولة (24 ساعة بعد completion)
 
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   category QuizCategory @relation(fields: [categoryId], references: [id])
+  answers  UserQuizAnswer[]
 
   @@index([userId])
   @@index([categoryId])
   @@index([completedAt])
   @@index([score])
+  @@index([canRetryAt])
   @@map("quiz_attempts")
+}
+
+model UserQuizAnswer {
+  id         String   @id @default(uuid())
+  userId     String
+  questionId String
+  attemptId  String
+  userAnswer String   // الإجابة المختارة (index كـ string)
+  isCorrect  Boolean
+  timeTaken  Int      // الوقت المستغرق بالثواني
+  createdAt  DateTime @default(now())
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attempt  QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([questionId])
+  @@index([attemptId])
+  @@map("user_quiz_answers")
 }
 
 // ============================================

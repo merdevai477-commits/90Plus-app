@@ -277,64 +277,95 @@ async function main() {
             name: 'High Five',
             description: 'Name 5 things',
             icon: '🖐️',
+            isLocked: false,
+            unlockLevel: 1,
+        },
+    });
+
+    const qa = await prisma.quizCategory.create({
+        data: {
+            name: 'Q&A',
+            description: 'Multiple choice questions',
+            icon: '❓',
+            isLocked: false,
+            unlockLevel: 1,
+        },
+    });
+
+    const teammates = await prisma.quizCategory.create({
+        data: {
+            name: 'Teammates',
+            description: 'Questions about teammates',
+            icon: '👥',
             isLocked: true,
             unlockLevel: 3,
         },
     });
 
-    // Create Quiz Questions
-    console.log('💭 Creating quiz questions...');
-    await prisma.quizQuestion.createMany({
-        data: [
-            {
-                categoryId: inCommon.id,
-                question: 'What do Cristiano Ronaldo and Lionel Messi have in common?',
-                options: JSON.stringify([
-                    'Both won World Cup',
-                    'Both won Ballon d\'Or',
-                    'Both played for Barcelona',
-                    'Both are from Brazil',
-                ]),
-                correctAnswer: 'Both won Ballon d\'Or',
-                difficulty: 'EASY',
-                points: 10,
-            },
-            {
-                categoryId: flash.id,
-                question: 'Which country won the 2018 FIFA World Cup?',
-                options: JSON.stringify(['Brazil', 'Germany', 'France', 'Argentina']),
-                correctAnswer: 'France',
-                difficulty: 'EASY',
-                points: 10,
-            },
-            {
-                categoryId: flash.id,
-                question: 'Who scored the most goals in World Cup history?',
-                options: JSON.stringify([
-                    'Miroslav Klose',
-                    'Pelé',
-                    'Ronaldo Nazário',
-                    'Lionel Messi',
-                ]),
-                correctAnswer: 'Miroslav Klose',
-                difficulty: 'MEDIUM',
-                points: 20,
-            },
-            {
-                categoryId: whoAmI.id,
-                question: 'I am Egyptian, I play for Liverpool, and I won the Premier League Golden Boot. Who am I?',
-                options: JSON.stringify([
-                    'Mohamed Salah',
-                    'Mohamed Elneny',
-                    'Mahmoud Trezeguet',
-                    'Ahmed Hegazi',
-                ]),
-                correctAnswer: 'Mohamed Salah',
-                difficulty: 'EASY',
-                points: 10,
-            },
-        ],
+    const guessNumber = await prisma.quizCategory.create({
+        data: {
+            name: 'Guess the Number',
+            description: 'Guess numbers and statistics',
+            icon: '🔢',
+            isLocked: false,
+            unlockLevel: 1,
+        },
     });
+
+    const legends = await prisma.quizCategory.create({
+        data: {
+            name: 'Legends',
+            description: 'Questions about football legends',
+            icon: '👑',
+            isLocked: true,
+            unlockLevel: 3,
+        },
+    });
+
+    // Import and seed quiz questions
+    console.log('💭 Creating quiz questions...');
+    try {
+        const { seedQuizQuestions } = require('./quiz-questions-seed');
+        await seedQuizQuestions(prisma, {
+            inCommon: inCommon.id,
+            flash: flash.id,
+            whoAmI: whoAmI.id,
+            highFive: highFive.id,
+            qa: qa.id,
+            teammates: teammates.id,
+            guessNumber: guessNumber.id,
+            legends: legends.id,
+        });
+    } catch (error) {
+        console.error('⚠️  Error seeding quiz questions:', error);
+        console.log('📝 Creating sample quiz questions instead...');
+        await prisma.quizQuestion.createMany({
+            data: [
+                {
+                    categoryId: inCommon.id,
+                    question: 'What do Cristiano Ronaldo and Lionel Messi have in common?',
+                    options: [
+                        'Both won World Cup',
+                        'Both won Ballon d\'Or',
+                        'Both played for Barcelona',
+                        'Both are from Brazil',
+                    ],
+                    correctAnswer: '1',
+                    difficulty: 'EASY',
+                    points: 10,
+                },
+                {
+                    categoryId: flash.id,
+                    question: 'Which country won the 2018 FIFA World Cup?',
+                    options: ['Brazil', 'Germany', 'France', 'Argentina'],
+                    correctAnswer: '2',
+                    difficulty: 'EASY',
+                    points: 10,
+                    timeLimit: 10,
+                },
+            ],
+        });
+    }
 
     // Create Achievements
     console.log('🏅 Creating achievements...');
@@ -403,117 +434,24 @@ async function main() {
         ],
     });
 
-    // Create sample quiz attempts
-    console.log('📊 Creating quiz attempts...');
-    await prisma.quizAttempt.createMany({
-        data: [
-            {
-                userId: user1.id,
-                categoryId: flash.id,
-                score: 80,
-                totalQuestions: 10,
-                coinsEarned: 80,
-            },
-            {
-                userId: user1.id,
-                categoryId: inCommon.id,
-                score: 90,
-                totalQuestions: 10,
-                coinsEarned: 90,
-            },
-            {
-                userId: user2.id,
-                categoryId: whoAmI.id,
-                score: 70,
-                totalQuestions: 10,
-                coinsEarned: 70,
-            },
-        ],
-    });
-
-    // Create coin transactions
-    console.log('💎 Creating coin transactions...');
-    await prisma.coinTransaction.createMany({
-        data: [
-            {
-                userId: user1.id,
-                amount: 100,
-                type: 'DAILY_LOGIN',
-                description: 'Daily login bonus',
-            },
-            {
-                userId: user1.id,
-                amount: 80,
-                type: 'QUIZ_REWARD',
-                description: 'Completed Flash quiz',
-            },
-            {
-                userId: user2.id,
-                amount: 50,
-                type: 'ACHIEVEMENT',
-                description: 'Unlocked Quiz Beginner achievement',
-            },
-        ],
-    });
-
-    // Create follows
-    console.log('👥 Creating follows...');
-    await prisma.follow.create({
-        data: {
-            followerId: user1.id,
-            followingId: user2.id,
-        },
-    });
-
-    await prisma.follow.create({
-        data: {
-            followerId: user2.id,
-            followingId: devUser.id,
-        },
-    });
-
-    // Create notifications
-    console.log('🔔 Creating notifications...');
-    await prisma.notification.createMany({
-        data: [
-            {
-                userId: user1.id,
-                title: 'Welcome! 🎉',
-                message: 'Welcome to Football App! Start your journey now.',
-                type: 'GENERAL',
-                isRead: false,
-            },
-            {
-                userId: user1.id,
-                title: 'Achievement Unlocked! 🏅',
-                message: 'You earned the Quiz Beginner achievement!',
-                type: 'ACHIEVEMENT',
-                isRead: false,
-            },
-            {
-                userId: user2.id,
-                title: 'New Follower',
-                message: 'ahmed_football started following you',
-                type: 'FOLLOW',
-                isRead: false,
-            },
-        ],
-    });
+    // Note: Sample data for users (coin transactions, follows, notifications)
+    // are not created because seed.ts doesn't create users
+    // All users must register fresh through the app
 
     console.log('✅ Database seeded successfully!');
     console.log('📊 Summary:');
-    console.log(`   - Users: 4 (Added: ${mahmoudUser.username})`);
-    console.log(`   - Leagues: 3 (${premierLeague.name}, ${laLiga.name}, ${bundesliga.name})`);
-    console.log(`   - Teams: 5 (${manUnited.name}, ${liverpool.name}, ${realMadrid.name}, ${barcelona.name}, ${bayernMunich.name})`);
-    console.log(`   - Players: 4 (${salah.name}, ${mbappe.name}, ${lewandowski.name}, ${neuer.name})`);
+    console.log(`   - Leagues: 3`);
+    console.log(`   - Teams: 5`);
+    console.log(`   - Players: 4`);
     console.log(`   - Matches: 2`);
-    console.log(`   - Quiz Categories: 4 (${inCommon.name}, ${flash.name}, ${whoAmI.name}, ${highFive.name})`);
-    console.log(`   - Quiz Questions: 4`);
+    console.log(`   - Quiz Categories: 8 (${inCommon.name}, ${flash.name}, ${whoAmI.name}, ${highFive.name}, ${qa.name}, ${teammates.name}, ${guessNumber.name}, ${legends.name})`);
+    const questionCount = await prisma.quizQuestion.count();
+    console.log(`   - Quiz Questions: ${questionCount}`);
     console.log(`   - Achievements: 6`);
-    console.log(`   - Quiz Attempts: 3`);
-    console.log(`   - Coin Transactions: 3`);
-    console.log(`   - Follows: 2`);
-    console.log(`   - Notifications: 3`);
+    console.log(`   - Quiz Attempts: 0 (users will create attempts when playing)`);
+    console.log(`   - Coin Transactions: 0 (created when users earn coins)`);
+    console.log(`   - Follows: 0 (created when users follow each other)`);
+    console.log(`   - Notifications: 0 (created dynamically)`);
 }
 
 main()
