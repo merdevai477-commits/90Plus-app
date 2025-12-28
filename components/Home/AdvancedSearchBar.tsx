@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Dimensions,
   FlatList,
   Image,
 } from 'react-native';
 import { 
   Search, 
   X, 
-  Filter, 
   Users,
   Video,
   Trophy,
@@ -22,10 +20,8 @@ import {
 } from 'lucide-react-native';
 import { useFadeIn, useSlideIn, usePulse } from '../leagues/Animations';
 import { useHapticFeedback } from '../leagues/HapticFeedback';
-import { allProfiles, searchProfiles } from '../Profile/MockProfiles';
+import { searchProfiles, type Profile } from '../profile/MockProfiles';
 import { globalState } from '../../globalState';
-
-const { width } = Dimensions.get('window');
 
 export interface SearchResult {
   id: string;
@@ -84,7 +80,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         }
       }
       
-      profiles.forEach(profile => {
+      profiles.forEach((profile: Profile) => {
         results.push({
           id: profile.id,
           type: 'profile',

@@ -1,1577 +1,1213 @@
-// app/(tabs)/settings.tsx
-import React, { useState, useRef, useEffect } from 'react';
+/**
+ * Settings Screen - Football Predictions App
+ * 
+ * Professional AMOLED Dark Theme Settings
+ * Designed for optimal user experience and performance
+ * 
+ * @author Staff Engineer
+ * @version 2.0.0
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Switch,
   TouchableOpacity,
+  Switch,
+  Alert,
+  StatusBar,
   Animated,
   Dimensions,
-  StatusBar,
-  Modal,
-  Alert,
-  Vibration,
   Platform,
-  Image,
-  TextInput,
-  ActivityIndicator,
-  RefreshControl,
-  KeyboardAvoidingView,
+  Linking,
+  Modal,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
-import * as LocalAuthentication from 'expo-local-authentication';
-import {
-  Bell,
-  Moon,
-  Sun,
-  Globe,
-  Lock,
-  User,
-  ChevronRight,
-  Shield,
-  Smartphone,
-  Palette,
-  Volume2,
-  Wifi,
-  Battery,
-  HardDrive,
-  AlertCircle,
-  Star,
-  Heart,
-  Trophy,
-  Zap,
-  Eye,
-  EyeOff,
-  Fingerprint,
-  Key,
-  Settings as SettingsIcon,
-  LogOut,
-  Info,
-  HelpCircle,
-  MessageSquare,
-  Share2,
-  Download,
-  Upload,
-  Trash2,
-  RefreshCw,
-  Check,
-  X,
-  Camera,
-  Mic,
-  MapPin,
-  Bell as BellOff,
-  BellRing,
-  Users,
-  Crown,
-  Sparkles,
-  Gamepad2,
-  Timer,
-  BarChart3,
-  TrendingUp,
-  Award,
-  Target,
-  Flag,
-  Coins,
-  CreditCard,
-  Gift,
-  Ticket,
-  ShieldCheck,
-  ShieldAlert,
-  Languages,
-  Type,
-  Sliders,
-  ToggleLeft,
-  ToggleRight,
-  Cpu,
-  Gauge,
-  Layers,
-  Package,
-  Server,
-  Database,
-  Cloud,
-  CloudOff,
-  WifiOff,
-  BatteryLow,
-  Loader,
-} from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSettings } from '../../contexts/SettingsContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
-// ✅ استيراد الـ Hooks والـ Types
-import { 
-  useAppSettings, 
-  useTheme, 
-  useLanguage, 
-  useNotifications, 
-  useSecurity, 
-  useUI, 
-  usePreferences,
-  useFeatures,
-  useAnalytics 
-} from '../../src/store/useAppSettings';
+const { width } = Dimensions.get('window');
 
-// ✅ استيراد المكونات الجديدة
-import { 
-  AdvancedSecuritySettings, 
-  BackupRestoreSettings, 
-  PerformanceSettings, 
-  AdvancedSearchSettings,
-  NotificationSettingsComponent, 
-  ThemeSettingsComponent, 
-  LanguageSettingsComponent,
-  PremiumFeaturesComponent, 
-  SmartNotificationsComponent, 
-  PerformanceMonitorComponent 
-} from '../../components/Settings';
+// ============================================================================
+// CONSTANTS
+// ============================================================================
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const APP_VERSION = '1.0.0';
+const BUILD_NUMBER = '100';
 
-// Animated Components
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
-const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
-export default function AdvancedSettings() {
-  // ✅ استخدام الـ Hooks الصحيحة
-  const { 
-    toggleTheme, 
-    setTheme,
-    setLanguage, 
-    setDirection,
-    autoDetectLanguage,
+export default function SettingsScreen() {
+  // Context
+  const {
+    settings,
+    loading: contextLoading,
     toggleNotifications,
-    toggleNotificationType,
-    setPIN,
-    setBiometric,
-    setPermission,
-    showSnackbar,
-    hideSnackbar,
-    setLoading,
-    showModal,
-    hideModal,
-    setFontScale,
-    setColors,
-    setAutoLock,
-    setDefaultTab,
-    setLastScrollPosition,
-    setThemeOverrides,
-    toggleFeature,
-    setFeature,
-    setAnalyticsEnabled,
-    logEvent,
+    toggleMatchNotifications,
+    toggleGoalNotifications,
+    togglePredictionReminders,
+    clearCache,
     resetSettings,
-    loadSettings,
-    saveSettings,
-    setPushToken,
-    fetchRemoteConfig,
-  } = useAppSettings();
-  
-  // ✅ استخدام الـ State من الـ Store
-  const theme = useTheme();
-  const language = useLanguage();
-  const notifications = useNotifications();
-  const security = useSecurity();
-  const ui = useUI();
-  const preferences = usePreferences();
-  const features = useFeatures();
-  const analytics = useAnalytics();
+  } = useSettings();
 
-  // Local States
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [showSecurityModal, setShowSecurityModal] = useState(false);
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [showThemeModal, setShowThemeModal] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { language, setLanguage: setAppLanguage, t, isRTL } = useLanguage();
+
+  // Safety check for translations
+  if (!t || !t.settings) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <ActivityIndicator size="large" color="#22c55e" />
+      </View>
+    );
+  }
+
+  // Local state
+  const [cacheSize, setCacheSize] = useState('12.5 MB');
+  const [lastSync, setLastSync] = useState(isRTL ? 'منذ 5 دقائق' : '5 minutes ago');
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'amoled' | 'light'>('amoled');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [soundEffects, setSoundEffects] = useState(true);
+  const [hapticFeedback, setHapticFeedback] = useState(true);
 
   // Animations
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const headerAnimation = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
-  // ✅ Premium Features Animation
-  useEffect(() => {
-    if (features.betaFeatures) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [features.betaFeatures]);
+  // ============================================================================
+  // LIFECYCLE
+  // ============================================================================
 
-  // ✅ Load settings on mount
   useEffect(() => {
-    loadSettings();
-    logEvent('settings_opened');
+    animateEntry();
+    calculateCacheSize();
   }, []);
 
-  // ✅ Save scroll position
-useEffect(() => {
-  return () => {
-    const currentY = (scrollY as any)._value ?? 0;
-    setLastScrollPosition('settings', currentY);
-  };
-}, []);
-  // Header Scroll Animation
-  const headerHeight = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [120, 70],
-    extrapolate: 'clamp',
-  });
-
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 50],
-    outputRange: [1, 0.9],
-    extrapolate: 'clamp',
-  });
-
-  // ✅ Handle Functions مع Analytics
-  const handleHaptic = (type: 'light' | 'medium' | 'heavy' = 'light') => {
-    if (preferences.animations === false) return; // Check if animations enabled
-    
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(
-        type === 'heavy' ? Haptics.ImpactFeedbackStyle.Heavy :
-        type === 'medium' ? Haptics.ImpactFeedbackStyle.Medium :
-        Haptics.ImpactFeedbackStyle.Light
-      );
-    } else {
-      Vibration.vibrate(type === 'heavy' ? 50 : type === 'medium' ? 30 : 10);
-    }
-  };
-
-  const handleThemeToggle = () => {
-    handleHaptic('medium');
-    Animated.sequence([
-      Animated.timing(rotateAnim, {
+  const animateEntry = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
-      Animated.timing(rotateAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
-        duration: 300,
+        tension: 50,
+        friction: 8,
         useNativeDriver: true,
       }),
     ]).start();
-    
-    toggleTheme();
-    const newMode = theme.mode === 'light' ? 'dark' : 'light';
-    showSnackbar(`تم التبديل إلى الوضع ${newMode === 'dark' ? 'الليلي' : 'النهاري'}`, 'success');
-    logEvent('theme_changed', { from: theme.mode, to: newMode });
   };
 
-  const handleBiometricToggle = async () => {
-    handleHaptic('heavy');
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+  const calculateCacheSize = async () => {
+    // Calculate actual cache size here
+    // For now, using placeholder
+    setCacheSize('12.5 MB');
+  };
+
+  const updateLastSync = () => {
+    const now = new Date();
+    const diff = now.getTime() - settings.lastSyncTime;
+    const minutes = Math.floor(diff / 60000);
     
-    if (!hasHardware || !isEnrolled) {
-      Alert.alert(
-        'غير متاح',
-        'البصمة أو Face ID غير متاح على هذا الجهاز',
-        [{ text: 'حسناً' }]
-      );
-      logEvent('biometric_not_available');
-      return;
+    if (minutes < 1) {
+      setLastSync('الآن');
+    } else if (minutes < 60) {
+      setLastSync(`منذ ${minutes} دقيقة`);
+    } else {
+      const hours = Math.floor(minutes / 60);
+      setLastSync(`منذ ${hours} ساعة`);
     }
-    
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'تأكيد الهوية',
-      fallbackLabel: 'استخدم رمز المرور',
+  };
+
+  useEffect(() => {
+    updateLastSync();
+    const interval = setInterval(updateLastSync, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [settings.lastSyncTime]);
+
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
+
+  const handleToggleNotifications = async () => {
+    try {
+      await toggleNotifications(!settings.notificationsEnabled);
+    } catch (error) {
+      Alert.alert('خطأ', 'فشل تحديث إعدادات الإشعارات');
+    }
+  };
+
+  const handleToggleMatchNotifications = async () => {
+    try {
+      await toggleMatchNotifications(!settings.matchNotifications);
+    } catch (error) {
+      Alert.alert('خطأ', 'فشل تحديث إعدادات إشعارات المباريات');
+    }
+  };
+
+  const handleToggleGoalNotifications = async () => {
+    try {
+      await toggleGoalNotifications(!settings.goalNotifications);
+    } catch (error) {
+      Alert.alert('خطأ', 'فشل تحديث إعدادات إشعارات الأهداف');
+    }
+  };
+
+  const handleTogglePredictionReminders = async () => {
+    try {
+      await togglePredictionReminders(!settings.predictionReminders);
+    } catch (error) {
+      Alert.alert('خطأ', 'فشل تحديث إعدادات تذكير التوقعات');
+    }
+  };
+
+  const handleClearCache = () => {
+    Alert.alert(
+      t.settings.clearCacheTitle,
+      t.settings.clearCacheMessage,
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: t.common.delete,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearCache();
+              setCacheSize('0 MB');
+              Alert.alert(t.common.done, t.settings.clearCacheSuccess);
+            } catch (error) {
+              Alert.alert(t.common.error, t.settings.clearCacheError);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'تسجيل الخروج',
+      'هل أنت متأكد من تسجيل الخروج؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'تسجيل الخروج',
+          style: 'destructive',
+          onPress: () => {
+            // Logout logic here
+            Alert.alert('تم', 'تم تسجيل الخروج بنجاح');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'حذف الحساب',
+      'تحذير: هذا الإجراء لا يمكن التراجع عنه. سيتم حذف جميع بياناتك وتوقعاتك بشكل نهائي.',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'حذف الحساب',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'تأكيد الحذف',
+              'هل أنت متأكد تماماً؟ لن تتمكن من استعادة حسابك.',
+              [
+                { text: 'إلغاء', style: 'cancel' },
+                {
+                  text: 'نعم، احذف حسابي',
+                  style: 'destructive',
+                  onPress: () => {
+                    // Delete account logic here
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRateApp = () => {
+    // Open app store for rating
+    const storeUrl = Platform.select({
+      ios: 'https://apps.apple.com/app/id123456789',
+      android: 'https://play.google.com/store/apps/details?id=com.footballpredictions',
     });
-    
-    if (result.success) {
-      setBiometric(!security.biometricEnabled);
-      showSnackbar('تم تحديث إعدادات الأمان', 'success');
-      logEvent('biometric_toggled', { enabled: !security.biometricEnabled });
+    if (storeUrl) {
+      Linking.openURL(storeUrl);
+    }
+  };
+
+  const handleShareApp = () => {
+    // Share app logic
+    Alert.alert('مشاركة التطبيق', 'شارك التطبيق مع أصدقائك!');
+  };
+
+  const handleContactUs = () => {
+    Linking.openURL('mailto:support@footballpredictions.com');
+  };
+
+  const handlePrivacyPolicy = () => {
+    Linking.openURL('https://footballpredictions.com/privacy');
+  };
+
+  const handleTerms = () => {
+    Linking.openURL('https://footballpredictions.com/terms');
+  };
+
+  const handleManagePermissions = () => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
+    } else {
+      Linking.openSettings();
     }
   };
 
   const handleResetSettings = () => {
     Alert.alert(
-      'إعادة تعيين الإعدادات',
-      'هل أنت متأكد من إعادة جميع الإعدادات إلى الوضع الافتراضي؟',
+      isRTL ? 'إعادة تعيين الإعدادات' : 'Reset Settings',
+      isRTL 
+        ? 'هل أنت متأكد من إعادة تعيين جميع الإعدادات إلى الوضع الافتراضي؟'
+        : 'Are you sure you want to reset all settings to default?',
       [
-        { text: 'إلغاء', style: 'cancel' },
-        { 
-          text: 'إعادة تعيين', 
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: isRTL ? 'إعادة تعيين' : 'Reset',
           style: 'destructive',
-          onPress: () => {
-            handleHaptic('heavy');
-            resetSettings();
-            showSnackbar('تم إعادة تعيين الإعدادات', 'info');
-            logEvent('settings_reset');
-          }
-        }
+          onPress: async () => {
+            try {
+              await resetSettings();
+              Alert.alert(t.common.done, isRTL ? 'تم إعادة تعيين الإعدادات' : 'Settings reset successfully');
+            } catch (error) {
+              Alert.alert(t.common.error, isRTL ? 'فشل إعادة التعيين' : 'Failed to reset settings');
+            }
+          },
+        },
       ]
     );
   };
 
-  const handleSectionPress = (section: string) => {
-    handleHaptic('light');
-    Animated.timing(scaleAnim, {
-      toValue: 0.95,
-      duration: 100,
-      useNativeDriver: true,
-    }).start(() => {
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }).start();
-    });
-    setExpandedSection(expandedSection === section ? null : section);
-    logEvent('section_expanded', { section });
-  };
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchRemoteConfig();
-    await loadSettings();
-    setTimeout(() => {
-      setIsRefreshing(false);
-      showSnackbar('تم تحديث الإعدادات', 'success');
-    }, 1000);
-  };
-
-  // ✅ Language Modal
-  const renderLanguageModal = () => (
-    <Modal
-      visible={showLanguageModal}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowLanguageModal(false)}
-    >
-      <BlurView intensity={20} style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>اختر اللغة</Text>
-          {language.available.map((lang) => (
-            <TouchableOpacity
-              key={lang}
-              style={[
-                styles.languageItem,
-                language.current === lang && styles.languageItemActive
-              ]}
-              onPress={() => {
-                setLanguage(lang);
-                setShowLanguageModal(false);
-                showSnackbar(`تم تغيير اللغة إلى ${lang === 'ar' ? 'العربية' : 'English'}`, 'success');
-                logEvent('language_changed', { language: lang });
-              }}
-            >
-              <Text style={[
-                styles.languageText,
-                language.current === lang && styles.languageTextActive
-              ]}>
-                {lang === 'ar' ? '🇸🇦 العربية' : '🇬🇧 English'}
-              </Text>
-              {language.current === lang && <Check size={20} color="#22c55e" />}
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.modalCloseButton}
-            onPress={() => setShowLanguageModal(false)}
-          >
-            <Text style={styles.modalCloseText}>إلغاء</Text>
-          </TouchableOpacity>
-        </View>
-      </BlurView>
-    </Modal>
-  );
-
-  // ✅ Theme Colors Modal
-  const renderThemeModal = () => (
-    <Modal
-      visible={showThemeModal}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowThemeModal(false)}
-    >
-      <BlurView intensity={20} style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>تخصيص الألوان</Text>
-          <View style={styles.colorGrid}>
-            {[
-              { name: 'الأخضر', color: '#22c55e' },
-              { name: 'الأزرق', color: '#3B82F6' },
-              { name: 'البنفسجي', color: '#A855F7' },
-              { name: 'الأحمر', color: '#EF4444' },
-              { name: 'البرتقالي', color: '#F59E0B' },
-              { name: 'الوردي', color: '#EC4899' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.color}
-                style={[
-                  styles.colorItem,
-                  { backgroundColor: item.color },
-                  theme.colors.primary === item.color && styles.colorItemActive
-                ]}
-                onPress={() => {
-                  setColors({ primary: item.color });
-                  showSnackbar(`تم تغيير اللون إلى ${item.name}`, 'success');
-                  logEvent('theme_color_changed', { color: item.color });
-                }}
-              >
-                {theme.colors.primary === item.color && (
-                  <Check size={24} color="#fff" />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity
-            style={styles.modalCloseButton}
-            onPress={() => setShowThemeModal(false)}
-          >
-            <Text style={styles.modalCloseText}>إغلاق</Text>
-          </TouchableOpacity>
-        </View>
-      </BlurView>
-    </Modal>
-  );
-
-  // ✅ Settings Sections Data (محدثة بناء على الـ State الفعلي)
-  const generalSettings = [
-    {
-      icon: Globe,
-      label: 'اللغة',
-      subtitle: language.current === 'ar' ? 'العربية' : 'English',
-      type: 'value',
-      value: language.current === 'ar' ? 'العربية' : 'English',
-      onPress: () => setShowLanguageModal(true),
-    },
-    {
-      icon: Type,
-      label: 'حجم الخط',
-      subtitle: `${Math.round(theme.fontScale * 100)}%`,
-      type: 'value',
-      value: `${Math.round(theme.fontScale * 100)}%`,
-      onPress: () => {
-        Alert.alert(
-          'حجم الخط',
-          '',
-          [
-            { text: 'صغير (80%)', onPress: () => {
-              setFontScale(0.8);
-              logEvent('font_scale_changed', { scale: 0.8 });
-            }},
-            { text: 'عادي (100%)', onPress: () => {
-              setFontScale(1);
-              logEvent('font_scale_changed', { scale: 1 });
-            }},
-            { text: 'كبير (120%)', onPress: () => {
-              setFontScale(1.2);
-              logEvent('font_scale_changed', { scale: 1.2 });
-            }},
-            { text: 'كبير جداً (140%)', onPress: () => {
-              setFontScale(1.4);
-              logEvent('font_scale_changed', { scale: 1.4 });
-            }},
-          ]
-        );
-      }
-    },
-    {
-      icon: Languages,
-      label: 'الكشف التلقائي للغة',
-      type: 'switch',
-      value: language.autoDetect,
-      onChange: () => {
-        autoDetectLanguage();
-        showSnackbar('تم تفعيل الكشف التلقائي للغة', 'success');
-      },
-    },
-    {
-      icon: Timer,
-      label: 'تنسيق الوقت',
-      subtitle: preferences.timeFormat === '24h' ? '24 ساعة' : '12 ساعة',
-      type: 'value',
-      value: preferences.timeFormat,
-      onPress: () => {
-        const newFormat = preferences.timeFormat === '24h' ? '12h' : '24h';
-        // Update time format in preferences
-        showSnackbar(`تم تغيير تنسيق الوقت إلى ${newFormat}`, 'success');
-      }
-    },
-  ];
-
-  const notificationSettings = [
-    {
-      icon: Bell,
-      label: 'تفعيل الإشعارات',
-      subtitle: notifications.enabled ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: notifications.enabled,
-      onChange: (value: boolean) => {
-        toggleNotifications(value);
-        logEvent('notifications_toggled', { enabled: value });
-      },
-    },
-    {
-      icon: MessageSquare,
-      label: 'إشعارات الرسائل',
-      type: 'switch',
-      value: notifications.types.messages,
-      onChange: () => {
-        toggleNotificationType('messages');
-        logEvent('notification_type_toggled', { type: 'messages' });
-      },
-    },
-    {
-      icon: TrendingUp,
-      label: 'إشعارات المباريات',
-      type: 'switch',
-      value: notifications.types.system,
-      onChange: () => {
-        toggleNotificationType('system');
-        logEvent('notification_type_toggled', { type: 'system' });
-      },
-    },
-    {
-      icon: Gift,
-      label: 'العروض والتخفيضات',
-      type: 'switch',
-      value: notifications.types.marketing,
-      onChange: () => {
-        toggleNotificationType('marketing');
-        logEvent('notification_type_toggled', { type: 'marketing' });
-      },
-    },
-    {
-      icon: Volume2,
-      label: 'الصوت',
-      type: 'switch',
-      value: notifications.sound,
-      onChange: () => {
-        // Toggle sound
-        showSnackbar('تم تحديث إعدادات الصوت', 'success');
-      },
-    },
-    {
-      icon: Smartphone,
-      label: 'الاهتزاز',
-      type: 'switch',
-      value: notifications.vibration,
-      onChange: () => {
-        // Toggle vibration
-        handleHaptic('medium');
-        showSnackbar('تم تحديث إعدادات الاهتزاز', 'success');
-      },
-    },
-  ];
-
-  const securitySettings = [
-    {
-      icon: Fingerprint,
-      label: 'البصمة / Face ID',
-      subtitle: security.biometricEnabled ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: security.biometricEnabled,
-      onChange: handleBiometricToggle,
-      iconColor: '#EF4444',
-    },
-    {
-      icon: Key,
-      label: 'رمز PIN',
-      subtitle: security.pinEnabled ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: security.pinEnabled,
-      onChange: (value: boolean) => {
-        if (value) {
-          setShowSecurityModal(true);
-        } else {
-          setPIN(false);
-          showSnackbar('تم إلغاء رمز PIN', 'info');
-        }
-        logEvent('pin_toggled', { enabled: value });
-      },
-      iconColor: '#EF4444',
-    },
-    {
-      icon: Timer,
-      label: 'القفل التلقائي',
-      subtitle: `بعد ${security.autoLockMinutes} دقائق`,
-      type: 'value',
-      value: `${security.autoLockMinutes} دقائق`,
-      iconColor: '#EF4444',
-      onPress: () => {
-        Alert.alert(
-          'القفل التلقائي',
-          '',
-          [
-            { text: 'فوري', onPress: () => {
-              setAutoLock(0);
-              logEvent('auto_lock_changed', { minutes: 0 });
-            }},
-            { text: '1 دقيقة', onPress: () => {
-              setAutoLock(1);
-              logEvent('auto_lock_changed', { minutes: 1 });
-            }},
-            { text: '5 دقائق', onPress: () => {
-              setAutoLock(5);
-              logEvent('auto_lock_changed', { minutes: 5 });
-            }},
-            { text: '15 دقيقة', onPress: () => {
-              setAutoLock(15);
-              logEvent('auto_lock_changed', { minutes: 15 });
-            }},
-            { text: 'أبداً', onPress: () => {
-              setAutoLock(999);
-              logEvent('auto_lock_changed', { minutes: 999 });
-            }},
-          ]
-        );
-      }
-    },
-    {
-      icon: ShieldAlert,
-      label: 'حجب لقطات الشاشة',
-      subtitle: security.secureScreenshot ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: security.secureScreenshot,
-      onChange: () => {
-        // Toggle secure screenshot
-        showSnackbar('تم تحديث إعدادات الأمان', 'success');
-        logEvent('secure_screenshot_toggled');
-      },
-      iconColor: '#EF4444',
-    },
-  ];
-
-  const appearanceSettings = [
-    {
-      icon: theme.mode === 'dark' ? Sun : Moon,
-      label: 'الوضع الليلي',
-      subtitle: theme.mode === 'dark' ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: theme.mode === 'dark',
-      onChange: handleThemeToggle,
-      iconColor: '#A855F7',
-    },
-    {
-      icon: Palette,
-      label: 'اللون الرئيسي',
-      type: 'value',
-      value: theme.colors.primary,
-      iconColor: '#A855F7',
-      onPress: () => setShowThemeModal(true),
-    },
-    {
-      icon: Sparkles,
-      label: 'تأثيرات الحركة',
-      subtitle: preferences.animations ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: preferences.animations,
-      onChange: () => {
-        // Toggle animations
-        showSnackbar(`تم ${preferences.animations ? 'إيقاف' : 'تفعيل'} التأثيرات`, 'success');
-        logEvent('animations_toggled', { enabled: !preferences.animations });
-      },
-      iconColor: '#A855F7',
-    },
-    {
-      icon: Layers,
-      label: 'الوضع المضغوط',
-      subtitle: preferences.compactMode ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: preferences.compactMode,
-      onChange: () => {
-        // Toggle compact mode
-        showSnackbar(`تم ${preferences.compactMode ? 'إيقاف' : 'تفعيل'} الوضع المضغوط`, 'success');
-        logEvent('compact_mode_toggled', { enabled: !preferences.compactMode });
-      },
-      iconColor: '#A855F7',
-    },
-  ];
-
-  const privacySettings = [
-    {
-      icon: Camera,
-      label: 'الكاميرا',
-      subtitle: security.permissions.camera ? 'مسموح' : 'محظور',
-      type: 'switch',
-      value: security.permissions.camera,
-      onChange: (value: boolean) => {
-        setPermission('camera', value);
-        logEvent('permission_changed', { type: 'camera', value });
-      },
-      iconColor: '#3B82F6',
-    },
-    {
-      icon: MapPin,
-      label: 'الموقع',
-      subtitle: security.permissions.location ? 'مسموح' : 'محظور',
-      type: 'switch',
-      value: security.permissions.location,
-      onChange: (value: boolean) => {
-        setPermission('location', value);
-        logEvent('permission_changed', { type: 'location', value });
-      },
-      iconColor: '#3B82F6',
-    },
-    {
-      icon: Mic,
-      label: 'الميكروفون',
-      subtitle: security.permissions.microphone ? 'مسموح' : 'محظور',
-      type: 'switch',
-      value: security.permissions.microphone,
-      onChange: (value: boolean) => {
-        setPermission('microphone', value);
-        logEvent('permission_changed', { type: 'microphone', value });
-      },
-      iconColor: '#3B82F6',
-    },
-    {
-      icon: Users,
-      label: 'جهات الاتصال',
-      subtitle: security.permissions.contacts ? 'مسموح' : 'محظور',
-      type: 'switch',
-      value: security.permissions.contacts,
-      onChange: (value: boolean) => {
-        setPermission('contacts', value);
-        logEvent('permission_changed', { type: 'contacts', value });
-      },
-      iconColor: '#3B82F6',
-    },
-    {
-      icon: HardDrive,
-      label: 'التخزين',
-      subtitle: security.permissions.storage ? 'مسموح' : 'محظور',
-      type: 'switch',
-      value: security.permissions.storage,
-      onChange: (value: boolean) => {
-        setPermission('storage', value);
-        logEvent('permission_changed', { type: 'storage', value });
-      },
-      iconColor: '#3B82F6',
-    },
-  ];
-
-  const advancedSettings = [
-    {
-      icon: BarChart3,
-      label: 'تحليلات الاستخدام',
-      subtitle: analytics.enabled ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: analytics.enabled,
-      onChange: (value: boolean) => {
-        setAnalyticsEnabled(value);
-        showSnackbar(`تم ${value ? 'تفعيل' : 'إيقاف'} التحليلات`, 'info');
-        logEvent('analytics_toggled', { enabled: value });
-      },
-      iconColor: '#F59E0B',
-    },
-    {
-      icon: AlertCircle,
-      label: 'تقارير الأخطاء',
-      subtitle: analytics.crashReporting ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: analytics.crashReporting,
-      onChange: () => {
-        showSnackbar('تم تحديث إعدادات تقارير الأخطاء', 'success');
-        logEvent('crash_reporting_toggled');
-      },
-      iconColor: '#F59E0B',
-    },
-    {
-      icon: Gauge,
-      label: 'مراقبة الأداء',
-      subtitle: analytics.performanceMonitoring ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: analytics.performanceMonitoring,
-      onChange: () => {
-        showSnackbar('تم تحديث إعدادات مراقبة الأداء', 'success');
-        logEvent('performance_monitoring_toggled');
-      },
-      iconColor: '#F59E0B',
-    },
-    {
-      icon: Gamepad2,
-      label: 'وضع التطوير',
-      subtitle: features.debugMode ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: features.debugMode,
-      onChange: () => {
-        toggleFeature('debugMode');
-        showSnackbar(`وضع التطوير ${features.debugMode ? 'معطل' : 'مفعل'}`, 'warning');
-        logEvent('debug_mode_toggled');
-      },
-      iconColor: '#F59E0B',
-    },
-    {
-      icon: Database,
-      label: 'مسح البيانات المؤقتة',
-      subtitle: 'تحرير المساحة',
-      type: 'button',
-      buttonText: 'مسح',
-      buttonColor: '#F59E0B',
-      iconColor: '#F59E0B',
-      onPress: () => {
-        Alert.alert('مسح البيانات المؤقتة', 'سيتم مسح جميع البيانات المؤقتة', [
-          { text: 'إلغاء', style: 'cancel' },
-          { 
-            text: 'مسح', 
-            style: 'destructive', 
-            onPress: () => {
-              setLoading(true);
-              setTimeout(() => {
-                setLoading(false);
-                showSnackbar('تم مسح البيانات المؤقتة', 'success');
-                logEvent('cache_cleared');
-              }, 2000);
-            }
-          }
-        ]);
-      }
-    },
-  ];
-
-  const experimentalSettings = [
-    {
-      icon: Zap,
-      label: 'الميزات التجريبية',
-      subtitle: features.experimentsEnabled ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: features.experimentsEnabled,
-      onChange: () => {
-        toggleFeature('experimentsEnabled');
-        showSnackbar('تم تحديث الميزات التجريبية', 'info');
-        logEvent('experiments_toggled');
-      },
-      iconColor: '#FFD700',
-    },
-    {
-      icon: Crown,
-      label: 'ميزات Beta',
-      subtitle: features.betaFeatures ? 'مفعل' : 'معطل',
-      type: 'switch',
-      value: features.betaFeatures,
-      onChange: () => {
-        toggleFeature('betaFeatures');
-        showSnackbar('تم تحديث ميزات Beta', 'info');
-        logEvent('beta_features_toggled');
-      },
-      iconColor: '#FFD700',
-    },
-  ];
-
-  // ✅ Render Functions
-  const renderHeader = () => (
-    <Animated.View style={[
-      styles.header,
-      {
-        height: headerHeight,
-        opacity: headerOpacity,
-      }
-    ]}>
-      <LinearGradient
-        colors={theme.mode === 'dark' ? ['#000', '#0a0a0a'] : ['#fff', '#f5f5f5']}
-        style={styles.headerGradient}
-      >
-        <View style={styles.headerContent}>
-          <View style={styles.headerTop}>
-            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-              الإعدادات
-            </Text>
-            <View style={styles.headerIcons}>
-              {features.betaFeatures && (
-                <TouchableOpacity 
-                  onPress={() => setShowPremiumModal(true)}
-                  style={styles.premiumButton}
-                >
-                  <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                    <Crown size={24} color="#FFD700" />
-                  </Animated.View>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={handleRefresh}>
-                <RefreshCw size={24} color={theme.colors.primary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          
-          {/* Advanced Search */}
-          <AdvancedSearchSettings 
-            theme={theme}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            onSearch={(query) => {
-              logEvent('settings_searched', { query });
-            }}
-          />
-        </View>
-      </LinearGradient>
-    </Animated.View>
-  );
-
-  const renderQuickActions = () => (
-    <View style={styles.quickActions}>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.quickActionsContent}
-      >
-        {[
-          { 
-            icon: theme.mode === 'dark' ? Sun : Moon, 
-            label: 'الوضع', 
-            onPress: handleThemeToggle, 
-            color: theme.mode === 'dark' ? '#FFD700' : '#6366F1' 
+  const handleExportData = () => {
+    Alert.alert(
+      isRTL ? 'تصدير البيانات' : 'Export Data',
+      isRTL 
+        ? 'سيتم تصدير جميع بياناتك وتوقعاتك'
+        : 'All your data and predictions will be exported',
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: isRTL ? 'تصدير' : 'Export',
+          onPress: () => {
+            Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment);
           },
-          { 
-            icon: notifications.enabled ? BellRing : BellOff, 
-            label: 'الإشعارات', 
-            onPress: () => toggleNotifications(!notifications.enabled), 
-            color: '#22c55e' 
-          },
-          { 
-            icon: Globe, 
-            label: language.current === 'ar' ? 'العربية' : 'English', 
-            onPress: () => setShowLanguageModal(true), 
-            color: '#3B82F6' 
-          },
-          { 
-            icon: Shield, 
-            label: 'الأمان', 
-            onPress: () => handleSectionPress('security'), 
-            color: '#EF4444' 
-          },
-          { 
-            icon: Palette, 
-            label: 'المظهر', 
-            onPress: () => setShowThemeModal(true), 
-            color: '#A855F7' 
-          },
-        ].map((action, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.quickActionItem}
-            onPress={() => {
-              handleHaptic('light');
-              action.onPress();
-            }}
-          >
-            <Animated.View style={[
-              styles.quickActionIcon,
-              { backgroundColor: `${action.color}20` },
-              theme.mode === 'dark' && index === 0 && {
-                transform: [{ 
-                  rotate: rotateAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0deg', '360deg']
-                  })
-                }]
-              }
-            ]}>
-              <action.icon size={24} color={action.color} />
-            </Animated.View>
-            <Text style={[styles.quickActionLabel, { color: theme.colors.textSecondary }]}>
-              {action.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-
-  const renderSection = (title: string, icon: any, items: any[], sectionKey: string, isPremium = false) => {
-    const isExpanded = expandedSection === sectionKey;
-    
-    return (
-      <Animated.View style={[
-        styles.section,
-        { 
-          transform: [{ scale: scaleAnim }],
-          backgroundColor: theme.mode === 'dark' ? '#0a0a0a' : '#fff',
-          borderColor: theme.mode === 'dark' ? '#1a1a1a' : '#e5e5e5',
-        }
-      ]}>
-        <TouchableOpacity
-          style={styles.sectionHeader}
-          onPress={() => handleSectionPress(sectionKey)}
-        >
-          <View style={styles.sectionHeaderLeft}>
-            <View style={[styles.sectionIcon, isPremium && styles.premiumIcon]}>
-              {React.createElement(icon, { 
-                size: 24, 
-                color: isPremium ? '#FFD700' : theme.colors.primary 
-              })}
-            </View>
-            <View>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {title}
-              </Text>
-              {isPremium && features.betaFeatures && (
-                <Text style={styles.premiumBadge}>Premium</Text>
-              )}
-            </View>
-          </View>
-          <Animated.View style={{
-            transform: [{
-              rotate: isExpanded ? '90deg' : '0deg'
-            }]
-          }}>
-            <ChevronRight size={20} color={theme.colors.textSecondary} />
-          </Animated.View>
-        </TouchableOpacity>
-        
-        {isExpanded && (
-          <Animated.View style={styles.sectionContent}>
-            {items.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.settingItem,
-                  index === items.length - 1 && styles.lastItem,
-                  { borderBottomColor: theme.mode === 'dark' ? '#1a1a1a' : '#e5e5e5' }
-                ]}
-                onPress={() => {
-                  handleHaptic('light');
-                  item.onPress && item.onPress();
-                }}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[
-                    styles.settingIconWrapper, 
-                    { backgroundColor: `${item.iconColor || theme.colors.primary}20` }
-                  ]}>
-                    {React.createElement(item.icon, { 
-                      size: 20, 
-                      color: item.iconColor || theme.colors.primary 
-                    })}
-                  </View>
-                  <View style={styles.settingInfo}>
-                    <Text style={[styles.settingText, { color: theme.colors.text }]}>
-                      {item.label}
-                    </Text>
-                    {item.subtitle && (
-                      <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>
-                        {item.subtitle}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.settingRight}>
-                  {item.type === 'switch' ? (
-                    <Switch
-                      value={item.value}
-                      onValueChange={(value) => {
-                        handleHaptic('light');
-                        item.onChange(value);
-                      }}
-                      trackColor={{ 
-                        false: theme.mode === 'dark' ? '#333' : '#e5e5e5', 
-                        true: theme.colors.primary 
-                      }}
-                      thumbColor={item.value ? '#fff' : '#666'}
-                    />
-                  ) : item.type === 'value' ? (
-                    <View style={styles.valueContainer}>
-                      <Text style={[styles.valueText, { color: theme.colors.textSecondary }]}>
-                        {item.value}
-                      </Text>
-                      <ChevronRight size={16} color={theme.colors.textSecondary} />
-                    </View>
-                  ) : item.type === 'button' ? (
-                    <View style={[
-                      styles.actionButton, 
-                      { backgroundColor: `${item.buttonColor || theme.colors.primary}20` }
-                    ]}>
-                      <Text style={[
-                        styles.actionButtonText, 
-                        { color: item.buttonColor || theme.colors.primary }
-                      ]}>
-                        {item.buttonText}
-                      </Text>
-                    </View>
-                  ) : (
-                    <ChevronRight size={20} color={theme.colors.textSecondary} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </Animated.View>
-        )}
-      </Animated.View>
+        },
+      ]
     );
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? '#000' : '#f5f5f5' }]}>
-      <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
-      
-      {renderHeader()}
-      
-      <Animated.ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.colors.primary}
+  const handleHelp = () => {
+    Alert.alert(
+      isRTL ? 'المساعدة' : 'Help',
+      isRTL 
+        ? 'كيف يمكننا مساعدتك؟'
+        : 'How can we help you?',
+      [
+        { text: isRTL ? 'الأسئلة الشائعة' : 'FAQ', onPress: () => {} },
+        { text: isRTL ? 'دليل الاستخدام' : 'User Guide', onPress: () => {} },
+        { text: t.common.cancel, style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleReportBug = () => {
+    Linking.openURL('mailto:support@footballpredictions.com?subject=Bug Report');
+  };
+
+  const handleFeatureRequest = () => {
+    Linking.openURL('mailto:support@footballpredictions.com?subject=Feature Request');
+  };
+
+  const handleLanguageChange = async (lang: 'ar' | 'en' | 'fr' | 'es' | 'de' | 'it' | 'tr' | 'pt') => {
+    try {
+      await setAppLanguage(lang);
+      setLanguageModalVisible(false);
+      Alert.alert(
+        isRTL ? 'تم تغيير اللغة' : 'Language Changed',
+        isRTL 
+          ? 'تم تغيير اللغة بنجاح. قد تحتاج لإعادة تشغيل التطبيق لتطبيق التغييرات بالكامل.'
+          : 'Language changed successfully. You may need to restart the app for full effect.'
+      );
+    } catch (error) {
+      Alert.alert(
+        isRTL ? 'خطأ' : 'Error',
+        isRTL ? 'فشل تغيير اللغة' : 'Failed to change language'
+      );
+    }
+  };
+
+  const getLanguageName = (lang: string): string => {
+    const names: { [key: string]: string } = {
+      ar: 'العربية',
+      en: 'English',
+      fr: 'Français',
+      es: 'Español',
+      de: 'Deutsch',
+      it: 'Italiano',
+      tr: 'Türkçe',
+      pt: 'Português',
+    };
+    return names[lang] || lang;
+  };
+
+  // ============================================================================
+  // RENDER COMPONENTS
+  // ============================================================================
+
+  const renderSectionHeader = (title: string, icon: string) => (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderLeft}>
+        <View style={styles.sectionIconContainer}>
+          <Ionicons name={icon as any} size={20} color="#22c55e" />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+    </View>
+  );
+
+  const renderSwitchItem = (
+    label: string,
+    subtitle: string,
+    value: boolean,
+    onToggle: () => void,
+    icon: string
+  ) => (
+    <View style={styles.settingItem}>
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIconContainer}>
+          <Ionicons name={icon as any} size={22} color="#888" />
+        </View>
+        <View style={styles.settingTextContainer}>
+          <Text style={styles.settingLabel}>{label}</Text>
+          <Text style={styles.settingSubtitle}>{subtitle}</Text>
+        </View>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        trackColor={{ false: '#1a1a1a', true: '#22c55e40' }}
+        thumbColor={value ? '#22c55e' : '#666'}
+        ios_backgroundColor="#1a1a1a"
+      />
+    </View>
+  );
+
+  const renderActionItem = (
+    label: string,
+    subtitle: string,
+    onPress: () => void,
+    icon: string,
+    showChevron: boolean = true,
+    danger: boolean = false
+  ) => (
+    <TouchableOpacity
+      style={styles.settingItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIconContainer}>
+          <Ionicons 
+            name={icon as any} 
+            size={22} 
+            color={danger ? '#ef4444' : '#888'} 
           />
-        }
+        </View>
+        <View style={styles.settingTextContainer}>
+          <Text style={[styles.settingLabel, danger && styles.dangerText]}>
+            {label}
+          </Text>
+          <Text style={styles.settingSubtitle}>{subtitle}</Text>
+        </View>
+      </View>
+      {showChevron && (
+        <Ionicons name="chevron-forward" size={20} color="#666" />
+      )}
+    </TouchableOpacity>
+  );
+
+  const renderInfoItem = (label: string, value: string, icon: string) => (
+    <View style={styles.infoItem}>
+      <View style={styles.infoLeft}>
+        <Ionicons name={icon as any} size={20} color="#888" />
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+
+  // ============================================================================
+  // MAIN RENDER
+  // ============================================================================
+
+  if (contextLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <Ionicons name="settings" size={48} color="#22c55e" />
+        <Text style={styles.loadingText}>{t.common.loading}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <View style={styles.headerIconContainer}>
+              <Ionicons name="settings" size={28} color="#22c55e" />
+            </View>
+            <View>
+              <Text style={styles.headerTitle}>{t.settings.title}</Text>
+              <Text style={styles.headerSubtitle}>{t.settings.subtitle}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        }}
       >
-        {/* Quick Actions */}
-        {renderQuickActions()}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* NOTIFICATIONS SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(t.settings.notifications, 'notifications')}
+            <View style={styles.sectionContent}>
+              {renderSwitchItem(
+                t.settings.enableNotifications,
+                t.settings.enableNotificationsDesc,
+                settings.notificationsEnabled,
+                handleToggleNotifications,
+                'notifications-outline'
+              )}
+              {renderSwitchItem(
+                t.settings.matchNotifications,
+                t.settings.matchNotificationsDesc,
+                settings.matchNotifications,
+                handleToggleMatchNotifications,
+                'football-outline'
+              )}
+              {renderSwitchItem(
+                t.settings.goalNotifications,
+                t.settings.goalNotificationsDesc,
+                settings.goalNotifications,
+                handleToggleGoalNotifications,
+                'trophy-outline'
+              )}
+              {renderSwitchItem(
+                t.settings.predictionReminders,
+                t.settings.predictionRemindersDesc,
+                settings.predictionReminders,
+                handleTogglePredictionReminders,
+                'time-outline'
+              )}
+            </View>
+          </View>
 
-        {/* Enhanced Settings Sections */}
-        <NotificationSettingsComponent 
-          theme={theme}
-          notifications={notifications}
-          toggleNotifications={toggleNotifications}
-          toggleNotificationType={toggleNotificationType}
-          logEvent={logEvent}
-        />
-        
-        <ThemeSettingsComponent 
-          theme={theme}
-          setTheme={setTheme}
-          setColors={setColors}
-          setFontScale={setFontScale}
-          logEvent={logEvent}
-        />
-        
-        <LanguageSettingsComponent 
-          theme={theme}
-          language={language}
-          setLanguage={setLanguage}
-          autoDetectLanguage={autoDetectLanguage}
-          logEvent={logEvent}
-        />
-        
-        <AdvancedSecuritySettings 
-          theme={theme}
-          security={security}
-          setPIN={setPIN}
-          setBiometric={setBiometric}
-          setPermission={setPermission}
-          setAutoLock={setAutoLock}
-          logEvent={logEvent}
-        />
-        
-        <BackupRestoreSettings 
-          theme={theme}
-          logEvent={logEvent}
-        />
-        
-        <PerformanceSettings 
-          theme={theme}
-          logEvent={logEvent}
-        />
-        
-        <PremiumFeaturesComponent 
-          theme={theme}
-          features={features}
-          toggleFeature={toggleFeature}
-          logEvent={logEvent}
-        />
-        
-        <SmartNotificationsComponent 
-          theme={theme}
-          notifications={notifications}
-          logEvent={logEvent}
-        />
-        
-        <PerformanceMonitorComponent 
-          theme={theme}
-          logEvent={logEvent}
-        />
-        
-        {/* Original Settings Sections */}
-        {renderSection('الإعدادات العامة', SettingsIcon, generalSettings, 'general')}
-        {renderSection('الأذونات', Lock, privacySettings, 'privacy')}
-        {renderSection('متقدم', Sliders, advancedSettings, 'advanced')}
-        
-        {/* Experimental Features */}
-        {features.debugMode && (
-          renderSection('تجريبي', Zap, experimentalSettings, 'experimental', true)
-        )}
+          {/* PREFERENCES SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(t.settings.preferences, 'options')}
+            <View style={styles.sectionContent}>
+              {renderActionItem(
+                t.settings.favoriteTeams,
+                t.settings.favoriteTeamsDesc,
+                () => Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment),
+                'heart-outline'
+              )}
+              {renderActionItem(
+                t.settings.favoriteLeagues,
+                t.settings.favoriteLeaguesDesc,
+                () => Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment),
+                'trophy-outline'
+              )}
+              {renderActionItem(
+                t.settings.language,
+                getLanguageName(language),
+                () => setLanguageModalVisible(true),
+                'language-outline'
+              )}
+            </View>
+          </View>
 
-        {/* Version Info */}
-        <View style={styles.versionInfo}>
-          <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>
-            Football Pro v2.0.1
-          </Text>
-          <Text style={[styles.copyrightText, { color: theme.colors.textSecondary }]}>
-            © 2024 جميع الحقوق محفوظة
-          </Text>
-        </View>
-      </Animated.ScrollView>
+          {/* APPEARANCE SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(isRTL ? 'المظهر' : 'Appearance', 'color-palette')}
+            <View style={styles.sectionContent}>
+              {renderActionItem(
+                isRTL ? 'الثيم' : 'Theme',
+                theme === 'amoled' ? 'AMOLED Dark' : theme === 'dark' ? 'Dark' : 'Light',
+                () => Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment),
+                'moon-outline'
+              )}
+              {renderSwitchItem(
+                isRTL ? 'المؤثرات الصوتية' : 'Sound Effects',
+                isRTL ? 'تشغيل الأصوات في التطبيق' : 'Play sounds in app',
+                soundEffects,
+                () => setSoundEffects(!soundEffects),
+                'volume-high-outline'
+              )}
+              {renderSwitchItem(
+                isRTL ? 'الاهتزاز' : 'Haptic Feedback',
+                isRTL ? 'اهتزاز عند اللمس' : 'Vibrate on touch',
+                hapticFeedback,
+                () => setHapticFeedback(!hapticFeedback),
+                'phone-portrait-outline'
+              )}
+            </View>
+          </View>
 
-      {/* Modals */}
-      {renderLanguageModal()}
-      {renderThemeModal()}
-      
-      {/* Snackbar */}
-      {ui.snackbar.visible && (
-        <Animated.View style={[
-          styles.snackbar,
-          { 
-            backgroundColor: 
-              ui.snackbar.type === 'success' ? '#22c55e' :
-              ui.snackbar.type === 'error' ? '#EF4444' :
-              ui.snackbar.type === 'warning' ? '#F59E0B' :
-              '#3B82F6'
-          }
-        ]}>
-          <Text style={styles.snackbarText}>{ui.snackbar.message}</Text>
-        </Animated.View>
-      )}
-      
-      {/* Loading Overlay */}
-      {ui.loading && (
-        <View style={styles.loadingOverlay}>
-          <BlurView intensity={20} style={styles.loadingBlur}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-              {ui.loadingMessage || 'جاري التحميل...'}
+          {/* PERMISSIONS SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(isRTL ? 'الأذونات' : 'Permissions', 'shield-checkmark')}
+            <View style={styles.sectionContent}>
+              {renderActionItem(
+                isRTL ? 'إدارة الأذونات' : 'Manage Permissions',
+                isRTL ? 'التحكم في أذونات التطبيق' : 'Control app permissions',
+                handleManagePermissions,
+                'settings-outline'
+              )}
+              {renderInfoItem(
+                isRTL ? 'الإشعارات' : 'Notifications',
+                settings.notificationsEnabled ? (isRTL ? 'مفعلة' : 'Enabled') : (isRTL ? 'معطلة' : 'Disabled'),
+                'notifications-outline'
+              )}
+            </View>
+          </View>
+
+          {/* DATA & STORAGE SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(t.settings.dataStorage, 'server')}
+            <View style={styles.sectionContent}>
+              {renderSwitchItem(
+                isRTL ? 'التحديث التلقائي' : 'Auto Refresh',
+                isRTL ? 'تحديث البيانات تلقائياً' : 'Automatically refresh data',
+                autoRefresh,
+                () => setAutoRefresh(!autoRefresh),
+                'refresh-outline'
+              )}
+              {renderActionItem(
+                t.settings.clearCache,
+                t.settings.clearCacheDesc,
+                handleClearCache,
+                'trash-outline',
+                false
+              )}
+              {renderActionItem(
+                isRTL ? 'تصدير البيانات' : 'Export Data',
+                isRTL ? 'تصدير جميع بياناتك' : 'Export all your data',
+                handleExportData,
+                'download-outline',
+                false
+              )}
+              {renderInfoItem(t.settings.cacheSize, cacheSize, 'folder-outline')}
+              {renderInfoItem(t.settings.lastSync, lastSync, 'sync-outline')}
+            </View>
+          </View>
+
+          {/* HELP & SUPPORT SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(isRTL ? 'المساعدة والدعم' : 'Help & Support', 'help-circle')}
+            <View style={styles.sectionContent}>
+              {renderActionItem(
+                isRTL ? 'المساعدة' : 'Help Center',
+                isRTL ? 'الأسئلة الشائعة ودليل الاستخدام' : 'FAQ and user guide',
+                handleHelp,
+                'help-circle-outline'
+              )}
+              {renderActionItem(
+                t.settings.contactUs,
+                'support@footballpredictions.com',
+                handleContactUs,
+                'mail-outline'
+              )}
+              {renderActionItem(
+                isRTL ? 'الإبلاغ عن مشكلة' : 'Report a Bug',
+                isRTL ? 'أخبرنا عن أي مشاكل تقنية' : 'Tell us about technical issues',
+                handleReportBug,
+                'bug-outline'
+              )}
+              {renderActionItem(
+                isRTL ? 'اقتراح ميزة' : 'Feature Request',
+                isRTL ? 'شاركنا أفكارك لتحسين التطبيق' : 'Share your ideas to improve the app',
+                handleFeatureRequest,
+                'bulb-outline'
+              )}
+            </View>
+          </View>
+
+          {/* ABOUT SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(t.settings.about, 'information-circle')}
+            <View style={styles.sectionContent}>
+              {renderInfoItem(t.settings.version, `${APP_VERSION} (${BUILD_NUMBER})`, 'code-outline')}
+              {renderActionItem(
+                t.settings.rateApp,
+                t.settings.rateAppDesc,
+                handleRateApp,
+                'star-outline',
+                false
+              )}
+              {renderActionItem(
+                t.settings.shareApp,
+                t.settings.shareAppDesc,
+                handleShareApp,
+                'share-social-outline',
+                false
+              )}
+              {renderActionItem(
+                t.settings.privacyPolicy,
+                t.settings.privacyPolicyDesc,
+                handlePrivacyPolicy,
+                'shield-checkmark-outline'
+              )}
+              {renderActionItem(
+                t.settings.termsConditions,
+                t.settings.termsConditionsDesc,
+                handleTerms,
+                'document-text-outline'
+              )}
+            </View>
+          </View>
+
+          {/* ADVANCED SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(isRTL ? 'متقدم' : 'Advanced', 'construct')}
+            <View style={styles.sectionContent}>
+              {renderActionItem(
+                isRTL ? 'إعادة تعيين الإعدادات' : 'Reset Settings',
+                isRTL ? 'استعادة الإعدادات الافتراضية' : 'Restore default settings',
+                handleResetSettings,
+                'refresh-circle-outline',
+                false,
+                true
+              )}
+              {renderInfoItem(
+                isRTL ? 'معرف الجهاز' : 'Device ID',
+                'XXXX-XXXX-XXXX',
+                'phone-portrait-outline'
+              )}
+            </View>
+          </View>
+
+          {/* ACCOUNT SECTION */}
+          <View style={styles.section}>
+            {renderSectionHeader(t.settings.account, 'person')}
+            <View style={styles.sectionContent}>
+              {renderActionItem(
+                t.settings.logout,
+                t.settings.logoutDesc,
+                handleLogout,
+                'log-out-outline',
+                false,
+                true
+              )}
+              {renderActionItem(
+                t.settings.deleteAccount,
+                t.settings.deleteAccountDesc,
+                handleDeleteAccount,
+                'trash-outline',
+                false,
+                true
+              )}
+            </View>
+          </View>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              {t.settings.madeWith}
             </Text>
-          </BlurView>
-        </View>
-      )}
+            <Text style={styles.footerCopyright}>
+              {t.settings.copyright}
+            </Text>
+          </View>
+        </ScrollView>
+      </Animated.View>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={languageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLanguageModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setLanguageModalVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {isRTL ? 'اختر اللغة' : 'Select Language'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setLanguageModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#888" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.languageList} showsVerticalScrollIndicator={false}>
+              {/* Arabic */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'ar' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('ar')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇸🇦</Text>
+                  <View>
+                    <Text style={styles.languageName}>العربية</Text>
+                    <Text style={styles.languageNative}>Arabic</Text>
+                  </View>
+                </View>
+                {language === 'ar' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* English */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'en' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('en')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇬🇧</Text>
+                  <View>
+                    <Text style={styles.languageName}>English</Text>
+                    <Text style={styles.languageNative}>الإنجليزية</Text>
+                  </View>
+                </View>
+                {language === 'en' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* French */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'fr' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('fr')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇫🇷</Text>
+                  <View>
+                    <Text style={styles.languageName}>Français</Text>
+                    <Text style={styles.languageNative}>French</Text>
+                  </View>
+                </View>
+                {language === 'fr' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* Spanish */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'es' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('es')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇪🇸</Text>
+                  <View>
+                    <Text style={styles.languageName}>Español</Text>
+                    <Text style={styles.languageNative}>Spanish</Text>
+                  </View>
+                </View>
+                {language === 'es' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* German */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'de' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('de')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇩🇪</Text>
+                  <View>
+                    <Text style={styles.languageName}>Deutsch</Text>
+                    <Text style={styles.languageNative}>German</Text>
+                  </View>
+                </View>
+                {language === 'de' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* Italian */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'it' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('it')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇮🇹</Text>
+                  <View>
+                    <Text style={styles.languageName}>Italiano</Text>
+                    <Text style={styles.languageNative}>Italian</Text>
+                  </View>
+                </View>
+                {language === 'it' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* Turkish */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'tr' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('tr')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇹🇷</Text>
+                  <View>
+                    <Text style={styles.languageName}>Türkçe</Text>
+                    <Text style={styles.languageNative}>Turkish</Text>
+                  </View>
+                </View>
+                {language === 'tr' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+
+              {/* Portuguese */}
+              <TouchableOpacity
+                style={[
+                  styles.languageItem,
+                  language === 'pt' && styles.languageItemActive,
+                ]}
+                onPress={() => handleLanguageChange('pt')}
+              >
+                <View style={styles.languageLeft}>
+                  <Text style={styles.languageFlag}>🇵🇹</Text>
+                  <View>
+                    <Text style={styles.languageName}>Português</Text>
+                    <Text style={styles.languageNative}>Portuguese</Text>
+                  </View>
+                </View>
+                {language === 'pt' && (
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <Text style={styles.modalFooterText}>
+                {isRTL 
+                  ? 'قد تحتاج لإعادة تشغيل التطبيق لتطبيق التغييرات بالكامل'
+                  : 'You may need to restart the app for full effect'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
+
+// ============================================================================
+// STYLES
+// ============================================================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
   },
-
-  // ✅ Header
-  header: {
-    position: 'absolute',
-    top: 0,
-    width: '100%',
-    zIndex: 10,
-  },
-  headerGradient: {
+  loadingContainer: {
     flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: '#888',
+    fontSize: 14,
+  },
+  header: {
+    backgroundColor: '#0a0a0a',
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: '#1a1a1a',
   },
   headerContent: {
-    flex: 1,
-    paddingTop: 50,
-    paddingHorizontal: 20,
-  },
-  headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#22c55e',
-  },
-  headerIcons: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
   },
-  premiumButton: {
-    marginRight: 10,
-  },
-
-  // ✅ Search
-  searchContainer: {
-    flexDirection: 'row',
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#22c55e15',
     alignItems: 'center',
-    borderRadius: 12,
-    marginTop: 16,
-    paddingHorizontal: 12,
-    height: 42,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#22c55e30',
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    marginLeft: 8,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
   },
-
-  // ✅ Scroll & Sections
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#888',
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 160,
-    paddingBottom: 80,
-    paddingHorizontal: 16,
+    padding: 20,
+    paddingBottom: 100,
   },
-
   section: {
-    borderWidth: 1,
-    borderColor: '#1a1a1a',
-    backgroundColor: '#0a0a0a',
-    borderRadius: 14,
-    marginVertical: 10,
-    overflow: 'hidden',
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
-  sectionIcon: {
-  width: 38,
-  height: 38,
-  borderRadius: 12,
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: 10,
-  backgroundColor: 'rgba(34, 197, 94, 0.1)',
-  },
-  premiumIcon: {
-  backgroundColor: 'rgba(255, 215, 0, 0.15)',
-  borderWidth: 1,
-  borderColor: '#FFD700',
+  sectionIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#22c55e15',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#fff',
   },
-  premiumBadge: {
-    fontSize: 12,
-    color: '#FFD700',
-    marginTop: 2,
-  },
   sectionContent: {
-    paddingHorizontal: 16,
-    backgroundColor: '#0f0f0f',
+    backgroundColor: '#0a0a0a',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1a1a1a',
+    overflow: 'hidden',
   },
-
-  // ✅ Setting Items
   settingItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    justifyContent: 'space-between',
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
-  },
-  lastItem: {
-    borderBottomWidth: 0,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 14,
+    flex: 1,
   },
-  settingIconWrapper: {
-    width: 34,
-    height: 34,
+  settingIconContainer: {
+    width: 40,
+    height: 40,
     borderRadius: 10,
-    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
   },
-  settingInfo: {
-    flexDirection: 'column',
+  settingTextContainer: {
+    flex: 1,
   },
-  settingRight: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'flex-end',
-  },
-  settingText: {
+  settingLabel: {
+    fontSize: 15,
+    fontWeight: '600',
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
+    marginBottom: 3,
   },
   settingSubtitle: {
-    color: '#888',
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 16,
   },
-  valueContainer: {
+  dangerText: {
+    color: '#ef4444',
+  },
+  infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
   },
-  valueText: {
+  infoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoLabel: {
     fontSize: 14,
-    color: '#666',
-    marginRight: 6,
+    color: '#888',
   },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  actionButtonText: {
+  infoValue: {
     fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // ✅ Quick Actions
-  quickActions: {
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  quickActionsContent: {
-    paddingHorizontal: 12,
-  },
-  quickActionItem: {
-    alignItems: 'center',
-    marginHorizontal: 10,
-  },
-  quickActionIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  quickActionLabel: {
-    fontSize: 12,
-    color: '#aaa',
-  },
-
-  // ✅ Modals
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  modalContent: {
-    width: '85%',
-    backgroundColor: '#111',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#22c55e30',
-  },
-  modalTitle: {
-    fontSize: 18,
     fontWeight: '600',
     color: '#fff',
-    marginBottom: 16,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  footerText: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+  },
+  footerCopyright: {
+    fontSize: 11,
+    color: '#444',
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#0a0a0a',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#1a1a1a',
+    width: '100%',
+    maxWidth: 400,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   modalCloseButton: {
-    marginTop: 16,
-    alignSelf: 'center',
+    padding: 4,
   },
-  modalCloseText: {
-    fontSize: 15,
-    color: '#22c55e',
+  languageList: {
+    padding: 12,
+    maxHeight: 400,
   },
   languageItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#1a1a1a',
+    marginBottom: 8,
   },
   languageItemActive: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    borderRadius: 10,
+    backgroundColor: '#22c55e15',
+    borderWidth: 1,
+    borderColor: '#22c55e30',
   },
-  languageText: {
-    color: '#ccc',
-    fontSize: 16,
-  },
-  languageTextActive: {
-    color: '#22c55e',
-    fontWeight: '600',
-  },
-  colorGrid: {
+  languageLeft: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  colorItem: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    margin: 10,
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: 16,
   },
-  colorItemActive: {
-    borderWidth: 3,
-    borderColor: '#fff',
+  languageFlag: {
+    fontSize: 32,
   },
-
-  // ✅ Snackbar
-  snackbar: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  snackbarText: {
-    textAlign: 'center',
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-
-  // ✅ Loading Overlay
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingBlur: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
+  languageName: {
     fontSize: 16,
+    fontWeight: '600',
     color: '#fff',
+    marginBottom: 2,
   },
-
-  // ✅ Footer
-  versionInfo: {
-    alignItems: 'center',
-    marginTop: 30,
-    marginBottom: 60,
+  languageNative: {
+    fontSize: 12,
+    color: '#888',
   },
-  versionText: {
-    color: '#666',
-    fontSize: 13,
+  modalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a1a',
   },
-  copyrightText: {
-    color: '#444',
-    fontSize: 11,
-    marginTop: 4,
+  modalFooterText: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

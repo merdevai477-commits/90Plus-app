@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions, Animated, Platform } from 'react-native';
-import { Home, Brain, User, Clapperboard, Trophy, BarChart3, Video } from 'lucide-react-native';
+import { Home, Brain, User, Trophy, BarChart3, Video } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
 
@@ -46,20 +46,22 @@ const BottomNav = () => {
   const insets = useSafeAreaInsets();
 
   // ✅ أضفنا هنا /rank و /reels و /diamond-profile
-  type AppRoute = '/Home' | '/quiz' | '/profile' | '/matches' | '/leagues' | '/rank' | '/reels' | '/diamond-profile';
+  type AppRoute = '/Home' | '/quiz' | '/profile' |  '/leagues' | '/rank' | '/reels' | '/diamond-profile';
 
   const tabs = [
     { name: 'Home', icon: Home, route: '/Home' as const },
     { name: 'Quiz', icon: Brain, route: '/quiz' as const },
-    { name: 'Profile', icon: User, route: '/diamond-profile' as const }, // ✅ تغيير إلى الحساب الماسي
-    { name: 'Highlights', icon: Clapperboard, route: '/matches' as const },
+    { name: 'Profile', icon: User, route: '/profile' as const },
     { name: 'Reels', icon: Video, route: '/reels' as const },
     { name: 'League', icon: Trophy, route: '/leagues' as const },
-    // ✅ التبويب الجديد
     { name: 'Rank', icon: BarChart3, route: '/rank' as const },
   ];
 
-  const activeTab = tabs.find(tab => pathname === tab.route)?.name || 'Home';
+  // إذا كان pathname يحتوي على match-details، اعتبره League
+  const isMatchDetails = pathname?.includes('match-details');
+  const activeTab = isMatchDetails 
+    ? 'League' 
+    : tabs.find(tab => pathname === tab.route)?.name || 'Home';
   const tabWidth = width / tabs.length;
   const activeIndex = tabs.findIndex(tab => tab.name === activeTab);
   const indicatorPosition = new Animated.Value(activeIndex * tabWidth);

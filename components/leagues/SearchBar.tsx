@@ -8,21 +8,21 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { Search, X, Filter, Globe } from 'lucide-react-native';
+import { Search, X, Filter } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
-  onFilterPress: () => void;
   placeholder?: string;
+  onFilterPress?: () => void;
 }
 
 const SearchBar: React.FC<SearchBarProps> = ({
   onSearch,
-  onFilterPress,
-  placeholder = "ابحث عن المباريات..."
+  placeholder = "ابحث عن المباريات...",
+  onFilterPress
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -65,11 +65,6 @@ const SearchBar: React.FC<SearchBarProps> = ({
     setSearchQuery('');
     onSearch('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
-
-  const handleFilterPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onFilterPress();
   };
 
   const animatedBorderColor = focusAnim.interpolate({
@@ -121,29 +116,19 @@ const SearchBar: React.FC<SearchBarProps> = ({
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={handleFilterPress}
-          activeOpacity={0.7}
-        >
-          <Filter size={18} color="#22c55e" />
-        </TouchableOpacity>
+        {onFilterPress && (
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => {
+              onFilterPress();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }}
+            activeOpacity={0.7}
+          >
+            <Filter size={18} color="#22c55e" />
+          </TouchableOpacity>
+        )}
       </Animated.View>
-
-      <View style={styles.quickFilters}>
-        <TouchableOpacity style={styles.quickFilterItem}>
-          <Globe size={14} color="#22c55e" />
-          <Text style={styles.quickFilterText}>كل العالم</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.quickFilterItem}>
-          <Text style={styles.quickFilterText}>اليوم</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.quickFilterItem}>
-          <Text style={styles.quickFilterText}>مباشر</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
@@ -183,31 +168,10 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#22c55e20',
+    borderRadius: 12,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderWidth: 1,
-    borderColor: '#22c55e',
-  },
-  quickFilters: {
-    flexDirection: 'row',
-    marginTop: 12,
-    gap: 10,
-  },
-  quickFilterItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: '#333',
-    gap: 5,
-  },
-  quickFilterText: {
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '500',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
   },
 });
 

@@ -1,31 +1,6 @@
-// Match related types
-export interface Match {
-  id: string;
-  homeTeam: string;
-  awayTeam: string;
-  homeScore?: number;
-  awayScore?: number;
-  homeLogo: string;
-  awayLogo: string;
-  date: string;
-  time: string;
-  status: 'finished' | 'live' | 'upcoming';
-  league: string;
-  leagueLogo?: string;
-  venue?: string;
-  prediction?: {
-    type: 'win' | 'draw' | 'lose';
-    homeScore: number;
-    awayScore: number;
-    points?: number;
-    isCorrect?: boolean;
-  };
-  odds?: {
-    home: number;
-    draw: number;
-    away: number;
-  };
-}
+import { Match } from '../../services/apiFootball';
+
+export type { Match };
 
 // Prediction related types
 export interface Prediction {
@@ -51,6 +26,7 @@ export interface UserStats {
   accuracy: number;
   totalPoints: number;
   streak: number;
+  bestStreak: number; // Best streak record
   rank: number;
   level: number;
 }

@@ -12,3 +12,7 @@ export { useHomeData } from './useHomeData';
 export { useHaptics } from './useHaptics';
 export { styles } from './homeStyles';
 export * from './types';
+export { MatchList } from './MatchList';
+export { VideoList } from './VideoList';
+export { PlayerList } from './PlayerList';
+export { TeamPitch } from './TeamPitch';

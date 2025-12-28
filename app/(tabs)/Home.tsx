@@ -1,209 +1,201 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
-  Animated,
   ScrollView,
   View,
   RefreshControl,
+  StyleSheet,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   HomeHeader,
   WelcomeSection,
-  VideosSection,
-  PlayersSection,
-  TeamSection,
-  SideMenu,
-  useHomeData,
-  useHaptics,
-  styles,
+  MatchList,
+  VideoList,
+  PlayerList,
+  TeamPitch,
 } from '../../components/Home';
 import AdvancedSearchBar, { SearchResult } from '../../components/Home/AdvancedSearchBar';
+import { useHomeStore } from '../../src/store/home.store';
+import { COLORS } from '../../components/reels/constants';
+import { useHapticFeedback } from '../../components/leagues/HapticFeedback';
+import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { hapticFeedback } = useHaptics();
+  const haptic = useHapticFeedback();
   const [searchVisible, setSearchVisible] = useState(false);
-  
+  const [refreshing, setRefreshing] = useState(false);
+
   const {
-    isGuest,
-    username,
-    isLoading,
-    refreshing,
-    sideMenuVisible,
-    imageErrors,
-    isTransitioning,
-    overlayOpacity,
-    ballScale,
-    ballRotate,
-    sideMenuAnim,
-    onRefresh,
-    getCurrentVideos,
-    getCurrentPlayers,
-    handleImageError,
-    startAmoledTransition,
-    setSideMenuVisible,
-    currentTeam,
-  } = useHomeData();
+    userMode,
+    matches,
+    videos,
+    players,
+    teamOfMonth,
+    fetchHomeData,
+    setUserMode,
+    toggleFavorite,
+  } = useHomeStore();
 
-  const toggleSideMenu = React.useCallback(() => {
-    hapticFeedback();
-    if (sideMenuVisible) {
-      Animated.timing(sideMenuAnim, {
-        toValue: 300,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => setSideMenuVisible(false));
-    } else {
-      setSideMenuVisible(true);
-      Animated.timing(sideMenuAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [sideMenuVisible, sideMenuAnim, setSideMenuVisible, hapticFeedback]);
+  // 🔔 Monitor favorited matches for live events
+  useMatchEventsMonitor();
 
-  const handleLogout = () => {
-    hapticFeedback();
-    toggleSideMenu();
-    startAmoledTransition(() => router.replace("/auth"));
+
+
+  // Auto-refresh when screen comes into focus (user returns from leagues)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔄 Home screen focused - refreshing data...');
+      fetchHomeData();
+    }, [])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHomeData();
+    setRefreshing(false);
   };
 
-  const handleMenuItemPress = (item: string) => {
-    hapticFeedback();
-    console.log(`Pressed: ${item}`);
+  const handleSettingsPress = () => {
+    router.push('/settings');
   };
 
   const handleSearchPress = () => {
-    hapticFeedback();
     setSearchVisible(true);
   };
 
-  const handleSearchClose = () => {
-    setSearchVisible(false);
+  const handleNotificationPress = () => {
+    router.push('/notifications');
   };
 
   const handleSearchResult = (result: SearchResult) => {
-    console.log('Search result selected:', result);
     setSearchVisible(false);
-    // Navigate to result based on type
-    switch (result.type) {
-      case 'profile':
-        // Navigate to profile
-        break;
-      case 'video':
-        // Navigate to video
-        break;
-      case 'match':
-        // Navigate to match
-        break;
-    }
+    // Implement navigation based on result
+    console.log('Search result:', result);
   };
 
+  const handleViewAllMatches = () => {
+    router.push('/(tabs)/leagues');
+  };
+
+  const handleMatchPress = (matchId: string) => {
+    haptic.selection();
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+
+    // Navigate to match details with proper parameters
+    router.push({
+      pathname: '/(tabs)/match-details',
+      params: {
+        fixtureId: String(match.fixtureId),
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        homeLogo: match.homeLogo || '',
+        awayLogo: match.awayLogo || '',
+        homeScore: match.homeScore?.toString() || '',
+        awayScore: match.awayScore?.toString() || '',
+        league: match.league,
+        leagueLogo: '',
+        date: new Date().toISOString().split('T')[0],
+        time: match.time,
+        status: match.isLive ? 'live' : 'upcoming',
+      },
+    });
+  };
+
+  const handleFavoritePress = async (matchId: string) => {
+    haptic.selection();
+    await toggleFavorite(matchId);
+  };
+
+  // Get top 3 matches for display (they're already sorted with favorites first)
+  const displayMatches = matches.slice(0, 3);
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: 0 }]}>
       <StatusBar style="light" />
 
+      <LinearGradient
+        colors={[COLORS.deepBlack, '#0a1a0a', COLORS.deepBlack]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
       <HomeHeader
-        onMenuPress={toggleSideMenu}
+        onSettingsPress={handleSettingsPress}
         onSearchPress={handleSearchPress}
-        onNotificationPress={hapticFeedback}
+        onNotificationPress={handleNotificationPress}
       />
 
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingTop: insets.top + 80, // safe area top + header height + spacing
+          paddingBottom: 100
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              hapticFeedback();
-              onRefresh();
-            }}
-            tintColor="#22c55e"
-            colors={['#22c55e']}
+            onRefresh={onRefresh}
+            tintColor={COLORS.neonGreen}
+            colors={[COLORS.neonGreen]}
           />
         }
       >
         <WelcomeSection
-          isGuest={isGuest}
-          username={username}
-          onRegisterPress={hapticFeedback}
-          onCreateCardPress={hapticFeedback}
+          onRegisterPress={() => router.push('/auth')}
+          onLoginPress={() => router.push('/auth')}
+          onProfilePress={() => router.push('/profile')}
         />
 
-        <VideosSection
-          videos={getCurrentVideos}
-          isLoading={isLoading}
-          imageErrors={imageErrors}
-          onImageError={handleImageError}
-          onVideoPress={hapticFeedback}
-          onViewAllPress={hapticFeedback}
+        <MatchList
+          matches={displayMatches}
+          onMatchPress={handleMatchPress}
+          onViewAllPress={handleViewAllMatches}
+          onFavoritePress={handleFavoritePress}
         />
 
-        <PlayersSection
-          players={getCurrentPlayers}
-          isLoading={isLoading}
-          imageErrors={imageErrors}
-          onImageError={handleImageError}
-          onPlayerPress={hapticFeedback}
-          onViewAllPress={hapticFeedback}
+        <VideoList
+          videos={videos}
+          onVideoPress={(id) => router.push('/reels')}
+          onViewAllPress={() => router.push('/reels')}
         />
 
-        <TeamSection
-          team={currentTeam}
-          onPlayerPress={hapticFeedback}
+        <PlayerList
+          players={players}
+          onPlayerPress={(id) => router.push('/profile')}
+          onViewAllPress={() => router.push('/rank')}
         />
 
-        <View style={{ height: 20 }} />
+        <TeamPitch
+          players={teamOfMonth}
+          onPlayerPress={(id) => router.push('/profile')}
+        />
+
       </ScrollView>
 
-      {/* Transition Overlay */}
-      {isTransitioning && (
-        <Animated.View 
-          pointerEvents="none" 
-          style={[styles.overlay, { opacity: overlayOpacity }]}
-        >
-          <Animated.View
-            style={[
-              styles.overlayIconWrap,
-              {
-                transform: [
-                  { scale: ballScale },
-                  {
-                    rotate: ballRotate.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0deg', '360deg']
-                    })
-                  }
-                ]
-              }
-            ]}
-          >
-            <Ionicons name="football" size={120} color="#d4af37" />
-          </Animated.View>
-        </Animated.View>
-      )}
-
-      <SideMenu
-        visible={sideMenuVisible}
-        animValue={sideMenuAnim}
-        onClose={toggleSideMenu}
-        onLogout={handleLogout}
-        onMenuItemPress={handleMenuItemPress}
-      />
-
-      {/* Advanced Search Bar */}
       <AdvancedSearchBar
         visible={searchVisible}
-        onClose={handleSearchClose}
+        onClose={() => setSearchVisible(false)}
         onResultSelect={handleSearchResult}
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.deepBlack,
+  },
+  scrollView: {
+    flex: 1,
+  },
+});

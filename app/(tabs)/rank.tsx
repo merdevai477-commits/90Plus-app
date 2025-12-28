@@ -52,6 +52,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import MaskedView from '@react-native-masked-view/masked-view';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -386,173 +387,211 @@ const players: Player[] = [
   },
 ];
 
-// Player Rating Card Component
-const PlayerRatingCard = memo(({ player, onVote }: { player: Player; onVote: (playerId: string, type: 'up' | 'down') => void }) => {
+// Player Rating Card Component - Redesigned
+const PlayerRatingCard = memo(({ player, onVote, t }: { player: Player; onVote: (playerId: string, type: 'up' | 'down') => void; t: any }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 5,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  const handleVote = useCallback((type: 'up' | 'down') => {
-    Animated.sequence([
-      Animated.timing(rotateAnim, {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
         toValue: 1,
-        duration: 100,
+        friction: 8,
+        tension: 40,
         useNativeDriver: true,
       }),
-      Animated.timing(rotateAnim, {
+      Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 100,
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
-    
+  }, []);
+
+  const handleVote = useCallback((type: 'up' | 'down') => {
     onVote(player.id, type);
   }, [player.id, onVote]);
 
-  const rotation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '10deg'],
-  });
+  const approvalRate = Math.round((player.votes.up / (player.votes.up + player.votes.down)) * 100);
 
   return (
     <Animated.View
       style={[
         styles.playerCard,
         {
-          transform: [{ scale: scaleAnim }, { rotate: rotation }],
+          opacity: scaleAnim,
+          transform: [
+            { scale: scaleAnim },
+            { translateY: slideAnim },
+          ],
         },
       ]}
     >
       <LinearGradient
-        colors={['#1a1a1a', '#0a0a0a']}
+        colors={['#1e293b', '#0f172a']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.playerCardGradient}
       >
-        {/* Header */}
+        {/* Player Header with Avatar */}
         <View style={styles.playerHeader}>
-          <View style={styles.playerInfo}>
-            <Image source={{ uri: player.avatar }} style={styles.playerAvatar} />
-            <View>
-              <Text style={styles.playerName}>{player.name}</Text>
-              <View style={styles.playerMeta}>
+          <View style={styles.playerAvatarContainer}>
+            <LinearGradient
+              colors={['#22c55e', '#16a34a']}
+              style={styles.playerAvatarBorder}
+            >
+              <Image source={{ uri: player.avatar }} style={styles.playerAvatar} />
+            </LinearGradient>
+            <View style={styles.playerNumberBadge}>
+              <Text style={styles.playerNumber}>#{player.number}</Text>
+            </View>
+          </View>
+
+          <View style={styles.playerInfoSection}>
+            <Text style={styles.playerName}>{player.name}</Text>
+            <View style={styles.playerMetaRow}>
+              <View style={styles.playerTeamBadge}>
                 <Text style={styles.playerTeam}>{player.team}</Text>
-                <View style={styles.playerBadge}>
-                  <Text style={styles.playerPosition}>{player.position}</Text>
+              </View>
+              <View style={styles.playerPositionBadge}>
+                <Text style={styles.playerPosition}>{player.position}</Text>
+              </View>
+            </View>
+            <View style={styles.playerRatingContainer}>
+              <Star color="#FFD700" size={18} fill="#FFD700" />
+              <Text style={styles.playerRating}>{player.rating}</Text>
+              <Text style={styles.playerRatingLabel}>Rating</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Stats Row */}
+        <View style={styles.quickStatsRow}>
+          <View style={styles.quickStat}>
+            <Zap color="#22c55e" size={16} />
+            <Text style={styles.quickStatValue}>{player.stats.goals}</Text>
+            <Text style={styles.quickStatLabel}>{t.rank.goals}</Text>
+          </View>
+          <View style={styles.quickStat}>
+            <Target color="#3b82f6" size={16} />
+            <Text style={styles.quickStatValue}>{player.stats.assists}</Text>
+            <Text style={styles.quickStatLabel}>{t.rank.assists}</Text>
+          </View>
+          <View style={styles.quickStat}>
+            <Shield color="#eab308" size={16} />
+            <Text style={styles.quickStatValue}>{player.stats.yellowCards}</Text>
+            <Text style={styles.quickStatLabel}>{t.rank.yellow}</Text>
+          </View>
+          <View style={styles.quickStat}>
+            <Activity color="#a855f7" size={16} />
+            <Text style={styles.quickStatValue}>{player.stats.matches}</Text>
+            <Text style={styles.quickStatLabel}>{t.rank.matches}</Text>
+          </View>
+        </View>
+
+        {/* Performance Bars - Compact */}
+        <View style={styles.performanceSection}>
+          <Text style={styles.performanceSectionTitle}>Performance</Text>
+          <View style={styles.performanceGrid}>
+            {Object.entries(player.performance).map(([key, value]) => (
+              <View key={key} style={styles.performanceItem}>
+                <View style={styles.performanceHeader}>
+                  <Text style={styles.performanceLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
+                  <Text style={styles.performanceValue}>{value}</Text>
+                </View>
+                <View style={styles.performanceBarBg}>
+                  <LinearGradient
+                    colors={
+                      value > 80 
+                        ? ['#22c55e', '#16a34a'] 
+                        : value > 60 
+                        ? ['#eab308', '#ca8a04'] 
+                        : ['#ef4444', '#dc2626']
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.performanceBar, { width: `${value}%` }]}
+                  />
                 </View>
               </View>
-            </View>
-          </View>
-          <View style={styles.playerRatingBox}>
-            <Text style={styles.playerRating}>{player.rating}</Text>
-            <Star color="#FFD700" size={16} fill="#FFD700" />
+            ))}
           </View>
         </View>
 
-        {/* Performance Bars */}
-        <View style={styles.performanceContainer}>
-          {Object.entries(player.performance).map(([key, value]) => (
-            <View key={key} style={styles.performanceRow}>
-              <Text style={styles.performanceLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
-              <View style={styles.performanceBarBg}>
-                <Animated.View 
-                  style={[
-                    styles.performanceBar,
-                    { 
-                      width: `${value}%`,
-                      backgroundColor: value > 80 ? '#22c55e' : value > 60 ? '#eab308' : '#ef4444',
-                    }
-                  ]} 
-                />
-              </View>
-              <Text style={styles.performanceValue}>{value}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Zap color="#22c55e" size={20} />
-            <Text style={styles.statValue}>{player.stats.goals}</Text>
-            <Text style={styles.statLabel}>Goals</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Target color="#3b82f6" size={20} />
-            <Text style={styles.statValue}>{player.stats.assists}</Text>
-            <Text style={styles.statLabel}>Assists</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Shield color="#eab308" size={20} />
-            <Text style={styles.statValue}>{player.stats.yellowCards}</Text>
-            <Text style={styles.statLabel}>Yellow</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Activity color="#a855f7" size={20} />
-            <Text style={styles.statValue}>{player.stats.matches}</Text>
-            <Text style={styles.statLabel}>Matches</Text>
-          </View>
-        </View>
-
-        {/* Voting Section */}
+        {/* Voting Section - Redesigned */}
         <View style={styles.votingSection}>
-          <TouchableOpacity
-            style={[
-              styles.voteButton,
-              player.votes.userVote === 'up' && styles.voteButtonActive,
-            ]}
-            onPress={() => handleVote('up')}
-          >
-            <ThumbsUp 
-              color={player.votes.userVote === 'up' ? '#22c55e' : '#666'} 
-              size={20}
-              fill={player.votes.userVote === 'up' ? '#22c55e' : 'transparent'}
-            />
-            <Text style={[
-              styles.voteCount,
-              player.votes.userVote === 'up' && styles.voteCountActive,
-            ]}>{formatNumber(player.votes.up)}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.votePercentage}>
-            <Text style={styles.votePercentageText}>
-              {Math.round((player.votes.up / (player.votes.up + player.votes.down)) * 100)}%
-            </Text>
-            <Text style={styles.votePercentageLabel}>Approval</Text>
+          <View style={styles.approvalSection}>
+            <Text style={styles.approvalRate}>{approvalRate}%</Text>
+            <Text style={styles.approvalLabel}>{t.rank.approval}</Text>
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.voteButton,
-              player.votes.userVote === 'down' && styles.voteButtonActiveRed,
-            ]}
-            onPress={() => handleVote('down')}
-          >
-            <ThumbsDown 
-              color={player.votes.userVote === 'down' ? '#ef4444' : '#666'} 
-              size={20}
-              fill={player.votes.userVote === 'down' ? '#ef4444' : 'transparent'}
-            />
-            <Text style={[
-              styles.voteCount,
-              player.votes.userVote === 'down' && styles.voteCountActiveRed,
-            ]}>{formatNumber(player.votes.down)}</Text>
-          </TouchableOpacity>
+          <View style={styles.voteButtons}>
+            <TouchableOpacity
+              style={[
+                styles.voteButton,
+                player.votes.userVote === 'up' && styles.voteButtonActiveGreen,
+              ]}
+              onPress={() => handleVote('up')}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={
+                  player.votes.userVote === 'up' 
+                    ? ['#22c55e', '#16a34a'] 
+                    : ['#1e293b', '#0f172a']
+                }
+                style={styles.voteButtonGradient}
+              >
+                <ThumbsUp 
+                  color={player.votes.userVote === 'up' ? '#fff' : '#666'} 
+                  size={18}
+                  fill={player.votes.userVote === 'up' ? '#fff' : 'transparent'}
+                />
+                <Text style={[
+                  styles.voteCount,
+                  player.votes.userVote === 'up' && styles.voteCountActive,
+                ]}>{formatNumber(player.votes.up)}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.voteButton,
+                player.votes.userVote === 'down' && styles.voteButtonActiveRed,
+              ]}
+              onPress={() => handleVote('down')}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={
+                  player.votes.userVote === 'down' 
+                    ? ['#ef4444', '#dc2626'] 
+                    : ['#1e293b', '#0f172a']
+                }
+                style={styles.voteButtonGradient}
+              >
+                <ThumbsDown 
+                  color={player.votes.userVote === 'down' ? '#fff' : '#666'} 
+                  size={18}
+                  fill={player.votes.userVote === 'down' ? '#fff' : 'transparent'}
+                />
+                <Text style={[
+                  styles.voteCount,
+                  player.votes.userVote === 'down' && styles.voteCountActiveRed,
+                ]}>{formatNumber(player.votes.down)}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </LinearGradient>
     </Animated.View>
   );
 });
 
-// Optimized User Card Component
-const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, hapticFeedback }: any) => {
+// Redesigned User Card Component
+const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, hapticFeedback, t }: any) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -560,15 +599,34 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
       setIsVisible(true);
       Animated.spring(animatedValue, {
         toValue: 1,
-        delay: index * 50,
-        friction: 6,
+        delay: index * 80,
+        friction: 8,
         tension: 40,
         useNativeDriver: true,
       }).start();
     });
   }, []);
 
+  const handlePress = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    hapticFeedback();
+  }, [hapticFeedback]);
+
   if (!isVisible) return <SkeletonLoader />;
+
+  const isTopThree = item.rank <= 3;
 
   return (
     <Animated.View
@@ -578,52 +636,101 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
           opacity: animatedValue,
           transform: [
             {
-              translateY: animatedValue.interpolate({
+              translateX: animatedValue.interpolate({
                 inputRange: [0, 1],
-                outputRange: [30, 0],
+                outputRange: [50, 0],
               }),
             },
-            {
-              scale: animatedValue.interpolate({
-                inputRange: [0, 0.5, 1],
-                outputRange: [0.8, 1.05, 1],
-              }),
-            },
+            { scale: scaleAnim },
           ],
         },
       ]}
     >
       <TouchableOpacity
         style={styles.userCardContent}
-        activeOpacity={0.7}
-        onPress={hapticFeedback}
+        activeOpacity={1}
+        onPress={handlePress}
       >
-        <View style={styles.userLeft}>
-          <View style={styles.rankBadge}>{getRankIcon(item.rank)}</View>
-          <Image source={{ uri: item.avatar }} style={styles.userAvatar} />
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{item.name}</Text>
-            <View style={styles.userStats}>
-              <Eye color="#666" size={12} />
-              <Text style={styles.userScore}>{formatNumber(item.score)}</Text>
-              {item.change !== 0 && (
-                <View style={[styles.changeIndicator, item.change > 0 ? styles.changePositive : styles.changeNegative]}>
-                  <Text style={styles.changeText}>
-                    {item.change > 0 ? '+' : ''}{item.change}%
-                  </Text>
+        <LinearGradient
+          colors={
+            isTopThree
+              ? item.rank === 1
+                ? ['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)']
+                : item.rank === 2
+                ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)']
+                : ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)']
+              : ['rgba(34, 197, 94, 0.08)', 'rgba(34, 197, 94, 0.02)']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.userCardGradient}
+        >
+          {/* Rank Badge */}
+          <View style={[
+            styles.rankBadgeNew,
+            isTopThree && styles.rankBadgeTopThree,
+          ]}>
+            {getRankIcon(item.rank)}
+          </View>
+
+          {/* User Info */}
+          <View style={styles.userInfoSection}>
+            <View style={styles.userAvatarWrapper}>
+              <LinearGradient
+                colors={
+                  isTopThree
+                    ? item.rank === 1
+                      ? ['#FFD700', '#FFA500']
+                      : item.rank === 2
+                      ? ['#C0C0C0', '#A8A8A8']
+                      : ['#CD7F32', '#B8860B']
+                    : ['#22c55e', '#16a34a']
+                }
+                style={styles.userAvatarBorder}
+              >
+                <Image source={{ uri: item.avatar }} style={styles.userAvatar} />
+              </LinearGradient>
+              {item.badge && (
+                <View style={[styles.badgeIcon, getBadgeStyle(item.badge)]}>
+                  <Star color="#fff" size={10} fill="#fff" />
                 </View>
               )}
             </View>
-          </View>
-        </View>
-        <View style={styles.userRight}>
-          {getTrendIcon(item.trend)}
-          {item.badge && (
-            <View style={[styles.badge, getBadgeStyle(item.badge)]}>
-              <Star color="#fff" size={12} fill="#fff" />
+
+            <View style={styles.userDetails}>
+              <Text style={styles.userName} numberOfLines={1}>{item.name}</Text>
+              <View style={styles.userStatsRow}>
+                <View style={styles.scoreContainer}>
+                  <Eye color="#22c55e" size={14} strokeWidth={2} />
+                  <Text style={styles.userScore}>{formatNumber(item.score)}</Text>
+                </View>
+                {item.change !== 0 && (
+                  <View style={[
+                    styles.changeIndicator,
+                    item.change > 0 ? styles.changePositive : styles.changeNegative
+                  ]}>
+                    <TrendingUp 
+                      color={item.change > 0 ? '#22c55e' : '#ef4444'} 
+                      size={10}
+                      style={item.change < 0 && { transform: [{ rotate: '180deg' }] }}
+                    />
+                    <Text style={[
+                      styles.changeText,
+                      item.change > 0 ? styles.changeTextPositive : styles.changeTextNegative
+                    ]}>
+                      {Math.abs(item.change)}%
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
-          )}
-        </View>
+          </View>
+
+          {/* Trend Icon */}
+          <View style={styles.trendSection}>
+            {getTrendIcon(item.trend)}
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -764,6 +871,17 @@ const getBadgeStyle = (badge?: string) => {
 };
 
 export default function ProRankScreen() {
+  const { t, isRTL } = useLanguage();
+  
+  // Safety check for translations
+  if (!t || !t.rank) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#22c55e" />
+      </View>
+    );
+  }
+  
   const [selectedCategory, setSelectedCategory] = useState<'views' | 'comments' | 'shares' | 'quiz'>('views');
   const [selectedTab, setSelectedTab] = useState<'rankings' | 'players'>('rankings');
   const [refreshing, setRefreshing] = useState(false);
@@ -939,7 +1057,7 @@ export default function ProRankScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Animated Header */}
+      {/* Redesigned Header */}
       <Animated.View
         style={[
           styles.header,
@@ -950,69 +1068,73 @@ export default function ProRankScreen() {
         ]}
       >
         <LinearGradient
-          colors={['#22c55e', '#16a34a', '#0f7938']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={['#0a0a0a', '#1a1a1a']}
           style={styles.headerGradient}
         >
-          <BlurView intensity={20} style={styles.headerBlur}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerTop}>
-                <MaskedView
-                  maskElement={
-                    <Text style={styles.headerTitle}>Pro Rankings</Text>
-                  }
+          <View style={styles.headerContent}>
+            {/* Header Top with Icon */}
+            <View style={styles.headerTop}>
+              <View style={styles.headerIconWrapper}>
+                <LinearGradient
+                  colors={['#22c55e', '#16a34a']}
+                  style={styles.headerIconGradient}
                 >
-                  <LinearGradient
-                    colors={['#fff', '#f0f0f0']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <Text style={[styles.headerTitle, { opacity: 0 }]}>Pro Rankings</Text>
-                  </LinearGradient>
-                </MaskedView>
-                <Animated.View
-                  style={{
-                    transform: [
-                      {
-                        rotate: rotateAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0deg', '360deg'],
-                        }),
-                      },
-                    ],
-                  }}
-                >
-                  <Trophy color="#FFD700" size={32} />
-                </Animated.View>
+                  <Award color="#fff" size={28} strokeWidth={2.5} />
+                </LinearGradient>
               </View>
-              <Text style={styles.headerSubtitle}>
-                Compete, Rate Players & Climb the Leaderboard
-              </Text>
-
-              {/* Tab Switcher */}
-              <View style={styles.tabSwitcher}>
-                <TouchableOpacity
-                  style={[styles.tab, selectedTab === 'rankings' && styles.tabActive]}
-                  onPress={() => handleTabChange('rankings')}
-                >
-                  <BarChart3 color={selectedTab === 'rankings' ? '#fff' : 'rgba(255,255,255,0.6)'} size={18} />
-                  <Text style={[styles.tabText, selectedTab === 'rankings' && styles.tabTextActive]}>
-                    Rankings
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tab, selectedTab === 'players' && styles.tabActive]}
-                  onPress={() => handleTabChange('players')}
-                >
-                  <UserCheck color={selectedTab === 'players' ? '#fff' : 'rgba(255,255,255,0.6)'} size={18} />
-                  <Text style={[styles.tabText, selectedTab === 'players' && styles.tabTextActive]}>
-                    Player Rating
-                  </Text>
-                </TouchableOpacity>
+              <View style={styles.headerTextSection}>
+                <Text style={styles.headerTitle}>{t.rank.title}</Text>
+                <Text style={styles.headerSubtitle}>
+                  {isRTL ? 'تنافس، قيّم اللاعبين وتسلق الترتيب' : 'Compete, Rate & Climb'}
+                </Text>
               </View>
             </View>
-          </BlurView>
+
+            {/* Tab Switcher - Redesigned */}
+            <View style={styles.tabSwitcher}>
+              <TouchableOpacity
+                style={[styles.tab, selectedTab === 'rankings' && styles.tabActive]}
+                onPress={() => handleTabChange('rankings')}
+                activeOpacity={0.7}
+              >
+                {selectedTab === 'rankings' && (
+                  <LinearGradient
+                    colors={['#22c55e', '#16a34a']}
+                    style={styles.tabActiveGradient}
+                  />
+                )}
+                <BarChart3 
+                  color={selectedTab === 'rankings' ? '#fff' : '#666'} 
+                  size={20} 
+                  strokeWidth={2.5}
+                />
+                <Text style={[styles.tabText, selectedTab === 'rankings' && styles.tabTextActive]}>
+                  {t.rank.rankings}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.tab, selectedTab === 'players' && styles.tabActive]}
+                onPress={() => handleTabChange('players')}
+                activeOpacity={0.7}
+              >
+                {selectedTab === 'players' && (
+                  <LinearGradient
+                    colors={['#22c55e', '#16a34a']}
+                    style={styles.tabActiveGradient}
+                  />
+                )}
+                <UserCheck 
+                  color={selectedTab === 'players' ? '#fff' : '#666'} 
+                  size={20}
+                  strokeWidth={2.5}
+                />
+                <Text style={[styles.tabText, selectedTab === 'players' && styles.tabTextActive]}>
+                  {t.rank.playerRating}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </LinearGradient>
       </Animated.View>
 
@@ -1032,7 +1154,7 @@ export default function ProRankScreen() {
       >
         {selectedTab === 'rankings' ? (
           <>
-            {/* Category Selector */}
+            {/* Category Selector - Redesigned */}
             <Animated.View
               style={[
                 styles.categoryContainer,
@@ -1048,23 +1170,39 @@ export default function ProRankScreen() {
                 contentContainerStyle={styles.categoryScroll}
               >
                 {[
-                  { key: 'views', icon: Eye, label: 'Top Viewers' },
-                  { key: 'comments', icon: MessageCircle, label: 'Top Comments' },
-                  { key: 'shares', icon: Share2, label: 'Top Shares' },
-                  { key: 'quiz', icon: Brain, label: 'Quiz Masters' },
-                ].map((category) => (
+                  { key: 'views', icon: Eye, label: t.rank.topViewers, color: '#3b82f6' },
+                  { key: 'comments', icon: MessageCircle, label: t.rank.topComments, color: '#a855f7' },
+                  { key: 'shares', icon: Share2, label: t.rank.topShares, color: '#f59e0b' },
+                  { key: 'quiz', icon: Brain, label: t.rank.quizMasters, color: '#22c55e' },
+                ].map((category, idx) => (
                   <TouchableOpacity
                     key={category.key}
-                    style={[styles.categoryButton, selectedCategory === category.key && styles.categoryActive]}
+                    style={[
+                      styles.categoryButton,
+                      selectedCategory === category.key && styles.categoryActive
+                    ]}
                     onPress={() => {
                       setSelectedCategory(category.key as any);
                       hapticFeedback();
                     }}
+                    activeOpacity={0.7}
                   >
-                    <category.icon 
-                      color={selectedCategory === category.key ? '#fff' : '#666'} 
-                      size={16} 
-                    />
+                    {selectedCategory === category.key && (
+                      <LinearGradient
+                        colors={[category.color, `${category.color}CC`]}
+                        style={styles.categoryActiveGradient}
+                      />
+                    )}
+                    <View style={[
+                      styles.categoryIconWrapper,
+                      selectedCategory === category.key && { backgroundColor: 'rgba(255,255,255,0.2)' }
+                    ]}>
+                      <category.icon 
+                        color={selectedCategory === category.key ? '#fff' : category.color} 
+                        size={18}
+                        strokeWidth={2.5}
+                      />
+                    </View>
                     <Text style={[
                       styles.categoryText, 
                       selectedCategory === category.key && styles.categoryTextActive
@@ -1095,6 +1233,7 @@ export default function ProRankScreen() {
                     getTrendIcon={getTrendIcon}
                     formatNumber={formatNumber}
                     hapticFeedback={hapticFeedback}
+                    t={t}
                   />
                 )}
                 keyExtractor={keyExtractor}
@@ -1127,6 +1266,7 @@ export default function ProRankScreen() {
                 <PlayerRatingCard
                   player={item}
                   onVote={handlePlayerVote}
+                  t={t}
                 />
               )}
               keyExtractor={keyExtractor}
@@ -1241,61 +1381,74 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   headerGradient: {
     paddingTop: 60,
-    paddingBottom: 30,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-  },
-  headerBlur: {
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
   },
   headerContent: {
-    alignItems: 'center',
+    gap: 20,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
+    gap: 16,
+  },
+  headerIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  headerIconGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTextSection: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-    marginBottom: 20,
+    fontSize: 13,
+    color: '#888',
   },
   tabSwitcher: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 25,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
     padding: 4,
-    width: SCREEN_WIDTH * 0.8,
+    gap: 4,
   },
   tab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 20,
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  tabActive: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  tabActiveGradient: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
   },
+  tabActive: {},
   tabText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
+    color: '#666',
+    fontSize: 13,
     fontWeight: '600',
+    zIndex: 1,
   },
   tabTextActive: {
     color: '#fff',
@@ -1314,23 +1467,36 @@ const styles = StyleSheet.create({
   categoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
     backgroundColor: '#1a1a1a',
     borderWidth: 1,
-    borderColor: '#333',
-    marginRight: 12,
+    borderColor: 'rgba(255,255,255,0.1)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  categoryActiveGradient: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
   },
   categoryActive: {
-    backgroundColor: '#22c55e',
-    borderColor: '#22c55e',
+    borderColor: 'transparent',
+  },
+  categoryIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   categoryText: {
-    color: '#666',
-    fontSize: 14,
+    color: '#888',
+    fontSize: 13,
     fontWeight: '600',
+    zIndex: 1,
   },
   categoryTextActive: {
     color: '#fff',
@@ -1352,16 +1518,122 @@ const styles = StyleSheet.create({
   },
   userCard: {
     marginBottom: 12,
+    marginHorizontal: 20,
   },
   userCardContent: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  userCardGradient: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
     padding: 16,
+    gap: 12,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+  },
+  rankBadgeNew: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  rankBadgeTopThree: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  userInfoSection: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  userAvatarWrapper: {
+    position: 'relative',
+  },
+  userAvatarBorder: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#0a0a0a',
+  },
+  badgeIcon: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#0a0a0a',
+  },
+  userDetails: {
+    flex: 1,
+  },
+  userName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  userStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  userScore: {
+    color: '#22c55e',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  changeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  changePositive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  changeNegative: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+  },
+  changeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  changeTextPositive: {
+    color: '#22c55e',
+  },
+  changeTextNegative: {
+    color: '#ef4444',
+  },
+  trendSection: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   userLeft: {
     flexDirection: 'row',
@@ -1577,172 +1849,229 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   playerCard: {
-    marginBottom: 20,
+    marginBottom: 16,
+    marginHorizontal: 16,
   },
   playerCardGradient: {
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: 'rgba(34, 197, 94, 0.2)',
   },
   playerHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  playerInfo: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    flex: 1,
+    marginBottom: 20,
+    gap: 16,
+  },
+  playerAvatarContainer: {
+    position: 'relative',
+  },
+  playerAvatarBorder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    padding: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playerAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: '#0a0a0a',
+  },
+  playerNumberBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: '#22c55e',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderWidth: 2,
-    borderColor: '#22c55e',
+    borderColor: '#0f172a',
+  },
+  playerNumber: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  playerInfoSection: {
+    flex: 1,
   },
   playerName: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  playerMeta: {
+  playerMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 8,
+  },
+  playerTeamBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
   },
   playerTeam: {
-    color: '#666',
-    fontSize: 14,
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  playerBadge: {
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  playerPositionBadge: {
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
   },
   playerPosition: {
-    color: '#fff',
+    color: '#a855f7',
     fontSize: 12,
     fontWeight: '600',
   },
-  playerRatingBox: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#22c55e',
-  },
-  playerRating: {
-    color: '#22c55e',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  performanceContainer: {
-    marginBottom: 20,
-  },
-  performanceRow: {
+  playerRatingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 6,
   },
-  performanceLabel: {
+  playerRating: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  playerRatingLabel: {
     color: '#666',
     fontSize: 12,
-    width: 70,
   },
-  performanceBarBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#333',
-    borderRadius: 3,
-    marginHorizontal: 10,
-    overflow: 'hidden',
-  },
-  performanceBar: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  performanceValue: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    width: 30,
-    textAlign: 'right',
-  },
-  statsGrid: {
+  quickStatsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 20,
     paddingVertical: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#333',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 16,
   },
-  statItem: {
+  quickStat: {
     alignItems: 'center',
     gap: 4,
   },
-  statValue: {
+  quickStatValue: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
-  statLabel: {
+  quickStatLabel: {
     color: '#666',
-    fontSize: 11,
+    fontSize: 10,
+  },
+  performanceSection: {
+    marginBottom: 20,
+  },
+  performanceSectionTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  performanceGrid: {
+    gap: 10,
+  },
+  performanceItem: {
+    marginBottom: 8,
+  },
+  performanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  performanceLabel: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  performanceValue: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  performanceBarBg: {
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  performanceBar: {
+    height: '100%',
+    borderRadius: 4,
   },
   votingSection: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  approvalSection: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  approvalRate: {
+    color: '#22c55e',
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  approvalLabel: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  voteButtons: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
   },
   voteButton: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  voteButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#0a0a0a',
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
   },
-  voteButtonActive: {
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+  voteButtonActiveGreen: {
     borderColor: '#22c55e',
   },
   voteButtonActiveRed: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
     borderColor: '#ef4444',
   },
   voteCount: {
     color: '#666',
     fontSize: 14,
-    fontWeight: '600',
-  },
-  voteCountActive: {
-    color: '#22c55e',
-  },
-  voteCountActiveRed: {
-    color: '#ef4444',
-  },
-  votePercentage: {
-    alignItems: 'center',
-  },
-  votePercentageText: {
-    color: '#22c55e',
-    fontSize: 20,
     fontWeight: 'bold',
   },
-  votePercentageLabel: {
-    color: '#666',
-    fontSize: 11,
+  voteCountActive: {
+    color: '#fff',
+  },
+  voteCountActiveRed: {
+    color: '#fff',
   },
   skeleton: {
     marginBottom: 12,

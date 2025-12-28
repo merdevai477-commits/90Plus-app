@@ -197,6 +197,12 @@ export default function TabLayout() {
             href: null,
           }}
         />
+        <Tabs.Screen
+          name="match-details"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
       <BottomNav />
     </View>

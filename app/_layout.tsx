@@ -5,8 +5,11 @@ import React, { useEffect } from "react";
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, I18nManager, Platform } from 'react-native';
-import { useAppSettings, useTheme, useLanguage } from "../src/store/useAppSettings";
+import { View, StatusBar } from 'react-native';
+import { SettingsProvider } from "../contexts/SettingsContext";
+import { LanguageProvider } from "../contexts/LanguageContext";
+import { CoinsProvider } from "../contexts/CoinsContext";
+import { configureAudioVideo } from "../utils/videoConfig";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -25,43 +28,31 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const theme = useTheme();
-  const language = useLanguage();
-
   useEffect(() => {
+    // تكوين الصوت والفيديو
+    configureAudioVideo();
     SplashScreen.hideAsync();
   }, []);
 
-  // Apply RTL/LTR globally when language changes (requires app reload to fully apply)
-  useEffect(() => {
-    const shouldRTL = language.direction === 'rtl';
-    if (I18nManager.isRTL !== shouldRTL) {
-      try {
-        I18nManager.allowRTL(shouldRTL);
-        I18nManager.forceRTL(shouldRTL);
-        if (Platform.OS !== 'web') {
-          // Soft notice: full effect after reload
-          console.log('Direction changed. Restart app to fully apply.');
-        }
-      } catch (e) {
-        console.warn('Failed to toggle RTL', e);
-      }
-    }
-  }, [language.direction]);
-
   return (
     <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView>
-        <SafeAreaProvider>
-          <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-            <StatusBar
-              barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
-              backgroundColor={theme.colors.background}
-            />
-          <RootLayoutNav />
-          </View>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+      <LanguageProvider>
+        <SettingsProvider>
+          <CoinsProvider>
+            <GestureHandlerRootView>
+              <SafeAreaProvider>
+                <View style={{ flex: 1, backgroundColor: '#000' }}>
+                  <StatusBar
+                    barStyle="light-content"
+                    backgroundColor="#000"
+                  />
+                  <RootLayoutNav />
+                </View>
+              </SafeAreaProvider>
+            </GestureHandlerRootView>
+          </CoinsProvider>
+        </SettingsProvider>
+      </LanguageProvider>
     </QueryClientProvider>
   );
 }

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 // Types
 interface ReelData {
@@ -31,15 +32,16 @@ const COLORS = {
 };
 
 // Enhanced Video Player Component
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ 
-  reel, 
-  isActive, 
-  onVideoRef 
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({
+  reel,
+  isActive,
+  onVideoRef
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [error, setError] = useState(false);
   const videoRef = useRef<Video>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (videoRef.current) {
@@ -53,9 +55,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   useEffect(() => {
     if (videoRef.current) {
       if (isActive) {
-        videoRef.current.playAsync();
+        videoRef.current.playAsync().catch(e => {
+          console.warn('Error playing video:', e);
+        });
       } else {
-        videoRef.current.pauseAsync();
+        videoRef.current.pauseAsync().catch(e => {
+          console.warn('Error pausing video:', e);
+        });
       }
     }
   }, [isActive]);
@@ -73,12 +79,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>فشل تحميل الفيديو</Text>
-        <TouchableOpacity 
+        <Text style={styles.errorText}>{t.reels.loadFailed}</Text>
+        <TouchableOpacity
           style={styles.retryButton}
           onPress={handleRetry}
         >
-          <Text style={styles.retryText}>إعادة المحاولة</Text>
+          <Text style={styles.retryText}>{t.reels.retry}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -104,14 +110,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         progressUpdateIntervalMillis={1000}
         positionMillis={0}
       />
-      
+
       {/* Loading/Buffering Indicator */}
-      {(isLoading || isBuffering) && (
+      {/* Loading/Buffering Indicator - Hidden as requested */}
+      {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>
-            {isLoading ? 'جاري التحميل...' : 'جاري التخزين المؤقت...'}
-          </Text>
         </View>
       )}
     </View>

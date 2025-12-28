@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +24,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mrdev187.footballpro",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "SCHEDULE_EXACT_ALARM"
+      ]
     },
     "web": {
       "output": "static",
@@ -39,6 +50,16 @@
           }
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#22c55e",
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ]
+        }
+      ],
       "expo-video",
       "expo-web-browser"
     ],
@@ -49,7 +70,8 @@
     "extra": {
       "eas": {
         "projectId": "2fce61d8-ece9-472c-80a5-4a16331f8363"
-      }
+      },
+      "sportmonksToken": "mDAf5ClZwcEKXgFCkQoSpUtoumBDl4hT5FYzF8LtAYSNsZ0i19AdekwZQcSy"
     }
   }
 }

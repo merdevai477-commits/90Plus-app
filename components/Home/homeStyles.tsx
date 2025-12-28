@@ -1,83 +1,245 @@
-import { StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions, Platform } from 'react-native';
+import { COLORS, EFFECTS } from '../reels/constants';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.deepBlack,
   },
-  header: {
+
+  // ====================
+  // HEADER STYLES
+  // ====================
+  headerContainer: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    zIndex: 100,
+  },
+  headerGradient: {
+    ...StyleSheet.absoluteFillObject,
+    height: 150,
+    zIndex: -1,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
-  appTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#22c55e',
-  },
-  headerIcons: {
+  profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
-  headerIcon: {
-    padding: 4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  welcomeSection: {
-    margin: 20,
-    padding: 24,
-    borderRadius: 16,
-    backgroundColor: '#22c55e',
-  },
-  greeting: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.9,
-    marginBottom: 4,
-  },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 20,
-  },
-  welcomeButtons: {
-    flexDirection: 'row',
     gap: 12,
   },
-  registerButton: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  avatarContainer: {
+    position: 'relative',
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    borderColor: COLORS.deepBlack,
+  },
+  levelRing: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: COLORS.neonGreen,
+    opacity: 0.8,
+  },
+  levelBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: COLORS.neonGreen,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.deepBlack,
+  },
+  levelText: {
+    color: COLORS.deepBlack,
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  greetingContainer: {
+    justifyContent: 'center',
+  },
+  greetingText: {
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  usernameText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    maxWidth: 150,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(50, 205, 50, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 20,
-  },
-  registerButtonText: {
-    color: '#22c55e',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  createCardButton: {
-    backgroundColor: 'transparent',
+    gap: 4,
     borderWidth: 1,
-    borderColor: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    borderColor: 'rgba(50, 205, 50, 0.3)',
+  },
+  pointsText: {
+    color: COLORS.electricGreen,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  createCardButtonText: {
-    color: '#fff',
-    fontWeight: '600',
+  notificationDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.error,
+    borderWidth: 1,
+    borderColor: COLORS.deepBlack,
+  },
+
+  // ====================
+  // HERO SECTION STYLES
+  // ====================
+  heroContainer: {
+    marginBottom: 24,
+  },
+  heroScrollContent: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  heroCard: {
+    width: SCREEN_WIDTH * 0.85,
+    height: 200,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: COLORS.mediumGray,
+    position: 'relative',
+    ...EFFECTS.softShadow,
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    padding: 20,
+    justifyContent: 'flex-end',
+  },
+  heroTag: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: COLORS.neonGreen,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  heroTagText: {
+    color: COLORS.deepBlack,
+    fontSize: 12,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    color: COLORS.white,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  heroSubtitle: {
+    color: COLORS.textSecondary,
     fontSize: 14,
+    fontWeight: '500',
   },
+
+  // ====================
+  // QUICK ACTIONS STYLES
+  // ====================
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 32,
+  },
+  actionCard: {
+    flex: 1,
+    minWidth: (SCREEN_WIDTH - 52) / 2,
+    height: 100,
+    borderRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  actionGradient: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  actionIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(50, 205, 50, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionTitle: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionArrow: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    opacity: 0.5,
+  },
+
+  // ====================
+  // SECTION STYLES
+  // ====================
   section: {
     marginBottom: 32,
   },
@@ -89,324 +251,75 @@ export const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: COLORS.white,
+    letterSpacing: 0.5,
   },
   viewAllText: {
-    color: '#22c55e',
-    fontSize: 14,
+    color: COLORS.neonGreen,
+    fontSize: 12,
     fontWeight: '600',
   },
-  horizontalList: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  skeletonContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-  },
-  videoCard: {
-    width: 160,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+
+  // ====================
+  // PLAYER CARD STYLES
+  // ====================
+  playerCard: {
+    width: 140,
+    height: 220,
+    backgroundColor: COLORS.mediumGray,
+    borderRadius: 16,
     overflow: 'hidden',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
-  videoThumbnailContainer: {
-    position: 'relative',
-  },
-  videoThumbnail: {
+  playerImage: {
     width: '100%',
-    height: 90,
+    height: 140,
+    resizeMode: 'cover',
   },
   errorPlaceholder: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: COLORS.darkGray,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playButton: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -12 }, { translateY: -12 }],
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 12,
-    padding: 8,
-  },
-  videoDuration: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    color: '#fff',
-    fontSize: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  videoTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    padding: 12,
-    paddingBottom: 8,
-  },
-  videoStats: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    color: '#666',
-    fontSize: 12,
-  },
-  playerCard: {
-    width: 140,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-  },
-  playerImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 8,
-  },
   playerInfo: {
-    alignItems: 'center',
-    width: '100%',
+    padding: 10,
+    flex: 1,
+    justifyContent: 'space-between',
   },
   playerName: {
-    color: '#fff',
+    color: COLORS.white,
     fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: 'bold',
   },
   playerPosition: {
-    color: '#22c55e',
-    fontSize: 12,
-    marginBottom: 2,
+    color: COLORS.neonGreen,
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   playerTeam: {
-    color: '#666',
-    fontSize: 11,
-    marginBottom: 6,
+    color: COLORS.textSecondary,
+    fontSize: 10,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginTop: 2,
   },
   rating: {
     color: '#FFD700',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  teamOfMonthContainer: {
-    paddingHorizontal: 20,
-  },
-  fullWidthTeamCard: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 8,
-  },
-  teamHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  teamLogo: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-  },
-  teamInfo: {
-    flex: 1,
-  },
-  teamName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  teamFormation: {
-    color: '#22c55e',
-    fontSize: 12,
-  },
-  largeFootballField: {
-    width: '100%',
-    height: 200,
-    position: 'relative',
-    backgroundColor: '#0d5016',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 12,
-  },
-  fieldBackground: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-  },
-  centerCircle: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: '#fff',
-    left: '50%',
-    top: '50%',
-    marginLeft: -30,
-    marginTop: -30,
-  },
-  centerLine: {
-    position: 'absolute',
-    width: '100%',
-    height: 2,
-    backgroundColor: '#fff',
-    top: '50%',
-    marginTop: -1,
-  },
-  goalArea: {
-    position: 'absolute',
-    width: 50,
-    height: 30,
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderBottomWidth: 0,
-    left: '50%',
-    bottom: 0,
-    marginLeft: -25,
-  },
-  penaltyArea: {
-    position: 'absolute',
-    width: 100,
-    height: 50,
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderBottomWidth: 0,
-    left: '50%',
-    bottom: 0,
-    marginLeft: -50,
-  },
-  playerDot: {
-    position: 'absolute',
-    alignItems: 'center',
-    transform: [{ translateX: -14 }, { translateY: -14 }],
-  },
-  playerDotImage: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#22c55e',
-  },
-  playerDotName: {
-    color: '#fff',
     fontSize: 10,
-    fontWeight: '600',
-    marginTop: 4,
-    textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    minWidth: 35,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'flex-start',
-  },
-  sideMenu: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: SCREEN_WIDTH * 0.75,
-    backgroundColor: '#0a0a0a',
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(34, 197, 94, 0.3)',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 20,
-  },
-  sideMenuHeader: {
-    paddingTop: 60,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(34, 197, 94, 0.2)',
-  },
-  sideMenuTitle: {
-    fontSize: 32,
     fontWeight: 'bold',
-    color: '#22c55e',
   },
-  sideMenuItems: {
-    flex: 1,
-    paddingTop: 24,
-  },
-  sideMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    gap: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: 'transparent',
-  },
-  sideMenuItemText: {
-    fontSize: 18,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  sideMenuFooter: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(34, 197, 94, 0.2)',
-  },
-  versionText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-  },
-  logoutButton: {
-    marginTop: 'auto',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 59, 48, 0.2)',
-    paddingTop: 20,
-    marginBottom: 20,
-  },
-  logoutText: {
-    color: '#ff3b30',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlayIconWrap: {
-    width: 160,
-    height: 160,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#3a2a0a',
-    backgroundColor: 'rgba(0,0,0,0.6)'
-  },
+
+  // Legacy styles for compatibility (can be refactored later)
+  scrollView: { flex: 1 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+  overlayIconWrap: { width: 160, height: 160, borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#3a2a0a', backgroundColor: 'rgba(0,0,0,0.6)' },
+  sideMenu: { position: 'absolute', right: 0, top: 0, bottom: 0, width: SCREEN_WIDTH * 0.75, backgroundColor: '#0a0a0a', borderLeftWidth: 1, borderLeftColor: 'rgba(34, 197, 94, 0.3)', shadowColor: '#22c55e', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 20 },
 });

@@ -16,11 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { QUIZ_QUESTIONS, Question } from '@/constants/quizData';
-import { 
-  Pause, 
+import {
+  Pause,
   Play,
-  SkipForward, 
-  Lightbulb, 
+  SkipForward,
+  Lightbulb,
   Heart,
   Zap,
   Trophy,
@@ -34,6 +34,10 @@ import {
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { useCoins } from '../../contexts/CoinsContext';
+import { CoinsBadge } from '../../components/common/CoinsBadge';
+import { QuizCategories } from '../../components/Quiz/QuizCategories';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,10 +47,23 @@ const HINT_COST = 10;
 const MAX_QUESTIONS = 20; // حد أقصى 20 سؤال
 
 export default function QuizScreen() {
+  const { t } = useLanguage();
+  const { coins, addCoins, subtractCoins } = useCoins();
+
+  // Safety check for translations
+  if (!t || !t.quiz) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <Text style={{ color: '#fff' }}>Loading...</Text>
+      </View>
+    );
+  }
+
   // تحديد 20 سؤال فقط
   const gameQuestions = QUIZ_QUESTIONS.slice(0, MAX_QUESTIONS);
-  
+
   // States الأساسية
+  const [selectedMode, setSelectedMode] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -55,11 +72,11 @@ export default function QuizScreen() {
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [coinsEarned, setCoinsEarned] = useState(0);
 
   // States التحسينات
   const [streak, setStreak] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [coins, setCoins] = useState(50);
+  const [lives, setLives] = useState(5);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showHint, setShowHint] = useState(false);
   const [hintUsed, setHintUsed] = useState(false);
@@ -199,14 +216,12 @@ export default function QuizScreen() {
     }
 
     const isCorrect = answerIndex === currentQuestion.correctAnswer;
-    
+
     if (isCorrect) {
-      const basePoints = currentQuestion.points;
-      const streakBonus = streak > 0 ? Math.floor(basePoints * 0.2 * streak) : 0;
-      const doubleBonus = powerUps.doublePoints ? basePoints : 0;
-      const totalPoints = basePoints + streakBonus + doubleBonus;
-      
-      setScore(prev => prev + totalPoints);
+      // كل إجابة صحيحة = 5 نقاط ثابتة
+      const pointsPerCorrectAnswer = 5;
+
+      setScore(prev => prev + pointsPerCorrectAnswer);
       setCorrectAnswers(prev => prev + 1);
       setStreak(prev => {
         const newStreak = prev + 1;
@@ -218,25 +233,28 @@ export default function QuizScreen() {
         }
         return newStreak;
       });
-      setCoins(prev => prev + 5);
-      
+
+      // إضافة 5 كوينات للإجابة الصحيحة
+      await addCoins(5);
+      setCoinsEarned(prev => prev + 5);
+
       if (soundEnabled && Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } else {
       setStreak(0);
       setLives(prev => Math.max(0, prev - 1));
-      
+
       if (soundEnabled && Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Vibration.vibrate(500);
       }
-      
+
       shakeAnimation();
     }
 
     animateResult(isCorrect);
-    
+
     if (lives <= 1 && !isCorrect) {
       setTimeout(() => setShowResult(true), 2000);
     }
@@ -295,14 +313,16 @@ export default function QuizScreen() {
     });
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
     if (coins >= 20 && currentQuestionIndex < gameQuestions.length - 1) {
-      setCoins(prev => prev - 20);
-      setSelectedAnswer(null);
-      setIsAnswered(false);
-      setTotalQuestions(prev => prev + 1);
-      setCurrentQuestionIndex(prev => prev + 1);
-      setStreak(0);
+      const success = await subtractCoins(20);
+      if (success) {
+        setSelectedAnswer(null);
+        setIsAnswered(false);
+        setTotalQuestions(prev => prev + 1);
+        setCurrentQuestionIndex(prev => prev + 1);
+        setStreak(0);
+      }
     }
   };
 
@@ -310,23 +330,25 @@ export default function QuizScreen() {
     setIsPaused(!isPaused);
   };
 
-  const handleHint = () => {
+  const handleHint = async () => {
     if (coins >= HINT_COST && !hintUsed) {
-      setCoins(prev => prev - HINT_COST);
-      setHintUsed(true);
-      
-      const wrongOptions = currentQuestion.options
-        .map((_, index) => index)
-        .filter(index => index !== currentQuestion.correctAnswer);
-      
-      const optionsToEliminate = wrongOptions
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 2);
-      
-      setEliminatedOptions(optionsToEliminate);
-      
-      if (soundEnabled && Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const success = await subtractCoins(HINT_COST);
+      if (success) {
+        setHintUsed(true);
+
+        const wrongOptions = currentQuestion.options
+          .map((_, index) => index)
+          .filter(index => index !== currentQuestion.correctAnswer);
+
+        const optionsToEliminate = wrongOptions
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 2);
+
+        setEliminatedOptions(optionsToEliminate);
+
+        if (soundEnabled && Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
       }
     }
   };
@@ -339,8 +361,8 @@ export default function QuizScreen() {
     setShowResult(false);
     setSelectedAnswer(null);
     setIsAnswered(false);
-    setLives(3);
-    setCoins(50);
+    setLives(5);
+    setCoinsEarned(0);
     setStreak(0);
     setBestStreak(0);
     setShowImage(false);
@@ -366,43 +388,43 @@ export default function QuizScreen() {
                   <Trophy size={60} color="#fff" strokeWidth={2} />
                 </LinearGradient>
               </View>
-              <Text style={styles.resultTitle}>مبروك!</Text>
-              <Text style={styles.resultSubtitle}>لقد أكملت الاختبار بنجاح</Text>
+              <Text style={styles.resultTitle}>{t.quiz.congratulations}</Text>
+              <Text style={styles.resultSubtitle}>{t.quiz.quizCompleted}</Text>
             </Animated.View>
-            
+
             <View style={styles.resultScoreCard}>
               <LinearGradient
                 colors={['rgba(16, 185, 129, 0.1)', 'rgba(16, 185, 129, 0.05)']}
                 style={styles.scoreGradient}
               >
                 <Text style={styles.resultScore}>{score}</Text>
-                <Text style={styles.resultLabel}>نقطة</Text>
+                <Text style={styles.resultLabel}>{t.quiz.points}</Text>
               </LinearGradient>
             </View>
-            
+
             <View style={styles.resultStatsGrid}>
               <View style={styles.resultStatCard}>
                 <View style={styles.statIconWrapper}>
                   <Target size={24} color="#10b981" />
                 </View>
                 <Text style={styles.resultStatValue}>{accuracy}%</Text>
-                <Text style={styles.resultStatLabel}>دقة</Text>
+                <Text style={styles.resultStatLabel}>{t.quiz.accuracy}</Text>
               </View>
-              
+
               <View style={styles.resultStatCard}>
                 <View style={styles.statIconWrapper}>
                   <Award size={24} color="#fbbf24" />
                 </View>
                 <Text style={styles.resultStatValue}>{correctAnswers}</Text>
-                <Text style={styles.resultStatLabel}>صحيحة</Text>
+                <Text style={styles.resultStatLabel}>{t.quiz.correct}</Text>
               </View>
-              
+
               <View style={styles.resultStatCard}>
                 <View style={styles.statIconWrapper}>
                   <Zap size={24} color="#f97316" />
                 </View>
                 <Text style={styles.resultStatValue}>{bestStreak}</Text>
-                <Text style={styles.resultStatLabel}>أفضل سلسلة</Text>
+                <Text style={styles.resultStatLabel}>{t.quiz.bestStreak}</Text>
               </View>
             </View>
 
@@ -411,10 +433,10 @@ export default function QuizScreen() {
                 colors={['rgba(251, 191, 36, 0.15)', 'rgba(251, 191, 36, 0.05)']}
                 style={styles.coinsGradientCard}
               >
-                <Text style={styles.resultCoinsText}>💰 +{coins - 50} عملة ذهبية</Text>
+                <Text style={styles.resultCoinsText}>💰 +{coinsEarned} {t.quiz.goldCoins}</Text>
               </LinearGradient>
             </View>
-            
+
             <TouchableOpacity
               style={styles.restartButton}
               onPress={handleRestart}
@@ -427,7 +449,7 @@ export default function QuizScreen() {
                 end={{ x: 1, y: 0 }}
               >
                 <RotateCcw size={22} color="#fff" strokeWidth={2.5} />
-                <Text style={styles.restartButtonText}>لعب مرة أخرى</Text>
+                <Text style={styles.restartButtonText}>{t.quiz.playAgain}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -436,19 +458,49 @@ export default function QuizScreen() {
     );
   }
 
+  const handleCategorySelect = (mode: string) => {
+    setSelectedMode(mode);
+    handleRestart();
+  };
+
+  const handleBackToCategories = () => {
+    setSelectedMode(null);
+    handleRestart();
+  };
+
+  if (!selectedMode) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="light-content" />
+        <LinearGradient
+          colors={['#0a0a0a', '#1a1a1a']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerLeft}>
+              <CoinsBadge />
+            </View>
+          </View>
+        </View>
+        <QuizCategories onSelectCategory={handleCategorySelect} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* خلفية ديناميكية */}
       <LinearGradient
         colors={['#0a0a0a', '#1a1a1a']}
         style={StyleSheet.absoluteFillObject}
       />
-      
+
       {/* Progress Bar */}
       <View style={styles.progressBar}>
-        <Animated.View 
+        <Animated.View
           style={[
             styles.progressFill,
             {
@@ -472,22 +524,18 @@ export default function QuizScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity style={styles.coinBadge} activeOpacity={0.8}>
-              <LinearGradient
-                colors={['rgba(251, 191, 36, 0.2)', 'rgba(251, 191, 36, 0.1)']}
-                style={styles.coinGradient}
-              >
-                <Text style={styles.coinIcon}>💰</Text>
-                <Text style={styles.coinValue}>{coins}</Text>
-              </LinearGradient>
+            <TouchableOpacity onPress={handleBackToCategories} style={{ marginRight: 12 }}>
+              <RotateCcw size={24} color="#fff" />
             </TouchableOpacity>
-            
+            {/* Unified Coins Badge */}
+            <CoinsBadge />
+
             <View style={styles.livesBadge}>
-              {[...Array(3)].map((_, i) => (
+              {[...Array(5)].map((_, i) => (
                 <Animated.View key={i} style={styles.heartWrapper}>
-                  <Heart 
-                    size={22} 
-                    color={i < lives ? "#ef4444" : "#4a4a4a"} 
+                  <Heart
+                    size={22}
+                    color={i < lives ? "#ef4444" : "#4a4a4a"}
                     fill={i < lives ? "#ef4444" : "transparent"}
                   />
                 </Animated.View>
@@ -511,17 +559,19 @@ export default function QuizScreen() {
 
       {/* Streak Animation */}
       {showStreakAnimation && (
-        <Animated.View 
+        <Animated.View
           style={[
             styles.streakBanner,
             {
               opacity: streakAnim,
               transform: [
                 { scale: streakAnim },
-                { translateY: streakAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-50, 0],
-                })},
+                {
+                  translateY: streakAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-50, 0],
+                  })
+                },
               ],
             },
           ]}
@@ -536,7 +586,7 @@ export default function QuizScreen() {
       )}
 
       {/* Main Content */}
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -565,11 +615,11 @@ export default function QuizScreen() {
                 <Text style={styles.categoryText}>{currentQuestion.category}</Text>
               </LinearGradient>
             </View>
-            
+
             <View style={styles.questionTextWrapper}>
               <Text style={styles.questionTextOnly}>{currentQuestion.question}</Text>
             </View>
-            
+
             <View style={styles.questionNumberBadge}>
               <Text style={styles.questionNumberText}>
                 {currentQuestionIndex + 1} / {gameQuestions.length}
@@ -578,7 +628,7 @@ export default function QuizScreen() {
 
             {/* عرض الصورة بعد الإجابة فقط */}
             {showImage && currentQuestion.image && (
-              <Animated.View 
+              <Animated.View
                 style={[
                   styles.revealedImageContainer,
                   {
@@ -630,10 +680,10 @@ export default function QuizScreen() {
                     {selectedAnswer === currentQuestion.correctAnswer ? '🎉' : '😔'}
                   </Text>
                   <Text style={styles.resultMainText}>
-                    {selectedAnswer === currentQuestion.correctAnswer ? 'ممتاز!' : 'خطأ!'}
+                    {selectedAnswer === currentQuestion.correctAnswer ? t.quiz.excellent : t.quiz.wrong}
                   </Text>
                   {selectedAnswer === currentQuestion.correctAnswer && (
-                    <Text style={styles.resultPointsText}>+{currentQuestion.points} نقطة</Text>
+                    <Text style={styles.resultPointsText}>+5 {t.quiz.points}</Text>
                   )}
                 </LinearGradient>
               </BlurView>
@@ -682,12 +732,12 @@ export default function QuizScreen() {
                       shouldShowCorrect
                         ? ['#10b981', '#059669']
                         : shouldShowWrong
-                        ? ['#ef4444', '#dc2626']
-                        : isEliminated
-                        ? ['#3a3a3a', '#2a2a2a']
-                        : isAnswered
-                        ? ['#2a2a2a', '#1a1a1a']
-                        : ['#1e293b', '#0f172a']
+                          ? ['#ef4444', '#dc2626']
+                          : isEliminated
+                            ? ['#3a3a3a', '#2a2a2a']
+                            : isAnswered
+                              ? ['#2a2a2a', '#1a1a1a']
+                              : ['#1e293b', '#0f172a']
                     }
                     style={styles.optionGradient}
                   >
@@ -726,8 +776,8 @@ export default function QuizScreen() {
           style={styles.bottomGradient}
         >
           <View style={styles.powerUpsRow}>
-            <TouchableOpacity 
-              style={[styles.powerUpButton, !hintUsed && coins >= HINT_COST && styles.powerUpActive]} 
+            <TouchableOpacity
+              style={[styles.powerUpButton, !hintUsed && coins >= HINT_COST && styles.powerUpActive]}
               onPress={handleHint}
               disabled={hintUsed || coins < HINT_COST}
             >
@@ -749,8 +799,8 @@ export default function QuizScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.powerUpButton, coins >= 20 && styles.powerUpActive]} 
+            <TouchableOpacity
+              style={[styles.powerUpButton, coins >= 20 && styles.powerUpActive]}
               onPress={handleSkip}
               disabled={coins < 20}
             >
@@ -787,8 +837,8 @@ export default function QuizScreen() {
                   <Pause size={40} color="#fff" />
                 </LinearGradient>
               </View>
-              <Text style={styles.pauseTitle}>اللعبة متوقفة</Text>
-              <Text style={styles.pauseSubtitle}>اضغط للمتابعة</Text>
+              <Text style={styles.pauseTitle}>{t.quiz.gamePaused}</Text>
+              <Text style={styles.pauseSubtitle}>{t.quiz.pressToResume}</Text>
               <TouchableOpacity
                 style={styles.resumeButton}
                 onPress={() => setIsPaused(false)}
@@ -798,7 +848,7 @@ export default function QuizScreen() {
                   style={styles.resumeGradient}
                 >
                   <Play size={22} color="#fff" />
-                  <Text style={styles.resumeText}>استمرار</Text>
+                  <Text style={styles.resumeText}>{t.quiz.continue}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </LinearGradient>
