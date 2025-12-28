@@ -1,0 +1,24 @@
+# Nixpacks Configuration for Railway
+# This file configures how Nixpacks builds the Docker image
+# It ensures secrets are NOT passed as build args
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm"]
+
+[phases.install]
+cmds = [
+  "npm ci --omit=dev",
+  "npm run build",
+  "npx prisma generate"
+]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "npx prisma migrate deploy && npm run start:prod"
+
+# Environment variables are set via Railway's Environment Variables feature
+# NOT via build args to avoid security warnings
+# All secrets (CLERK_SECRET_KEY, FOOTBALL_API_KEY, etc.) should be set in Railway dashboard
+
