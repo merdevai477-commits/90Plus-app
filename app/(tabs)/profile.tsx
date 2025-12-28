@@ -978,70 +978,81 @@ export default function ProfileScreen() {
         return;
       }
 
+      // ✅ OPTIMISTIC UPDATE: Update UI immediately before backend calls
+      const previousUserData = { ...userData };
+      
+      // Update cached user data immediately (optimistic update)
+      await updateCachedUserData({
+        displayName: newData.name,
+        username: newData.username,
+        bio: newData.bio,
+        lastUsernameChange: newData.username !== userData?.username ? new Date() : userData?.lastUsernameChange,
+        socialLinks: newData.socials || [],
+      });
+
+      // Update globalState immediately
+      if (globalState.userProfile) {
+        globalState.userProfile.username = newData.username;
+        globalState.userProfile.displayName = newData.name;
+        globalState.userProfile.bio = newData.bio;
+      }
+      globalState.username = newData.username;
+
       // Check if username is being changed (Requirements 12.1, 12.2, 12.3)
-      const usernameChanged = newData.username !== userData?.username;
+      const usernameChanged = newData.username !== previousUserData?.username;
 
-      if (usernameChanged) {
-        // Use the dedicated username endpoint with cooldown enforcement
-        const usernameResult = await AuthService.updateUsername(token, newData.username);
-
-        if (!usernameResult.success) {
-          // Show cooldown error with remaining days
-          if (usernameResult.daysRemaining !== undefined) {
+      // Send updates to backend in background (non-blocking)
+      Promise.all([
+        // Update username if changed
+        usernameChanged ? AuthService.updateUsername(token, newData.username).catch((error) => {
+          logger.error('Error updating username:', error);
+          // Revert on error
+          updateCachedUserData(previousUserData);
+          if (error.daysRemaining !== undefined) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             Alert.alert(
               '⏳ انتظر قليلاً',
-              `يمكنك تغيير اسم المستخدم بعد ${usernameResult.daysRemaining} يوم`,
+              `يمكنك تغيير اسم المستخدم بعد ${error.daysRemaining} يوم`,
               [{ text: 'حسناً', style: 'default' }]
             );
           } else {
-            toast.showError('خطأ', usernameResult.error || 'فشل في تغيير اسم المستخدم');
+            toast.showError('خطأ', error.error || 'فشل في تغيير اسم المستخدم');
           }
-          return;
-        }
-      }
-
-      // Send other profile updates to backend
-      const result = await AuthService.updateProfile(token, {
-        displayName: newData.name,
-        bio: newData.bio,
-      });
-
-      // Update social links separately
-      if (newData.socials && Array.isArray(newData.socials)) {
-        const socialLinksResult = await ProfileService.updateSocialLinks(token, newData.socials);
-        if (!socialLinksResult.success) {
-          toast.showError('خطأ', socialLinksResult.error || 'فشل في حفظ الروابط');
-          return;
-        }
-      }
-
-      if (result.user || !usernameChanged) {
-        // Update cached user data (Requirement 2.3 - update without full page reload)
-        await updateCachedUserData({
-          displayName: result.user?.displayName || newData.name,
-          username: usernameChanged ? newData.username : (result.user?.username || userData?.username),
-          bio: result.user?.bio || newData.bio,
-          lastUsernameChange: usernameChanged ? new Date() : userData?.lastUsernameChange,
-          socialLinks: newData.socials || userData?.socialLinks || [],
-        });
-
-        // Update globalState
-        if (globalState.userProfile) {
-          globalState.userProfile.username = usernameChanged ? newData.username : (result.user?.username || userData?.username || '');
-          globalState.userProfile.displayName = result.user?.displayName || newData.name;
-          globalState.userProfile.bio = result.user?.bio || undefined;
-        }
-        globalState.username = usernameChanged ? newData.username : (result.user?.username || userData?.username || '');
-
-        // Force refresh cache to get latest data from backend (including cooldowns)
+          throw error;
+        }) : Promise.resolve({ success: true }),
+        
+        // Update profile
+        AuthService.updateProfile(token, {
+          displayName: newData.name,
+          bio: newData.bio,
+        }).catch((error) => {
+          logger.error('Error updating profile:', error);
+          // Revert on error
+          updateCachedUserData(previousUserData);
+          toast.showError('خطأ', error.message || 'فشل في حفظ التغييرات');
+          throw error;
+        }),
+        
+        // Update social links in background
+        newData.socials && Array.isArray(newData.socials) 
+          ? ProfileService.updateSocialLinks(token, newData.socials).catch((error) => {
+              logger.error('Error updating social links:', error);
+              // Don't revert social links on error - they're already shown
+              // Just log the error silently
+              return { success: false };
+            })
+          : Promise.resolve({ success: true })
+      ]).then(async ([usernameResult, profileResult, socialLinksResult]) => {
+        // All backend calls completed successfully
+        // Refresh cache to get latest data from backend (including cooldowns)
         await refreshCache(true);
-
+        
+        // Show success message
         toast.showSuccess('تم', 'تم حفظ التغييرات بنجاح');
-      } else {
-        // Show error message from backend
-        toast.showError('خطأ', result.error || 'فشل في حفظ التغييرات');
-      }
+      }).catch((error) => {
+        // Error already handled in individual catch blocks
+        // Just ensure we don't show duplicate errors
+      });
     } catch (error: any) {
       logger.error('Error saving profile:', error);
       toast.showError('خطأ', error.message || 'حدث خطأ أثناء الحفظ');

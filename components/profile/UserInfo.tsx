@@ -1,68 +1,166 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Vibration, Linking } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
 
+interface SocialLinks {
+    instagram?: string;
+    twitter?: string;
+    facebook?: string;
+}
+
 interface UserInfoProps {
     name: string;
     username: string;
-    bio: string;
+    bio?: string;
     location: string;
-    joinDate: string;
-    role: string;
-    team: string;
+    team: string; // "Favorite Team"
+    isVerified?: boolean;
+    isDeveloper?: boolean;
+    onBioLongPress?: () => void;
+    onNameLongPress?: () => void;
+    clubLogo?: string; // Club logo URL
+    onEditPress?: () => void;
+    socials?: SocialLinks; // روابط السوشيال ميديا
 }
 
-export default function UserInfo({
+const UserInfo = memo(function UserInfo({
     name,
     username,
-    bio,
+    bio = 'عاشق لكره القدم', // Default fallback
     location,
-    joinDate,
-    role,
     team,
+    isVerified = false,
+    isDeveloper = false,
+    onBioLongPress,
+    onNameLongPress,
+    clubLogo,
+    onEditPress,
+    socials,
 }: UserInfoProps) {
+
+    const handleSocialPress = (url: string) => {
+        Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+    };
+
+    // تحقق من وجود أي رابط سوشيال ميديا
+    const hasSocials = socials && (socials.instagram || socials.twitter || socials.facebook);
     return (
         <View style={styles.container}>
-            <View style={styles.nameRow}>
-                <Text style={styles.name}>{name}</Text>
-                <View style={styles.badgeContainer}>
-                    <VerifiedBadge size={24} />
+            {/* 1. Name & Badges */}
+            <TouchableOpacity
+                onLongPress={() => {
+                    if (onNameLongPress) {
+                        Vibration.vibrate(50);
+                        onNameLongPress();
+                    }
+                }}
+                activeOpacity={0.7}
+            >
+                <View style={styles.nameRow}>
+                    <Text style={styles.name}>{name}</Text>
+                    {isDeveloper && (
+                        <View style={styles.badgeContainer}>
+                            <DeveloperBadge size={24} />
+                        </View>
+                    )}
+                    {isVerified && !isDeveloper && (
+                        <View style={styles.badgeContainer}>
+                            <VerifiedBadge size={24} />
+                        </View>
+                    )}
+
+                    {/* Edit Pen Icon */}
+                    <TouchableOpacity
+                        onPress={onEditPress}
+                        style={styles.editButton}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="pencil" size={18} color={ProfileTheme.colors.neonBlue} />
+                    </TouchableOpacity>
                 </View>
-                <View style={styles.badgeContainer}>
-                    <DeveloperBadge size={24} />
-                </View>
-            </View>
+            </TouchableOpacity>
+
+            {/* Username */}
             <Text style={styles.username}>@{username}</Text>
 
-            <Text style={styles.bio}>{bio}</Text>
-
+            {/* 2. Location & Favorite Team Row (Merged) */}
             <View style={styles.detailsRow}>
                 <View style={styles.detailItem}>
                     <Ionicons name="location-outline" size={16} color={ProfileTheme.colors.textSecondary} />
-                    <Text style={styles.detailText}>{location}</Text>
+                    <Text style={styles.detailText}>{location || 'مصر'}</Text>
                 </View>
                 <View style={styles.detailItem}>
-                    <Ionicons name="calendar-outline" size={16} color={ProfileTheme.colors.textSecondary} />
-                    <Text style={styles.detailText}>{joinDate}</Text>
+                    {clubLogo ? (
+                        <Image
+                            source={{ uri: clubLogo }}
+                            style={styles.clubLogo}
+                            contentFit="contain"
+                            cachePolicy="memory-disk"
+                        />
+                    ) : (
+                        <Ionicons name="football-outline" size={16} color={ProfileTheme.colors.neonGreen} />
+                    )}
+                    <Text style={styles.detailText}>{team || 'اختر ناديك'}</Text>
                 </View>
             </View>
 
-            <View style={styles.detailsRow}>
-                <View style={styles.detailItem}>
-                    <Ionicons name="shield-outline" size={16} color={ProfileTheme.colors.neonPurple} />
-                    <Text style={styles.detailText}>{role}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                    <Ionicons name="football-outline" size={16} color={ProfileTheme.colors.neonGreen} />
-                    <Text style={styles.detailText}>{team}</Text>
-                </View>
+            {/* 3. Bio with Social Links (Combined) */}
+            <View style={styles.bioSection}>
+                <TouchableOpacity
+                    onLongPress={() => {
+                        if (onBioLongPress) {
+                            Vibration.vibrate(50); // Haptic feedback
+                            onBioLongPress();
+                        }
+                    }}
+                    activeOpacity={0.7}
+                    style={styles.bioContainer}
+                >
+                    <Text style={styles.bio}>{bio || 'عاشق لكره القدم'}</Text>
+                </TouchableOpacity>
+
+                {/* Social Links - تظهر بجانب البايو */}
+                {hasSocials && (
+                    <View style={styles.socialRow}>
+                        {socials?.instagram && (
+                            <TouchableOpacity onPress={() => handleSocialPress(socials.instagram!)} style={styles.socialIcon}>
+                                <LinearGradient
+                                    colors={['#833AB4', '#FD1D1D', '#FCAF45']}
+                                    style={styles.socialGradient}
+                                >
+                                    <FontAwesome name="instagram" size={16} color="white" />
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        )}
+
+                        {socials?.twitter && (
+                            <TouchableOpacity onPress={() => handleSocialPress(socials.twitter!)} style={styles.socialIcon}>
+                                <View style={[styles.socialGradient, { backgroundColor: '#000' }]}>
+                                    <FontAwesome name="twitter" size={16} color="#1DA1F2" />
+                                </View>
+                            </TouchableOpacity>
+                        )}
+
+                        {socials?.facebook && (
+                            <TouchableOpacity onPress={() => handleSocialPress(socials.facebook!)} style={styles.socialIcon}>
+                                <View style={[styles.socialGradient, { backgroundColor: '#1877F2' }]}>
+                                    <FontAwesome name="facebook" size={16} color="white" />
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
             </View>
-        </View>
+        </View >
     );
-}
+});
+
+export default UserInfo;
 
 const styles = StyleSheet.create({
     container: {
@@ -96,30 +194,20 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         letterSpacing: 1,
     },
-    bio: {
-        fontSize: 16,
-        color: '#DDD',
-        marginBottom: 20,
-        lineHeight: 24,
-        textAlign: 'center',
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 2,
-    },
     detailsRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 12,
-        gap: 20,
+        marginBottom: 16,
+        gap: 12,
     },
     detailItem: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
         backgroundColor: 'rgba(255,255,255,0.05)',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
         borderRadius: 12,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
@@ -129,4 +217,58 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
     },
+    clubLogo: {
+        width: 16,
+        height: 16,
+    },
+    bioSection: {
+        width: '100%',
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    bioContainer: {
+        alignItems: 'center',
+        padding: 5,
+        marginBottom: 12,
+    },
+    bio: {
+        fontSize: 16,
+        color: '#DDD',
+        lineHeight: 24,
+        textAlign: 'center',
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
+        maxWidth: '90%',
+    },
+    bioHint: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.3)',
+        marginTop: 4,
+    },
+    editButton: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 6,
+        borderRadius: 20,
+        marginLeft: 8,
+    },
+    socialRow: {
+        flexDirection: 'row',
+        gap: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
+    socialIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    socialGradient: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    }
 });

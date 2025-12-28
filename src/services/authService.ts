@@ -139,11 +139,11 @@ export class AuthService {
                             setMemoryCache(cacheKey, data.data.user);
                             resolve(data.data.user);
                         } else {
-                            console.error('❌ Failed to sync user:', data.message);
+                            // Silent error handling - don't log sync errors
                             resolve(null);
                         }
                     } catch (error: any) {
-                        console.error('❌ Error syncing user with backend:', error);
+                        // Silent error handling - don't log sync errors (including rate limits)
                         resolve(null);
                     }
                 }, SYNC_DEBOUNCE_MS);
@@ -258,11 +258,11 @@ export class AuthService {
                 console.log('✅ User synced from Clerk successfully');
                 return data.data.user;
             } else {
-                console.error('❌ Failed to sync from Clerk:', data.message);
+                // Silent error handling - don't log sync errors
                 return null;
             }
         } catch (error: any) {
-            console.error('❌ Error syncing from Clerk:', error);
+            // Silent error handling - don't log sync errors
             return null;
         }
     }

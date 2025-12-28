@@ -457,17 +457,20 @@ const fetchFromProxy = async <T>(
           // Cache this rate limit error
           cacheRateLimitError(endpoint, retryDelay);
           
-          // If we have retries left, wait and retry
+          // If we have retries left, wait and retry (silent)
           if (attempt < retries) {
-            logger.warn(`⏳ Rate limit hit (429). Waiting ${retryAfterSeconds}s before retry ${attempt + 1}/${retries}...`);
+            // Silent retry - don't log to avoid spamming console
             await new Promise(resolve => setTimeout(resolve, retryDelay));
             continue; // Retry the request
           } else {
-            // All retries exhausted - throw user-friendly error
-            throw new ApiFootballError(
-              `تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة مرة أخرى بعد ${retryAfterSeconds} ثانية.`,
-              response.status
-            );
+            // All retries exhausted - return empty/cached data instead of throwing
+            // This prevents error spam in console
+            const cached = await footballCacheService.getMatches();
+            if (cached && cached.length > 0) {
+              return cached as T;
+            }
+            // Return empty array/object based on expected type
+            return [] as T;
           }
         }
         
