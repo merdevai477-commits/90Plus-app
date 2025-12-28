@@ -75,7 +75,11 @@ class R2StorageService {
 
       const url = this.getPublicUrl(folder, filePath);
       
-      logger.info(`✅ R2 Upload success: ${url}`);
+      if (!url) {
+        logger.warn(`⚠️ R2 Upload succeeded but no public URL (R2_PUBLIC_URL not configured): ${fullPath}`);
+      } else {
+        logger.info(`✅ R2 Upload success: ${url}`);
+      }
 
       return {
         success: true,

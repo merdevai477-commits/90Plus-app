@@ -35,7 +35,21 @@ router.post('/avatar', requireAuth, upload.single('file'), async (req: Request, 
 
         const file = req.file;
         if (!file) {
+            logger.error('No file received in avatar upload request');
             res.status(400).json({ status: 'ERROR', message: 'No file provided' });
+            return;
+        }
+
+        // Validate file properties
+        if (!file.buffer) {
+            logger.error('File buffer is missing in avatar upload');
+            res.status(400).json({ status: 'ERROR', message: 'File buffer is missing' });
+            return;
+        }
+
+        if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+            logger.error(`Invalid file type in avatar upload: ${file.mimetype}`);
+            res.status(400).json({ status: 'ERROR', message: 'Invalid file type. Only images are allowed.' });
             return;
         }
 
@@ -81,15 +95,36 @@ router.post('/avatar', requireAuth, upload.single('file'), async (req: Request, 
             await r2Storage.deleteFile('avatars', user.avatarStoragePath);
         }
 
+        // Validate file buffer is not empty
+        if (file.buffer.length === 0) {
+            logger.error('Empty file buffer received');
+            res.status(400).json({ status: 'ERROR', message: 'File is empty or corrupted' });
+            return;
+        }
+
+        logger.info(`Uploading avatar: ${file.originalname}, size: ${file.buffer.length} bytes, type: ${file.mimetype}`);
+
         // Upload new avatar
         const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
         const result = await r2Storage.uploadFile('avatars', file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             logger.error('R2 upload error:', result.error);
-            res.status(500).json({ status: 'ERROR', message: 'Failed to upload file' });
+            res.status(500).json({ status: 'ERROR', message: result.error || 'Failed to upload file' });
             return;
         }
+
+        // Check if URL was generated (R2_PUBLIC_URL must be configured)
+        if (!result.url) {
+            logger.error('R2 upload succeeded but no public URL returned. Check R2_PUBLIC_URL configuration.');
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: 'File uploaded but public URL not available. Please check server configuration.' 
+            });
+            return;
+        }
+
+        logger.info(`Avatar uploaded successfully: ${result.url}, path: ${result.path}`);
 
         // Update user
         await prisma.user.update({
