@@ -34,10 +34,12 @@ import {
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from '../../src/i18n';
 import { useCoins } from '../../contexts/CoinsContext';
 import { CoinsBadge } from '../../components/common/CoinsBadge';
 import { QuizCategories } from '../../components/Quiz/QuizCategories';
+import { useAuth } from '@clerk/clerk-expo';
+import { router } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,8 +49,16 @@ const HINT_COST = 10;
 const MAX_QUESTIONS = 20; // حد أقصى 20 سؤال
 
 export default function QuizScreen() {
-  const { t } = useLanguage();
+  const { t } = useTranslation();
   const { coins, addCoins, subtractCoins } = useCoins();
+  const { isSignedIn, isLoaded } = useAuth();
+
+  // Prevent guest access - redirect to auth
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.replace('/auth');
+    }
+  }, [isLoaded, isSignedIn]);
 
   // Safety check for translations
   if (!t || !t.quiz) {
@@ -59,8 +69,31 @@ export default function QuizScreen() {
     );
   }
 
-  // تحديد 20 سؤال فقط
-  const gameQuestions = QUIZ_QUESTIONS.slice(0, MAX_QUESTIONS);
+  // Show loading while checking auth
+  if (!isLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <Text style={{ color: '#fff' }}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // Don't render quiz if not signed in (will redirect)
+  if (!isSignedIn) {
+    return null;
+  }
+
+  // فلترة الأسئلة - فقط Q&A (FAQ) كما طلب المستخدم
+  const gameQuestions = QUIZ_QUESTIONS
+    .filter(q => {
+      // إبقاء فقط أسئلة Q&A أو FAQ
+      const category = q.category?.toLowerCase() || '';
+      return category.includes('q&a') || category.includes('faq') || category.includes('أسئلة');
+    })
+    .slice(0, MAX_QUESTIONS);
+  
+  // إذا لم يكن هناك أسئلة Q&A، استخدم جميع الأسئلة كـ fallback
+  const finalQuestions = gameQuestions.length > 0 ? gameQuestions : QUIZ_QUESTIONS.slice(0, MAX_QUESTIONS);
 
   // States الأساسية
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
@@ -104,8 +137,8 @@ export default function QuizScreen() {
   const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
   const imageFadeAnim = useRef(new Animated.Value(0)).current; // أنيميشن ظهور الصورة
 
-  const currentQuestion = gameQuestions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / gameQuestions.length) * 100;
+  const currentQuestion = finalQuestions[currentQuestionIndex];
+  const progress = ((currentQuestionIndex + 1) / finalQuestions.length) * 100;
 
   // Progress Animation
   useEffect(() => {
@@ -294,7 +327,7 @@ export default function QuizScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      if (currentQuestionIndex < gameQuestions.length - 1 && lives > 0) {
+      if (currentQuestionIndex < finalQuestions.length - 1 && lives > 0) {
         handleNextQuestion();
       } else {
         setShowResult(true);
@@ -314,7 +347,7 @@ export default function QuizScreen() {
   };
 
   const handleSkip = async () => {
-    if (coins >= 20 && currentQuestionIndex < gameQuestions.length - 1) {
+    if (coins >= 20 && currentQuestionIndex < finalQuestions.length - 1) {
       const success = await subtractCoins(20);
       if (success) {
         setSelectedAnswer(null);
@@ -622,7 +655,7 @@ export default function QuizScreen() {
 
             <View style={styles.questionNumberBadge}>
               <Text style={styles.questionNumberText}>
-                {currentQuestionIndex + 1} / {gameQuestions.length}
+                {currentQuestionIndex + 1} / {finalQuestions.length}
               </Text>
             </View>
 
