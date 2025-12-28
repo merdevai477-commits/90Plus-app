@@ -21,6 +21,10 @@ const app: Application = express();
 const PORT = process.env.PORT || 3000;
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
+// Trust proxy - Required for Railway and other reverse proxies
+// This allows Express to correctly identify the client's IP from X-Forwarded-For header
+app.set('trust proxy', true);
+
 // ============================================
 // MIDDLEWARE
 // ============================================
