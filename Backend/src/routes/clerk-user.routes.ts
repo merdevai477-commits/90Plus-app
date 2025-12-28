@@ -1146,17 +1146,64 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
             return;
         }
 
-        // Validate social links (max 5)
-        if (socialLinks && socialLinks.length > 5) {
+        // Validate social links array
+        if (!Array.isArray(socialLinks)) {
+            res.status(400).json({ status: 'ERROR', message: 'Social links must be an array' });
+            return;
+        }
+
+        // Validate max 5 links
+        if (socialLinks.length > 5) {
             res.status(400).json({ status: 'ERROR', message: 'Maximum 5 social links allowed' });
             return;
+        }
+
+        // Validate and normalize each link
+        const validLinks = [];
+        const allowedPlatforms = ['instagram', 'twitter', 'facebook', 'youtube', 'tiktok', 'website', 'linkedin', 'snapchat'];
+        
+        for (const link of socialLinks) {
+            if (!link || typeof link !== 'object') {
+                continue;
+            }
+
+            const platform = link.platform?.toLowerCase();
+            const url = link.url?.trim();
+
+            // Skip empty links
+            if (!url || url === '') {
+                continue;
+            }
+
+            // Validate platform
+            if (!platform || !allowedPlatforms.includes(platform)) {
+                logger.warn(`Invalid platform: ${platform}, defaulting to website`);
+                link.platform = 'website';
+            } else {
+                link.platform = platform;
+            }
+
+            // Normalize URL - ensure it starts with http:// or https://
+            let normalizedUrl = url;
+            if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+                normalizedUrl = `https://${normalizedUrl}`;
+            }
+
+            validLinks.push({
+                platform: link.platform,
+                url: normalizedUrl,
+                username: link.username || undefined,
+            });
         }
 
         // Update user's social links
         const user = await prisma.user.update({
             where: { clerkUserId },
-            data: { socialLinks: socialLinks || [] } as any,
+            data: { socialLinks: validLinks } as any,
         });
+
+        // Invalidate cache
+        invalidateUserCache(clerkUserId);
 
         res.json({
             status: 'SUCCESS',
