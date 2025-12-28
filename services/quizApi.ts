@@ -4,14 +4,18 @@
  */
 
 import { getApiUrl } from '../config/api.config';
-import * as Clerk from '@clerk/clerk-expo';
+import { useAuth } from '@clerk/clerk-expo';
 
 const API_URL = getApiUrl();
 const API_TIMEOUT = 10000; // 10 seconds
 
+// Type for getToken function from useAuth hook
+type GetTokenFunction = () => Promise<string | null>;
+
 // Helper function for fetch with timeout and authentication
 const fetchWithAuth = async (
     endpoint: string,
+    getToken: GetTokenFunction,
     options: RequestInit = {},
     timeout = API_TIMEOUT
 ): Promise<Response> => {
@@ -19,8 +23,12 @@ const fetchWithAuth = async (
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-        // Get auth token from Clerk
-        const token = await Clerk.getToken();
+        // Get auth token from Clerk using the provided getToken function
+        const token = await getToken();
+        
+        if (!token) {
+            throw new Error('No authentication token available');
+        }
         
         const response = await fetch(`${API_URL}${endpoint}`, {
             ...options,
@@ -135,9 +143,9 @@ export interface QuizHistoryItem {
 /**
  * Get all quiz categories
  */
-export async function getQuizCategories(): Promise<QuizCategory[]> {
+export async function getQuizCategories(getToken: GetTokenFunction): Promise<QuizCategory[]> {
     try {
-        const response = await fetchWithAuth('/quiz/categories', {
+        const response = await fetchWithAuth('/quiz/categories', getToken, {
             method: 'GET',
         });
 
@@ -160,14 +168,18 @@ export async function getQuizCategories(): Promise<QuizCategory[]> {
 /**
  * Start a new quiz - get questions for a category
  */
-export async function startQuiz(categoryId: string, count?: number): Promise<{
+export async function startQuiz(
+    categoryId: string,
+    getToken: GetTokenFunction,
+    count?: number
+): Promise<{
     category: QuizCategory;
     questions: QuizQuestion[];
     count: number;
 }> {
     try {
         const url = `/quiz/${categoryId}/start${count ? `?count=${count}` : ''}`;
-        const response = await fetchWithAuth(url, {
+        const response = await fetchWithAuth(url, getToken, {
             method: 'GET',
         });
 
@@ -197,10 +209,11 @@ export async function startQuiz(categoryId: string, count?: number): Promise<{
  */
 export async function submitQuiz(
     categoryId: string,
-    submission: QuizSubmission
+    submission: QuizSubmission,
+    getToken: GetTokenFunction
 ): Promise<QuizResult> {
     try {
-        const response = await fetchWithAuth(`/quiz/${categoryId}/submit`, {
+        const response = await fetchWithAuth(`/quiz/${categoryId}/submit`, getToken, {
             method: 'POST',
             body: JSON.stringify(submission),
         });
@@ -224,9 +237,9 @@ export async function submitQuiz(
 /**
  * Get user quiz statistics
  */
-export async function getQuizStats(): Promise<QuizStats> {
+export async function getQuizStats(getToken: GetTokenFunction): Promise<QuizStats> {
     try {
-        const response = await fetchWithAuth('/quiz/stats', {
+        const response = await fetchWithAuth('/quiz/stats', getToken, {
             method: 'GET',
         });
 
@@ -249,10 +262,10 @@ export async function getQuizStats(): Promise<QuizStats> {
 /**
  * Get user quiz history
  */
-export async function getQuizHistory(limit?: number): Promise<QuizHistoryItem[]> {
+export async function getQuizHistory(getToken: GetTokenFunction, limit?: number): Promise<QuizHistoryItem[]> {
     try {
         const url = `/quiz/history${limit ? `?limit=${limit}` : ''}`;
-        const response = await fetchWithAuth(url, {
+        const response = await fetchWithAuth(url, getToken, {
             method: 'GET',
         });
 
@@ -275,9 +288,9 @@ export async function getQuizHistory(limit?: number): Promise<QuizHistoryItem[]>
 /**
  * Check cooldown status for a category
  */
-export async function checkQuizCooldown(categoryId: string): Promise<QuizCooldown> {
+export async function checkQuizCooldown(categoryId: string, getToken: GetTokenFunction): Promise<QuizCooldown> {
     try {
-        const response = await fetchWithAuth(`/quiz/${categoryId}/cooldown`, {
+        const response = await fetchWithAuth(`/quiz/${categoryId}/cooldown`, getToken, {
             method: 'GET',
         });
 
@@ -296,6 +309,9 @@ export async function checkQuizCooldown(categoryId: string): Promise<QuizCooldow
         throw error;
     }
 }
+
+// Export GetTokenFunction type for use in components
+export type { GetTokenFunction };
 
 // Export all functions as default object for convenience
 export const quizApi = {

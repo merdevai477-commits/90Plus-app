@@ -4,6 +4,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { COLORS } from '../reels/constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getQuizCategories, checkQuizCooldown, QuizCategory } from '../../services/quizApi';
+import { useAuth } from '@clerk/clerk-expo';
 import { Clock } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -28,25 +29,33 @@ const CATEGORY_IMAGES: Record<string, any> = {
 
 export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory }) => {
     const { t } = useLanguage();
+    const { getToken } = useAuth();
     const [categories, setCategories] = useState<QuizCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [cooldowns, setCooldowns] = useState<Record<string, { canStart: boolean; hoursRemaining?: number }>>({});
 
     useEffect(() => {
-        loadCategories();
-    }, []);
+        if (getToken) {
+            loadCategories();
+        }
+    }, [getToken]);
 
     const loadCategories = async () => {
+        if (!getToken) {
+            console.error('getToken is not available');
+            return;
+        }
+
         try {
             setLoading(true);
-            const fetchedCategories = await getQuizCategories();
+            const fetchedCategories = await getQuizCategories(getToken);
             setCategories(fetchedCategories);
 
             // Check cooldown for each category
             const cooldownMap: Record<string, { canStart: boolean; hoursRemaining?: number }> = {};
             for (const category of fetchedCategories) {
                 try {
-                    const cooldown = await checkQuizCooldown(category.id);
+                    const cooldown = await checkQuizCooldown(category.id, getToken);
                     cooldownMap[category.id] = cooldown;
                 } catch (error) {
                     // If error, assume can start
