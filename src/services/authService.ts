@@ -1250,6 +1250,49 @@ export class ProfileService {
             return null;
         }
     }
+
+    /**
+     * Update social links
+     */
+    static async updateSocialLinks(
+        token: string,
+        socialLinks: Array<{ platform: string; url: string }>
+    ): Promise<{ success: boolean; error?: string; socialLinks?: any[] }> {
+        try {
+            // Validate links
+            if (socialLinks.length > 5) {
+                return { success: false, error: 'Maximum 5 social links allowed' };
+            }
+
+            // Filter out empty links
+            const validLinks = socialLinks.filter(link => link.url && link.url.trim() !== '');
+
+            // Validate URLs
+            for (const link of validLinks) {
+                if (!link.url.startsWith('http://') && !link.url.startsWith('https://')) {
+                    link.url = `https://${link.url}`;
+                }
+            }
+
+            const response = await fetch(`${API_URL}/clerk/social-links`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ socialLinks: validLinks }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, socialLinks: data.data.socialLinks || [] };
+            }
+            return { success: false, error: data.message || 'Failed to update social links' };
+        } catch (error: any) {
+            console.error('Error updating social links:', error);
+            return { success: false, error: error.message || 'Network error' };
+        }
+    }
 }
 
 // ============================================
