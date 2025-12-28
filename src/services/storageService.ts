@@ -215,45 +215,53 @@ export class StorageService {
 
                 clearTimeout(timeoutId);
 
-            // Check response status first
-            if (!response.ok) {
-                const errorText = await response.text();
-                logger.error('Upload reel failed:', response.status, errorText);
-                let errorData;
-                try {
-                    errorData = JSON.parse(errorText);
-                } catch {
-                    errorData = { message: errorText || 'Upload failed' };
-                }
-                return { success: false, error: errorData.message || `Upload failed: ${response.status}` };
-            }
-            
-            const data = await response.json();
-            
-            logger.info('Upload reel response:', JSON.stringify(data));
-            
-            if (data.status === 'SUCCESS') {
-                // Handle response format from upload.routes.ts
-                const videoUrl = data.data?.videoUrl || data.data?.url || data.url;
-                const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
-                const reelId = data.data?.reelId || data.reelId;
-                
-                if (!videoUrl) {
-                    logger.error('No video URL in response:', data);
-                    return { success: false, error: 'No video URL returned from server' };
+                // Check response status first
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    logger.error('Upload reel failed:', response.status, errorText);
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(errorText);
+                    } catch {
+                        errorData = { message: errorText || 'Upload failed' };
+                    }
+                    return { success: false, error: errorData.message || `Upload failed: ${response.status}` };
                 }
                 
-                logger.info('Reel uploaded successfully:', { videoUrl, reelId });
+                const data = await response.json();
                 
-                return {
-                    success: true,
-                    url: videoUrl,
-                    storagePath: storagePath,
-                    reelId: reelId,
-                };
+                logger.info('Upload reel response:', JSON.stringify(data));
+                
+                if (data.status === 'SUCCESS') {
+                    // Handle response format from upload.routes.ts
+                    const videoUrl = data.data?.videoUrl || data.data?.url || data.url;
+                    const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
+                    const reelId = data.data?.reelId || data.reelId;
+                    
+                    if (!videoUrl) {
+                        logger.error('No video URL in response:', data);
+                        return { success: false, error: 'No video URL returned from server' };
+                    }
+                    
+                    logger.info('Reel uploaded successfully:', { videoUrl, reelId });
+                    
+                    return {
+                        success: true,
+                        url: videoUrl,
+                        storagePath: storagePath,
+                        reelId: reelId,
+                    };
+                }
+                
+                return { success: false, error: data.message || 'Upload failed' };
+            } catch (fetchError: any) {
+                clearTimeout(timeoutId);
+                if (fetchError.name === 'AbortError') {
+                    logger.error('Upload reel timeout:', uploadTimeout);
+                    return { success: false, error: 'Upload timeout - request took too long' };
+                }
+                throw fetchError;
             }
-            
-            return { success: false, error: data.message || 'Upload failed' };
         } catch (error: any) {
             logger.error('Upload reel error:', error);
             return { success: false, error: error.message };
