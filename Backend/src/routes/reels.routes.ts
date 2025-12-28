@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
+import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
 const router = Router();
 
@@ -1340,7 +1341,7 @@ router.post('/:id/report', requireAuth, async (req: Request, res: Response): Pro
  * Get top 10 reels by views in the last 3 days
  * الفيديوهات الأكثر مشاهدة خلال 3 أيام
  */
-router.get('/rankings/top-views', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/top-views', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
@@ -1418,7 +1419,7 @@ router.get('/rankings/top-views', async (req: Request, res: Response): Promise<v
  * Get top 10 reels by shares in the last 3 days
  * الفيديوهات الأكثر مشاركة خلال 3 أيام
  */
-router.get('/rankings/top-shares', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/top-shares', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
@@ -1499,7 +1500,7 @@ router.get('/rankings/top-shares', async (req: Request, res: Response): Promise<
  * Get top 10 users by correct predictions
  * أفضل المتوقعين (أكثر التوقعات الصحيحة)
  */
-router.get('/rankings/top-predictions', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/top-predictions', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
@@ -1590,7 +1591,7 @@ router.get('/rankings/top-predictions', async (req: Request, res: Response): Pro
  * Get top 10 users by comments count in the last 3 days
  * أكثر المستخدمين تعليقاً خلال 3 أيام
  */
-router.get('/rankings/top-commenters', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/top-commenters', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
@@ -1665,7 +1666,7 @@ router.get('/rankings/top-commenters', async (req: Request, res: Response): Prom
  * Get all rankings in one request (for efficiency)
  * كل الرانكينج في طلب واحد
  */
-router.get('/rankings/all', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
@@ -1829,7 +1830,7 @@ router.get('/rankings/all', async (req: Request, res: Response): Promise<void> =
  * أفضل 11 لاعب بناءً على المشاهدات وزيارات البروفايل واللايكات
  * @query period - 'weekly' | 'monthly' (default: 'weekly')
  */
-router.get('/rankings/top-players', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '11', period = 'weekly' } = req.query;
         const take = Math.min(parseInt(limit as string) || 11, 50);
@@ -2388,7 +2389,7 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
  * Get all badges for a user
  * جلب كل ميداليات المستخدم
  */
-router.get('/rankings/user/:userId/badges', async (req: Request, res: Response): Promise<void> => {
+router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { userId } = req.params;
 

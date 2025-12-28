@@ -9,11 +9,12 @@ import { Request, Response } from 'express';
 
 /**
  * General API rate limiter
- * 500 requests per minute in development, 100 per 15 minutes in production
+ * Increased limits to handle normal app usage
+ * 1000 requests per minute in development, 500 per 15 minutes in production
  */
 export const generalLimiter = rateLimit({
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
-    max: process.env.NODE_ENV === 'production' ? 100 : 500, // 100 prod, 500 dev
+    max: process.env.NODE_ENV === 'production' ? 500 : 1000, // 500 prod (was 100), 1000 dev
     message: {
         status: 'ERROR',
         message: 'Too many requests, please try again later',
@@ -21,6 +22,12 @@ export const generalLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    // Use keyGenerator to group by user ID if authenticated, otherwise by IP
+    keyGenerator: (req: Request) => {
+        // If user is authenticated, use their ID to allow more requests per user
+        const userId = (req as any).auth?.userId;
+        return userId ? `user:${userId}` : req.ip || 'unknown';
+    },
 });
 
 /**
@@ -73,11 +80,11 @@ export const strictLimiter = rateLimit({
 /**
  * User sync rate limiter (for /clerk/me endpoint)
  * More lenient than general limiter since this is called frequently during app usage
- * 200 requests per 15 minutes in production, 1000 per minute in development
+ * 500 requests per 15 minutes in production, 2000 per minute in development
  */
 export const userSyncLimiter = rateLimit({
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
-    max: process.env.NODE_ENV === 'production' ? 200 : 1000, // 200 prod, 1000 dev
+    max: process.env.NODE_ENV === 'production' ? 500 : 2000, // 500 prod (was 200), 2000 dev
     message: {
         status: 'ERROR',
         message: 'Too many requests, please try again later',
@@ -86,6 +93,11 @@ export const userSyncLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     skip: skipRateLimitForTrusted,
+    // Use user ID for key generation
+    keyGenerator: (req: Request) => {
+        const userId = (req as any).auth?.userId;
+        return userId ? `user:${userId}` : req.ip || 'unknown';
+    },
 });
 
 /**
