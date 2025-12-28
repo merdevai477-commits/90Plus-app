@@ -22,6 +22,18 @@ const router = Router();
 // ============================================
 
 /**
+ * GET /api/quiz/health
+ * Health check endpoint للتحقق من أن quiz routes تعمل
+ */
+router.get('/health', (_req: Request, res: Response): void => {
+    res.json({
+        status: 'SUCCESS',
+        message: 'Quiz API is healthy',
+        timestamp: new Date().toISOString(),
+    });
+});
+
+/**
  * GET /api/quiz/categories
  * جلب جميع فئات الكويز
  * Requires authentication - guests cannot access quiz

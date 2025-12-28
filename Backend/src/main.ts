@@ -97,6 +97,14 @@ app.use(morgan(isProduction ? 'combined' : 'dev'));
 // Performance monitoring
 app.use(performanceMiddleware());
 
+// Route logging middleware (for debugging in development)
+if (!isProduction) {
+    app.use((req: Request, _res: Response, next: NextFunction) => {
+        logger.debug(`Route: ${req.method} ${req.path}`);
+        next();
+    });
+}
+
 // ============================================
 // ROUTES
 // ============================================
