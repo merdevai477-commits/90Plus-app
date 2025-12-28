@@ -7,7 +7,7 @@ nixPkgs = ["nodejs_20", "npm"]
 
 [phases.install]
 cmds = [
-  "npm ci --omit=dev",
+  "npm ci",
   "npm run build",
   "npx prisma generate"
 ]
@@ -16,7 +16,7 @@ cmds = [
 cmds = []
 
 [start]
-cmd = "npx prisma migrate deploy && npm run start:prod"
+cmd = "npx prisma migrate deploy && node dist/src/main.js"
 
 # Environment variables are set via Railway's Environment Variables feature
 # NOT via build args to avoid security warnings

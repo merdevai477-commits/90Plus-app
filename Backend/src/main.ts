@@ -295,11 +295,24 @@ app.get(`${API_PREFIX}/users`, async (_req: Request, res: Response) => {
 // ============================================
 // ERROR HANDLING
 // ============================================
+// 404 Handler - يجب أن يكون بعد جميع الـ routes
 app.use((req: Request, res: Response) => {
+    logger.warn(`404 - Route not found: ${req.method} ${req.path}`);
     res.status(404).json({
         status: 'ERROR',
         message: 'Route not found',
         path: req.path,
+        method: req.method,
+        availableRoutes: {
+            quiz: [
+                `${API_PREFIX}/quiz/categories`,
+                `${API_PREFIX}/quiz/stats`,
+                `${API_PREFIX}/quiz/history`,
+                `${API_PREFIX}/quiz/:categoryId/start`,
+                `${API_PREFIX}/quiz/:categoryId/submit`,
+                `${API_PREFIX}/quiz/:categoryId/cooldown`,
+            ],
+        },
     });
 });
 
@@ -322,41 +335,57 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 const httpServer = createServer(app);
 
 async function startServer() {
-    // Initialize WebSocket server (Requirements: 21.1)
-    WebSocketService.initialize(httpServer);
+    try {
+        // Initialize WebSocket server (Requirements: 21.1)
+        WebSocketService.initialize(httpServer);
 
-    httpServer.listen(PORT, async () => {
-        logger.info('🚀 90Plus Backend is running! ');
-        logger.info(`📍 Server: http://localhost:${PORT}`);
-        logger.info(`📍 API: http://localhost:${PORT}${API_PREFIX}`);
-        logger.info(`📍 Health: http://localhost:${PORT}${API_PREFIX}/health`);
-        logger.info(`📍 WebSocket: ws://localhost:${PORT}`);
-        logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+        httpServer.listen(PORT, '0.0.0.0', async () => {
+            logger.info('🚀 90Plus Backend is running! ');
+            logger.info(`📍 Server: http://0.0.0.0:${PORT}`);
+            logger.info(`📍 API: http://0.0.0.0:${PORT}${API_PREFIX}`);
+            logger.info(`📍 Health: http://0.0.0.0:${PORT}${API_PREFIX}/health`);
+            logger.info(`📍 WebSocket: ws://0.0.0.0:${PORT}`);
+            logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
-        try {
-            await prisma.$connect();
-            logger.info('✅ Database connected successfully');
-            // Start keep-alive ping to prevent Neon connection timeout
-            startKeepAlive();
-            logger.info('✅ Database keep-alive started');
+            try {
+                await prisma.$connect();
+                logger.info('✅ Database connected successfully');
+                // Start keep-alive ping to prevent Neon connection timeout
+                startKeepAlive();
+                logger.info('✅ Database keep-alive started');
 
-            // Start match watcher for push notifications
-            if (process.env.FOOTBALL_API_KEY) {
-                MatchWatcherService.start();
-                PredictionWatcherService.start(); // ✅ Start prediction watcher
-                LeagueMatchWatcherService.start(); // ✅ Start league match watcher
-                // ✅ OPTIMIZATION 4: Start background preload service
-                backgroundPreloadService.start();
-                logger.info('✅ Background preload service started');
-            } else {
-                logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
+                // Start match watcher for push notifications
+                if (process.env.FOOTBALL_API_KEY) {
+                    MatchWatcherService.start();
+                    PredictionWatcherService.start(); // ✅ Start prediction watcher
+                    LeagueMatchWatcherService.start(); // ✅ Start league match watcher
+                    // ✅ OPTIMIZATION 4: Start background preload service
+                    backgroundPreloadService.start();
+                    logger.info('✅ Background preload service started');
+                } else {
+                    logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
+                }
+            } catch (error) {
+                logger.warn('⚠️  Database connection failed. Please check your DATABASE_URL in .env');
+                logger.warn('   The server will still run, but database features will not work.');
+                logger.warn('   Make sure PostgreSQL is running and DATABASE_URL is correct.');
+                logger.error('Database error:', error);
             }
-        } catch (error) {
-            logger.warn('⚠️  Database connection failed. Please check your DATABASE_URL in .env');
-            logger.warn('   The server will still run, but database features will not work.');
-            logger.warn('   Make sure PostgreSQL is running and DATABASE_URL is correct.');
-        }
-    });
+        });
+
+        // Handle server errors
+        httpServer.on('error', (error: NodeJS.ErrnoException) => {
+            if (error.code === 'EADDRINUSE') {
+                logger.error(`❌ Port ${PORT} is already in use`);
+            } else {
+                logger.error('❌ Server error:', error);
+            }
+            process.exit(1);
+        });
+    } catch (error) {
+        logger.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
 }
 
 process.on('SIGINT', async () => {
@@ -380,6 +409,17 @@ process.on('SIGTERM', async () => {
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
+});
+
+// Handle uncaught exceptions and unhandled promise rejections
+process.on('uncaughtException', (error: Error) => {
+    logger.error('❌ Uncaught Exception:', error);
+    // Don't exit immediately - let the server try to handle it
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+    logger.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit immediately - let the server try to handle it
 });
 
 startServer();

@@ -17,31 +17,124 @@ import {
 
 const router = Router();
 
+// ============================================
+// STATIC ROUTES (يجب أن تكون قبل Dynamic Routes)
+// ============================================
+
 /**
  * GET /api/quiz/categories
  * جلب جميع فئات الكويز
  * Requires authentication - guests cannot access quiz
  */
 router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const categories = await prisma.quizCategory.findMany({
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
+    try {
+        const categories = await prisma.quizCategory.findMany({
+            orderBy: {
+                createdAt: 'asc',
+            },
+        });
 
-    res.json({
-      status: 'SUCCESS',
-      data: categories,
-    });
-  } catch (error: any) {
-    logger.error('Error getting quiz categories:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Failed to get categories',
-    });
-  }
+        res.json({
+            status: 'SUCCESS',
+            data: categories,
+        });
+    } catch (error: any) {
+        logger.error('Error getting quiz categories:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get categories',
+        });
+    }
 });
+
+/**
+ * GET /api/quiz/stats
+ * جلب إحصائيات المستخدم في الكويزات
+ */
+router.get(
+  '/stats',
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const clerkUserId = req.auth?.userId;
+      if (!clerkUserId) {
+        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId },
+        select: { id: true },
+      });
+
+      if (!user) {
+        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        return;
+      }
+
+      const stats = await getUserQuizStats(user.id);
+
+      res.json({
+        status: 'SUCCESS',
+        data: stats,
+      });
+    } catch (error: any) {
+      logger.error('Error getting quiz stats:', error);
+      res.status(500).json({
+        status: 'ERROR',
+        message: error.message || 'Failed to get stats',
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/quiz/history
+ * جلب تاريخ محاولات المستخدم
+ */
+router.get(
+  '/history',
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const clerkUserId = req.auth?.userId;
+      if (!clerkUserId) {
+        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId },
+        select: { id: true },
+      });
+
+      if (!user) {
+        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        return;
+      }
+
+      const { limit } = req.query;
+      const historyLimit = limit ? parseInt(limit as string, 10) : 20;
+
+      const history = await getUserQuizHistory(user.id, historyLimit);
+
+      res.json({
+        status: 'SUCCESS',
+        data: history,
+      });
+    } catch (error: any) {
+      logger.error('Error getting quiz history:', error);
+      res.status(500).json({
+        status: 'ERROR',
+        message: error.message || 'Failed to get history',
+      });
+    }
+  }
+);
+
+// ============================================
+// DYNAMIC ROUTES (يجب أن تكون بعد Static Routes)
+// ============================================
 
 /**
  * GET /api/quiz/:categoryId/start
@@ -186,91 +279,6 @@ router.post(
       res.status(500).json({
         status: 'ERROR',
         message: error.message || 'Failed to submit quiz',
-      });
-    }
-  }
-);
-
-/**
- * GET /api/quiz/stats
- * جلب إحصائيات المستخدم في الكويزات
- */
-router.get(
-  '/stats',
-  requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const clerkUserId = req.auth?.userId;
-      if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-        return;
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId },
-        select: { id: true },
-      });
-
-      if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
-        return;
-      }
-
-      const stats = await getUserQuizStats(user.id);
-
-      res.json({
-        status: 'SUCCESS',
-        data: stats,
-      });
-    } catch (error: any) {
-      logger.error('Error getting quiz stats:', error);
-      res.status(500).json({
-        status: 'ERROR',
-        message: error.message || 'Failed to get stats',
-      });
-    }
-  }
-);
-
-/**
- * GET /api/quiz/history
- * جلب تاريخ محاولات المستخدم
- */
-router.get(
-  '/history',
-  requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const clerkUserId = req.auth?.userId;
-      if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-        return;
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId },
-        select: { id: true },
-      });
-
-      if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
-        return;
-      }
-
-      const { limit } = req.query;
-      const historyLimit = limit ? parseInt(limit as string, 10) : 20;
-
-      const history = await getUserQuizHistory(user.id, historyLimit);
-
-      res.json({
-        status: 'SUCCESS',
-        data: history,
-      });
-    } catch (error: any) {
-      logger.error('Error getting quiz history:', error);
-      res.status(500).json({
-        status: 'ERROR',
-        message: error.message || 'Failed to get history',
       });
     }
   }
