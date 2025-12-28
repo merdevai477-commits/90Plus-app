@@ -27,10 +27,13 @@ const fetchWithAuth = async (
         const token = await getToken();
         
         if (!token) {
-            throw new Error('No authentication token available');
+            throw new Error('No authentication token available. Please sign in.');
         }
         
-        const response = await fetch(`${API_URL}${endpoint}`, {
+        const url = `${API_URL}${endpoint}`;
+        console.log(`[QuizAPI] Fetching: ${url}`);
+        
+        const response = await fetch(url, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
@@ -41,13 +44,22 @@ const fetchWithAuth = async (
         });
         
         clearTimeout(timeoutId);
+        
+        // Log response status for debugging
+        if (!response.ok) {
+            console.error(`[QuizAPI] Request failed: ${response.status} ${response.statusText} for ${url}`);
+        }
+        
         return response;
     } catch (error: any) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
             throw new Error('Request timeout - please check your connection');
         }
-        throw error;
+        if (error.message) {
+            throw error;
+        }
+        throw new Error(`Network error: ${error.message || 'Unknown error'}`);
     }
 };
 
@@ -145,12 +157,34 @@ export interface QuizHistoryItem {
  */
 export async function getQuizCategories(getToken: GetTokenFunction): Promise<QuizCategory[]> {
     try {
+        // Check if getToken is available
+        if (!getToken) {
+            throw new Error('Authentication token function is not available');
+        }
+
+        const token = await getToken();
+        if (!token) {
+            throw new Error('No authentication token available. Please sign in.');
+        }
+
         const response = await fetchWithAuth('/quiz/categories', getToken, {
             method: 'GET',
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to fetch categories: ${response.statusText}`);
+            const errorText = await response.text();
+            let errorMessage = `Failed to fetch categories: ${response.status} ${response.statusText}`;
+            
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.message || errorData.error || errorMessage;
+            } catch {
+                if (errorText) {
+                    errorMessage = errorText;
+                }
+            }
+            
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -161,7 +195,11 @@ export async function getQuizCategories(getToken: GetTokenFunction): Promise<Qui
         throw new Error(data.message || 'Failed to fetch categories');
     } catch (error: any) {
         console.error('Error fetching quiz categories:', error);
-        throw error;
+        // Re-throw with more context if needed
+        if (error.message) {
+            throw error;
+        }
+        throw new Error(error.message || 'Failed to fetch quiz categories');
     }
 }
 

@@ -35,19 +35,27 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
     const [cooldowns, setCooldowns] = useState<Record<string, { canStart: boolean; hoursRemaining?: number }>>({});
 
     useEffect(() => {
-        if (getToken) {
-            loadCategories();
-        }
-    }, [getToken]);
+        loadCategories();
+    }, []);
 
     const loadCategories = async () => {
         if (!getToken) {
             console.error('getToken is not available');
+            setLoading(false);
             return;
         }
 
         try {
             setLoading(true);
+            
+            // Verify token is available before making request
+            const token = await getToken();
+            if (!token) {
+                console.error('No authentication token available');
+                setLoading(false);
+                return;
+            }
+
             const fetchedCategories = await getQuizCategories(getToken);
             setCategories(fetchedCategories);
 
@@ -63,8 +71,10 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
                 }
             }
             setCooldowns(cooldownMap);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error loading quiz categories:', error);
+            // Set empty categories on error to prevent infinite retries
+            setCategories([]);
         } finally {
             setLoading(false);
         }
