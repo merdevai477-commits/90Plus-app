@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { clerkClient } from '@clerk/clerk-sdk-node';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
+import { logger } from '../utils/logger';
 
 export class ClerkUserService {
     /**
@@ -10,7 +9,7 @@ export class ClerkUserService {
      */
     static async findOrCreateUser(clerkUserId: string) {
         try {
-            // Check if user exists in our database
+            // Check if user exists by clerkUserId
             let user = await prisma.user.findUnique({
                 where: { clerkUserId },
             });
@@ -31,42 +30,70 @@ export class ClerkUserService {
                 throw new Error('No email found for user');
             }
 
-            // Generate username from email or Clerk username
+            // Generate unique email - always add clerkUserId to ensure uniqueness
+            const emailParts = primaryEmail.emailAddress.split('@');
+            let finalEmail = `${emailParts[0]}+${clerkUserId.slice(-8)}@${emailParts[1]}`;
+            
+            // Check if this modified email exists, if so use full clerkUserId
+            let existingEmail = await prisma.user.findUnique({ where: { email: finalEmail } });
+            if (existingEmail) {
+                finalEmail = `${emailParts[0]}+${clerkUserId}@${emailParts[1]}`;
+            }
+            
+            // Final check - if still exists, use timestamp
+            existingEmail = await prisma.user.findUnique({ where: { email: finalEmail } });
+            if (existingEmail) {
+                finalEmail = `${emailParts[0]}+${Date.now()}@${emailParts[1]}`;
+            }
+
+            logger.info(`📧 Using email: ${finalEmail}`);
+
+            // Generate username with unique suffix - use short suffix for better UX
             const baseUsername = clerkUser.username || 
                 primaryEmail.emailAddress.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
             
-            let username = baseUsername;
-            let counter = 1;
-
-            // Ensure unique username
-            while (await prisma.user.findUnique({ where: { username } })) {
-                username = `${baseUsername}${counter}`;
-                counter++;
-                if (counter > 9999) {
-                    username = `${baseUsername}_${Date.now()}`;
-                    break;
+            // Use last 8 characters of clerkUserId for shorter, cleaner usernames
+            // Remove 'user_' prefix if present, then take last 8 chars
+            const cleanId = clerkUserId.replace('user_', '');
+            const shortSuffix = cleanId.slice(-8); // Last 8 characters
+            
+            let username = `${baseUsername}_${shortSuffix}`;
+            
+            // Check username uniqueness and add random suffix if needed
+            let existingUsername = await prisma.user.findUnique({ where: { username } });
+            if (existingUsername) {
+                // If conflict, use random 4-digit number instead
+                const randomNum = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
+                username = `${baseUsername}_${randomNum}`;
+                // Double check
+                existingUsername = await prisma.user.findUnique({ where: { username } });
+                if (existingUsername) {
+                    // Final fallback: timestamp + random
+                    username = `${baseUsername}_${Date.now().toString().slice(-6)}_${Math.random().toString(36).slice(2, 5)}`;
                 }
             }
 
-            // Create user in our database
+            logger.info(`👤 Using username: ${username}`);
+
+            // Create new user
             user = await prisma.user.create({
                 data: {
                     clerkUserId,
-                    email: primaryEmail.emailAddress,
+                    email: finalEmail,
                     username,
                     displayName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || username,
                     avatar: clerkUser.imageUrl || undefined,
                     emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
-                    coins: 50, // Welcome bonus
+                    coins: 50,
                     level: 1,
                     xp: 0,
                 },
             });
 
-            console.log('✅ New user created from Clerk:', user.id);
+            logger.info('✅ User synced from Clerk:', user.id);
             return user;
         } catch (error) {
-            console.error('Error in findOrCreateUser:', error);
+            logger.error('Error in findOrCreateUser:', error);
             throw error;
         }
     }
@@ -91,6 +118,16 @@ export class ClerkUserService {
                 isVerified: true,
                 isDeveloper: true,
                 favoriteTeam: true,
+                // FIFA Card fields
+                position: true,
+                countryFlag: true,
+                age: true,
+                height: true,
+                weight: true,
+                preferredFoot: true,
+                lastUsernameChange: true,
+                // Cover image
+                coverImage: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -107,6 +144,43 @@ export class ClerkUserService {
         avatar?: string;
         favoriteTeam?: string;
     }) {
+        // First check if user exists
+        let user = await prisma.user.findUnique({
+            where: { clerkUserId },
+        });
+
+        // If user doesn't exist, create them first
+        if (!user) {
+            logger.info('⚠️ User not found, creating first...');
+            user = await this.findOrCreateUser(clerkUserId);
+        }
+
+        // Check if username is being changed
+        if (data.username && data.username !== user.username) {
+            // Check 15 days cooldown
+            if (user.lastUsernameChange) {
+                const daysSinceLastChange = Math.floor(
+                    (Date.now() - new Date(user.lastUsernameChange).getTime()) / (1000 * 60 * 60 * 24)
+                );
+                if (daysSinceLastChange < 15) {
+                    const daysRemaining = 15 - daysSinceLastChange;
+                    throw new Error(`You can change your username in ${daysRemaining} days`);
+                }
+            }
+
+            // Check if username is unique
+            const existingUser = await prisma.user.findUnique({
+                where: { username: data.username },
+            });
+            if (existingUser && existingUser.id !== user.id) {
+                throw new Error('Username already taken');
+            }
+
+            // Add lastUsernameChange to the update data
+            (data as any).lastUsernameChange = new Date();
+        }
+
+        // Now update the user
         return await prisma.user.update({
             where: { clerkUserId },
             data,
@@ -151,7 +225,7 @@ export class ClerkUserService {
 
             return user;
         } catch (error) {
-            console.error('Error syncing user from Clerk:', error);
+            logger.error('Error syncing user from Clerk:', error);
             throw error;
         }
     }

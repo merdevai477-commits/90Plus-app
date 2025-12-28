@@ -9,15 +9,15 @@ import { Request, Response } from 'express';
 
 /**
  * General API rate limiter
- * 100 requests per 15 minutes
+ * 500 requests per minute in development, 100 per 15 minutes in production
  */
 export const generalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
+    max: process.env.NODE_ENV === 'production' ? 100 : 500, // 100 prod, 500 dev
     message: {
         status: 'ERROR',
         message: 'Too many requests, please try again later',
-        retryAfter: '15 minutes',
+        retryAfter: process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
     },
     standardHeaders: true,
     legacyHeaders: false,

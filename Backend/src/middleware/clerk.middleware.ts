@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { clerkClient } from '@clerk/clerk-sdk-node';
+import { logger } from '../utils/logger';
 
 // Extend Express Request to include auth
 declare global {
@@ -13,6 +14,55 @@ declare global {
         }
     }
 }
+
+// Simple in-memory cache for verified users to prevent Clerk API rate limiting
+interface CachedUser {
+    userId: string;
+    verifiedAt: number;
+}
+
+const userCache = new Map<string, CachedUser>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
+/**
+ * Get cached user or verify with Clerk API
+ */
+async function getVerifiedUser(userId: string): Promise<boolean> {
+    const cached = userCache.get(userId);
+    const now = Date.now();
+
+    // Return cached result if still valid
+    if (cached && (now - cached.verifiedAt) < CACHE_TTL_MS) {
+        return true;
+    }
+
+    // Verify with Clerk API
+    try {
+        const user = await clerkClient.users.getUser(userId);
+        if (user && user.id) {
+            userCache.set(userId, { userId: user.id, verifiedAt: now });
+            return true;
+        }
+        return false;
+    } catch (error: any) {
+        // If rate limited but user was previously verified, extend cache
+        if (error.status === 429 && cached) {
+            cached.verifiedAt = now; // Extend cache on rate limit
+            return true;
+        }
+        throw error;
+    }
+}
+
+// Clean up old cache entries periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of userCache.entries()) {
+        if (now - value.verifiedAt > CACHE_TTL_MS * 2) {
+            userCache.delete(key);
+        }
+    }
+}, 60 * 1000); // Clean every minute
 
 /**
  * Decode JWT without verification (for extracting claims)
@@ -66,10 +116,10 @@ export const requireAuth = async (
                 return;
             }
 
-            // Verify user exists in Clerk
-            const user = await clerkClient.users.getUser(decoded.sub);
+            // Verify user exists in Clerk (with caching)
+            const userExists = await getVerifiedUser(decoded.sub);
 
-            if (!user || !user.id) {
+            if (!userExists) {
                 res.status(401).json({
                     status: 'ERROR',
                     message: 'Unauthorized - User not found',
@@ -95,7 +145,7 @@ export const requireAuth = async (
 
             next();
         } catch (verifyError: any) {
-            console.error('Token verification error:', verifyError);
+            logger.error('Token verification error:', verifyError);
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized - Token verification failed',
@@ -103,7 +153,7 @@ export const requireAuth = async (
             return;
         }
     } catch (error: any) {
-        console.error('Auth middleware error:', error);
+        logger.error('Auth middleware error:', error);
         res.status(500).json({
             status: 'ERROR',
             message: 'Internal server error',
@@ -135,10 +185,10 @@ export const optionalAuth = async (
             const decoded = decodeJwt(token);
 
             if (decoded && decoded.sub) {
-                // Verify user exists
-                const user = await clerkClient.users.getUser(decoded.sub);
+                // Verify user exists (with caching)
+                const userExists = await getVerifiedUser(decoded.sub);
 
-                if (user && user.id && (!decoded.exp || decoded.exp * 1000 >= Date.now())) {
+                if (userExists && (!decoded.exp || decoded.exp * 1000 >= Date.now())) {
                     req.auth = {
                         userId: decoded.sub,
                         sessionId: decoded.sid || '',
@@ -148,12 +198,12 @@ export const optionalAuth = async (
             }
         } catch (verifyError) {
             // Token invalid, continue without auth
-            console.warn('Optional auth - token verification failed');
+            logger.error('Optional auth - token verification failed');
         }
 
         next();
     } catch (error) {
-        console.error('Optional auth middleware error:', error);
+        logger.error('Optional auth middleware error:', error);
         next();
     }
 };

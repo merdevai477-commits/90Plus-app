@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
 import streamifier from 'streamifier';
+import { logger } from './logger';
 
 dotenv.config();
 
@@ -73,7 +74,7 @@ export class StorageService {
         try {
             await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
         } catch (error) {
-            console.error(`Failed to delete file ${publicId}:`, error);
+            logger.error(`Failed to delete file ${publicId}:`, error);
         }
     }
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { StorageService } from '../utils/storage.service';
 import { STORAGE_BUCKETS } from '../config/supabase.config';
+import { logger } from '../utils/logger';
 
 export class StorageController {
     /**
@@ -29,7 +30,7 @@ export class StorageController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Avatar upload error:', error);
+            logger.error('Avatar upload error:', error);
             res.status(500).json({ message: 'Failed to upload avatar', error: error.message });
         }
     }
@@ -58,7 +59,7 @@ export class StorageController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Reel upload error:', error);
+            logger.error('Reel upload error:', error);
             res.status(500).json({ message: 'Failed to upload reel', error: error.message });
         }
     }
@@ -87,13 +88,14 @@ export class StorageController {
                 data: result,
             });
         } catch (error: any) {
-            console.error('Thumbnail upload error:', error);
+            logger.error('Thumbnail upload error:', error);
             res.status(500).json({ message: 'Failed to upload thumbnail', error: error.message });
         }
     }
 
     /**
      * Delete File
+     * Authorization is handled by verifyFileOwnership middleware
      */
     static async deleteFile(req: Request, res: Response) {
         try {
@@ -106,14 +108,13 @@ export class StorageController {
                 return;
             }
 
-            // TODO: Add authorization check here
-            // Ensure user owns the file they are deleting
+            // Ownership verification is done by middleware before reaching here
 
             await StorageService.deleteFile(path, bucket as 'image' | 'video');
 
             res.status(200).json({ message: 'File deleted successfully' });
         } catch (error: any) {
-            console.error('File delete error:', error);
+            logger.error('File delete error:', error);
             res.status(500).json({ message: 'Failed to delete file', error: error.message });
         }
     }

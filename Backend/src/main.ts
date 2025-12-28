@@ -1,46 +1,97 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import prisma, { startKeepAlive, stopKeepAlive } from './lib/prisma';
+import { logger } from './utils/logger';
+import { WebSocketService } from './services/websocket.service';
+import { performanceMiddleware } from './middleware/performance.middleware';
+import { backgroundPreloadService } from './services/background-preload.service';
 
 // Load environment variables
 dotenv.config();
 
+// Check if running in production mode (must be defined before middleware)
+const isProduction = process.env.NODE_ENV === 'production';
+
 const app: Application = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
 // ============================================
 // MIDDLEWARE
 // ============================================
-app.use(helmet());
+// Helmet security headers with production optimizations
+app.use(
+    helmet({
+        contentSecurityPolicy: isProduction ? undefined : false,
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+);
+// CORS configuration - stricter in production
+const corsOrigins = isProduction
+    ? [
+          process.env.CORS_ORIGIN || 'https://api.90plus.app',
+          'https://90plus.app',
+          /^https:\/\/.*\.90plus\.app$/, // Production domains
+      ]
+    : [
+          process.env.CORS_ORIGIN || 'http://localhost:8081',
+          'http://192.168.1.7:8081',
+          'http://localhost:3000',
+          'exp://192.168.1.7:8081',
+          /^https:\/\/.*\.ngrok-free\.app$/, // ngrok URLs
+          /^https:\/\/.*\.ngrok\.io$/, // ngrok legacy URLs
+          /^https:\/\/.*\.ngrok\.app$/, // ngrok app URLs
+          /^https:\/\/.*\.railway\.app$/, // Railway URLs
+          /^https:\/\/.*\.up\.railway\.app$/, // Railway URLs
+          /^ninetyplusapp:\/\//, // App deep links
+      ];
+
 app.use(
     cors({
-        origin: [
-            process.env.CORS_ORIGIN || 'http://localhost:8081',
-            'http://192.168.1.7:8081',
-            'http://localhost:3000',
-            'exp://192.168.1.7:8081',
-            /^https:\/\/.*\.ngrok-free\.app$/, // ngrok URLs
-            /^https:\/\/.*\.ngrok\.io$/, // ngrok legacy URLs
-            /^https:\/\/.*\.ngrok\.app$/, // ngrok app URLs
-            /^https:\/\/.*\.railway\.app$/, // Railway URLs
-            /^https:\/\/.*\.up\.railway\.app$/, // Railway URLs
-            /^ninetyplusapp:\/\//, // App deep links
-        ],
+        origin: corsOrigins,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'x-mobile-app', 'x-session-token', 'svix-id', 'svix-timestamp', 'svix-signature'],
+        maxAge: isProduction ? 86400 : 3600, // 24 hours in production, 1 hour in dev
     })
 );
+
+// Keep-Alive headers for better connection reuse
+app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Keep-Alive', 'timeout=5, max=1000');
+    next();
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(compression());
-app.use(morgan('dev'));
+
+// Compression middleware with production optimizations
+app.use(
+    compression({
+        level: 6, // Optimal balance between compression and CPU
+        threshold: 1024, // Only compress responses > 1KB
+        filter: (req, res) => {
+            // Don't compress if client explicitly requests no compression
+            if (req.headers['x-no-compression']) {
+                return false;
+            }
+            // Use default compression filter
+            return compression.filter(req, res);
+        },
+    })
+);
+
+// Morgan logging - use 'combined' in production, 'dev' in development
+app.use(morgan(isProduction ? 'combined' : 'dev'));
+
+// Performance monitoring
+app.use(performanceMiddleware());
 
 // ============================================
 // ROUTES
@@ -65,6 +116,21 @@ app.get('/', (_req: Request, res: Response) => {
 import userRoutes from './routes/user.routes';
 import clerkUserRoutes from './routes/clerk-user.routes';
 import webhookRoutes from './routes/webhook.routes';
+import profileRoutes from './routes/profile.routes';
+import videoRoutes from './routes/video.routes';
+import analyticsRoutes from './routes/analytics.routes';
+import reelsRoutes from './routes/reels.routes';
+import uploadRoutes from './routes/upload.routes';
+import notificationRoutes from './routes/notification.routes';
+import matchesRoutes from './routes/matches.routes';
+import dailySpinRoutes from './routes/daily-spin.routes';
+import footballRoutes from './routes/football.routes';
+import predictionsRoutes from './routes/predictions.routes';
+import coinsRoutes from './routes/coins.routes';
+
+// Import services
+import { MatchWatcherService } from './services/match-watcher.service';
+import { PredictionWatcherService } from './services/prediction-watcher.service';
 
 // Import rate limiters
 import { generalLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
@@ -76,6 +142,17 @@ app.use(`${API_PREFIX}`, generalLimiter);
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/clerk`, clerkUserRoutes);
 app.use(`${API_PREFIX}/webhooks/clerk`, webhookLimiter, webhookRoutes);
+app.use(`${API_PREFIX}/profile`, profileRoutes);
+app.use(`${API_PREFIX}/videos`, videoRoutes);
+app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
+app.use(`${API_PREFIX}/reels`, reelsRoutes);
+app.use(`${API_PREFIX}/upload`, uploadRoutes);
+app.use(`${API_PREFIX}/notifications`, notificationRoutes);
+app.use(`${API_PREFIX}/matches`, matchesRoutes);
+app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
+app.use(`${API_PREFIX}/football`, footballRoutes);
+app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
+app.use(`${API_PREFIX}/coins`, coinsRoutes);
 
 app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
     const timestamp = new Date().toISOString();
@@ -220,7 +297,7 @@ app.use((req: Request, res: Response) => {
 });
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    console.error('Error:', err);
+    logger.error('Error:', err);
 
     res.status(500).json({
         status: 'ERROR',
@@ -233,33 +310,65 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ============================================
 // SERVER START
 // ============================================
+
+// Create HTTP server for both Express and WebSocket
+const httpServer = createServer(app);
+
 async function startServer() {
-    app.listen(PORT, async () => {
-        console.log('🚀 90Plus Backend is running! ');
-        console.log(`📍 Server: http://localhost:${PORT}`);
-        console.log(`📍 API: http://localhost:${PORT}${API_PREFIX}`);
-        console.log(`📍 Health: http://localhost:${PORT}${API_PREFIX}/health`);
-        console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    // Initialize WebSocket server (Requirements: 21.1)
+    WebSocketService.initialize(httpServer);
+
+    httpServer.listen(PORT, async () => {
+        logger.info('🚀 90Plus Backend is running! ');
+        logger.info(`📍 Server: http://localhost:${PORT}`);
+        logger.info(`📍 API: http://localhost:${PORT}${API_PREFIX}`);
+        logger.info(`📍 Health: http://localhost:${PORT}${API_PREFIX}/health`);
+        logger.info(`📍 WebSocket: ws://localhost:${PORT}`);
+        logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
         try {
             await prisma.$connect();
-            console.log('✅ Database connected successfully');
+            logger.info('✅ Database connected successfully');
+            // Start keep-alive ping to prevent Neon connection timeout
+            startKeepAlive();
+            logger.info('✅ Database keep-alive started');
+
+            // Start match watcher for push notifications
+            if (process.env.FOOTBALL_API_KEY) {
+                MatchWatcherService.start();
+                PredictionWatcherService.start(); // ✅ Start prediction watcher
+                // ✅ OPTIMIZATION 4: Start background preload service
+                backgroundPreloadService.start();
+                logger.info('✅ Background preload service started');
+            } else {
+                logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
+            }
         } catch (error) {
-            console.warn('⚠️  Database connection failed. Please check your DATABASE_URL in .env');
-            console.warn('   The server will still run, but database features will not work.');
-            console.warn('   Make sure PostgreSQL is running and DATABASE_URL is correct.');
+            logger.warn('⚠️  Database connection failed. Please check your DATABASE_URL in .env');
+            logger.warn('   The server will still run, but database features will not work.');
+            logger.warn('   Make sure PostgreSQL is running and DATABASE_URL is correct.');
         }
     });
 }
 
 process.on('SIGINT', async () => {
-    console.log('\n👋 Shutting down gracefully...');
+    logger.info('\n👋 Shutting down gracefully...');
+    WebSocketService.shutdown();
+    MatchWatcherService.stop();
+    PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
+    stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-    console.log('\n👋 Shutting down gracefully...');
+    logger.info('\n👋 Shutting down gracefully...');
+    WebSocketService.shutdown();
+    MatchWatcherService.stop();
+    PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
+    stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
 });

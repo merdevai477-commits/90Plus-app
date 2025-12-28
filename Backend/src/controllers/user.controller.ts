@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
+import { logger } from '../utils/logger';
 
 export class UserController {
     /**
@@ -30,7 +29,7 @@ export class UserController {
                 data: user?.settings || {},
             });
         } catch (error) {
-            console.error('Get settings error:', error);
+            logger.error('Get settings error:', error);
             res.status(500).json({
                 status: 'ERROR',
                 message: 'Failed to retrieve settings',
@@ -76,7 +75,7 @@ export class UserController {
                 message: 'Settings updated successfully',
             });
         } catch (error) {
-            console.error('Update settings error:', error);
+            logger.error('Update settings error:', error);
             res.status(500).json({
                 status: 'ERROR',
                 message: 'Failed to update settings',
@@ -110,7 +109,7 @@ export class UserController {
                 message: 'Account deleted successfully',
             });
         } catch (error) {
-            console.error('Delete account error:', error);
+            logger.error('Delete account error:', error);
             res.status(500).json({
                 status: 'ERROR',
                 message: 'Failed to delete account',

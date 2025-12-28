@@ -6,9 +6,7 @@
  * - OAuth Registration: Email prefix or fallback to random
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 /**
  * Generate a random number with specified digits

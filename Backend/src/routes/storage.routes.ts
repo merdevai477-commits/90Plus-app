@@ -2,9 +2,8 @@ import { Router } from 'express';
 import { StorageController } from '../controllers/storage.controller';
 import { uploadAvatar, uploadReel, uploadThumbnail } from '../middleware/upload.middleware';
 import { validateAvatarUpload, validateReelUpload, validateThumbnailUpload } from '../middleware/validation.middleware';
-
-// Note: Auth middleware should be added here once Lucia is integrated
-// For now, we assume the user ID is passed in the body or handled by a placeholder auth middleware
+import { requireAuth } from '../middleware/clerk.middleware';
+import { verifyFileOwnership } from '../middleware/ownership.middleware';
 
 const router = Router();
 
@@ -32,7 +31,7 @@ router.post(
     StorageController.uploadThumbnail
 );
 
-// Delete File
-router.delete('/:bucket/:path(*)', StorageController.deleteFile);
+// Delete File - requires authentication and ownership verification
+router.delete('/:bucket/:path(*)', requireAuth, verifyFileOwnership, StorageController.deleteFile);
 
 export default router;

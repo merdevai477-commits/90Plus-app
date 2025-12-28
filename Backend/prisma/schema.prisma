@@ -30,7 +30,44 @@ model User {
   isVerified   Boolean  @default(false)
   isDeveloper  Boolean  @default(false)
   favoriteTeam String?
+  favoriteBrand String?  // البراند المفضل
+  country       String?  // بلد المستخدم
+  favoriteLeagues Int[]  @default([]) // الدوريات المفضلة (IDs)
   settings     Json?    @default("{}") // Stores preferences like biometricEnabled, language
+  
+  // FIFA Card Profile Fields
+  position      String?  @default("RW")  // Player position (RW, LW, ST, etc.)
+  countryFlag   String?  @default("🇪🇬")  // Country flag emoji
+  age           Int?     @default(22)    // Player age
+  height        Int?     @default(180)   // Height in cm
+  weight        Int?     @default(70)    // Weight in kg
+  preferredFoot String?  @default("R")   // R = Right, L = Left, B = Both
+  clubLogo      String?  // شعار النادي المفضل (URL or path)
+  brandLogo     String?  // شعار البراند المفضل (URL or path)
+  
+  // Social Links
+  socialLinks   Json?    @default("[]")  // Array of {platform, url, username}
+  
+  // Username change tracking (15 days cooldown)
+  lastUsernameChange DateTime?
+  
+  // Profile image change tracking (7 days cooldown)
+  lastAvatarChange DateTime?
+  lastCoverChange  DateTime?
+  coverImage       String?
+  coverStoragePath String?
+  
+  // Profile analytics
+  profileViews     Int      @default(0)
+  lastReelUpload   DateTime?
+  reelDeleteCount  Int      @default(0)  // عدد مرات مسح الفيديو (حد أقصى 3)
+  
+  // Daily Spin Wheel
+  lastDailySpin    DateTime?  // آخر مرة لف عجلة الحظ
+  dailySpins       DailySpinHistory[]
+  
+  // Push Notifications
+  expoPushToken    String?  // Expo Push Token for notifications
   
   // Email verification
   emailVerified              Boolean   @default(false)
@@ -56,6 +93,9 @@ model User {
   reels             Reel[]
   comments          Comment[]
   likes             Like[]
+  commentLikes      CommentLike[]
+  savedReels        SavedReel[]
+  reelShares        ReelShare[]
   coinTransactions  CoinTransaction[]
   achievements      UserAchievement[]
   
@@ -63,10 +103,20 @@ model User {
   followers  Follow[] @relation("UserFollowers")
   following  Follow[] @relation("UserFollowing")
   
+  // Block system
+  blockedUsers   Block[] @relation("UserBlocking")
+  blockedByUsers Block[] @relation("UserBlocked")
+  
   // Reports
   reportsCreated  Report[] @relation("ReportCreator")
   reportsReceived Report[] @relation("ReportedUser")
   reportsReviewed Report[] @relation("ReportReviewer")
+  
+  // Favorite Matches
+  favoriteMatches FavoriteMatch[]
+  
+  // Predictions
+  predictions     Prediction[]
 
   @@index([email])
   @@index([username])
@@ -313,6 +363,7 @@ enum CoinTransactionType {
   PURCHASE
   ADMIN_GRANT
   REEL_REWARD
+  PREDICTION
 }
 
 model Achievement {
@@ -385,7 +436,24 @@ model Follow {
   @@unique([followerId, followingId])
   @@index([followerId])
   @@index([followingId])
+  @@index([createdAt]) // For recent followers analytics
+  @@index([followingId, createdAt]) // Compound index for analytics
   @@map("follows")
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlocking", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocks")
 }
 
 model Reel {
@@ -397,6 +465,7 @@ model Reel {
   thumbnailStoragePath String? // Path in Supabase Storage
   caption   String?  @db.Text
   views     Int      @default(0)
+  sharesCount Int    @default(0)  // عدد المشاركات
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -405,11 +474,60 @@ model Reel {
   likes    Like[]
   comments Comment[]
   reports  Report[]
+  hashtags ReelHashtag[]
+  mentions ReelMention[]
+  savedBy  SavedReel[]
+  shares   ReelShare[]
 
   @@index([userId])
   @@index([views])
   @@index([createdAt])
+  @@index([sharesCount]) // ✅ OPTIMIZATION 3: Index for top shares ranking
+  @@index([createdAt, views]) // ✅ OPTIMIZATION 3: Compound index for rankings queries
+  @@index([createdAt, sharesCount]) // ✅ OPTIMIZATION 3: Compound index for shares ranking
   @@map("reels")
+}
+
+model Hashtag {
+  id        String   @id @default(uuid())
+  name      String   @unique // without # symbol
+  reelCount Int      @default(0)
+  createdAt DateTime @default(now())
+  
+  reels ReelHashtag[]
+  
+  @@index([name])
+  @@index([reelCount])
+  @@map("hashtags")
+}
+
+model ReelHashtag {
+  id        String   @id @default(uuid())
+  reelId    String
+  hashtagId String
+  createdAt DateTime @default(now())
+  
+  reel    Reel    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+  
+  @@unique([reelId, hashtagId])
+  @@index([reelId])
+  @@index([hashtagId])
+  @@map("reel_hashtags")
+}
+
+model ReelMention {
+  id             String   @id @default(uuid())
+  reelId         String
+  mentionedUserId String
+  createdAt      DateTime @default(now())
+  
+  reel          Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  
+  @@unique([reelId, mentionedUserId])
+  @@index([reelId])
+  @@index([mentionedUserId])
+  @@map("reel_mentions")
 }
 
 model Like {
@@ -424,6 +542,7 @@ model Like {
   @@unique([userId, reelId])
   @@index([userId])
   @@index([reelId])
+  @@index([createdAt]) // For analytics queries
   @@map("likes")
 }
 
@@ -431,17 +550,81 @@ model Comment {
   id        String   @id @default(uuid())
   userId    String
   reelId    String
+  parentId  String?  // For replies
   content   String   @db.Text
   createdAt DateTime @default(now())
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel    Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reel    Reel      @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
   reports Report[]
+  likes   CommentLike[]
+
+  @@index([userId])
+  @@index([reelId])
+  @@index([parentId])
+  @@index([createdAt])
+  @@map("comments")
+}
+
+// ============================================
+// COMMENT LIKES (لايك على التعليقات والردود)
+// ============================================
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([userId])
+  @@index([commentId])
+  @@map("comment_likes")
+}
+
+// ============================================
+// SAVED REELS (الفيديوهات المحفوظة)
+// ============================================
+
+model SavedReel {
+  id        String   @id @default(uuid())
+  userId    String
+  reelId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reelId])
+  @@index([userId])
+  @@index([reelId])
+  @@index([createdAt])
+  @@map("saved_reels")
+}
+
+// ============================================
+// REEL SHARES (تتبع المشاركات)
+// ============================================
+
+model ReelShare {
+  id        String   @id @default(uuid())
+  userId    String
+  reelId    String
+  platform  String?  // whatsapp, facebook, twitter, copy_link, etc.
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([reelId])
   @@index([createdAt])
-  @@map("comments")
+  @@map("reel_shares")
 }
 
 // ============================================
@@ -469,12 +652,15 @@ model Notification {
 
 enum NotificationType {
   MATCH_UPDATE
+  MATCH_FAVORITE
   QUIZ_REWARD
   LEVEL_UP
   ACHIEVEMENT
   FOLLOW
   LIKE
   COMMENT
+  REPLY
+  MENTION
   GENERAL
 }
 
@@ -529,4 +715,381 @@ enum ReportAction {
   CONTENT_REMOVED
   USER_SUSPENDED
   USER_BANNED
+}
+
+
+// ============================================
+// FAVORITE MATCHES (for Push Notifications)
+// ============================================
+
+model FavoriteMatch {
+  id              String   @id @default(uuid())
+  userId          String
+  apiMatchId      Int      // Match ID from API-Football
+  homeTeam        String   // Home team name (cached)
+  awayTeam        String   // Away team name (cached)
+  homeTeamLogo    String?  // Home team logo URL
+  awayTeamLogo    String?  // Away team logo URL
+  matchDate       DateTime // Match date/time
+  leagueName      String?  // League name
+  lastHomeScore   Int?     // Last known home score (for detecting goals)
+  lastAwayScore   Int?     // Last known away score
+  lastStatus      String?  // Last known status (NS, 1H, HT, 2H, FT, etc.)
+  notifiedStart   Boolean  @default(false) // Already notified about match start
+  notifiedEnd     Boolean  @default(false) // Already notified about match end
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, apiMatchId])
+  @@index([userId])
+  @@index([apiMatchId])
+  @@index([matchDate])
+  @@map("favorite_matches")
+}
+
+// ============================================
+// DAILY SPIN WHEEL (عجلة الحظ اليومية)
+// ============================================
+
+model DailySpinHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  coinsWon    Int      // الكوينات المربوحة
+  spinDate    DateTime @default(now()) // تاريخ اللف
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([spinDate])
+  @@map("daily_spin_history")
+}
+
+// ============================================
+// CACHED FIXTURES (API Optimization)
+// Stores finished matches permanently to reduce API calls
+// ============================================
+
+model CachedFixture {
+  id              String   @id @default(uuid())
+  fixtureId       Int      @unique  // API-Football fixture ID
+  
+  // League Info
+  leagueId        Int
+  leagueName      String
+  leagueLogo      String?
+  leagueCountry   String?
+  leagueSeason    Int?
+  leagueRound     String?
+  
+  // Home Team
+  homeTeamId      Int
+  homeTeamName    String
+  homeTeamLogo    String?
+  
+  // Away Team
+  awayTeamId      Int
+  awayTeamName    String
+  awayTeamLogo    String?
+  
+  // Match Result
+  homeScore       Int?
+  awayScore       Int?
+  homeHalftimeScore Int?
+  awayHalftimeScore Int?
+  
+  // Match Info
+  matchDate       DateTime
+  matchTimestamp  Int      // Unix timestamp for easy sorting
+  status          String   // FT, AET, PEN, PST, CANC, etc.
+  statusLong      String?  // Full status name
+  venue           String?
+  referee         String?
+  
+  // Full JSON data for detailed views
+  fullData        Json
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([matchDate])
+  @@index([matchTimestamp])
+  @@index([leagueId])
+  @@index([status])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@map("cached_fixtures")
+}
+
+// ============================================
+// CACHED PLAYERS (API Optimization)
+// Stores player data to reduce API calls
+// ============================================
+
+model CachedPlayer {
+  id              String   @id @default(uuid())
+  playerId        Int      @unique  // API-Football player ID
+  
+  // Basic Info
+  name            String
+  firstname       String?
+  lastname        String?
+  photo           String?
+  
+  // Personal Info
+  nationality     String?
+  nationalityFlag String?
+  age             Int?
+  birthDate       String?
+  birthPlace      String?
+  birthCountry    String?
+  height          String?
+  weight          String?
+  
+  // Current Team
+  teamId          Int?
+  teamName        String?
+  teamLogo        String?
+  
+  // Position
+  position        String?
+  
+  // Season Stats (JSON for flexibility)
+  seasonStats     Json?    // Goals, assists, matches, cards, etc.
+  
+  // Full API response
+  fullData        Json
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([nationality])
+  @@index([position])
+  @@map("cached_players")
+}
+
+// ============================================
+// CACHED TEAMS (API Optimization)
+// Stores team data to reduce API calls
+// ============================================
+
+model CachedTeam {
+  id              String   @id @default(uuid())
+  teamId          Int      @unique  // API-Football team ID
+  
+  // Basic Info
+  name            String
+  code            String?
+  logo            String?
+  country         String?
+  founded         Int?
+  
+  // Venue
+  venueName       String?
+  venueAddress    String?
+  venueCity       String?
+  venueCapacity   Int?
+  venueImage      String?
+  
+  // Full API response
+  fullData        Json
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([country])
+  @@index([name]) // ✅ OPTIMIZATION 3: Index for team search
+  @@index([updatedAt]) // ✅ OPTIMIZATION 3: Index for cache freshness checks
+  @@map("cached_teams")
+}
+
+// ============================================
+// CACHED HEAD TO HEAD (API Optimization)
+// Stores H2H data between teams
+// ============================================
+
+model CachedH2H {
+  id              String   @id @default(uuid())
+  team1Id         Int
+  team2Id         Int
+  
+  // Summary
+  totalMatches    Int      @default(0)
+  team1Wins       Int      @default(0)
+  team2Wins       Int      @default(0)
+  draws           Int      @default(0)
+  
+  // Last matches (JSON array)
+  lastMatches     Json
+  
+  // Full API response
+  fullData        Json
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([team1Id, team2Id])
+  @@index([team1Id])
+  @@index([team2Id])
+  @@map("cached_h2h")
+}
+
+model CachedLeague {
+  id        String   @id @default(uuid())
+  leagueId  Int      @unique
+  name      String
+  country   String
+  logo      String?
+  type      String?  @default("league")
+  fullData  Json
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([country])
+  @@map("cached_leagues")
+}
+
+// ============================================
+// PREDICTIONS SYSTEM (التوقعات)
+// ============================================
+
+model Prediction {
+  id              String    @id @default(uuid())
+  userId          String
+  apiMatchId      Int       // Match ID from API-Football
+  predictionType  String    // 'home' | 'draw' | 'away'
+  coinsSpent      Int       @default(5)
+  coinsWon        Int?
+  isCorrect       Boolean?
+  createdAt       DateTime  @default(now())
+  resolvedAt      DateTime?
+  
+  // Cached match info for display
+  homeTeam        String?
+  awayTeam        String?
+  homeTeamLogo    String?
+  awayTeamLogo    String?
+  matchDate       DateTime?
+  leagueName      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, apiMatchId])
+  @@index([userId])
+  @@index([apiMatchId])
+  @@index([createdAt])
+  @@index([isCorrect]) // ✅ OPTIMIZATION 3: Index for top predictions ranking
+  @@index([userId, isCorrect]) // ✅ OPTIMIZATION 3: Compound index for user predictions stats
+  @@map("predictions")
+}
+
+// ============================================
+// PLAYER VOTING SYSTEM (تصويت اللاعبين)
+// ============================================
+
+model PlayerVote {
+  id        String   @id @default(uuid())
+  voterId   String   // المصوت (voter)
+  playerId  String   // اللاعب المصوت عليه
+  voteType  String   // 'up' or 'down'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([voterId, playerId])
+  @@index([voterId])
+  @@index([playerId])
+  @@index([voteType])
+  @@map("player_votes")
+}
+
+// ============================================
+// RANKING BADGES & ACHIEVEMENTS (ميداليات وإنجازات التصنيف)
+// ============================================
+
+model RankingBadge {
+  id          String   @id @default(uuid())
+  userId      String
+  badgeType   String   // 'gold', 'silver', 'bronze', 'diamond', 'rank_4' to 'rank_100'
+  category    String   // 'views', 'shares', 'comments', 'predictions', 'team_of_month'
+  period      String   // 'daily', 'weekly', 'monthly'
+  rank        Int      // الترتيب الفعلي
+  earnedAt    DateTime @default(now())
+  
+  // For team of month streak tracking
+  monthYear   String?  // Format: "2024-01" for tracking consecutive months
+  
+  @@index([userId])
+  @@index([badgeType])
+  @@index([category])
+  @@index([earnedAt])
+  @@map("ranking_badges")
+}
+
+// Track consecutive team of month appearances for Diamond badge
+model TeamOfMonthStreak {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  consecutiveMonths Int      @default(0)
+  lastMonthYear     String?  // Last month they appeared in team of month
+  diamondAwarded    Boolean  @default(false)
+  diamondAwardedAt  DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([consecutiveMonths])
+  @@map("team_of_month_streaks")
+}
+
+
+// ============================================
+// CACHED SEARCH RESULTS (نتائج البحث المحفوظة)
+// Stores search results for instant retrieval
+// ============================================
+
+model CachedSearch {
+  id          String   @id @default(uuid())
+  query       String   @unique // Search query (lowercase, trimmed)
+  queryType   String   @default("general") // 'team', 'player', 'league', 'general'
+  
+  // Results stored as JSON
+  teams       Json?    // Array of team results
+  players     Json?    // Array of player results
+  leagues     Json?    // Array of league results
+  matches     Json?    // Array of match results (live, upcoming, finished)
+  
+  // Metadata
+  resultCount Int      @default(0)
+  searchCount Int      @default(1) // How many times this was searched
+  lastSearchedAt DateTime @default(now())
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([query])
+  @@index([queryType])
+  @@index([searchCount])
+  @@index([lastSearchedAt])
+  @@map("cached_searches")
+}
+
+// ============================================
+// POPULAR SEARCHES (البحث الشائع)
+// Tracks trending searches for suggestions
+// ============================================
+
+model PopularSearch {
+  id          String   @id @default(uuid())
+  query       String   @unique
+  searchCount Int      @default(1)
+  lastSearchedAt DateTime @default(now())
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([searchCount])
+  @@index([lastSearchedAt])
+  @@map("popular_searches")
 }

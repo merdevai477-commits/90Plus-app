@@ -8,13 +8,13 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { Webhook } from 'svix';
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import { generateUsername } from '../utils/username.utils';
+import prisma from '../lib/prisma';
+import { logger } from '../utils/logger';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Clerk Webhook Secret from environment
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET || '';
@@ -48,7 +48,7 @@ interface ClerkWebhookEvent {
  */
 function verifyWebhook(req: Request): ClerkWebhookEvent | null {
     if (!WEBHOOK_SECRET) {
-        console.warn('⚠️ CLERK_WEBHOOK_SECRET not configured');
+        logger.warn('⚠️ CLERK_WEBHOOK_SECRET not configured');
         return null;
     }
 
@@ -57,7 +57,7 @@ function verifyWebhook(req: Request): ClerkWebhookEvent | null {
     const svix_signature = req.headers['svix-signature'] as string;
 
     if (!svix_id || !svix_timestamp || !svix_signature) {
-        console.error('❌ Missing svix headers');
+        logger.error('❌ Missing svix headers');
         return null;
     }
 
@@ -72,7 +72,7 @@ function verifyWebhook(req: Request): ClerkWebhookEvent | null {
 
         return evt;
     } catch (err) {
-        console.error('❌ Webhook verification failed:', err);
+        logger.error('❌ Webhook verification failed:', err);
         return null;
     }
 }
@@ -103,11 +103,11 @@ function isOAuthUser(data: ClerkWebhookEvent['data']): boolean {
  * Handle user.created event
  */
 async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void> {
-    console.log('📧 Processing user.created webhook for:', data.id);
+    logger.info('📧 Processing user.created webhook for:', data.id);
 
     const email = getPrimaryEmail(data);
     if (!email) {
-        console.error('❌ No email found for user:', data.id);
+        logger.error('❌ No email found for user:', data.id);
         throw new Error('No email found');
     }
 
@@ -117,7 +117,7 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
     });
 
     if (existingUser) {
-        console.log('ℹ️ User already exists, skipping:', data.id);
+        logger.info('ℹ️ User already exists, skipping:', data.id);
         return;
     }
 
@@ -144,7 +144,7 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
         },
     });
 
-    console.log('✅ User created in database:', user.id, 'username:', username);
+    logger.info('✅ User created in database:', user.id, 'username:', username);
 
     // Update Clerk user metadata with generated username
     try {
@@ -155,9 +155,9 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
                 dbUserId: user.id,
             },
         });
-        console.log('✅ Clerk metadata updated with username:', username);
+        logger.info('✅ Clerk metadata updated with username:', username);
     } catch (err) {
-        console.error('⚠️ Failed to update Clerk metadata:', err);
+        logger.error('⚠️ Failed to update Clerk metadata:', err);
         // Don't throw - user is already created in DB
     }
 }
@@ -166,7 +166,7 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
  * Handle user.updated event
  */
 async function handleUserUpdated(data: ClerkWebhookEvent['data']): Promise<void> {
-    console.log('📧 Processing user.updated webhook for:', data.id);
+    logger.info('📧 Processing user.updated webhook for:', data.id);
 
     const email = getPrimaryEmail(data);
 
@@ -181,24 +181,24 @@ async function handleUserUpdated(data: ClerkWebhookEvent['data']): Promise<void>
         },
     });
 
-    console.log('✅ User updated in database:', updatedUser.id);
+    logger.info('✅ User updated in database:', updatedUser.id);
 }
 
 /**
  * Handle user.deleted event
  */
 async function handleUserDeleted(data: ClerkWebhookEvent['data']): Promise<void> {
-    console.log('📧 Processing user.deleted webhook for:', data.id);
+    logger.info('📧 Processing user.deleted webhook for:', data.id);
 
     // Delete user from database (cascade will handle related data)
     try {
         await prisma.user.delete({
             where: { clerkUserId: data.id },
         });
-        console.log('✅ User deleted from database:', data.id);
+        logger.info('✅ User deleted from database:', data.id);
     } catch (err: any) {
         if (err.code === 'P2025') {
-            console.log('ℹ️ User already deleted or not found:', data.id);
+            logger.info('ℹ️ User already deleted or not found:', data.id);
         } else {
             throw err;
         }
@@ -210,13 +210,13 @@ async function handleUserDeleted(data: ClerkWebhookEvent['data']): Promise<void>
  * Main webhook endpoint
  */
 router.post('/', async (req: Request, res: Response): Promise<void> => {
-    console.log('🔔 Received Clerk webhook');
+    logger.info('🔔 Received Clerk webhook');
 
     // For development without signature verification
     let event: ClerkWebhookEvent | null;
 
     if (process.env.NODE_ENV === 'development' && !WEBHOOK_SECRET) {
-        console.warn('⚠️ Development mode: Skipping webhook verification');
+        logger.warn('⚠️ Development mode: Skipping webhook verification');
         event = req.body as ClerkWebhookEvent;
     } else {
         event = verifyWebhook(req);
@@ -233,7 +233,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const eventType = event.type;
     const eventData = event.data;
 
-    console.log(`📧 Webhook event: ${eventType}`);
+    logger.info(`📧 Webhook event: ${eventType}`);
 
     try {
         switch (eventType) {
@@ -250,7 +250,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 break;
 
             default:
-                console.log(`ℹ️ Unhandled event type: ${eventType}`);
+                logger.info(`ℹ️ Unhandled event type: ${eventType}`);
         }
 
         res.status(200).json({
@@ -258,7 +258,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             message: `Webhook processed: ${eventType}`,
         });
     } catch (error: any) {
-        console.error(`❌ Webhook error for ${eventType}:`, error);
+        logger.error(`❌ Webhook error for ${eventType}:`, error);
 
         res.status(500).json({
             status: 'ERROR',

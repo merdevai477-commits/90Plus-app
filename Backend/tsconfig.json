@@ -16,6 +16,8 @@
         "declaration": true,
         "declarationMap": true,
         "removeComments": true,
+        "incremental": true,
+        "tsBuildInfoFile": ".tsbuildinfo",
         "noUnusedLocals": false,
         "noUnusedParameters": false,
         "noImplicitReturns": true,
@@ -24,7 +26,8 @@
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
         "types": [
-            "node"
+            "node",
+            "jest"
         ],
         "baseUrl": ".",
         "paths": {
