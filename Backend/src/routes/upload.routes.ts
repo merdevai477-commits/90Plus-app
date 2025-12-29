@@ -257,19 +257,9 @@ router.post('/reel', requireAuth, upload.fields([
     let thumbnailPath: string | null = null;
     
     try {
-        // Set response timeout to prevent 502 errors
-        // Railway has a 60s timeout, so we need to respond before that
-        res.setTimeout(55 * 1000, () => {
-            if (!res.headersSent) {
-                logger.error('Upload timeout - response not sent in time');
-                res.status(504).json({
-                    status: 'ERROR',
-                    message: 'Upload timeout - request took too long',
-                    code: 'UPLOAD_TIMEOUT'
-                });
-            }
-        });
-
+        // Note: Timeout is handled by middleware in main.ts (req.setTimeout)
+        // Railway gateway has a 60s timeout, so we must complete within that time
+        
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
@@ -322,31 +312,38 @@ router.post('/reel', requireAuth, upload.fields([
         }
 
         // Upload video with timeout protection
+        // Railway gateway timeout is 60s, so we need to complete upload + response within that time
+        // Reduce upload timeout to 45s to leave buffer for response processing
         const videoFileName = `${user.id}/${Date.now()}_${videoFile.originalname}`;
-        logger.info(`Starting video upload: ${videoFileName}, size: ${videoFile.buffer.length} bytes, type: ${videoFile.mimetype}`);
+        const fileSizeMB = (videoFile.buffer.length / (1024 * 1024)).toFixed(2);
+        logger.info(`Starting video upload: ${videoFileName}, size: ${fileSizeMB}MB (${videoFile.buffer.length} bytes), type: ${videoFile.mimetype}`);
         
-        // Add timeout for R2 upload (50 seconds max to leave time for response)
+        const uploadStartTime = Date.now();
         const uploadPromise = r2Storage.uploadFile('reels', videoFile.buffer, videoFileName, videoFile.mimetype);
         const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
             setTimeout(() => {
-                resolve({ success: false, error: 'Upload to storage timed out' });
-            }, 50 * 1000); // 50 seconds
+                const elapsed = Date.now() - uploadStartTime;
+                logger.error(`R2 upload timeout after ${elapsed}ms for file: ${videoFileName}`);
+                resolve({ success: false, error: 'Upload to storage timed out. File may be too large. Maximum size is 50MB.' });
+            }, 45 * 1000); // 45 seconds - leaving 15s buffer for response
         });
 
         videoResult = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
         if (!videoResult.success) {
-            logger.error('Video upload error:', videoResult.error);
+            const elapsed = Date.now() - uploadStartTime;
+            logger.error(`Video upload failed after ${elapsed}ms. File: ${videoFileName}, Size: ${fileSizeMB}MB, Error: ${videoResult.error}`);
             res.status(500).json({ 
                 status: 'ERROR', 
-                message: videoResult.error || 'Failed to upload video to storage',
+                message: videoResult.error || 'Failed to upload video to storage. Please try again or use a smaller file.',
                 code: 'UPLOAD_FAILED'
             });
             return;
         }
         
         if (!videoResult.url) {
-            logger.error('Video uploaded but no public URL returned. Check R2_PUBLIC_URL configuration.');
+            const elapsed = Date.now() - uploadStartTime;
+            logger.error(`Video uploaded but no public URL returned after ${elapsed}ms. File: ${videoFileName}. Check R2_PUBLIC_URL configuration.`);
             res.status(500).json({ 
                 status: 'ERROR', 
                 message: 'Video uploaded but public URL not available. Please check server configuration.',
@@ -356,17 +353,23 @@ router.post('/reel', requireAuth, upload.fields([
         }
         
         videoUploaded = true;
-        const uploadTime = Date.now() - startTime;
-        logger.info(`Video uploaded successfully in ${uploadTime}ms: ${videoResult.url}, path: ${videoResult.path}`);
+        const uploadTime = Date.now() - uploadStartTime;
+        logger.info(`Video uploaded successfully in ${uploadTime}ms (${(uploadTime/1000).toFixed(2)}s). File: ${videoFileName}, Size: ${fileSizeMB}MB, URL: ${videoResult.url}`);
 
         // Upload thumbnail if provided (with timeout)
         let thumbnailUrl = null;
         if (thumbnailFile) {
             try {
                 const thumbFileName = `${user.id}/${Date.now()}_thumb_${thumbnailFile.originalname}`;
+                const thumbSizeMB = (thumbnailFile.buffer.length / (1024 * 1024)).toFixed(2);
+                logger.info(`Starting thumbnail upload: ${thumbFileName}, size: ${thumbSizeMB}MB`);
+                const thumbStartTime = Date.now();
+                
                 const thumbUploadPromise = r2Storage.uploadFile('thumbnails', thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype);
                 const thumbTimeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
                     setTimeout(() => {
+                        const elapsed = Date.now() - thumbStartTime;
+                        logger.warn(`Thumbnail upload timeout after ${elapsed}ms: ${thumbFileName}`);
                         resolve({ success: false, error: 'Thumbnail upload timed out' });
                     }, 10 * 1000); // 10 seconds for thumbnail
                 });
@@ -376,18 +379,26 @@ router.post('/reel', requireAuth, upload.fields([
                     thumbnailUrl = thumbResult.url;
                     thumbnailPath = thumbResult.path;
                     thumbnailUploaded = true;
+                    const thumbTime = Date.now() - thumbStartTime;
+                    logger.info(`Thumbnail uploaded successfully in ${thumbTime}ms: ${thumbFileName}`);
                 } else {
-                    logger.warn('Thumbnail upload failed, continuing without thumbnail:', thumbResult.error);
+                    logger.warn(`Thumbnail upload failed for ${thumbFileName}, continuing without thumbnail. Error: ${thumbResult.error}`);
                 }
-            } catch (thumbError) {
-                logger.warn('Thumbnail upload error, continuing without thumbnail:', thumbError);
+            } catch (thumbError: any) {
+                logger.warn(`Thumbnail upload exception for ${thumbnailFile.originalname}:`, thumbError?.message || thumbError);
             }
         }
 
-        // Parse metadata
-        const { caption, hashtags: hashtagsJson, mentions: mentionsJson } = req.body;
-        const hashtags = hashtagsJson ? JSON.parse(hashtagsJson) : [];
-        const mentions = mentionsJson ? JSON.parse(mentionsJson) : [];
+        // Parse metadata (with error handling)
+        let hashtags: string[] = [];
+        let mentions: string[] = [];
+        try {
+            const { caption, hashtags: hashtagsJson, mentions: mentionsJson } = req.body;
+            hashtags = hashtagsJson ? (typeof hashtagsJson === 'string' ? JSON.parse(hashtagsJson) : hashtagsJson) : [];
+            mentions = mentionsJson ? (typeof mentionsJson === 'string' ? JSON.parse(mentionsJson) : mentionsJson) : [];
+        } catch (parseError: any) {
+            logger.warn('Failed to parse metadata (hashtags/mentions), continuing with empty arrays:', parseError?.message);
+        }
 
         // Create reel in database
         const reel = await prisma.reel.create({
@@ -445,7 +456,7 @@ router.post('/reel', requireAuth, upload.fields([
         });
 
         const totalTime = Date.now() - startTime;
-        logger.info(`Reel upload completed successfully in ${totalTime}ms`);
+        logger.info(`Reel upload completed successfully in ${totalTime}ms (${(totalTime/1000).toFixed(2)}s). Reel ID: ${reel.id}, User: ${user.id}, Hashtags: ${hashtags.length}, Mentions: ${mentions.length}`);
 
         res.json({
             status: 'SUCCESS',
@@ -459,24 +470,33 @@ router.post('/reel', requireAuth, upload.fields([
         });
     } catch (error: any) {
         const totalTime = Date.now() - startTime;
-        logger.error(`Upload reel error after ${totalTime}ms:`, error);
+        const errorMessage = error?.message || 'Unknown error';
+        const errorStack = error?.stack || 'No stack trace';
+        logger.error(`Upload reel exception after ${totalTime}ms (${(totalTime/1000).toFixed(2)}s). Error: ${errorMessage}`, {
+            error: errorMessage,
+            stack: errorStack,
+            videoUploaded,
+            thumbnailUploaded,
+            videoPath: videoResult?.path,
+            thumbnailPath
+        });
         
         // Clean up uploaded files if database operation failed
         if (videoUploaded && videoResult && videoResult.success && videoResult.path) {
             try {
                 await r2Storage.deleteFile('reels', videoResult.path);
-                logger.info('Cleaned up uploaded video file after error');
-            } catch (cleanupError) {
-                logger.error('Failed to cleanup video file:', cleanupError);
+                logger.info(`Cleaned up uploaded video file: ${videoResult.path}`);
+            } catch (cleanupError: any) {
+                logger.error(`Failed to cleanup video file ${videoResult.path}:`, cleanupError?.message || cleanupError);
             }
         }
         
         if (thumbnailUploaded && thumbnailPath) {
             try {
                 await r2Storage.deleteFile('thumbnails', thumbnailPath);
-                logger.info('Cleaned up uploaded thumbnail file after error');
-            } catch (cleanupError) {
-                logger.error('Failed to cleanup thumbnail file:', cleanupError);
+                logger.info(`Cleaned up uploaded thumbnail file: ${thumbnailPath}`);
+            } catch (cleanupError: any) {
+                logger.error(`Failed to cleanup thumbnail file ${thumbnailPath}:`, cleanupError?.message || cleanupError);
             }
         }
 
@@ -484,7 +504,7 @@ router.post('/reel', requireAuth, upload.fields([
         if (!res.headersSent) {
             res.status(500).json({ 
                 status: 'ERROR', 
-                message: error.message || 'Failed to upload reel',
+                message: errorMessage || 'Failed to upload reel. Please try again.',
                 code: 'UPLOAD_ERROR'
             });
         }
