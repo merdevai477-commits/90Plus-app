@@ -295,13 +295,29 @@ router.post('/reel', requireAuth, upload.fields([
 
         // Upload video
         const videoFileName = `${user.id}/${Date.now()}_${videoFile.originalname}`;
+        logger.info(`Starting video upload: ${videoFileName}, size: ${videoFile.buffer.length} bytes, type: ${videoFile.mimetype}`);
+        
         const videoResult = await r2Storage.uploadFile('reels', videoFile.buffer, videoFileName, videoFile.mimetype);
 
         if (!videoResult.success) {
             logger.error('Video upload error:', videoResult.error);
-            res.status(500).json({ status: 'ERROR', message: 'Failed to upload video' });
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: videoResult.error || 'Failed to upload video to storage' 
+            });
             return;
         }
+        
+        if (!videoResult.url) {
+            logger.error('Video uploaded but no public URL returned. Check R2_PUBLIC_URL configuration.');
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: 'Video uploaded but public URL not available. Please check server configuration.' 
+            });
+            return;
+        }
+        
+        logger.info(`Video uploaded successfully: ${videoResult.url}, path: ${videoResult.path}`);
 
         // Upload thumbnail if provided
         let thumbnailUrl = null;

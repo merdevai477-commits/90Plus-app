@@ -399,12 +399,45 @@ export class VideoController {
       }
 
       // Delete files from storage
+      let videoDeleted = false;
+      let thumbnailDeleted = false;
+      
       if (reel.videoStoragePath) {
-        await supabaseStorage.deleteFile('videos', reel.videoStoragePath);
+        logger.info(`Attempting to delete video: ${reel.videoStoragePath}`);
+        
+        // The path stored in DB might be:
+        // 1. Full path: "reels/user123/file.mp4" (from upload.routes.ts)
+        // 2. Full path: "videos/user123/file.mp4" (from video.controller.ts)
+        // 3. Relative path: "user123/file.mp4"
+        
+        // Try deleting with 'reels' folder first (current standard)
+        videoDeleted = await supabaseStorage.deleteFile('reels', reel.videoStoragePath);
+        
+        // If that failed, try with 'videos' folder (for backward compatibility)
+        if (!videoDeleted) {
+          logger.info(`Failed with 'reels' folder, trying 'videos' folder`);
+          videoDeleted = await supabaseStorage.deleteFile('videos', reel.videoStoragePath);
+        }
+        
+        if (!videoDeleted) {
+          logger.warn(`Failed to delete video file after trying both folders: ${reel.videoStoragePath}`);
+        } else {
+          logger.info(`Successfully deleted video file: ${reel.videoStoragePath}`);
+        }
       }
+      
       if (reel.thumbnailStoragePath) {
-        await supabaseStorage.deleteFile('thumbnails', reel.thumbnailStoragePath);
+        logger.info(`Attempting to delete thumbnail: ${reel.thumbnailStoragePath}`);
+        thumbnailDeleted = await supabaseStorage.deleteFile('thumbnails', reel.thumbnailStoragePath);
+        if (!thumbnailDeleted) {
+          logger.warn(`Failed to delete thumbnail file: ${reel.thumbnailStoragePath}`);
+        } else {
+          logger.info(`Successfully deleted thumbnail file: ${reel.thumbnailStoragePath}`);
+        }
       }
+      
+      // Log deletion results
+      logger.info(`Video deletion: ${videoDeleted ? 'success' : 'failed'}, Thumbnail deletion: ${thumbnailDeleted ? 'success' : 'failed'}`);
 
       // Delete from database, increment delete count, and reset upload cooldown (Requirement 13.4)
       await prisma.$transaction([

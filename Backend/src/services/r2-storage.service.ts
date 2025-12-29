@@ -95,15 +95,46 @@ class R2StorageService {
 
   /**
    * حذف ملف من R2 Storage
+   * 
+   * @param folder - The folder name (e.g., 'reels', 'videos', 'thumbnails')
+   * @param filePath - The file path. Can be:
+   *   - Full path stored in DB: "reels/user123/file.mp4" (from uploadFile which returns fullPath)
+   *   - Relative path: "user123/file.mp4"
+   *   - Just filename: "file.mp4"
    */
   async deleteFile(folder: string, filePath: string): Promise<boolean> {
     if (!this.client) {
+      logger.warn('R2 client not initialized, cannot delete file');
+      return false;
+    }
+
+    if (!filePath) {
+      logger.warn('No file path provided for deletion');
       return false;
     }
 
     try {
-      // Handle both full path and relative path
-      const fullPath = filePath.includes('/') ? filePath : `${folder}/${filePath}`;
+      let fullPath: string;
+      
+      // Check if path already starts with any folder prefix (reels/, videos/, thumbnails/, etc.)
+      const folderPrefixes = ['reels/', 'videos/', 'thumbnails/', 'avatars/', 'covers/'];
+      const hasFolderPrefix = folderPrefixes.some(prefix => filePath.startsWith(prefix));
+      
+      if (hasFolderPrefix) {
+        // Path already includes folder (e.g., "reels/user123/file.mp4")
+        // Use as-is - this is the format stored in DB from uploadFile
+        fullPath = filePath;
+      } else if (filePath.includes('/')) {
+        // Has path structure but no folder prefix (e.g., "user123/file.mp4")
+        // Prepend the specified folder
+        fullPath = `${folder}/${filePath}`;
+      } else {
+        // Just filename (e.g., "file.mp4")
+        // Prepend folder
+        fullPath = `${folder}/${filePath}`;
+      }
+
+      logger.info(`Deleting file from R2: ${fullPath} (original path: ${filePath}, folder: ${folder})`);
 
       await this.client.send(
         new DeleteObjectCommand({
@@ -112,9 +143,11 @@ class R2StorageService {
         })
       );
 
+      logger.info(`Successfully deleted file from R2: ${fullPath}`);
       return true;
-    } catch (error) {
-      logger.error('R2 delete error:', error);
+    } catch (error: any) {
+      logger.error(`R2 delete error for path "${filePath}":`, error);
+      // Don't throw - return false so calling code can handle gracefully
       return false;
     }
   }
