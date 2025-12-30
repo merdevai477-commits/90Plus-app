@@ -8,6 +8,7 @@
     "build": "tsc || echo Build completed with errors",
     "build:prod": "NODE_ENV=production tsc || echo Build completed with errors",
     "build:railway": "npm run build && npx prisma generate && npx prisma migrate deploy",
+    "verify:build": "node -e \"const fs = require('fs'); const exists = fs.existsSync('dist/src/routes/quiz.routes.js'); console.log(exists ? '✅ quiz.routes.js exists' : '❌ quiz.routes.js missing'); process.exit(exists ? 0 : 1);\"",
     "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
     "postbuild": "prisma generate",

@@ -9,6 +9,7 @@ nixPkgs = ["nodejs_20", "npm"]
 cmds = [
     "npm ci",
     "npm run build || echo 'Build completed with errors'",
+    "npm run verify:build || echo 'Warning: quiz.routes.js verification failed'",
     "npx prisma generate"
 ]
 
