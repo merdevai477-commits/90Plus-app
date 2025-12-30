@@ -60,6 +60,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
 import { useFollowStore } from '../../src/store/useFollowStore';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { preloadNextVideos, isVideoPreloaded } from '../../utils/videoPreloader';
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService';
 import { preloadManager } from '../../services/preloadManager';

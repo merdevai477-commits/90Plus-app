@@ -221,8 +221,11 @@ export default function CommentsModal({
         effectiveCommentsRef.current = effectiveComments;
     }, [effectiveComments]);
     
-    // Calculate current comment IDs
-    const currentCommentIds = (effectiveComments || []).map(c => c.id).join(',');
+    // Memoize current comment IDs to prevent infinite loop
+    // Only recalculate when effectiveComments actually changes
+    const currentCommentIds = useMemo(() => {
+        return (effectiveComments || []).map(c => c.id).join(',');
+    }, [effectiveComments]);
     
     // Only update commentsWithReplies when comment IDs actually change (not on every render)
     // Merge base comments with existing replies/showReplies state
@@ -252,15 +255,21 @@ export default function CommentsModal({
                 };
             });
             
+            // Update ref synchronously BEFORE setState to avoid circular dependency
             commentsWithRepliesRef.current = transformed;
             setCommentsWithReplies(transformed);
         }
-    }, [currentCommentIds]); // Only depend on IDs string, not the array itself
+    }, [currentCommentIds]); // Now currentCommentIds is properly memoized
     
-    // Update ref whenever commentsWithReplies changes (from user actions like adding replies)
-    useEffect(() => {
-        commentsWithRepliesRef.current = commentsWithReplies;
-    }, [commentsWithReplies]);
+    // Helper function to update commentsWithReplies state and ref together
+    // This ensures the ref is always in sync with state
+    const updateCommentsWithReplies = useCallback((updater: (prev: CommentWithReplies[]) => CommentWithReplies[]) => {
+        setCommentsWithReplies(prev => {
+            const next = updater(prev);
+            commentsWithRepliesRef.current = next; // Keep ref in sync
+            return next;
+        });
+    }, []);
 
     // Shake animation for limit warning
     const triggerShake = () => {
