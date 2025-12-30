@@ -106,10 +106,20 @@ export default function CommentsModal({
     // Primary source: active session userId, fallback to globalState only if session unavailable
     const currentUserId = sessionUserId || (globalState.userProfile?.id && !sessionUserId ? globalState.userProfile.id : null);
 
+    // Memoize comments prop by comparing IDs to prevent unnecessary re-renders
+    const commentsIdsRef = useRef<string>('');
+    const stableComments = useMemo(() => {
+        const currentIds = (comments || []).map(c => c.id).join(',');
+        if (commentsIdsRef.current !== currentIds) {
+            commentsIdsRef.current = currentIds;
+        }
+        return comments || [];
+    }, [comments]);
+
     // Use loaded comments if prop comments are empty, otherwise use prop comments
     const effectiveComments = useMemo(() => {
-        return (comments && comments.length > 0) ? comments : loadedComments;
-    }, [comments, loadedComments]);
+        return (stableComments && stableComments.length > 0) ? stableComments : loadedComments;
+    }, [stableComments, loadedComments]);
 
     // Count top-level comments by current user
     const userCommentsCount = useMemo(() => {
@@ -147,7 +157,7 @@ export default function CommentsModal({
         
         // If comments are provided as props, mark as loaded but don't clear loadedComments
         // This prevents unnecessary state updates that cause infinite loops
-        if (comments && comments.length > 0) {
+        if (stableComments && stableComments.length > 0) {
             loadedReelIdRef.current = reelId;
             // Don't call setLoadedComments([]) here - it causes re-renders
             return;
@@ -196,7 +206,7 @@ export default function CommentsModal({
         };
         
         loadComments();
-    }, [visible, reelId, getToken]); // Removed comments from dependencies to prevent infinite loop
+    }, [visible, reelId, getToken, stableComments]); // Include stableComments in dependencies
 
     // Update commentsWithReplies when comments change - transform content to text
     // Use useMemo to prevent unnecessary updates that cause infinite loops
@@ -219,15 +229,14 @@ export default function CommentsModal({
         });
     }, [effectiveComments]);
 
-    // Update commentsWithReplies only when transformedComments actually changes
-    // Use a ref to track the previous value to prevent unnecessary updates
-    const prevTransformedRef = useRef<CommentWithReplies[]>([]);
+    // Update commentsWithReplies only when comment IDs actually change
+    // Use a ref to track the previous IDs to prevent unnecessary updates
+    const prevCommentIdsRef = useRef<string>('');
     useEffect(() => {
-        // Only update if the content actually changed (compare IDs)
-        const prevIds = prevTransformedRef.current.map(c => c.id).join(',');
+        // Only update if the comment IDs actually changed (stable comparison)
         const currentIds = transformedComments.map(c => c.id).join(',');
-        if (prevIds !== currentIds) {
-            prevTransformedRef.current = transformedComments;
+        if (prevCommentIdsRef.current !== currentIds) {
+            prevCommentIdsRef.current = currentIds;
             setCommentsWithReplies(transformedComments);
         }
     }, [transformedComments]);
