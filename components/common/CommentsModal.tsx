@@ -211,38 +211,48 @@ export default function CommentsModal({
         loadComments();
     }, [visible, reelId, getToken, stableComments]); // Include stableComments in dependencies
 
-    // Update commentsWithReplies when comments change - transform content to text
-    // Use useMemo to prevent unnecessary updates that cause infinite loops
-    const transformedComments = useMemo(() => {
-        return effectiveComments.map(c => {
-            // Transform comment: handle both content (backend) and text (frontend) fields
-            const commentText = (c as any).content || c.text || '';
-            return {
-                ...c,
-                text: commentText, // Ensure text field exists
-                user: {
-                    ...c.user,
-                    name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
-                },
-                replies: [],
-                repliesCount: (c as any).repliesCount || 0,
-                showReplies: false,
-                loadingReplies: false
-            };
-        });
-    }, [effectiveComments]);
-
-    // Update commentsWithReplies only when comment IDs actually change
-    // Use a ref to track the previous IDs to prevent unnecessary updates
-    const prevCommentIdsRef = useRef<string>('');
+    // Track comment IDs separately to detect when base comments actually change
+    const commentIdsRef = useRef<string>('');
+    const currentCommentIds = (effectiveComments || []).map(c => c.id).join(',');
+    const commentsWithRepliesRef = useRef<CommentWithReplies[]>([]);
+    
+    // Only update commentsWithReplies when comment IDs actually change (not on every render)
+    // Merge base comments with existing replies/showReplies state
     useEffect(() => {
-        // Only update if the comment IDs actually changed (stable comparison)
-        const currentIds = transformedComments.map(c => c.id).join(',');
-        if (prevCommentIdsRef.current !== currentIds) {
-            prevCommentIdsRef.current = currentIds;
-            setCommentsWithReplies(transformedComments);
+        if (commentIdsRef.current !== currentCommentIds) {
+            commentIdsRef.current = currentCommentIds;
+            
+            // Transform base comments and merge with existing replies state
+            const transformed = effectiveComments.map(c => {
+                // Transform comment: handle both content (backend) and text (frontend) fields
+                const commentText = (c as any).content || c.text || '';
+                
+                // Find existing comment in state to preserve replies/showReplies/loadingReplies
+                const existing = commentsWithRepliesRef.current.find(ec => ec.id === c.id);
+                
+                return {
+                    ...c,
+                    text: commentText, // Ensure text field exists
+                    user: {
+                        ...c.user,
+                        name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
+                    },
+                    replies: existing?.replies || [],
+                    repliesCount: existing?.repliesCount ?? (c as any).repliesCount ?? 0,
+                    showReplies: existing?.showReplies ?? false,
+                    loadingReplies: existing?.loadingReplies ?? false
+                };
+            });
+            
+            commentsWithRepliesRef.current = transformed;
+            setCommentsWithReplies(transformed);
         }
-    }, [transformedComments]);
+    }, [currentCommentIds, effectiveComments]); // Depend on IDs string and effectiveComments
+    
+    // Update ref whenever commentsWithReplies changes (from user actions like adding replies)
+    useEffect(() => {
+        commentsWithRepliesRef.current = commentsWithReplies;
+    }, [commentsWithReplies]);
 
     // Shake animation for limit warning
     const triggerShake = () => {
