@@ -5,8 +5,8 @@
   "main": "dist/src/main.js",
   "scripts": {
     "dev": "nodemon src/main.ts",
-    "build": "tsc || (echo 'Build completed with errors, but continuing...' && exit 0)",
-    "build:prod": "NODE_ENV=production tsc || (echo 'Build completed with errors, but continuing...' && exit 0)",
+    "build": "tsc || echo Build completed with errors",
+    "build:prod": "NODE_ENV=production tsc || echo Build completed with errors",
     "build:railway": "npm run build && npx prisma generate && npx prisma migrate deploy",
     "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
