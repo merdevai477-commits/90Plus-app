@@ -191,9 +191,14 @@ app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
-app.use(`${API_PREFIX}/quiz`, quizRoutes);
-// Log quiz routes registration for debugging
-logger.info(`Quiz routes registered at ${API_PREFIX}/quiz`);
+// Register quiz routes with error handling
+try {
+    app.use(`${API_PREFIX}/quiz`, quizRoutes);
+    logger.info(`✅ Quiz routes registered successfully at ${API_PREFIX}/quiz`);
+} catch (error: any) {
+    logger.error(`❌ Failed to register quiz routes: ${error.message}`, error);
+    // Continue even if quiz routes fail to register
+}
 
 // Metrics endpoint (for monitoring)
 app.get(`${API_PREFIX}/metrics`, getMetricsHandler);
