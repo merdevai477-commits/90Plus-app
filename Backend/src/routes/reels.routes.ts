@@ -3,7 +3,9 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
-import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
+import { lenientLimiter, writeLimiter, strictLimiter } from '../middleware/rateLimit.middleware';
+import { redisCacheService } from '../services/redis-cache.service';
 
 const router = Router();
 
@@ -24,7 +26,7 @@ const USER_ID_CACHE_TTL = 5 * 60 * 1000;
  * GET /api/reels/feed
  * Get reels feed with pagination (5 reels per request) - WITH CACHING
  */
-router.get('/feed', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { cursor, limit = REELS_PER_PAGE.toString() } = req.query;
         const currentUserId = req.auth?.userId;
@@ -56,6 +58,7 @@ router.get('/feed', requireAuth, async (req: Request, res: Response): Promise<vo
         }
 
         const reels = await prisma.reel.findMany({
+            where: { isDeleted: false }, // Exclude deleted reels
             take: take + 1, // Get one extra to check if there's more
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
             orderBy: { createdAt: 'desc' },
@@ -95,6 +98,7 @@ router.get('/feed', requireAuth, async (req: Request, res: Response): Promise<vo
                     }
                 },
                 comments: {
+                    where: { isDeleted: false },
                     take: MAX_COMMENTS_PREVIEW,
                     orderBy: { createdAt: 'desc' },
                     select: {
@@ -355,6 +359,10 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             data: { lastReelUpload: new Date() }
         });
 
+        // Invalidate cache for feed
+        await clearResponseCache('/reels/feed');
+        await redisCacheService.delPattern('reels:feed:*');
+
         res.status(201).json({
             status: 'SUCCESS',
             message: 'تم رفع الفيديو بنجاح',
@@ -403,7 +411,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
  * POST /api/reels/:id/like
  * Like a reel
  */
-router.post('/:id/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const clerkUserId = req.auth?.userId;
@@ -455,28 +463,17 @@ router.post('/:id/like', requireAuth, async (req: Request, res: Response): Promi
                 select: { username: true, displayName: true, avatar: true }
             });
             
-            const notification = await prisma.notification.create({
-                data: {
-                    userId: reel.userId,
-                    title: 'إعجاب جديد',
-                    message: `أعجب ${liker?.displayName || liker?.username || 'شخص'} بفيديوك`,
-                    type: 'LIKE',
-                    data: { 
-                        reelId: id,
-                        userId: user.id,
-                        username: liker?.username,
-                        avatar: liker?.avatar
-                    }
-                }
-            });
-
-            // Send WebSocket notification (Requirements: 21.2)
-            WebSocketService.sendNotification(reel.userId, {
-                id: notification.id,
+            // Use NotificationService for standardized actor info
+            const { NotificationService } = await import('../services/notification.service');
+            await NotificationService.createSocialNotification({
+                userId: reel.userId,
+                actorId: user.id,
+                title: 'إعجاب جديد',
+                message: `أعجب ${liker?.displayName || liker?.username || 'شخص'} بفيديوك`,
                 type: 'LIKE',
-                title: notification.title,
-                message: notification.message,
-                data: notification.data as Record<string, any>,
+                data: { 
+                    reelId: id,
+                },
             });
         }
 
@@ -487,6 +484,11 @@ router.post('/:id/like', requireAuth, async (req: Request, res: Response): Promi
             userId: user.id,
             action: 'like',
         });
+
+        // Invalidate cache for feed and this reel
+        await clearResponseCache('/reels/feed');
+        await redisCacheService.delPattern('reels:feed:*');
+        await redisCacheService.del(`reel:${id}`);
 
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
@@ -556,9 +558,9 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
         const { id } = req.params;
         const { limit = '20' } = req.query;
 
-        // Get top-level comments (no parentId)
+        // Get top-level comments (no parentId, not deleted)
         const comments = await prisma.comment.findMany({
-            where: { reelId: id, parentId: null },
+            where: { reelId: id, parentId: null, isDeleted: false },
             take: Math.min(parseInt(limit as string), 50),
             orderBy: { createdAt: 'desc' },
             select: {
@@ -575,6 +577,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
                     }
                 },
                 replies: {
+                    where: { isDeleted: false },
                     take: 3,
                     orderBy: { createdAt: 'asc' },
                     select: {
@@ -598,7 +601,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
             }
         });
 
-        const totalCount = await prisma.comment.count({ where: { reelId: id, parentId: null } });
+        const totalCount = await prisma.comment.count({ where: { reelId: id, parentId: null, isDeleted: false } });
 
         // Format response
         const formattedComments = comments.map(c => ({
@@ -623,7 +626,8 @@ import { COMMENT_LIMITS } from '../config/supabase.config';
  * POST /api/reels/:id/comments
  * Add a comment or reply to a reel
  */
-router.post('/:id/comments', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
+    // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
         const { content, parentId } = req.body;
@@ -738,30 +742,18 @@ router.post('/:id/comments', requireAuth, async (req: Request, res: Response): P
 
         if (parentComment && parentComment.userId !== user.id) {
             // This is a reply - notify the parent comment owner
-            const notification = await prisma.notification.create({
-                data: {
-                    userId: parentComment.userId,
-                    title: 'رد جديد',
-                    message: `رد ${user.displayName || user.username} على تعليقك`,
-                    type: 'REPLY',
-                    data: { 
-                        reelId: id, 
-                        commentId: comment.id,
-                        parentCommentId: parentId,
-                        userId: user.id,
-                        username: user.username,
-                        avatar: user.avatar
-                    }
-                }
-            });
-
-            // Send WebSocket notification (Requirements: 21.2)
-            WebSocketService.sendNotification(parentComment.userId, {
-                id: notification.id,
+            const { NotificationService } = await import('../services/notification.service');
+            await NotificationService.createSocialNotification({
+                userId: parentComment.userId,
+                actorId: user.id,
+                title: 'رد جديد',
+                message: `رد ${user.displayName || user.username} على تعليقك`,
                 type: 'REPLY',
-                title: notification.title,
-                message: notification.message,
-                data: notification.data as Record<string, any>,
+                data: { 
+                    reelId: id, 
+                    commentId: comment.id,
+                    parentCommentId: parentId,
+                },
             });
 
             // Send WebSocket reply event (Requirements: 21.3)
@@ -781,29 +773,17 @@ router.post('/:id/comments', requireAuth, async (req: Request, res: Response): P
             });
         } else if (reel && reel.userId !== user.id && !parentId) {
             // This is a top-level comment - notify reel owner
-            const notification = await prisma.notification.create({
-                data: {
-                    userId: reel.userId,
-                    title: 'تعليق جديد',
-                    message: `علق ${user.displayName || user.username} على فيديوك`,
-                    type: 'COMMENT',
-                    data: { 
-                        reelId: id, 
-                        commentId: comment.id,
-                        userId: user.id,
-                        username: user.username,
-                        avatar: user.avatar
-                    }
-                }
-            });
-
-            // Send WebSocket notification (Requirements: 21.2)
-            WebSocketService.sendNotification(reel.userId, {
-                id: notification.id,
+            const { NotificationService } = await import('../services/notification.service');
+            await NotificationService.createSocialNotification({
+                userId: reel.userId,
+                actorId: user.id,
+                title: 'تعليق جديد',
+                message: `علق ${user.displayName || user.username} على فيديوك`,
                 type: 'COMMENT',
-                title: notification.title,
-                message: notification.message,
-                data: notification.data as Record<string, any>,
+                data: { 
+                    reelId: id, 
+                    commentId: comment.id,
+                },
             });
 
             // Send WebSocket comment event (Requirements: 21.3, 21.9)
@@ -821,6 +801,12 @@ router.post('/:id/comments', requireAuth, async (req: Request, res: Response): P
                 },
             });
         }
+
+        // Invalidate cache for feed, this reel, and comments
+        await clearResponseCache('/reels/feed');
+        await redisCacheService.delPattern('reels:feed:*');
+        await redisCacheService.del(`reel:${id}`);
+        await redisCacheService.del(`reel:${id}:comments`);
 
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
@@ -1024,6 +1010,160 @@ router.delete('/comments/:commentId/like', requireAuth, async (req: Request, res
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Unlike comment error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * DELETE /api/reels/comments/:commentId
+ * Delete a comment (own comments only)
+ */
+router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { commentId } = req.params;
+        const clerkUserId = req.auth?.userId;
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId: clerkUserId! },
+            select: { id: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Check if comment exists and belongs to user
+        const comment = await prisma.comment.findUnique({
+            where: { id: commentId },
+            select: { id: true, userId: true }
+        });
+
+        if (!comment) {
+            res.status(404).json({ status: 'ERROR', message: 'Comment not found' });
+            return;
+        }
+
+        if (comment.userId !== user.id) {
+            res.status(403).json({ status: 'ERROR', message: 'You can only delete your own comments' });
+            return;
+        }
+
+        // Delete comment (cascade will delete replies and likes)
+        await prisma.comment.delete({
+            where: { id: commentId }
+        });
+
+        res.json({ status: 'SUCCESS', message: 'Comment deleted successfully' });
+    } catch (error: any) {
+        logger.error('Delete comment error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * POST /api/reels/comments/:commentId/report
+ * Report a comment
+ */
+router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { commentId } = req.params;
+        const { reason } = req.body;
+        const clerkUserId = req.auth?.userId;
+
+        if (!reason || reason.trim().length === 0) {
+            res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId: clerkUserId! },
+            select: { id: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Check if comment exists and is not deleted
+        const comment = await prisma.comment.findFirst({
+            where: { id: commentId, isDeleted: false },
+            select: { id: true, userId: true, reelId: true }
+        });
+
+        if (!comment) {
+            res.status(404).json({ status: 'ERROR', message: 'Comment not found or already deleted' });
+            return;
+        }
+
+        // Can't report own comments
+        if (comment.userId === user.id) {
+            res.status(400).json({ status: 'ERROR', message: 'Cannot report your own comment' });
+            return;
+        }
+
+        // Check for duplicate report
+        const { checkDuplicateReport, calculateReportPriority } = await import('../services/moderation.service');
+        const isDuplicate = await checkDuplicateReport({
+            reporterId: user.id,
+            reportedCommentId: commentId,
+        });
+
+        if (isDuplicate) {
+            res.status(400).json({ status: 'ERROR', message: 'تم الإبلاغ عن هذا التعليق مسبقاً. يمكنك الإبلاغ مرة أخرى بعد 24 ساعة' });
+            return;
+        }
+
+        // Map reason to ReportType enum
+        const reportTypeMap: Record<string, string> = {
+            'محتوى غير لائق': 'INAPPROPRIATE',
+            'سبام أو إعلانات': 'SPAM',
+            'خطاب كراهية': 'HARASSMENT',
+            'أخرى': 'OTHER',
+        };
+
+        const reportType = reportTypeMap[reason] || 'OTHER';
+
+        // Calculate priority
+        const priority = await calculateReportPriority({
+            reportType,
+            reportedCommentId: commentId,
+            reportedUserId: comment.userId,
+        });
+
+        // Create report
+        const report = await prisma.report.create({
+            data: {
+                reporterId: user.id,
+                reportedCommentId: commentId,
+                reportedUserId: comment.userId,
+                reportedReelId: comment.reelId,
+                type: reportType as any,
+                reason: reason.trim(),
+                status: 'PENDING',
+                priority: priority as any,
+                isDuplicate: false,
+            }
+        });
+
+        // Process report (create strike, check thresholds)
+        const { processReport } = await import('../services/moderation.service');
+        await processReport(report.id);
+
+        // Alert admins if high priority
+        if (priority === 'HIGH' || priority === 'CRITICAL') {
+            const { AdminNotificationService } = await import('../services/admin-notification.service');
+            await AdminNotificationService.alertHighPriorityReport(report.id, priority, reportType);
+        }
+
+        // Log audit
+        const { AuditService } = await import('../services/audit.service');
+        await AuditService.logReportCreated(report.id, user.id, commentId, 'COMMENT');
+
+        res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
+    } catch (error: any) {
+        logger.error('Report comment error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
@@ -1254,7 +1394,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
  * POST /api/reels/:id/report
  * Report a reel
  */
-router.post('/:id/report', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const { reason, type = 'INAPPROPRIATE' } = req.body;
@@ -1275,28 +1415,26 @@ router.post('/:id/report', requireAuth, async (req: Request, res: Response): Pro
             return;
         }
 
-        // Check if reel exists
-        const reel = await prisma.reel.findUnique({
-            where: { id },
+        // Check if reel exists and is not deleted
+        const reel = await prisma.reel.findFirst({
+            where: { id, isDeleted: false },
             select: { id: true, userId: true }
         });
 
         if (!reel) {
-            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            res.status(404).json({ status: 'ERROR', message: 'Reel not found or already deleted' });
             return;
         }
 
-        // Check if user already reported this reel
-        const existingReport = await prisma.report.findFirst({
-            where: {
-                reporterId: user.id,
-                reportedReelId: id,
-                status: { in: ['PENDING', 'REVIEWED'] }
-            }
+        // Check for duplicate report
+        const { checkDuplicateReport, calculateReportPriority } = await import('../services/moderation.service');
+        const isDuplicate = await checkDuplicateReport({
+            reporterId: user.id,
+            reportedReelId: id,
         });
 
-        if (existingReport) {
-            res.json({ status: 'SUCCESS', message: 'تم استلام بلاغك مسبقاً' });
+        if (isDuplicate) {
+            res.status(400).json({ status: 'ERROR', message: 'تم الإبلاغ عن هذا الفيديو مسبقاً. يمكنك الإبلاغ مرة أخرى بعد 24 ساعة' });
             return;
         }
 
@@ -1314,16 +1452,53 @@ router.post('/:id/report', requireAuth, async (req: Request, res: Response): Pro
 
         const reportType = reportTypeMap[reason] || type || 'OTHER';
 
-        await prisma.report.create({
+        // Calculate priority
+        const priority = await calculateReportPriority({
+            reportType,
+            reportedReelId: id,
+            reportedUserId: reel.userId,
+        });
+
+        // Create report
+        const report = await prisma.report.create({
             data: {
                 reporterId: user.id,
                 reportedReelId: id,
                 reportedUserId: reel.userId,
                 type: reportType as any,
                 reason: reason.trim(),
-                status: 'PENDING'
+                status: 'PENDING',
+                priority: priority as any,
+                isDuplicate: false,
             }
         });
+
+        // Process report (create strike, check thresholds)
+        const { processReport } = await import('../services/moderation.service');
+        await processReport(report.id);
+
+        // Alert admins if high priority
+        if (priority === 'HIGH' || priority === 'CRITICAL') {
+            const { AdminNotificationService } = await import('../services/admin-notification.service');
+            await AdminNotificationService.alertHighPriorityReport(report.id, priority, reportType);
+        }
+
+        // Check report count for admin alert
+        const reportCount = await prisma.report.count({
+            where: {
+                reportedReelId: id,
+                status: { not: 'REJECTED' },
+            },
+        });
+
+        if (reportCount >= 3) {
+            const { AdminNotificationService } = await import('../services/admin-notification.service');
+            await AdminNotificationService.alertContentThreshold(id, 'reel', reportCount);
+        }
+
+        // Log audit
+        const { AuditService, AuditTargetType } = await import('../services/audit.service');
+        await AuditService.logReportCreated(report.id, user.id, id, AuditTargetType.REEL);
 
         res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
     } catch (error: any) {

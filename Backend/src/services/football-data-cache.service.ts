@@ -38,8 +38,10 @@ interface MemoryCacheEntry<T> {
     ttl: number;
 }
 
+import { redisCacheService } from './redis-cache.service';
+
 class FootballDataCacheService {
-    // In-memory caches
+    // In-memory caches (fallback)
     private standingsCache = new Map<string, MemoryCacheEntry<any>>();
     private lineupsCache = new Map<number, MemoryCacheEntry<any>>();
     private statisticsCache = new Map<number, MemoryCacheEntry<any>>();
@@ -330,7 +332,17 @@ class FootballDataCacheService {
      * ✅ Finished matches: permanently stored in DB, shared for all users, no API call
      */
     async getMatchLineups(fixtureId: number): Promise<any[]> {
-        // 1. Check memory cache
+        // 1. Check Redis cache first, then memory cache
+        const redisKey = `lineups:${fixtureId}`;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+            logger.debug(`📦 Lineups ${fixtureId} from Redis cache (shared for all users)`);
+            // Update memory cache
+            this.lineupsCache.set(fixtureId, redisCached);
+            return redisCached.data;
+        }
+
+        // Check memory cache
         const cached = this.lineupsCache.get(fixtureId);
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
             logger.debug(`📦 Lineups ${fixtureId} from memory cache (shared for all users)`);
@@ -365,13 +377,15 @@ class FootballDataCacheService {
             try {
                 const lineups = await footballService.getFixtureLineups(fixtureId);
 
-                // Cache in memory
+                // Cache in Redis and memory
                 const ttl = isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH;
-                this.lineupsCache.set(fixtureId, {
+                const cacheEntry: MemoryCacheEntry<any> = {
                     data: lineups,
                     timestamp: Date.now(),
                     ttl,
-                });
+                };
+                await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
+                this.lineupsCache.set(fixtureId, cacheEntry);
 
                 // ✅ If finished, update fullData in DB (permanent, shared for all users)
                 if (isFinished && lineups?.length) {
@@ -397,6 +411,16 @@ class FootballDataCacheService {
      * Get match statistics
      */
     async getMatchStatistics(fixtureId: number): Promise<any[]> {
+        // Check Redis cache first, then memory cache
+        const redisKey = `statistics:${fixtureId}`;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+            logger.debug(`📦 Statistics ${fixtureId} from Redis cache`);
+            // Update memory cache
+            this.statisticsCache.set(fixtureId, redisCached);
+            return redisCached.data;
+        }
+
         // Check memory cache
         const cached = this.statisticsCache.get(fixtureId);
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
@@ -422,13 +446,15 @@ class FootballDataCacheService {
         logger.debug(`📡 Fetching statistics for fixture ${fixtureId}`);
         const statistics = await footballService.getFixtureStatistics(fixtureId);
 
-        // Cache
+        // Cache in Redis and memory
         const ttl = isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH;
-        this.statisticsCache.set(fixtureId, {
+        const cacheEntry: MemoryCacheEntry<any> = {
             data: statistics,
             timestamp: Date.now(),
             ttl,
-        });
+        };
+        await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
+        this.statisticsCache.set(fixtureId, cacheEntry);
 
         if (isFinished && statistics?.length) {
             await this.updateFixtureFullData(fixtureId, { statistics });
@@ -443,7 +469,17 @@ class FootballDataCacheService {
      * ✅ Finished matches: permanently stored in DB, shared for all users, no API call
      */
     async getMatchEvents(fixtureId: number): Promise<any[]> {
-        // 1. Check memory cache
+        // 1. Check Redis cache first, then memory cache
+        const redisKey = `events:${fixtureId}`;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+            logger.debug(`📦 Events ${fixtureId} from Redis cache (shared for all users)`);
+            // Update memory cache
+            this.eventsCache.set(fixtureId, redisCached);
+            return redisCached.data;
+        }
+
+        // Check memory cache
         const cached = this.eventsCache.get(fixtureId);
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
             logger.debug(`📦 Events ${fixtureId} from memory cache (shared for all users)`);
@@ -478,13 +514,15 @@ class FootballDataCacheService {
             try {
                 const events = await footballService.getFixtureEvents(fixtureId);
 
-                // Cache
+                // Cache in Redis and memory
                 const ttl = isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH;
-                this.eventsCache.set(fixtureId, {
+                const cacheEntry: MemoryCacheEntry<any> = {
                     data: events,
                     timestamp: Date.now(),
                     ttl,
-                });
+                };
+                await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
+                this.eventsCache.set(fixtureId, cacheEntry);
 
                 // ✅ If finished, update fullData in DB (permanent, shared for all users)
                 if (isFinished && events?.length) {

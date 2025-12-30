@@ -7,6 +7,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import { redisCacheService } from '../services/redis-cache.service';
 
 interface CacheEntry {
     data: any;
@@ -16,7 +17,7 @@ interface CacheEntry {
 }
 
 class ResponseCache {
-    private cache = new Map<string, CacheEntry>();
+    private memoryCache = new Map<string, CacheEntry>(); // Fallback in-memory cache
     private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
     /**
@@ -40,17 +41,25 @@ class ResponseCache {
     /**
      * Get cached response
      */
-    get(req: Request): CacheEntry | null {
+    async get(req: Request): Promise<CacheEntry | null> {
         const key = this.getCacheKey(req);
-        const entry = this.cache.get(key);
+        
+        // Try Redis first
+        const redisKey = `response:${key}`;
+        const cached = await redisCacheService.get<CacheEntry>(redisKey);
+        if (cached) {
+            return cached;
+        }
 
+        // Fallback to memory cache
+        const entry = this.memoryCache.get(key);
         if (!entry) {
             return null;
         }
 
         // Check if expired
         if (Date.now() - entry.timestamp > entry.ttl) {
-            this.cache.delete(key);
+            this.memoryCache.delete(key);
             return null;
         }
 
@@ -60,16 +69,22 @@ class ResponseCache {
     /**
      * Set cached response
      */
-    set(req: Request, data: any, ttl?: number): string {
+    async set(req: Request, data: any, ttl?: number): Promise<string> {
         const key = this.getCacheKey(req);
         const etag = this.generateETag(data);
-
-        this.cache.set(key, {
+        const entry: CacheEntry = {
             data,
             etag,
             timestamp: Date.now(),
             ttl: ttl || this.DEFAULT_TTL,
-        });
+        };
+
+        // Store in Redis
+        const redisKey = `response:${key}`;
+        await redisCacheService.set(redisKey, entry, entry.ttl);
+
+        // Also store in memory cache as fallback
+        this.memoryCache.set(key, entry);
 
         return etag;
     }
@@ -77,27 +92,33 @@ class ResponseCache {
     /**
      * Clear cache for a specific path pattern
      */
-    clear(pattern?: string): void {
+    async clear(pattern?: string): Promise<void> {
         if (!pattern) {
-            this.cache.clear();
+            // Clear all response cache
+            await redisCacheService.delPattern('response:*');
+            this.memoryCache.clear();
             return;
         }
 
-        for (const key of this.cache.keys()) {
+        // Clear Redis cache matching pattern
+        await redisCacheService.delPattern(`response:*${pattern}*`);
+
+        // Clear memory cache matching pattern
+        for (const key of this.memoryCache.keys()) {
             if (key.includes(pattern)) {
-                this.cache.delete(key);
+                this.memoryCache.delete(key);
             }
         }
     }
 
     /**
-     * Clean expired entries
+     * Clean expired entries (Redis handles TTL automatically, only clean memory cache)
      */
     clean(): void {
         const now = Date.now();
-        for (const [key, entry] of this.cache.entries()) {
+        for (const [key, entry] of this.memoryCache.entries()) {
             if (now - entry.timestamp > entry.ttl) {
-                this.cache.delete(key);
+                this.memoryCache.delete(key);
             }
         }
     }
@@ -117,7 +138,7 @@ setInterval(() => {
 export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Request) => boolean } = {}) {
     const { ttl, skip } = options;
 
-    return (req: Request, res: Response, next: NextFunction) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
         // Only cache GET requests
         if (req.method !== 'GET') {
             return next();
@@ -128,8 +149,8 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             return next();
         }
 
-        // Check cache
-        const cached = responseCache.get(req);
+        // Check cache (async)
+        const cached = await responseCache.get(req);
         if (cached) {
             // Check ETag
             const ifNoneMatch = req.headers['if-none-match'];
@@ -148,8 +169,8 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
         const originalJson = res.json.bind(res);
 
         // Override json to cache response
-        res.json = function (body: any) {
-            const etag = responseCache.set(req, body, ttl);
+        res.json = async function (body: any) {
+            const etag = await responseCache.set(req, body, ttl);
             res.setHeader('ETag', `"${etag}"`);
             res.setHeader('X-Cache', 'MISS');
             return originalJson(body);
@@ -162,8 +183,8 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
 /**
  * Clear cache helper
  */
-export function clearResponseCache(pattern?: string): void {
-    responseCache.clear(pattern);
+export async function clearResponseCache(pattern?: string): Promise<void> {
+    await responseCache.clear(pattern);
 }
 
 export default responseCacheMiddleware;

@@ -105,8 +105,10 @@ interface FixtureFromAPI {
     };
 }
 
+import { redisCacheService } from './redis-cache.service';
+
 class MatchCacheService {
-    // In-memory cache for live and scheduled matches
+    // In-memory cache for live and scheduled matches (fallback)
     private memoryCache = new Map<string, CacheEntry<any>>();
 
     // Track which fixture IDs are already in database
@@ -170,11 +172,19 @@ class MatchCacheService {
     }
 
     /**
-     * Get matches from memory cache
+     * Get matches from cache (Redis first, then memory fallback)
      */
-    getFromMemoryCache<T>(key: string): T | null {
-        const entry = this.memoryCache.get(key);
+    async getFromMemoryCache<T>(key: string): Promise<T | null> {
+        const redisKey = `match:${key}`;
+        
+        // Try Redis first
+        const cached = await redisCacheService.get<CacheEntry<T>>(redisKey);
+        if (cached) {
+            return cached.data;
+        }
 
+        // Fallback to memory cache
+        const entry = this.memoryCache.get(key);
         if (!entry) {
             return null;
         }
@@ -189,14 +199,22 @@ class MatchCacheService {
     }
 
     /**
-     * Set matches in memory cache
+     * Set matches in cache (Redis first, then memory fallback)
      */
-    setInMemoryCache<T>(key: string, data: T, ttl: number): void {
-        this.memoryCache.set(key, {
+    async setInMemoryCache<T>(key: string, data: T, ttl: number): Promise<void> {
+        const entry: CacheEntry<T> = {
             data,
             timestamp: Date.now(),
             ttl,
-        });
+        };
+
+        const redisKey = `match:${key}`;
+        
+        // Store in Redis
+        await redisCacheService.set(redisKey, entry, ttl);
+
+        // Also store in memory cache as fallback
+        this.memoryCache.set(key, entry);
     }
 
     /**
@@ -498,7 +516,7 @@ class MatchCacheService {
                 const nonDbMatches = apiMatches.filter(m => !this.isFixtureInDb(m.fixture.id));
                 const hasLive = nonDbMatches.some(m => this.isLiveStatus(m.fixture.status.short));
                 const ttl = hasLive ? CACHE_TTL.LIVE : CACHE_TTL.SCHEDULED;
-                this.setInMemoryCache(cacheKey, nonDbMatches, ttl);
+                await this.setInMemoryCache(cacheKey, nonDbMatches, ttl);
 
                 logger.debug(`✅ API request completed. ${nonDbMatches.length} live/scheduled matches cached (shared for all users)`);
                 return apiMatches;

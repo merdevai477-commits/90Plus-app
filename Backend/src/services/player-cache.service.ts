@@ -96,8 +96,10 @@ interface TeamFromAPI {
     };
 }
 
+import { redisCacheService } from './redis-cache.service';
+
 class PlayerCacheService {
-    // In-memory cache for fast access
+    // In-memory cache for fast access (fallback)
     private playerCache = new Map<number, CacheEntry<any>>();
     private teamCache = new Map<number, CacheEntry<any>>();
     private h2hCache = new Map<string, CacheEntry<any>>();
@@ -124,7 +126,17 @@ class PlayerCacheService {
         playerId: number,
         fetchFromApi: () => Promise<PlayerFromAPI[]>
     ): Promise<PlayerFromAPI | null> {
-        // 1. Check memory cache
+        // 1. Check Redis cache first, then memory cache
+        const redisKey = `player:${playerId}`;
+        const redisCached = await redisCacheService.get<CacheEntry<any>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < MEMORY_CACHE_TTL) {
+            logger.debug(`📦 Player ${playerId} from Redis cache (shared for all users)`);
+            // Update memory cache
+            this.playerCache.set(playerId, redisCached);
+            return redisCached.data;
+        }
+
+        // Check memory cache
         const memoryCached = this.playerCache.get(playerId);
         if (memoryCached && Date.now() - memoryCached.timestamp < MEMORY_CACHE_TTL) {
             logger.debug(`📦 Player ${playerId} from memory cache (shared for all users)`);
@@ -138,8 +150,13 @@ class PlayerCacheService {
 
         if (dbPlayer) {
             const playerData = dbPlayer.fullData as unknown as PlayerFromAPI;
+            const cacheEntry: CacheEntry<any> = { data: playerData, timestamp: Date.now() };
+            
+            // Update Redis cache
+            await redisCacheService.set(redisKey, cacheEntry, MEMORY_CACHE_TTL);
+            
             // Update memory cache
-            this.playerCache.set(playerId, { data: playerData, timestamp: Date.now() });
+            this.playerCache.set(playerId, cacheEntry);
             logger.debug(`📦 Player ${playerId} from database (shared for all users)`);
             return playerData;
         }
@@ -162,8 +179,10 @@ class PlayerCacheService {
                     // Cache in database (shared for all users)
                     await this.cachePlayer(player);
 
-                    // Cache in memory
-                    this.playerCache.set(playerId, { data: player, timestamp: Date.now() });
+                    // Cache in Redis and memory
+                    const cacheEntry: CacheEntry<any> = { data: player, timestamp: Date.now() };
+                    await redisCacheService.set(redisKey, cacheEntry, MEMORY_CACHE_TTL);
+                    this.playerCache.set(playerId, cacheEntry);
 
                     logger.debug(`✅ Player ${playerId} cached (shared for all users)`);
                     return player;
@@ -271,7 +290,17 @@ class PlayerCacheService {
         teamId: number,
         fetchFromApi: () => Promise<TeamFromAPI[]>
     ): Promise<TeamFromAPI | null> {
-        // 1. Check memory cache (with longer TTL for teams)
+        // 1. Check Redis cache first, then memory cache
+        const redisKey = `team:${teamId}`;
+        const redisCached = await redisCacheService.get<CacheEntry<any>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < TEAM_MEMORY_CACHE_TTL) {
+            logger.debug(`📦 Team ${teamId} from Redis cache (shared for all users)`);
+            // Update memory cache
+            this.teamCache.set(teamId, redisCached);
+            return redisCached.data;
+        }
+
+        // Check memory cache
         const memoryCached = this.teamCache.get(teamId);
         if (memoryCached && Date.now() - memoryCached.timestamp < TEAM_MEMORY_CACHE_TTL) {
             logger.debug(`📦 Team ${teamId} from memory cache (shared for all users)`);
@@ -285,7 +314,13 @@ class PlayerCacheService {
 
         if (dbTeam) {
             const teamData = dbTeam.fullData as unknown as TeamFromAPI;
-            this.teamCache.set(teamId, { data: teamData, timestamp: Date.now() });
+            const cacheEntry: CacheEntry<any> = { data: teamData, timestamp: Date.now() };
+            
+            // Update Redis cache
+            await redisCacheService.set(redisKey, cacheEntry, TEAM_MEMORY_CACHE_TTL);
+            
+            // Update memory cache
+            this.teamCache.set(teamId, cacheEntry);
             logger.debug(`📦 Team ${teamId} from database (shared for all users)`);
             return teamData;
         }
@@ -305,7 +340,11 @@ class PlayerCacheService {
                 if (apiData && apiData.length > 0) {
                     const team = apiData[0];
                     await this.cacheTeam(team);
-                    this.teamCache.set(teamId, { data: team, timestamp: Date.now() });
+                    
+                    // Cache in Redis and memory
+                    const cacheEntry: CacheEntry<any> = { data: team, timestamp: Date.now() };
+                    await redisCacheService.set(redisKey, cacheEntry, TEAM_MEMORY_CACHE_TTL);
+                    this.teamCache.set(teamId, cacheEntry);
                     logger.debug(`✅ Team ${teamId} cached (shared for all users)`);
                     return team;
                 }

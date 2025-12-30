@@ -566,27 +566,16 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         });
 
         // Create notification for the followed user
-        const notification = await prisma.notification.create({
-            data: {
-                userId: targetUser.id,
-                title: 'متابع جديد',
-                message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
-                type: 'FOLLOW',
-                data: {
-                    followerId: currentUser.id,
-                    followerUsername: currentUser.username,
-                    followerAvatar: currentUser.avatar,
-                },
-            },
-        });
-
-        // Send WebSocket notification (Requirements: 21.2)
-        WebSocketService.sendNotification(targetUser.id, {
-            id: notification.id,
+        const { NotificationService } = await import('../services/notification.service');
+        await NotificationService.createSocialNotification({
+            userId: targetUser.id,
+            actorId: currentUser.id,
+            title: 'متابع جديد',
+            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
             type: 'FOLLOW',
-            title: notification.title,
-            message: notification.message,
-            data: notification.data as Record<string, any>,
+            data: {
+                followerId: currentUser.id,
+            },
         });
 
         // Send WebSocket follow event (Requirements: 21.4)
@@ -1059,17 +1048,15 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         });
 
         // Create notification
-        await prisma.notification.create({
+        const { NotificationService } = await import('../services/notification.service');
+        await NotificationService.createSocialNotification({
+            userId: targetUserId,
+            actorId: currentUser.id,
+            title: 'متابع جديد',
+            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
+            type: 'FOLLOW',
             data: {
-                userId: targetUserId,
-                title: 'متابع جديد',
-                message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
-                type: 'FOLLOW',
-                data: {
-                    followerId: currentUser.id,
-                    followerUsername: currentUser.username,
-                    followerAvatar: currentUser.avatar,
-                },
+                followerId: currentUser.id,
             },
         });
 

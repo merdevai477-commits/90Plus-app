@@ -97,6 +97,10 @@ app.use(morgan(isProduction ? 'combined' : 'dev'));
 // Performance monitoring
 app.use(performanceMiddleware());
 
+// Metrics tracking
+import { metricsMiddleware, getMetricsHandler } from './middleware/metrics.middleware';
+app.use(metricsMiddleware());
+
 // Route logging middleware (for debugging in development)
 if (!isProduction) {
     app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -154,6 +158,7 @@ import footballRoutes from './routes/football.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import coinsRoutes from './routes/coins.routes';
 import quizRoutes from './routes/quiz.routes';
+import adminRoutes from './routes/admin.routes';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
@@ -187,6 +192,9 @@ app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/quiz`, quizRoutes);
+
+// Metrics endpoint (for monitoring)
+app.get(`${API_PREFIX}/metrics`, getMetricsHandler);
 
 app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
     const timestamp = new Date().toISOString();
