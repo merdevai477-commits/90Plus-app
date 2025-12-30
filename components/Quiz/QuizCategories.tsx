@@ -59,22 +59,23 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
             const fetchedCategories = await getQuizCategories(getToken);
             setCategories(fetchedCategories);
 
-            // Check cooldown for each category
+            // Parallelize cooldown checks for faster loading
+            const cooldownPromises = fetchedCategories.map(category =>
+                checkQuizCooldown(category.id, getToken)
+                    .then(cooldown => ({ categoryId: category.id, cooldown }))
+                    .catch(() => ({ categoryId: category.id, cooldown: { canStart: true } }))
+            );
+
+            const cooldownResults = await Promise.all(cooldownPromises);
             const cooldownMap: Record<string, { canStart: boolean; hoursRemaining?: number }> = {};
-            for (const category of fetchedCategories) {
-                try {
-                    const cooldown = await checkQuizCooldown(category.id, getToken);
-                    cooldownMap[category.id] = cooldown;
-                } catch (error) {
-                    // If error, assume can start
-                    cooldownMap[category.id] = { canStart: true };
-                }
-            }
+            cooldownResults.forEach(({ categoryId, cooldown }) => {
+                cooldownMap[categoryId] = cooldown;
+            });
             setCooldowns(cooldownMap);
         } catch (error: any) {
             console.error('Error loading quiz categories:', error);
-            // Set empty categories on error to prevent infinite retries
-            setCategories([]);
+            // Don't set empty categories - keep existing state or show error
+            // This prevents UI flicker and allows showing cached data if available
         } finally {
             setLoading(false);
         }

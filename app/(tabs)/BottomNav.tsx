@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { prefetchRoute, prefetchRoutes } from '../../utils/routePrefetcher';
 
 const { width } = Dimensions.get('window');
 
@@ -47,6 +48,7 @@ interface NavItemProps {
   icon: React.ElementType;
   isActive: boolean;
   onPress: () => void;
+  onPressIn?: () => void;
   scaleAnim: Animated.Value;
   activeColor: string;
 }
@@ -55,12 +57,14 @@ const NavItem = ({
   icon: Icon,
   isActive,
   onPress,
+  onPressIn,
   scaleAnim,
   activeColor,
 }: NavItemProps) => {
   return (
     <TouchableOpacity
       onPress={onPress}
+      onPressIn={onPressIn}
       style={styles.navItem}
       activeOpacity={0.7}
     >
@@ -126,6 +130,35 @@ const BottomNav = () => {
     ? 'Leagues'
     : tabs.find((tab) => pathname === tab.route)?.name || 'Home';
 
+  // Prefetch adjacent tabs and popular routes on mount
+  useEffect(() => {
+    // Prefetch all tab routes for instant navigation
+    const allRoutes = tabs.map(tab => tab.route);
+    prefetchRoutes(allRoutes).catch(() => {
+      // Silent fail for prefetching
+    });
+  }, []);
+
+  const handlePressIn = (tab: typeof tabs[number]) => {
+    // Prefetch on press start (before release) for instant navigation
+    prefetchRoute(tab.route).catch(() => {
+      // Silent fail
+    });
+    
+    // Prefetch adjacent routes
+    const currentIndex = tabs.findIndex(t => t.route === tab.route);
+    const adjacentRoutes = [
+      tabs[currentIndex - 1]?.route,
+      tabs[currentIndex + 1]?.route,
+    ].filter(Boolean) as string[];
+    
+    if (adjacentRoutes.length > 0) {
+      prefetchRoutes(adjacentRoutes).catch(() => {
+        // Silent fail
+      });
+    }
+  };
+
   const handlePress = (tab: typeof tabs[number], index: number) => {
     // Light haptic feedback
     Haptics.selectionAsync();
@@ -167,6 +200,7 @@ const BottomNav = () => {
               return (
                 <TouchableOpacity
                   key={tab.name}
+                  onPressIn={() => handlePressIn(tab)}
                   onPress={() => handlePress(tab, index)}
                   style={styles.navItem}
                   activeOpacity={0.7}
@@ -207,6 +241,7 @@ const BottomNav = () => {
                 icon={tab.icon!}
                 isActive={isActive}
                 onPress={() => handlePress(tab, index)}
+                onPressIn={() => handlePressIn(tab)}
                 scaleAnim={scaleAnims[index]}
                 activeColor={activeColor}
               />

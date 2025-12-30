@@ -5,9 +5,30 @@
 
 import { getApiUrl } from '../config/api.config';
 import { useAuth } from '@clerk/clerk-expo';
+import { cacheService } from './cacheService';
 
 const API_URL = getApiUrl();
 const API_TIMEOUT = 10000; // 10 seconds
+
+// Cache keys and TTL
+const QUIZ_CATEGORIES_CACHE_KEY = 'quiz_categories';
+const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Memory cache for instant responses
+const memoryCache = new Map<string, { data: any; timestamp: number }>();
+const MEMORY_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+const getFromMemoryCache = (key: string): any | null => {
+    const cached = memoryCache.get(key);
+    if (cached && Date.now() - cached.timestamp < MEMORY_CACHE_TTL) {
+        return cached.data;
+    }
+    return null;
+};
+
+const setMemoryCache = (key: string, data: any): void => {
+    memoryCache.set(key, { data, timestamp: Date.now() });
+};
 
 // Type for getToken function from useAuth hook
 type GetTokenFunction = () => Promise<string | null>;
@@ -153,13 +174,28 @@ export interface QuizHistoryItem {
 }
 
 /**
- * Get all quiz categories
+ * Get all quiz categories with caching
  */
-export async function getQuizCategories(getToken: GetTokenFunction): Promise<QuizCategory[]> {
+export async function getQuizCategories(getToken: GetTokenFunction, retryCount: number = 0): Promise<QuizCategory[]> {
     try {
         // Check if getToken is available
         if (!getToken) {
             throw new Error('Authentication token function is not available');
+        }
+
+        // Check memory cache first (instant)
+        const memoryCached = getFromMemoryCache(QUIZ_CATEGORIES_CACHE_KEY);
+        if (memoryCached) {
+            return memoryCached;
+        }
+
+        // Check AsyncStorage cache
+        const cached = await cacheService.get<QuizCategory[]>(QUIZ_CATEGORIES_CACHE_KEY);
+        if (cached) {
+            // Store in memory for next time
+            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, cached);
+            // Note: Background refresh is handled by preloadManager, not here
+            return cached;
         }
 
         const token = await getToken();
@@ -189,13 +225,34 @@ export async function getQuizCategories(getToken: GetTokenFunction): Promise<Qui
 
         const data = await response.json();
         if (data.status === 'SUCCESS') {
-            return data.data || [];
+            const categories = data.data || [];
+            
+            // Cache in both memory and storage
+            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, categories);
+            await cacheService.set(QUIZ_CATEGORIES_CACHE_KEY, categories, QUIZ_CATEGORIES_CACHE_TTL);
+            
+            return categories;
         }
 
         throw new Error(data.message || 'Failed to fetch categories');
     } catch (error: any) {
         console.error('Error fetching quiz categories:', error);
-        // Re-throw with more context if needed
+        
+        // Retry with exponential backoff (max 2 retries)
+        if (retryCount < 2) {
+            const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return getQuizCategories(getToken, retryCount + 1);
+        }
+        
+        // If retries failed, try to return cached data
+        const cached = await cacheService.get<QuizCategory[]>(QUIZ_CATEGORIES_CACHE_KEY);
+        if (cached) {
+            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, cached);
+            return cached;
+        }
+        
+        // Re-throw if no cache available
         if (error.message) {
             throw error;
         }

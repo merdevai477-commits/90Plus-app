@@ -88,24 +88,37 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   const slideAnim = useSlideIn('down', 500);
   const pulseAnim = usePulse(1, 1.02, 1000);
 
-  // Debounced search - يبدأ من أول حرف
+  // Debounced search with instant cache lookup - يبدأ من أول حرف
   useEffect(() => {
     if (searchQuery.length < 1) {
       setSearchResults([]);
       return;
     }
 
+    // Normalize cache key (trim + lowercase)
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    
+    // Instant cache lookup before debounce
+    const cached = searchCache.get(normalizedQuery);
+    if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
+      setSearchResults(cached.results);
+      setIsSearching(false);
+      return;
+    }
+
     setIsSearching(true);
     const timeoutId = setTimeout(() => {
       performSearch(searchQuery);
-    }, 300);
+    }, 150); // Reduced from 300ms to 150ms for faster response
 
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
   const performSearch = async (query: string) => {
+    // Normalize cache key (trim + lowercase)
+    const cacheKey = query.trim().toLowerCase();
+    
     // Check cache first
-    const cacheKey = query.toLowerCase();
     const cached = searchCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
       setSearchResults(cached.results);
@@ -263,7 +276,8 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
             <Search size={48} color="#666" />
             <Text style={styles.noResultsText}>لا توجد نتائج</Text>
             <Text style={styles.noResultsSubtext}>
-              جرب البحث بكلمات مختلفة
+              جرب البحث بكلمات مختلفة{'\n'}
+              أو ابحث باسم المستخدم أو الاسم المعروض
             </Text>
           </View>
         ) : (
