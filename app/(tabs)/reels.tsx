@@ -58,6 +58,7 @@ import { useVideos } from '../../contexts/VideosContext';
 import CommentsModal from '../../components/common/CommentsModal';
 import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
+import { useFollowStore } from '../../src/store/useFollowStore';
 import { router, useLocalSearchParams } from 'expo-router';
 import { preloadNextVideos, isVideoPreloaded } from '../../utils/videoPreloader';
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService';
@@ -531,6 +532,7 @@ const ReelsFeed: React.FC = () => {
   const [noReelsMessage, setNoReelsMessage] = useState(false);
   const hasLoadedRef = useRef(false);
   const viewedReelsRef = useRef<Set<string>>(new Set());
+  const VIEWED_REELS_STORAGE_KEY = '@viewed_reels';
 
   const videoRefs = useRef<Map<string, Video>>(new Map());
   const flatListRef = useRef<FlatList>(null);
@@ -557,16 +559,18 @@ const ReelsFeed: React.FC = () => {
   // to maintain backward compatibility. The hook can be fully integrated in a future refactor.
 
   // Transform backend reels to ReelData format
-  const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData => ({
-    id: reel.id,
-    user: {
-      id: reel.user.id,
-      username: reel.user.username,
-      name: reel.user.displayName || reel.user.username,
-      avatar: reel.user.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
-      verified: reel.user.isVerified,
-      followers: 0,
-      isFollowing: false
+  const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData => {
+    const followState = useFollowStore.getState();
+    return {
+      id: reel.id,
+      user: {
+        id: reel.user.id,
+        username: reel.user.username,
+        name: reel.user.displayName || reel.user.username,
+        avatar: reel.user.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
+        verified: reel.user.isVerified,
+        followers: 0,
+        isFollowing: followState.isFollowing(reel.user.id)
     },
     videoUrl: reel.videoUrl,
     thumbnail: reel.thumbnail || reel.videoUrl,
@@ -747,18 +751,48 @@ const ReelsFeed: React.FC = () => {
     }
   }, [params.reelId, reels]);
 
+  // Load viewed reels from AsyncStorage on mount
+  useEffect(() => {
+    const loadViewedReels = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(VIEWED_REELS_STORAGE_KEY);
+        if (stored) {
+          const viewedIds = JSON.parse(stored) as string[];
+          viewedReelsRef.current = new Set(viewedIds);
+        }
+      } catch (error) {
+        console.error('Error loading viewed reels:', error);
+      }
+    };
+    loadViewedReels();
+  }, []);
+
   // Record view when reel becomes active
   const recordReelView = useCallback(async (reelId: string) => {
+    // Check if already viewed in memory
     if (viewedReelsRef.current.has(reelId)) return;
+    
+    // Mark as viewed immediately to prevent duplicate API calls
     viewedReelsRef.current.add(reelId);
     
+    // Save to AsyncStorage
+    try {
+      const viewedArray = Array.from(viewedReelsRef.current);
+      await AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray));
+    } catch (error) {
+      console.error('Error saving viewed reels:', error);
+    }
+    
+    // Call API to record view
     try {
       const token = await getToken();
       if (token) {
-        ReelsService.recordView(token, reelId);
+        await ReelsService.recordView(token, reelId);
       }
     } catch (error) {
-      // Silent fail
+      // If API call fails, we've already marked as viewed locally
+      // This is fine - the backend will handle duplicate prevention
+      console.warn('Error recording view:', error);
     }
   }, [getToken]);
 
@@ -1051,26 +1085,30 @@ const ReelsFeed: React.FC = () => {
     });
   }, [haptic]);
 
-  // Helper to update follow state across all states - Requirements 18.3, 18.4, 18.5
-  const updateFollowState = useCallback((username: string, isFollowing: boolean) => {
+  // Use global follow store
+  const { follow, unfollow } = useFollowStore();
+
+  // Helper to update local reels state when follow state changes
+  const updateReelsFollowState = useCallback((userId: string, isFollowing: boolean) => {
     setReels(prev => prev.map(reel => 
-      reel.user.username === username 
+      reel.user.id === userId 
         ? { ...reel, user: { ...reel.user, isFollowing } }
         : reel
     ));
     setBackendReels(prev => prev.map(reel => 
-      reel.user.username === username 
+      reel.user.id === userId 
         ? { ...reel, user: { ...reel.user, isFollowing } }
         : reel
     ));
   }, []);
 
   // Handle follow from reel - Ultra Fast with Rollback (Requirements 18.3, 18.5)
-  const handleFollow = useCallback(async (username: string) => {
+  const handleFollow = useCallback(async (username: string, userId: string) => {
     haptic.trigger('medium');
     
     // Optimistic UI update - INSTANT (0ms) - Requirement 18.3
-    updateFollowState(username, true);
+    follow(userId); // Update global store
+    updateReelsFollowState(userId, true); // Update local state
     
     // Sync with backend in background (fire and forget with rollback) - Requirement 18.5
     try {
@@ -1081,16 +1119,18 @@ const ReelsFeed: React.FC = () => {
     } catch (error) {
       // ROLLBACK on failure
       console.error('Error following user, rolling back:', error);
-      updateFollowState(username, false);
+      unfollow(userId);
+      updateReelsFollowState(userId, false);
     }
-  }, [haptic, getToken, updateFollowState]);
+  }, [haptic, getToken, follow, unfollow, updateReelsFollowState]);
 
   // Handle unfollow from reel - Ultra Fast with Rollback (Requirements 18.3, 18.5)
-  const handleUnfollow = useCallback(async (username: string) => {
+  const handleUnfollow = useCallback(async (username: string, userId: string) => {
     haptic.trigger('medium');
     
     // Optimistic UI update - INSTANT (0ms) - Requirement 18.3
-    updateFollowState(username, false);
+    unfollow(userId); // Update global store
+    updateReelsFollowState(userId, false); // Update local state
     
     // Sync with backend in background (fire and forget with rollback) - Requirement 18.5
     try {
@@ -1101,9 +1141,10 @@ const ReelsFeed: React.FC = () => {
     } catch (error) {
       // ROLLBACK on failure
       console.error('Error unfollowing user, rolling back:', error);
-      updateFollowState(username, true);
+      follow(userId);
+      updateReelsFollowState(userId, true);
     }
-  }, [haptic, getToken, updateFollowState]);
+  }, [haptic, getToken, follow, unfollow, updateReelsFollowState]);
 
   // Get current user ID for follow button visibility - Requirement 18.1
   const currentUserId = globalState.userProfile?.id;
@@ -1119,8 +1160,8 @@ const ReelsFeed: React.FC = () => {
       onShare={() => handleShareReel(item)}
       onSave={() => handleSave(item.id)}
       onUserPress={() => handleUserPress(item.user.username)}
-      onFollow={() => handleFollow(item.user.username)}
-      onUnfollow={() => handleUnfollow(item.user.username)}
+      onFollow={() => handleFollow(item.user.username, item.user.id)}
+      onUnfollow={() => handleUnfollow(item.user.username, item.user.id)}
       onHashtagPress={handleHashtagPress}
       onMentionPress={handleMentionPress}
       onVideoRef={handleVideoRef}
@@ -1200,6 +1241,7 @@ const ReelsFeed: React.FC = () => {
           windowSize={3}
           initialNumToRender={2}
           maxToRenderPerBatch={2}
+          updateCellsBatchingPeriod={50}
           removeClippedSubviews={Platform.OS === 'android'}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}

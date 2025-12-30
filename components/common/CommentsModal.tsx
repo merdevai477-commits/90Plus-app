@@ -93,9 +93,11 @@ export default function CommentsModal({
     const [commentLimitReached, setCommentLimitReached] = useState(false);
     const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
     const [commentsWithReplies, setCommentsWithReplies] = useState<CommentWithReplies[]>([]);
+    const [loadedComments, setLoadedComments] = useState<Comment[]>([]);
     const inputRef = useRef<TextInput>(null);
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const shakeAnim = useRef(new Animated.Value(0)).current;
+    const loadedReelIdRef = useRef<string | null>(null);
     const haptic = useHaptic();
     const { t } = useLanguage();
     const { getToken, userId: sessionUserId } = useAuth();
@@ -103,12 +105,17 @@ export default function CommentsModal({
     // Check if current user has reached comment/reply limits - Requirements 15.1, 15.2, 15.4
     // Primary source: active session userId, fallback to globalState only if session unavailable
     const currentUserId = sessionUserId || (globalState.userProfile?.id && !sessionUserId ? globalState.userProfile.id : null);
-    
+
+    // Use loaded comments if prop comments are empty, otherwise use prop comments
+    const effectiveComments = useMemo(() => {
+        return (comments && comments.length > 0) ? comments : loadedComments;
+    }, [comments, loadedComments]);
+
     // Count top-level comments by current user
     const userCommentsCount = useMemo(() => {
         if (!currentUserId) return 0;
-        return comments.filter(c => c.user.id === currentUserId).length;
-    }, [comments, currentUserId]);
+        return effectiveComments.filter(c => c.user.id === currentUserId).length;
+    }, [effectiveComments, currentUserId]);
 
     // Count replies by current user across all comments
     const userRepliesCount = useMemo(() => {
@@ -125,16 +132,97 @@ export default function CommentsModal({
     const canComment = userCommentsCount < MAX_COMMENTS_PER_USER;
     const canReply = userRepliesCount < MAX_REPLIES_PER_USER;
 
-    // Update commentsWithReplies when comments change
+    // Load comments from backend when modal opens (only once per reelId when visible)
     useEffect(() => {
-        setCommentsWithReplies(comments.map(c => ({
-            ...c,
-            replies: [],
-            repliesCount: (c as any).repliesCount || 0,
-            showReplies: false,
-            loadingReplies: false
-        })));
-    }, [comments]);
+        // Reset loaded reel ID when modal closes
+        if (!visible) {
+            loadedReelIdRef.current = null;
+            setLoadedComments([]);
+            return;
+        }
+        
+        if (!reelId) {
+            return;
+        }
+        
+        // If comments are provided as props, mark as loaded but don't clear loadedComments
+        // This prevents unnecessary state updates that cause infinite loops
+        if (comments && comments.length > 0) {
+            loadedReelIdRef.current = reelId;
+            // Don't call setLoadedComments([]) here - it causes re-renders
+            return;
+        }
+        
+        // Only load if we haven't loaded comments for this reel yet while modal is visible (prevent infinite loop)
+        // This prevents multiple simultaneous requests for the same reelId
+        if (loadedReelIdRef.current === reelId) {
+            return;
+        }
+        
+        // Load comments from backend (only once per reelId when modal opens)
+        const loadComments = async () => {
+            try {
+                const token = await getToken();
+                if (!token) return;
+                
+                // Mark as loading immediately to prevent duplicate requests
+                loadedReelIdRef.current = reelId;
+                
+                const backendComments = await ReelsService.getComments(token, reelId, 50);
+                // Transform backend comments (content -> text, format user data)
+                const transformedComments: Comment[] = backendComments.map((c: any) => ({
+                    id: c.id,
+                    user: {
+                        id: c.user.id,
+                        name: c.user.displayName || c.user.username,
+                        avatar: c.user.avatar,
+                        verified: c.user.isVerified
+                    },
+                    text: c.content || c.text || '', // Transform content to text
+                    timestamp: formatTimestamp(c.createdAt),
+                    likes: (c as any).likes || 0,
+                    liked: (c as any).liked || false
+                }));
+                setLoadedComments(transformedComments);
+            } catch (error) {
+                console.error('Error loading comments:', error);
+                // On rate limit (429), don't reset to prevent retry loop
+                // On other errors, reset to allow retry when modal reopens
+                if ((error as any)?.status !== 429) {
+                    loadedReelIdRef.current = null;
+                }
+                // Don't set empty array on error - keep existing comments if any
+            }
+        };
+        
+        loadComments();
+    }, [visible, reelId, getToken]); // Removed comments from dependencies to prevent infinite loop
+
+    // Update commentsWithReplies when comments change - transform content to text
+    // Use useMemo to prevent unnecessary updates that cause infinite loops
+    const transformedComments = useMemo(() => {
+        return effectiveComments.map(c => {
+            // Transform comment: handle both content (backend) and text (frontend) fields
+            const commentText = (c as any).content || c.text || '';
+            return {
+                ...c,
+                text: commentText, // Ensure text field exists
+                user: {
+                    ...c.user,
+                    name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
+                },
+                replies: [],
+                repliesCount: (c as any).repliesCount || 0,
+                showReplies: false,
+                loadingReplies: false
+            };
+        });
+    }, [effectiveComments]);
+
+    // Update commentsWithReplies only when transformedComments actually changes
+    useEffect(() => {
+        setCommentsWithReplies(transformedComments);
+    }, [transformedComments]);
 
     // Shake animation for limit warning
     const triggerShake = () => {
@@ -696,7 +784,7 @@ export default function CommentsModal({
                     <View style={styles.handleContainer}><View style={styles.handle} /></View>
 
                     <View style={styles.header}>
-                        <Text style={styles.title}>{displayedComments.length} تعليقات</Text>
+                        <Text style={styles.title}>{displayedComments.length} {displayedComments.length === 1 ? 'تعليق' : 'تعليقات'}</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                             <X size={20} color="#fff" />
                         </TouchableOpacity>

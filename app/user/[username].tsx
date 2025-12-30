@@ -21,6 +21,7 @@ import StatsRow from '../../components/profile/StatsRow';
 import VideoGrid from '../../components/profile/VideoGrid';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { AuthService, SearchUserResult, FollowService, UserReel, ProfileService } from '../../src/services/authService';
+import { useFollowStore } from '../../src/store/useFollowStore';
 import { useToast } from '../../contexts/ToastContext';
 import { globalState } from '../../globalState';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
@@ -161,6 +162,9 @@ export default function UserProfileScreen() {
     ]).start();
   };
 
+  // Use global follow store
+  const { follow, unfollow } = useFollowStore();
+
   // Perform follow action with Optimistic UI
   const performFollow = async () => {
     if (!user) return;
@@ -169,17 +173,19 @@ export default function UserProfileScreen() {
     const previousState = { isFollowing: user.isFollowing, followersCount: user.followersCount };
     
     // Optimistic update - instant UI change
+    follow(user.id); // Update global store
     setUser(prev => prev ? {
       ...prev,
       isFollowing: true,
       followersCount: (prev.followersCount || 0) + 1,
     } : null);
-
+    
     // API call in background
     try {
       const token = await getToken();
       if (!token) {
         // Rollback on error
+        unfollow(user.id);
         setUser(prev => prev ? { ...prev, ...previousState } : null);
         toast.showError('خطأ', 'يرجى تسجيل الدخول');
         return;
@@ -188,6 +194,7 @@ export default function UserProfileScreen() {
       const result = await FollowService.followUser(token, user.username);
       if (!result.success) {
         // Rollback on failure
+        unfollow(user.id);
         setUser(prev => prev ? { ...prev, ...previousState } : null);
         toast.showError('خطأ', result.error || 'فشل المتابعة');
       }
@@ -195,6 +202,7 @@ export default function UserProfileScreen() {
     } catch (err) {
       console.error('Follow error:', err);
       // Rollback on error
+      unfollow(user.id);
       setUser(prev => prev ? { ...prev, ...previousState } : null);
       toast.showError('خطأ', 'حدث خطأ');
     }
@@ -208,6 +216,7 @@ export default function UserProfileScreen() {
     const previousState = { isFollowing: user.isFollowing, followersCount: user.followersCount };
     
     // Optimistic update - instant UI change
+    unfollow(user.id); // Update global store
     setUser(prev => prev ? {
       ...prev,
       isFollowing: false,
@@ -219,6 +228,7 @@ export default function UserProfileScreen() {
       const token = await getToken();
       if (!token) {
         // Rollback on error
+        follow(user.id);
         setUser(prev => prev ? { ...prev, ...previousState } : null);
         toast.showError('خطأ', 'يرجى تسجيل الدخول');
         return;
@@ -227,6 +237,7 @@ export default function UserProfileScreen() {
       const result = await FollowService.unfollowUser(token, user.username);
       if (!result.success) {
         // Rollback on failure
+        follow(user.id);
         setUser(prev => prev ? { ...prev, ...previousState } : null);
         toast.showError('خطأ', result.error || 'فشل إلغاء المتابعة');
       }
@@ -234,6 +245,7 @@ export default function UserProfileScreen() {
     } catch (err) {
       console.error('Unfollow error:', err);
       // Rollback on error
+      follow(user.id);
       setUser(prev => prev ? { ...prev, ...previousState } : null);
       toast.showError('خطأ', 'حدث خطأ');
     }

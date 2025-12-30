@@ -44,7 +44,11 @@ const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCou
                                     size={20}
                                     color={isActive ? ProfileTheme.colors.neonBlue : ProfileTheme.colors.textSecondary}
                                 />
-                                <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
+                                <Text 
+                                    style={[styles.tabLabel, isActive && styles.activeTabLabel]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                >
                                     {tab.label}
                                 </Text>
                                 {(tab.id === 'videos' || tab.id === 'saved') && (tab as any).count !== undefined && (
@@ -99,13 +103,18 @@ const styles = StyleSheet.create({
     tabContent: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 8,
         zIndex: 2,
+        flexShrink: 1,
+        minWidth: 0, // Allow text to shrink below content size
     },
     tabLabel: {
         color: ProfileTheme.colors.textSecondary,
         fontSize: 14,
         fontWeight: '500',
+        flexShrink: 1,
+        minWidth: 0, // Allow text to shrink below content size
     },
     activeTabLabel: {
         color: ProfileTheme.colors.neonBlue,
