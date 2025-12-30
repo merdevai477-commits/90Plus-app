@@ -33,6 +33,10 @@ router.get('/health', (_req: Request, res: Response): void => {
     });
 });
 
+// Quiz categories cache (5 minutes TTL)
+const quizCategoriesCache = new Map<string, { data: any; timestamp: number }>();
+const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
+
 /**
  * GET /api/quiz/categories
  * جلب جميع فئات الكويز
@@ -40,16 +44,29 @@ router.get('/health', (_req: Request, res: Response): void => {
  */
 router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
+        // Check cache first
+        const cacheKey = 'quiz_categories_all';
+        const cached = quizCategoriesCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < QUIZ_CATEGORIES_CACHE_TTL) {
+            res.json(cached.data);
+            return;
+        }
+
         const categories = await prisma.quizCategory.findMany({
             orderBy: {
                 createdAt: 'asc',
             },
         });
 
-        res.json({
+        const responseData = {
             status: 'SUCCESS',
             data: categories,
-        });
+        };
+
+        // Save to cache
+        quizCategoriesCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+
+        res.json(responseData);
     } catch (error: any) {
         logger.error('Error getting quiz categories:', error);
         res.status(500).json({

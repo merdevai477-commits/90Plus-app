@@ -347,10 +347,14 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
             return;
         }
 
-        // Search by username only (case-insensitive)
+        // Search by username and displayName (case-insensitive)
+        // Use OR condition to search both fields
         const users = await prisma.user.findMany({
             where: {
-                username: { contains: searchQuery, mode: 'insensitive' },
+                OR: [
+                    { username: { contains: searchQuery, mode: 'insensitive' } },
+                    { displayName: { contains: searchQuery, mode: 'insensitive' } },
+                ],
             },
             select: {
                 id: true,
@@ -363,16 +367,71 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
                 level: true,
                 favoriteTeam: true,
             },
-            take: searchLimit,
-            orderBy: [
-                { isVerified: 'desc' },
-                { level: 'desc' },
-            ],
+            take: searchLimit * 2, // Get more results for ranking
         });
+
+        // Apply relevance scoring and ranking
+        // Priority: exact username match > exact displayName match > partial match
+        const searchQueryLower = searchQuery.toLowerCase();
+        const rankedUsers = users
+            .map(user => {
+                const usernameLower = (user.username || '').toLowerCase();
+                const displayNameLower = (user.displayName || '').toLowerCase();
+                
+                let score = 0;
+                
+                // Exact username match gets highest priority
+                if (usernameLower === searchQueryLower) {
+                    score += 1000;
+                }
+                // Username starts with query
+                else if (usernameLower.startsWith(searchQueryLower)) {
+                    score += 500;
+                }
+                // Username contains query
+                else if (usernameLower.includes(searchQueryLower)) {
+                    score += 200;
+                }
+                
+                // Exact displayName match
+                if (displayNameLower === searchQueryLower) {
+                    score += 800;
+                }
+                // displayName starts with query
+                else if (displayNameLower.startsWith(searchQueryLower)) {
+                    score += 400;
+                }
+                // displayName contains query
+                else if (displayNameLower.includes(searchQueryLower)) {
+                    score += 150;
+                }
+                
+                // Boost verified users
+                if (user.isVerified) {
+                    score += 100;
+                }
+                
+                // Boost by level
+                score += user.level || 0;
+                
+                return { ...user, _relevanceScore: score };
+            })
+            .sort((a, b) => {
+                // Sort by relevance score first, then by verified status, then by level
+                if (b._relevanceScore !== a._relevanceScore) {
+                    return b._relevanceScore - a._relevanceScore;
+                }
+                if (b.isVerified !== a.isVerified) {
+                    return b.isVerified ? 1 : -1;
+                }
+                return (b.level || 0) - (a.level || 0);
+            })
+            .slice(0, searchLimit) // Take top results
+            .map(({ _relevanceScore, ...user }) => user); // Remove score from response
 
         const responseData = {
             status: 'SUCCESS',
-            data: { users },
+            data: { users: rankedUsers },
         };
 
         // Save to cache

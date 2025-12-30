@@ -127,6 +127,8 @@ model User {
   @@index([level])
   @@index([coins])
   @@index([createdAt])
+  // Case-insensitive search indexes: idx_users_username_lower, idx_users_displayname_lower
+  // Created via migration for LOWER(username) and LOWER(displayName) expressions
   @@map("users")
 }
 
