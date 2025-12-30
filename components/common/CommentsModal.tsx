@@ -107,13 +107,16 @@ export default function CommentsModal({
     const currentUserId = sessionUserId || (globalState.userProfile?.id && !sessionUserId ? globalState.userProfile.id : null);
 
     // Memoize comments prop by comparing IDs to prevent unnecessary re-renders
+    // This prevents infinite loops when the comments array reference changes but content is the same
     const commentsIdsRef = useRef<string>('');
+    const stableCommentsRef = useRef<Comment[]>([]);
     const stableComments = useMemo(() => {
         const currentIds = (comments || []).map(c => c.id).join(',');
         if (commentsIdsRef.current !== currentIds) {
             commentsIdsRef.current = currentIds;
+            stableCommentsRef.current = comments || [];
         }
-        return comments || [];
+        return stableCommentsRef.current;
     }, [comments]);
 
     // Use loaded comments if prop comments are empty, otherwise use prop comments
