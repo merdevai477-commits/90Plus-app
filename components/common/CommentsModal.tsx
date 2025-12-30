@@ -213,8 +213,16 @@ export default function CommentsModal({
 
     // Track comment IDs separately to detect when base comments actually change
     const commentIdsRef = useRef<string>('');
-    const currentCommentIds = (effectiveComments || []).map(c => c.id).join(',');
+    const effectiveCommentsRef = useRef<Comment[]>(effectiveComments);
     const commentsWithRepliesRef = useRef<CommentWithReplies[]>([]);
+    
+    // Update ref when effectiveComments changes
+    useEffect(() => {
+        effectiveCommentsRef.current = effectiveComments;
+    }, [effectiveComments]);
+    
+    // Calculate current comment IDs
+    const currentCommentIds = (effectiveComments || []).map(c => c.id).join(',');
     
     // Only update commentsWithReplies when comment IDs actually change (not on every render)
     // Merge base comments with existing replies/showReplies state
@@ -223,7 +231,7 @@ export default function CommentsModal({
             commentIdsRef.current = currentCommentIds;
             
             // Transform base comments and merge with existing replies state
-            const transformed = effectiveComments.map(c => {
+            const transformed = effectiveCommentsRef.current.map(c => {
                 // Transform comment: handle both content (backend) and text (frontend) fields
                 const commentText = (c as any).content || c.text || '';
                 
@@ -247,7 +255,7 @@ export default function CommentsModal({
             commentsWithRepliesRef.current = transformed;
             setCommentsWithReplies(transformed);
         }
-    }, [currentCommentIds, effectiveComments]); // Depend on IDs string and effectiveComments
+    }, [currentCommentIds]); // Only depend on IDs string, not the array itself
     
     // Update ref whenever commentsWithReplies changes (from user actions like adding replies)
     useEffect(() => {
