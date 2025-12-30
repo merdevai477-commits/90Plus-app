@@ -1133,6 +1133,31 @@ export class ReelsService {
     }
 
     /**
+     * Report a reel
+     */
+    static async reportReel(token: string, reelId: string, reason: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/${reelId}/report`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ reason }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, message: data.message };
+            }
+            return { success: false, message: data.message };
+        } catch (error: any) {
+            console.error('Error reporting reel:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
      * Like a comment
      */
     static async likeComment(token: string, commentId: string): Promise<{ success: boolean; likesCount?: number }> {

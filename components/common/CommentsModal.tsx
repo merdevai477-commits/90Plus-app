@@ -94,6 +94,7 @@ export default function CommentsModal({
     const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
     const [commentsWithReplies, setCommentsWithReplies] = useState<CommentWithReplies[]>([]);
     const [loadedComments, setLoadedComments] = useState<Comment[]>([]);
+    const [longPressedCommentId, setLongPressedCommentId] = useState<string | null>(null);
     const inputRef = useRef<TextInput>(null);
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -291,6 +292,7 @@ export default function CommentsModal({
                 useNativeDriver: true,
             }).start();
             setReplyingTo(null);
+            setLongPressedCommentId(null);
         }
     }, [visible]);
 
@@ -486,7 +488,7 @@ export default function CommentsModal({
                     { text: 'Cancel', style: 'cancel' },
                     {
                         text: 'Report',
-                        onPress: async (reason) => {
+                        onPress: async (reason: string | undefined) => {
                             if (reason) {
                                 try {
                                     const token = await getToken();
@@ -609,10 +611,10 @@ export default function CommentsModal({
                         const newReply: Reply = {
                             id: result.reply.id || Date.now().toString(),
                             user: {
-                                id: sessionUserId || verifiedCurrentUser?.id || 'current_user',
+                                id: sessionUserId || currentUser?.id || 'current_user',
                                 name: currentUserName,
                                 avatar: currentUserAvatar,
-                                verified: verifiedCurrentUser?.isVerified || false
+                                verified: currentUser?.isVerified || false
                             },
                             text: newComment.trim(),
                             timestamp: 'الآن',
@@ -649,10 +651,10 @@ export default function CommentsModal({
                     const comment: Comment = {
                         id: result.comment?.id || Date.now().toString(),
                         user: {
-                            id: sessionUserId || verifiedCurrentUser?.id || 'current_user',
+                            id: sessionUserId || currentUser?.id || 'current_user',
                             name: currentUserName,
                             avatar: currentUserAvatar,
-                            verified: verifiedCurrentUser?.isVerified || false
+                            verified: currentUser?.isVerified || false
                         },
                         text: newComment.trim(),
                         timestamp: 'الآن',
@@ -706,103 +708,129 @@ export default function CommentsModal({
         </View>
     );
 
-    const renderItem = ({ item }: { item: CommentWithReplies }) => (
-        <View style={styles.commentContainer}>
-            <View style={styles.commentItem}>
-                <Image
-                    source={{ 
-                        uri: item.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.name || 'User')}&background=0D8ABC&color=fff`
+    const renderItem = ({ item }: { item: CommentWithReplies }) => {
+        const isOwnComment = currentUserId && item.user.id && 
+            String(currentUserId) === String(item.user.id);
+        const showActionIcon = longPressedCommentId === item.id;
+
+        return (
+            <View style={styles.commentContainer}>
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onLongPress={() => {
+                        haptic.trigger('medium');
+                        setLongPressedCommentId(item.id);
                     }}
-                    style={styles.commentAvatar}
-                    contentFit="cover"
-                />
-                <View style={styles.commentContent}>
-                    <View style={styles.commentHeader}>
-                        <View style={styles.commentUserInfo}>
-                            <Text style={styles.commentUsername}>{item.user.name}</Text>
-                            {item.user.verified && <CheckCircle size={12} color={COLORS.info} />}
-                        </View>
-                        <View style={styles.commentHeaderRight}>
-                            <Text style={styles.commentTimestamp}>{item.timestamp}</Text>
-                            {/* Action menu - Delete for own comments, Report for others */}
-                            <TouchableOpacity
-                                style={styles.commentActionButton}
-                                onPress={() => {
-                                    const isOwnComment = currentUserId && item.user.id && 
-                                        String(currentUserId) === String(item.user.id);
-                                    if (isOwnComment) {
-                                        Alert.alert(
-                                            'Delete Comment',
-                                            'Are you sure you want to delete this comment?',
-                                            [
-                                                { text: 'Cancel', style: 'cancel' },
-                                                { text: 'Delete', style: 'destructive', onPress: () => handleDeleteComment(item.id) }
-                                            ]
-                                        );
-                                    } else {
-                                        handleReportComment(item.id);
-                                    }
-                                }}
-                            >
-                                <MoreVertical size={16} color={COLORS.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                    <Text style={styles.commentText}>{item.text}</Text>
+                    onPress={() => {
+                        // Hide action icon when tapping elsewhere
+                        if (longPressedCommentId === item.id) {
+                            setLongPressedCommentId(null);
+                        }
+                    }}
+                    delayLongPress={300}
+                >
+                    <View style={styles.commentItem}>
+                        <Image
+                            source={{ 
+                                uri: item.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.name || 'User')}&background=0D8ABC&color=fff`
+                            }}
+                            style={styles.commentAvatar}
+                            contentFit="cover"
+                        />
+                        <View style={styles.commentContent}>
+                            <View style={styles.commentHeader}>
+                                <View style={styles.commentUserInfo}>
+                                    <Text style={styles.commentUsername}>{item.user.name}</Text>
+                                    {item.user.verified && <CheckCircle size={12} color={COLORS.info} />}
+                                </View>
+                                <View style={styles.commentHeaderRight}>
+                                    <Text style={styles.commentTimestamp}>{item.timestamp}</Text>
+                                    {/* Action icon - Trash for own comments, Flag for others */}
+                                    {showActionIcon && (
+                                        <TouchableOpacity
+                                            style={styles.commentActionButton}
+                                            onPress={() => {
+                                                setLongPressedCommentId(null);
+                                                if (isOwnComment) {
+                                                    Alert.alert(
+                                                        'حذف التعليق',
+                                                        'هل أنت متأكد من حذف هذا التعليق؟',
+                                                        [
+                                                            { text: 'إلغاء', style: 'cancel' },
+                                                            { text: 'حذف', style: 'destructive', onPress: () => handleDeleteComment(item.id) }
+                                                        ]
+                                                    );
+                                                } else {
+                                                    handleReportComment(item.id);
+                                                }
+                                            }}
+                                        >
+                                            {isOwnComment ? (
+                                                <Trash2 size={18} color={COLORS.error} />
+                                            ) : (
+                                                <Flag size={18} color={COLORS.info} />
+                                            )}
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                            <Text style={styles.commentText}>{item.text}</Text>
 
-                    {/* Comment Actions - Requirements 14.1 */}
-                    <View style={styles.commentActions}>
-                        <TouchableOpacity 
-                            onPress={() => handleReplyPress(item.id, item.user.name)}
-                            style={styles.replyButton}
-                        >
-                            <MessageCircle size={14} color="#888" />
-                            <Text style={styles.replyText}>رد</Text>
-                        </TouchableOpacity>
-                        
-                        {/* View Replies - Requirements 14.4 */}
-                        {(item.repliesCount || 0) > 0 && (
-                            <TouchableOpacity 
-                                onPress={() => toggleReplies(item.id)}
-                                style={styles.viewRepliesButton}
-                            >
-                                {item.loadingReplies ? (
-                                    <ActivityIndicator size="small" color={COLORS.primary} />
-                                ) : (
-                                    <>
-                                        {item.showReplies ? (
-                                            <ChevronUp size={14} color={COLORS.primary} />
+                            {/* Comment Actions - Requirements 14.1 */}
+                            <View style={styles.commentActions}>
+                                <TouchableOpacity 
+                                    onPress={() => handleReplyPress(item.id, item.user.name)}
+                                    style={styles.replyButton}
+                                >
+                                    <MessageCircle size={14} color="#888" />
+                                    <Text style={styles.replyText}>رد</Text>
+                                </TouchableOpacity>
+                                
+                                {/* View Replies - Requirements 14.4 */}
+                                {(item.repliesCount || 0) > 0 && (
+                                    <TouchableOpacity 
+                                        onPress={() => toggleReplies(item.id)}
+                                        style={styles.viewRepliesButton}
+                                    >
+                                        {item.loadingReplies ? (
+                                            <ActivityIndicator size="small" color={COLORS.primary} />
                                         ) : (
-                                            <ChevronDown size={14} color={COLORS.primary} />
+                                            <>
+                                                {item.showReplies ? (
+                                                    <ChevronUp size={14} color={COLORS.primary} />
+                                                ) : (
+                                                    <ChevronDown size={14} color={COLORS.primary} />
+                                                )}
+                                                <Text style={styles.viewRepliesText}>
+                                                    {item.showReplies ? 'إخفاء الردود' : `عرض ${item.repliesCount} ردود`}
+                                                </Text>
+                                            </>
                                         )}
-                                        <Text style={styles.viewRepliesText}>
-                                            {item.showReplies ? 'إخفاء الردود' : `عرض ${item.repliesCount} ردود`}
-                                        </Text>
-                                    </>
+                                    </TouchableOpacity>
                                 )}
-                            </TouchableOpacity>
-                        )}
+                            </View>
+                        </View>
+
+                        <TouchableOpacity style={styles.commentLike} onPress={() => handleToggleLike(item.id)}>
+                            <Heart size={14} color={item.liked ? COLORS.error : '#666'} fill={item.liked ? COLORS.error : 'none'} />
+                            {item.likes > 0 && (
+                                <Text style={[styles.commentLikeCount, item.liked && styles.commentLikeCountActive]}>
+                                    {item.likes}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
                     </View>
-                </View>
-
-                <TouchableOpacity style={styles.commentLike} onPress={() => handleToggleLike(item.id)}>
-                    <Heart size={14} color={item.liked ? COLORS.error : '#666'} fill={item.liked ? COLORS.error : 'none'} />
-                    {item.likes > 0 && (
-                        <Text style={[styles.commentLikeCount, item.liked && styles.commentLikeCountActive]}>
-                            {item.likes}
-                        </Text>
-                    )}
                 </TouchableOpacity>
-            </View>
 
-            {/* Replies Section */}
-            {item.showReplies && item.replies && item.replies.length > 0 && (
-                <View style={styles.repliesContainer}>
-                    {item.replies.map(reply => renderReply(reply, item.id))}
-                </View>
-            )}
-        </View>
-    );
+                {/* Replies Section */}
+                {item.showReplies && item.replies && item.replies.length > 0 && (
+                    <View style={styles.repliesContainer}>
+                        {item.replies.map(reply => renderReply(reply, item.id))}
+                    </View>
+                )}
+            </View>
+        );
+    };
 
     return (
         <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
@@ -833,6 +861,12 @@ export default function CommentsModal({
                         renderItem={renderItem}
                         contentContainerStyle={styles.listContent}
                         showsVerticalScrollIndicator={false}
+                        onScrollBeginDrag={() => {
+                            // Hide action icon when scrolling starts
+                            if (longPressedCommentId) {
+                                setLongPressedCommentId(null);
+                            }
+                        }}
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Text style={styles.emptyText}>كن أول من يعلق! 👇</Text>
@@ -1038,8 +1072,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 4,
         flex: 1,
-        alignItems: 'center',
-        gap: 4,
     },
     commentUsername: {
         color: '#fff',
