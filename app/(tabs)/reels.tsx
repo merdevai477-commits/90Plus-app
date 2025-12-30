@@ -1276,7 +1276,7 @@ const ReelsFeed: React.FC = () => {
         visible={showComments}
         onClose={() => setShowComments(false)}
         reelId={selectedReelId}
-        comments={reelComments[selectedReelId] || []}
+        comments={useMemo(() => reelComments[selectedReelId] || [], [reelComments, selectedReelId])}
         onAddComment={(comment) => handleAddComment(selectedReelId, comment)}
         onToggleLike={(commentId) => handleToggleCommentLike(selectedReelId, commentId)}
       />
