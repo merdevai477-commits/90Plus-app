@@ -393,6 +393,15 @@ async function startServer() {
             logger.info(`📍 Health: http://0.0.0.0:${PORT}${API_PREFIX}/health`);
             logger.info(`📍 WebSocket: ws://0.0.0.0:${PORT}`);
             logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+            
+            // Verify quiz routes are registered
+            try {
+                const quizRoutesPath = require.resolve('./routes/quiz.routes');
+                logger.info(`✅ Quiz routes file found at: ${quizRoutesPath}`);
+                logger.info(`✅ Quiz routes available at: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories`);
+            } catch (error: any) {
+                logger.error(`❌ Quiz routes file not found: ${error.message}`);
+            }
 
             try {
                 await prisma.$connect();
