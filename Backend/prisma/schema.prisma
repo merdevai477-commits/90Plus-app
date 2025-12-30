@@ -15,65 +15,65 @@ datasource db {
 // ============================================
 
 model User {
-  id           String   @id @default(uuid())
-  clerkUserId  String?  @unique // Clerk User ID for authentication
-  email        String   @unique
-  username     String   @unique
-  password     String?  // Nullable for OAuth users (deprecated with Clerk)
-  displayName  String?
-  avatar       String?
+  id                String  @id @default(uuid())
+  clerkUserId       String? @unique // Clerk User ID for authentication
+  email             String  @unique
+  username          String  @unique
+  password          String? // Nullable for OAuth users (deprecated with Clerk)
+  displayName       String?
+  avatar            String?
   avatarStoragePath String? // Path in Supabase Storage
-  bio          String?
-  coins        Int      @default(0)
-  level        Int      @default(1)
-  xp           Int      @default(0)
-  isVerified   Boolean  @default(false)
-  isDeveloper  Boolean  @default(false)
-  favoriteTeam String?
-  favoriteBrand String?  // البراند المفضل
-  country       String?  // بلد المستخدم
-  favoriteLeagues Int[]  @default([]) // الدوريات المفضلة (IDs)
-  settings     Json?    @default("{}") // Stores preferences like biometricEnabled, language
-  
+  bio               String?
+  coins             Int     @default(0)
+  level             Int     @default(1)
+  xp                Int     @default(0)
+  isVerified        Boolean @default(false)
+  isDeveloper       Boolean @default(false)
+  favoriteTeam      String?
+  favoriteBrand     String? // البراند المفضل
+  country           String? // بلد المستخدم
+  favoriteLeagues   Int[]   @default([]) // الدوريات المفضلة (IDs)
+  settings          Json?   @default("{}") // Stores preferences like biometricEnabled, language
+
   // FIFA Card Profile Fields
-  position      String?  @default("RW")  // Player position (RW, LW, ST, etc.)
-  countryFlag   String?  @default("🇪🇬")  // Country flag emoji
-  age           Int?     @default(22)    // Player age
-  height        Int?     @default(180)   // Height in cm
-  weight        Int?     @default(70)    // Weight in kg
-  preferredFoot String?  @default("R")   // R = Right, L = Left, B = Both
-  clubLogo      String?  // شعار النادي المفضل (URL or path)
-  brandLogo     String?  // شعار البراند المفضل (URL or path)
-  
+  position      String? @default("RW") // Player position (RW, LW, ST, etc.)
+  countryFlag   String? @default("🇪🇬") // Country flag emoji
+  age           Int?    @default(22) // Player age
+  height        Int?    @default(180) // Height in cm
+  weight        Int?    @default(70) // Weight in kg
+  preferredFoot String? @default("R") // R = Right, L = Left, B = Both
+  clubLogo      String? // شعار النادي المفضل (URL or path)
+  brandLogo     String? // شعار البراند المفضل (URL or path)
+
   // Social Links
-  socialLinks   Json?    @default("[]")  // Array of {platform, url, username}
-  
+  socialLinks Json? @default("[]") // Array of {platform, url, username}
+
   // Username change tracking (15 days cooldown)
   lastUsernameChange DateTime?
-  
+
   // Profile image change tracking (7 days cooldown)
   lastAvatarChange DateTime?
   lastCoverChange  DateTime?
   coverImage       String?
   coverStoragePath String?
-  
+
   // Profile analytics
-  profileViews     Int      @default(0)
-  lastReelUpload   DateTime?
-  reelDeleteCount  Int      @default(0)  // عدد مرات مسح الفيديو (حد أقصى 3)
-  
+  profileViews    Int       @default(0)
+  lastReelUpload  DateTime?
+  reelDeleteCount Int       @default(0) // عدد مرات مسح الفيديو (حد أقصى 3)
+
   // Daily Spin Wheel
-  lastDailySpin    DateTime?  // آخر مرة لف عجلة الحظ
-  dailySpins       DailySpinHistory[]
-  
+  lastDailySpin DateTime? // آخر مرة لف عجلة الحظ
+  dailySpins    DailySpinHistory[]
+
   // Push Notifications
-  expoPushToken    String?  // Expo Push Token for notifications
-  
+  expoPushToken String? // Expo Push Token for notifications
+
   // Email verification
-  emailVerified              Boolean   @default(false)
-  emailVerificationToken     String?   @unique
+  emailVerified                 Boolean   @default(false)
+  emailVerificationToken        String?   @unique
   emailVerificationTokenExpires DateTime?
-  
+
   // Moderation fields
   isSuspended    Boolean   @default(false)
   suspendedUntil DateTime?
@@ -81,46 +81,47 @@ model User {
   bannedAt       DateTime?
   banReason      String?
   warningsCount  Int       @default(0)
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  sessions          Session[]
-  refreshTokens     RefreshToken[]
-  quizAttempts      QuizAttempt[]
-  quizAnswers       UserQuizAnswer[]
-  notifications     Notification[]
-  reels             Reel[]
-  comments          Comment[]
-  likes             Like[]
-  commentLikes      CommentLike[]
-  savedReels        SavedReel[]
-  reelShares        ReelShare[]
-  coinTransactions  CoinTransaction[]
-  achievements      UserAchievement[]
-  
+  sessions         Session[]
+  refreshTokens    RefreshToken[]
+  quizAttempts     QuizAttempt[]
+  quizAnswers      UserQuizAnswer[]
+  notifications    Notification[]
+  reels            Reel[]
+  comments         Comment[]
+  likes            Like[]
+  commentLikes     CommentLike[]
+  savedReels       SavedReel[]
+  reelShares       ReelShare[]
+  reelViews        ReelView[]
+  coinTransactions CoinTransaction[]
+  achievements     UserAchievement[]
+
   // Follow system
-  followers  Follow[] @relation("UserFollowers")
-  following  Follow[] @relation("UserFollowing")
-  
+  followers Follow[] @relation("UserFollowers")
+  following Follow[] @relation("UserFollowing")
+
   // Block system
   blockedUsers   Block[] @relation("UserBlocking")
   blockedByUsers Block[] @relation("UserBlocked")
-  
+
   // Reports
   reportsCreated  Report[] @relation("ReportCreator")
   reportsReceived Report[] @relation("ReportedUser")
   reportsReviewed Report[] @relation("ReportReviewer")
-  
+
   // Strikes
-  strikes         Strike[]
-  
+  strikes Strike[]
+
   // Favorite Matches
   favoriteMatches FavoriteMatch[]
-  
+
   // Predictions
-  predictions     Prediction[]
+  predictions Prediction[]
 
   @@index([email])
   @@index([username])
@@ -157,7 +158,7 @@ model Session {
   userId    String
   expiresAt DateTime
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId])
   @@map("sessions")
 }
@@ -184,14 +185,14 @@ model League {
 }
 
 model Team {
-  id       String   @id @default(uuid())
+  id       String  @id @default(uuid())
   name     String
   logo     String?
   country  String
   stadium  String?
   founded  Int?
   leagueId String?
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -207,7 +208,7 @@ model Team {
 }
 
 model Player {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   name        String
   photo       String?
   position    String
@@ -215,7 +216,7 @@ model Player {
   nationality String
   age         Int?
   teamId      String?
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -256,7 +257,7 @@ model Match {
   leagueId   String
   matchDate  DateTime
   venue      String?
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -309,12 +310,12 @@ model QuizQuestion {
   difficulty    Difficulty
   points        Int        @default(10)
   imageUrl      String?
-  imageType     String?    // player, club, stadium, trophy, manager, flag
+  imageType     String? // player, club, stadium, trophy, manager, flag
   hint          String?
   timeLimit     Int        @default(15) // بالثواني
   createdAt     DateTime   @default(now())
 
-  category QuizCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category QuizCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   answers  UserQuizAnswer[]
 
   @@index([categoryId])
@@ -339,12 +340,12 @@ model QuizAttempt {
   xpEarned       Int      @default(0)
   streak         Int      @default(0)
   bestStreak     Int      @default(0)
-  timeTaken      Int      // إجمالي الوقت بالثواني
+  timeTaken      Int // إجمالي الوقت بالثواني
   completedAt    DateTime @default(now())
   canRetryAt     DateTime // موعد السماح بإعادة المحاولة (24 ساعة بعد completion)
 
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category QuizCategory @relation(fields: [categoryId], references: [id])
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category QuizCategory     @relation(fields: [categoryId], references: [id])
   answers  UserQuizAnswer[]
 
   @@index([userId])
@@ -360,9 +361,9 @@ model UserQuizAnswer {
   userId     String
   questionId String
   attemptId  String
-  userAnswer String   // الإجابة المختارة (index كـ string)
+  userAnswer String // الإجابة المختارة (index كـ string)
   isCorrect  Boolean
-  timeTaken  Int      // الوقت المستغرق بالثواني
+  timeTaken  Int // الوقت المستغرق بالثواني
   createdAt  DateTime @default(now())
 
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -406,16 +407,16 @@ enum CoinTransactionType {
 }
 
 model Achievement {
-  id          String            @id @default(uuid())
-  name        String            @unique
+  id          String              @id @default(uuid())
+  name        String              @unique
   description String
   icon        String?
   category    AchievementCategory
   requirement Json // Flexible JSON for different requirements
-  coinReward  Int               @default(0)
-  xpReward    Int               @default(0)
+  coinReward  Int                 @default(0)
+  xpReward    Int                 @default(0)
   rarity      AchievementRarity
-  createdAt   DateTime          @default(now())
+  createdAt   DateTime            @default(now())
 
   userAchievements UserAchievement[]
 
@@ -496,30 +497,31 @@ model Block {
 }
 
 model Reel {
-  id        String   @id @default(uuid())
-  userId    String
-  videoUrl  String
-  videoStoragePath String? // Path in Supabase Storage
-  thumbnail String?
+  id                   String    @id @default(uuid())
+  userId               String
+  videoUrl             String
+  videoStoragePath     String? // Path in Supabase Storage
+  thumbnail            String?
   thumbnailStoragePath String? // Path in Supabase Storage
-  caption   String?  @db.Text
-  views     Int      @default(0)
-  sharesCount Int    @default(0)  // عدد المشاركات
-  isDeleted Boolean  @default(false)
-  deletedAt DateTime?
-  
+  caption              String?   @db.Text
+  views                Int       @default(0)
+  sharesCount          Int       @default(0) // عدد المشاركات
+  isDeleted            Boolean   @default(false)
+  deletedAt            DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  likes    Like[]
-  comments Comment[]
-  reports  Report[]
-  hashtags ReelHashtag[]
-  mentions ReelMention[]
-  savedBy  SavedReel[]
-  shares   ReelShare[]
-  strikes  Strike[]
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes     Like[]
+  comments  Comment[]
+  reports   Report[]
+  hashtags  ReelHashtag[]
+  mentions  ReelMention[]
+  savedBy   SavedReel[]
+  shares    ReelShare[]
+  reelViews ReelView[]
+  strikes   Strike[]
 
   @@index([userId])
   @@index([views])
@@ -536,9 +538,9 @@ model Hashtag {
   name      String   @unique // without # symbol
   reelCount Int      @default(0)
   createdAt DateTime @default(now())
-  
+
   reels ReelHashtag[]
-  
+
   @@index([name])
   @@index([reelCount])
   @@map("hashtags")
@@ -549,10 +551,10 @@ model ReelHashtag {
   reelId    String
   hashtagId String
   createdAt DateTime @default(now())
-  
+
   reel    Reel    @relation(fields: [reelId], references: [id], onDelete: Cascade)
   hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
-  
+
   @@unique([reelId, hashtagId])
   @@index([reelId])
   @@index([hashtagId])
@@ -560,13 +562,13 @@ model ReelHashtag {
 }
 
 model ReelMention {
-  id             String   @id @default(uuid())
-  reelId         String
+  id              String   @id @default(uuid())
+  reelId          String
   mentionedUserId String
-  createdAt      DateTime @default(now())
-  
-  reel          Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
-  
+  createdAt       DateTime @default(now())
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
   @@unique([reelId, mentionedUserId])
   @@index([reelId])
   @@index([mentionedUserId])
@@ -589,20 +591,36 @@ model Like {
   @@map("likes")
 }
 
+model ReelView {
+  id       String   @id @default(uuid())
+  reelId   String
+  userId   String
+  viewedAt DateTime @default(now())
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId])
+  @@index([reelId])
+  @@index([userId])
+  @@index([viewedAt])
+  @@map("reel_views")
+}
+
 model Comment {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   reelId    String
-  parentId  String?  // For replies
-  content   String   @db.Text
-  isDeleted Boolean  @default(false)
+  parentId  String? // For replies
+  content   String    @db.Text
+  isDeleted Boolean   @default(false)
   deletedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel    Reel      @relation(fields: [reelId], references: [id], onDelete: Cascade)
-  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies Comment[] @relation("CommentReplies")
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reel    Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[]     @relation("CommentReplies")
   reports Report[]
   likes   CommentLike[]
   strikes Strike[]
@@ -662,7 +680,7 @@ model ReelShare {
   id        String   @id @default(uuid())
   userId    String
   reelId    String
-  platform  String?  // whatsapp, facebook, twitter, copy_link, etc.
+  platform  String? // whatsapp, facebook, twitter, copy_link, etc.
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -726,16 +744,16 @@ model Report {
   reviewedAt        DateTime?
   action            ReportAction   @default(NO_ACTION)
   isDuplicate       Boolean        @default(false)
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  reporter      User     @relation("ReportCreator", fields: [reporterId], references: [id])
-  reportedUser  User?    @relation("ReportedUser", fields: [reportedUserId], references: [id])
-  reportedReel  Reel?    @relation(fields: [reportedReelId], references: [id])
+  reporter        User     @relation("ReportCreator", fields: [reporterId], references: [id])
+  reportedUser    User?    @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reportedReel    Reel?    @relation(fields: [reportedReelId], references: [id])
   reportedComment Comment? @relation(fields: [reportedCommentId], references: [id])
-  reviewer      User?    @relation("ReportReviewer", fields: [reviewedBy], references: [id])
-  strikes       Strike[]
+  reviewer        User?    @relation("ReportReviewer", fields: [reviewedBy], references: [id])
+  strikes         Strike[]
 
   @@index([reporterId])
   @@index([status])
@@ -752,19 +770,19 @@ model Report {
 // ============================================
 
 model Strike {
-  id                String      @id @default(uuid())
+  id                String     @id @default(uuid())
   userId            String
   reportId          String
   reportedReelId    String?
   reportedCommentId String?
   strikeType        StrikeType
-  reason            String      @db.Text
-  createdAt         DateTime    @default(now())
+  reason            String     @db.Text
+  createdAt         DateTime   @default(now())
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  report          Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  reportedReel    Reel?     @relation(fields: [reportedReelId], references: [id], onDelete: Cascade)
-  reportedComment Comment?  @relation(fields: [reportedCommentId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportedReel    Reel?    @relation(fields: [reportedReelId], references: [id], onDelete: Cascade)
+  reportedComment Comment? @relation(fields: [reportedCommentId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([reportId])
@@ -820,14 +838,14 @@ enum ReportAction {
 // ============================================
 
 model AuditLog {
-  id        String      @id @default(uuid())
-  action    AuditAction
-  actorId   String      // User who performed the action
-  targetId  String      // Target user/content ID
+  id         String          @id @default(uuid())
+  action     AuditAction
+  actorId    String // User who performed the action
+  targetId   String // Target user/content ID
   targetType AuditTargetType
-  reason    String?     @db.Text
-  metadata  Json?       // Additional context
-  createdAt DateTime    @default(now())
+  reason     String?         @db.Text
+  metadata   Json? // Additional context
+  createdAt  DateTime        @default(now())
 
   @@index([actorId])
   @@index([targetId])
@@ -860,22 +878,22 @@ enum AuditTargetType {
 // ============================================
 
 model FavoriteMatch {
-  id              String   @id @default(uuid())
-  userId          String
-  apiMatchId      Int      // Match ID from API-Football
-  homeTeam        String   // Home team name (cached)
-  awayTeam        String   // Away team name (cached)
-  homeTeamLogo    String?  // Home team logo URL
-  awayTeamLogo    String?  // Away team logo URL
-  matchDate       DateTime // Match date/time
-  leagueName      String?  // League name
-  lastHomeScore   Int?     // Last known home score (for detecting goals)
-  lastAwayScore   Int?     // Last known away score
-  lastStatus      String?  // Last known status (NS, 1H, HT, 2H, FT, etc.)
-  notifiedStart   Boolean  @default(false) // Already notified about match start
-  notifiedEnd     Boolean  @default(false) // Already notified about match end
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  userId        String
+  apiMatchId    Int // Match ID from API-Football
+  homeTeam      String // Home team name (cached)
+  awayTeam      String // Away team name (cached)
+  homeTeamLogo  String? // Home team logo URL
+  awayTeamLogo  String? // Away team logo URL
+  matchDate     DateTime // Match date/time
+  leagueName    String? // League name
+  lastHomeScore Int? // Last known home score (for detecting goals)
+  lastAwayScore Int? // Last known away score
+  lastStatus    String? // Last known status (NS, 1H, HT, 2H, FT, etc.)
+  notifiedStart Boolean  @default(false) // Already notified about match start
+  notifiedEnd   Boolean  @default(false) // Already notified about match end
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -891,13 +909,13 @@ model FavoriteMatch {
 // ============================================
 
 model DailySpinHistory {
-  id          String   @id @default(uuid())
-  userId      String
-  coinsWon    Int      // الكوينات المربوحة
-  spinDate    DateTime @default(now()) // تاريخ اللف
-  
+  id       String   @id @default(uuid())
+  userId   String
+  coinsWon Int // الكوينات المربوحة
+  spinDate DateTime @default(now()) // تاريخ اللف
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId])
   @@index([spinDate])
   @@map("daily_spin_history")
@@ -909,46 +927,46 @@ model DailySpinHistory {
 // ============================================
 
 model CachedFixture {
-  id              String   @id @default(uuid())
-  fixtureId       Int      @unique  // API-Football fixture ID
-  
+  id        String @id @default(uuid())
+  fixtureId Int    @unique // API-Football fixture ID
+
   // League Info
-  leagueId        Int
-  leagueName      String
-  leagueLogo      String?
-  leagueCountry   String?
-  leagueSeason    Int?
-  leagueRound     String?
-  
+  leagueId      Int
+  leagueName    String
+  leagueLogo    String?
+  leagueCountry String?
+  leagueSeason  Int?
+  leagueRound   String?
+
   // Home Team
-  homeTeamId      Int
-  homeTeamName    String
-  homeTeamLogo    String?
-  
+  homeTeamId   Int
+  homeTeamName String
+  homeTeamLogo String?
+
   // Away Team
-  awayTeamId      Int
-  awayTeamName    String
-  awayTeamLogo    String?
-  
+  awayTeamId   Int
+  awayTeamName String
+  awayTeamLogo String?
+
   // Match Result
-  homeScore       Int?
-  awayScore       Int?
+  homeScore         Int?
+  awayScore         Int?
   homeHalftimeScore Int?
   awayHalftimeScore Int?
-  
+
   // Match Info
-  matchDate       DateTime
-  matchTimestamp  Int      // Unix timestamp for easy sorting
-  status          String   // FT, AET, PEN, PST, CANC, etc.
-  statusLong      String?  // Full status name
-  venue           String?
-  referee         String?
-  
+  matchDate      DateTime
+  matchTimestamp Int // Unix timestamp for easy sorting
+  status         String // FT, AET, PEN, PST, CANC, etc.
+  statusLong     String? // Full status name
+  venue          String?
+  referee        String?
+
   // Full JSON data for detailed views
-  fullData        Json
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  fullData Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([matchDate])
   @@index([matchTimestamp])
@@ -965,15 +983,15 @@ model CachedFixture {
 // ============================================
 
 model CachedPlayer {
-  id              String   @id @default(uuid())
-  playerId        Int      @unique  // API-Football player ID
-  
+  id       String @id @default(uuid())
+  playerId Int    @unique // API-Football player ID
+
   // Basic Info
-  name            String
-  firstname       String?
-  lastname        String?
-  photo           String?
-  
+  name      String
+  firstname String?
+  lastname  String?
+  photo     String?
+
   // Personal Info
   nationality     String?
   nationalityFlag String?
@@ -983,23 +1001,23 @@ model CachedPlayer {
   birthCountry    String?
   height          String?
   weight          String?
-  
+
   // Current Team
-  teamId          Int?
-  teamName        String?
-  teamLogo        String?
-  
+  teamId   Int?
+  teamName String?
+  teamLogo String?
+
   // Position
-  position        String?
-  
+  position String?
+
   // Season Stats (JSON for flexibility)
-  seasonStats     Json?    // Goals, assists, matches, cards, etc.
-  
+  seasonStats Json? // Goals, assists, matches, cards, etc.
+
   // Full API response
-  fullData        Json
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  fullData Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([teamId])
   @@index([nationality])
@@ -1013,28 +1031,28 @@ model CachedPlayer {
 // ============================================
 
 model CachedTeam {
-  id              String   @id @default(uuid())
-  teamId          Int      @unique  // API-Football team ID
-  
+  id     String @id @default(uuid())
+  teamId Int    @unique // API-Football team ID
+
   // Basic Info
-  name            String
-  code            String?
-  logo            String?
-  country         String?
-  founded         Int?
-  
+  name    String
+  code    String?
+  logo    String?
+  country String?
+  founded Int?
+
   // Venue
-  venueName       String?
-  venueAddress    String?
-  venueCity       String?
-  venueCapacity   Int?
-  venueImage      String?
-  
+  venueName     String?
+  venueAddress  String?
+  venueCity     String?
+  venueCapacity Int?
+  venueImage    String?
+
   // Full API response
-  fullData        Json
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  fullData Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([country])
   @@index([name]) // ✅ OPTIMIZATION 3: Index for team search
@@ -1048,24 +1066,24 @@ model CachedTeam {
 // ============================================
 
 model CachedH2H {
-  id              String   @id @default(uuid())
-  team1Id         Int
-  team2Id         Int
-  
+  id      String @id @default(uuid())
+  team1Id Int
+  team2Id Int
+
   // Summary
-  totalMatches    Int      @default(0)
-  team1Wins       Int      @default(0)
-  team2Wins       Int      @default(0)
-  draws           Int      @default(0)
-  
+  totalMatches Int @default(0)
+  team1Wins    Int @default(0)
+  team2Wins    Int @default(0)
+  draws        Int @default(0)
+
   // Last matches (JSON array)
-  lastMatches     Json
-  
+  lastMatches Json
+
   // Full API response
-  fullData        Json
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  fullData Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([team1Id, team2Id])
   @@index([team1Id])
@@ -1093,23 +1111,23 @@ model CachedLeague {
 // ============================================
 
 model Prediction {
-  id              String    @id @default(uuid())
-  userId          String
-  apiMatchId      Int       // Match ID from API-Football
-  predictionType  String    // 'home' | 'draw' | 'away'
-  coinsSpent      Int       @default(5)
-  coinsWon        Int?
-  isCorrect       Boolean?
-  createdAt       DateTime  @default(now())
-  resolvedAt      DateTime?
-  
+  id             String    @id @default(uuid())
+  userId         String
+  apiMatchId     Int // Match ID from API-Football
+  predictionType String // 'home' | 'draw' | 'away'
+  coinsSpent     Int       @default(5)
+  coinsWon       Int?
+  isCorrect      Boolean?
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+
   // Cached match info for display
-  homeTeam        String?
-  awayTeam        String?
-  homeTeamLogo    String?
-  awayTeamLogo    String?
-  matchDate       DateTime?
-  leagueName      String?
+  homeTeam     String?
+  awayTeam     String?
+  homeTeamLogo String?
+  awayTeamLogo String?
+  matchDate    DateTime?
+  leagueName   String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1128,9 +1146,9 @@ model Prediction {
 
 model PlayerVote {
   id        String   @id @default(uuid())
-  voterId   String   // المصوت (voter)
-  playerId  String   // اللاعب المصوت عليه
-  voteType  String   // 'up' or 'down'
+  voterId   String // المصوت (voter)
+  playerId  String // اللاعب المصوت عليه
+  voteType  String // 'up' or 'down'
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1146,17 +1164,17 @@ model PlayerVote {
 // ============================================
 
 model RankingBadge {
-  id          String   @id @default(uuid())
-  userId      String
-  badgeType   String   // 'gold', 'silver', 'bronze', 'diamond', 'rank_4' to 'rank_100'
-  category    String   // 'views', 'shares', 'comments', 'predictions', 'team_of_month'
-  period      String   // 'daily', 'weekly', 'monthly'
-  rank        Int      // الترتيب الفعلي
-  earnedAt    DateTime @default(now())
-  
+  id        String   @id @default(uuid())
+  userId    String
+  badgeType String // 'gold', 'silver', 'bronze', 'diamond', 'rank_4' to 'rank_100'
+  category  String // 'views', 'shares', 'comments', 'predictions', 'team_of_month'
+  period    String // 'daily', 'weekly', 'monthly'
+  rank      Int // الترتيب الفعلي
+  earnedAt  DateTime @default(now())
+
   // For team of month streak tracking
-  monthYear   String?  // Format: "2024-01" for tracking consecutive months
-  
+  monthYear String? // Format: "2024-01" for tracking consecutive months
+
   @@index([userId])
   @@index([badgeType])
   @@index([category])
@@ -1166,20 +1184,19 @@ model RankingBadge {
 
 // Track consecutive team of month appearances for Diamond badge
 model TeamOfMonthStreak {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  consecutiveMonths Int      @default(0)
-  lastMonthYear     String?  // Last month they appeared in team of month
-  diamondAwarded    Boolean  @default(false)
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  consecutiveMonths Int       @default(0)
+  lastMonthYear     String? // Last month they appeared in team of month
+  diamondAwarded    Boolean   @default(false)
   diamondAwardedAt  DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
   @@index([userId])
   @@index([consecutiveMonths])
   @@map("team_of_month_streaks")
 }
-
 
 // ============================================
 // CACHED SEARCH RESULTS (نتائج البحث المحفوظة)
@@ -1187,23 +1204,23 @@ model TeamOfMonthStreak {
 // ============================================
 
 model CachedSearch {
-  id          String   @id @default(uuid())
-  query       String   @unique // Search query (lowercase, trimmed)
-  queryType   String   @default("general") // 'team', 'player', 'league', 'general'
-  
+  id        String @id @default(uuid())
+  query     String @unique // Search query (lowercase, trimmed)
+  queryType String @default("general") // 'team', 'player', 'league', 'general'
+
   // Results stored as JSON
-  teams       Json?    // Array of team results
-  players     Json?    // Array of player results
-  leagues     Json?    // Array of league results
-  matches     Json?    // Array of match results (live, upcoming, finished)
-  
+  teams   Json? // Array of team results
+  players Json? // Array of player results
+  leagues Json? // Array of league results
+  matches Json? // Array of match results (live, upcoming, finished)
+
   // Metadata
-  resultCount Int      @default(0)
-  searchCount Int      @default(1) // How many times this was searched
+  resultCount    Int      @default(0)
+  searchCount    Int      @default(1) // How many times this was searched
   lastSearchedAt DateTime @default(now())
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([query])
   @@index([queryType])
@@ -1218,13 +1235,13 @@ model CachedSearch {
 // ============================================
 
 model PopularSearch {
-  id          String   @id @default(uuid())
-  query       String   @unique
-  searchCount Int      @default(1)
+  id             String   @id @default(uuid())
+  query          String   @unique
+  searchCount    Int      @default(1)
   lastSearchedAt DateTime @default(now())
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([searchCount])
   @@index([lastSearchedAt])

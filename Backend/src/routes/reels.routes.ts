@@ -376,16 +376,33 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
 /**
  * POST /api/reels/:id/view
- * Increment view count
+ * Increment view count (only once per user per video, no owner self-views)
  */
 router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const clerkUserId = req.auth?.userId;
 
-        // Check if reel exists first
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        // Get current user
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Check if reel exists and get owner
         const reel = await prisma.reel.findUnique({
             where: { id },
-            select: { id: true }
+            select: { id: true, userId: true }
         });
 
         if (!reel) {
@@ -394,13 +411,51 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        await prisma.reel.update({
-            where: { id },
-            data: { views: { increment: 1 } }
+        // Don't count owner's own views
+        if (reel.userId === user.id) {
+            res.json({ status: 'SUCCESS', message: 'View not counted (owner viewing own video)' });
+            return;
+        }
+
+        // Check if user has already viewed this reel
+        const existingView = await prisma.reelView.findUnique({
+            where: {
+                reelId_userId: {
+                    reelId: id,
+                    userId: user.id
+                }
+            }
         });
+
+        if (existingView) {
+            // Already viewed - return success without incrementing
+            res.json({ status: 'SUCCESS', message: 'View already recorded' });
+            return;
+        }
+
+        // Create view record and increment count in a transaction
+        await prisma.$transaction([
+            prisma.reelView.create({
+                data: {
+                    reelId: id,
+                    userId: user.id
+                }
+            }),
+            prisma.reel.update({
+                where: { id },
+                data: { views: { increment: 1 } }
+            })
+        ]);
 
         res.json({ status: 'SUCCESS' });
     } catch (error: any) {
+        // Handle unique constraint violation (race condition)
+        if (error.code === 'P2002') {
+            // View was already created by another request - just return success
+            res.json({ status: 'SUCCESS', message: 'View already recorded' });
+            return;
+        }
+        
         // Don't fail on view recording errors
         logger.warn('View recording error:', error.message);
         res.json({ status: 'SUCCESS', message: 'View recording skipped' });
