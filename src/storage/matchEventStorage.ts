@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../../services/logger';
 
 const EVENTS_KEY = '@match_events_snapshot';
 
@@ -32,7 +33,7 @@ export const MatchEventStorage = {
             };
             await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(allSnapshots));
         } catch (error) {
-            console.error('Error saving event snapshot:', error);
+            logger.error('Error saving event snapshot:', error);
         }
     },
 
@@ -44,7 +45,7 @@ export const MatchEventStorage = {
             const allSnapshots = await this.getAllSnapshots();
             return allSnapshots[fixtureId] || null;
         } catch (error) {
-            console.error('Error getting event snapshot:', error);
+            logger.error('Error getting event snapshot:', error);
             return null;
         }
     },
@@ -57,7 +58,7 @@ export const MatchEventStorage = {
             const data = await AsyncStorage.getItem(EVENTS_KEY);
             return data ? JSON.parse(data) : {};
         } catch (error) {
-            console.error('Error getting all snapshots:', error);
+            logger.error('Error getting all snapshots:', error);
             return {};
         }
     },
@@ -71,7 +72,7 @@ export const MatchEventStorage = {
             delete allSnapshots[fixtureId];
             await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(allSnapshots));
         } catch (error) {
-            console.error('Error clearing snapshot:', error);
+            logger.error('Error clearing snapshot:', error);
         }
     },
 
@@ -82,7 +83,7 @@ export const MatchEventStorage = {
         try {
             await AsyncStorage.removeItem(EVENTS_KEY);
         } catch (error) {
-            console.error('Error clearing all snapshots:', error);
+            logger.error('Error clearing all snapshots:', error);
         }
     },
 
@@ -104,7 +105,7 @@ export const MatchEventStorage = {
 
             await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(cleaned));
         } catch (error) {
-            console.error('Error cleaning up old snapshots:', error);
+            logger.error('Error cleaning up old snapshots:', error);
         }
     },
 };

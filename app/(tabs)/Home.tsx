@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth, useUser } from '@clerk/clerk-expo';
+import Constants from 'expo-constants';
 
 import {
   HomeHeader,
@@ -19,17 +21,62 @@ import {
   TeamPitch,
 } from '../../components/Home';
 import AdvancedSearchBar, { SearchResult } from '../../components/Home/AdvancedSearchBar';
+import LuckyWheelModal from '../../components/common/LuckyWheelModal';
+// Username is now auto-set from email, no modal needed
 import { useHomeStore } from '../../src/store/home.store';
 import { COLORS } from '../../components/reels/constants';
 import { useHapticFeedback } from '../../components/leagues/HapticFeedback';
 import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
+import { globalState } from '../../globalState';
+import { logger } from '../../utils/logger';
+import { useTranslation } from '../../src/i18n';
+import { getApiUrl } from '../../config/api.config';
+
+const API_URL = getApiUrl();
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const haptic = useHapticFeedback();
+  const { t } = useTranslation();
   const [searchVisible, setSearchVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUsername, setCurrentUsername] = useState('');
+  const [luckyWheelVisible, setLuckyWheelVisible] = useState(false);
+  const [spinWheelAvailable, setSpinWheelAvailable] = useState(true);
+  const [nextSpinTime, setNextSpinTime] = useState<Date | undefined>(undefined);
+
+  const { isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+
+  // جلب حالة عجلة الحظ
+  const fetchSpinWheelStatus = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/daily-spin/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+
+      if (data.status === 'SUCCESS') {
+        setSpinWheelAvailable(data.data.canSpin);
+        if (!data.data.canSpin && data.data.timeRemaining) {
+          // حساب وقت الـ spin القادم
+          const now = new Date();
+          const nextTime = new Date(now.getTime() +
+            (data.data.timeRemaining.hours * 60 * 60 * 1000) +
+            (data.data.timeRemaining.minutes * 60 * 1000));
+          setNextSpinTime(nextTime);
+        } else {
+          setNextSpinTime(undefined);
+        }
+      }
+    } catch (error) {
+      logger.error('Error fetching spin status:', error);
+    }
+  }, [getToken]);
 
   const {
     userMode,
@@ -38,26 +85,100 @@ export default function HomeScreen() {
     players,
     teamOfMonth,
     fetchHomeData,
+    fetchRankingsData,
     setUserMode,
     toggleFavorite,
   } = useHomeStore();
 
+  // Set username automatically from email (no popup needed)
+  useEffect(() => {
+    if (isSignedIn && user) {
+      // Get username from email
+      const email = user.primaryEmailAddress?.emailAddress || '';
+      const emailUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+      // Set current username for display
+      const displayUsername = globalState.userProfile?.username || emailUsername;
+      setCurrentUsername(displayUsername);
+
+      // Set basic profile info from Clerk (auto-set username from email)
+      // Only set if globalState.userProfile is null AND session matches
+      // Prefer backend sync over Clerk-only data
+      if (!globalState.userProfile || globalState.userProfile.id !== user.id) {
+        // Verify session matches before setting
+        if (globalState.userProfile && globalState.userProfile.id !== user.id) {
+          // Session changed - clear old profile first
+          globalState.setUserProfile(null);
+        }
+        
+        // Only set if profile is null (backend sync should set it, this is fallback)
+        if (!globalState.userProfile) {
+          globalState.username = emailUsername;
+          globalState.setUserProfile({
+            id: user.id,
+            username: emailUsername,
+            displayName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || emailUsername,
+            avatar: user.imageUrl || undefined,
+            bio: undefined,
+            stats: {
+              views: 0, likes: 0, questionsSolved: 0, rating: 0, posts: 0,
+              predictions: 0, interactions: 0, level: 1, followers: 0, following: 0,
+              monthlyViews: 0, yearlyViews: 0, engagementRate: 0, contentQuality: 0,
+            },
+            videos: [], badges: [], achievements: [],
+            socialStats: { followers: [], following: [] },
+            notifications: [],
+            isOwner: true, isVerified: false, isAppOwner: false,
+          });
+        }
+      }
+    }
+  }, [isSignedIn, user]);
+
   // 🔔 Monitor favorited matches for live events
   useMatchEventsMonitor();
 
-
-
-  // Auto-refresh when screen comes into focus (user returns from leagues)
+  // Auto-refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 Home screen focused - refreshing data...');
-      fetchHomeData();
+      // Removed console.log for production
+      
+      const loadData = async () => {
+        const token = await getToken();
+        // ✅ FIX: Load data in parallel for faster loading
+        await Promise.all([
+          fetchHomeData(token),
+          fetchRankingsData(token),
+          fetchSpinWheelStatus(),
+        ]);
+      };
+      
+      loadData();
+
+      // Update username from globalState (in case it changed in Profile)
+      if (globalState.userProfile?.username) {
+        setCurrentUsername(globalState.userProfile.username);
+      } else if (globalState.username) {
+        setCurrentUsername(globalState.username);
+      }
+
+      // Sync userMode with globalState
+      const shouldBeUser = globalState.userType !== 'guest';
+      if (shouldBeUser && userMode !== 'user') {
+        setUserMode('user');
+      } else if (!shouldBeUser && userMode !== 'guest') {
+        setUserMode('guest');
+      }
     }, [])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchHomeData();
+    const token = await getToken();
+    await Promise.all([
+      fetchHomeData(token),
+      fetchRankingsData(token),
+    ]);
     setRefreshing(false);
   };
 
@@ -75,8 +196,7 @@ export default function HomeScreen() {
 
   const handleSearchResult = (result: SearchResult) => {
     setSearchVisible(false);
-    // Implement navigation based on result
-    console.log('Search result:', result);
+    logger.log('Search result:', result);
   };
 
   const handleViewAllMatches = () => {
@@ -88,7 +208,6 @@ export default function HomeScreen() {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
 
-    // Navigate to match details with proper parameters
     router.push({
       pathname: '/(tabs)/match-details',
       params: {
@@ -110,11 +229,12 @@ export default function HomeScreen() {
 
   const handleFavoritePress = async (matchId: string) => {
     haptic.selection();
-    await toggleFavorite(matchId);
+    const token = await getToken();
+    await toggleFavorite(matchId, token);
   };
 
-  // Get top 3 matches for display (they're already sorted with favorites first)
-  const displayMatches = matches.slice(0, 3);
+  // Get top 3 matches for display - ✅ PERFORMANCE: useMemo to prevent recalculation
+  const displayMatches = useMemo(() => matches.slice(0, 3), [matches]);
 
   return (
     <View style={[styles.container, { paddingTop: 0 }]}>
@@ -137,7 +257,7 @@ export default function HomeScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: insets.top + 80, // safe area top + header height + spacing
+          paddingTop: insets.top + 80,
           paddingBottom: 100
         }}
         refreshControl={
@@ -150,9 +270,20 @@ export default function HomeScreen() {
         }
       >
         <WelcomeSection
-          onRegisterPress={() => router.push('/auth')}
+          onRegisterPress={() => router.push('/signup')}
           onLoginPress={() => router.push('/auth')}
-          onProfilePress={() => router.push('/profile')}
+          onProfilePress={() => router.push('/(tabs)/profile')}
+          onSpinWheelPress={() => setLuckyWheelVisible(true)}
+          onPredictionsPress={() => router.push({ pathname: '/(tabs)/leagues', params: { tab: 'predictions' } })}
+          onQuizPress={() => router.push('/(tabs)/quiz')}
+          onRankPress={() => router.push('/(tabs)/rank')}
+          username={currentUsername}
+          predictionsCount={5}
+          streakDays={globalState.userProfile?.stats?.predictions || 0}
+          userRank={globalState.userProfile?.stats?.level || 0}
+          spinWheelAvailable={spinWheelAvailable}
+          nextSpinTime={nextSpinTime}
+          loginStreak={globalState.userProfile?.stats?.level || 3}
         />
 
         <MatchList
@@ -170,13 +301,29 @@ export default function HomeScreen() {
 
         <PlayerList
           players={players}
-          onPlayerPress={(id) => router.push('/profile')}
+          onPlayerPress={(player) => {
+            // ✅ Navigate to user profile by username
+            if (player.username) {
+              router.push({
+                pathname: '/user/[username]',
+                params: { username: player.username }
+              });
+            }
+          }}
           onViewAllPress={() => router.push('/rank')}
         />
 
         <TeamPitch
           players={teamOfMonth}
-          onPlayerPress={(id) => router.push('/profile')}
+          onPlayerPress={(player) => {
+            // ✅ Navigate to user profile by username
+            if (player.username) {
+              router.push({
+                pathname: '/user/[username]',
+                params: { username: player.username }
+              });
+            }
+          }}
         />
 
       </ScrollView>
@@ -185,6 +332,19 @@ export default function HomeScreen() {
         visible={searchVisible}
         onClose={() => setSearchVisible(false)}
         onResultSelect={handleSearchResult}
+      />
+
+      {/* Lucky Wheel Modal */}
+      <LuckyWheelModal
+        visible={luckyWheelVisible}
+        onClose={() => {
+          setLuckyWheelVisible(false);
+          fetchSpinWheelStatus(); // تحديث الحالة بعد الإغلاق
+        }}
+        onCoinsWon={(coins, newBalance) => {
+          logger.log(`Won ${coins} coins! New balance: ${newBalance}`);
+          fetchSpinWheelStatus(); // تحديث الحالة بعد الفوز
+        }}
       />
     </View>
   );

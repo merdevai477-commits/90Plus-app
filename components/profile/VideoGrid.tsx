@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, Image, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity } from 'react-native';
+import React, { memo } from 'react';
+import { View, Image, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { shouldShowDuration } from '../../utils/videoDuration';
+import Animated, { useAnimatedStyle, withRepeat, withTiming } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
@@ -14,16 +16,39 @@ interface VideoItem {
     thumbnail: any;
     views: string;
     duration: string;
+    isUploading?: boolean;
+    uploadProgress?: number;
 }
 
 interface VideoGridProps {
     videos: VideoItem[];
+    onVideoPress: (video: VideoItem, index: number) => void;
+    onVideoLongPress: (video: VideoItem) => void;
+    onDeleteVideo: (videoId: string) => void;
+    isDeleteMode: boolean;
 }
 
-export default function VideoGrid({ videos }: VideoGridProps) {
-    const renderItem = ({ item }: { item: VideoItem }) => (
-        <TouchableOpacity activeOpacity={0.8} style={styles.itemContainer}>
-            <Image source={item.thumbnail} style={styles.thumbnail} resizeMode="cover" />
+const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPress, onDeleteVideo, isDeleteMode }: VideoGridProps) {
+    const renderItem = ({ item, index }: { item: VideoItem; index: number }) => (
+        <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.itemContainer}
+            onPress={() => {
+                if (isDeleteMode) {
+                    onDeleteVideo(item.id);
+                } else {
+                    onVideoPress(item, index);
+                }
+            }}
+            onLongPress={() => onVideoLongPress(item)}
+        >
+            <Image
+                source={typeof item.thumbnail === 'string' ? { uri: item.thumbnail } : item.thumbnail}
+                style={styles.thumbnail}
+                resizeMode="cover"
+            />
+
+            {/* Overlay */}
             <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.8)']}
                 style={styles.overlay}
@@ -34,8 +59,39 @@ export default function VideoGrid({ videos }: VideoGridProps) {
                     <Ionicons name="play" size={10} color="#FFF" />
                     <Text style={styles.statsText}>{item.views}</Text>
                 </View>
-                <Text style={styles.duration}>{item.duration}</Text>
+                {/* Only show duration if it's a valid, known duration (Requirement 9.4) */}
+                {shouldShowDuration(item.duration) && (
+                    <Text style={styles.duration}>{item.duration}</Text>
+                )}
             </LinearGradient>
+
+            {/* Uploading Overlay */}
+            {item.isUploading && (
+                <View style={styles.uploadingOverlay}>
+                    <View style={styles.uploadingContent}>
+                        <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                        <Text style={styles.uploadingText}>
+                            {item.uploadProgress !== undefined 
+                                ? `جاري الرفع ${Math.round(item.uploadProgress)}%`
+                                : 'جاري الرفع...'}
+                        </Text>
+                    </View>
+                    {item.uploadProgress !== undefined && (
+                        <View style={styles.progressBarContainer}>
+                            <View style={[styles.progressBar, { width: `${item.uploadProgress}%` }]} />
+                        </View>
+                    )}
+                </View>
+            )}
+
+            {/* Delete Overlay */}
+            {isDeleteMode && (
+                <View style={styles.deleteOverlay}>
+                    <View style={styles.trashCircle}>
+                        <Ionicons name="trash" size={20} color="#FFF" />
+                    </View>
+                </View>
+            )}
         </TouchableOpacity>
     );
 
@@ -50,7 +106,7 @@ export default function VideoGrid({ videos }: VideoGridProps) {
             columnWrapperStyle={{ gap: SPACING }}
         />
     );
-}
+});
 
 const styles = StyleSheet.create({
     grid: {
@@ -96,4 +152,55 @@ const styles = StyleSheet.create({
         borderRadius: 4,
         overflow: 'hidden',
     },
+    deleteOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,0,0,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    trashCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#FF3B30',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    uploadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 5,
+    },
+    uploadingContent: {
+        alignItems: 'center',
+        gap: 8,
+    },
+    uploadingText: {
+        color: '#FFF',
+        fontSize: 11,
+        fontWeight: '600',
+        marginTop: 4,
+    },
+    progressBarContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: ProfileTheme.colors.neonGreen,
+    }
 });
+
+export default VideoGrid;

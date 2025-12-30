@@ -1,18 +1,31 @@
 /**
  * Language Context - i18n Management
+ * 
+ * @deprecated This context is deprecated. Please use the new i18n system instead:
+ * 
+ * ```tsx
+ * // Old way (deprecated)
+ * import { useLanguage } from '../contexts/LanguageContext';
+ * const { t, language, setLanguage, isRTL } = useLanguage();
+ * 
+ * // New way (recommended)
+ * import { useTranslation } from '../src/i18n';
+ * const { t, language, setLanguage, isRTL } = useTranslation();
+ * ```
+ * 
+ * Migration Guide:
+ * 1. Replace `import { useLanguage } from '../contexts/LanguageContext'`
+ *    with `import { useTranslation } from '../src/i18n'`
+ * 2. Replace `useLanguage()` with `useTranslation()`
+ * 3. The API is compatible - t, language, setLanguage, isRTL work the same way
+ * 
+ * This context now internally uses the new Zustand-based i18n store for
+ * backwards compatibility during migration.
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { I18nManager } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ar, TranslationKeys } from '../locales/ar';
-import { en } from '../locales/en';
-import { fr } from '../locales/fr';
-import { es } from '../locales/es';
-import { de } from '../locales/de';
-import { it } from '../locales/it';
-import { tr } from '../locales/tr';
-import { pt } from '../locales/pt';
+import React, { createContext, useContext, ReactNode, useEffect, useState } from 'react';
+import { TranslationKeys } from '../locales/ar';
+import { useTranslation } from '../src/i18n';
 
 type Language = 'ar' | 'en' | 'fr' | 'es' | 'de' | 'it' | 'tr' | 'pt';
 type Direction = 'rtl' | 'ltr';
@@ -25,68 +38,39 @@ interface LanguageContextType {
   isRTL: boolean;
 }
 
-const STORAGE_KEY = '@app:language';
-
-const translations: Record<Language, TranslationKeys> = {
-  ar,
-  en,
-  fr,
-  es,
-  de,
-  it,
-  tr,
-  pt,
-};
-
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+/**
+ * @deprecated Use the new i18n system directly instead of wrapping with LanguageProvider.
+ * The app layout already initializes the language store.
+ * 
+ * This provider is maintained for backwards compatibility and internally
+ * delegates to the new Zustand-based i18n store.
+ */
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>('ar');
-  const [direction, setDirection] = useState<Direction>('rtl');
+  const { t, language, setLanguage: setLang, isRTL } = useTranslation();
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    loadLanguage();
+    // Small delay to ensure the new i18n store is initialized
+    setIsReady(true);
   }, []);
 
-  const loadLanguage = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      const validLanguages: Language[] = ['ar', 'en', 'fr', 'es', 'de', 'it', 'tr', 'pt'];
-      if (stored && validLanguages.includes(stored as Language)) {
-        setLanguageState(stored as Language);
-        setDirection(stored === 'ar' ? 'rtl' : 'ltr');
-      }
-    } catch (error) {
-      console.error('Error loading language:', error);
-    }
-  };
-
   const setLanguage = async (lang: Language) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, lang);
-      setLanguageState(lang);
-      
-      const newDirection = lang === 'ar' ? 'rtl' : 'ltr';
-      setDirection(newDirection);
-      
-      const shouldRTL = newDirection === 'rtl';
-      if (I18nManager.isRTL !== shouldRTL) {
-        I18nManager.allowRTL(shouldRTL);
-        I18nManager.forceRTL(shouldRTL);
-      }
-    } catch (error) {
-      console.error('Error setting language:', error);
-      throw error;
-    }
+    await setLang(lang);
   };
 
   const value: LanguageContextType = {
-    language,
-    direction,
-    t: translations[language],
+    language: language as Language,
+    direction: isRTL ? 'rtl' : 'ltr',
+    t,
     setLanguage,
-    isRTL: direction === 'rtl',
+    isRTL,
   };
+
+  if (!isReady) {
+    return null;
+  }
 
   return (
     <LanguageContext.Provider value={value}>
@@ -95,12 +79,48 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   );
 };
 
+/**
+ * @deprecated Use `useTranslation` from '../src/i18n' instead.
+ * 
+ * This hook is maintained for backwards compatibility and internally
+ * delegates to the new useTranslation hook.
+ * 
+ * @example
+ * ```tsx
+ * // Deprecated
+ * import { useLanguage } from '../contexts/LanguageContext';
+ * const { t, language } = useLanguage();
+ * 
+ * // Recommended
+ * import { useTranslation } from '../src/i18n';
+ * const { t, language } = useTranslation();
+ * ```
+ */
 export const useLanguage = (): LanguageContextType => {
+  // First try to use the context (for components still wrapped in LanguageProvider)
   const context = useContext(LanguageContext);
-  if (!context) {
-    throw new Error('useLanguage must be used within LanguageProvider');
+  
+  // If context exists, use it for backwards compatibility
+  if (context) {
+    return context;
   }
-  return context;
+  
+  // Otherwise, use the new i18n system directly
+  // This allows useLanguage to work even without LanguageProvider
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { t, language, setLanguage: setLang, isRTL } = useTranslation();
+  
+  const setLanguage = async (lang: Language) => {
+    await setLang(lang);
+  };
+
+  return {
+    language: language as Language,
+    direction: isRTL ? 'rtl' : 'ltr',
+    t,
+    setLanguage,
+    isRTL,
+  };
 };
 
 export default LanguageContext;

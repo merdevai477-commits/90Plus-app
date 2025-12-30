@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,12 +8,17 @@ interface ContentTabsProps {
     activeTab: string;
     onTabChange: (tab: string) => void;
     videoCount: number;
+    savedCount?: number;
+    isOwnProfile?: boolean; // هل هذا بروفايل المستخدم الحالي؟
 }
 
-export default function ContentTabs({ activeTab, onTabChange, videoCount }: ContentTabsProps) {
+const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCount, savedCount = 0, isOwnProfile = true }: ContentTabsProps) {
     const tabs = [
-        { id: 'videos', label: 'الفيديوهات', icon: 'grid-outline' },
-        { id: 'likes', label: 'الإعجابات', icon: 'heart-outline' },
+        { id: 'videos', label: 'الفيديوهات', icon: 'grid-outline', count: videoCount },
+        // تاب المحفوظات يظهر فقط لصاحب البروفايل
+        ...(isOwnProfile ? [{ id: 'saved', label: 'المحفوظات', icon: 'bookmark-outline', count: savedCount }] : []),
+        // تاب التحليلات يظهر فقط لصاحب البروفايل
+        ...(isOwnProfile ? [{ id: 'analytics', label: 'التحليلات', icon: 'analytics-outline' }] : []),
     ];
 
     return (
@@ -42,10 +47,10 @@ export default function ContentTabs({ activeTab, onTabChange, videoCount }: Cont
                                 <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]}>
                                     {tab.label}
                                 </Text>
-                                {tab.id === 'videos' && (
+                                {(tab.id === 'videos' || tab.id === 'saved') && (tab as any).count !== undefined && (
                                     <View style={[styles.badge, isActive && styles.activeBadge]}>
                                         <Text style={[styles.badgeText, isActive && styles.activeBadgeText]}>
-                                            {videoCount}
+                                            {(tab as any).count}
                                         </Text>
                                     </View>
                                 )}
@@ -64,7 +69,9 @@ export default function ContentTabs({ activeTab, onTabChange, videoCount }: Cont
             </LinearGradient>
         </View>
     );
-}
+});
+
+export default ContentTabs;
 
 const styles = StyleSheet.create({
     container: {

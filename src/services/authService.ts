@@ -1,4 +1,5 @@
 import { getApiUrl } from '../../config/api.config';
+import { requestDeduplicator } from '../../services/requestDeduplicator';
 
 const API_URL = getApiUrl();
 
@@ -154,6 +155,18 @@ export class AuthService {
             console.error('❌ Error syncing user with backend:', error);
             return null;
         }
+    }
+
+    /**
+     * Clear memory cache for user data
+     * Should be called on logout to prevent serving stale cached data
+     */
+    static clearMemoryCache(): void {
+        memoryCache.clear();
+        // Also clear any pending debounce timers
+        syncDebounceTimers.forEach(timer => clearTimeout(timer));
+        syncDebounceTimers.clear();
+        console.log('🧹 AuthService memory cache cleared');
     }
 
     /**
@@ -1071,6 +1084,55 @@ export class ReelsService {
     }
 
     /**
+     * Delete a comment (own comments only)
+     */
+    static async deleteComment(token: string, commentId: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/comments/${commentId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, message: data.message };
+            }
+            return { success: false, message: data.message };
+        } catch (error: any) {
+            console.error('Error deleting comment:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Report a comment
+     */
+    static async reportComment(token: string, commentId: string, reason: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/comments/${commentId}/report`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ reason }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, message: data.message };
+            }
+            return { success: false, message: data.message };
+        } catch (error: any) {
+            console.error('Error reporting comment:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
      * Like a comment
      */
     static async likeComment(token: string, commentId: string): Promise<{ success: boolean; likesCount?: number }> {
@@ -1114,6 +1176,107 @@ export class ReelsService {
             return { success: false };
         } catch (error) {
             console.error('Error unliking comment:', error);
+            return { success: false };
+        }
+    }
+
+    /**
+     * Save a reel
+     */
+    static async saveReel(token: string, reelId: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/${reelId}/save`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, message: data.message };
+            }
+            return { success: false, message: data.message };
+        } catch (error: any) {
+            console.error('Error saving reel:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Unsave a reel
+     */
+    static async unsaveReel(token: string, reelId: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/${reelId}/save`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, message: data.message };
+            }
+            return { success: false, message: data.message };
+        } catch (error: any) {
+            console.error('Error unsaving reel:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Get saved reels
+     */
+    static async getSavedReels(token: string, cursor?: string): Promise<{ savedReels: ReelFeedItem[]; hasMore: boolean; nextCursor: string | null } | null> {
+        try {
+            const url = cursor
+                ? `${API_URL}/reels/saved?cursor=${cursor}`
+                : `${API_URL}/reels/saved`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return data.data;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting saved reels:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Record share action
+     */
+    static async recordShare(token: string, reelId: string, platform: string): Promise<{ success: boolean; sharesCount?: number }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/${reelId}/share`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ platform }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, sharesCount: data.data?.sharesCount };
+            }
+            return { success: false };
+        } catch (error) {
+            console.error('Error recording share:', error);
             return { success: false };
         }
     }
@@ -1301,7 +1464,7 @@ export class ProfileService {
 
 export interface SocialNotification {
     id: string;
-    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'GENERAL';
+    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'GENERAL' | 'MODERATION_ALERT';
     title: string;
     message: string;
     isRead: boolean;
@@ -1316,6 +1479,10 @@ export interface SocialNotification {
         followerUsername?: string;
         followerAvatar?: string;
         matchId?: string;
+        actorId?: string;
+        actorUsername?: string;
+        actorDisplayName?: string;
+        actorAvatar?: string;
     };
 }
 

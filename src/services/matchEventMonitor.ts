@@ -1,5 +1,6 @@
-import ApiFootballService, { FixtureEvent, Fixture } from '../../services/apiFootball';
+import ApiFootballService, { FixtureEvent, Fixture, isRateLimitError } from '../../services/apiFootball';
 import { MatchEventStorage, EventSnapshot } from '../storage/matchEventStorage';
+import { logger } from '../../services/logger';
 
 export interface MatchEvent {
     fixtureId: string;
@@ -51,7 +52,7 @@ export const MatchEventMonitor = {
 
             if (!lastSnapshot) {
                 // First time checking this match - don't notify about existing events
-                console.log(`📸 First snapshot for fixture ${fixtureId} (${matchName})`);
+                logger.error(`📸 First snapshot for fixture ${fixtureId} (${matchName})`);
             } else {
                 // Compare current with last snapshot
                 const lastEventIds = new Set(lastSnapshot.events.map((e) => e.id));
@@ -76,7 +77,13 @@ export const MatchEventMonitor = {
 
             return newEvents;
         } catch (error) {
-            console.error(`Error checking match events for ${fixtureId}:`, error);
+            // Handle rate limit errors gracefully with debug-level logging
+            if (isRateLimitError(error)) {
+                logger.debug(`⏸️ Rate limit encountered while checking events for fixture ${fixtureId}, will retry later`);
+                return [];
+            }
+            // Log actual errors (not rate limits) as errors
+            logger.error(`Error checking match events for ${fixtureId}:`, error);
             return [];
         }
     },
@@ -96,7 +103,13 @@ export const MatchEventMonitor = {
             if (result.status === 'fulfilled') {
                 allNewEvents.push(...result.value);
             } else {
-                console.warn(`Failed to monitor fixture ${fixtureIds[index]}:`, result.reason);
+                // Handle rate limit errors gracefully with debug-level logging
+                if (isRateLimitError(result.reason)) {
+                    logger.debug(`⏸️ Rate limit encountered while monitoring fixture ${fixtureIds[index]}, will retry later`);
+                } else {
+                    // Log actual errors (not rate limits) as errors
+                    logger.error(`Failed to monitor fixture ${fixtureIds[index]}:`, result.reason);
+                }
             }
         });
 
@@ -194,7 +207,13 @@ export const MatchEventMonitor = {
 
             return liveFavorited;
         } catch (error) {
-            console.error('Error getting live favorited fixtures:', error);
+            // Handle rate limit errors gracefully with debug-level logging
+            if (isRateLimitError(error)) {
+                logger.debug('⏸️ Rate limit encountered while getting live favorited fixtures, will retry later');
+                return [];
+            }
+            // Log actual errors (not rate limits) as errors
+            logger.error('Error getting live favorited fixtures:', error);
             return [];
         }
     },

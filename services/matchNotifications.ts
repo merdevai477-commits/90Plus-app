@@ -47,3 +47,9 @@ class MatchNotificationsService {
       return true;
     } catch (error) {
       console.error('Error requesting notification permissions:', error);
+      return false;
+    }
+  }
+}
+
+export default new MatchNotificationsService();

@@ -18,8 +18,6 @@ import {
   ViewToken,
   Platform,
   Vibration,
-  AppState,
-  AppStateStatus,
   Keyboard,
   KeyboardAvoidingView,
   Share,
@@ -38,7 +36,8 @@ import {
   Share2,
   Bookmark,
   MoreVertical,
-  CheckCircle
+  CheckCircle,
+  Play,
 } from 'lucide-react-native';
 
 // للفيديو
@@ -53,8 +52,21 @@ import * as Haptics from 'expo-haptics';
 // Import new components and constants
 import { ReelItem } from '../../components/reels/ReelItem';
 import { COLORS } from '../../components/reels/constants';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from '../../src/i18n';
 import { ReelData } from '../../components/reels/types';
+import { useVideos } from '../../contexts/VideosContext';
+import CommentsModal from '../../components/common/CommentsModal';
+import { useAuth } from '@clerk/clerk-expo';
+import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
+import { router, useLocalSearchParams } from 'expo-router';
+import { preloadNextVideos, isVideoPreloaded } from '../../utils/videoPreloader';
+import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService';
+import { preloadManager } from '../../services/preloadManager';
+import { ReelsCacheData } from '../../hooks/useReelsCache';
+import { useReelsAudioManager, markVideoAsLoaded, markVideoAsUnloaded, clearLoadedVideos } from '../../hooks/useReelsAudioManager';
+import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
+import { globalState } from '../../globalState';
+import { logger } from '../../utils/logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -75,7 +87,7 @@ const ANIMATIONS = {
 interface User {
   id: string;
   name: string;
-  avatar: string;
+  avatar?: string;
   verified?: boolean;
   followers?: number;
   isFollowing?: boolean;
@@ -115,45 +127,9 @@ const useHaptic = () => {
   return { trigger };
 };
 
-// Custom Hook for App State & Audio Management
-const useAppStateAudio = (videoRefs: React.MutableRefObject<Map<string, Video>>) => {
-  const appState = useRef(AppState.currentState);
-
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
-        // Pause all videos when app goes to background
-        videoRefs.current.forEach((video) => {
-          video?.pauseAsync();
-        });
-      }
-      appState.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    // Configure audio session
-    const configureAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          staysActiveInBackground: false,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false
-        });
-      } catch (error) {
-        console.warn('Error configuring audio session:', error);
-      }
-    };
-
-    configureAudio();
-
-    return () => {
-      subscription.remove();
-    };
-  }, [videoRefs]);
-};
+// Track loaded videos - now managed by useReelsAudioManager
+// The loadedVideosRef is kept for backward compatibility with VideoPlayer component
+const loadedVideosRef = { current: new Set<string>() };
 
 // ====== COMPONENTS ======
 
@@ -240,92 +216,6 @@ const ActionButton: React.FC<{
   );
 };
 
-// Enhanced Video Player with better controls
-const VideoPlayer: React.FC<{
-  reel: ReelData;
-  isActive: boolean;
-  onVideoRef: (ref: Video | null, id: string) => void;
-}> = ({ reel, isActive, onVideoRef }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [error, setError] = useState(false);
-  const videoRef = useRef<Video>(null);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      onVideoRef(videoRef.current, reel.id);
-    }
-    return () => {
-      onVideoRef(null, reel.id);
-    };
-  }, [reel.id, onVideoRef]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isActive) {
-        videoRef.current.playAsync();
-      } else {
-        videoRef.current.pauseAsync();
-      }
-    }
-  }, [isActive]);
-
-  const handleError = () => {
-    setError(true);
-    setIsLoading(false);
-  };
-
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>فشل تحميل الفيديو</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => {
-            setError(false);
-            setIsLoading(true);
-          }}
-        >
-          <Text style={styles.retryText}>إعادة المحاولة</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.videoContainer}>
-      <Video
-        ref={videoRef}
-        source={{ uri: reel.videoUrl }}
-        style={styles.video}
-        resizeMode={ResizeMode.COVER}
-        shouldPlay={isActive}
-        isLooping={true}
-        isMuted={reel.muted}
-        onLoad={() => setIsLoading(false)}
-        onError={handleError}
-        onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-          if ('isBuffering' in status) {
-            setIsBuffering(status.isBuffering || false);
-          }
-        }}
-        progressUpdateIntervalMillis={1000}
-        positionMillis={0}
-      />
-
-      {/* Loading/Buffering Indicator */}
-      {(isLoading || isBuffering) && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>
-            {isLoading ? 'جاري التحميل...' : 'جاري التخزين المؤقت...'}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-};
-
 // Enhanced Double Tap Animation with Confetti
 const DoubleTapLikeAnimation: React.FC<{
   visible: boolean;
@@ -405,245 +295,7 @@ const DoubleTapLikeAnimation: React.FC<{
   );
 };
 
-// Enhanced Comments Modal
-const CommentsModal: React.FC<{
-  visible: boolean;
-  onClose: () => void;
-  reelId: string;
-}> = ({ visible, onClose, reelId }) => {
-  const [comments, setComments] = useState<Comment[]>([
-    {
-      id: '1',
-      user: {
-        id: '1',
-        name: 'أحمد محمد',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop',
-        verified: true
-      },
-      text: 'هدف رائع! مهارة عالية جداً ⚽🔥',
-      timestamp: '2 د',
-      likes: 24,
-      liked: false
-    },
-    {
-      id: '2',
-      user: {
-        id: '2',
-        name: 'سارة أحمد',
-        avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b047?w=40&h=40&fit=crop'
-      },
-      text: 'احترافية عالية جداً 👏',
-      timestamp: '5 د',
-      likes: 12,
-      liked: true
-    }
-  ]);
 
-  const [newComment, setNewComment] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const inputRef = useRef<TextInput>(null);
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const haptic = useHaptic();
-  const { t } = useLanguage();
-
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        ...ANIMATIONS.spring
-      }).start();
-
-      setTimeout(() => inputRef.current?.focus(), 300);
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        ...ANIMATIONS.timing
-      }).start();
-    }
-  }, [visible]);
-
-  useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => setKeyboardHeight(e.endCoordinates.height)
-    );
-    const keyboardWillHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardHeight(0)
-    );
-
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
-  }, []);
-
-  const handleToggleCommentLike = (commentId: string) => {
-    haptic.trigger('light');
-    setComments(prev => prev.map(comment =>
-      comment.id === commentId
-        ? {
-          ...comment,
-          liked: !comment.liked,
-          likes: comment.liked ? comment.likes - 1 : comment.likes + 1
-        }
-        : comment
-    ));
-  };
-
-  const handleAddComment = async () => {
-    if (!newComment.trim() || isSubmitting) return;
-
-    haptic.trigger('light');
-    setIsSubmitting(true);
-    Keyboard.dismiss();
-
-    const comment: Comment = {
-      id: Date.now().toString(),
-      user: {
-        id: 'current_user',
-        name: 'أنت',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop'
-      },
-      text: newComment.trim(),
-      timestamp: 'الآن',
-      likes: 0,
-      liked: false
-    };
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    setComments(prev => [comment, ...prev]);
-    setNewComment('');
-    setIsSubmitting(false);
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="none"
-      transparent={true}
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-
-        <Animated.View
-          style={[
-            styles.commentsContainer,
-            {
-              transform: [{ translateY: slideAnim }],
-              marginBottom: keyboardHeight
-            }
-          ]}
-        >
-          {/* Drag Handle */}
-          <View style={styles.dragHandle} />
-
-          {/* Header */}
-          <View style={styles.commentsHeader}>
-            <Text style={styles.commentsTitle}>
-              {comments.length} {t.reels.comments}
-            </Text>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeButton}
-            >
-              <X size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Comments List */}
-          <FlatList
-            data={comments}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.commentsList}
-            renderItem={({ item }) => (
-              <View style={styles.commentItem}>
-                <Image
-                  source={{ uri: item.user.avatar }}
-                  style={styles.commentAvatar}
-                />
-                <View style={styles.commentContent}>
-                  <View style={styles.commentHeader}>
-                    <View style={styles.commentUserInfo}>
-                      <Text style={styles.commentUsername}>{item.user.name}</Text>
-                      {item.user.verified && (
-                        <CheckCircle size={14} color={COLORS.info} />
-                      )}
-                    </View>
-                    <Text style={styles.commentTimestamp}>{item.timestamp}</Text>
-                  </View>
-                  <Text style={styles.commentText}>{item.text}</Text>
-                  <TouchableOpacity
-                    style={styles.commentLike}
-                    onPress={() => handleToggleCommentLike(item.id)}
-                  >
-                    <Heart
-                      size={16}
-                      color={item.liked ? COLORS.error : '#999'}
-                      fill={item.liked ? COLORS.error : 'none'}
-                    />
-                    {item.likes > 0 && (
-                      <Text style={[
-                        styles.commentLikeCount,
-                        item.liked && styles.commentLikeCountActive
-                      ]}>
-                        {item.likes}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          />
-
-          {/* Input */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
-          >
-            <View style={styles.commentInputContainer}>
-              <TextInput
-                ref={inputRef}
-                style={styles.commentTextInput}
-                placeholder={t.reels.addComment}
-                placeholderTextColor="#999"
-                value={newComment}
-                onChangeText={setNewComment}
-                onSubmitEditing={handleAddComment}
-                editable={!isSubmitting}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                onPress={handleAddComment}
-                disabled={!newComment.trim() || isSubmitting}
-                style={[
-                  styles.sendButton,
-                  (!newComment.trim() || isSubmitting) && styles.sendButtonDisabled
-                ]}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Send size={20} color="#fff" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-};
 
 // Share Sheet Component
 const handleShare = async (reel: ReelData) => {
@@ -661,7 +313,7 @@ const handleShare = async (reel: ReelData) => {
     if (result.action === Share.sharedAction) {
       if (result.activityType) {
         // تم المشاركة بنجاح
-        console.log('Shared with activity type:', result.activityType);
+        logger.log('Shared with activity type:', result.activityType);
       }
     }
   } catch (error) {
@@ -682,7 +334,7 @@ const ReportModal: React.FC<{
   const [isSubmitted, setIsSubmitted] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const haptic = useHaptic();
-  const { t } = useLanguage();
+  const { t } = useTranslation();
 
   const reasons = [
     t.reels.reasons.inappropriate,
@@ -860,99 +512,276 @@ const ReportModal: React.FC<{
 
 // Main Reels Feed Component
 const ReelsFeed: React.FC = () => {
+  const params = useLocalSearchParams<{ reelId?: string }>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Hashtag filtering
+  const [selectedHashtag, setSelectedHashtag] = useState<string | null>(null);
+
+  // Backend integration state - now managed by useReelsCache
+  const [backendReels, setBackendReels] = useState<ReelData[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [noReelsMessage, setNoReelsMessage] = useState(false);
+  const hasLoadedRef = useRef(false);
+  const viewedReelsRef = useRef<Set<string>>(new Set());
+
   const videoRefs = useRef<Map<string, Video>>(new Map());
   const flatListRef = useRef<FlatList>(null);
   const haptic = useHaptic();
-  const { t } = useLanguage();
+  const { t } = useTranslation();
+  const { getToken } = useAuth();
+  const { uploadedVideos, userVideoData, reelComments, addComment, toggleCommentLike, likedReelIds, toggleReelLike } = useVideos();
 
-  // Use App State Hook for Audio Management
-  useAppStateAudio(videoRefs);
+  // Use Reels Audio Manager for navigation and app state audio cleanup
+  // Requirements 16.1, 16.2, 16.3: Stop audio on navigation, pause on background, resume on return
+  const { pauseAllVideos, markVideoLoaded, markVideoUnloaded } = useReelsAudioManager({
+    videoRefs,
+    currentIndex,
+    onPauseAll: () => {
+      console.log('[ReelsFeed] All videos paused');
+    },
+    onResumeActive: (index) => {
+      console.log(`[ReelsFeed] Resumed video at index ${index}`);
+    },
+  });
+  
+  // Import useReelsCache for cache-first loading (Requirements 3.1, 3.5, 3.6)
+  // Note: The hook is available but we're keeping the existing implementation
+  // to maintain backward compatibility. The hook can be fully integrated in a future refactor.
 
-  const [reels, setReels] = useState<ReelData[]>([
-    {
-      id: '1',
-      user: {
-        id: '1',
-        username: 'mosalah',
-        name: 'محمد صلاح',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop',
-        verified: true,
-        followers: 125000,
-        isFollowing: false
-      },
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&h=800&fit=crop',
-      duration: 30,
-      likes: 12400,
-      views: 124000,
-      comments: 892,
-      shares: 234,
-      liked: false,
-      saved: false,
-      muted: true,
-      description: 'هدف رائع في المباراة النهائية! 🔥⚽',
-      hashtags: ['كرة_القدم', 'أهداف', 'رياضة'],
-      location: 'ستاد القاهرة',
-      createdAt: new Date()
+  // Transform backend reels to ReelData format
+  const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData => ({
+    id: reel.id,
+    user: {
+      id: reel.user.id,
+      username: reel.user.username,
+      name: reel.user.displayName || reel.user.username,
+      avatar: reel.user.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
+      verified: reel.user.isVerified,
+      followers: 0,
+      isFollowing: false
     },
-    {
-      id: '2',
-      user: {
-        id: '2',
-        username: 'cristiano',
-        name: 'كريستيانو رونالدو',
-        avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop',
-        verified: false,
-        followers: 85000,
-        isFollowing: true
-      },
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=400&h=800&fit=crop',
-      duration: 25,
-      likes: 8900,
-      views: 89000,
-      comments: 456,
-      shares: 123,
-      liked: true,
-      saved: false,
-      muted: false,
-      description: 'تمرين اليوم كان قوي! 💪',
-      hashtags: ['لياقة', 'صحة', 'تمارين'],
-      location: 'نادي الجزيرة',
-      createdAt: new Date()
-    },
-    {
-      id: '3',
-      user: {
-        id: '3',
-        username: 'leomessi',
-        name: 'ليونيل ميسي',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop',
-        verified: false,
-        followers: 92000,
-        isFollowing: false
-      },
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=400&h=800&fit=crop',
-      duration: 28,
-      likes: 15600,
-      views: 156000,
-      comments: 1200,
-      shares: 567,
-      liked: false,
-      saved: true,
-      muted: true,
-      description: 'لحظات لا تُنسى من البطولة',
-      hashtags: ['بطولة', 'فوز', 'احتفال'],
-      createdAt: new Date()
+    videoUrl: reel.videoUrl,
+    thumbnail: reel.thumbnail || reel.videoUrl,
+    duration: 0,
+    likes: reel.likesCount,
+    views: reel.views,
+    comments: reel.commentsCount,
+    shares: reel.sharesCount || 0,
+    liked: reel.isLiked || likedReelIds.includes(reel.id),
+    saved: reel.isSaved || false,
+    muted: false, // Audio ON by default (Instagram/TikTok style)
+    description: reel.caption || '',
+    hashtags: reel.hashtags || [],
+    mentions: reel.mentions || [],
+    createdAt: new Date(reel.createdAt)
+  }), [likedReelIds]);
+
+  // Load reels from backend with cache-first pattern (Requirements 3.1, 3.4, 3.5)
+  const loadReelsFromBackend = useCallback(async (cursor?: string, skipCache = false) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      // Cache-first loading for initial load (Requirement 3.1)
+      if (!cursor && !skipCache && !selectedHashtag) {
+        const cachedData = await cacheService.get<ReelsCacheData>(CACHE_KEYS.REELS_FEED);
+        if (cachedData && cachedData.reels && cachedData.reels.length > 0) {
+          console.log('[ReelsFeed] Using cached reels data');
+          // Restore dates from cached data
+          const restoredReels = cachedData.reels.map(reel => ({
+            ...reel,
+            createdAt: new Date(reel.createdAt),
+            liked: likedReelIds.includes(reel.id) || reel.liked
+          }));
+          setBackendReels(restoredReels);
+          setNextCursor(cachedData.nextCursor);
+          setHasMore(cachedData.hasMore);
+          setNoReelsMessage(restoredReels.length === 0);
+          setIsInitialLoading(false);
+          // Continue to fetch fresh data in background (Requirement 3.5)
+        }
+      }
+
+      if (selectedHashtag) {
+        // Load by hashtag (no caching for hashtag searches)
+        const result = await ReelsService.getByHashtag(token, selectedHashtag, cursor);
+        if (result) {
+          const transformed = result.reels.map((r: any) => transformBackendReel({
+            ...r,
+            likesCount: r.likesCount || r._count?.likes || 0,
+            commentsCount: r.commentsCount || r._count?.comments || 0,
+            isLiked: false,
+            hashtags: [],
+            mentions: [],
+            previewComments: [],
+          }));
+          
+          if (cursor) {
+            // Deduplicate when appending
+            setBackendReels(prev => {
+              const existingIds = new Set(prev.map(r => r.id));
+              const newReels = transformed.filter(r => !existingIds.has(r.id));
+              return [...prev, ...newReels];
+            });
+          } else {
+            setBackendReels(transformed);
+          }
+          setNextCursor(result.nextCursor);
+          setHasMore(result.hasMore);
+          setNoReelsMessage(transformed.length === 0 && !cursor);
+        }
+      } else {
+        // Load feed
+        const result = await ReelsService.getFeed(token, cursor);
+        if (result) {
+          const transformed = result.reels.map(transformBackendReel);
+          
+          if (cursor) {
+            // Deduplicate when appending
+            setBackendReels(prev => {
+              const existingIds = new Set(prev.map(r => r.id));
+              const newReels = transformed.filter(r => !existingIds.has(r.id));
+              return [...prev, ...newReels];
+            });
+          } else {
+            setBackendReels(transformed);
+          }
+          setNextCursor(result.nextCursor);
+          setHasMore(result.hasMore);
+          setNoReelsMessage(transformed.length === 0 && !cursor);
+          
+          // Save to cache for future visits (Requirement 3.4)
+          if (!cursor) {
+            const cacheData: ReelsCacheData = {
+              reels: transformed,
+              nextCursor: result.nextCursor,
+              hasMore: result.hasMore,
+              cachedAt: Date.now(),
+            };
+            cacheService.set(CACHE_KEYS.REELS_FEED, cacheData, CACHE_TTL.REELS).catch(err => {
+              console.warn('[ReelsFeed] Failed to cache reels:', err);
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading reels:', error);
     }
-  ]);
+  }, [getToken, selectedHashtag, transformBackendReel, likedReelIds]);
+
+  // Initial load
+  useEffect(() => {
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadReelsFromBackend().finally(() => setIsInitialLoading(false));
+    }
+  }, []);
+
+  // Reload when hashtag changes
+  useEffect(() => {
+    if (hasLoadedRef.current) {
+      setIsInitialLoading(true);
+      setBackendReels([]);
+      setNextCursor(null);
+      setHasMore(true);
+      loadReelsFromBackend().finally(() => setIsInitialLoading(false));
+    }
+  }, [selectedHashtag]);
+
+  // Reels state - ONLY backend reels (no local videos in global feed)
+  const [reels, setReels] = useState<ReelData[]>([]);
+
+  // Handle deep link navigation to specific reel
+  useEffect(() => {
+    if (params.reelId && reels.length > 0 && flatListRef.current) {
+      const reelIndex = reels.findIndex(r => r.id === params.reelId);
+      if (reelIndex >= 0) {
+        // Scroll to the specific reel
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
+          setCurrentIndex(reelIndex);
+        }, 500); // Small delay to ensure list is rendered
+      }
+    }
+  }, [params.reelId, reels]);
+
+  // Update reels when data changes - ONLY use backend reels (no mock data)
+  useEffect(() => {
+    // Update backend reels liked status
+    const updatedBackendReels = backendReels.map(reel => ({
+      ...reel,
+      liked: likedReelIds.includes(reel.id),
+      comments: reelComments[reel.id]?.length || reel.comments
+    }));
+
+    // Only use backend reels - no mock data
+    setReels(updatedBackendReels);
+  }, [reelComments, likedReelIds, backendReels]);
+
+  // Handle deep link navigation to specific reel
+  useEffect(() => {
+    if (params.reelId && reels.length > 0 && flatListRef.current) {
+      const reelIndex = reels.findIndex(r => r.id === params.reelId);
+      if (reelIndex >= 0) {
+        // Scroll to the specific reel
+        setTimeout(() => {
+          try {
+            flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
+            setCurrentIndex(reelIndex);
+          } catch (error) {
+            // Fallback to scrollToOffset if scrollToIndex fails
+            const itemHeight = SCREEN_HEIGHT;
+            flatListRef.current?.scrollToOffset({ offset: reelIndex * itemHeight, animated: true });
+            setCurrentIndex(reelIndex);
+          }
+        }, 500); // Small delay to ensure list is rendered
+      }
+    }
+  }, [params.reelId, reels]);
+
+  // Record view when reel becomes active
+  const recordReelView = useCallback(async (reelId: string) => {
+    if (viewedReelsRef.current.has(reelId)) return;
+    viewedReelsRef.current.add(reelId);
+    
+    try {
+      const token = await getToken();
+      if (token) {
+        ReelsService.recordView(token, reelId);
+      }
+    } catch (error) {
+      // Silent fail
+    }
+  }, [getToken]);
+
+  // Load more reels when reaching end
+  const loadMoreReels = useCallback(async () => {
+    if (!hasMore || isLoadingMore || !nextCursor) return;
+    
+    setIsLoadingMore(true);
+    await loadReelsFromBackend(nextCursor);
+    setIsLoadingMore(false);
+  }, [hasMore, isLoadingMore, nextCursor, loadReelsFromBackend]);
+
+  // Filter reels by hashtag
+  const filteredReels = useMemo(() => {
+    if (selectedHashtag) {
+      return reels.filter(reel =>
+        reel.hashtags?.includes(selectedHashtag)
+      );
+    }
+    return reels;
+  }, [selectedHashtag, reels]);
+
+
 
   // Video Ref Management
   const handleVideoRef = useCallback((ref: Video | null, id: string) => {
@@ -963,19 +792,60 @@ const ReelsFeed: React.FC = () => {
     }
   }, []);
 
-  // Handle Like
-  const handleLike = useCallback((reelId: string) => {
+  // Cleanup videos on unmount - now handled by useReelsAudioManager
+  // The hook automatically pauses all videos and clears tracking on unmount
+  // This effect is kept for backward compatibility with loadedVideosRef
+  useEffect(() => {
+    return () => {
+      // Clear local loaded videos tracking (for backward compatibility)
+      loadedVideosRef.current.clear();
+      // Also clear the audio manager's tracking
+      clearLoadedVideos();
+    };
+  }, []);
+
+  // Handle Like with Backend sync - Ultra Fast with Rollback
+  const handleLike = useCallback(async (reelId: string) => {
     haptic.trigger('medium');
-    setReels(prev => prev.map(reel =>
-      reel.id === reelId
-        ? {
-          ...reel,
-          liked: !reel.liked,
-          likes: reel.liked ? reel.likes - 1 : reel.likes + 1
+    
+    // Get current state BEFORE update for rollback
+    const currentReel = reels.find(r => r.id === reelId);
+    const wasLiked = currentReel?.liked ?? false;
+    const prevLikes = currentReel?.likes ?? 0;
+    
+    // Optimistic UI update - INSTANT (0ms)
+    toggleReelLike(reelId);
+    
+    const updateReelState = (liked: boolean, likes: number) => {
+      setReels(prev => prev.map(reel => 
+        reel.id === reelId ? { ...reel, liked, likes } : reel
+      ));
+      setBackendReels(prev => prev.map(reel => 
+        reel.id === reelId ? { ...reel, liked, likes } : reel
+      ));
+    };
+    
+    // Apply optimistic update immediately
+    updateReelState(!wasLiked, wasLiked ? prevLikes - 1 : prevLikes + 1);
+    
+    // Sync with backend (fire and forget with rollback on error)
+    try {
+      const token = await getToken();
+      if (token) {
+        if (wasLiked) {
+          await ReelsService.unlikeReel(token, reelId);
+        } else {
+          await ReelsService.likeReel(token, reelId);
         }
-        : reel
-    ));
-  }, [haptic]);
+      }
+    } catch (error) {
+      // ROLLBACK on failure - restore previous state
+      console.error('Error syncing like, rolling back:', error);
+      updateReelState(wasLiked, prevLikes);
+      toggleReelLike(reelId); // Rollback the toggle too
+    }
+  }, [toggleReelLike, haptic, getToken, reels]);
+
 
   // Handle Mute Toggle
   const handleToggleMute = useCallback((reelId: string) => {
@@ -987,33 +857,126 @@ const ReelsFeed: React.FC = () => {
     ));
   }, [haptic]);
 
-  // Handle Save
-  const handleSave = useCallback((reelId: string) => {
+  // Handle Save - with Backend sync
+  const handleSave = useCallback(async (reelId: string) => {
     haptic.trigger('light');
-    setReels(prev => prev.map(reel =>
-      reel.id === reelId
-        ? {
-          ...reel,
-          saved: !reel.saved
+    
+    // Get current state for rollback
+    const currentReel = reels.find(r => r.id === reelId);
+    const wasSaved = currentReel?.saved ?? false;
+    
+    // Optimistic UI update
+    const updateSaveState = (saved: boolean) => {
+      setReels(prev => prev.map(reel =>
+        reel.id === reelId ? { ...reel, saved } : reel
+      ));
+      setBackendReels(prev => prev.map(reel =>
+        reel.id === reelId ? { ...reel, saved } : reel
+      ));
+    };
+    
+    updateSaveState(!wasSaved);
+    
+    // Show toast
+    Alert.alert('', wasSaved ? t.reels.unsaved : t.reels.saved, [{ text: t.common.done }]);
+    
+    // Sync with backend
+    try {
+      const token = await getToken();
+      if (token) {
+        if (wasSaved) {
+          await ReelsService.unsaveReel(token, reelId);
+        } else {
+          await ReelsService.saveReel(token, reelId);
         }
+      }
+    } catch (error) {
+      // Rollback on failure
+      console.error('Error syncing save, rolling back:', error);
+      updateSaveState(wasSaved);
+    }
+  }, [haptic, reels, getToken, t.reels.unsaved, t.reels.saved, t.common.done]);
+
+  // Handle Add Comment
+  const handleAddComment = useCallback((reelId: string, comment: Comment) => {
+    addComment(reelId, comment);
+
+    // Update comment count in reel
+    setReels(prevReels => prevReels.map(reel =>
+      reel.id === reelId
+        ? { ...reel, comments: reel.comments + 1 }
         : reel
     ));
+  }, [addComment]);
 
-    // Show toast
-    const saved = reels.find(r => r.id === reelId)?.saved;
-    Alert.alert('', saved ? t.reels.unsaved : t.reels.saved, [{ text: t.common.done }]);
-  }, [haptic, reels]);
+  // Handle Toggle Comment Like
+  const handleToggleCommentLike = useCallback((reelId: string, commentId: string) => {
+    toggleCommentLike(reelId, commentId);
+  }, [toggleCommentLike]);
 
-  // Handle Report
-  const handleReport = useCallback((reason: string) => {
-    console.log('Report submitted:', reason);
-    // Alert handled in modal
-  }, []);
+  // Handle Hashtag Press
+  const handleHashtagPress = useCallback((tag: string) => {
+    haptic.trigger('light');
+    setSelectedHashtag(tag);
+    // Scroll to top
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [haptic]);
 
-  // Handle Share
-  const handleShareReel = useCallback((reel: ReelData) => {
-    handleShare(reel);
-  }, []);
+  // Clear Hashtag Filter
+  const handleClearHashtag = useCallback(() => {
+    haptic.trigger('light');
+    setSelectedHashtag(null);
+  }, [haptic]);
+
+  // Handle Report - with Backend sync
+  const handleReport = useCallback(async (reason: string) => {
+    try {
+      const token = await getToken();
+      if (token && selectedReelId) {
+        const result = await ReelsService.reportReel(token, selectedReelId, reason);
+        if (result.success) {
+          console.log('Report submitted successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error submitting report:', error);
+    }
+  }, [getToken, selectedReelId]);
+
+  // Handle Share - with Backend tracking and deep links
+  const handleShareReel = useCallback(async (reel: ReelData) => {
+    haptic.trigger('light');
+    
+    try {
+      // Generate deep link: 90plus://reel/:reelId
+      const deepLink = `90plus://reel/${reel.id}`;
+      const message = `شاهد هذا الفيديو الرائع من ${reel.user.name}!\n${reel.description || ''}\n\n${deepLink}`;
+      const result = await Share.share({
+        message,
+        url: deepLink, // Use deep link instead of direct video URL
+        title: 'مشاركة فيديو'
+      });
+
+      if (result.action === Share.sharedAction) {
+        // Record share in backend
+        const token = await getToken();
+        if (token) {
+          const shareResult = await ReelsService.recordShare(token, reel.id, result.activityType || 'unknown');
+          if (shareResult.success && shareResult.sharesCount !== undefined) {
+            // Update shares count in UI
+            setReels(prev => prev.map(r =>
+              r.id === reel.id ? { ...r, shares: shareResult.sharesCount! } : r
+            ));
+            setBackendReels(prev => prev.map(r =>
+              r.id === reel.id ? { ...r, shares: shareResult.sharesCount! } : r
+            ));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  }, [haptic, getToken]);
 
   // Open Comments
   const openComments = useCallback((reelId: string) => {
@@ -1029,29 +992,121 @@ const ReelsFeed: React.FC = () => {
     setShowReport(true);
   }, [haptic]);
 
-  // Handle Refresh
+  // Handle Refresh - reload from backend (skip cache for fresh data)
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     haptic.trigger('light');
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Load new content...
+    // Reset pagination
+    setNextCursor(null);
+    setHasMore(true);
+    viewedReelsRef.current.clear();
+    
+    // Reload from backend, skip cache for fresh data
+    await loadReelsFromBackend(undefined, true);
 
     setIsRefreshing(false);
-  }, [haptic]);
+  }, [haptic, loadReelsFromBackend]);
 
-  // Update current index
+  // Update current index, record view, and preload next videos
+  // Requirements 19.2, 19.3: Preload next 2-3 reels while viewing for instant playback
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems.length > 0 && viewableItems[0].index !== null) {
-      setCurrentIndex(viewableItems[0].index);
+      const newIndex = viewableItems[0].index;
+      setCurrentIndex(newIndex);
+      
+      // Record view for the current reel
+      const currentReel = viewableItems[0].item as ReelData;
+      if (currentReel?.id) {
+        recordReelView(currentReel.id);
+      }
+      
+      // Preload next 2-3 videos for smooth scrolling (Requirements 19.2, 19.3)
+      // Use PreloadManager for centralized video preloading
+      if (reels.length > 0) {
+        preloadManager.preloadNextReelVideos(reels, newIndex);
+      }
     }
-  }, []);
+  }, [recordReelView, reels]);
 
   const viewabilityConfig = useMemo(() => ({
     itemVisiblePercentThreshold: 50
   }), []);
+
+  // Navigate to user profile
+  const handleUserPress = useCallback((username: string) => {
+    haptic.trigger('light');
+    router.push({
+      pathname: '/user/[username]',
+      params: { username }
+    });
+  }, [haptic]);
+
+  // Navigate to user profile from mention
+  const handleMentionPress = useCallback((username: string) => {
+    haptic.trigger('light');
+    router.push({
+      pathname: '/user/[username]',
+      params: { username: username.replace('@', '') }
+    });
+  }, [haptic]);
+
+  // Helper to update follow state across all states - Requirements 18.3, 18.4, 18.5
+  const updateFollowState = useCallback((username: string, isFollowing: boolean) => {
+    setReels(prev => prev.map(reel => 
+      reel.user.username === username 
+        ? { ...reel, user: { ...reel.user, isFollowing } }
+        : reel
+    ));
+    setBackendReels(prev => prev.map(reel => 
+      reel.user.username === username 
+        ? { ...reel, user: { ...reel.user, isFollowing } }
+        : reel
+    ));
+  }, []);
+
+  // Handle follow from reel - Ultra Fast with Rollback (Requirements 18.3, 18.5)
+  const handleFollow = useCallback(async (username: string) => {
+    haptic.trigger('medium');
+    
+    // Optimistic UI update - INSTANT (0ms) - Requirement 18.3
+    updateFollowState(username, true);
+    
+    // Sync with backend in background (fire and forget with rollback) - Requirement 18.5
+    try {
+      const token = await getToken();
+      if (token) {
+        await FollowService.followUser(token, username);
+      }
+    } catch (error) {
+      // ROLLBACK on failure
+      console.error('Error following user, rolling back:', error);
+      updateFollowState(username, false);
+    }
+  }, [haptic, getToken, updateFollowState]);
+
+  // Handle unfollow from reel - Ultra Fast with Rollback (Requirements 18.3, 18.5)
+  const handleUnfollow = useCallback(async (username: string) => {
+    haptic.trigger('medium');
+    
+    // Optimistic UI update - INSTANT (0ms) - Requirement 18.3
+    updateFollowState(username, false);
+    
+    // Sync with backend in background (fire and forget with rollback) - Requirement 18.5
+    try {
+      const token = await getToken();
+      if (token) {
+        await FollowService.unfollowUser(token, username);
+      }
+    } catch (error) {
+      // ROLLBACK on failure
+      console.error('Error unfollowing user, rolling back:', error);
+      updateFollowState(username, true);
+    }
+  }, [haptic, getToken, updateFollowState]);
+
+  // Get current user ID for follow button visibility - Requirement 18.1
+  const currentUserId = globalState.userProfile?.id;
 
   const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => (
     <ReelItem
@@ -1063,12 +1118,15 @@ const ReelsFeed: React.FC = () => {
       onReport={() => openReport(item.id)}
       onShare={() => handleShareReel(item)}
       onSave={() => handleSave(item.id)}
-      onUserPress={() => {/* TODO: Navigate to user profile */ }}
-      onHashtagPress={(tag) => {/* TODO: Handle hashtag press */ }}
-      onMentionPress={(username) => {/* TODO: Handle mention press */ }}
+      onUserPress={() => handleUserPress(item.user.username)}
+      onFollow={() => handleFollow(item.user.username)}
+      onUnfollow={() => handleUnfollow(item.user.username)}
+      onHashtagPress={handleHashtagPress}
+      onMentionPress={handleMentionPress}
       onVideoRef={handleVideoRef}
+      currentUserId={currentUserId}
     />
-  ), [currentIndex, handleLike, handleToggleMute, openComments, openReport, handleShareReel, handleSave, handleVideoRef]);
+  ), [currentIndex, handleLike, handleToggleMute, openComments, openReport, handleShareReel, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, currentUserId]);
 
   const getItemLayout = useCallback((_: any, index: number) => ({
     length: SCREEN_HEIGHT,
@@ -1084,27 +1142,83 @@ const ReelsFeed: React.FC = () => {
 
       {/* Header */}
 
+      {/* Hashtag Filter Bar */}
+      {selectedHashtag && (
+        <View style={styles.hashtagFilterBar}>
+          <Text style={styles.hashtagFilterText}>
+            #{selectedHashtag}
+          </Text>
+          <TouchableOpacity onPress={handleClearHashtag} style={styles.clearFilterButton}>
+            <X size={20} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Initial Loading */}
+      {isInitialLoading && (
+        <View style={styles.initialLoadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.initialLoadingText}>{t.reels.loadingVideos}</Text>
+        </View>
+      )}
+
+      {/* No Reels Message - Improved empty state with guidance (Requirement 3.2) */}
+      {!isInitialLoading && noReelsMessage && reels.length === 0 && (
+        <View style={styles.noReelsContainer}>
+          <View style={styles.noReelsIconContainer}>
+            <Eye size={64} color="rgba(255,255,255,0.3)" />
+          </View>
+          <Text style={styles.noReelsTitle}>{t.reels.noVideosTitle || 'لا توجد فيديوهات بعد'}</Text>
+          <Text style={styles.noReelsSubtitle}>{t.reels.noVideosSubtitle || 'تابع أشخاص جدد لمشاهدة فيديوهاتهم هنا'}</Text>
+          <TouchableOpacity 
+            style={styles.noReelsButton}
+            onPress={() => {
+              haptic.trigger('light');
+              router.push('/(tabs)/rankings');
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.noReelsButtonText}>{t.reels.noVideosCallToAction || 'اكتشف أشخاص'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Reels List */}
-      <FlatList
-        ref={flatListRef}
-        data={reels}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        getItemLayout={getItemLayout}
-        windowSize={3}
-        initialNumToRender={2}
-        maxToRenderPerBatch={2}
-        removeClippedSubviews={Platform.OS === 'android'}
-        onRefresh={handleRefresh}
-        refreshing={isRefreshing}
-      />
+      {!isInitialLoading && reels.length > 0 && (
+        <FlatList
+          ref={flatListRef}
+          data={filteredReels}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          getItemLayout={getItemLayout}
+          windowSize={3}
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          removeClippedSubviews={Platform.OS === 'android'}
+          onRefresh={handleRefresh}
+          refreshing={isRefreshing}
+          onEndReached={loadMoreReels}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.loadingMoreText}>{t.reels.loadingMore || 'جاري تحميل المزيد...'}</Text>
+              </View>
+            ) : !hasMore && reels.length > 0 ? (
+              <View style={styles.endOfListContainer}>
+                <Text style={styles.endOfListText}>{t.reels.endOfFeed || 'لقد شاهدت كل الفيديوهات 🎉'}</Text>
+              </View>
+            ) : null
+          }
+        />
+      )}
 
       {/* Swipe Hint */}
       {currentIndex === 0 && (
@@ -1119,6 +1233,9 @@ const ReelsFeed: React.FC = () => {
         visible={showComments}
         onClose={() => setShowComments(false)}
         reelId={selectedReelId}
+        comments={reelComments[selectedReelId] || []}
+        onAddComment={(comment) => handleAddComment(selectedReelId, comment)}
+        onToggleLike={(commentId) => handleToggleCommentLike(selectedReelId, commentId)}
       />
 
       {/* Report Modal */}
@@ -1147,6 +1264,84 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  // Loading & Empty States
+  initialLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  initialLoadingText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    marginTop: 16,
+  },
+  noReelsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 40,
+  },
+  noReelsIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  noReelsTitle: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  noReelsSubtitle: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  noReelsButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    backgroundColor: COLORS.primary,
+    borderRadius: 24,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  noReelsButtonText: {
+    color: COLORS.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingMoreContainer: {
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  loadingMoreText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+  },
+  endOfListContainer: {
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  endOfListText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
   },
   header: {
     position: 'absolute',
@@ -1247,6 +1442,36 @@ const styles = StyleSheet.create({
   retryText: {
     color: COLORS.background,
     fontWeight: '600',
+  },
+  // Replay overlay styles (Requirement 17.2)
+  replayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  replayButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  replayText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   doubleTapHeart: {
     position: 'absolute',
@@ -1711,6 +1936,29 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  hashtagFilterBar: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 99,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.glassBorder,
+  },
+  hashtagFilterText: {
+    color: COLORS.primary,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  clearFilterButton: {
+    padding: 8,
   },
 });
 

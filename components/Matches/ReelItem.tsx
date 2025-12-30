@@ -20,10 +20,11 @@ import {
   CheckCircle 
 } from 'lucide-react-native';
 
-import { VideoPlayer } from './VideoPlayer';
+import { UnifiedVideoPlayer } from '../common/UnifiedVideoPlayer';
 import { ActionButton } from './ActionButton';
 import { DoubleTapLikeAnimation } from './DoubleTapAnimation';
 import { useHaptics } from '../Home/useHaptics';
+import { globalState } from '../../globalState';
 
 // Types
 interface User {
@@ -64,6 +65,8 @@ interface ReelItemProps {
   onShare: () => void;
   onSave: () => void;
   onVideoRef: (ref: any, id: string) => void;
+  /** Current user's ID - used to hide follow button on own reels */
+  currentUserId?: string;
 }
 
 // Constants
@@ -88,7 +91,8 @@ const formatCount = (count: number): string => {
 // Main Reel Item Component
 export const ReelItem: React.FC<ReelItemProps> = ({ 
   reel, 
-  isActive, 
+  isActive,
+  currentUserId, 
   onLike, 
   onToggleMute, 
   onComment, 
@@ -131,8 +135,14 @@ export const ReelItem: React.FC<ReelItemProps> = ({
         onPress={handleDoubleTap}
         style={styles.videoWrapper}
       >
-        <VideoPlayer 
-          reel={reel} 
+        <UnifiedVideoPlayer 
+          reel={{
+            id: reel.id,
+            videoUrl: reel.videoUrl,
+            thumbnail: reel.thumbnail,
+            duration: reel.duration,
+            muted: reel.muted,
+          }}
           isActive={isActive}
           onVideoRef={onVideoRef}
         />
@@ -178,7 +188,13 @@ export const ReelItem: React.FC<ReelItemProps> = ({
           </View>
         </TouchableOpacity>
         
-        {!reel.user.isFollowing && (
+        {(() => {
+          // Type-safe comparison: ensure own videos NEVER show follow button
+          const userId = currentUserId || globalState.userProfile?.id;
+          const isOwnReel = userId && reel.user.id && 
+            String(userId) === String(reel.user.id);
+          return !isOwnReel && !reel.user.isFollowing;
+        })() && (
           <TouchableOpacity style={styles.followButton}>
             <Text style={styles.followButtonText}>متابعة</Text>
           </TouchableOpacity>

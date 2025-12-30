@@ -19,7 +19,9 @@ import {
   Star,
   Award,
   CheckCircle,
-  XCircle
+  XCircle,
+  Users,
+  Pin
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -214,6 +216,31 @@ const MatchCard: React.FC<MatchCardProps> = ({
         }
       ]}
     >
+      {/* Pinned Prediction Indicator - Far Right */}
+      {userPrediction && (
+        <View style={styles.pinnedPrediction}>
+          {/* Visual generic pin or customized indicator */}
+          {/* Showing what they predicted: Home Logo, Away Logo, or 'X' for Draw */}
+          <View style={[
+            styles.pinnedContent,
+            userPrediction.prediction.type === 'home' ? { borderColor: '#3b82f6' } :
+              userPrediction.prediction.type === 'away' ? { borderColor: '#ef4444' } :
+                { borderColor: '#fbbf24' }
+          ]}>
+            {userPrediction.prediction.type === 'home' ? (
+              <Image source={{ uri: match.homeLogo }} style={styles.pinnedLogo} />
+            ) : userPrediction.prediction.type === 'away' ? (
+              <Image source={{ uri: match.awayLogo }} style={styles.pinnedLogo} />
+            ) : (
+              <Text style={[styles.pinnedDrawText, { color: '#fbbf24' }]}>X</Text>
+            )}
+            <View style={styles.pinIconBadge}>
+              <Pin size={10} color="#fff" fill="#fff" />
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.leagueInfo}>
@@ -298,6 +325,11 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   )}
                 </View>
               )}
+              {/* Prediction Count Placeholder */}
+              <View style={styles.predictionStats}>
+                <Users size={12} color="#666" />
+                <Text style={styles.predictionCountText}>12.5k {t.leagues.predictions || 'Predictions'}</Text>
+              </View>
             </View>
           ) : (
             <View style={styles.timeContainer}>
@@ -443,7 +475,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
           </BlurView>
         </View>
       </Modal>
-    </Animated.View>
+    </Animated.View >
   );
 
   if (onPress) {
@@ -611,7 +643,7 @@ const styles = StyleSheet.create({
   predictButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#22c55e',
+    backgroundColor: '#3b82f6', // Changed to match prediction counter blue
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -790,6 +822,63 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  pinnedPrediction: {
+    position: 'absolute',
+    top: -8,
+    right: 10,
+    zIndex: 10,
+  },
+  pinnedContent: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  pinnedLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  pinnedDrawText: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  pinIconBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: '#3b82f6',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#1a1a1a',
+  },
+  predictionStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  predictionCountText: {
+    color: '#666',
+    fontSize: 10,
+    fontWeight: '500',
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -12,6 +12,7 @@ import {
     Alert,
     ActivityIndicator,
     Modal,
+    Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,7 +50,62 @@ WebBrowser.maybeCompleteAuthSession();
 const clearPreviousUserData = async () => {
     console.log('🧹 Clearing previous user data...');
     // Clear globalState
-    globalState.logout();
+    await globalState.logout();
+    
+    // Clear CoinsService user context
+    try {
+        const { CoinsService } = await import('../../services/coins.service');
+        CoinsService.clearCurrentUser();
+        console.log('✅ CoinsService cleared');
+    } catch (error) {
+        console.warn('⚠️ Failed to clear CoinsService:', error);
+    }
+    
+    // Clear AuthService memory cache
+    try {
+        const { AuthService } = await import('../../src/services/authService');
+        AuthService.clearMemoryCache();
+        console.log('✅ AuthService cache cleared');
+    } catch (error) {
+        console.warn('⚠️ Failed to clear AuthService cache:', error);
+    }
+    
+    // Clear RankingsService memory cache
+    try {
+        const { rankingsService } = await import('../../services/rankingsService');
+        rankingsService.clearMemoryCache();
+        console.log('✅ RankingsService cache cleared');
+    } catch (error) {
+        console.warn('⚠️ Failed to clear RankingsService cache:', error);
+    }
+    
+    // Clear home.store user data
+    try {
+        const { useHomeStore } = await import('../../src/store/home.store');
+        useHomeStore.getState().clearUserData();
+        console.log('✅ Home store cleared');
+    } catch (error) {
+        console.warn('⚠️ Failed to clear home store:', error);
+    }
+    
+    // Disconnect WebSocket
+    try {
+        const { websocketClient } = await import('../../services/websocketClient');
+        websocketClient.disconnect();
+        console.log('✅ WebSocket disconnected');
+    } catch (error) {
+        console.warn('⚠️ Failed to disconnect WebSocket:', error);
+    }
+    
+    // Clear all cache (including profile, reels, notifications, etc.)
+    try {
+        const { cacheService } = await import('../../services/cacheService');
+        await cacheService.clearAll();
+        console.log('✅ Cache service cleared');
+    } catch (error) {
+        console.warn('⚠️ Failed to clear cache service:', error);
+    }
+    
     // Clear username setup flag
     await AsyncStorage.removeItem('@username_setup_complete');
     // Clear any cached user data
@@ -71,8 +127,74 @@ export default function AuthScreen() {
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
 
+    // Logo animation values
+    const logoScale = useRef(new Animated.Value(1)).current;
+    const logoOpacity = useRef(new Animated.Value(1)).current;
+    const glowOpacity = useRef(new Animated.Value(0.3)).current;
+
     const { signIn, setActive: setActiveSignIn } = useSignIn();
     const { signUp, setActive: setActiveSignUp } = useSignUp();
+
+    // Logo animation effect
+    useEffect(() => {
+        // Pulse animation (scale)
+        const pulseAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(logoScale, {
+                    toValue: 1.05,
+                    duration: 1500,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(logoScale, {
+                    toValue: 1,
+                    duration: 1500,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        // Glow animation (opacity)
+        const glowAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(glowOpacity, {
+                    toValue: 0.6,
+                    duration: 2000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(glowOpacity, {
+                    toValue: 0.3,
+                    duration: 2000,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        // Fade animation for logo
+        const fadeAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(logoOpacity, {
+                    toValue: 0.9,
+                    duration: 2000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(logoOpacity, {
+                    toValue: 1,
+                    duration: 2000,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+
+        pulseAnimation.start();
+        glowAnimation.start();
+        fadeAnimation.start();
+
+        return () => {
+            pulseAnimation.stop();
+            glowAnimation.stop();
+            fadeAnimation.stop();
+        };
+    }, []);
 
     /**
      * Translate Clerk error messages to Arabic
@@ -283,7 +405,7 @@ export default function AuthScreen() {
                     const syncResult = await syncUserWithBackend();
 
                     // ✅ Start background preloading immediately after login
-                    if (syncResult.user) {
+                    if (syncResult.success) {
                         try {
                             const { preloadManager } = await import('../../services/preloadManager');
                             const { getToken } = useAuth();
@@ -395,7 +517,7 @@ export default function AuthScreen() {
                 const syncResult = await syncUserWithBackend();
 
                 // ✅ Start background preloading for new users too
-                if (syncResult.user) {
+                if (syncResult.success) {
                     try {
                         const { preloadManager } = await import('../../services/preloadManager');
                         const { getToken } = useAuth();
@@ -621,43 +743,43 @@ export default function AuthScreen() {
             {/* Dynamic Background */}
             <Animated.View style={[StyleSheet.absoluteFill, { opacity: 0.6 }]}>
                 <LinearGradient
-                    colors={[COLORS.deepBlack, '#0a1f0a', COLORS.deepBlack]}
+                    colors={['#0A0514', '#0F0719', '#0A0514']}
                     style={StyleSheet.absoluteFill}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                 />
 
                 {/* Animated Orbs */}
-                <Animated.View
-                    style={[
-                        styles.orb,
-                        {
-                            top: -100,
-                            left: -50,
-                            backgroundColor: COLORS.neonGreen,
-                            transform: [
-                                { scale: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] }) },
-                                { translateX: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }
-                            ]
-                        }
-                    ]}
-                />
-                <Animated.View
-                    style={[
-                        styles.orb,
-                        {
-                            bottom: -100,
-                            right: -50,
-                            backgroundColor: COLORS.electricGreen,
-                            width: 300,
-                            height: 300,
-                            transform: [
-                                { scale: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [1.2, 1] }) },
-                                { translateY: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -40] }) }
-                            ]
-                        }
-                    ]}
-                />
+                        <Animated.View
+                        style={[
+                            styles.orb,
+                            {
+                                top: -100,
+                                left: -50,
+                                backgroundColor: '#FFD700',
+                                transform: [
+                                    { scale: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] }) },
+                                    { translateX: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }
+                                ]
+                            }
+                        ]}
+                    />
+                    <Animated.View
+                        style={[
+                            styles.orb,
+                            {
+                                bottom: -100,
+                                right: -50,
+                                backgroundColor: '#FFA500',
+                                width: 300,
+                                height: 300,
+                                transform: [
+                                    { scale: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [1.2, 1] }) },
+                                    { translateY: bgAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -40] }) }
+                                ]
+                            }
+                        ]}
+                    />
             </Animated.View>
 
             <KeyboardAvoidingView
@@ -672,8 +794,29 @@ export default function AuthScreen() {
                     {/* Header */}
                     <View style={styles.header}>
                         <View style={styles.logoContainer}>
-                            <Trophy size={48} color={COLORS.neonGreen} />
-                            <View style={styles.logoGlow} />
+                            <Animated.View
+                                style={[
+                                    styles.logoImageContainer,
+                                    {
+                                        transform: [{ scale: logoScale }],
+                                        opacity: logoOpacity,
+                                    },
+                                ]}
+                            >
+                                <Image 
+                                    source={require('../../assets/images/90Plus.png')} 
+                                    style={styles.logoImage}
+                                    resizeMode="contain"
+                                />
+                            </Animated.View>
+                            <Animated.View 
+                                style={[
+                                    styles.logoGlow,
+                                    {
+                                        opacity: glowOpacity,
+                                    },
+                                ]} 
+                            />
                         </View>
                         <Text style={styles.appName}>90Plus</Text>
                         <Text style={styles.tagline}>
@@ -774,23 +917,18 @@ export default function AuthScreen() {
                                 onPressOut={handlePressOut}
                                 disabled={isLoading}
                             >
-                                <LinearGradient
-                                    colors={GRADIENTS.greenGlow}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                    style={styles.gradientButton}
-                                >
+                                <View style={styles.gradientButton}>
                                     {isLoading ? (
-                                        <ActivityIndicator color={COLORS.deepBlack} />
+                                        <ActivityIndicator color="#0A0514" />
                                     ) : (
                                         <>
                                             <Text style={styles.submitText}>
                                                 {isLogin ? 'دخول' : 'تسجيل'}
                                             </Text>
-                                            <ArrowRight color={COLORS.deepBlack} size={20} />
+                                            <ArrowRight color="#0A0514" size={20} />
                                         </>
                                     )}
-                                </LinearGradient>
+                                </View>
                             </TouchableOpacity>
                         </Animated.View>
 
@@ -831,7 +969,7 @@ export default function AuthScreen() {
 
                         {/* Guest Button */}
                         <TouchableOpacity style={styles.guestButton} onPress={handleGuest}>
-                            <Gamepad2 color={COLORS.neonGreen} size={20} style={{ marginRight: 8 }} />
+                            <Gamepad2 color="#FFD700" size={20} style={{ marginRight: 8 }} />
                             <Text style={styles.guestText}>متابعة كضيف</Text>
                         </TouchableOpacity>
                     </Animated.View>
@@ -854,7 +992,7 @@ export default function AuthScreen() {
                             <X color={COLORS.white} size={24} />
                         </TouchableOpacity>
 
-                        <KeyRound color={COLORS.neonGreen} size={48} style={{ marginBottom: 16 }} />
+                        <KeyRound color="#FFD700" size={48} style={{ marginBottom: 16 }} />
                         <Text style={styles.modalTitle}>تحقق من بريدك الإلكتروني</Text>
                         <Text style={styles.modalSubtitle}>
                             تم إرسال رمز مكون من 6 أرقام إلى{'\n'}{email}
@@ -877,18 +1015,13 @@ export default function AuthScreen() {
                             onPress={handleVerifyEmail}
                             disabled={isVerifying}
                         >
-                            <LinearGradient
-                                colors={GRADIENTS.greenGlow}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.gradientButton}
-                            >
+                            <View style={styles.gradientButton}>
                                 {isVerifying ? (
-                                    <ActivityIndicator color={COLORS.deepBlack} />
+                                    <ActivityIndicator color="#0A0514" />
                                 ) : (
                                     <Text style={styles.submitText}>تأكيد</Text>
                                 )}
-                            </LinearGradient>
+                            </View>
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={handleResendCode}>
@@ -904,7 +1037,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.deepBlack,
+        backgroundColor: '#0D0627',
     },
     orb: {
         position: 'absolute',
@@ -927,24 +1060,37 @@ const styles = StyleSheet.create({
         marginBottom: 24,
     },
     logoContainer: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-        backgroundColor: 'rgba(50, 205, 50, 0.1)',
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(74, 20, 140, 0.2)',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
-        borderWidth: 1,
-        borderColor: COLORS.neonGreen,
+        borderWidth: 2,
+        borderColor: '#4A148C',
         ...EFFECTS.greenGlow,
+    },
+    logoImageContainer: {
+        width: 80,
+        height: 80,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 40,
+        overflow: 'hidden',
+    },
+    logoImage: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
     },
     logoGlow: {
         position: 'absolute',
         width: '100%',
         height: '100%',
-        borderRadius: 35,
-        backgroundColor: COLORS.neonGreen,
-        opacity: 0.2,
+        borderRadius: 50,
+        backgroundColor: '#4A148C',
+        opacity: 0.3,
         zIndex: -1,
     },
     appName: {
@@ -959,10 +1105,12 @@ const styles = StyleSheet.create({
     },
     modeSwitcher: {
         flexDirection: 'row',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
         borderRadius: 16,
         padding: 4,
         marginBottom: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 215, 0, 0.2)',
     },
     modeButton: {
         flex: 1,
@@ -971,15 +1119,16 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
     modeButtonActive: {
-        backgroundColor: COLORS.neonGreen,
+        backgroundColor: '#FFD700',
     },
     modeText: {
-        color: COLORS.textSecondary,
+        color: 'rgba(255, 255, 255, 0.6)',
         fontSize: 14,
         fontWeight: '600',
     },
     modeTextActive: {
-        color: COLORS.deepBlack,
+        color: '#0A0514',
+        fontWeight: 'bold',
     },
     formContainer: {
         gap: 12,
@@ -987,12 +1136,12 @@ const styles = StyleSheet.create({
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255, 215, 0, 0.08)',
         borderRadius: 16,
         paddingHorizontal: 16,
         height: 54,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(255, 215, 0, 0.2)',
     },
     inputIcon: {
         marginRight: 12,
@@ -1010,6 +1159,8 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         overflow: 'hidden',
         marginTop: 8,
+        borderWidth: 1,
+        borderColor: '#FFD700',
     },
     gradientButton: {
         flexDirection: 'row',
@@ -1017,9 +1168,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 14,
         gap: 8,
+        backgroundColor: '#FFD700',
     },
     submitText: {
-        color: COLORS.deepBlack,
+        color: '#0A0514',
         fontSize: 16,
         fontWeight: 'bold',
     },
@@ -1030,11 +1182,11 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: COLORS.neonGreen,
-        backgroundColor: 'rgba(50, 205, 50, 0.05)',
+        borderColor: '#FFD700',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
     },
     guestText: {
-        color: COLORS.neonGreen,
+        color: '#FFD700',
         fontSize: 14,
         fontWeight: '600',
     },
@@ -1043,7 +1195,7 @@ const styles = StyleSheet.create({
         marginTop: -8,
     },
     forgotPasswordText: {
-        color: COLORS.neonGreen,
+        color: '#FFD700',
         fontSize: 14,
         fontWeight: '600',
     },
@@ -1055,7 +1207,7 @@ const styles = StyleSheet.create({
     dividerLine: {
         flex: 1,
         height: 1,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(255, 215, 0, 0.2)',
     },
     dividerText: {
         color: COLORS.textTertiary,
@@ -1088,16 +1240,16 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     modalContent: {
-        backgroundColor: '#0d1f0d',
+        backgroundColor: '#0D0627',
         borderRadius: 28,
         padding: 28,
         width: '100%',
         alignItems: 'center',
         borderWidth: 2,
-        borderColor: COLORS.neonGreen,
-        shadowColor: COLORS.neonGreen,
+        borderColor: '#FFD700',
+        shadowColor: '#FFD700',
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.4,
         shadowRadius: 20,
         elevation: 10,
     },
@@ -1108,9 +1260,11 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 215, 0, 0.3)',
     },
     modalTitle: {
         fontSize: 24,
@@ -1149,7 +1303,7 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     resendText: {
-        color: COLORS.neonGreen,
+        color: '#FFD700',
         fontSize: 15,
         fontWeight: '600',
         marginTop: 16,

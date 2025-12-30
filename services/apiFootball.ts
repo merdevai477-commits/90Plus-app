@@ -77,6 +77,27 @@ class ApiFootballError extends Error {
   }
 }
 
+/**
+ * Helper function to check if an error is rate-limit related
+ * This allows consistent detection of rate limit errors across the codebase
+ */
+export const isRateLimitError = (error: unknown): boolean => {
+  if (error instanceof ApiFootballError) {
+    return error.statusCode === 429;
+  }
+  if (error instanceof Error) {
+    // Check for rate limit indicators in error message
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('rate limit') ||
+      message.includes('rate_limit') ||
+      message.includes('429') ||
+      message.includes('تم تجاوز الحد الأقصى')
+    );
+  }
+  return false;
+};
+
 const withTimeout = async <T>(promise: Promise<T>, timeout = DEFAULT_TIMEOUT): Promise<T> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -406,12 +427,14 @@ const fetchFromProxy = async <T>(
 
   // Check if we should skip this request due to recent rate limit
   if (shouldSkipDueToRateLimit(endpoint)) {
-    const cached = rateLimitCache.get(endpoint);
-    const remainingTime = cached ? Math.ceil((cached.retryAfter - (Date.now() - cached.timestamp)) / 1000) : 0;
-    throw new ApiFootballError(
-      `تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة مرة أخرى بعد ${remainingTime} ثانية.`,
-      429
-    );
+    // Return empty array instead of throwing error - rate limits are expected
+    if (__DEV__) {
+      const cached = rateLimitCache.get(endpoint);
+      const remainingTime = cached ? Math.ceil((cached.retryAfter - (Date.now() - cached.timestamp)) / 1000) : 0;
+      logger.debug(`⏸️ Rate limit active for ${endpoint}, will retry after ${remainingTime}s`);
+    }
+    // Return empty array/object matching expected type
+    return [] as T;
   }
 
   let lastError: Error | null = null;
@@ -483,7 +506,22 @@ const fetchFromProxy = async <T>(
       const data: ProxyResponse<T> = await response.json();
 
       if (data.status === 'ERROR') {
-        throw new ApiFootballError(data.message || 'API returned errors');
+        const errorMessage = data.message || 'API returned errors';
+        // Check if error message indicates rate limit
+        if (errorMessage.toLowerCase().includes('rate limit') || 
+            errorMessage.toLowerCase().includes('rate_limit') ||
+            errorMessage.toLowerCase().includes('429') ||
+            errorMessage.toLowerCase().includes('تم تجاوز الحد الأقصى')) {
+          // Cache this rate limit error
+          const retryDelay = 60 * 1000; // Default 1 minute
+          cacheRateLimitError(endpoint, retryDelay);
+          // Return empty array instead of throwing
+          if (__DEV__) {
+            logger.debug('⏸️ Rate limit error from backend, returning empty result');
+          }
+          return [] as T;
+        }
+        throw new ApiFootballError(errorMessage);
       }
 
       if (__DEV__) {
@@ -494,6 +532,27 @@ const fetchFromProxy = async <T>(
     } catch (error) {
       lastError = error as Error;
       
+      // Handle rate limit errors - return empty array instead of throwing
+      if (isRateLimitError(error)) {
+        if (attempt === retries) {
+          // All retries exhausted - return empty array gracefully
+          if (__DEV__) {
+            logger.debug('⏸️ Rate limit encountered, returning empty result');
+          }
+          // Try to return cached data if available, otherwise empty array
+          try {
+            const cached = await footballCacheService.getMatches().catch(() => null);
+            if (cached && Array.isArray(cached) && cached.length > 0) {
+              return cached as T;
+            }
+          } catch (e) {
+            // Ignore cache errors
+          }
+          return [] as T;
+        }
+        // Continue to retry logic below for rate limit errors
+      }
+      
       // Don't retry on non-timeout/rate-limit errors (like 4xx responses except 429)
       if (error instanceof ApiFootballError && error.statusCode && error.statusCode < 500 && error.statusCode !== 429) {
         throw error;
@@ -501,10 +560,22 @@ const fetchFromProxy = async <T>(
       
       // Only retry on timeout, network errors, or rate limit errors (429)
       if (attempt === retries) {
-        logger.error('❌ Football API Proxy Error (all retries failed):', error);
+        // Only log actual errors (not rate limits) as errors
+        if (!isRateLimitError(error)) {
+          logger.error('❌ Football API Proxy Error (all retries failed):', error);
+        }
+        // For rate limit errors, return empty array instead of throwing
+        if (isRateLimitError(error)) {
+          return [] as T;
+        }
         throw error;
       }
     }
+  }
+  
+  // This should not be reached, but if it is, check if lastError is rate limit related
+  if (lastError && isRateLimitError(lastError)) {
+    return [] as T;
   }
   
   throw lastError || new ApiFootballError('Unknown error occurred');

@@ -15,17 +15,22 @@ export const en = {
     done: 'Done',
     close: 'Close',
     unknown: 'Unknown',
-  },
-
-  coins: {
-    balance: 'Balance',
-    earned: 'Earned',
-    spent: 'Spent',
-    notEnough: 'Not enough coins',
-    earnMore: 'Earn more coins by:',
-    correctPrediction: 'Correct prediction: +5 coins',
-    correctQuizAnswer: 'Correct quiz answer: +5 coins',
-    dailyBonus: 'Daily login: +10 coins',
+    unavailable: 'Unavailable',
+    // New common keys
+    fillAllFields: 'Please fill all fields',
+    enterName: 'Please enter your name',
+    loginServiceUnavailable: 'Login service unavailable',
+    signupServiceUnavailable: 'Signup service unavailable',
+    operationFailed: 'Operation failed',
+    loginError: 'Login Error',
+    checkRedirectUrls: 'Login failed. Please check Redirect URLs in Clerk Dashboard.',
+    verifyEmail: 'Please verify your email',
+    alert: 'Alert',
+    warning: 'Warning',
+    success: 'Success',
+    loggingIn: 'Logging in...',
+    signingUp: 'Signing up...',
+    errorOccurred: 'An error occurred',
   },
 
   leagues: {
@@ -66,11 +71,41 @@ export const en = {
     filterUpcoming: 'Upcoming',
     filterTop5: 'Top Leagues',
 
+    // Filter Modal
+    filterTitle: 'Filter Leagues',
+    filterSave: 'Save',
+    filterClearAll: 'Clear All',
+    filterMajorLeagues: 'Major Leagues',
+    filterSearchPlaceholder: 'Search for a league...',
+    filterSelectedCount: '{count} leagues selected',
+    filterNoSelection: 'No leagues selected (all matches will be shown)',
+
     // Empty States
     emptyTitle: 'No Matches',
     emptySubtitle: 'No matches available at the moment',
     emptySearch: 'No matches found matching your search',
     emptyPredictions: 'No upcoming matches available for prediction today',
+    allLeagues: 'All Leagues',
+    searchLeagues: 'Search leagues...',
+  },
+
+  search: {
+    all: 'All',
+    players: 'Players',
+    teams: 'Teams',
+    leagues: 'Leagues',
+    matches: 'Matches',
+    noResults: 'No results found',
+    searching: 'Searching...',
+    recentPlayers: 'Recently Viewed Players',
+    placeholder: 'Search for players, teams or leagues...',
+    searchForTeam: 'Search for a team to see their matches',
+  },
+  teamProfile: {
+    stadium: 'Stadium',
+    capacity: 'capacity',
+    squadList: 'Squad List',
+    noSquadData: 'No squad data available',
   },
 
   filters: {
@@ -174,6 +209,8 @@ export const en = {
     redCards: 'Red Cards',
     offsides: 'Offsides',
     corners: 'Corners',
+    standings: 'Standings',
+    team: 'Team',
   },
 
   predictions: {
@@ -227,6 +264,106 @@ export const en = {
     gamePaused: 'Game Paused',
     pressToResume: 'Press to Resume',
     continue: 'Continue',
+    consecutiveAnswers: 'consecutive answers!',
+  },
+
+  // Lucky Wheel
+  luckyWheel: {
+    title: 'Daily Lucky Wheel',
+    spinning: 'Spinning...',
+    spin: 'SPIN',
+    youWon: 'You Won!',
+    coins: 'Coins',
+    congratulations: 'Congratulations!',
+    tryAgainTomorrow: 'Try again tomorrow',
+    availableIn: 'Available in',
+    hours: 'hours',
+    minutes: 'minutes',
+  },
+
+  // Notifications Screen
+  notifications: {
+    title: 'Notifications',
+    loading: 'Loading notifications...',
+    clearAll: 'Clear All',
+    noNotifications: 'No notifications yet',
+    noNotificationsSubtitle: 'Follow, like, and comment notifications will appear here',
+    luckyWheelReady: '🎡 Lucky Wheel Ready!',
+    tapToWin: 'Tap here to win free coins',
+    wheelAvailableIn: 'Lucky wheel available in',
+    newNotification: 'new',
+    now: 'Now',
+    minutesAgo: '{n} minutes ago',
+    hoursAgo: '{n} hours ago',
+    daysAgo: '{n} days ago',
+  },
+
+  // Security Settings
+  security: {
+    title: 'Advanced Security',
+    pinCode: 'PIN Code',
+    pinEnabled: 'Enabled',
+    pinDisabled: 'Disabled',
+    biometric: 'Fingerprint / Face ID',
+    biometricEnabled: 'Enabled',
+    biometricDisabled: 'Disabled',
+    autoLock: 'Auto Lock',
+    afterMinutes: 'After {n} minutes',
+    setupPin: 'Setup PIN',
+    newPin: 'New PIN',
+    confirmPin: 'Confirm PIN',
+    enterDigits: 'Enter 4 digits',
+    pinMismatch: 'PIN codes do not match',
+    pinTooShort: 'PIN must be at least 4 digits',
+    biometricUnavailable: 'Fingerprint or Face ID not available on this device',
+    confirmIdentity: 'Confirm Identity',
+    usePasscode: 'Use Passcode',
+    immediate: 'Immediate',
+    oneMinute: '1 minute',
+    fiveMinutes: '5 minutes',
+    fifteenMinutes: '15 minutes',
+    never: 'Never',
+  },
+
+  // Username Setup
+  usernameSetup: {
+    title: 'Choose Username',
+    subtitle: 'Pick a unique username for your profile',
+    placeholder: 'Enter username',
+    requirements: 'Letters, numbers, and underscores only',
+    minLength: 'Username must be at least 3 characters',
+    maxLength: 'Username must be less than 20 characters',
+    invalidChars: 'Username can only contain letters, numbers, and underscores',
+    taken: 'Username might be taken. Try another one.',
+    authFailed: 'Authentication failed',
+    setFailed: 'Failed to set username. Please try again.',
+    skip: 'Skip',
+    continue: 'Continue',
+  },
+
+  // About Us
+  aboutUs: {
+    title: 'About Us',
+    description: 'User profile will be displayed here',
+  },
+
+  // Not Found
+  notFound: {
+    title: 'Oops!',
+    description: "This screen doesn't exist.",
+    goHome: 'Go to home screen',
+  },
+
+  // Push Notifications Content
+  pushNotifications: {
+    matchStarting: '⚽ Match is about to start!',
+    matchStartingBody: '{home} vs {away} - in {minutes} minutes',
+    goal: '⚽ Goal!',
+    goalBody: '{player} scores for {team} in minute {minute}',
+    predictionCorrect: '🎉 Correct Prediction!',
+    predictionCorrectBody: 'You won {points} points in {match}',
+    predictionWrong: '😔 Wrong Prediction',
+    predictionWrongBody: 'Unfortunately, your prediction in {match} was incorrect',
   },
 
   home: {
@@ -246,6 +383,42 @@ export const en = {
     days: 'Days',
     streak: 'Daily Streak',
     nextLevel: 'Next Level',
+    // New keys for Home screen components
+    nextGenFantasy: 'NEXT GEN FANTASY',
+    unlock: 'UNLOCK',
+    potential: 'POTENTIAL',
+    tagline: 'Compete. Predict. Rise.',
+    getStarted: 'GET STARTED',
+    signIn: 'SIGN IN',
+    importantMatches: 'Important Matches',
+    trendingReels: 'Trending Reels',
+    playerOfWeek: 'Player of the Week',
+    teamOfMonth: 'Team of the Month',
+    // WelcomeSection slides
+    hello: 'Hello',
+    consecutiveDays: 'consecutive days - keep going!',
+    newChallenges: 'Your day is full of new challenges',
+    profile: 'Profile',
+    luckyWheel: 'Lucky Wheel',
+    wheelLocked: 'Wheel Locked',
+    spinAndWin: 'Spin and win daily prizes!',
+    availableAfter: 'Available after',
+    tryYourLuck: 'Try Your Luck',
+    predictions: 'Predictions',
+    matchesAvailable: 'matches available to predict',
+    predictResults: 'Predict match results',
+    predictNow: 'Predict Now',
+    knowledgeChallenge: 'Knowledge Challenge',
+    testKnowledge: 'Test your football knowledge',
+    startQuiz: 'Start Quiz',
+    rankPosition: 'Rank',
+    ranking: 'Ranking',
+    competeWithBest: 'Compete with the best players',
+    seeYourRank: 'See Your Rank',
+    joinCompetition: 'Join the Competition!',
+    registerAndStart: 'Register now and start your football journey',
+    startNow: 'Start Now',
+    day: 'day',
   },
 
   rank: {
@@ -264,6 +437,13 @@ export const en = {
     predictions: 'Predictions',
     following: 'Following',
     follow: 'Follow',
+    // Empty state messages
+    firstPlace: '1st Place',
+    secondPlace: '2nd Place',
+    thirdPlace: '3rd Place',
+    waitingForYou: 'Waiting for you!',
+    beTheBest: 'Be the best',
+    competeNow: 'Compete now',
   },
 
   profile: {
@@ -299,6 +479,8 @@ export const en = {
     message: 'Message',
     block: 'Block',
     report: 'Report',
+    uploadVideo: 'Upload Video',
+    createContent: 'Create content',
 
     // Social
     followersCount: 'Followers',
@@ -319,6 +501,57 @@ export const en = {
     profileUpdated: 'Profile updated',
     profileShared: 'Profile shared',
     errorLoading: 'Failed to load data',
+
+    // Analytics
+    videoAnalytics: 'Video Analytics',
+    views: 'Views',
+    likes: 'Likes',
+    comments: 'Comments',
+    newFollowers: 'New Followers (7 days)',
+    performanceSummary: 'Performance Summary',
+    totalVideos: 'Total Videos',
+    profileVisits: 'Profile Visits',
+    avgEngagement: 'Average Engagement',
+    predictionStats: 'Prediction Statistics',
+    correctPredictions: 'Correct Predictions',
+    wrongPredictions: 'Wrong Predictions',
+    pendingPredictions: 'Pending',
+    successRate: 'Success Rate',
+    coinsEarned: 'Coins Earned from Predictions',
+    achievementsTitle: 'Achievements',
+    firstPrediction: 'First Prediction',
+    tenPredictions: '10 Predictions',
+    firstCorrect: 'First Correct',
+    fiveCorrect: '5 Correct',
+    fiftyAccuracy: '50% Accuracy',
+    professional: 'Professional',
+    coinsStats: 'Coins Statistics',
+    coinsFromPredictions: 'Coins earned from correct predictions',
+    coinsSpent: 'Coins spent on predictions',
+    netProfit: 'Net Profit/Loss',
+    predictionCost: 'Prediction = 5 coins • Win = +10 coins',
+    chooseClub: 'Choose your club',
+
+    // QR Code Modal
+    qrCode: 'QR Code',
+    scanToFollow: 'Scan to follow this profile',
+    checkMyProfile: 'Check out my profile on 90Plus!',
+
+    // Social Links
+    addSocialLinks: 'Add your social media links',
+
+    // Block & Report
+    blockUser: 'Block User',
+    blockConfirm: 'Are you sure you want to block',
+    blockDesc: 'They won\'t be able to see your profile or contact you',
+    userBlocked: 'User has been blocked',
+    reportUser: 'Report User',
+    reportDesc: 'Report inappropriate behavior or content',
+    reportWarning: 'False reports may result in action against your account',
+    selectReason: 'Select a reason',
+    additionalInfo: 'Additional details (optional)',
+    sendReport: 'Send Report',
+    reportSent: 'Report sent successfully. We will review it soon.',
   },
 
   settings: {
@@ -368,6 +601,68 @@ export const en = {
     copyright: '© 2024 Football Predictions. All rights reserved.',
     comingSoon: 'Coming Soon',
     featureInDevelopment: 'This feature is under development',
+
+    // Appearance
+    appearance: 'Appearance',
+    theme: 'Theme',
+    amoled: 'AMOLED Dark',
+    dark: 'Dark',
+    light: 'Light',
+    soundEffects: 'Sound Effects',
+    soundEffectsDesc: 'Play sounds in app',
+    hapticFeedback: 'Haptic Feedback',
+    hapticFeedbackDesc: 'Enable haptic feedback on interaction',
+    biometricUnlock: 'Biometric Unlock',
+    biometricUnlockDesc: 'Use biometrics to login',
+
+    // Permissions
+    permissions: 'Permissions',
+    managePermissions: 'Manage Permissions',
+    managePermissionsDesc: 'Control app permissions',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+
+    // Data
+    autoRefresh: 'Auto Refresh',
+    autoRefreshDesc: 'Automatically refresh data',
+    exportData: 'Export Data',
+    exportDataDesc: 'Export all your data',
+
+    // Help
+    helpSupport: 'Help & Support',
+    helpCenter: 'Help Center',
+    helpCenterDesc: 'FAQ and user guide',
+    reportBug: 'Report a Bug',
+    reportBugDesc: 'Tell us about technical issues',
+    featureRequest: 'Feature Request',
+    featureRequestDesc: 'Share your ideas to improve the app',
+
+    // Advanced
+    advanced: 'Advanced',
+    resetSettings: 'Reset Settings',
+    resetSettingsDesc: 'Restore default settings',
+    ipAddress: 'IP Address',
+
+    // Alerts/Modals
+    languageDatabases: 'Language Changed',
+    languageChangedMessage: 'Language changed successfully. You may need to restart the app for full effect.',
+    changeLanguageError: 'Failed to change language',
+    confirmDelete: 'Confirm Deletion',
+    areYouSureDelete: 'Are you sure?',
+    yesDelete: 'Yes, Delete',
+    warning: 'Warning',
+    actionUndone: 'This action cannot be undone.',
+    resetConfirm: 'Are you sure you want to reset all settings to default?',
+    resetSuccess: 'Settings reset successfully',
+    resetError: 'Failed to reset settings',
+    exportDisclaimer: 'All your data and predictions will be exported',
+    exportBtn: 'Export',
+    helpPrompt: 'How can we help you?',
+    faq: 'FAQ',
+    userGuide: 'User Guide',
+    justNow: 'Just now',
+    minutesAgo: '{n} minutes ago',
+    hoursAgo: '{n} hours ago',
   },
 
   reels: {
@@ -407,7 +702,11 @@ export const en = {
 
     // Empty States
     noVideos: 'No videos available',
+    noVideosTitle: 'No Videos Yet',
+    noVideosSubtitle: 'Follow people to see their videos here',
+    noVideosCallToAction: 'Discover People',
     noMoreVideos: 'No more videos',
+    endOfFeed: "You've seen all videos 🎉",
 
     // Swipe Hint
     swipeUp: 'Swipe up for more',
@@ -439,6 +738,10 @@ export const en = {
     // Errors
     loadFailed: 'Failed to load video',
     retry: 'Retry',
+    buffering: 'Buffering...',
+    tapToReplay: 'Tap to replay',
+    replayVideo: 'Replay video',
+    loadingVideos: 'Loading videos...',
   },
 };
 

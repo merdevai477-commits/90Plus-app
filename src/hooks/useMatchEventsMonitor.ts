@@ -3,6 +3,8 @@ import { AppState, AppStateStatus } from 'react-native';
 import { MatchEventMonitor } from '../services/matchEventMonitor';
 import { MatchFavoritesStorage } from '../storage/matchFavorites.storage';
 import { useHomeStore } from '../store/home.store';
+import { isRateLimitError } from '../../services/apiFootball';
+import { logger } from '../services/logger';
 
 const POLLING_INTERVAL = 45000; // 45 seconds
 
@@ -53,7 +55,13 @@ export const useMatchEventsMonitor = () => {
                 console.log('✓ No new events in this check');
             }
         } catch (error) {
-            console.error('❌ Error monitoring matches:', error);
+            // Handle rate limit errors gracefully with debug-level logging
+            if (isRateLimitError(error)) {
+                logger.debug('⏸️ Rate limit encountered while monitoring matches, will retry later');
+            } else {
+                // Log actual errors (not rate limits) as errors
+                console.error('❌ Error monitoring matches:', error);
+            }
         }
     };
 

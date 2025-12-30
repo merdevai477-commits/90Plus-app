@@ -1,26 +1,61 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useTranslation } from '../../src/i18n';
+import * as Haptics from 'expo-haptics';
 
 interface StatsRowProps {
     followers: string;
     following: string;
     videos: string;
+    onFollowersPress?: () => void;
+    onFollowingPress?: () => void;
+    onVideosPress?: () => void;
 }
 
-export default function StatsRow({ followers, following, videos }: StatsRowProps) {
+const StatsRow = memo(function StatsRow({ 
+    followers, 
+    following, 
+    videos,
+    onFollowersPress,
+    onFollowingPress,
+    onVideosPress,
+}: StatsRowProps) {
+    const { t } = useTranslation();
+    
     return (
         <View style={styles.container}>
-            <StatCard label="متابع" value={followers} />
-            <StatCard label="يتابع" value={following} />
-            <StatCard label="فيديو" value={videos} />
+            <StatCard 
+                label={t.profile.followers} 
+                value={followers} 
+                onPress={onFollowersPress}
+            />
+            <StatCard 
+                label={t.profile.following} 
+                value={following} 
+                onPress={onFollowingPress}
+            />
+            <StatCard 
+                label={t.profile.videos} 
+                value={videos} 
+                onPress={onVideosPress}
+            />
         </View>
     );
-}
+});
 
-function StatCard({ label, value }: { label: string; value: string }) {
-    return (
+export default StatsRow;
+
+function StatCard({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
+    const handlePress = () => {
+        if (onPress) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onPress();
+        }
+    };
+
+    const content = (
         <LinearGradient
             colors={[ProfileTheme.colors.glassWhite, 'transparent']}
             style={styles.statCard}
@@ -31,6 +66,16 @@ function StatCard({ label, value }: { label: string; value: string }) {
             <Text style={styles.statLabel}>{label}</Text>
         </LinearGradient>
     );
+
+    if (onPress) {
+        return (
+            <TouchableOpacity style={styles.touchable} onPress={handlePress} activeOpacity={0.7}>
+                {content}
+            </TouchableOpacity>
+        );
+    }
+
+    return <View style={styles.touchable}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -40,6 +85,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         marginBottom: 30,
         gap: 12,
+    },
+    touchable: {
+        flex: 1,
     },
     statCard: {
         flex: 1,

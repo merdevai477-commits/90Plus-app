@@ -1,6 +1,21 @@
 import { create } from 'zustand';
 import { ApiFootballService, MAJOR_LEAGUES, Fixture } from '../../services/apiFootball';
 import { MatchFavoritesStorage } from '../storage/matchFavorites.storage';
+import { matchesBatchService } from '../../services/matchesBatchService';
+import { logger } from '../../services/logger';
+import rankingsService from '../../services/rankingsService';
+import { cacheService } from '../../services/cacheService';
+
+// Cache keys for home data
+const HOME_CACHE_KEYS = {
+    MATCHES: 'home_matches',
+    VIDEOS: 'home_videos',
+    PLAYERS: 'home_players',
+    TEAM_OF_MONTH: 'home_team_of_month',
+};
+
+// Cache TTL: 2 minutes for home data
+const HOME_CACHE_TTL = 2 * 60 * 1000;
 
 export interface Match {
     id: string;
@@ -18,6 +33,9 @@ export interface Match {
     awayLogo?: string;
     minute?: string;
     fixtureId: number;
+    startTimestamp?: number;
+    statusShort?: string;
+    date?: string; // ✅ Added date
 }
 
 export interface Video {
@@ -27,15 +45,26 @@ export interface Video {
     views: string;
     likes: string;
     duration: string;
+    userId?: string;
+    username?: string;
+    avatar?: string;
 }
 
 export interface Player {
     id: string;
+    username: string; // ✅ Added username for navigation
     name: string;
     position: string;
     rating: number;
     image: string;
     team: string;
+    isVerified?: boolean;
+    level?: number;
+    stats?: {
+        totalViews: number;
+        totalLikes: number;
+        profileViews: number;
+    };
 }
 
 export interface Notification {
@@ -52,18 +81,122 @@ export interface Notification {
 interface HomeState {
     matches: Match[];
     videos: Video[];
-    players: Player[];
-    teamOfMonth: Player[];
+    players: Player[];  // أهم 5 لاعبين (أسبوعي)
+    teamOfMonth: Player[];  // تشكيلة الشهر (11 لاعب)
     notifications: Notification[];
-    userMode: 'guest' | 'user';
+    userMode: 'guest' | 'user' | 'diamond' | 'admin';
     favoritedMatches: string[];
     loadingMatches: boolean;
-    setUserMode: (mode: 'guest' | 'user') => void;
-    fetchHomeData: () => Promise<void>;
-    toggleFavorite: (matchId: string) => Promise<void>;
+    loadingRankings: boolean;
+    setUserMode: (mode: 'guest' | 'user' | 'diamond' | 'admin') => void;
+    fetchHomeData: (token?: string | null) => Promise<void>;
+    fetchRankingsData: (token?: string | null) => Promise<void>;
+    toggleFavorite: (matchId: string, token?: string | null) => Promise<void>;
     addMatchNotification: (notification: Omit<Notification, 'id' | 'time' | 'read'>) => void;
     clearNotifications: () => void;
+    clearUserData: () => void;
 }
+
+/**
+ * Sort matches by priority: Favorites -> Live -> Top Leagues -> Time
+ */
+const sortMatches = (matches: Match[], favoriteIds: string[]): Match[] => {
+    return [...matches].sort((a, b) => {
+        // Favorites always first
+        if (a.isFavorited && !b.isFavorited) return -1;
+        if (!a.isFavorited && b.isFavorited) return 1;
+
+        // Live Matches
+        if (a.isLive && !b.isLive) return -1;
+        if (!a.isLive && b.isLive) return 1;
+
+        // Top 5 Leagues Priority
+        const top5Leagues = [
+            MAJOR_LEAGUES.PREMIER_LEAGUE,
+            MAJOR_LEAGUES.LA_LIGA,
+            MAJOR_LEAGUES.BUNDESLIGA,
+            MAJOR_LEAGUES.SERIE_A,
+            MAJOR_LEAGUES.LIGUE_1,
+            MAJOR_LEAGUES.CHAMPIONS_LEAGUE
+        ];
+        const aIsTop5 = top5Leagues.includes(a.leagueId);
+        const bIsTop5 = top5Leagues.includes(b.leagueId);
+
+        if (aIsTop5 && !bIsTop5) return -1;
+        if (!aIsTop5 && bIsTop5) return 1;
+
+        // Default: Sort by fixture ID (newer matches first)
+        return b.fixtureId - a.fixtureId;
+    });
+};
+
+/**
+ * Background refresh for matches data
+ * Fetches fresh data without blocking the UI
+ */
+const refreshMatchesInBackground = async (
+    favoriteIds: string[],
+    set: (state: Partial<HomeState>) => void
+) => {
+    try {
+        logger.debug('🔄 Background refresh starting...');
+
+        // Fetch live matches (always fresh)
+        let liveFixtures: Fixture[] = [];
+        try {
+            liveFixtures = await ApiFootballService.getLiveFixtures();
+        } catch (err) {
+            logger.warn('Background: Failed to fetch live fixtures:', err);
+        }
+
+        // Get fresh batched matches
+        const today = new Date();
+        let batchedFixtures: Fixture[] = [];
+        try {
+            // Check if cache is still valid, if not refresh
+            const isValid = await matchesBatchService.isCacheValid(today);
+            if (!isValid) {
+                await matchesBatchService.refreshCache();
+            }
+            batchedFixtures = await matchesBatchService.getMatches(today);
+        } catch (err) {
+            logger.warn('Background: Failed to refresh batched fixtures:', err);
+        }
+
+        // Get favorited matches from cache
+        let favoritedFixtures: Fixture[] = [];
+        if (favoriteIds.length > 0) {
+            const allCached = await matchesBatchService.getAllCachedMatches();
+            favoritedFixtures = allCached.filter(f =>
+                favoriteIds.includes(String(f.fixture.id))
+            );
+        }
+
+        // Combine all fixtures
+        const uniqueFixturesMap = new Map<number, Fixture>();
+        favoritedFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
+        liveFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
+        batchedFixtures.forEach(f => {
+            if (!uniqueFixturesMap.has(f.fixture.id)) {
+                uniqueFixturesMap.set(f.fixture.id, f);
+            }
+        });
+
+        const allFixtures = Array.from(uniqueFixturesMap.values());
+        const mappedMatches = allFixtures.map(fixture =>
+            mapFixtureToMatch(fixture, favoriteIds.includes(String(fixture.fixture.id)))
+        );
+
+        const sortedMatches = sortMatches(mappedMatches, favoriteIds);
+        const finalMatches = sortedMatches.slice(0, 15);
+
+        logger.debug(`🔄 Background refresh complete: ${finalMatches.length} matches`);
+
+        set({ matches: finalMatches });
+    } catch (error) {
+        logger.warn('Background refresh failed:', error);
+    }
+};
 
 // Helper function to map API fixture to Match interface
 const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Match => {
@@ -99,6 +232,11 @@ const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Matc
         homeLogo: fixture.teams.home.logo,
         awayLogo: fixture.teams.away.logo,
         minute,
+        statusShort: fixture.fixture.status.short,
+        date: fixture.fixture.date, // ✅ Map date
+        startTimestamp: fixture.fixture.status.short === '2H'
+            ? fixture.fixture.periods.second || undefined
+            : fixture.fixture.periods.first || undefined,
     };
 };
 
@@ -107,104 +245,154 @@ export const useHomeStore = create<HomeState>((set, get) => ({
     matches: [],
     favoritedMatches: [],
     loadingMatches: false,
-    videos: [
-        { id: '1', title: 'Top 10 Goals of the Month', thumbnail: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=300&h=500&fit=crop', views: '1.2M', likes: '85K', duration: '0:45' },
-        { id: '2', title: 'Messi vs Ronaldo - The Final Battle', thumbnail: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=300&h=500&fit=crop', views: '850K', likes: '120K', duration: '0:30' },
-        { id: '3', title: 'Funny Moments in Football 2023', thumbnail: 'https://images.unsplash.com/photo-1553778263-73a83bab9b0c?w=300&h=500&fit=crop', views: '2.5M', likes: '200K', duration: '0:55' },
-        { id: '4', title: 'Neymar Skills 2024', thumbnail: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=300&h=500&fit=crop', views: '500K', likes: '45K', duration: '0:25' },
-    ],
-    players: [
-        { id: '1', name: 'Erling Haaland', position: 'ST', rating: 9.5, image: 'https://media.api-sports.io/football/players/1100.png', team: 'Man City' },
-        { id: '2', name: 'Kylian Mbappe', position: 'LW', rating: 9.2, image: 'https://media.api-sports.io/football/players/278.png', team: 'Real Madrid' },
-        { id: '3', name: 'Jude Bellingham', position: 'CAM', rating: 9.0, image: 'https://media.api-sports.io/football/players/157.png', team: 'Real Madrid' },
-        { id: '4', name: 'Kevin De Bruyne', position: 'CM', rating: 8.9, image: 'https://media.api-sports.io/football/players/18.png', team: 'Man City' },
-    ],
-    teamOfMonth: [
-        { id: '1', name: 'Courtois', position: 'GK', rating: 8.5, image: 'https://media.api-sports.io/football/players/35.png', team: 'Real Madrid' },
-        { id: '2', name: 'Walker', position: 'RB', rating: 8.2, image: 'https://media.api-sports.io/football/players/188.png', team: 'Man City' },
-        { id: '3', name: 'Dias', position: 'CB', rating: 8.4, image: 'https://media.api-sports.io/football/players/200.png', team: 'Man City' },
-        { id: '4', name: 'Van Dijk', position: 'CB', rating: 8.3, image: 'https://media.api-sports.io/football/players/290.png', team: 'Liverpool' },
-        { id: '5', name: 'Davies', position: 'LB', rating: 8.1, image: 'https://media.api-sports.io/football/players/162.png', team: 'Bayern' },
-        { id: '6', name: 'Rodri', position: 'CDM', rating: 9.1, image: 'https://media.api-sports.io/football/players/631.png', team: 'Man City' },
-        { id: '7', name: 'De Bruyne', position: 'CM', rating: 8.9, image: 'https://media.api-sports.io/football/players/18.png', team: 'Man City' },
-        { id: '8', name: 'Bellingham', position: 'CAM', rating: 9.0, image: 'https://media.api-sports.io/football/players/157.png', team: 'Real Madrid' },
-        { id: '9', name: 'Salah', position: 'RW', rating: 8.8, image: 'https://media.api-sports.io/football/players/306.png', team: 'Liverpool' },
-        { id: '10', name: 'Haaland', position: 'ST', rating: 9.5, image: 'https://media.api-sports.io/football/players/1100.png', team: 'Man City' },
-        { id: '11', name: 'Vinicius', position: 'LW', rating: 8.9, image: 'https://media.api-sports.io/football/players/234.png', team: 'Real Madrid' },
-    ],
-    notifications: [
-        { id: '1', title: 'Match Started', message: 'Real Madrid vs Barcelona has started!', time: '2 mins ago', read: false, type: 'info' },
-        { id: '2', title: 'Goal!', message: 'Haaland scores for Man City!', time: '15 mins ago', read: false, type: 'success' },
-        { id: '3', title: 'Transfer News', message: 'Mbappe to Real Madrid confirmed?', time: '1 hour ago', read: true, type: 'warning' },
-    ],
+    loadingRankings: false,
+    videos: [],  // سيتم ملؤها من الـ API
+    players: [],  // أهم 5 لاعبين أسبوعياً
+    teamOfMonth: [],  // تشكيلة الشهر (11 لاعب)
+    notifications: [],
     setUserMode: (mode) => set({ userMode: mode }),
 
-    fetchHomeData: async () => {
+    // Fetch rankings data (videos, players, teamOfMonth)
+    fetchRankingsData: async (token?: string | null) => {
+        set({ loadingRankings: true });
+        
+        try {
+            logger.debug('🏆 Fetching rankings data for home screen...');
+            
+            // Fetch all data in parallel
+            const [topViewsData, weeklyPlayersData, monthlyPlayersData] = await Promise.all([
+                // أهم فيديوهات (3 أيام)
+                rankingsService.getAllRankings(token || null, 5),
+                // أهم 5 لاعبين (أسبوعي)
+                rankingsService.getTopPlayers(token || null, 5, 'weekly'),
+                // تشكيلة الشهر (11 لاعب)
+                rankingsService.getTopPlayers(token || null, 11, 'monthly'),
+            ]);
+
+            // Transform videos data
+            const videos: Video[] = topViewsData.topViews.map(reel => ({
+                id: reel.id,
+                title: reel.caption || 'فيديو رائع',
+                thumbnail: reel.thumbnail || 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=300&h=500&fit=crop',
+                views: formatNumber(reel.views),
+                likes: formatNumber(reel.likesCount),
+                duration: '0:30',
+                userId: reel.user?.id,
+                username: reel.user?.username,
+                avatar: reel.user?.avatar || undefined,
+            }));
+
+            // Transform weekly players (top 5)
+            const players: Player[] = weeklyPlayersData.players.map(player => ({
+                id: player.id,
+                username: player.username, // ✅ Added username for navigation
+                name: player.displayName || player.username,
+                position: player.position || 'ST',
+                rating: Math.min(10, (player.score / 1000) + 7), // Calculate rating from score
+                image: player.avatar || 'https://via.placeholder.com/150',
+                team: player.countryFlag || '🇪🇬',
+                isVerified: player.isVerified,
+                level: player.level,
+                stats: player.stats,
+            }));
+
+            // Transform monthly players (team of month - 11 players)
+            const teamOfMonth: Player[] = monthlyPlayersData.players.map(player => ({
+                id: player.id,
+                username: player.username, // ✅ Added username for navigation
+                name: player.displayName || player.username,
+                position: player.position || 'ST',
+                rating: Math.min(10, (player.score / 1000) + 7),
+                image: player.avatar || 'https://via.placeholder.com/150',
+                team: player.countryFlag || '🇪🇬',
+                isVerified: player.isVerified,
+                level: player.level,
+                stats: player.stats,
+            }));
+
+            logger.debug(`✅ Rankings loaded: ${videos.length} videos, ${players.length} weekly players, ${teamOfMonth.length} monthly players`);
+
+            set({
+                videos,
+                players,
+                teamOfMonth,
+                loadingRankings: false,
+            });
+        } catch (error) {
+            logger.error('❌ Error fetching rankings data:', error);
+            set({ loadingRankings: false });
+        }
+    },
+
+    fetchHomeData: async (token?: string | null) => {
         set({ loadingMatches: true });
 
         try {
-            console.log('🏠 Fetching home screen data...');
+            logger.debug('🏠 Fetching home screen data...');
 
             // Load favorited match IDs from storage
             const favoriteIds = await MatchFavoritesStorage.getFavorites();
 
-            // 1. Fetch ALL live matches
+            // 1. Try to get cached matches first (cache-first pattern)
+            // Requirements 5.3, 5.4: Serve from cache if data exists
+            const today = new Date();
+            let cachedMatches = await matchesBatchService.getCachedMatches(today);
+
+            if (cachedMatches && cachedMatches.length > 0) {
+                logger.debug(`📦 Cache hit: ${cachedMatches.length} matches from cache`);
+
+                // Map cached matches to UI format
+                const mappedCached = cachedMatches.map(fixture =>
+                    mapFixtureToMatch(fixture, favoriteIds.includes(String(fixture.fixture.id)))
+                );
+
+                // Sort and display cached data immediately
+                const sortedCached = sortMatches(mappedCached, favoriteIds);
+                set({
+                    matches: sortedCached.slice(0, 15),
+                    favoritedMatches: favoriteIds,
+                    loadingMatches: false
+                });
+
+                // Background refresh: fetch fresh data without blocking UI
+                // Requirements 5.5: Fetch fresh data when needed
+                refreshMatchesInBackground(favoriteIds, set);
+                return;
+            }
+
+            logger.debug('📡 Cache miss, fetching fresh data...');
+
+            // 2. Fetch ALL live matches (always fresh for live data)
             let liveFixtures: Fixture[] = [];
             try {
                 liveFixtures = await ApiFootballService.getLiveFixtures();
-                console.log(`📡 Found ${liveFixtures.length} live matches`);
+                logger.debug(`📡 Found ${liveFixtures.length} live matches`);
             } catch (err) {
-                console.warn('Failed to fetch live fixtures:', err);
+                logger.warn('Failed to fetch live fixtures:', err);
             }
 
-            // 2. Fetch Favorited Matches (Yesterday, Today, Tomorrow)
+            // 3. Use batch service to get today's matches (with caching)
+            // Requirements 5.1, 5.6: Batch fetch for multiple days
+            let batchedFixtures: Fixture[] = [];
+            try {
+                batchedFixtures = await matchesBatchService.getMatches(today);
+                logger.debug(`📦 Batch service returned ${batchedFixtures.length} matches`);
+            } catch (err) {
+                logger.warn('Failed to fetch batched fixtures:', err);
+            }
+
+            // 4. Filter favorited matches from batched data
             let favoritedFixtures: Fixture[] = [];
             if (favoriteIds.length > 0) {
-                try {
-                    const today = new Date();
-                    const yesterday = new Date(today);
-                    yesterday.setDate(yesterday.getDate() - 1);
-                    const tomorrow = new Date(today);
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-
-                    const dates = [
-                        yesterday.toISOString().split('T')[0],
-                        today.toISOString().split('T')[0],
-                        tomorrow.toISOString().split('T')[0],
-                    ];
-
-                    const allMatches: Fixture[] = [];
-                    for (const date of dates) {
-                        try {
-                            const matches = await ApiFootballService.getFixturesByDate(date);
-                            allMatches.push(...matches);
-                        } catch (error) {
-                            console.log(`Could not fetch matches for ${date}:`, error);
-                        }
-                    }
-
-                    favoritedFixtures = allMatches.filter(f =>
-                        favoriteIds.includes(String(f.fixture.id))
-                    );
-                    console.log(`⭐ Found ${favoritedFixtures.length} favorited matches`);
-                } catch (error) {
-                    console.log('Could not fetch favorited matches:', error);
-                }
+                // Get all cached matches to find favorites
+                const allCached = await matchesBatchService.getAllCachedMatches();
+                favoritedFixtures = allCached.filter(f =>
+                    favoriteIds.includes(String(f.fixture.id))
+                );
+                logger.debug(`⭐ Found ${favoritedFixtures.length} favorited matches`);
             }
 
-            // 3. Fallback: If no live matches and few favorites, fetch Today's Matches
-            let todaysFixtures: Fixture[] = [];
-            if (liveFixtures.length === 0 && favoritedFixtures.length < 5) {
-                try {
-                    const todayDate = new Date().toISOString().split('T')[0];
-                    console.log(`📅 No live matches, fetching today's matches for ${todayDate}...`);
-                    todaysFixtures = await ApiFootballService.getFixturesByDate(todayDate);
-                } catch (err) {
-                    console.warn('Failed to fetch today\'s fixtures:', err);
-                }
-            }
-
-            // 4. Combine All (Live + Favorites + Today's)
+            // 5. Combine All (Live + Favorites + Batched)
             const uniqueFixturesMap = new Map<number, Fixture>();
 
             // Add favorited matches first (higher priority)
@@ -213,8 +401,8 @@ export const useHomeStore = create<HomeState>((set, get) => ({
             // Add live matches
             liveFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
 
-            // Add today's matches (if fetched)
-            todaysFixtures.forEach(f => {
+            // Add batched matches
+            batchedFixtures.forEach(f => {
                 if (!uniqueFixturesMap.has(f.fixture.id)) {
                     uniqueFixturesMap.set(f.fixture.id, f);
                 }
@@ -222,46 +410,16 @@ export const useHomeStore = create<HomeState>((set, get) => ({
 
             const allFixtures = Array.from(uniqueFixturesMap.values());
 
-            // 5. Map to Match interface
+            // 6. Map to Match interface
             const mappedMatches = allFixtures.map(fixture =>
                 mapFixtureToMatch(fixture, favoriteIds.includes(String(fixture.fixture.id)))
             );
 
-            // 6. Sort: Favorites -> Live -> Top Leagues -> Time
-            mappedMatches.sort((a, b) => {
-                // Favorites always first
-                if (a.isFavorited && !b.isFavorited) return -1;
-                if (!a.isFavorited && b.isFavorited) return 1;
+            // 7. Sort and limit
+            const sortedMatches = sortMatches(mappedMatches, favoriteIds);
+            const finalMatches = sortedMatches.slice(0, 15);
 
-                // Live Matches
-                if (a.isLive && !b.isLive) return -1;
-                if (!a.isLive && b.isLive) return 1;
-
-                // Top 5 Leagues Priority
-                const top5Leagues = [
-                    MAJOR_LEAGUES.PREMIER_LEAGUE,
-                    MAJOR_LEAGUES.LA_LIGA,
-                    MAJOR_LEAGUES.BUNDESLIGA,
-                    MAJOR_LEAGUES.SERIE_A,
-                    MAJOR_LEAGUES.LIGUE_1,
-                    MAJOR_LEAGUES.CHAMPIONS_LEAGUE
-                ];
-                const aIsTop5 = top5Leagues.includes(a.leagueId);
-                const bIsTop5 = top5Leagues.includes(b.leagueId);
-
-                if (aIsTop5 && !bIsTop5) return -1;
-                if (!aIsTop5 && bIsTop5) return 1;
-
-                // Default: Sort by Time (descending for completed, ascending for upcoming?) 
-                // Actually, usually we want upcoming soonest. But for mixed list...
-                // Let's stick to ID or simple time comparison if needed.
-                return b.fixtureId - a.fixtureId;
-            });
-
-            // 7. Limit to 15 matches (increased from 10 to ensure content)
-            const finalMatches = mappedMatches.slice(0, 15);
-
-            console.log(`✅ Displaying ${finalMatches.length} matches`);
+            logger.debug(`✅ Displaying ${finalMatches.length} matches`);
 
             set({
                 matches: finalMatches,
@@ -269,23 +427,49 @@ export const useHomeStore = create<HomeState>((set, get) => ({
                 loadingMatches: false
             });
         } catch (error) {
-            console.error('❌ Error fetching home data:', error);
+            logger.error('❌ Error fetching home data:', error);
             set({ loadingMatches: false });
         }
     },
 
-    toggleFavorite: async (matchId: string) => {
+    toggleFavorite: async (matchId: string, token?: string | null) => {
         const { matches, favoritedMatches } = get();
 
         try {
             const isFavorited = favoritedMatches.includes(matchId);
+            const match = matches.find(m => m.id === matchId);
 
             if (isFavorited) {
+                // Remove locally
                 await MatchFavoritesStorage.removeFavorite(matchId);
-                console.log(`🗑️ Removed favorite: ${matchId}`);
+
+                // Sync with backend if signed in
+                if (token) {
+                    await ApiFootballService.unfavoriteMatch(parseInt(matchId), token);
+                }
+
+                logger.debug(`🗑️ Removed favorite: ${matchId}`);
             } else {
+                // Add locally
                 await MatchFavoritesStorage.addFavorite(matchId);
-                console.log(`⭐ Added favorite: ${matchId}`);
+
+                // Sync with backend if signed in
+                if (token && match) {
+                    await ApiFootballService.favoriteMatch(
+                        parseInt(matchId),
+                        {
+                            homeTeam: match.homeTeam,
+                            awayTeam: match.awayTeam,
+                            homeTeamLogo: match.homeLogo,
+                            awayTeamLogo: match.awayLogo,
+                            matchDate: match.date || new Date().toISOString(), // Match interface needs date
+                            leagueName: match.league
+                        },
+                        token
+                    );
+                }
+
+                logger.debug(`⭐ Added favorite: ${matchId}`);
             }
 
             // Instant update
@@ -297,40 +481,17 @@ export const useHomeStore = create<HomeState>((set, get) => ({
                 m.id === matchId ? { ...m, isFavorited: !isFavorited } : m
             );
 
-            updatedMatches.sort((a, b) => {
-                // Same sorting logic as above
-                if (a.isFavorited && !b.isFavorited) return -1;
-                if (!a.isFavorited && b.isFavorited) return 1;
-
-                const top5Leagues = [
-                    MAJOR_LEAGUES.PREMIER_LEAGUE,
-                    MAJOR_LEAGUES.LA_LIGA,
-                    MAJOR_LEAGUES.BUNDESLIGA,
-                    MAJOR_LEAGUES.SERIE_A,
-                    MAJOR_LEAGUES.LIGUE_1,
-                    MAJOR_LEAGUES.CHAMPIONS_LEAGUE
-                ];
-
-                const aIsTop5Live = a.isLive && top5Leagues.includes(a.leagueId);
-                const bIsTop5Live = b.isLive && top5Leagues.includes(b.leagueId);
-
-                if (aIsTop5Live && !bIsTop5Live) return -1;
-                if (!aIsTop5Live && bIsTop5Live) return 1;
-
-                if (a.isLive && !b.isLive) return -1;
-                if (!a.isLive && b.isLive) return 1;
-
-                return b.fixtureId - a.fixtureId;
-            });
+            // Use the shared sorting function
+            const sortedMatches = sortMatches(updatedMatches, newFavorites);
 
             set({
-                matches: updatedMatches,
+                matches: sortedMatches,
                 favoritedMatches: newFavorites
             });
 
-            console.log(`✅ Favorites updated instantly (${newFavorites.length} total)`);
+            logger.debug(`✅ Favorites updated instantly (${newFavorites.length} total)`);
         } catch (error) {
-            console.error('❌ Error toggling favorite:', error);
+            logger.error('❌ Error toggling favorite:', error);
         }
     },
 
@@ -345,11 +506,19 @@ export const useHomeStore = create<HomeState>((set, get) => ({
 
         // Add to beginning of array (most recent first)
         set({ notifications: [newNotification, ...notifications] });
-        console.log('📢 New match notification:', newNotification.title);
+        logger.debug('📢 New match notification:', newNotification.title);
     },
 
     clearNotifications: () => {
         set({ notifications: [] });
+    },
+    
+    clearUserData: () => {
+        set({ 
+            userMode: 'guest',
+            notifications: [],
+            // Keep matches, videos, players, teamOfMonth as they're not user-specific
+        });
     },
 }));
 
@@ -361,4 +530,11 @@ function getTimeAgo(timestamp: number): string {
     if (seconds < 3600) return `${Math.floor(seconds / 60)} mins ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
     return `${Math.floor(seconds / 86400)} days ago`;
+}
+
+// Helper function to format numbers
+function formatNumber(num: number): string {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
 }

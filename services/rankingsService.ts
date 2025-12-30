@@ -432,6 +432,15 @@ class RankingsService {
       return { players: [], period: 'weekly' };
     }
   }
+
+  /**
+   * Clear memory cache
+   * Should be called on logout to prevent serving stale cached data
+   */
+  clearMemoryCache(): void {
+    memoryCache.clear();
+    console.log('🧹 RankingsService memory cache cleared');
+  }
 }
 
 // Badge Types

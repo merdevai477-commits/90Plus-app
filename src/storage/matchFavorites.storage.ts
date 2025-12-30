@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../../services/logger';
 
 const FAVORITES_KEY = '@match_favorites';
 
@@ -17,7 +18,7 @@ export const MatchFavoritesStorage = {
                 await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
             }
         } catch (error) {
-            console.error('Error adding favorite:', error);
+            logger.error('Error adding favorite:', error);
             throw error;
         }
     },
@@ -31,7 +32,7 @@ export const MatchFavoritesStorage = {
             const filtered = favorites.filter(id => id !== matchId);
             await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(filtered));
         } catch (error) {
-            console.error('Error removing favorite:', error);
+            logger.error('Error removing favorite:', error);
             throw error;
         }
     },
@@ -44,7 +45,7 @@ export const MatchFavoritesStorage = {
             const data = await AsyncStorage.getItem(FAVORITES_KEY);
             return data ? JSON.parse(data) : [];
         } catch (error) {
-            console.error('Error getting favorites:', error);
+            logger.error('Error getting favorites:', error);
             return [];
         }
     },
@@ -57,7 +58,7 @@ export const MatchFavoritesStorage = {
             const favorites = await this.getFavorites();
             return favorites.includes(matchId);
         } catch (error) {
-            console.error('Error checking favorite:', error);
+            logger.error('Error checking favorite:', error);
             return false;
         }
     },
@@ -69,7 +70,7 @@ export const MatchFavoritesStorage = {
         try {
             await AsyncStorage.removeItem(FAVORITES_KEY);
         } catch (error) {
-            console.error('Error clearing favorites:', error);
+            logger.error('Error clearing favorites:', error);
             throw error;
         }
     },

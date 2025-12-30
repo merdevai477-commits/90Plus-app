@@ -22,11 +22,20 @@ import {
   Dimensions,
   Platform,
   Linking,
-  Modal,
+  ActivityIndicator,
 } from 'react-native';
+import * as Network from 'expo-network';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useVideos } from '../../contexts/VideosContext';
+import { useRouter } from 'expo-router';
+import { globalState } from '../../globalState';
+import { useAuth } from '@clerk/clerk-expo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import LanguagePickerModal from '../../components/common/LanguagePickerModal';
+import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +52,7 @@ const BUILD_NUMBER = '100';
 
 export default function SettingsScreen() {
   // Context
+  const { clearVideos } = useVideos();
   const {
     settings,
     loading: contextLoading,
@@ -50,11 +60,25 @@ export default function SettingsScreen() {
     toggleMatchNotifications,
     toggleGoalNotifications,
     togglePredictionReminders,
+
     clearCache,
-    resetSettings,
+    deleteAccount,
+    toggleBiometric,
   } = useSettings();
 
-  const { language, setLanguage: setAppLanguage, t, isRTL } = useLanguage();
+  const router = useRouter();
+  const { signOut } = useAuth();
+
+  // Use new i18n system (Requirements: 7.1, 7.4)
+  const { 
+    language: i18nLanguage, 
+    setLanguage: setI18nLanguage, 
+    t: i18nT, 
+    isRTL: i18nIsRTL 
+  } = useTranslation();
+  
+  // Keep old context for backward compatibility during migration
+  const { language: contextLanguage, setLanguage: setAppLanguage, t, isRTL } = useLanguage();
 
   // Safety check for translations
   if (!t || !t.settings) {
@@ -64,12 +88,16 @@ export default function SettingsScreen() {
       </View>
     );
   }
+  
+  // Use the new i18n language as the source of truth
+  const currentLanguage = i18nLanguage;
 
   // Local state
   const [cacheSize, setCacheSize] = useState('12.5 MB');
-  const [lastSync, setLastSync] = useState(isRTL ? 'منذ 5 دقائق' : '5 minutes ago');
+  const [lastSync, setLastSync] = useState(t.settings.justNow || 'Just now');
+  const [ipAddress, setIpAddress] = useState('Loading...');
+  const [biometricSupported, setBiometricSupported] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'amoled' | 'light'>('amoled');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [soundEffects, setSoundEffects] = useState(true);
   const [hapticFeedback, setHapticFeedback] = useState(true);
@@ -82,10 +110,28 @@ export default function SettingsScreen() {
   // LIFECYCLE
   // ============================================================================
 
+
   useEffect(() => {
     animateEntry();
     calculateCacheSize();
+    fetchIpAddress();
+    checkBiometrics();
   }, []);
+
+  const fetchIpAddress = async () => {
+    try {
+      const ip = await Network.getIpAddressAsync();
+      setIpAddress(ip || t.common.unknown);
+    } catch (e) {
+      setIpAddress(t.common.unavailable);
+    }
+  };
+
+  const checkBiometrics = async () => {
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    setBiometricSupported(hasHardware && isEnrolled);
+  };
 
   const animateEntry = () => {
     Animated.parallel([
@@ -113,14 +159,16 @@ export default function SettingsScreen() {
     const now = new Date();
     const diff = now.getTime() - settings.lastSyncTime;
     const minutes = Math.floor(diff / 60000);
-    
+
     if (minutes < 1) {
-      setLastSync('الآن');
+      setLastSync(t.settings.justNow || 'Just now');
     } else if (minutes < 60) {
-      setLastSync(`منذ ${minutes} دقيقة`);
+      const template = t.settings.minutesAgo || '{n} minutes ago';
+      setLastSync(template.replace('{n}', minutes.toString()));
     } else {
       const hours = Math.floor(minutes / 60);
-      setLastSync(`منذ ${hours} ساعة`);
+      const template = t.settings.hoursAgo || '{n} hours ago';
+      setLastSync(template.replace('{n}', hours.toString()));
     }
   };
 
@@ -138,7 +186,7 @@ export default function SettingsScreen() {
     try {
       await toggleNotifications(!settings.notificationsEnabled);
     } catch (error) {
-      Alert.alert('خطأ', 'فشل تحديث إعدادات الإشعارات');
+      Alert.alert(t.common.error, t.settings.clearCacheError);
     }
   };
 
@@ -146,7 +194,7 @@ export default function SettingsScreen() {
     try {
       await toggleMatchNotifications(!settings.matchNotifications);
     } catch (error) {
-      Alert.alert('خطأ', 'فشل تحديث إعدادات إشعارات المباريات');
+      Alert.alert(t.common.error, t.settings.clearCacheError);
     }
   };
 
@@ -154,7 +202,7 @@ export default function SettingsScreen() {
     try {
       await toggleGoalNotifications(!settings.goalNotifications);
     } catch (error) {
-      Alert.alert('خطأ', 'فشل تحديث إعدادات إشعارات الأهداف');
+      Alert.alert(t.common.error, t.settings.clearCacheError);
     }
   };
 
@@ -162,7 +210,7 @@ export default function SettingsScreen() {
     try {
       await togglePredictionReminders(!settings.predictionReminders);
     } catch (error) {
-      Alert.alert('خطأ', 'فشل تحديث إعدادات تذكير التوقعات');
+      Alert.alert(t.common.error, t.settings.clearCacheError);
     }
   };
 
@@ -191,16 +239,60 @@ export default function SettingsScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'تسجيل الخروج',
-      'هل أنت متأكد من تسجيل الخروج؟',
+      t.settings.logout,
+      t.settings.logoutDesc,
       [
-        { text: 'إلغاء', style: 'cancel' },
+        { text: t.common.cancel, style: 'cancel' },
         {
-          text: 'تسجيل الخروج',
+          text: t.settings.logout,
           style: 'destructive',
-          onPress: () => {
-            // Logout logic here
-            Alert.alert('تم', 'تم تسجيل الخروج بنجاح');
+          onPress: async () => {
+            try {
+              // Clear videos data first
+              await clearVideos();
+              
+              // Sign out from Clerk first
+              await signOut();
+              
+              // Clear global state
+              await globalState.logout();
+              
+              // Clear CoinsService user context
+              const { CoinsService } = await import('../../services/coins.service');
+              CoinsService.clearCurrentUser();
+              
+              // Clear AuthService memory cache
+              const { AuthService } = await import('../../src/services/authService');
+              AuthService.clearMemoryCache();
+              
+              // Clear RankingsService memory cache
+              const { rankingsService } = await import('../../services/rankingsService');
+              rankingsService.clearMemoryCache();
+              
+              // Clear home.store user data
+              const { useHomeStore } = await import('../../src/store/home.store');
+              useHomeStore.getState().clearUserData();
+              
+              // Disconnect WebSocket
+              const { websocketClient } = await import('../../services/websocketClient');
+              websocketClient.disconnect();
+              
+              // Clear all cache (including profile, reels, notifications, etc.)
+              const { cacheService } = await import('../../services/cacheService');
+              await cacheService.clearAll();
+              
+              // Clear AsyncStorage
+              await AsyncStorage.removeItem('@username_setup_complete');
+              await AsyncStorage.removeItem('@user_profile');
+
+              // Navigate to Auth screen
+              router.replace('/auth');
+
+              Alert.alert(t.common.done, 'Logged out successfully');
+            } catch (e) {
+              console.error('Logout error:', e);
+              Alert.alert(t.common.error, 'Logout failed');
+            }
           },
         },
       ]
@@ -209,24 +301,33 @@ export default function SettingsScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'حذف الحساب',
-      'تحذير: هذا الإجراء لا يمكن التراجع عنه. سيتم حذف جميع بياناتك وتوقعاتك بشكل نهائي.',
+      t.settings.deleteAccount,
+      t.settings.deleteAccountDesc,
       [
-        { text: 'إلغاء', style: 'cancel' },
+        { text: t.common.cancel, style: 'cancel' },
         {
-          text: 'حذف الحساب',
+          text: t.common.delete,
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'تأكيد الحذف',
-              'هل أنت متأكد تماماً؟ لن تتمكن من استعادة حسابك.',
+              t.settings.confirmDelete,
+              t.settings.areYouSureDelete,
               [
-                { text: 'إلغاء', style: 'cancel' },
+                { text: t.common.cancel, style: 'cancel' },
                 {
-                  text: 'نعم، احذف حسابي',
+                  text: t.settings.yesDelete,
                   style: 'destructive',
-                  onPress: () => {
-                    // Delete account logic here
+                  onPress: async () => {
+                    try {
+                      await deleteAccount();
+                      // Clear global state
+                      globalState.setUserType('guest');
+                      globalState.setUserProfile(null as any);
+                      // Navigate to Auth screen after deletion
+                      router.replace('/auth');
+                    } catch (e) {
+                      Alert.alert(t.common.error, 'Failed to delete account');
+                    }
                   },
                 },
               ]
@@ -250,7 +351,7 @@ export default function SettingsScreen() {
 
   const handleShareApp = () => {
     // Share app logic
-    Alert.alert('مشاركة التطبيق', 'شارك التطبيق مع أصدقائك!');
+    Alert.alert(t.settings.shareApp, t.settings.shareAppDesc);
   };
 
   const handleContactUs = () => {
@@ -273,57 +374,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleResetSettings = () => {
-    Alert.alert(
-      isRTL ? 'إعادة تعيين الإعدادات' : 'Reset Settings',
-      isRTL 
-        ? 'هل أنت متأكد من إعادة تعيين جميع الإعدادات إلى الوضع الافتراضي؟'
-        : 'Are you sure you want to reset all settings to default?',
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: isRTL ? 'إعادة تعيين' : 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await resetSettings();
-              Alert.alert(t.common.done, isRTL ? 'تم إعادة تعيين الإعدادات' : 'Settings reset successfully');
-            } catch (error) {
-              Alert.alert(t.common.error, isRTL ? 'فشل إعادة التعيين' : 'Failed to reset settings');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleExportData = () => {
-    Alert.alert(
-      isRTL ? 'تصدير البيانات' : 'Export Data',
-      isRTL 
-        ? 'سيتم تصدير جميع بياناتك وتوقعاتك'
-        : 'All your data and predictions will be exported',
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: isRTL ? 'تصدير' : 'Export',
-          onPress: () => {
-            Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment);
-          },
-        },
-      ]
-    );
-  };
-
   const handleHelp = () => {
     Alert.alert(
-      isRTL ? 'المساعدة' : 'Help',
-      isRTL 
-        ? 'كيف يمكننا مساعدتك؟'
-        : 'How can we help you?',
+      t.settings.helpSupport,
+      t.settings.helpPrompt,
       [
-        { text: isRTL ? 'الأسئلة الشائعة' : 'FAQ', onPress: () => {} },
-        { text: isRTL ? 'دليل الاستخدام' : 'User Guide', onPress: () => {} },
+        { text: t.settings.faq, onPress: () => { } },
+        { text: t.settings.userGuide, onPress: () => { } },
         { text: t.common.cancel, style: 'cancel' },
       ]
     );
@@ -337,36 +394,36 @@ export default function SettingsScreen() {
     Linking.openURL('mailto:support@footballpredictions.com?subject=Feature Request');
   };
 
-  const handleLanguageChange = async (lang: 'ar' | 'en' | 'fr' | 'es' | 'de' | 'it' | 'tr' | 'pt') => {
+  /**
+   * Handle language change from the new LanguagePickerModal
+   * Uses the new i18n system and syncs with old context for compatibility
+   * Requirements: 7.1, 7.4
+   */
+  const handleLanguageChange = async (lang: Language) => {
     try {
+      // Update new i18n system
+      await setI18nLanguage(lang);
+      // Also update old context for backward compatibility
       await setAppLanguage(lang);
       setLanguageModalVisible(false);
-      Alert.alert(
-        isRTL ? 'تم تغيير اللغة' : 'Language Changed',
-        isRTL 
-          ? 'تم تغيير اللغة بنجاح. قد تحتاج لإعادة تشغيل التطبيق لتطبيق التغييرات بالكامل.'
-          : 'Language changed successfully. You may need to restart the app for full effect.'
-      );
     } catch (error) {
       Alert.alert(
-        isRTL ? 'خطأ' : 'Error',
-        isRTL ? 'فشل تغيير اللغة' : 'Failed to change language'
+        t.common.error,
+        t.settings.changeLanguageError
       );
     }
   };
 
+  /**
+   * Get display name for a language using the new i18n types
+   * Requirements: 7.2, 7.3
+   */
   const getLanguageName = (lang: string): string => {
-    const names: { [key: string]: string } = {
-      ar: 'العربية',
-      en: 'English',
-      fr: 'Français',
-      es: 'Español',
-      de: 'Deutsch',
-      it: 'Italiano',
-      tr: 'Türkçe',
-      pt: 'Português',
-    };
-    return names[lang] || lang;
+    const info = getLanguageInfo(lang as Language);
+    if (info) {
+      return `${info.flag} ${info.nativeName} (${info.name})`;
+    }
+    return lang;
   };
 
   // ============================================================================
@@ -426,10 +483,10 @@ export default function SettingsScreen() {
     >
       <View style={styles.settingLeft}>
         <View style={styles.settingIconContainer}>
-          <Ionicons 
-            name={icon as any} 
-            size={22} 
-            color={danger ? '#ef4444' : '#888'} 
+          <Ionicons
+            name={icon as any}
+            size={22}
+            color={danger ? '#ef4444' : '#888'}
           />
         </View>
         <View style={styles.settingTextContainer}>
@@ -540,20 +597,8 @@ export default function SettingsScreen() {
             {renderSectionHeader(t.settings.preferences, 'options')}
             <View style={styles.sectionContent}>
               {renderActionItem(
-                t.settings.favoriteTeams,
-                t.settings.favoriteTeamsDesc,
-                () => Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment),
-                'heart-outline'
-              )}
-              {renderActionItem(
-                t.settings.favoriteLeagues,
-                t.settings.favoriteLeaguesDesc,
-                () => Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment),
-                'trophy-outline'
-              )}
-              {renderActionItem(
                 t.settings.language,
-                getLanguageName(language),
+                getLanguageName(currentLanguage),
                 () => setLanguageModalVisible(true),
                 'language-outline'
               )}
@@ -562,44 +607,45 @@ export default function SettingsScreen() {
 
           {/* APPEARANCE SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(isRTL ? 'المظهر' : 'Appearance', 'color-palette')}
+            {renderSectionHeader(t.settings.appearance, 'color-palette')}
             <View style={styles.sectionContent}>
-              {renderActionItem(
-                isRTL ? 'الثيم' : 'Theme',
-                theme === 'amoled' ? 'AMOLED Dark' : theme === 'dark' ? 'Dark' : 'Light',
-                () => Alert.alert(t.settings.comingSoon, t.settings.featureInDevelopment),
-                'moon-outline'
-              )}
               {renderSwitchItem(
-                isRTL ? 'المؤثرات الصوتية' : 'Sound Effects',
-                isRTL ? 'تشغيل الأصوات في التطبيق' : 'Play sounds in app',
+                t.settings.soundEffects,
+                t.settings.soundEffectsDesc,
                 soundEffects,
                 () => setSoundEffects(!soundEffects),
                 'volume-high-outline'
               )}
               {renderSwitchItem(
-                isRTL ? 'الاهتزاز' : 'Haptic Feedback',
-                isRTL ? 'اهتزاز عند اللمس' : 'Vibrate on touch',
+                t.settings.hapticFeedback,
+                t.settings.hapticFeedbackDesc,
                 hapticFeedback,
                 () => setHapticFeedback(!hapticFeedback),
                 'phone-portrait-outline'
+              )}
+              {biometricSupported && renderSwitchItem(
+                t.settings.biometricUnlock,
+                t.settings.biometricUnlockDesc,
+                settings.biometricEnabled,
+                () => toggleBiometric(!settings.biometricEnabled),
+                'finger-print-outline'
               )}
             </View>
           </View>
 
           {/* PERMISSIONS SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(isRTL ? 'الأذونات' : 'Permissions', 'shield-checkmark')}
+            {renderSectionHeader(t.settings.permissions, 'shield-checkmark')}
             <View style={styles.sectionContent}>
               {renderActionItem(
-                isRTL ? 'إدارة الأذونات' : 'Manage Permissions',
-                isRTL ? 'التحكم في أذونات التطبيق' : 'Control app permissions',
+                t.settings.managePermissions,
+                t.settings.managePermissionsDesc,
                 handleManagePermissions,
                 'settings-outline'
               )}
               {renderInfoItem(
-                isRTL ? 'الإشعارات' : 'Notifications',
-                settings.notificationsEnabled ? (isRTL ? 'مفعلة' : 'Enabled') : (isRTL ? 'معطلة' : 'Disabled'),
+                t.settings.notifications,
+                settings.notificationsEnabled ? t.settings.enabled : t.settings.disabled,
                 'notifications-outline'
               )}
             </View>
@@ -621,13 +667,6 @@ export default function SettingsScreen() {
                 t.settings.clearCacheDesc,
                 handleClearCache,
                 'trash-outline',
-                false
-              )}
-              {renderActionItem(
-                isRTL ? 'تصدير البيانات' : 'Export Data',
-                isRTL ? 'تصدير جميع بياناتك' : 'Export all your data',
-                handleExportData,
-                'download-outline',
                 false
               )}
               {renderInfoItem(t.settings.cacheSize, cacheSize, 'folder-outline')}
@@ -704,18 +743,10 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             {renderSectionHeader(isRTL ? 'متقدم' : 'Advanced', 'construct')}
             <View style={styles.sectionContent}>
-              {renderActionItem(
-                isRTL ? 'إعادة تعيين الإعدادات' : 'Reset Settings',
-                isRTL ? 'استعادة الإعدادات الافتراضية' : 'Restore default settings',
-                handleResetSettings,
-                'refresh-circle-outline',
-                false,
-                true
-              )}
               {renderInfoItem(
-                isRTL ? 'معرف الجهاز' : 'Device ID',
-                'XXXX-XXXX-XXXX',
-                'phone-portrait-outline'
+                isRTL ? 'عنوان IP' : 'IP Address',
+                ipAddress,
+                'globe-outline'
               )}
             </View>
           </View>
@@ -755,204 +786,14 @@ export default function SettingsScreen() {
         </ScrollView>
       </Animated.View>
 
-      {/* Language Selection Modal */}
-      <Modal
+      {/* Language Selection Modal - Using new LanguagePickerModal component */}
+      {/* Requirements: 7.1, 7.2, 7.3, 7.4 */}
+      <LanguagePickerModal
         visible={languageModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLanguageModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setLanguageModalVisible(false)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {isRTL ? 'اختر اللغة' : 'Select Language'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setLanguageModalVisible(false)}
-                style={styles.modalCloseButton}
-              >
-                <Ionicons name="close" size={24} color="#888" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.languageList} showsVerticalScrollIndicator={false}>
-              {/* Arabic */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'ar' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('ar')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇸🇦</Text>
-                  <View>
-                    <Text style={styles.languageName}>العربية</Text>
-                    <Text style={styles.languageNative}>Arabic</Text>
-                  </View>
-                </View>
-                {language === 'ar' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* English */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'en' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('en')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇬🇧</Text>
-                  <View>
-                    <Text style={styles.languageName}>English</Text>
-                    <Text style={styles.languageNative}>الإنجليزية</Text>
-                  </View>
-                </View>
-                {language === 'en' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* French */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'fr' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('fr')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇫🇷</Text>
-                  <View>
-                    <Text style={styles.languageName}>Français</Text>
-                    <Text style={styles.languageNative}>French</Text>
-                  </View>
-                </View>
-                {language === 'fr' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* Spanish */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'es' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('es')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇪🇸</Text>
-                  <View>
-                    <Text style={styles.languageName}>Español</Text>
-                    <Text style={styles.languageNative}>Spanish</Text>
-                  </View>
-                </View>
-                {language === 'es' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* German */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'de' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('de')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇩🇪</Text>
-                  <View>
-                    <Text style={styles.languageName}>Deutsch</Text>
-                    <Text style={styles.languageNative}>German</Text>
-                  </View>
-                </View>
-                {language === 'de' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* Italian */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'it' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('it')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇮🇹</Text>
-                  <View>
-                    <Text style={styles.languageName}>Italiano</Text>
-                    <Text style={styles.languageNative}>Italian</Text>
-                  </View>
-                </View>
-                {language === 'it' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* Turkish */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'tr' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('tr')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇹🇷</Text>
-                  <View>
-                    <Text style={styles.languageName}>Türkçe</Text>
-                    <Text style={styles.languageNative}>Turkish</Text>
-                  </View>
-                </View>
-                {language === 'tr' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-
-              {/* Portuguese */}
-              <TouchableOpacity
-                style={[
-                  styles.languageItem,
-                  language === 'pt' && styles.languageItemActive,
-                ]}
-                onPress={() => handleLanguageChange('pt')}
-              >
-                <View style={styles.languageLeft}>
-                  <Text style={styles.languageFlag}>🇵🇹</Text>
-                  <View>
-                    <Text style={styles.languageName}>Português</Text>
-                    <Text style={styles.languageNative}>Portuguese</Text>
-                  </View>
-                </View>
-                {language === 'pt' && (
-                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <Text style={styles.modalFooterText}>
-                {isRTL 
-                  ? 'قد تحتاج لإعادة تشغيل التطبيق لتطبيق التغييرات بالكامل'
-                  : 'You may need to restart the app for full effect'}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
+        onClose={() => setLanguageModalVisible(false)}
+        onLanguageChange={handleLanguageChange}
+      />
+    </View >
   );
 }
 

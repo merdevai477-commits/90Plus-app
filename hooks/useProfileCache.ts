@@ -141,12 +141,21 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
   /**
    * Load cached data immediately (Requirement 2.1)
+   * Validates that cached data is valid before using it
    */
   const loadFromCache = useCallback(async (): Promise<boolean> => {
     try {
       const cachedData = await cacheService.get<ProfileCacheData>(CACHE_KEYS.PROFILE_DATA);
       
       if (cachedData) {
+        // Validate cached data - ensure userData exists and has required fields
+        // This prevents showing stale data from a different user after logout/login
+        if (!cachedData.userData || !cachedData.userData.username || !cachedData.userData.id) {
+          console.warn('[useProfileCache] Invalid cached data detected (missing user info), clearing cache');
+          await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
+          return false;
+        }
+        
         // Restore dates from cached data
         if (cachedData.userData) {
           cachedData.userData.createdAt = new Date(cachedData.userData.createdAt);
@@ -269,6 +278,13 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       // But we update UI immediately with user data first
       if (userResult) {
         newUserData = transformUserProfile(userResult, clerkUserImageUrl);
+        
+        // Validate user data before setting
+        if (!newUserData.username || !newUserData.id) {
+          console.error('[useProfileCache] Invalid user data received from backend');
+          setError('Invalid user data received');
+          return;
+        }
         
         // Update state IMMEDIATELY - don't wait for videos
         setUserData(newUserData);

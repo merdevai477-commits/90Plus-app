@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { CoinsService } from '../services/coins.service';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 
 const INITIAL_COINS = 50;
 
@@ -16,14 +17,36 @@ const CoinsContext = createContext<CoinsContextType | undefined>(undefined);
 export const CoinsProvider = ({ children }: { children: ReactNode }) => {
   const [coins, setCoins] = useState<number>(INITIAL_COINS);
   const [loading, setLoading] = useState(true);
+  const { isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
 
-  // تحميل الكوينات عند بدء التطبيق
+  // تحميل الكوينات عند تغيير المستخدم
   useEffect(() => {
-    loadCoins();
-  }, []);
+    if (isSignedIn && user?.id) {
+      // Set the current user and token in CoinsService
+      const setupCoins = async () => {
+        const token = await getToken();
+        CoinsService.setCurrentUser(user.id, token);
+        CoinsService.setToken(token);
+        await loadCoins();
+      };
+      setupCoins();
+    } else {
+      // Clear user and reset to initial coins
+      CoinsService.clearCurrentUser();
+      setCoins(INITIAL_COINS);
+      setLoading(false);
+    }
+  }, [isSignedIn, user?.id, getToken]);
 
-  const loadCoins = async () => {
+  const loadCoins = useCallback(async () => {
     try {
+      setLoading(true);
+      // Update token before loading
+      const token = await getToken();
+      if (token) {
+        CoinsService.setToken(token);
+      }
       const balance = await CoinsService.getBalance();
       setCoins(balance);
     } catch (error) {
@@ -32,16 +55,25 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getToken]);
 
   const addCoins = async (amount: number) => {
     try {
+      // Update token before operation
+      const token = await getToken();
+      if (token) {
+        CoinsService.setToken(token);
+      }
       const newCoins = coins + amount;
+      // ✅ PERFORMANCE: Update UI immediately (optimistic)
       setCoins(newCoins);
-      await CoinsService.updateBalance(newCoins);
+      // Update backend in background (non-blocking)
+      CoinsService.updateBalance(newCoins).catch(() => {
+        // On error, reload to sync
+        loadCoins();
+      });
     } catch (error) {
-      console.error('Error adding coins:', error);
-      // Revert state on error if needed, or re-fetch
+      // Revert state on error
       loadCoins();
     }
   };
@@ -52,12 +84,21 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
+      // Update token before operation
+      const token = await getToken();
+      if (token) {
+        CoinsService.setToken(token);
+      }
       const newCoins = coins - amount;
+      // ✅ PERFORMANCE: Update UI immediately (optimistic)
       setCoins(newCoins);
-      await CoinsService.updateBalance(newCoins);
+      // Update backend in background (non-blocking)
+      CoinsService.updateBalance(newCoins).catch(() => {
+        // On error, reload to sync
+        loadCoins();
+      });
       return true;
     } catch (error) {
-      console.error('Error subtracting coins:', error);
       loadCoins();
       return false;
     }

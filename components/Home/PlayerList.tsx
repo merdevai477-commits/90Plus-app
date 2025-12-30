@@ -3,12 +3,54 @@ import { View, Text, FlatList, StyleSheet, Image, TouchableOpacity } from 'react
 import { COLORS } from '../reels/constants';
 import { Player } from '../../src/store/home.store';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from '../../src/i18n';
+import { Star, Trophy, User } from 'lucide-react-native';
 
 interface PlayerListProps {
     players: Player[];
-    onPlayerPress: (playerId: string) => void;
+    onPlayerPress: (player: Player) => void; // ✅ Changed to pass full player object
     onViewAllPress: () => void;
 }
+
+// Empty State Placeholder Card
+const EmptyPlayerCard = React.memo(({ index, onPress, t }: { index: number; onPress: () => void; t: any }) => {
+    const positions = ['ST', 'CAM', 'RW', 'LW', 'CM'];
+    const messages = [
+        { emoji: '👑', text: t?.rank?.firstPlace || '1st Place', hint: t?.rank?.waitingForYou || 'Waiting for you!' },
+        { emoji: '🥈', text: t?.rank?.secondPlace || '2nd Place', hint: t?.rank?.beTheBest || 'Be the best' },
+        { emoji: '🥉', text: t?.rank?.thirdPlace || '3rd Place', hint: t?.rank?.competeNow || 'Compete now' },
+        { emoji: '⭐', text: t?.home?.playerOfWeek || 'Star of the Week', hint: t?.profile?.createContent || 'Create content' },
+        { emoji: '🔥', text: t?.home?.trendingReels || 'Trending', hint: t?.home?.getStarted || 'Join now' },
+    ];
+    const msg = messages[index % messages.length];
+    const pos = positions[index % positions.length];
+    
+    return (
+        <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+            <LinearGradient
+                colors={['rgba(34, 197, 94, 0.15)', 'rgba(34, 197, 94, 0.05)']}
+                style={styles.emptyCardContainer}
+            >
+                <View style={styles.emptyAvatarContainer}>
+                    <View style={styles.emptyAvatar}>
+                        <User size={32} color="rgba(255,255,255,0.3)" />
+                    </View>
+                    <View style={styles.positionBadge}>
+                        <Text style={styles.positionText}>{pos}</Text>
+                    </View>
+                </View>
+                <View style={styles.ratingBadge}>
+                    <Text style={styles.ratingText}>?</Text>
+                </View>
+                <View style={styles.infoContainer}>
+                    <Text style={styles.emptyEmoji}>{msg.emoji}</Text>
+                    <Text style={styles.emptyPlayerText}>{msg.text}</Text>
+                    <Text style={styles.emptyHintText}>{msg.hint}</Text>
+                </View>
+            </LinearGradient>
+        </TouchableOpacity>
+    );
+});
 
 const PlayerCard = React.memo(({ player, onPress }: { player: Player; onPress: () => void }) => (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
@@ -30,21 +72,36 @@ const PlayerCard = React.memo(({ player, onPress }: { player: Player; onPress: (
 ));
 
 export const PlayerList: React.FC<PlayerListProps> = ({ players, onPlayerPress, onViewAllPress }) => {
-    const renderItem = React.useCallback(({ item }: { item: Player }) => (
-        <PlayerCard player={item} onPress={() => onPlayerPress(item.id)} />
-    ), [onPlayerPress]);
+    const { t } = useTranslation();
+    
+    // If no players, show placeholder cards
+    const hasPlayers = players && players.length > 0;
+    const placeholderData = [
+        { id: 'empty-1' }, { id: 'empty-2' }, { id: 'empty-3' }, 
+        { id: 'empty-4' }, { id: 'empty-5' }
+    ];
+    
+    const renderItem = React.useCallback(({ item, index }: { item: Player | { id: string }; index: number }) => {
+        if ('name' in item) {
+            return <PlayerCard player={item as Player} onPress={() => onPlayerPress(item as Player)} />; // ✅ Pass full player object
+        }
+        return <EmptyPlayerCard index={index} onPress={onViewAllPress} t={t} />;
+    }, [onPlayerPress, onViewAllPress, t]);
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Player of the Week</Text>
+                <View style={styles.headerLeft}>
+                    <Star size={20} color={COLORS.neonGreen} fill={COLORS.neonGreen} />
+                    <Text style={styles.title}>{t.home.playerOfWeek || 'Player of the Week'}</Text>
+                </View>
                 <TouchableOpacity onPress={onViewAllPress}>
-                    <Text style={styles.viewAll}>View All</Text>
+                    <Text style={styles.viewAll}>{t.home.viewAll}</Text>
                 </TouchableOpacity>
             </View>
 
             <FlatList
-                data={players}
+                data={hasPlayers ? players : placeholderData}
                 renderItem={renderItem}
                 keyExtractor={(item) => item.id}
                 horizontal
@@ -71,6 +128,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         marginBottom: 12,
     },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     title: {
         fontSize: 18,
         fontWeight: 'bold',
@@ -91,6 +153,60 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
+    },
+    emptyCardContainer: {
+        width: 140,
+        height: 200,
+        borderRadius: 16,
+        padding: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(34, 197, 94, 0.3)',
+        borderStyle: 'dashed',
+    },
+    emptyAvatarContainer: {
+        position: 'relative',
+        marginBottom: 12,
+    },
+    emptyAvatar: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(34, 197, 94, 0.3)',
+        borderStyle: 'dashed',
+    },
+    positionBadge: {
+        position: 'absolute',
+        bottom: -4,
+        right: -4,
+        backgroundColor: 'rgba(34, 197, 94, 0.3)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    positionText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: COLORS.neonGreen,
+    },
+    emptyEmoji: {
+        fontSize: 20,
+        marginBottom: 4,
+    },
+    emptyPlayerText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: COLORS.white,
+        textAlign: 'center',
+    },
+    emptyHintText: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.5)',
+        textAlign: 'center',
     },
     playerImage: {
         width: 80,

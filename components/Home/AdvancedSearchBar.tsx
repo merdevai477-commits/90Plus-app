@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,20 +8,26 @@ import {
   Animated,
   FlatList,
   Image,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { 
   Search, 
   X, 
   Users,
-  Video,
-  Trophy,
-  Star,
-  TrendingUp
+  BadgeCheck,
+  Code
 } from 'lucide-react-native';
 import { useFadeIn, useSlideIn, usePulse } from '../leagues/Animations';
 import { useHapticFeedback } from '../leagues/HapticFeedback';
-import { searchProfiles, type Profile } from '../profile/MockProfiles';
-import { globalState } from '../../globalState';
+import { useAuth } from '@clerk/clerk-expo';
+import { AuthService, SearchUserResult } from '../../src/services/authService';
+import { router } from 'expo-router';
+import MiniProfileCard from '../profile/MiniProfileCard';
+
+// Simple search cache (5 minutes TTL)
+const searchCache = new Map<string, { results: SearchResult[]; timestamp: number }>();
+const SEARCH_CACHE_TTL = 5 * 60 * 1000;
 
 export interface SearchResult {
   id: string;
@@ -31,6 +37,35 @@ export interface SearchResult {
   image?: string;
   data: any;
 }
+
+// Helper function to highlight matching text
+const HighlightedText: React.FC<{ text: string; highlight: string; style: any; highlightStyle?: any }> = ({ 
+  text, 
+  highlight, 
+  style,
+  highlightStyle 
+}) => {
+  if (!highlight.trim()) {
+    return <Text style={style}>{text}</Text>;
+  }
+
+  const regex = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <Text style={style}>
+      {parts.map((part, index) => 
+        regex.test(part) ? (
+          <Text key={index} style={[style, highlightStyle || { backgroundColor: 'rgba(34, 197, 94, 0.3)', color: '#22c55e' }]}>
+            {part}
+          </Text>
+        ) : (
+          <Text key={index}>{part}</Text>
+        )
+      )}
+    </Text>
+  );
+};
 
 interface AdvancedSearchBarProps {
   onResultSelect: (result: SearchResult) => void;
@@ -46,115 +81,67 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'profiles' | 'videos' | 'matches'>('all');
 
+  const { getToken } = useAuth();
   const haptic = useHapticFeedback();
   const fadeAnim = useFadeIn(600);
   const slideAnim = useSlideIn('down', 500);
   const pulseAnim = usePulse(1, 1.02, 1000);
 
+  // Debounced search - يبدأ من أول حرف
   useEffect(() => {
-    if (searchQuery.length > 0) {
-      setIsSearching(true);
-      const results = performSearch(searchQuery);
-      setSearchResults(results);
-      setTimeout(() => setIsSearching(false), 500);
-    } else {
+    if (searchQuery.length < 1) {
       setSearchResults([]);
+      return;
     }
+
+    setIsSearching(true);
+    const timeoutId = setTimeout(() => {
+      performSearch(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
-  const performSearch = (query: string): SearchResult[] => {
+  const performSearch = async (query: string) => {
+    // Check cache first
+    const cacheKey = query.toLowerCase();
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
+      setSearchResults(cached.results);
+      setIsSearching(false);
+      return;
+    }
+
     const results: SearchResult[] = [];
     
-    // البحث في البروفايلات مع إضافة البروفايل المرتبط بالحساب
-    if (activeFilter === 'all' || activeFilter === 'profiles') {
-      let profiles = searchProfiles(query);
-      
-      // إضافة البروفايل المرتبط بالحساب إذا كان متوفراً
-      if (globalState.userProfile) {
-        const userProfile = globalState.userProfile as any;
-        if (userProfile.displayName.toLowerCase().includes(query.toLowerCase()) || 
-            userProfile.username.toLowerCase().includes(query.toLowerCase())) {
-          profiles = [userProfile, ...profiles];
-        }
-      }
-      
-      profiles.forEach((profile: Profile) => {
-        results.push({
-          id: profile.id,
-          type: 'profile',
-          title: profile.displayName,
-          subtitle: `@${profile.username} • ${profile.favoriteClub.name}`,
-          image: profile.avatar,
-          data: profile
+    try {
+      // البحث في المستخدمين من الـ Backend
+      const token = await getToken();
+      if (token) {
+        const users = await AuthService.searchUsers(token, query, 10);
+        users.forEach((user: SearchUserResult) => {
+          results.push({
+            id: user.id,
+            type: 'profile',
+            title: user.displayName || user.username,
+            subtitle: `@${user.username}${user.favoriteTeam ? ` • ${user.favoriteTeam}` : ''}`,
+            image: user.avatar || undefined,
+            data: user
+          });
         });
-      });
+      }
+    } catch (error) {
+      console.error('Search error:', error);
     }
 
-    // البحث في الفيديوهات (بيانات تجريبية)
-    if (activeFilter === 'all' || activeFilter === 'videos') {
-      const mockVideos = [
-        {
-          id: 'video1',
-          title: 'تحليل مباراة الأهلي والزمالك',
-          subtitle: 'فيديو تحليلي • 15.6K مشاهدة',
-          image: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=100&h=100&fit=crop'
-        },
-        {
-          id: 'video2',
-          title: 'توقعات مباريات هذا الأسبوع',
-          subtitle: 'توقعات شخصية • 8.9K مشاهدة',
-          image: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=100&h=100&fit=crop'
-        }
-      ];
-
-      mockVideos.forEach(video => {
-        if (video.title.toLowerCase().includes(query.toLowerCase())) {
-          results.push({
-            id: video.id,
-            type: 'video',
-            title: video.title,
-            subtitle: video.subtitle,
-            image: video.image,
-            data: video
-          });
-        }
-      });
-    }
-
-    // البحث في المباريات (بيانات تجريبية)
-    if (activeFilter === 'all' || activeFilter === 'matches') {
-      const mockMatches = [
-        {
-          id: 'match1',
-          title: 'الأهلي vs الزمالك',
-          subtitle: 'الكلاسيكو المصري • اليوم 22:00',
-          image: 'https://upload.wikimedia.org/wikipedia/ar/9/9e/Al_Ahly_SC_logo.png'
-        },
-        {
-          id: 'match2',
-          title: 'ريال مدريد vs برشلونة',
-          subtitle: 'الكلاسيكو الإسباني • غداً 21:00',
-          image: 'https://upload.wikimedia.org/wikipedia/en/5/56/Real_Madrid_CF.svg'
-        }
-      ];
-
-      mockMatches.forEach(match => {
-        if (match.title.toLowerCase().includes(query.toLowerCase())) {
-          results.push({
-            id: match.id,
-            type: 'match',
-            title: match.title,
-            subtitle: match.subtitle,
-            image: match.image,
-            data: match
-          });
-        }
-      });
-    }
-
-    return results.slice(0, 10); // حد أقصى 10 نتائج
+    const finalResults = results.slice(0, 15);
+    
+    // Save to cache
+    searchCache.set(cacheKey, { results: finalResults, timestamp: Date.now() });
+    
+    setSearchResults(finalResults);
+    setIsSearching(false);
   };
 
   const handleSearch = (text: string) => {
@@ -162,13 +149,19 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
     haptic.search();
   };
 
-  const handleFilterChange = (filter: 'all' | 'profiles' | 'videos' | 'matches') => {
-    setActiveFilter(filter);
-    haptic.filter();
-  };
-
   const handleResultSelect = (result: SearchResult) => {
     haptic.cardTap();
+    
+    // إذا كان النتيجة بروفايل، افتح صفحة البروفايل
+    if (result.type === 'profile') {
+      onClose();
+      router.push({
+        pathname: '/user/[username]',
+        params: { username: result.data.username }
+      });
+      return;
+    }
+    
     onResultSelect(result);
   };
 
@@ -176,16 +169,6 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
     setSearchQuery('');
     setSearchResults([]);
     haptic.light();
-  };
-
-  const getResultIcon = (type: string) => {
-    switch (type) {
-      case 'profile': return <Users size={16} color="#22c55e" />;
-      case 'video': return <Video size={16} color="#3b82f6" />;
-      case 'match': return <Trophy size={16} color="#f59e0b" />;
-      case 'team': return <Star size={16} color="#8b5cf6" />;
-      default: return <Search size={16} color="#666" />;
-    }
   };
 
   if (!visible) return null;
@@ -226,49 +209,6 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, activeFilter === 'all' && styles.activeFilter]}
-          onPress={() => handleFilterChange('all')}
-        >
-          <TrendingUp size={16} color={activeFilter === 'all' ? '#fff' : '#666'} />
-          <Text style={[styles.filterText, activeFilter === 'all' && styles.activeFilterText]}>
-            الكل
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterButton, activeFilter === 'profiles' && styles.activeFilter]}
-          onPress={() => handleFilterChange('profiles')}
-        >
-          <Users size={16} color={activeFilter === 'profiles' ? '#fff' : '#666'} />
-          <Text style={[styles.filterText, activeFilter === 'profiles' && styles.activeFilterText]}>
-            اللاعبين
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterButton, activeFilter === 'videos' && styles.activeFilter]}
-          onPress={() => handleFilterChange('videos')}
-        >
-          <Video size={16} color={activeFilter === 'videos' ? '#fff' : '#666'} />
-          <Text style={[styles.filterText, activeFilter === 'videos' && styles.activeFilterText]}>
-            الفيديوهات
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterButton, activeFilter === 'matches' && styles.activeFilter]}
-          onPress={() => handleFilterChange('matches')}
-        >
-          <Trophy size={16} color={activeFilter === 'matches' ? '#fff' : '#666'} />
-          <Text style={[styles.filterText, activeFilter === 'matches' && styles.activeFilterText]}>
-            المباريات
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Search Results */}
       <View style={styles.resultsContainer}>
         {isSearching ? (
@@ -276,32 +216,48 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
             <Text style={styles.loadingText}>جاري البحث...</Text>
           </Animated.View>
         ) : searchResults.length > 0 ? (
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.resultItem}
-                onPress={() => handleResultSelect(item)}
-                activeOpacity={0.8}
+          <>
+            {/* Profiles Grid Section - FIFA Cards */}
+            <View style={styles.sectionContainer}>
+              <ScrollView 
+                horizontal={false} 
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.profilesGrid}
               >
-                <View style={styles.resultImageContainer}>
-                  {item.image && (
-                    <Image source={{ uri: item.image }} style={styles.resultImage} />
-                  )}
-                  <View style={styles.resultIcon}>
-                    {getResultIcon(item.type)}
-                  </View>
-                </View>
-                
-                <View style={styles.resultContent}>
-                  <Text style={styles.resultTitle}>{item.title}</Text>
-                  <Text style={styles.resultSubtitle}>{item.subtitle}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            showsVerticalScrollIndicator={false}
-          />
+                {searchResults.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.cardItem}
+                    onPress={() => handleResultSelect(item)}
+                    activeOpacity={0.8}
+                  >
+                    <MiniProfileCard
+                      playerImage={item.image}
+                      countryFlag={item.data?.countryFlag || '🇪🇬'}
+                      position={item.data?.position || 'RW'}
+                      clubLogo={item.data?.clubLogo}
+                    />
+                    <View style={styles.cardInfo}>
+                      <View style={styles.cardNameRow}>
+                        <Text style={styles.cardName} numberOfLines={1}>
+                          {item.data?.displayName || item.title}
+                        </Text>
+                        {item.data?.isVerified && (
+                          <BadgeCheck size={12} color="#22c55e" />
+                        )}
+                        {item.data?.isDeveloper && (
+                          <Code size={10} color="#3b82f6" />
+                        )}
+                      </View>
+                      <Text style={styles.cardUsername} numberOfLines={1}>
+                        @{item.data?.username}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </>
         ) : searchQuery.length > 0 ? (
           <View style={styles.noResultsContainer}>
             <Search size={48} color="#666" />
@@ -312,19 +268,11 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
           </View>
         ) : (
           <View style={styles.suggestionsContainer}>
-            <Text style={styles.suggestionsTitle}>اقتراحات البحث</Text>
+            <Text style={styles.suggestionsTitle}>ابحث عن لاعبين</Text>
             <View style={styles.suggestionsList}>
               <TouchableOpacity style={styles.suggestionItem}>
                 <Users size={16} color="#22c55e" />
-                <Text style={styles.suggestionText}>اللاعبين المشهورين</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.suggestionItem}>
-                <Video size={16} color="#3b82f6" />
-                <Text style={styles.suggestionText}>فيديوهات التحليل</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.suggestionItem}>
-                <Trophy size={16} color="#f59e0b" />
-                <Text style={styles.suggestionText}>مباريات اليوم</Text>
+                <Text style={styles.suggestionText}>ابحث باسم المستخدم أو الاسم</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -383,35 +331,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#333',
   },
-  filtersContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    gap: 10,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#333',
-    gap: 6,
-  },
-  activeFilter: {
-    backgroundColor: '#22c55e',
-    borderColor: '#22c55e',
-  },
-  filterText: {
-    color: '#666',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  activeFilterText: {
-    color: '#fff',
-  },
   resultsContainer: {
     flex: 1,
     paddingHorizontal: 20,
@@ -426,43 +345,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 10,
   },
-  resultItem: {
+  // Section styles
+  sectionContainer: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'right',
+  },
+  // Grid styles for profiles - FIFA Cards
+  profilesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingBottom: 20,
+  },
+  cardItem: {
+    width: '48%',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardInfo: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  cardNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 10,
+    gap: 4,
   },
-  resultImageContainer: {
-    position: 'relative',
-    marginRight: 15,
-  },
-  resultImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  resultIcon: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: '#0a0a0a',
-    borderRadius: 10,
-    padding: 2,
-  },
-  resultContent: {
-    flex: 1,
-  },
-  resultTitle: {
+  cardName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: 'bold',
-    marginBottom: 4,
+    textAlign: 'center',
+    maxWidth: 80,
   },
-  resultSubtitle: {
+  cardUsername: {
     color: '#666',
-    fontSize: 14,
+    fontSize: 10,
+    textAlign: 'center',
   },
   noResultsContainer: {
     alignItems: 'center',

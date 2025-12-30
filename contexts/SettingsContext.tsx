@@ -4,6 +4,9 @@
  * Provides app-wide settings state and persistence
  * Handles notifications, preferences, theme, and language
  * 
+ * Language handling is now synced with the new i18n system.
+ * The i18n store is the source of truth for language preferences.
+ * 
  * @author Staff Engineer
  */
 
@@ -11,6 +14,9 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { useLanguageStore, Language } from '../src/i18n';
+import { useAuth } from '@clerk/clerk-expo';
+import { getApiUrl } from '../config/api.config';
 
 // Conditionally import notifications only if not in Expo Go
 let Notifications: any = null;
@@ -34,38 +40,43 @@ export interface SettingsState {
   matchNotifications: boolean;
   goalNotifications: boolean;
   predictionReminders: boolean;
-  
+
   // Preferences
-  language: 'ar' | 'en';
+  /** @deprecated Language is now managed by the i18n store. Use useTranslation() hook instead. */
+  language: Language;
   favoriteTeams: number[];
   favoriteLeagues: number[];
-  
+
   // App State
   isFirstLaunch: boolean;
   lastSyncTime: number;
+  biometricEnabled: boolean;
 }
 
 interface SettingsContextType {
   settings: SettingsState;
   loading: boolean;
-  
+
   // Notification Methods
   toggleNotifications: (enabled: boolean) => Promise<void>;
   toggleMatchNotifications: (enabled: boolean) => Promise<void>;
   toggleGoalNotifications: (enabled: boolean) => Promise<void>;
   togglePredictionReminders: (enabled: boolean) => Promise<void>;
-  
+
   // Preference Methods
-  setLanguage: (lang: 'ar' | 'en') => Promise<void>;
+  /** @deprecated Use useTranslation().setLanguage() from '../src/i18n' instead */
+  setLanguage: (lang: Language) => Promise<void>;
   addFavoriteTeam: (teamId: number) => Promise<void>;
   removeFavoriteTeam: (teamId: number) => Promise<void>;
   addFavoriteLeague: (leagueId: number) => Promise<void>;
   removeFavoriteLeague: (leagueId: number) => Promise<void>;
-  
+
   // Utility Methods
   clearCache: () => Promise<void>;
   resetSettings: () => Promise<void>;
   updateLastSync: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  toggleBiometric: (enabled: boolean) => Promise<void>;
 }
 
 // ============================================================================
@@ -82,12 +93,15 @@ const DEFAULT_SETTINGS: SettingsState = {
   matchNotifications: true,
   goalNotifications: true,
   predictionReminders: true,
-  language: 'ar',
+  language: 'ar', // Default, but actual language is managed by i18n store
   favoriteTeams: [],
   favoriteLeagues: [],
   isFirstLaunch: true,
   lastSyncTime: Date.now(),
+  biometricEnabled: false,
 };
+
+const API_BASE_URL = getApiUrl();
 
 // ============================================================================
 // CONTEXT
@@ -102,6 +116,13 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  
+  // Get Clerk auth for API calls
+  const { getToken, isSignedIn } = useAuth();
+  
+  // Get language from the new i18n store
+  const i18nLanguage = useLanguageStore((state) => state.language);
+  const i18nSetLanguage = useLanguageStore((state) => state.setLanguage);
 
   // ============================================================================
   // INITIALIZATION
@@ -111,13 +132,89 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     initializeSettings();
     configureNotifications();
   }, []);
+  
+  // Sync settings.language with i18n store language
+  useEffect(() => {
+    if (!loading && settings.language !== i18nLanguage) {
+      setSettings((prev) => ({ ...prev, language: i18nLanguage }));
+    }
+  }, [i18nLanguage, loading]);
+
+  // Sync settings to backend whenever they change (debounce could be added here)
+  useEffect(() => {
+    if (!loading && !settings.isFirstLaunch) {
+      syncSettingsToBackend(settings);
+    }
+  }, [settings]);
+
+  const syncSettingsToBackend = async (currentSettings: SettingsState) => {
+    try {
+      if (!isSignedIn) return;
+      
+      const token = await getToken();
+      if (!token) return;
+
+      await fetch(`${API_BASE_URL}/users/settings`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(currentSettings)
+      });
+    } catch (e) {
+      console.log('Failed to sync settings', e);
+    }
+  };
+
+  const loadSettingsFromBackend = async () => {
+    try {
+      if (!isSignedIn) return null;
+      
+      const token = await getToken();
+      if (!token) return null;
+
+      const res = await fetch(`${API_BASE_URL}/users/settings`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const json = await res.json();
+      if (json.status === 'SUCCESS' && json.data) {
+        return json.data;
+      }
+    } catch (e) {
+      console.log('Failed to load settings from backend', e);
+    }
+    return null;
+  };
 
   const initializeSettings = async () => {
     try {
+      // ✅ OPTIMIZATION: Load from local storage FIRST (instant)
       const stored = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (stored) {
         const parsed = JSON.parse(stored);
+        // Show local settings immediately
         setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+        setLoading(false); // ✅ Stop loading immediately after local load
+        
+        // ✅ OPTIMIZATION: Sync with backend in background (non-blocking)
+        loadSettingsFromBackend().then(backendSettings => {
+          if (backendSettings) {
+            const merged = { ...DEFAULT_SETTINGS, ...parsed, ...backendSettings };
+            setSettings(merged);
+            AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(merged));
+          }
+        }).catch(err => console.warn('Background settings sync failed:', err));
+        
+        return; // Exit early - loading is done
+      }
+      
+      // No local settings - try backend (this is first launch)
+      const backendSettings = await loadSettingsFromBackend();
+      if (backendSettings) {
+        setSettings({ ...DEFAULT_SETTINGS, ...backendSettings });
+        await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...DEFAULT_SETTINGS, ...backendSettings }));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -147,12 +244,12 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (Platform.OS !== 'web') {
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
-        
+
         if (existingStatus !== 'granted') {
           const { status } = await Notifications.requestPermissionsAsync();
           finalStatus = status;
         }
-        
+
         if (finalStatus !== 'granted') {
           console.log('Notification permissions not granted');
         }
@@ -170,6 +267,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
       setSettings(newSettings);
+      // Backend sync is handled by useEffect
     } catch (error) {
       console.error('Error saving settings:', error);
       throw error;
@@ -182,7 +280,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const toggleNotifications = async (enabled: boolean) => {
     const newSettings = { ...settings, notificationsEnabled: enabled };
-    
+
     // Skip notification operations in Expo Go
     if (!isExpoGo && Notifications) {
       try {
@@ -200,7 +298,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         console.log('Notification operation failed:', error);
       }
     }
-    
+
     await saveSettings(newSettings);
   };
 
@@ -223,7 +321,14 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   // PREFERENCE METHODS
   // ============================================================================
 
-  const setLanguage = async (lang: 'ar' | 'en') => {
+  /**
+   * @deprecated Use useTranslation().setLanguage() from '../src/i18n' instead.
+   * This method now delegates to the i18n store for consistency.
+   */
+  const setLanguage = async (lang: Language) => {
+    // Delegate to the new i18n store (Requirements: 1.2, 1.3)
+    await i18nSetLanguage(lang);
+    // Update local settings state to keep in sync
     const newSettings = { ...settings, language: lang };
     await saveSettings(newSettings);
   };
@@ -293,6 +398,34 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     await saveSettings(newSettings);
   };
 
+  const deleteAccount = async () => {
+    try {
+      if (!isSignedIn) throw new Error('Not logged in');
+      
+      const token = await getToken();
+      if (!token) throw new Error('Not logged in');
+
+      const res = await fetch(`${API_BASE_URL}/users/me`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error('Failed to delete account');
+
+      // Clear local storage
+      await resetSettings();
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      throw error;
+    }
+  };
+
+  const toggleBiometric = async (enabled: boolean) => {
+    const newSettings = { ...settings, biometricEnabled: enabled };
+    await saveSettings(newSettings);
+  };
+
   // ============================================================================
   // CONTEXT VALUE
   // ============================================================================
@@ -300,24 +433,26 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const value: SettingsContextType = {
     settings,
     loading,
-    
+
     // Notification Methods
     toggleNotifications,
     toggleMatchNotifications,
     toggleGoalNotifications,
     togglePredictionReminders,
-    
+
     // Preference Methods
     setLanguage,
     addFavoriteTeam,
     removeFavoriteTeam,
     addFavoriteLeague,
     removeFavoriteLeague,
-    
+
     // Utility Methods
     clearCache,
     resetSettings,
     updateLastSync,
+    deleteAccount,
+    toggleBiometric,
   };
 
   return (
@@ -360,7 +495,7 @@ export const scheduleMatchNotification = async (
 
   try {
     const trigger = new Date(matchTime.getTime() - minutesBefore * 60 * 1000);
-    
+
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '⚽ المباراة على وشك البدء!',
@@ -420,7 +555,7 @@ export const sendPredictionResultNotification = async (
     await Notifications.scheduleNotificationAsync({
       content: {
         title: isCorrect ? '🎉 توقع صحيح!' : '😔 توقع خاطئ',
-        body: isCorrect 
+        body: isCorrect
           ? `لقد ربحت ${points} نقطة في مباراة ${matchInfo}`
           : `للأسف، توقعك في مباراة ${matchInfo} لم يكن صحيحاً`,
         data: { type: 'prediction_result', isCorrect, points },

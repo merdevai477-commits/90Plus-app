@@ -156,7 +156,7 @@ export class StorageService {
     }
 
     /**
-     * Upload reel video
+     * Upload reel video with progress tracking
      */
     static async uploadReel(
         token: string, 
@@ -164,7 +164,8 @@ export class StorageService {
         thumbnailUri?: string,
         caption?: string,
         hashtags?: string[],
-        mentions?: string[]
+        mentions?: string[],
+        onProgress?: (progress: number) => void
     ): Promise<UploadResult & { reelId?: string }> {
         try {
             const formData = new FormData();
@@ -197,71 +198,93 @@ export class StorageService {
             const config = getAPIConfig();
             const uploadTimeout = config.uploadTimeout || 15 * 60 * 1000; // Default 15 minutes
 
-            // Create AbortController for timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), uploadTimeout);
-
-            try {
-                // Don't set Content-Type header - let fetch API set it automatically with boundary
-                const response = await fetch(`${API_URL}/upload/reel`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        // Content-Type will be set automatically by fetch with boundary
-                    },
-                    body: formData,
-                    signal: controller.signal, // Add abort signal for timeout
+            // Use XMLHttpRequest for progress tracking
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                
+                // Track upload progress
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable && onProgress) {
+                        // Start from 30% (after thumbnail generation) and go to 90%
+                        // Use Math.min to ensure we never exceed 90% during upload
+                        const uploadProgress = 30 + Math.min(event.loaded / event.total, 1) * 60;
+                        const progressValue = Math.min(Math.round(uploadProgress), 90); // Cap at 90%
+                        onProgress(progressValue);
+                    }
                 });
 
-                clearTimeout(timeoutId);
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            
+                            logger.info('Upload reel response:', JSON.stringify(data));
+                            
+                            if (data.status === 'SUCCESS') {
+                                // Handle response format from upload.routes.ts
+                                const videoUrl = data.data?.videoUrl || data.data?.url || data.url;
+                                const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
+                                const reelId = data.data?.reelId || data.reelId;
+                                
+                                if (!videoUrl) {
+                                    logger.error('No video URL in response:', data);
+                                    resolve({ success: false, error: 'No video URL returned from server' });
+                                    return;
+                                }
+                                
+                                logger.info('Reel uploaded successfully:', { videoUrl, reelId });
+                                
+                                if (onProgress) onProgress(100);
+                                
+                                resolve({
+                                    success: true,
+                                    url: videoUrl,
+                                    storagePath: storagePath,
+                                    reelId: reelId,
+                                });
+                            } else {
+                                resolve({ success: false, error: data.message || 'Upload failed' });
+                            }
+                        } catch (parseError) {
+                            logger.error('Failed to parse upload response:', parseError);
+                            resolve({ success: false, error: 'Invalid response from server' });
+                        }
+                    } else {
+                        // Handle error response
+                        let errorData;
+                        try {
+                            errorData = JSON.parse(xhr.responseText);
+                        } catch {
+                            errorData = { message: xhr.responseText || `Upload failed: ${xhr.status}` };
+                        }
+                        logger.error('Upload reel failed:', xhr.status, errorData);
+                        resolve({ success: false, error: errorData.message || `Upload failed: ${xhr.status}` });
+                    }
+                });
 
-                // Check response status first
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    logger.error('Upload reel failed:', response.status, errorText);
-                    let errorData;
-                    try {
-                        errorData = JSON.parse(errorText);
-                    } catch {
-                        errorData = { message: errorText || 'Upload failed' };
-                    }
-                    return { success: false, error: errorData.message || `Upload failed: ${response.status}` };
-                }
-                
-                const data = await response.json();
-                
-                logger.info('Upload reel response:', JSON.stringify(data));
-                
-                if (data.status === 'SUCCESS') {
-                    // Handle response format from upload.routes.ts
-                    const videoUrl = data.data?.videoUrl || data.data?.url || data.url;
-                    const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
-                    const reelId = data.data?.reelId || data.reelId;
-                    
-                    if (!videoUrl) {
-                        logger.error('No video URL in response:', data);
-                        return { success: false, error: 'No video URL returned from server' };
-                    }
-                    
-                    logger.info('Reel uploaded successfully:', { videoUrl, reelId });
-                    
-                    return {
-                        success: true,
-                        url: videoUrl,
-                        storagePath: storagePath,
-                        reelId: reelId,
-                    };
-                }
-                
-                return { success: false, error: data.message || 'Upload failed' };
-            } catch (fetchError: any) {
-                clearTimeout(timeoutId);
-                if (fetchError.name === 'AbortError') {
+                xhr.addEventListener('error', () => {
+                    logger.error('Upload reel network error');
+                    resolve({ success: false, error: 'Network error during upload' });
+                });
+
+                xhr.addEventListener('abort', () => {
+                    logger.error('Upload reel aborted');
+                    resolve({ success: false, error: 'Upload was cancelled' });
+                });
+
+                // Set timeout
+                const timeoutId = setTimeout(() => {
+                    xhr.abort();
                     logger.error('Upload reel timeout:', uploadTimeout);
-                    return { success: false, error: 'Upload timeout - request took too long' };
-                }
-                throw fetchError;
-            }
+                    resolve({ success: false, error: 'Upload timeout - request took too long' });
+                }, uploadTimeout);
+
+                xhr.open('POST', `${API_URL}/upload/reel`);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                // Don't set Content-Type - let browser set it with boundary
+                
+                xhr.send(formData);
+            });
         } catch (error: any) {
             logger.error('Upload reel error:', error);
             return { success: false, error: error.message };

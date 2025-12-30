@@ -28,6 +28,7 @@ export const COLORS = {
     white: '#FFFFFF',
     overlay: 'rgba(0,0,0,0.6)',
     glass: 'rgba(255,255,255,0.1)',
+    glassBlack: 'rgba(10, 10, 10, 0.95)',
 
     // Text Colors
     textPrimary: '#FFFFFF',

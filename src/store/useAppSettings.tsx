@@ -6,6 +6,7 @@ import { Platform, Dimensions } from 'react-native';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import { nanoid } from 'nanoid/non-secure';
+import { logger } from '../../services/logger';
 
 const { width, height } = Dimensions.get('window');
 
@@ -374,7 +375,7 @@ export const useAppSettings = create<AppSettingsStore>()(
             },
           }));
         } catch (error) {
-          console.error('Failed to fetch remote config:', error);
+          logger.debug('Failed to fetch remote config:', error);
         }
       },
 
@@ -415,7 +416,7 @@ export const useAppSettings = create<AppSettingsStore>()(
         }));
         
         // Send to analytics service
-        console.log('📊 Analytics Event:', event);
+        logger.debug('📊 Analytics Event:', event);
       },
 
       // General Actions
@@ -434,12 +435,12 @@ export const useAppSettings = create<AppSettingsStore>()(
 
       loadSettings: async () => {
         // Settings are auto-loaded by zustand persist
-        console.log('Settings loaded');
+        logger.debug('Settings loaded');
       },
 
       saveSettings: async () => {
         // Settings are auto-saved by zustand persist
-        console.log('Settings saved');
+        logger.debug('Settings saved');
       },
     }),
     {

@@ -34,6 +34,7 @@ export interface ReelData {
     muted: boolean;
     description?: string;
     hashtags?: string[];
+    mentions?: string[];
     location?: string;
     createdAt: Date;
 }

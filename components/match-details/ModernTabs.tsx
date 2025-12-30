@@ -1,12 +1,10 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
 interface Tab {
   key: string;
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: any; // Keeping icon prop optional but not using it for this design
 }
 
 interface ModernTabsProps {
@@ -17,6 +15,8 @@ interface ModernTabsProps {
 
 export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabChange }) => {
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Auto-scroll to active tab logic could be added here if needed
 
   return (
     <View style={styles.container}>
@@ -34,21 +34,8 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabCh
               key={tab.key}
               style={[styles.tab, isActive && styles.activeTab]}
               onPress={() => onTabChange(tab.key)}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              {isActive && (
-                <LinearGradient
-                  colors={['#22c55e', '#16a34a']}
-                  style={StyleSheet.absoluteFill}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                />
-              )}
-              <Ionicons
-                name={tab.icon}
-                size={18}
-                color={isActive ? '#fff' : '#888'}
-              />
               <Text style={[styles.tabText, isActive && styles.activeTabText]}>
                 {tab.label}
               </Text>
@@ -62,32 +49,34 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabCh
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 16,
+    marginVertical: 12,
   },
   scrollContent: {
     paddingHorizontal: 20,
     gap: 12,
   },
   tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    gap: 8,
-    overflow: 'hidden', // For LinearGradient
+    paddingHorizontal: 24,
+    borderRadius: 30, // Pill shape
+    backgroundColor: 'rgba(255, 255, 255, 0.08)', // Dark subtle background for inactive
+    borderWidth: 0,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activeTab: {
-    borderColor: 'transparent',
-    backgroundColor: '#22c55e', // Fallback
+    backgroundColor: '#8b5cf6', // Indigo-purple active background
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   tabText: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '500',
   },
   activeTabText: {
     color: '#fff',

@@ -15,10 +15,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent } from '../../services/apiFootball';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from '../../src/i18n';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { FootballField } from '../../components/match-details/FootballField';
+import { matchArchiveService } from '../../services/matchArchiveService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -39,7 +40,7 @@ interface MatchDetailsParams {
 
 const MatchDetailsScreen = () => {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
 
   // Safety check for translations
@@ -59,6 +60,7 @@ const MatchDetailsScreen = () => {
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
   const [events, setEvents] = useState<FixtureEvent[]>([]);
   const [standings, setStandings] = useState<any[]>([]);
+  const [fixture, setFixture] = useState<Fixture | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [lineupsLoading, setLineupsLoading] = useState(false);
@@ -82,6 +84,7 @@ const MatchDetailsScreen = () => {
     setEvents([]);
     setLineups([]);
     setStatistics([]);
+    setFixture(null);
     setHomeLastFixtures([]);
     setAwayLastFixtures([]);
     setStandings([]);
@@ -174,14 +177,38 @@ const MatchDetailsScreen = () => {
         })
         .finally(() => setStatsLoading(false));
 
-      // 5. Handle Fixture Details -> Form & Standings
+      // 5. Handle Fixture Details -> Form & Standings + Archive finished matches
       fixtureDetailsPromise
         .then(async (details) => {
           if (details) {
+            setFixture(details);
             const homeId = details.teams.home.id;
             const awayId = details.teams.away.id;
             const leagueId = details.league.id;
             const season = details.league.season;
+
+            // Archive finished matches (Requirement 6.1, 6.6)
+            const finishedStatuses = ['FT', 'AET', 'PEN'];
+            if (finishedStatuses.includes(details.fixture.status.short)) {
+              // Archive in background - don't block UI
+              Promise.all([lineupsPromise, statsPromise, eventsPromise])
+                .then(async ([lineupsData, statsData, eventsData]) => {
+                  try {
+                    await matchArchiveService.archiveMatchFromData(
+                      details,
+                      lineupsData,
+                      statsData,
+                      eventsData
+                    );
+                    console.log('✅ Match archived successfully:', fixtureId);
+                  } catch (archiveErr) {
+                    console.warn('⚠️ Failed to archive match:', archiveErr);
+                  }
+                })
+                .catch(err => {
+                  console.warn('⚠️ Could not archive match - missing data:', err);
+                });
+            }
 
             // Fetch Form (Last 5 Matches) in parallel
             Promise.allSettled([
@@ -234,12 +261,12 @@ const MatchDetailsScreen = () => {
 
   const getPositionName = (pos: string | null): string => {
     const positions: { [key: string]: string } = {
-      'G': t.matchDetails.goalkeeper,
-      'D': t.matchDetails.defender,
-      'M': t.matchDetails.midfielder,
-      'F': t.matchDetails.forward,
+      'G': t.matchDetails?.goalkeeper || 'GK',
+      'D': t.matchDetails?.defender || 'DEF',
+      'M': t.matchDetails?.midfielder || 'MID',
+      'F': t.matchDetails?.forward || 'FWD',
     };
-    return positions[pos || ''] || pos || t.common.unknown || 'Unknown';
+    return positions[pos || ''] || String(pos || '') || t.common?.unknown || 'Unknown';
   };
 
   // Player Card Component with image error handling
@@ -336,7 +363,7 @@ const MatchDetailsScreen = () => {
               <View key={index} style={[styles.eventCard, isHomeTeam ? styles.eventHome : styles.eventAway]}>
                 <View style={styles.eventTime}>
                   <Text style={styles.eventTimeText}>{event.time.elapsed}'</Text>
-                  {event.time.extra && (
+                  {!!event.time.extra && (
                     <Text style={styles.eventExtraTime}>+{event.time.extra}'</Text>
                   )}
                 </View>
@@ -350,10 +377,10 @@ const MatchDetailsScreen = () => {
                 </View>
 
                 <View style={styles.eventDetails}>
-                  <Text style={styles.eventPlayer}>{event.player.name}</Text>
+                  {!!event.player.name && <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>}
                   <Text style={styles.eventType}>{getEventLabel(event.type, event.detail)}</Text>
-                  {event.assist.name && (
-                    <Text style={styles.eventAssist}>{t.matchDetails.assist}: {event.assist.name}</Text>
+                  {!!event.assist.name && (
+                    <Text style={styles.eventAssist}>{t.matchDetails?.assist || 'Assist'}: {String(event.assist.name)}</Text>
                   )}
                 </View>
 
@@ -439,6 +466,20 @@ const MatchDetailsScreen = () => {
                   players={fieldPlayers}
                   teamName={lineup.team.name}
                   teamColor={index === 0 ? params.homeTeam === lineup.team.name ? '#22c55e' : '#3b82f6' : params.awayTeam === lineup.team.name ? '#3b82f6' : '#22c55e'}
+                  onPlayerPress={(player) => {
+                    if (player.id) {
+                      router.push({
+                        pathname: '/player-profile' as any,
+                        params: {
+                          id: player.id.toString(),
+                          name: player.name,
+                          photo: player.photo || '',
+                          teamName: lineup.team.name,
+                          teamLogo: lineup.team.logo,
+                        }
+                      } as any);
+                    }
+                  }}
                 />
 
                 {/* Substitutes */}
@@ -447,13 +488,27 @@ const MatchDetailsScreen = () => {
                     <Text style={styles.substitutesTitle}>{t.matchDetails.substitutes}</Text>
                     <View style={styles.substitutesGrid}>
                       {substitutes.map((item: any) => (
-                        <View key={item.player.id} style={styles.substituteCard}>
+                        <TouchableOpacity
+                          key={item.player.id}
+                          style={styles.substituteCard}
+                          onPress={() => {
+                            router.push({
+                              pathname: '/player-profile' as any,
+                              params: {
+                                id: item.player.id.toString(),
+                                name: item.player.name,
+                                teamName: lineup.team.name,
+                                teamLogo: lineup.team.logo,
+                              }
+                            } as any);
+                          }}
+                        >
                           <Text style={styles.substituteNumber}>{item.player.number || '-'}</Text>
                           <View style={styles.substituteInfo}>
                             <Text style={styles.substituteName} numberOfLines={1}>{item.player.name}</Text>
                             <Text style={styles.substitutePos}>{item.player.pos}</Text>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       ))}
                     </View>
                   </View>
@@ -515,15 +570,15 @@ const MatchDetailsScreen = () => {
 
             return (
               <View key={index} style={styles.statRow}>
-                <Text style={styles.statValue}>{homeValue || '0'}</Text>
+                <Text style={styles.statValue}>{String(homeValue || '0')}</Text>
                 <View style={styles.statCenter}>
-                  <Text style={styles.statLabel}>{stat.type}</Text>
+                  <Text style={styles.statLabel}>{String(stat.type || '')}</Text>
                   <View style={styles.statBarsContainer}>
                     <View style={[styles.statBar, styles.statBarHome, { width: `${homePercentage}%` }]} />
                     <View style={[styles.statBar, styles.statBarAway, { width: `${awayPercentage}%` }]} />
                   </View>
                 </View>
-                <Text style={styles.statValue}>{awayValue || '0'}</Text>
+                <Text style={styles.statValue}>{String(awayValue || '0')}</Text>
               </View>
             );
           })}
@@ -732,23 +787,22 @@ const MatchDetailsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#0f0720" />
 
-      {/* Back Button */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => {
-          // Force navigation to Leagues (Matches) page as requested
-          router.replace('/(tabs)/leagues');
-        }}
-      >
-        <View style={styles.backButtonInner}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </View>
-      </TouchableOpacity>
+      {/* Custom Top Bar */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity
+          style={styles.backButtonRound}
+          onPress={() => router.replace('/(tabs)/leagues')}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Live Match</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Modern Header */}
+        {/* Modern Header (Score Card) */}
         <MatchHeader
           homeTeam={params.homeTeam}
           awayTeam={params.awayTeam}
@@ -760,6 +814,11 @@ const MatchDetailsScreen = () => {
           league={params.league}
           date={params.date}
           time={params.time}
+          statusShort={fixture?.fixture.status.short}
+          startTimestamp={fixture?.fixture.status.short === '2H'
+            ? (fixture?.fixture.periods.second || undefined)
+            : (fixture?.fixture.periods.first || undefined)
+          }
         />
 
         {/* Modern Tabs */}
@@ -785,24 +844,30 @@ const MatchDetailsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#0f0720', // Deep dark purple/black background
   },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 100,
-    padding: 8,
+  customHeader: {
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  backButtonInner: {
+  backButtonRound: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: '#1e1b4b',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
   },
   lineupsContainer: {
     paddingBottom: 40,

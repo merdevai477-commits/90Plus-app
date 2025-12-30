@@ -24,7 +24,7 @@ import {
     Play,
 } from 'lucide-react-native';
 
-import { VideoPlayer } from '../Matches/VideoPlayer';
+import { UnifiedVideoPlayer, UnifiedReelData } from '../common/UnifiedVideoPlayer';
 import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { ReelData } from './types';
 import { COLORS, GRADIENTS, EFFECTS } from './constants';
@@ -41,6 +41,8 @@ interface ReelItemProps {
     onSave: () => void;
     onUserPress: () => void;
     onReport: () => void;
+    onFollow?: () => void;
+    onUnfollow?: () => void;
     onHashtagPress?: (tag: string) => void;
     onMentionPress?: (username: string) => void;
     onTogglePlayPause?: () => void;
@@ -48,6 +50,8 @@ interface ReelItemProps {
     fadeAnim?: RNAnimated.Value;
     slideAnim?: RNAnimated.Value;
     pulseAnim?: RNAnimated.Value;
+    /** Current user's ID - used to hide follow button on own reels (Requirement 18.1) */
+    currentUserId?: string;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -63,7 +67,7 @@ const formatCount = (count: number): string => {
 };
 
 // Modern Reel Item Component with App Colors 🎨
-export const ReelItem: React.FC<ReelItemProps> = ({
+const ReelItemComponent: React.FC<ReelItemProps> = ({
     reel,
     isActive,
     onLike,
@@ -73,12 +77,15 @@ export const ReelItem: React.FC<ReelItemProps> = ({
     onShare,
     onSave,
     onUserPress,
+    onFollow,
+    onUnfollow,
     onHashtagPress,
     onMentionPress,
     onVideoRef,
     fadeAnim,
     slideAnim,
     pulseAnim,
+    currentUserId,
 }) => {
     const [showHeartAnimation, setShowHeartAnimation] = useState(false);
     const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
@@ -246,8 +253,14 @@ export const ReelItem: React.FC<ReelItemProps> = ({
                 onPressOut={handleLongPressEnd}
                 style={styles.videoWrapper}
             >
-                <VideoPlayer
-                    reel={reel}
+                <UnifiedVideoPlayer
+                    reel={{
+                        id: reel.id,
+                        videoUrl: reel.videoUrl,
+                        thumbnail: reel.thumbnail,
+                        duration: reel.duration,
+                        muted: reel.muted,
+                    }}
                     isActive={isActive && !isPaused}
                     onVideoRef={onVideoRef}
                 />
@@ -305,26 +318,48 @@ export const ReelItem: React.FC<ReelItemProps> = ({
                                     <Text style={styles.verifiedBadge}>✓</Text>
                                 )}
                             </View>
-                            {reel.user.followers && (
+                            {typeof reel.user.followers === 'number' && reel.user.followers > 0 && (
                                 <Text style={styles.userFollowers}>
-                                    {formatCount(reel.user.followers)} {t.profile.followers}
+                                    {formatCount(reel.user.followers)} {t.profile?.followers || 'متابعين'}
                                 </Text>
                             )}
                         </View>
                     </TouchableOpacity>
 
-                    {!reel.user.isFollowing && (
+                    {/* Follow Button Logic - Requirements 18.1, 18.2, 18.4 */}
+                    {/* Hide for own reels (18.1), Show for other users (18.2), Show correct state (18.4) */}
+                    {(() => {
+                        // Type-safe comparison: ensure own videos NEVER show follow button
+                        const isOwnReel = currentUserId && reel.user.id && 
+                            String(currentUserId) === String(reel.user.id);
+                        return !isOwnReel && (onFollow || onUnfollow);
+                    })() && (
                         <TouchableOpacity
-                            style={styles.followButton}
-                            onPress={() => haptics.lightImpact()}
+                            style={[
+                                styles.followButton,
+                                reel.user.isFollowing && styles.followingButton
+                            ]}
+                            onPress={() => {
+                                haptics.lightImpact();
+                                if (reel.user.isFollowing && onUnfollow) {
+                                    onUnfollow();
+                                } else if (!reel.user.isFollowing && onFollow) {
+                                    onFollow();
+                                }
+                            }}
                         >
                             <LinearGradient
-                                colors={GRADIENTS.greenGlow}
+                                colors={reel.user.isFollowing ? GRADIENTS.cardGradient : GRADIENTS.greenGlow}
                                 style={styles.followButtonGradient}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             >
-                                <Text style={styles.followButtonText}>{t.reels.follow}</Text>
+                                <Text style={[
+                                    styles.followButtonText,
+                                    reel.user.isFollowing && styles.followingButtonText
+                                ]}>
+                                    {reel.user.isFollowing ? (t.reels?.following || 'Following') : t.reels.follow}
+                                </Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     )}
@@ -371,7 +406,7 @@ export const ReelItem: React.FC<ReelItemProps> = ({
                     <View style={styles.statItem}>
                         <Eye size={14} color={COLORS.accent} />
                         <Text style={styles.statText}>
-                            {formatCount(reel.views)} {t.reels.views}
+                            {formatCount(reel.views)} {t.reels?.views || 'مشاهدات'}
                         </Text>
                     </View>
                     {reel.location && (
@@ -572,6 +607,12 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         ...EFFECTS.greenGlow,
     },
+    followingButton: {
+        borderRadius: 18,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: COLORS.glassBorder,
+    },
     followButtonGradient: {
         paddingHorizontal: 18,
         paddingVertical: 8,
@@ -580,6 +621,9 @@ const styles = StyleSheet.create({
         color: COLORS.deepBlack,
         fontSize: 13,
         fontWeight: '700',
+    },
+    followingButtonText: {
+        color: COLORS.textPrimary,
     },
     descriptionContainer: {
         position: 'absolute',
@@ -713,3 +757,6 @@ const styles = StyleSheet.create({
         ...EFFECTS.softShadow,
     },
 });
+
+// ✅ PERFORMANCE: Memoize to prevent unnecessary re-renders
+export const ReelItem = React.memo(ReelItemComponent);

@@ -52,7 +52,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import MaskedView from '@react-native-masked-view/masked-view';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from '../../src/i18n';
+import { useAuth } from '@clerk/clerk-expo';
+import rankingsService, { RankedReel, RankedQuizUser, RankedPredictor, RankedCommenter, RankedPlayer, PlayerPeriod, AllRankingsResponse } from '../../services/rankingsService';
+import { logger } from '../../utils/logger';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -86,6 +89,7 @@ const customLayoutAnimation = {
 // Types
 interface RankedUser {
   id: string;
+  username?: string; // ✅ Added username for navigation
   name: string;
   avatar: string;
   score: number;
@@ -387,6 +391,191 @@ const players: Player[] = [
   },
 ];
 
+// Top Player Card Component - For Top 11 Players from API
+const TopPlayerCard = memo(({ 
+  player, 
+  votes, 
+  onVote, 
+  rank,
+  t 
+}: { 
+  player: RankedPlayer; 
+  votes: { up: number; down: number; userVote: string | null };
+  onVote: (playerId: string, type: 'up' | 'down') => void; 
+  rank: number;
+  t: any;
+}) => {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const router = require('expo-router').useRouter();
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        delay: rank * 50,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        delay: rank * 50,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [rank]);
+
+  const handleVote = useCallback((type: 'up' | 'down') => {
+    onVote(player.id, type);
+  }, [player.id, onVote]);
+
+  const handlePress = useCallback(() => {
+    // ✅ Navigate to user profile by username
+    if (player.username) {
+      router.push({
+        pathname: '/user/[username]',
+        params: { username: player.username }
+      });
+    }
+  }, [player.username, router]);
+
+  const totalVotes = votes.up + votes.down;
+  const approvalRate = totalVotes > 0 ? Math.round((votes.up / totalVotes) * 100) : 0;
+
+  const isTopThree = rank <= 3;
+  const badgeColors = rank === 1 ? ['#FFD700', '#FFA500'] : 
+                      rank === 2 ? ['#C0C0C0', '#A8A8A8'] : 
+                      rank === 3 ? ['#CD7F32', '#B8860B'] : 
+                      ['#22c55e', '#16a34a'];
+
+  return (
+    <Animated.View
+      style={[
+        styles.topPlayerCard,
+        {
+          opacity: scaleAnim,
+          transform: [
+            { scale: scaleAnim },
+            { translateY: slideAnim },
+          ],
+        },
+      ]}
+    >
+      <TouchableOpacity activeOpacity={0.9} onPress={handlePress}>
+        <LinearGradient
+          colors={
+            isTopThree
+              ? rank === 1 ? ['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)']
+              : rank === 2 ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)']
+              : ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)']
+              : ['#1e293b', '#0f172a']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.topPlayerCardGradient}
+        >
+          {/* Rank Badge */}
+          <View style={[styles.topPlayerRank, isTopThree && styles.topPlayerRankTop]}>
+            {rank === 1 ? <Crown color="#FFD700" size={22} /> :
+             rank === 2 ? <Medal color="#C0C0C0" size={22} /> :
+             rank === 3 ? <Award color="#CD7F32" size={22} /> :
+             <Text style={styles.topPlayerRankText}>#{rank}</Text>}
+          </View>
+
+          {/* Player Avatar */}
+          <View style={styles.topPlayerAvatarWrapper}>
+            <LinearGradient colors={badgeColors} style={styles.topPlayerAvatarBorder}>
+              <Image 
+                source={{ uri: player.avatar || DEFAULT_AVATAR }} 
+                style={styles.topPlayerAvatar} 
+              />
+            </LinearGradient>
+            {player.isVerified && (
+              <View style={styles.topPlayerVerified}>
+                <Star color="#fff" size={10} fill="#fff" />
+              </View>
+            )}
+          </View>
+
+          {/* Player Info */}
+          <View style={styles.topPlayerInfo}>
+            <View style={styles.topPlayerNameRow}>
+              <Text style={styles.topPlayerName} numberOfLines={1}>
+                {player.displayName || player.username}
+              </Text>
+              <Text style={styles.topPlayerFlag}>{player.countryFlag}</Text>
+            </View>
+            <View style={styles.topPlayerMetaRow}>
+              <View style={styles.topPlayerPositionBadge}>
+                <Text style={styles.topPlayerPosition}>{player.position}</Text>
+              </View>
+              <Text style={styles.topPlayerLevel}>Lv.{player.level}</Text>
+            </View>
+            {/* Stats Row */}
+            <View style={styles.topPlayerStatsRow}>
+              <View style={styles.topPlayerStat}>
+                <Eye color="#22c55e" size={12} />
+                <Text style={styles.topPlayerStatText}>{formatNumber(player.stats.totalViews)}</Text>
+              </View>
+              <View style={styles.topPlayerStat}>
+                <Heart color="#ef4444" size={12} />
+                <Text style={styles.topPlayerStatText}>{formatNumber(player.stats.totalLikes)}</Text>
+              </View>
+              <View style={styles.topPlayerStat}>
+                <Users color="#3b82f6" size={12} />
+                <Text style={styles.topPlayerStatText}>{formatNumber(player.followersCount)}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Voting Section */}
+          <View style={styles.topPlayerVoting}>
+            <Text style={styles.topPlayerApproval}>{approvalRate}%</Text>
+            <View style={styles.topPlayerVoteButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.topPlayerVoteBtn,
+                  votes.userVote === 'up' && styles.topPlayerVoteBtnActiveUp,
+                ]}
+                onPress={() => handleVote('up')}
+              >
+                <ThumbsUp 
+                  color={votes.userVote === 'up' ? '#fff' : '#666'} 
+                  size={14}
+                  fill={votes.userVote === 'up' ? '#fff' : 'transparent'}
+                />
+                <Text style={[
+                  styles.topPlayerVoteCount,
+                  votes.userVote === 'up' && styles.topPlayerVoteCountActive
+                ]}>{votes.up}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.topPlayerVoteBtn,
+                  votes.userVote === 'down' && styles.topPlayerVoteBtnActiveDown,
+                ]}
+                onPress={() => handleVote('down')}
+              >
+                <ThumbsDown 
+                  color={votes.userVote === 'down' ? '#fff' : '#666'} 
+                  size={14}
+                  fill={votes.userVote === 'down' ? '#fff' : 'transparent'}
+                />
+                <Text style={[
+                  styles.topPlayerVoteCount,
+                  votes.userVote === 'down' && styles.topPlayerVoteCountActiveRed
+                ]}>{votes.down}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
 // Player Rating Card Component - Redesigned
 const PlayerRatingCard = memo(({ player, onVote, t }: { player: Player; onVote: (playerId: string, type: 'up' | 'down') => void; t: any }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -607,6 +796,8 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
     });
   }, []);
 
+  const router = require('expo-router').useRouter();
+
   const handlePress = useCallback(() => {
     Animated.sequence([
       Animated.timing(scaleAnim, {
@@ -622,7 +813,15 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
       }),
     ]).start();
     hapticFeedback();
-  }, [hapticFeedback]);
+    
+    // ✅ Navigate to user profile by username
+    if (item.username) {
+      router.push({
+        pathname: '/user/[username]',
+        params: { username: item.username }
+      });
+    }
+  }, [hapticFeedback, item.username, router]);
 
   if (!isVisible) return <SkeletonLoader />;
 
@@ -871,7 +1070,8 @@ const getBadgeStyle = (badge?: string) => {
 };
 
 export default function ProRankScreen() {
-  const { t, isRTL } = useLanguage();
+  const { t, isRTL } = useTranslation();
+  const { getToken } = useAuth();
   
   // Safety check for translations
   if (!t || !t.rank) {
@@ -882,7 +1082,7 @@ export default function ProRankScreen() {
     );
   }
   
-  const [selectedCategory, setSelectedCategory] = useState<'views' | 'comments' | 'shares' | 'quiz'>('views');
+  const [selectedCategory, setSelectedCategory] = useState<'views' | 'comments' | 'shares' | 'predictions'>('views');
   const [selectedTab, setSelectedTab] = useState<'rankings' | 'players'>('rankings');
   const [refreshing, setRefreshing] = useState(false);
   const [showPredictionModal, setShowPredictionModal] = useState(false);
@@ -890,7 +1090,21 @@ export default function ProRankScreen() {
   const [homeScore, setHomeScore] = useState('');
   const [awayScore, setAwayScore] = useState('');
   const [loading, setLoading] = useState(false);
-  const [playersData, setPlayersData] = useState(players);
+  const [playersData, setPlayersData] = useState<RankedPlayer[]>([]);
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(true);
+  const [playerVotes, setPlayerVotes] = useState<Record<string, { up: number; down: number; userVote: string | null }>>({});
+  const [playerPeriod, setPlayerPeriod] = useState<PlayerPeriod>('weekly');
+  const [showAllRankings, setShowAllRankings] = useState(false);
+  
+  // Real data from API
+  const [rankingsData, setRankingsData] = useState<AllRankingsResponse>({
+    topViews: [],
+    topShares: [],
+    topPredictions: [],
+    topCommenters: [],
+    period: '3_days',
+  });
+  const [isLoadingRankings, setIsLoadingRankings] = useState(true);
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -898,6 +1112,69 @@ export default function ProRankScreen() {
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const headerHeight = useRef(new Animated.Value(200)).current;
+
+  // Fetch rankings data from API
+  const fetchRankings = useCallback(async () => {
+    try {
+      setIsLoadingRankings(true);
+      const token = await getToken();
+      const data = await rankingsService.getAllRankings(token, 10);
+      setRankingsData(data);
+    } catch (error) {
+      logger.error('Error fetching rankings:', error);
+    } finally {
+      setIsLoadingRankings(false);
+    }
+  }, []); // Remove getToken from deps - it's stable from Clerk
+
+  // Fetch top players
+  const fetchTopPlayers = useCallback(async (period: PlayerPeriod = playerPeriod) => {
+    try {
+      setIsLoadingPlayers(true);
+      const token = await getToken();
+      const { players } = await rankingsService.getTopPlayers(token, 11, period);
+      setPlayersData(players);
+      
+      // Fetch votes for each player - PARALLEL for better performance
+      const votesPromises = players.map(player => 
+        rankingsService.getPlayerVotes(token, player.id).then(votesData => ({
+          playerId: player.id,
+          votes: votesData ? {
+            up: votesData.votes.up,
+            down: votesData.votes.down,
+            userVote: votesData.userVote,
+          } : null
+        })).catch(() => ({ playerId: player.id, votes: null }))
+      );
+      
+      const votesResults = await Promise.all(votesPromises);
+      const votesMap: Record<string, { up: number; down: number; userVote: string | null }> = {};
+      votesResults.forEach(({ playerId, votes }) => {
+        if (votes) {
+          votesMap[playerId] = votes;
+        }
+      });
+      setPlayerVotes(votesMap);
+    } catch (error) {
+      logger.error('Error fetching top players:', error);
+    } finally {
+      setIsLoadingPlayers(false);
+    }
+  }, [playerPeriod]); // Remove getToken from deps - it's stable from Clerk
+
+  // Handle period change
+  const handlePeriodChange = useCallback((period: PlayerPeriod) => {
+    setPlayerPeriod(period);
+    hapticFeedback();
+    fetchTopPlayers(period);
+  }, [hapticFeedback, fetchTopPlayers]);
+
+  // Initial data fetch - run only once on mount
+  useEffect(() => {
+    fetchRankings();
+    fetchTopPlayers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount
 
   useEffect(() => {
     // Entry animations with better timing
@@ -942,14 +1219,13 @@ export default function ProRankScreen() {
     }
   }, []);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     hapticFeedback();
     LayoutAnimation.configureNext(customLayoutAnimation);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
-  }, [hapticFeedback]);
+    await Promise.all([fetchRankings(), fetchTopPlayers()]);
+    setRefreshing(false);
+  }, [hapticFeedback, fetchRankings, fetchTopPlayers]);
 
   const getRankIcon = useCallback((rank: number) => {
     switch (rank) {
@@ -976,31 +1252,27 @@ export default function ProRankScreen() {
     hapticFeedback();
   }, [hapticFeedback]);
 
-  const handlePlayerVote = useCallback((playerId: string, type: 'up' | 'down') => {
+  const handlePlayerVote = useCallback(async (playerId: string, type: 'up' | 'down') => {
     hapticFeedback();
-    setPlayersData(prev => prev.map(player => {
-      if (player.id === playerId) {
-        const currentVote = player.votes.userVote;
-        let newVotes = { ...player.votes };
-        
-        if (currentVote === type) {
-          // Remove vote
-          newVotes.userVote = null;
-          newVotes[type] -= 1;
-        } else {
-          // Add/change vote
-          if (currentVote) {
-            newVotes[currentVote] -= 1;
+    try {
+      const token = await getToken();
+      const result = await rankingsService.voteForPlayer(token, playerId, type);
+      
+      if (result) {
+        setPlayerVotes(prev => ({
+          ...prev,
+          [playerId]: {
+            up: result.votes.up,
+            down: result.votes.down,
+            userVote: result.voteType,
           }
-          newVotes.userVote = type;
-          newVotes[type] += 1;
-        }
-        
-        return { ...player, votes: newVotes };
+        }));
       }
-      return player;
-    }));
-  }, [hapticFeedback]);
+    } catch (error) {
+      logger.error('Error voting:', error);
+      Alert.alert('خطأ', 'فشل في التصويت');
+    }
+  }, [hapticFeedback, getToken]);
 
   const openPrediction = useCallback((match: Match) => {
     setSelectedMatch(match);
@@ -1036,17 +1308,73 @@ export default function ProRankScreen() {
   }, [homeScore, awayScore, hapticFeedback]);
 
   const currentData = useMemo(() => {
-    switch(selectedCategory) {
-      case 'comments':
-        return topCommenters;
-      case 'shares':
-        return topSharers;
-      case 'quiz':
-        return topQuizMasters;
-      default:
-        return topViewers;
+    // Transform API data to match the UI format
+    const transformReelToUser = (reel: RankedReel): RankedUser => ({
+      id: reel.id,
+      username: reel.user?.username || '', // ✅ Added username for navigation
+      name: reel.user?.displayName || reel.user?.username || 'مجهول',
+      avatar: reel.user?.avatar || DEFAULT_AVATAR,
+      score: selectedCategory === 'views' ? reel.views : reel.sharesCount,
+      rank: reel.rank,
+      badge: reel.badge as 'gold' | 'silver' | 'bronze' | undefined,
+      trend: 'stable' as const,
+      stats: {
+        views: reel.views,
+        shares: reel.sharesCount,
+        comments: reel.commentsCount,
+      },
+      change: 0,
+    });
+
+    const transformPredictorToUser = (predictor: RankedPredictor): RankedUser => ({
+      id: predictor.userId,
+      username: predictor.user?.username || '', // ✅ Added username for navigation
+      name: predictor.user?.displayName || predictor.user?.username || 'مجهول',
+      avatar: predictor.user?.avatar || DEFAULT_AVATAR,
+      score: predictor.correctPredictions,
+      rank: predictor.rank,
+      badge: predictor.badge as 'gold' | 'silver' | 'bronze' | undefined,
+      trend: 'stable' as const,
+      stats: {
+        quizScore: predictor.accuracy, // Using accuracy as display stat
+      },
+      change: 0,
+    });
+
+    const transformCommenterToUser = (commenter: RankedCommenter): RankedUser => ({
+      id: commenter.userId,
+      username: commenter.user?.username || '', // ✅ Added username for navigation
+      name: commenter.user?.displayName || commenter.user?.username || 'مجهول',
+      avatar: commenter.user?.avatar || DEFAULT_AVATAR,
+      score: commenter.commentsCount,
+      rank: commenter.rank,
+      badge: commenter.badge as 'gold' | 'silver' | 'bronze' | undefined,
+      trend: 'stable' as const,
+      stats: {
+        comments: commenter.commentsCount,
+      },
+      change: 0,
+    });
+
+    // If still loading, return empty array (will show loading state)
+    if (isLoadingRankings) {
+      return [];
     }
-  }, [selectedCategory]);
+
+    // Use real data from API - return empty if no data
+    switch(selectedCategory) {
+      case 'views':
+        return rankingsData.topViews.map(transformReelToUser);
+      case 'shares':
+        return rankingsData.topShares.map(transformReelToUser);
+      case 'predictions':
+        return rankingsData.topPredictions.map(transformPredictorToUser);
+      case 'comments':
+        return rankingsData.topCommenters.map(transformCommenterToUser);
+      default:
+        return [];
+    }
+  }, [selectedCategory, rankingsData, isLoadingRankings]);
 
   const keyExtractor = useCallback((item: any) => item.id, []);
 
@@ -1173,7 +1501,7 @@ export default function ProRankScreen() {
                   { key: 'views', icon: Eye, label: t.rank.topViewers, color: '#3b82f6' },
                   { key: 'comments', icon: MessageCircle, label: t.rank.topComments, color: '#a855f7' },
                   { key: 'shares', icon: Share2, label: t.rank.topShares, color: '#f59e0b' },
-                  { key: 'quiz', icon: Brain, label: t.rank.quizMasters, color: '#22c55e' },
+                  { key: 'predictions', icon: Target, label: 'أفضل المتوقعين', color: '#22c55e' },
                 ].map((category, idx) => (
                   <TouchableOpacity
                     key={category.key}
@@ -1217,65 +1545,157 @@ export default function ProRankScreen() {
             {/* Top Users Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Leaderboard</Text>
+                <View style={styles.sectionTitleRow}>
+                  <Text style={styles.sectionTitle}>Leaderboard</Text>
+                  {rankingsData.period === '3_days' && (
+                    <View style={styles.periodBadge}>
+                      <Clock color="#22c55e" size={12} />
+                      <Text style={styles.periodText}>3 أيام</Text>
+                    </View>
+                  )}
+                </View>
                 <TouchableOpacity onPress={hapticFeedback}>
                   <Filter color="#22c55e" size={20} />
                 </TouchableOpacity>
               </View>
 
-              <FlatList
-                data={currentData}
-                renderItem={({ item, index }) => (
-                  <UserCard
-                    item={item}
-                    index={index}
-                    getRankIcon={getRankIcon}
-                    getTrendIcon={getTrendIcon}
-                    formatNumber={formatNumber}
-                    hapticFeedback={hapticFeedback}
-                    t={t}
-                  />
-                )}
-                keyExtractor={keyExtractor}
-                scrollEnabled={false}
-                removeClippedSubviews
-                initialNumToRender={5}
-                maxToRenderPerBatch={5}
-                windowSize={10}
-              />
+              {isLoadingRankings ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#22c55e" />
+                  <Text style={styles.loadingText}>جاري تحميل الترتيب...</Text>
+                </View>
+              ) : currentData.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Trophy color="#666" size={48} />
+                  <Text style={styles.emptyText}>لا يوجد مصنفون حالياً</Text>
+                  <Text style={styles.emptySubtext}>
+                    {selectedCategory === 'views' ? 'ارفع فيديو وابدأ المنافسة!' :
+                     selectedCategory === 'shares' ? 'شارك فيديوهاتك لتظهر هنا!' :
+                     selectedCategory === 'comments' ? 'علق على الفيديوهات لتظهر هنا!' :
+                     'توقع نتائج المباريات لتظهر هنا!'}
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={currentData}
+                  renderItem={({ item, index }) => (
+                    <UserCard
+                      item={item}
+                      index={index}
+                      getRankIcon={getRankIcon}
+                      getTrendIcon={getTrendIcon}
+                      formatNumber={formatNumber}
+                      hapticFeedback={hapticFeedback}
+                      t={t}
+                    />
+                  )}
+                  keyExtractor={keyExtractor}
+                  scrollEnabled={false}
+                  removeClippedSubviews
+                  initialNumToRender={5}
+                  maxToRenderPerBatch={5}
+                  windowSize={10}
+                />
+              )}
 
-              <TouchableOpacity style={styles.viewMoreButton} onPress={hapticFeedback}>
+              <TouchableOpacity 
+                style={styles.viewMoreButton} 
+                onPress={() => {
+                  setShowAllRankings(true);
+                  hapticFeedback();
+                }}
+              >
                 <Text style={styles.viewMoreText}>View All Rankings</Text>
                 <ChevronRight color="#22c55e" size={20} />
               </TouchableOpacity>
             </View>
           </>
         ) : (
-          /* Player Rating Section */
+          /* Player Rating Section - Top 11 Players */
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Rate Today's Players</Text>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitle}>أفضل 11 لاعب</Text>
+              </View>
               <TouchableOpacity onPress={hapticFeedback}>
                 <Search color="#22c55e" size={20} />
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={playersData}
-              renderItem={({ item }) => (
-                <PlayerRatingCard
-                  player={item}
-                  onVote={handlePlayerVote}
-                  t={t}
-                />
-              )}
-              keyExtractor={keyExtractor}
-              scrollEnabled={false}
-              removeClippedSubviews
-              initialNumToRender={3}
-              maxToRenderPerBatch={3}
-              windowSize={5}
-            />
+            {/* Period Filter */}
+            <View style={styles.periodFilter}>
+              <TouchableOpacity
+                style={[
+                  styles.periodButton,
+                  playerPeriod === 'weekly' && styles.periodButtonActive,
+                ]}
+                onPress={() => handlePeriodChange('weekly')}
+              >
+                {playerPeriod === 'weekly' && (
+                  <LinearGradient
+                    colors={['#22c55e', '#16a34a']}
+                    style={styles.periodButtonGradient}
+                  />
+                )}
+                <Calendar color={playerPeriod === 'weekly' ? '#fff' : '#666'} size={16} />
+                <Text style={[
+                  styles.periodButtonText,
+                  playerPeriod === 'weekly' && styles.periodButtonTextActive,
+                ]}>أسبوعي</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.periodButton,
+                  playerPeriod === 'monthly' && styles.periodButtonActive,
+                ]}
+                onPress={() => handlePeriodChange('monthly')}
+              >
+                {playerPeriod === 'monthly' && (
+                  <LinearGradient
+                    colors={['#22c55e', '#16a34a']}
+                    style={styles.periodButtonGradient}
+                  />
+                )}
+                <Calendar color={playerPeriod === 'monthly' ? '#fff' : '#666'} size={16} />
+                <Text style={[
+                  styles.periodButtonText,
+                  playerPeriod === 'monthly' && styles.periodButtonTextActive,
+                ]}>شهري</Text>
+              </TouchableOpacity>
+            </View>
+
+            {isLoadingPlayers ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#22c55e" />
+                <Text style={styles.loadingText}>جاري تحميل أفضل اللاعبين...</Text>
+              </View>
+            ) : playersData.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Users color="#666" size={48} />
+                <Text style={styles.emptyText}>لا يوجد مصنفون حالياً</Text>
+                <Text style={styles.emptySubtext}>ارفع فيديو وابدأ المنافسة لتظهر هنا!</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={playersData}
+                renderItem={({ item, index }) => (
+                  <TopPlayerCard
+                    player={item}
+                    votes={playerVotes[item.id] || { up: 0, down: 0, userVote: null }}
+                    onVote={handlePlayerVote}
+                    rank={index + 1}
+                    t={t}
+                  />
+                )}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                removeClippedSubviews
+                initialNumToRender={5}
+                maxToRenderPerBatch={5}
+                windowSize={10}
+              />
+            )}
           </View>
         )}
 
@@ -1370,6 +1790,145 @@ export default function ProRankScreen() {
             </View>
           </View>
         </BlurView>
+      </Modal>
+
+      {/* All Rankings Modal */}
+      <Modal
+        visible={showAllRankings}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAllRankings(false)}
+      >
+        <View style={styles.allRankingsModal}>
+          <LinearGradient
+            colors={['#0a0a0a', '#1a1a1a']}
+            style={styles.allRankingsHeader}
+          >
+            <View style={styles.allRankingsHeaderContent}>
+              <TouchableOpacity
+                style={styles.allRankingsClose}
+                onPress={() => setShowAllRankings(false)}
+              >
+                <X color="#fff" size={24} />
+              </TouchableOpacity>
+              <Text style={styles.allRankingsTitle}>
+                {selectedCategory === 'views' ? t.rank.topViewers :
+                 selectedCategory === 'shares' ? t.rank.topShares :
+                 selectedCategory === 'comments' ? t.rank.topComments :
+                 'أفضل المتوقعين'}
+              </Text>
+              <View style={styles.allRankingsPeriod}>
+                <Clock color="#22c55e" size={14} />
+                <Text style={styles.allRankingsPeriodText}>آخر 3 أيام</Text>
+              </View>
+            </View>
+          </LinearGradient>
+
+          <ScrollView 
+            style={styles.allRankingsList}
+            showsVerticalScrollIndicator={false}
+          >
+            {currentData.map((item, index) => (
+              <View key={item.id} style={styles.allRankingsItem}>
+                <LinearGradient
+                  colors={
+                    index === 0 ? ['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)'] :
+                    index === 1 ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)'] :
+                    index === 2 ? ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)'] :
+                    ['rgba(34, 197, 94, 0.08)', 'rgba(34, 197, 94, 0.02)']
+                  }
+                  style={styles.allRankingsItemGradient}
+                >
+                  {/* Rank */}
+                  <View style={[
+                    styles.allRankingsRank,
+                    index < 3 && styles.allRankingsRankTop
+                  ]}>
+                    {index === 0 ? <Crown color="#FFD700" size={22} /> :
+                     index === 1 ? <Medal color="#C0C0C0" size={22} /> :
+                     index === 2 ? <Award color="#CD7F32" size={22} /> :
+                     <Text style={styles.allRankingsRankText}>#{index + 1}</Text>}
+                  </View>
+
+                  {/* Avatar */}
+                  <View style={styles.allRankingsAvatarWrapper}>
+                    <LinearGradient
+                      colors={
+                        index === 0 ? ['#FFD700', '#FFA500'] :
+                        index === 1 ? ['#C0C0C0', '#A8A8A8'] :
+                        index === 2 ? ['#CD7F32', '#B8860B'] :
+                        ['#22c55e', '#16a34a']
+                      }
+                      style={styles.allRankingsAvatarBorder}
+                    >
+                      <Image 
+                        source={{ uri: item.avatar }} 
+                        style={styles.allRankingsAvatar} 
+                      />
+                    </LinearGradient>
+                  </View>
+
+                  {/* Info */}
+                  <View style={styles.allRankingsInfo}>
+                    <Text style={styles.allRankingsName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <View style={styles.allRankingsStats}>
+                      {selectedCategory === 'views' && (
+                        <>
+                          <Eye color="#22c55e" size={14} />
+                          <Text style={styles.allRankingsStatText}>
+                            {formatNumber(item.stats?.views || item.score)} مشاهدة
+                          </Text>
+                        </>
+                      )}
+                      {selectedCategory === 'shares' && (
+                        <>
+                          <Share2 color="#f59e0b" size={14} />
+                          <Text style={styles.allRankingsStatText}>
+                            {formatNumber(item.stats?.shares || item.score)} مشاركة
+                          </Text>
+                        </>
+                      )}
+                      {selectedCategory === 'comments' && (
+                        <>
+                          <MessageCircle color="#a855f7" size={14} />
+                          <Text style={styles.allRankingsStatText}>
+                            {formatNumber(item.stats?.comments || item.score)} تعليق
+                          </Text>
+                        </>
+                      )}
+                      {selectedCategory === 'predictions' && (
+                        <>
+                          <Target color="#22c55e" size={14} />
+                          <Text style={styles.allRankingsStatText}>
+                            {formatNumber(item.score)} توقع صحيح ({item.stats?.quizScore || 0}%)
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Score Badge */}
+                  <View style={[
+                    styles.allRankingsScoreBadge,
+                    index === 0 && styles.allRankingsScoreGold,
+                    index === 1 && styles.allRankingsScoreSilver,
+                    index === 2 && styles.allRankingsScoreBronze,
+                  ]}>
+                    <Text style={[
+                      styles.allRankingsScoreText,
+                      index < 3 && styles.allRankingsScoreTextTop
+                    ]}>
+                      {formatNumber(item.score)}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            ))}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
       </Modal>
     </View>
   );
@@ -1511,10 +2070,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  periodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  periodText: {
+    color: '#22c55e',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  loadingText: {
+    color: '#888',
+    fontSize: 14,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    color: '#666',
+    fontSize: 14,
   },
   userCard: {
     marginBottom: 12,
@@ -2184,5 +2787,326 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  // All Rankings Modal Styles
+  allRankingsModal: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  allRankingsHeader: {
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+  },
+  allRankingsHeaderContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  allRankingsClose: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    padding: 8,
+  },
+  allRankingsTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  allRankingsPeriod: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  allRankingsPeriodText: {
+    color: '#22c55e',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  allRankingsList: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  allRankingsItem: {
+    marginBottom: 12,
+  },
+  allRankingsItemGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 12,
+  },
+  allRankingsRank: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  allRankingsRankTop: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  allRankingsRankText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  allRankingsAvatarWrapper: {
+    position: 'relative',
+  },
+  allRankingsAvatarBorder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  allRankingsAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#0a0a0a',
+  },
+  allRankingsInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  allRankingsName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  allRankingsStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  allRankingsStatText: {
+    color: '#888',
+    fontSize: 13,
+  },
+  allRankingsScoreBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  allRankingsScoreGold: {
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  allRankingsScoreSilver: {
+    backgroundColor: 'rgba(192, 192, 192, 0.2)',
+  },
+  allRankingsScoreBronze: {
+    backgroundColor: 'rgba(205, 127, 50, 0.2)',
+  },
+  allRankingsScoreText: {
+    color: '#22c55e',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  allRankingsScoreTextTop: {
+    color: '#fff',
+  },
+  // Top Player Card Styles
+  topPlayerCard: {
+    marginBottom: 12,
+  },
+  topPlayerCardGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 12,
+  },
+  topPlayerRank: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  topPlayerRankTop: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  topPlayerRankText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  topPlayerAvatarWrapper: {
+    position: 'relative',
+  },
+  topPlayerAvatarBorder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topPlayerAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#0a0a0a',
+  },
+  topPlayerVerified: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#0a0a0a',
+  },
+  topPlayerInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  topPlayerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  topPlayerName: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+  topPlayerFlag: {
+    fontSize: 16,
+  },
+  topPlayerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topPlayerPositionBadge: {
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  topPlayerPosition: {
+    color: '#a855f7',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  topPlayerLevel: {
+    color: '#666',
+    fontSize: 11,
+  },
+  topPlayerStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  topPlayerStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  topPlayerStatText: {
+    color: '#888',
+    fontSize: 11,
+  },
+  topPlayerVoting: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  topPlayerApproval: {
+    color: '#22c55e',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  topPlayerVoteButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  topPlayerVoteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  topPlayerVoteBtnActiveUp: {
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    borderColor: '#22c55e',
+  },
+  topPlayerVoteBtnActiveDown: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderColor: '#ef4444',
+  },
+  topPlayerVoteCount: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  topPlayerVoteCountActive: {
+    color: '#22c55e',
+  },
+  topPlayerVoteCountActiveRed: {
+    color: '#ef4444',
+  },
+  // Period Filter Styles
+  periodFilter: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  periodButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  periodButtonActive: {
+    borderColor: '#22c55e',
+  },
+  periodButtonGradient: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+  },
+  periodButtonText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
+    zIndex: 1,
+  },
+  periodButtonTextActive: {
+    color: '#fff',
   },
 });

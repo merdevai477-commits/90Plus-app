@@ -20,7 +20,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import * as ImagePicker from 'expo-image-picker';
 import { useVideos, Comment } from '../../contexts/VideosContext';
 import { globalState } from '../../globalState';
-import { AuthService, CardProfileService, ProfileService } from '../../src/services/authService';
+import { AuthService, CardProfileService, ProfileService, ReelsService } from '../../src/services/authService';
 import { StorageService } from '../../src/services/storageService';
 import { useToast } from '../../contexts/ToastContext';
 import * as Haptics from 'expo-haptics';
@@ -169,6 +169,45 @@ export default function ProfileScreen() {
   };
 
   // Merge cached videos with uploaded videos from context (for optimistic updates)
+  // Saved videos state
+  const [savedVideos, setSavedVideos] = useState<any[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [savedVideosCursor, setSavedVideosCursor] = useState<string | null>(null);
+  const [hasMoreSaved, setHasMoreSaved] = useState(true);
+
+  // Load saved videos
+  const loadSavedVideos = useCallback(async (cursor?: string) => {
+    setIsLoadingSaved(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const result = await ReelsService.getSavedReels(token, cursor);
+      if (result) {
+        if (cursor) {
+          // Append to existing
+          setSavedVideos(prev => [...prev, ...result.savedReels]);
+        } else {
+          // Replace
+          setSavedVideos(result.savedReels);
+        }
+        setSavedVideosCursor(result.nextCursor);
+        setHasMoreSaved(result.hasMore);
+      }
+    } catch (error) {
+      console.error('Error loading saved videos:', error);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  }, [getToken]);
+
+  // Load saved videos when saved tab is active
+  useEffect(() => {
+    if (activeTab === 'saved' && savedVideos.length === 0 && !isLoadingSaved) {
+      loadSavedVideos();
+    }
+  }, [activeTab, savedVideos.length, isLoadingSaved, loadSavedVideos]);
+
   const myVideos = React.useMemo(() => {
     const cached = cachedVideos || [];
     const uploaded = uploadedVideos || [];
@@ -784,10 +823,9 @@ export default function ProfileScreen() {
             newVideo.thumbnail,
             caption,
             hashtags.map((h: string) => h.replace('#', '')),
-            mentions.map((m: string) => m.replace('@', ''))
+            mentions.map((m: string) => m.replace('@', '')),
+            updateProgress // Pass progress callback
           );
-
-          updateProgress(90);
 
           // Check for cooldown error from backend
           if (!uploadResult.success) {
@@ -812,6 +850,7 @@ export default function ProfileScreen() {
           }
 
           if (uploadResult.success) {
+            // Only update to 100% if not already at 100% (avoid duplicate calls)
             updateProgress(100);
             
             // Small delay to show 100% completion
@@ -1342,6 +1381,7 @@ export default function ProfileScreen() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           videoCount={myVideos.length}
+          savedCount={savedVideos.length}
           isOwnProfile={true}
         />
 
@@ -1352,6 +1392,27 @@ export default function ProfileScreen() {
             onVideoLongPress={handleVideoLongPress}
             onDeleteVideo={handleDeleteVideo}
             isDeleteMode={isDeleteMode}
+          />
+        )}
+
+        {activeTab === 'saved' && (
+          <VideoGrid
+            videos={savedVideos.map(video => ({
+              id: video.id,
+              thumbnail: video.thumbnail || video.videoUrl,
+              views: video.views?.toString() || '0',
+              duration: '', // Saved videos may not have duration
+            }))}
+            onVideoPress={(video, index) => {
+              // Navigate to reels page and open this video
+              router.push({
+                pathname: '/(tabs)/reels',
+                params: { reelId: video.id }
+              });
+            }}
+            onVideoLongPress={() => {}}
+            onDeleteVideo={() => {}}
+            isDeleteMode={false}
           />
         )}
 

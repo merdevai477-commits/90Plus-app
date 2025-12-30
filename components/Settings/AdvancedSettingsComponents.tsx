@@ -177,6 +177,7 @@ import {
   RotateCcw as RotateCcwIcon,
   Power as PowerIcon,
 } from 'lucide-react-native';
+import { useTranslation } from '../../src/i18n';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -198,6 +199,7 @@ export const AdvancedSecuritySettings = ({
   setAutoLock: any;
   logEvent: any;
 }) => {
+  const { t } = useTranslation();
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -206,12 +208,12 @@ export const AdvancedSecuritySettings = ({
 
   const handleSetPIN = async () => {
     if (pinInput.length < 4) {
-      Alert.alert('خطأ', 'يجب أن يكون رمز PIN مكون من 4 أرقام على الأقل');
+      Alert.alert(t.common?.error || 'Error', t.security?.pinTooShort || 'PIN must be at least 4 digits');
       return;
     }
     
     if (pinInput !== confirmPin) {
-      Alert.alert('خطأ', 'رمز PIN غير متطابق');
+      Alert.alert(t.common?.error || 'Error', t.security?.pinMismatch || 'PIN codes do not match');
       return;
     }
 
@@ -231,13 +233,13 @@ export const AdvancedSecuritySettings = ({
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     
     if (!hasHardware || !isEnrolled) {
-      Alert.alert('غير متاح', 'البصمة أو Face ID غير متاح على هذا الجهاز');
+      Alert.alert(t.common?.unavailable || 'Unavailable', t.security?.biometricUnavailable || 'Fingerprint or Face ID not available on this device');
       return;
     }
     
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'تأكيد الهوية',
-      fallbackLabel: 'استخدم رمز المرور',
+      promptMessage: t.security?.confirmIdentity || 'Confirm Identity',
+      fallbackLabel: t.security?.usePasscode || 'Use Passcode',
     });
     
     if (result.success) {
@@ -249,7 +251,7 @@ export const AdvancedSecuritySettings = ({
   return (
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-        الأمان المتقدم
+        {t.security?.title || 'Advanced Security'}
       </Text>
       
       {/* PIN Settings */}
@@ -263,10 +265,10 @@ export const AdvancedSecuritySettings = ({
           </View>
           <View>
             <Text style={[styles.settingText, { color: theme.colors.text }]}>
-              رمز PIN
+              {t.security?.pinCode || 'PIN Code'}
             </Text>
             <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>
-              {security.pinEnabled ? 'مفعل' : 'معطل'}
+              {security.pinEnabled ? (t.security?.pinEnabled || 'Enabled') : (t.security?.pinDisabled || 'Disabled')}
             </Text>
           </View>
         </View>
@@ -284,10 +286,10 @@ export const AdvancedSecuritySettings = ({
           </View>
           <View>
             <Text style={[styles.settingText, { color: theme.colors.text }]}>
-              البصمة / Face ID
+              {t.security?.biometric || 'Fingerprint / Face ID'}
             </Text>
             <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>
-              {security.biometricEnabled ? 'مفعل' : 'معطل'}
+              {security.biometricEnabled ? (t.security?.biometricEnabled || 'Enabled') : (t.security?.biometricDisabled || 'Disabled')}
             </Text>
           </View>
         </View>
@@ -304,14 +306,14 @@ export const AdvancedSecuritySettings = ({
         style={[styles.settingItem, { borderBottomColor: theme.colors.border }]}
         onPress={() => {
           Alert.alert(
-            'القفل التلقائي',
+            t.security?.autoLock || 'Auto Lock',
             '',
             [
-              { text: 'فوري', onPress: () => setAutoLock(0) },
-              { text: '1 دقيقة', onPress: () => setAutoLock(1) },
-              { text: '5 دقائق', onPress: () => setAutoLock(5) },
-              { text: '15 دقيقة', onPress: () => setAutoLock(15) },
-              { text: 'أبداً', onPress: () => setAutoLock(999) },
+              { text: t.security?.immediate || 'Immediate', onPress: () => setAutoLock(0) },
+              { text: t.security?.oneMinute || '1 minute', onPress: () => setAutoLock(1) },
+              { text: t.security?.fiveMinutes || '5 minutes', onPress: () => setAutoLock(5) },
+              { text: t.security?.fifteenMinutes || '15 minutes', onPress: () => setAutoLock(15) },
+              { text: t.security?.never || 'Never', onPress: () => setAutoLock(999) },
             ]
           );
         }}
@@ -322,10 +324,10 @@ export const AdvancedSecuritySettings = ({
           </View>
           <View>
             <Text style={[styles.settingText, { color: theme.colors.text }]}>
-              القفل التلقائي
+              {t.security?.autoLock || 'Auto Lock'}
             </Text>
             <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>
-              بعد {security.autoLockMinutes} دقائق
+              {(t.security?.afterMinutes || 'After {n} minutes').replace('{n}', String(security.autoLockMinutes))}
             </Text>
           </View>
         </View>
@@ -342,19 +344,19 @@ export const AdvancedSecuritySettings = ({
         <BlurView intensity={20} style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
             <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-              إعداد رمز PIN
+              {t.security?.setupPin || 'Setup PIN'}
             </Text>
             
             <View style={styles.pinInputContainer}>
               <Text style={[styles.pinLabel, { color: theme.colors.text }]}>
-                رمز PIN الجديد
+                {t.security?.newPin || 'New PIN'}
               </Text>
               <View style={[styles.pinInputWrapper, { borderColor: theme.colors.border }]}>
                 <TextInput
                   style={[styles.pinInput, { color: theme.colors.text }]}
                   value={pinInput}
                   onChangeText={setPinInput}
-                  placeholder="أدخل 4 أرقام"
+                  placeholder={t.security?.enterDigits || 'Enter 4 digits'}
                   placeholderTextColor={theme.colors.textSecondary}
                   secureTextEntry={!showPin}
                   keyboardType="numeric"
@@ -371,14 +373,14 @@ export const AdvancedSecuritySettings = ({
 
             <View style={styles.pinInputContainer}>
               <Text style={[styles.pinLabel, { color: theme.colors.text }]}>
-                تأكيد رمز PIN
+                {t.security?.confirmPin || 'Confirm PIN'}
               </Text>
               <View style={[styles.pinInputWrapper, { borderColor: theme.colors.border }]}>
                 <TextInput
                   style={[styles.pinInput, { color: theme.colors.text }]}
                   value={confirmPin}
                   onChangeText={setConfirmPin}
-                  placeholder="أعد إدخال رمز PIN"
+                  placeholder={t.security?.enterDigits || 'Enter 4 digits'}
                   placeholderTextColor={theme.colors.textSecondary}
                   secureTextEntry={!showPin}
                   keyboardType="numeric"

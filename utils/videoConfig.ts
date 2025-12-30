@@ -1,4 +1,19 @@
-import { Audio } from 'expo-av';
+import { Audio, ResizeMode } from 'expo-av';
+import { logger } from '../services/logger';
+
+/**
+ * Unified Video Configuration Defaults
+ * Single source of truth for all video playback behavior
+ * Instagram/TikTok-style defaults: Audio ON, Autoplay ON
+ */
+export const VIDEO_DEFAULTS = {
+  autoplay: true,
+  looping: false, // Use replay limit instead of native looping
+  muted: false, // Audio ON by default (Instagram/TikTok style)
+  shouldPlay: true,
+  resizeMode: ResizeMode.COVER,
+  progressUpdateIntervalMillis: 500,
+};
 
 /**
  * تكوين الصوت والفيديو للتطبيق
@@ -13,9 +28,9 @@ export const configureAudioVideo = async () => {
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
     });
-    console.log('✅ Audio/Video configured successfully');
+    logger.info('✅ Audio/Video configured successfully');
   } catch (error) {
-    console.error('❌ Failed to configure audio/video:', error);
+    logger.error('❌ Failed to configure audio/video:', error);
   }
 };
 
