@@ -220,8 +220,16 @@ export default function CommentsModal({
     }, [effectiveComments]);
 
     // Update commentsWithReplies only when transformedComments actually changes
+    // Use a ref to track the previous value to prevent unnecessary updates
+    const prevTransformedRef = useRef<CommentWithReplies[]>([]);
     useEffect(() => {
-        setCommentsWithReplies(transformedComments);
+        // Only update if the content actually changed (compare IDs)
+        const prevIds = prevTransformedRef.current.map(c => c.id).join(',');
+        const currentIds = transformedComments.map(c => c.id).join(',');
+        if (prevIds !== currentIds) {
+            prevTransformedRef.current = transformedComments;
+            setCommentsWithReplies(transformedComments);
+        }
     }, [transformedComments]);
 
     // Shake animation for limit warning
