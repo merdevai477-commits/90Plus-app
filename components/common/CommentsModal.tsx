@@ -260,16 +260,6 @@ export default function CommentsModal({
             setCommentsWithReplies(transformed);
         }
     }, [currentCommentIds]); // Now currentCommentIds is properly memoized
-    
-    // Helper function to update commentsWithReplies state and ref together
-    // This ensures the ref is always in sync with state
-    const updateCommentsWithReplies = useCallback((updater: (prev: CommentWithReplies[]) => CommentWithReplies[]) => {
-        setCommentsWithReplies(prev => {
-            const next = updater(prev);
-            commentsWithRepliesRef.current = next; // Keep ref in sync
-            return next;
-        });
-    }, []);
 
     // Shake animation for limit warning
     const triggerShake = () => {
