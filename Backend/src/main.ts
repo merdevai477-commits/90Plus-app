@@ -192,6 +192,8 @@ app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/quiz`, quizRoutes);
+// Log quiz routes registration for debugging
+logger.info(`Quiz routes registered at ${API_PREFIX}/quiz`);
 
 // Metrics endpoint (for monitoring)
 app.get(`${API_PREFIX}/metrics`, getMetricsHandler);

@@ -17,6 +17,9 @@ import {
 
 const router = Router();
 
+// Log router initialization for debugging
+logger.info('Quiz routes router initialized');
+
 // ============================================
 // STATIC ROUTES (يجب أن تكون قبل Dynamic Routes)
 // ============================================
