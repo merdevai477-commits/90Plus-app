@@ -586,7 +586,8 @@ const ReelsFeed: React.FC = () => {
     hashtags: reel.hashtags || [],
     mentions: reel.mentions || [],
     createdAt: new Date(reel.createdAt)
-  }), [likedReelIds]);
+  };
+}, [likedReelIds]);
 
   // Load reels from backend with cache-first pattern (Requirements 3.1, 3.4, 3.5)
   const loadReelsFromBackend = useCallback(async (cursor?: string, skipCache = false) => {
