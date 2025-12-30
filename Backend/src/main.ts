@@ -18,7 +18,7 @@ dotenv.config();
 const isProduction = process.env.NODE_ENV === 'production';
 
 const app: Application = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
 // Trust proxy - Required for Railway and other reverse proxies
@@ -99,7 +99,7 @@ app.use(performanceMiddleware());
 
 // Metrics tracking
 import { metricsMiddleware, getMetricsHandler } from './middleware/metrics.middleware';
-app.use(metricsMiddleware());
+app.use(metricsMiddleware);
 
 // Route logging middleware (for debugging in development)
 if (!isProduction) {
@@ -193,10 +193,14 @@ app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 // Register quiz routes with error handling
 try {
+    // Log before registration
+    logger.info(`📝 Attempting to register quiz routes at ${API_PREFIX}/quiz`);
     app.use(`${API_PREFIX}/quiz`, quizRoutes);
     logger.info(`✅ Quiz routes registered successfully at ${API_PREFIX}/quiz`);
+    logger.info(`✅ Available quiz endpoints: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories`);
 } catch (error: any) {
     logger.error(`❌ Failed to register quiz routes: ${error.message}`, error);
+    logger.error(`❌ Error stack: ${error.stack}`);
     // Continue even if quiz routes fail to register
 }
 

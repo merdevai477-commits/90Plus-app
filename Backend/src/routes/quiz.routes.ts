@@ -46,6 +46,7 @@ const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
  * Requires authentication - guests cannot access quiz
  */
 router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Quiz categories endpoint called - Path: ${req.path}, Method: ${req.method}`);
     try {
         // Check cache first
         const cacheKey = 'quiz_categories_all';
