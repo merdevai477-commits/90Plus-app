@@ -249,18 +249,28 @@ export async function canUserTakeDailyQuiz(userId: string): Promise<{
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dailyQuiz = await getCurrentDailyQuiz();
+    // محاولة جلب daily quiz الحالي، وإذا لم يكن موجوداً، إنشاء واحد جديد
+    let dailyQuiz = await getCurrentDailyQuiz();
     if (!dailyQuiz) {
-      return { canTake: false };
+      // إنشاء daily quiz جديد إذا لم يكن موجوداً
+      logger.info('No current daily quiz found, creating new one...');
+      const newDailyQuiz = await getOrCreateDailyQuiz();
+      dailyQuiz = await getCurrentDailyQuiz();
+      
+      if (!dailyQuiz) {
+        logger.error('Failed to create daily quiz');
+        return { canTake: false };
+      }
     }
 
-    // البحث عن آخر محاولة للمستخدم في نفس اليوم
+    // البحث عن آخر محاولة للمستخدم للكويز اليومي الحالي
+    // نبحث عن محاولات بعد وقت إنشاء daily quiz الحالي (ليس فقط اليوم)
     const lastAttempt = await prisma.quizAttempt.findFirst({
       where: {
         userId,
         categoryId: dailyQuiz.categoryId,
         completedAt: {
-          gte: today,
+          gte: dailyQuiz.date, // استخدام تاريخ daily quiz بدلاً من بداية اليوم
         },
       },
       orderBy: {
