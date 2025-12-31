@@ -66,6 +66,10 @@ model User {
   lastDailySpin DateTime? // آخر مرة لف عجلة الحظ
   dailySpins    DailySpinHistory[]
 
+  // Login Streak Tracking
+  lastLoginDate        DateTime? // آخر تاريخ تسجيل دخول
+  consecutiveLoginDays Int       @default(0) // عدد أيام الدخول المتتالية
+
   // Push Notifications
   expoPushToken String? // Expo Push Token for notifications
 

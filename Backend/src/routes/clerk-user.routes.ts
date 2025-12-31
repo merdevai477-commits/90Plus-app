@@ -68,6 +68,7 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             clubLogo: user.clubLogo,
             brandLogo: user.brandLogo,
             socialLinks: (user as any).socialLinks || [],
+            consecutiveLoginDays: (user as any).consecutiveLoginDays || 0,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         };

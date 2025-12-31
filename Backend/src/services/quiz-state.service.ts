@@ -28,6 +28,7 @@ export async function getUserQuizState(userId: string) {
 
     // إنشاء state جديد إذا لم يكن موجوداً
     if (!state) {
+      // إنشاء state جديد
       state = await prisma.userQuizState.create({
         data: {
           userId,
@@ -39,6 +40,21 @@ export async function getUserQuizState(userId: string) {
           },
         },
       });
+
+      // فتح كويز عشوائي تلقائياً للمستخدم الجديد
+      const newCategoryId = await openNextCategory(userId);
+      if (newCategoryId) {
+        // إعادة جلب state مع الكويز المفتوح
+        state = await prisma.userQuizState.findUnique({
+          where: { userId },
+          include: {
+            user: {
+              select: { id: true },
+            },
+          },
+        });
+        logger.info(`Auto-opened category ${newCategoryId} for new user ${userId}`);
+      }
     }
 
     return state;
@@ -141,20 +157,28 @@ export async function checkAndUnlockCategory(userId: string): Promise<{
     // إذا لم يكن هناك نوع مفتوح، فتح واحد جديد
     if (!state.currentOpenCategoryId) {
       const newCategoryId = await openNextCategory(userId);
+      // إعادة جلب state المحدث للحصول على nextUnlockAt الصحيح
+      const updatedState = await prisma.userQuizState.findUnique({
+        where: { userId },
+      });
       return {
         shouldUnlock: true,
         currentCategoryId: newCategoryId,
-        nextUnlockAt: state.nextCategoryUnlockAt,
+        nextUnlockAt: updatedState?.nextCategoryUnlockAt || null,
       };
     }
 
     // إذا انتهت الـ 24 ساعة، فتح النوع التالي
     if (state.nextCategoryUnlockAt && now >= state.nextCategoryUnlockAt) {
       const newCategoryId = await openNextCategory(userId);
+      // إعادة جلب state المحدث للحصول على nextUnlockAt الصحيح
+      const updatedState = await prisma.userQuizState.findUnique({
+        where: { userId },
+      });
       return {
         shouldUnlock: true,
         currentCategoryId: newCategoryId,
-        nextUnlockAt: state.nextCategoryUnlockAt,
+        nextUnlockAt: updatedState?.nextCategoryUnlockAt || null,
       };
     }
 

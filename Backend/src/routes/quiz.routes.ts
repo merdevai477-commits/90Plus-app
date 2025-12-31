@@ -24,7 +24,7 @@ const router = Router();
 
 // Log router initialization for debugging
 logger.info('Quiz routes router initialized');
-logger.info('Quiz routes endpoints: /health, /categories, /answers, /:categoryId/start, /:categoryId/submit');
+logger.info('Quiz routes endpoints: /health, /categories, /daily-status, /answers, /:categoryId/start, /:categoryId/submit');
 
 // ============================================
 // STATIC ROUTES (يجب أن تكون قبل Dynamic Routes)
@@ -153,6 +153,101 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
         res.status(500).json({
             status: 'ERROR',
             message: error.message || 'Failed to get categories',
+        });
+    }
+});
+
+/**
+ * GET /api/quiz/daily-status
+ * التحقق من حالة الكويز اليومي (هل يمكن أخذ الكويز أم هناك cooldown)
+ * Requires authentication
+ */
+router.get('/daily-status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Quiz daily status endpoint called`);
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // فحص وفتح النوع إذا لزم الأمر
+        const { currentCategoryId, nextUnlockAt } = await checkAndUnlockCategory(user.id);
+
+        if (!currentCategoryId) {
+            res.json({
+                status: 'SUCCESS',
+                data: {
+                    canTake: false,
+                    categoryId: null,
+                    categoryName: null,
+                    canRetryAt: null,
+                    timeRemaining: null,
+                },
+            });
+            return;
+        }
+
+        // جلب اسم النوع
+        const category = await prisma.quizCategory.findUnique({
+            where: { id: currentCategoryId },
+            select: { name: true },
+        });
+
+        if (!category) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'Category not found',
+            });
+            return;
+        }
+
+        // التحقق من آخر محاولة للكويز اليومي
+        const cooldownInfo = await checkAttemptCooldown(user.id, currentCategoryId);
+
+        const now = new Date();
+        let timeRemaining = null;
+
+        if (!cooldownInfo.canStart && cooldownInfo.canRetryAt) {
+            const diff = cooldownInfo.canRetryAt.getTime() - now.getTime();
+            if (diff > 0) {
+                const hours = Math.floor(diff / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                timeRemaining = {
+                    hours,
+                    minutes,
+                    seconds,
+                    totalSeconds: Math.floor(diff / 1000),
+                };
+            }
+        }
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                canTake: cooldownInfo.canStart,
+                categoryId: currentCategoryId,
+                categoryName: category.name,
+                canRetryAt: cooldownInfo.canRetryAt?.toISOString() || null,
+                timeRemaining,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Error getting daily quiz status:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get daily quiz status',
         });
     }
 });

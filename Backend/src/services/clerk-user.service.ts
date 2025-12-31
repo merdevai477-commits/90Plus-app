@@ -15,6 +15,8 @@ export class ClerkUserService {
             });
 
             if (user) {
+                // Update login streak for existing user
+                await this.updateLoginStreak(user.id);
                 return user;
             }
 
@@ -91,10 +93,78 @@ export class ClerkUserService {
             });
 
             logger.info('✅ User synced from Clerk:', user.id);
+            
+            // Update login streak for new user (first login)
+            await this.updateLoginStreak(user.id);
+            
             return user;
         } catch (error) {
             logger.error('Error in findOrCreateUser:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Update user login streak
+     * Calculates consecutive login days based on lastLoginDate
+     */
+    private static async updateLoginStreak(userId: string): Promise<void> {
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { lastLoginDate: true, consecutiveLoginDays: true },
+            });
+
+            if (!user) {
+                return;
+            }
+
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            // If user has never logged in, set to 1 day
+            if (!user.lastLoginDate) {
+                await prisma.user.update({
+                    where: { id: userId },
+                    data: {
+                        lastLoginDate: today,
+                        consecutiveLoginDays: 1,
+                    },
+                });
+                return;
+            }
+
+            const lastLogin = new Date(user.lastLoginDate);
+            const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
+            
+            // Calculate days difference
+            const daysDiff = Math.floor((today.getTime() - lastLoginDate.getTime()) / (1000 * 60 * 60 * 24));
+
+            let newStreak = user.consecutiveLoginDays;
+
+            if (daysDiff === 0) {
+                // Same day - no change needed
+                return;
+            } else if (daysDiff === 1) {
+                // Consecutive day - increment streak
+                newStreak = user.consecutiveLoginDays + 1;
+            } else {
+                // More than 1 day - reset streak to 1
+                newStreak = 1;
+            }
+
+            await prisma.user.update({
+                where: { id: userId },
+                data: {
+                    lastLoginDate: today,
+                    consecutiveLoginDays: newStreak,
+                },
+            });
+
+            logger.info(`Updated login streak for user ${userId}: ${newStreak} days`);
+        } catch (error) {
+            logger.error('Error updating login streak:', error);
+            // Don't throw - login streak update shouldn't fail the login
         }
     }
 
