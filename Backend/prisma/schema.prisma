@@ -299,8 +299,9 @@ model QuizCategory {
   unlockLevel Int      @default(1)
   createdAt   DateTime @default(now())
 
-  questions QuizQuestion[]
-  attempts  QuizAttempt[]
+  questions  QuizQuestion[]
+  attempts   QuizAttempt[]
+  dailyQuizzes DailyQuiz[]
 
   @@index([isLocked])
   @@map("quiz_categories")
@@ -398,6 +399,23 @@ model UserQuizState {
   @@index([currentOpenCategoryId])
   @@index([nextCategoryUnlockAt])
   @@map("user_quiz_states")
+}
+
+model DailyQuiz {
+  id                String   @id @default(uuid())
+  categoryId        String
+  questionIds       String[] // قائمة معرفات الأسئلة للاختبار اليومي
+  date              DateTime @unique @db.Date // تاريخ اليوم (YYYY-MM-DD)
+  expiresAt         DateTime // وقت انتهاء الاختبار (24 ساعة من بداية اليوم)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  category QuizCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([date])
+  @@index([categoryId])
+  @@index([expiresAt])
+  @@map("daily_quizzes")
 }
 
 // ============================================

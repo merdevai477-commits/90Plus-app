@@ -18,6 +18,11 @@ import {
   checkAndUnlockCategory,
   isCategoryOpenForUser,
 } from '../services/quiz-state.service';
+import {
+  getOrCreateDailyQuiz,
+  getCurrentDailyQuiz,
+  canUserTakeDailyQuiz,
+} from '../services/daily-quiz.service';
 import { getAnswers } from '../data/quiz-answers';
 
 const router = Router();
@@ -56,6 +61,37 @@ setTimeout(verifyRouteRegistration, 100);
 // ============================================
 // STATIC ROUTES (يجب أن تكون قبل Dynamic Routes)
 // ============================================
+
+/**
+ * GET /api/quiz
+ * Root endpoint - معلومات عن Quiz API
+ */
+router.get('/', (_req: Request, res: Response): void => {
+    res.json({
+        status: 'SUCCESS',
+        message: 'Quiz API is available',
+        version: '1.0.0',
+        timestamp: new Date().toISOString(),
+        endpoints: {
+            public: [
+                'GET /api/quiz - API information (this endpoint)',
+                'GET /api/quiz/health - Health check',
+                'GET /api/quiz/test-daily-status - Test endpoint',
+                'GET /api/quiz/routes - List all routes',
+            ],
+            authenticated: [
+                'GET /api/quiz/categories - Get open category',
+                'GET /api/quiz/daily-status - Get daily quiz status',
+                'POST /api/quiz/answers - Get answers',
+                'GET /api/quiz/stats - Get user stats',
+                'GET /api/quiz/history - Get quiz history',
+                'GET /api/quiz/:categoryId/start - Start quiz',
+                'POST /api/quiz/:categoryId/submit - Submit answers',
+                'GET /api/quiz/:categoryId/cooldown - Check cooldown',
+            ],
+        },
+    });
+});
 
 /**
  * GET /api/quiz/health
@@ -145,7 +181,7 @@ const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
 
 /**
  * GET /api/quiz/categories
- * جلب النوع المفتوح فقط للمستخدم (categoryId فقط)
+ * جلب الاختبار اليومي الموحد (نفس الاختبار لجميع المستخدمين)
  * الكاتيجوري والأسئلة موجودة في الفرونت إند
  * Requires authentication - guests cannot access quiz
  */
@@ -168,24 +204,12 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
             return;
         }
 
-        // فحص وفتح النوع إذا لزم الأمر
-        const { shouldUnlock, currentCategoryId, nextUnlockAt } =
-            await checkAndUnlockCategory(user.id);
+        // جلب أو إنشاء الاختبار اليومي الموحد
+        const dailyQuiz = await getOrCreateDailyQuiz();
 
-        if (!currentCategoryId) {
-            res.json({
-                status: 'SUCCESS',
-                data: {
-                    openCategoryId: null,
-                    nextUnlockAt: nextUnlockAt?.toISOString(),
-                },
-            });
-            return;
-        }
-
-        // جلب اسم النوع فقط للتحقق
+        // جلب اسم الكاتيجوري
         const category = await prisma.quizCategory.findUnique({
-            where: { id: currentCategoryId },
+            where: { id: dailyQuiz.categoryId },
             select: { name: true },
         });
 
@@ -197,50 +221,13 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
             return;
         }
 
-        // جلب الأسئلة المستخدمة لتحديد الأسئلة المتاحة
-        const usedAnswers = await prisma.userQuizAnswer.findMany({
-            where: {
-                userId: user.id,
-                question: {
-                    categoryId: currentCategoryId,
-                },
-            },
-            select: {
-                questionId: true,
-            },
-            distinct: ['questionId'],
-        });
-
-        const usedQuestionIds = usedAnswers.map((a) => a.questionId);
-
-        // جلب كل questionIds للفئة
-        const allQuestions = await prisma.quizQuestion.findMany({
-            where: { categoryId: currentCategoryId },
-            select: { id: true },
-            orderBy: { createdAt: 'asc' }, // Order from backend
-        });
-
-        // استبعاد الأسئلة المستخدمة
-        let availableQuestionIds = allQuestions
-            .map((q) => q.id)
-            .filter((id) => !usedQuestionIds.includes(id));
-
-        // إذا لم يبقَ أسئلة كافية، إعادة استخدام كل الأسئلة
-        if (availableQuestionIds.length < 20) {
-            availableQuestionIds = allQuestions.map((q) => q.id);
-        }
-
-        // اختيار 20 سؤال عشوائي مع الحفاظ على الترتيب من الباك إند
-        const shuffled = [...availableQuestionIds].sort(() => Math.random() - 0.5);
-        const selectedQuestionIds = shuffled.slice(0, 20);
-
         const responseData = {
             status: 'SUCCESS',
             data: {
-                openCategoryId: currentCategoryId,
+                openCategoryId: dailyQuiz.categoryId,
                 openCategoryName: category.name,
-                questionIds: selectedQuestionIds, // الأسئلة المختارة للاختبار اليومي
-                nextUnlockAt: nextUnlockAt?.toISOString(),
+                questionIds: dailyQuiz.questionIds, // الأسئلة المختارة للاختبار اليومي الموحد
+                nextUnlockAt: dailyQuiz.expiresAt.toISOString(),
             },
         };
 
@@ -305,74 +292,52 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
             return;
         }
 
-        // فحص وفتح النوع إذا لزم الأمر
-        const { currentCategoryId, nextUnlockAt } = await checkAndUnlockCategory(user.id);
+        // جلب الاختبار اليومي الموحد
+        const dailyQuiz = await getCurrentDailyQuiz();
 
-        if (!currentCategoryId) {
+        if (!dailyQuiz) {
+            // إنشاء اختبار جديد إذا لم يكن موجوداً
+            const newDailyQuiz = await getOrCreateDailyQuiz();
+            const canTakeInfo = await canUserTakeDailyQuiz(user.id);
+
+            // جلب اسم الكاتيجوري
+            const category = await prisma.quizCategory.findUnique({
+                where: { id: newDailyQuiz.categoryId },
+                select: { name: true },
+            });
+
             res.json({
                 status: 'SUCCESS',
                 data: {
-                    canTake: false,
-                    categoryId: null,
-                    categoryName: null,
-                    canRetryAt: null,
-                    timeRemaining: null,
+                    canTake: canTakeInfo.canTake,
+                    categoryId: newDailyQuiz.categoryId,
+                    categoryName: category?.name || 'Daily Quiz',
+                    canRetryAt: canTakeInfo.canRetryAt?.toISOString() || null,
+                    timeRemaining: canTakeInfo.timeRemaining || null,
                 },
             });
             return;
         }
 
-        // جلب اسم النوع
-        const category = await prisma.quizCategory.findUnique({
-            where: { id: currentCategoryId },
-            select: { name: true },
-        });
-
-        if (!category) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'Category not found',
-            });
-            return;
-        }
-
-        // التحقق من آخر محاولة للكويز اليومي
-        const cooldownInfo = await checkAttemptCooldown(user.id, currentCategoryId);
-
-        const now = new Date();
-        let timeRemaining = null;
-
-        if (!cooldownInfo.canStart && cooldownInfo.canRetryAt) {
-            const diff = cooldownInfo.canRetryAt.getTime() - now.getTime();
-            if (diff > 0) {
-                const hours = Math.floor(diff / (1000 * 60 * 60));
-                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-                timeRemaining = {
-                    hours,
-                    minutes,
-                    seconds,
-                    totalSeconds: Math.floor(diff / 1000),
-                };
-            }
-        }
+        // التحقق من أن المستخدم يمكنه أخذ الاختبار اليومي
+        const canTakeInfo = await canUserTakeDailyQuiz(user.id);
 
         const responseData = {
             status: 'SUCCESS',
             data: {
-                canTake: cooldownInfo.canStart,
-                categoryId: currentCategoryId,
-                categoryName: category.name,
-                canRetryAt: cooldownInfo.canRetryAt?.toISOString() || null,
-                timeRemaining,
+                canTake: canTakeInfo.canTake,
+                categoryId: dailyQuiz.categoryId,
+                categoryName: dailyQuiz.categoryName,
+                canRetryAt: canTakeInfo.canRetryAt?.toISOString() || null,
+                timeRemaining: canTakeInfo.timeRemaining || null,
             },
         };
         
         const duration = Date.now() - startTime;
         logger.info('Daily status endpoint - Success', {
             userId: user.id,
-            canTake: cooldownInfo.canStart,
-            categoryId: currentCategoryId,
+            canTake: canTakeInfo.canTake,
+            categoryId: dailyQuiz.categoryId,
             duration: `${duration}ms`,
         });
         
@@ -588,6 +553,37 @@ router.get(
         return;
       }
 
+      // جلب الاختبار اليومي الموحد
+      const dailyQuiz = await getCurrentDailyQuiz();
+
+      // إذا كان categoryId هو نفس الاختبار اليومي، استخدم الأسئلة من الاختبار اليومي
+      if (dailyQuiz && dailyQuiz.categoryId === categoryId) {
+        // التحقق من أن المستخدم يمكنه أخذ الاختبار
+        const canTakeInfo = await canUserTakeDailyQuiz(user.id);
+        
+        if (!canTakeInfo.canTake) {
+          res.status(429).json({
+            status: 'ERROR',
+            message: 'Quiz cooldown active',
+            canRetryAt: canTakeInfo.canRetryAt,
+            hoursRemaining: canTakeInfo.timeRemaining?.hours,
+          });
+          return;
+        }
+
+        res.json({
+          status: 'SUCCESS',
+          data: {
+            categoryId: dailyQuiz.categoryId,
+            categoryName: dailyQuiz.categoryName,
+            questionIds: dailyQuiz.questionIds,
+            count: dailyQuiz.questionIds.length,
+          },
+        });
+        return;
+      }
+
+      // إذا لم يكن الاختبار اليومي، استخدم النظام القديم
       // Check cooldown
       const cooldown = await checkAttemptCooldown(user.id, categoryId);
       if (!cooldown.canStart) {
