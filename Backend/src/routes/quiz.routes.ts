@@ -18,6 +18,7 @@ import {
   checkAndUnlockCategory,
   isCategoryOpenForUser,
 } from '../services/quiz-state.service';
+import { getAnswers } from '../data/quiz-answers';
 
 const router = Router();
 
@@ -192,21 +193,16 @@ router.post('/answers', requireAuth, async (req: Request, res: Response): Promis
         let answersMap: Record<string, string> = {};
         
         try {
-            // محاولة جلب من الملفات المحلية
-            const answersModule = await import('../data/quiz-answers');
-            if (answersModule && answersModule.getAnswers) {
-                answersMap = answersModule.getAnswers(categoryId, questionIds);
-                
-                // إذا لم نجد إجابات في الملفات، استخدم قاعدة البيانات
-                if (Object.keys(answersMap).length === 0) {
-                    logger.warn('No answers found in files, falling back to database');
-                    throw new Error('No answers in files');
-                }
-            } else {
-                throw new Error('getAnswers function not found');
+            // محاولة جلب من الملفات المحلية (static import)
+            answersMap = getAnswers(categoryId, questionIds);
+            
+            // إذا لم نجد إجابات في الملفات، استخدم قاعدة البيانات
+            if (Object.keys(answersMap).length === 0) {
+                logger.warn('No answers found in files, falling back to database');
+                throw new Error('No answers in files');
             }
-        } catch (importError: any) {
-            logger.warn('Failed to load answers from files, falling back to database:', importError.message);
+        } catch (error: any) {
+            logger.warn('Failed to load answers from files, falling back to database:', error.message);
             
             // Fallback: جلب من قاعدة البيانات إذا فشل تحميل الملفات
             const questions = await prisma.quizQuestion.findMany({
