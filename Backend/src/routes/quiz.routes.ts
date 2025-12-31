@@ -23,6 +23,7 @@ const router = Router();
 
 // Log router initialization for debugging
 logger.info('Quiz routes router initialized');
+logger.info('Quiz routes endpoints: /health, /categories, /answers, /:categoryId/start, /:categoryId/submit');
 
 // ============================================
 // STATIC ROUTES (يجب أن تكون قبل Dynamic Routes)
@@ -188,16 +189,24 @@ router.post('/answers', requireAuth, async (req: Request, res: Response): Promis
         }
 
         // جلب الإجابات من الملفات المحلية
+        let answersMap: Record<string, string> = {};
+        
         try {
-            const { getAnswers } = await import('../data/quiz-answers');
-            const answersMap = getAnswers(categoryId, questionIds);
-
-            res.json({
-                status: 'SUCCESS',
-                data: answersMap,
-            });
+            // محاولة جلب من الملفات المحلية
+            const answersModule = await import('../data/quiz-answers');
+            if (answersModule && answersModule.getAnswers) {
+                answersMap = answersModule.getAnswers(categoryId, questionIds);
+                
+                // إذا لم نجد إجابات في الملفات، استخدم قاعدة البيانات
+                if (Object.keys(answersMap).length === 0) {
+                    logger.warn('No answers found in files, falling back to database');
+                    throw new Error('No answers in files');
+                }
+            } else {
+                throw new Error('getAnswers function not found');
+            }
         } catch (importError: any) {
-            logger.warn('Failed to load answers from files, falling back to database:', importError);
+            logger.warn('Failed to load answers from files, falling back to database:', importError.message);
             
             // Fallback: جلب من قاعدة البيانات إذا فشل تحميل الملفات
             const questions = await prisma.quizQuestion.findMany({
@@ -211,16 +220,15 @@ router.post('/answers', requireAuth, async (req: Request, res: Response): Promis
                 },
             });
 
-            const answersMap: Record<string, string> = {};
             questions.forEach((q) => {
                 answersMap[q.id] = q.correctAnswer;
             });
-
-            res.json({
-                status: 'SUCCESS',
-                data: answersMap,
-            });
         }
+
+        res.json({
+            status: 'SUCCESS',
+            data: answersMap,
+        });
     } catch (error: any) {
         logger.error('Error getting quiz answers:', error);
         res.status(500).json({
