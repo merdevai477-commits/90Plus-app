@@ -48,6 +48,7 @@ temp/
 # Railway
 .railwayignore
 
-# Nixpacks
+# Nixpacks (generated files - should not be in build context)
 .nixpacks/
+.nixpacks/**
 
