@@ -9,6 +9,35 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
 /**
+ * إنشاء كاتيجوري افتراضية إذا لم تكن موجودة
+ */
+async function ensureDefaultCategories(): Promise<void> {
+  const categoryCount = await prisma.quizCategory.count();
+  
+  if (categoryCount === 0) {
+    logger.warn('No quiz categories found. Creating default categories...');
+    
+    const defaultCategories = [
+      { name: 'In Common', description: 'What do they have in common?', icon: '🔗', isLocked: false, unlockLevel: 1 },
+      { name: 'Flash', description: 'Quick fire questions', icon: '⚡', isLocked: false, unlockLevel: 1 },
+      { name: 'Who Am I?', description: 'Guess the player from clues', icon: '🎭', isLocked: false, unlockLevel: 2 },
+      { name: 'High Five', description: 'Name 5 things', icon: '🖐️', isLocked: false, unlockLevel: 1 },
+      { name: 'Q&A', description: 'Multiple choice questions', icon: '❓', isLocked: false, unlockLevel: 1 },
+      { name: 'Teammates', description: 'Questions about teammates', icon: '👥', isLocked: true, unlockLevel: 3 },
+      { name: 'Guess the Number', description: 'Guess numbers and statistics', icon: '🔢', isLocked: false, unlockLevel: 1 },
+      { name: 'Legends', description: 'Questions about football legends', icon: '👑', isLocked: true, unlockLevel: 3 },
+    ];
+
+    await prisma.quizCategory.createMany({
+      data: defaultCategories,
+      skipDuplicates: true,
+    });
+
+    logger.info(`Created ${defaultCategories.length} default quiz categories`);
+  }
+}
+
+/**
  * الحصول على الاختبار اليومي الحالي أو إنشاء واحد جديد
  */
 export async function getOrCreateDailyQuiz(): Promise<{
@@ -52,6 +81,9 @@ export async function getOrCreateDailyQuiz(): Promise<{
     // إذا لم يكن موجوداً أو انتهى، إنشاء اختبار جديد
     logger.info('Creating new daily quiz', { date: today.toISOString() });
 
+    // التأكد من وجود كاتيجوريز افتراضية
+    await ensureDefaultCategories();
+
     // جلب كل الكاتيجوريز
     const categories = await prisma.quizCategory.findMany({
       select: { id: true },
@@ -59,22 +91,44 @@ export async function getOrCreateDailyQuiz(): Promise<{
     });
 
     if (categories.length === 0) {
-      throw new Error('No quiz categories found');
+      logger.error('No quiz categories found after ensuring defaults. Database may be corrupted.');
+      throw new Error('No quiz categories found. Please contact administrator.');
     }
 
     // اختيار كاتيجوري عشوائية
     const randomIndex = Math.floor(Math.random() * categories.length);
-    const selectedCategory = categories[randomIndex];
+    let selectedCategory = categories[randomIndex];
 
     // جلب 20 سؤال عشوائي من الكاتيجوري المختارة
-    const allQuestions = await prisma.quizQuestion.findMany({
+    let allQuestions = await prisma.quizQuestion.findMany({
       where: { categoryId: selectedCategory.id },
       select: { id: true },
       orderBy: { createdAt: 'asc' },
     });
 
+    // إذا لم تكن هناك أسئلة في هذه الكاتيجوري، جرب كاتيجوري أخرى
     if (allQuestions.length === 0) {
-      throw new Error(`No questions found for category ${selectedCategory.id}`);
+      logger.warn(`No questions found for category ${selectedCategory.id}, trying other categories...`);
+      
+      // جرب كل الكاتيجوريز حتى نجد واحدة بها أسئلة
+      for (const cat of categories) {
+        const questions = await prisma.quizQuestion.findMany({
+          where: { categoryId: cat.id },
+          select: { id: true },
+          take: 20,
+        });
+        
+        if (questions.length > 0) {
+          allQuestions = questions;
+          selectedCategory = cat;
+          logger.info(`Using category ${cat.id} with ${questions.length} questions`);
+          break;
+        }
+      }
+      
+      if (allQuestions.length === 0) {
+        throw new Error('No questions found in any quiz category. Please seed the database with questions.');
+      }
     }
 
     // اختيار 20 سؤال عشوائي
@@ -243,6 +297,148 @@ export async function canUserTakeDailyQuiz(userId: string): Promise<{
   } catch (error: any) {
     logger.error('Error checking if user can take daily quiz:', error);
     return { canTake: false };
+  }
+}
+
+/**
+ * إنشاء كويز يومي جديد يبدأ من الوقت الحالي (ليس من بداية اليوم)
+ * وإعادة تعيين cooldown لجميع المستخدمين
+ */
+export async function createNewDailyQuizFromNow(): Promise<{
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  questionIds: string[];
+  date: Date;
+  expiresAt: Date;
+  usersReset: number;
+}> {
+  try {
+    const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+
+    // حذف جميع الكويزات اليومية القديمة
+    await prisma.dailyQuiz.deleteMany({
+      where: {
+        date: today,
+      },
+    });
+
+    logger.info('Creating new daily quiz from current time', { 
+      currentTime: now.toISOString() 
+    });
+
+    // التأكد من وجود كاتيجوريز افتراضية
+    await ensureDefaultCategories();
+
+    // جلب كل الكاتيجوريز
+    const categories = await prisma.quizCategory.findMany({
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (categories.length === 0) {
+      logger.error('No quiz categories found after ensuring defaults. Database may be corrupted.');
+      throw new Error('No quiz categories found. Please contact administrator.');
+    }
+
+    // اختيار كاتيجوري عشوائية
+    const randomIndex = Math.floor(Math.random() * categories.length);
+    let selectedCategory = categories[randomIndex];
+
+    // جلب 20 سؤال عشوائي من الكاتيجوري المختارة
+    let allQuestions = await prisma.quizQuestion.findMany({
+      where: { categoryId: selectedCategory.id },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // إذا لم تكن هناك أسئلة في هذه الكاتيجوري، جرب كاتيجوري أخرى
+    if (allQuestions.length === 0) {
+      logger.warn(`No questions found for category ${selectedCategory.id}, trying other categories...`);
+      
+      // جرب كل الكاتيجوريز حتى نجد واحدة بها أسئلة
+      for (const cat of categories) {
+        const questions = await prisma.quizQuestion.findMany({
+          where: { categoryId: cat.id },
+          select: { id: true },
+          take: 20,
+        });
+        
+        if (questions.length > 0) {
+          allQuestions = questions;
+          selectedCategory = cat;
+          logger.info(`Using category ${cat.id} (${cat.name}) with ${questions.length} questions`);
+          break;
+        }
+      }
+      
+      if (allQuestions.length === 0) {
+        throw new Error('No questions found in any quiz category. Please seed the database with questions.');
+      }
+    }
+
+    // اختيار 20 سؤال عشوائي
+    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
+    const selectedQuestionIds = shuffled
+      .slice(0, Math.min(20, allQuestions.length))
+      .map((q) => q.id);
+
+    // حساب وقت انتهاء الاختبار (24 ساعة من الوقت الحالي)
+    const expiresAt = new Date(now);
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    // إنشاء الاختبار الجديد
+    const newDailyQuiz = await prisma.dailyQuiz.create({
+      data: {
+        categoryId: selectedCategory.id,
+        questionIds: selectedQuestionIds,
+        date: today,
+        expiresAt,
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    // إعادة تعيين cooldown لجميع المستخدمين للكويز اليومي الجديد
+    // حذف جميع محاولات الكويز اليومي القديمة لهذا اليوم
+    const deletedAttempts = await prisma.quizAttempt.deleteMany({
+      where: {
+        categoryId: selectedCategory.id,
+        completedAt: {
+          gte: today,
+        },
+      },
+    });
+
+    logger.info('Daily quiz created and cooldowns reset', {
+      id: newDailyQuiz.id,
+      categoryId: selectedCategory.id,
+      categoryName: selectedCategory.name,
+      questionCount: selectedQuestionIds.length,
+      expiresAt: expiresAt.toISOString(),
+      deletedAttempts: deletedAttempts.count,
+    });
+
+    return {
+      id: newDailyQuiz.id,
+      categoryId: newDailyQuiz.categoryId,
+      categoryName: selectedCategory.name,
+      questionIds: newDailyQuiz.questionIds,
+      date: newDailyQuiz.date,
+      expiresAt: newDailyQuiz.expiresAt,
+      usersReset: deletedAttempts.count,
+    };
+  } catch (error: any) {
+    logger.error('Error creating new daily quiz from now:', error);
+    throw error;
   }
 }
 

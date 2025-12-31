@@ -22,6 +22,7 @@ import {
   getOrCreateDailyQuiz,
   getCurrentDailyQuiz,
   canUserTakeDailyQuiz,
+  createNewDailyQuizFromNow,
 } from '../services/daily-quiz.service';
 import { getAnswers } from '../data/quiz-answers';
 
@@ -234,6 +235,17 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
         res.json(responseData);
     } catch (error: any) {
         logger.error('Error getting quiz categories:', error);
+        
+        // إذا كانت المشكلة عدم وجود كاتيجوريز، أعط رسالة واضحة
+        if (error.message && error.message.includes('No quiz categories found')) {
+            res.status(503).json({
+                status: 'ERROR',
+                message: 'Quiz system is not initialized. Please contact administrator.',
+                code: 'QUIZ_NOT_INITIALIZED',
+            });
+            return;
+        }
+        
         res.status(500).json({
             status: 'ERROR',
             message: error.message || 'Failed to get categories',
@@ -520,6 +532,44 @@ router.get(
     }
   }
 );
+
+/**
+ * POST /api/quiz/reset-daily
+ * إعادة تعيين الكويز اليومي وإنشاء واحد جديد يبدأ من الوقت الحالي
+ * وإعادة تعيين cooldown لجميع المستخدمين
+ */
+router.post('/reset-daily', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    logger.info('Resetting daily quiz', { userId: clerkUserId });
+
+    const result = await createNewDailyQuizFromNow();
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Daily quiz reset successfully',
+      data: {
+        quizId: result.id,
+        categoryId: result.categoryId,
+        categoryName: result.categoryName,
+        questionCount: result.questionIds.length,
+        expiresAt: result.expiresAt.toISOString(),
+        usersReset: result.usersReset,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error resetting daily quiz:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      message: error.message || 'Failed to reset daily quiz',
+    });
+  }
+});
 
 // ============================================
 // DYNAMIC ROUTES (يجب أن تكون بعد Static Routes)
