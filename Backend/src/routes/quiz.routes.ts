@@ -14,6 +14,10 @@ import {
   getUserQuizStats,
   getUserQuizHistory,
 } from '../services/quiz.service';
+import {
+  checkAndUnlockCategory,
+  isCategoryOpenForUser,
+} from '../services/quiz-state.service';
 
 const router = Router();
 
@@ -42,33 +46,104 @@ const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
 
 /**
  * GET /api/quiz/categories
- * جلب جميع فئات الكويز
+ * جلب النوع المفتوح فقط للمستخدم (categoryId فقط)
+ * الكاتيجوري والأسئلة موجودة في الفرونت إند
  * Requires authentication - guests cannot access quiz
  */
 router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
     logger.info(`📥 Quiz categories endpoint called - Path: ${req.path}, Method: ${req.method}`);
     try {
-        // Check cache first
-        const cacheKey = 'quiz_categories_all';
-        const cached = quizCategoriesCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < QUIZ_CATEGORIES_CACHE_TTL) {
-            res.json(cached.data);
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
         }
 
-        const categories = await prisma.quizCategory.findMany({
-            orderBy: {
-                createdAt: 'asc',
-            },
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
         });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // فحص وفتح النوع إذا لزم الأمر
+        const { shouldUnlock, currentCategoryId, nextUnlockAt } =
+            await checkAndUnlockCategory(user.id);
+
+        if (!currentCategoryId) {
+            res.json({
+                status: 'SUCCESS',
+                data: {
+                    openCategoryId: null,
+                    nextUnlockAt: nextUnlockAt?.toISOString(),
+                },
+            });
+            return;
+        }
+
+        // جلب اسم النوع فقط للتحقق
+        const category = await prisma.quizCategory.findUnique({
+            where: { id: currentCategoryId },
+            select: { name: true },
+        });
+
+        if (!category) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'Category not found',
+            });
+            return;
+        }
+
+        // جلب الأسئلة المستخدمة لتحديد الأسئلة المتاحة
+        const usedAnswers = await prisma.userQuizAnswer.findMany({
+            where: {
+                userId: user.id,
+                question: {
+                    categoryId: currentCategoryId,
+                },
+            },
+            select: {
+                questionId: true,
+            },
+            distinct: ['questionId'],
+        });
+
+        const usedQuestionIds = usedAnswers.map((a) => a.questionId);
+
+        // جلب كل questionIds للفئة
+        const allQuestions = await prisma.quizQuestion.findMany({
+            where: { categoryId: currentCategoryId },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' }, // Order from backend
+        });
+
+        // استبعاد الأسئلة المستخدمة
+        let availableQuestionIds = allQuestions
+            .map((q) => q.id)
+            .filter((id) => !usedQuestionIds.includes(id));
+
+        // إذا لم يبقَ أسئلة كافية، إعادة استخدام كل الأسئلة
+        if (availableQuestionIds.length < 20) {
+            availableQuestionIds = allQuestions.map((q) => q.id);
+        }
+
+        // اختيار 20 سؤال عشوائي مع الحفاظ على الترتيب من الباك إند
+        const shuffled = [...availableQuestionIds].sort(() => Math.random() - 0.5);
+        const selectedQuestionIds = shuffled.slice(0, 20);
 
         const responseData = {
             status: 'SUCCESS',
-            data: categories,
+            data: {
+                openCategoryId: currentCategoryId,
+                openCategoryName: category.name,
+                questionIds: selectedQuestionIds, // الأسئلة المختارة للاختبار اليومي
+                nextUnlockAt: nextUnlockAt?.toISOString(),
+            },
         };
-
-        // Save to cache
-        quizCategoriesCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
 
         res.json(responseData);
     } catch (error: any) {
@@ -76,6 +151,81 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
         res.status(500).json({
             status: 'ERROR',
             message: error.message || 'Failed to get categories',
+        });
+    }
+});
+
+/**
+ * POST /api/quiz/answers
+ * جلب الإجابات الصحيحة للأسئلة من الملفات المحلية
+ * Requires authentication
+ */
+router.post('/answers', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Quiz answers endpoint called - Path: ${req.path}, Method: ${req.method}`);
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const { questionIds, categoryId } = req.body;
+
+        if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'questionIds array is required',
+            });
+            return;
+        }
+
+        if (!categoryId) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'categoryId is required',
+            });
+            return;
+        }
+
+        // جلب الإجابات من الملفات المحلية
+        try {
+            const { getAnswers } = await import('../data/quiz-answers');
+            const answersMap = getAnswers(categoryId, questionIds);
+
+            res.json({
+                status: 'SUCCESS',
+                data: answersMap,
+            });
+        } catch (importError: any) {
+            logger.warn('Failed to load answers from files, falling back to database:', importError);
+            
+            // Fallback: جلب من قاعدة البيانات إذا فشل تحميل الملفات
+            const questions = await prisma.quizQuestion.findMany({
+                where: {
+                    id: { in: questionIds },
+                    categoryId,
+                },
+                select: {
+                    id: true,
+                    correctAnswer: true,
+                },
+            });
+
+            const answersMap: Record<string, string> = {};
+            questions.forEach((q) => {
+                answersMap[q.id] = q.correctAnswer;
+            });
+
+            res.json({
+                status: 'SUCCESS',
+                data: answersMap,
+            });
+        }
+    } catch (error: any) {
+        logger.error('Error getting quiz answers:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get answers',
         });
     }
 });
@@ -222,24 +372,60 @@ router.get(
         return;
       }
 
-      // Get random questions (10 questions per quiz as per requirements)
-      const questionCount = count ? parseInt(count as string, 10) : 10;
-      const questions = await getRandomQuestions(categoryId, questionCount);
-
-      if (questions.length === 0) {
-        res.status(404).json({
+      // التحقق من أن النوع مفتوح للمستخدم
+      const isOpen = await isCategoryOpenForUser(user.id, categoryId);
+      if (!isOpen) {
+        res.status(403).json({
           status: 'ERROR',
-          message: 'No questions available for this category',
+          message: 'This category is not available for you at the moment',
         });
         return;
       }
 
+      // إرجاع فقط questionIds (الأسئلة موجودة في الفرونت إند)
+      // جلب الأسئلة المستخدمة لتحديد الأسئلة المتاحة
+      const usedAnswers = await prisma.userQuizAnswer.findMany({
+        where: {
+          userId: user.id,
+          question: {
+            categoryId,
+          },
+        },
+        select: {
+          questionId: true,
+        },
+        distinct: ['questionId'],
+      });
+
+      const usedQuestionIds = usedAnswers.map((a) => a.questionId);
+
+      // جلب كل questionIds للفئة
+      const allQuestions = await prisma.quizQuestion.findMany({
+        where: { categoryId },
+        select: { id: true },
+      });
+
+      // استبعاد الأسئلة المستخدمة
+      let availableQuestionIds = allQuestions
+        .map((q) => q.id)
+        .filter((id) => !usedQuestionIds.includes(id));
+
+      // إذا لم يبقَ أسئلة كافية، إعادة استخدام كل الأسئلة
+      if (availableQuestionIds.length < 20) {
+        availableQuestionIds = allQuestions.map((q) => q.id);
+      }
+
+      // اختيار 20 سؤال عشوائي
+      const shuffled = [...availableQuestionIds].sort(() => Math.random() - 0.5);
+      const selectedQuestionIds = shuffled.slice(0, 20);
+
       res.json({
         status: 'SUCCESS',
         data: {
-          category,
-          questions,
-          count: questions.length,
+          categoryId: category.id,
+          categoryName: category.name,
+          questionIds: selectedQuestionIds,
+          count: selectedQuestionIds.length,
         },
       });
     } catch (error: any) {

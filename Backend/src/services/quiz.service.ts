@@ -6,6 +6,7 @@
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { Difficulty } from '@prisma/client';
+import { markCategoryCompleted } from './quiz-state.service';
 
 interface QuizAnswer {
   questionId: string;
@@ -27,23 +28,70 @@ interface QuizRewards {
 
 /**
  * جلب أسئلة عشوائية لفئة معينة
+ * @param categoryId - معرف الفئة
+ * @param count - عدد الأسئلة المطلوبة (افتراضي 20)
+ * @param userId - معرف المستخدم (للاستبعاد الأسئلة المستخدمة)
+ * @param excludeQuestionIds - قائمة بمعرفات الأسئلة المستبعدة
  */
 export async function getRandomQuestions(
   categoryId: string,
-  count: number = 10
+  count: number = 20,
+  userId?: string,
+  excludeQuestionIds: string[] = []
 ): Promise<any[]> {
   try {
-    const questions = await prisma.quizQuestion.findMany({
-      where: { categoryId },
-      take: 1000, // fetch more to shuffle
+    // جلب الأسئلة المستخدمة من قبل المستخدم إذا تم توفير userId
+    let usedQuestionIds: string[] = [];
+    if (userId) {
+      const usedAnswers = await prisma.userQuizAnswer.findMany({
+        where: {
+          userId,
+          question: {
+            categoryId,
+          },
+        },
+        select: {
+          questionId: true,
+        },
+        distinct: ['questionId'],
+      });
+      usedQuestionIds = usedAnswers.map((a) => a.questionId);
+    }
+
+    // دمج قائمة الاستبعاد
+    const allExcludedIds = [...excludeQuestionIds, ...usedQuestionIds];
+    const uniqueExcludedIds = [...new Set(allExcludedIds)];
+
+    // جلب كل الأسئلة للفئة
+    const allQuestions = await prisma.quizQuestion.findMany({
+      where: {
+        categoryId,
+        ...(uniqueExcludedIds.length > 0 && {
+          id: {
+            notIn: uniqueExcludedIds,
+          },
+        }),
+      },
     });
 
-    if (questions.length === 0) {
+    // إذا لم يبقَ أسئلة كافية، إعادة استخدام الأسئلة (إعادة الدورة)
+    let availableQuestions = allQuestions;
+    if (availableQuestions.length < count && userId) {
+      logger.info(
+        `Not enough unused questions (${availableQuestions.length}), resetting for user ${userId}`
+      );
+      // إعادة جلب كل الأسئلة بدون استبعاد
+      availableQuestions = await prisma.quizQuestion.findMany({
+        where: { categoryId },
+      });
+    }
+
+    if (availableQuestions.length === 0) {
       return [];
     }
 
     // Shuffle array using Fisher-Yates algorithm
-    const shuffled = [...questions];
+    const shuffled = [...availableQuestions];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -283,6 +331,17 @@ export async function submitQuizAttempt(data: SubmitQuizData): Promise<any> {
 
       return attempt;
     });
+
+    // إغلاق النوع وفتح التالي بعد الحفظ
+    try {
+      const nextCategoryId = await markCategoryCompleted(userId, categoryId);
+      logger.info(
+        `Quiz completed for user ${userId}, category ${categoryId} closed, next category: ${nextCategoryId}`
+      );
+    } catch (stateError: any) {
+      // لا نوقف العملية إذا فشل تحديث الحالة
+      logger.error('Error updating quiz state after completion:', stateError);
+    }
 
     return {
       attemptId: result.id,

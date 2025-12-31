@@ -21,6 +21,8 @@
     "prisma:reset": "prisma migrate reset",
     "delete:users": "ts-node scripts/delete-all-users.ts",
     "delete-all-users": "ts-node scripts/delete-all-users.ts",
+    "export:questions": "ts-node scripts/export-questions.ts",
+    "export:answers": "ts-node scripts/export-answers.ts",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
