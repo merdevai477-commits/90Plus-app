@@ -81,6 +81,11 @@ export async function getNextAvailableCategory(userId: string): Promise<string |
       return null;
     }
 
+    if (!state) {
+      logger.error('State is null after getUserQuizState');
+      return null;
+    }
+
     // استبعاد الأنواع المكتملة
     const availableCategories = allCategories.filter(
       (cat) => !state.completedCategoryIds.includes(cat.id)
@@ -152,6 +157,16 @@ export async function checkAndUnlockCategory(userId: string): Promise<{
 }> {
   try {
     const state = await getUserQuizState(userId);
+    
+    if (!state) {
+      logger.error('State is null after getUserQuizState');
+      return {
+        shouldUnlock: false,
+        currentCategoryId: null,
+        nextUnlockAt: null,
+      };
+    }
+    
     const now = new Date();
 
     // إذا لم يكن هناك نوع مفتوح، فتح واحد جديد
@@ -203,6 +218,11 @@ export async function markCategoryCompleted(
   try {
     const state = await getUserQuizState(userId);
 
+    if (!state) {
+      logger.error('State is null after getUserQuizState');
+      return null;
+    }
+
     // إضافة النوع إلى المكتملة إذا لم يكن موجوداً
     const updatedCompletedIds = state.completedCategoryIds.includes(categoryId)
       ? state.completedCategoryIds
@@ -241,6 +261,9 @@ export async function isCategoryOpenForUser(
 ): Promise<boolean> {
   try {
     const state = await getUserQuizState(userId);
+    if (!state) {
+      return false;
+    }
     return state.currentOpenCategoryId === categoryId;
   } catch (error: any) {
     logger.error('Error checking if category is open:', error);

@@ -3,7 +3,7 @@ import { requireAdmin } from '../middleware/admin.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { StrikeService } from '../services/strike.service';
-import { AuditService } from '../services/audit.service';
+import { AuditService, AuditAction, AuditTargetType } from '../services/audit.service';
 import { AdminNotificationService } from '../services/admin-notification.service';
 import { suspendUser, autoDeleteContent } from '../services/moderation.service';
 import { NotificationService } from '../services/notification.service';
@@ -244,10 +244,10 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
 
         // Create audit log
         await AuditService.createAuditLog({
-            action: 'ADMIN_REVIEW',
+            action: AuditAction.ADMIN_REVIEW,
             actorId: adminUser.id,
             targetId: report.id,
-            targetType: 'REPORT',
+            targetType: AuditTargetType.REPORT,
             reason: reason || report.reason,
             metadata: { action, reportId: report.id },
         });
@@ -390,10 +390,10 @@ router.post('/users/:id/unsuspend', requireAdmin, async (req: Request, res: Resp
         });
 
         await AuditService.createAuditLog({
-            action: 'USER_UNSUSPENDED',
+            action: AuditAction.USER_UNSUSPENDED,
             actorId: adminUser.id,
             targetId: id,
-            targetType: 'USER',
+            targetType: AuditTargetType.USER,
         });
 
         res.json({

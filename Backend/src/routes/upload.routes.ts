@@ -330,12 +330,12 @@ router.post('/reel', requireAuth, upload.fields([
 
         videoResult = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
-        if (!videoResult.success) {
+        if (!videoResult || !videoResult.success) {
             const elapsed = Date.now() - uploadStartTime;
-            logger.error(`Video upload failed after ${elapsed}ms. File: ${videoFileName}, Size: ${fileSizeMB}MB, Error: ${videoResult.error}`);
+            logger.error(`Video upload failed after ${elapsed}ms. File: ${videoFileName}, Size: ${fileSizeMB}MB, Error: ${videoResult?.error || 'Unknown error'}`);
             res.status(500).json({ 
                 status: 'ERROR', 
-                message: videoResult.error || 'Failed to upload video to storage. Please try again or use a smaller file.',
+                message: videoResult?.error || 'Failed to upload video to storage. Please try again or use a smaller file.',
                 code: 'UPLOAD_FAILED'
             });
             return;
@@ -401,14 +401,24 @@ router.post('/reel', requireAuth, upload.fields([
         }
 
         // Create reel in database
+        if (!videoResult || !videoResult.url || !videoResult.path) {
+            logger.error('Cannot create reel: videoResult is missing required fields');
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: 'Video upload completed but required data is missing',
+                code: 'MISSING_DATA'
+            });
+            return;
+        }
+
         const reel = await prisma.reel.create({
             data: {
                 userId: user.id,
-                videoUrl: videoResult.url!,
-                videoStoragePath: videoResult.path!,
+                videoUrl: videoResult.url,
+                videoStoragePath: videoResult.path,
                 thumbnail: thumbnailUrl,
                 thumbnailStoragePath: thumbnailPath,
-                caption,
+                caption: caption || null,
             }
         });
 

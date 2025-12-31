@@ -419,6 +419,7 @@ export async function createNewDailyQuizFromNow(): Promise<{
 
     // إعادة تعيين cooldown لجميع المستخدمين للكويز اليومي الجديد
     // حذف جميع محاولات الكويز اليومي القديمة لهذا اليوم
+    // وأيضاً حذف محاولات الكاتيجوري المختارة من اليوم السابق
     const deletedAttempts = await prisma.quizAttempt.deleteMany({
       where: {
         categoryId: selectedCategory.id,
@@ -427,6 +428,35 @@ export async function createNewDailyQuizFromNow(): Promise<{
         },
       },
     });
+    
+    // أيضاً حذف محاولات من daily quiz القديم (إذا كان هناك daily quiz سابق)
+    const oldDailyQuizzes = await prisma.dailyQuiz.findMany({
+      where: {
+        date: {
+          lt: today,
+        },
+      },
+      select: {
+        categoryId: true,
+      },
+    });
+    
+    // حذف محاولات من الكاتيجوريز القديمة للكويزات اليومية السابقة
+    let additionalDeleted = 0;
+    if (oldDailyQuizzes.length > 0) {
+      const oldCategoryIds = oldDailyQuizzes.map(q => q.categoryId);
+      const additionalResult = await prisma.quizAttempt.deleteMany({
+        where: {
+          categoryId: {
+            in: oldCategoryIds,
+          },
+          completedAt: {
+            gte: today,
+          },
+        },
+      });
+      additionalDeleted = additionalResult.count;
+    }
 
     logger.info('Daily quiz created and cooldowns reset', {
       id: newDailyQuiz.id,
@@ -444,7 +474,7 @@ export async function createNewDailyQuizFromNow(): Promise<{
       questionIds: newDailyQuiz.questionIds,
       date: newDailyQuiz.date,
       expiresAt: newDailyQuiz.expiresAt,
-      usersReset: deletedAttempts.count,
+      usersReset: deletedAttempts.count + additionalDeleted,
     };
   } catch (error: any) {
     logger.error('Error creating new daily quiz from now:', error);

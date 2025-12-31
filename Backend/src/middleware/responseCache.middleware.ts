@@ -169,10 +169,14 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
         const originalJson = res.json.bind(res);
 
         // Override json to cache response
-        res.json = async function (body: any) {
-            const etag = await responseCache.set(req, body, ttl);
-            res.setHeader('ETag', `"${etag}"`);
-            res.setHeader('X-Cache', 'MISS');
+        res.json = function (body: any) {
+            // Cache asynchronously without blocking response
+            responseCache.set(req, body, ttl).then((etag) => {
+                res.setHeader('ETag', `"${etag}"`);
+                res.setHeader('X-Cache', 'MISS');
+            }).catch(() => {
+                // Ignore cache errors, don't block response
+            });
             return originalJson(body);
         };
 

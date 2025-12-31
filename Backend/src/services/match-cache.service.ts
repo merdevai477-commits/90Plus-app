@@ -477,7 +477,7 @@ class MatchCacheService {
 
         // 2. Check memory cache for live/scheduled matches
         const cacheKey = `matches_${from.toISOString()}_${to.toISOString()}`;
-        const cachedApiMatches = this.getFromMemoryCache<FixtureFromAPI[]>(cacheKey);
+        const cachedApiMatches = await this.getFromMemoryCache<FixtureFromAPI[]>(cacheKey);
 
         if (cachedApiMatches) {
             logger.debug(`📦 Got ${cachedApiMatches.length} matches from memory cache (shared for all users)`);

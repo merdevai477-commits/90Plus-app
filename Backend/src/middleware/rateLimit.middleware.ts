@@ -8,6 +8,18 @@ import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
 /**
+ * Skip rate limiting for certain conditions
+ * Must be defined before use in rate limiters
+ */
+export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean => {
+    // Skip for internal requests or trusted IPs
+    const trustedIPs = process.env.TRUSTED_IPS?.split(',') || [];
+    const clientIP = req.ip || req.socket.remoteAddress || '';
+
+    return trustedIPs.includes(clientIP);
+};
+
+/**
  * General API rate limiter
  * Increased limits to handle normal app usage
  * 5000 requests per 15 minutes in production, 2000 per minute in development
@@ -139,17 +151,6 @@ export const userSyncLimiter = rateLimit({
         return userId ? `user:${userId}` : req.ip || 'unknown';
     },
 });
-
-/**
- * Skip rate limiting for certain conditions
- */
-export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean => {
-    // Skip for internal requests or trusted IPs
-    const trustedIPs = process.env.TRUSTED_IPS?.split(',') || [];
-    const clientIP = req.ip || req.socket.remoteAddress || '';
-
-    return trustedIPs.includes(clientIP);
-};
 
 export default {
     generalLimiter,

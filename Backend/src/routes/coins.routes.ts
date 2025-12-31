@@ -95,6 +95,10 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
             return;
         }
 
+        // Validate and set transaction type
+        const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'PURCHASE', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
+        const transactionType = (type && validTypes.includes(type)) ? type : 'QUIZ_REWARD';
+
         // Update coins in transaction
         const [updatedUser] = await prisma.$transaction([
             prisma.user.update({
@@ -106,7 +110,7 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
                 data: {
                     userId: user.id,
                     amount,
-                    type: type || 'OTHER',
+                    type: transactionType as any,
                     description: description || `Added ${amount} coins`
                 }
             })
@@ -165,6 +169,10 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
+        // Validate and set transaction type
+        const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'PURCHASE', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
+        const transactionType = (type && validTypes.includes(type)) ? type : 'PURCHASE';
+
         // Update coins in transaction
         const [updatedUser] = await prisma.$transaction([
             prisma.user.update({
@@ -176,7 +184,7 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
                 data: {
                     userId: user.id,
                     amount: -amount,
-                    type: type || 'OTHER',
+                    type: transactionType as any,
                     description: description || `Subtracted ${amount} coins`
                 }
             })
