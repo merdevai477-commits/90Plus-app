@@ -182,8 +182,9 @@ const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
 
 /**
  * GET /api/quiz/categories
- * جلب الاختبار اليومي الموحد (نفس الاختبار لجميع المستخدمين)
+ * جلب قائمة الكاتيجوريز المتاحة
  * الكاتيجوري والأسئلة موجودة في الفرونت إند
+ * يتم إدارة الكاتيجوري المفتوح محلياً في الفرونت إند
  * Requires authentication - guests cannot access quiz
  */
 router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
@@ -205,39 +206,21 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
             return;
         }
 
-        // جلب أو إنشاء الاختبار اليومي الموحد
-        const dailyQuiz = await getOrCreateDailyQuiz();
-
-        // جلب اسم الكاتيجوري
-        const category = await prisma.quizCategory.findUnique({
-            where: { id: dailyQuiz.categoryId },
-            select: { name: true },
+        // جلب جميع الكاتيجوريز المتاحة
+        const categories = await prisma.quizCategory.findMany({
+            select: {
+                id: true,
+                name: true,
+                icon: true,
+                description: true,
+                isLocked: true,
+                unlockLevel: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'asc' },
         });
 
-        if (!category) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'Category not found',
-            });
-            return;
-        }
-
-        const responseData = {
-            status: 'SUCCESS',
-            data: {
-                openCategoryId: dailyQuiz.categoryId,
-                openCategoryName: category.name,
-                questionIds: dailyQuiz.questionIds, // الأسئلة المختارة للاختبار اليومي الموحد
-                nextUnlockAt: dailyQuiz.expiresAt.toISOString(),
-            },
-        };
-
-        res.json(responseData);
-    } catch (error: any) {
-        logger.error('Error getting quiz categories:', error);
-        
-        // إذا كانت المشكلة عدم وجود كاتيجوريز، أعط رسالة واضحة
-        if (error.message && error.message.includes('No quiz categories found')) {
+        if (categories.length === 0) {
             res.status(503).json({
                 status: 'ERROR',
                 message: 'Quiz system is not initialized. Please contact administrator.',
@@ -245,6 +228,25 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
             });
             return;
         }
+
+        const responseData = {
+            status: 'SUCCESS',
+            data: {
+                categories: categories.map((cat) => ({
+                    id: cat.id,
+                    name: cat.name,
+                    icon: cat.icon,
+                    description: cat.description,
+                    isLocked: cat.isLocked,
+                    unlockLevel: cat.unlockLevel,
+                    createdAt: cat.createdAt.toISOString(),
+                })),
+            },
+        };
+
+        res.json(responseData);
+    } catch (error: any) {
+        logger.error('Error getting quiz categories:', error);
         
         res.status(500).json({
             status: 'ERROR',
@@ -537,12 +539,44 @@ router.get(
  * POST /api/quiz/reset-daily
  * إعادة تعيين الكويز اليومي وإنشاء واحد جديد يبدأ من الوقت الحالي
  * وإعادة تعيين cooldown لجميع المستخدمين
+ * يمكن استدعاؤه بـ:
+ * 1. Authentication (Bearer token) - للمستخدمين المسجلين
+ * 2. Secret key (X-API-Key header) - للاستدعاء المباشر من Railway أو التطبيق
  */
-router.post('/reset-daily', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/reset-daily', async (req: Request, res: Response): Promise<void> => {
   try {
+    // التحقق من Secret Key أولاً (للاستدعاء المباشر)
+    const apiKey = req.headers['x-api-key'] as string;
+    const secretKey = process.env.QUIZ_RESET_SECRET_KEY || process.env.ADMIN_SECRET_KEY;
+    
+    // إذا كان هناك secret key وكان صحيح، السماح بالوصول مباشرة
+    if (secretKey && apiKey === secretKey) {
+      logger.info('Resetting daily quiz via API key');
+      
+      const result = await createNewDailyQuizFromNow();
+      
+      res.json({
+        status: 'SUCCESS',
+        message: 'Daily quiz reset successfully',
+        data: {
+          quizId: result.id,
+          categoryId: result.categoryId,
+          categoryName: result.categoryName,
+          questionCount: result.questionIds.length,
+          expiresAt: result.expiresAt.toISOString(),
+          usersReset: result.usersReset,
+        },
+      });
+      return;
+    }
+    
+    // إذا لم يكن هناك secret key، التحقق من authentication
     const clerkUserId = req.auth?.userId;
     if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      res.status(401).json({ 
+        status: 'ERROR', 
+        message: 'Unauthorized. Provide either Bearer token or X-API-Key header' 
+      });
       return;
     }
 
