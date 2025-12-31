@@ -6,6 +6,7 @@
 import { getApiUrl } from '../config/api.config';
 import { useAuth } from '@clerk/clerk-expo';
 import { cacheService } from './cacheService';
+import { getQuestionsByIds, getQuestionById, QuizQuestion as LocalQuizQuestion } from '../data/quizQuestions';
 
 const API_URL = getApiUrl();
 const API_TIMEOUT = 10000; // 10 seconds
@@ -93,19 +94,12 @@ export interface QuizCategory {
     isLocked: boolean;
     unlockLevel: number;
     createdAt: string;
+    isOpen?: boolean;
+    nextUnlockAt?: string;
 }
 
-export interface QuizQuestion {
-    id: string;
-    question: string;
-    options: string[];
-    difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-    points: number;
-    imageUrl?: string | null;
-    imageType?: string | null;
-    hint?: string | null;
-    timeLimit?: number | null;
-}
+// QuizQuestion interface - نفس البنية الموجودة في quizQuestions.ts
+export type QuizQuestion = LocalQuizQuestion;
 
 export interface QuizAnswer {
     questionId: string;
@@ -174,9 +168,17 @@ export interface QuizHistoryItem {
 }
 
 /**
- * Get all quiz categories with caching
+ * Get open quiz category with questionIds and answers
+ * الكاتيجوري موجودة في الفرونت إند
+ * يتم جلب questionIds والإجابات عند تسجيل الدخول وكل 24 ساعة
  */
-export async function getQuizCategories(getToken: GetTokenFunction, retryCount: number = 0): Promise<QuizCategory[]> {
+export async function getQuizCategories(getToken: GetTokenFunction, retryCount: number = 0): Promise<{
+    openCategoryId: string | null;
+    openCategoryName: string | null;
+    questionIds: string[];
+    answers: Record<string, string>; // { questionId: correctAnswer }
+    nextUnlockAt: string | null;
+}> {
     try {
         // Check if getToken is available
         if (!getToken) {
@@ -187,15 +189,6 @@ export async function getQuizCategories(getToken: GetTokenFunction, retryCount: 
         const memoryCached = getFromMemoryCache(QUIZ_CATEGORIES_CACHE_KEY);
         if (memoryCached) {
             return memoryCached;
-        }
-
-        // Check AsyncStorage cache
-        const cached = await cacheService.get<QuizCategory[]>(QUIZ_CATEGORIES_CACHE_KEY);
-        if (cached) {
-            // Store in memory for next time
-            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, cached);
-            // Note: Background refresh is handled by preloadManager, not here
-            return cached;
         }
 
         const token = await getToken();
@@ -225,13 +218,45 @@ export async function getQuizCategories(getToken: GetTokenFunction, retryCount: 
 
         const data = await response.json();
         if (data.status === 'SUCCESS') {
-            const categories = data.data || [];
+            const result = data.data || {
+                openCategoryId: null,
+                openCategoryName: null,
+                questionIds: [],
+                nextUnlockAt: null,
+            };
+
+            // إذا كان هناك questionIds، جلب الإجابات
+            let answers: Record<string, string> = {};
+            if (result.questionIds && result.questionIds.length > 0) {
+                try {
+                    answers = await getQuizAnswers(result.questionIds, getToken);
+                    // حفظ الإجابات في cache
+                    const answersCacheKey = `quiz_answers_${result.openCategoryId}`;
+                    await cacheService.set(answersCacheKey, answers, 24 * 60 * 60 * 1000); // 24 hours
+                    setMemoryCache(answersCacheKey, answers);
+                } catch (error) {
+                    console.error('Error fetching answers:', error);
+                    // محاولة جلب الإجابات من cache إذا فشل الطلب
+                    const answersCacheKey = `quiz_answers_${result.openCategoryId}`;
+                    const cachedAnswers = await cacheService.get<Record<string, string>>(answersCacheKey);
+                    if (cachedAnswers) {
+                        answers = cachedAnswers;
+                    }
+                }
+            }
+
+            const finalResult = {
+                openCategoryId: result.openCategoryId,
+                openCategoryName: result.openCategoryName,
+                questionIds: result.questionIds || [],
+                answers,
+                nextUnlockAt: result.nextUnlockAt,
+            };
             
-            // Cache in both memory and storage
-            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, categories);
-            await cacheService.set(QUIZ_CATEGORIES_CACHE_KEY, categories, QUIZ_CATEGORIES_CACHE_TTL);
+            // Cache in memory
+            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, finalResult);
             
-            return categories;
+            return finalResult;
         }
 
         throw new Error(data.message || 'Failed to fetch categories');
@@ -245,31 +270,30 @@ export async function getQuizCategories(getToken: GetTokenFunction, retryCount: 
             return getQuizCategories(getToken, retryCount + 1);
         }
         
-        // If retries failed, try to return cached data
-        const cached = await cacheService.get<QuizCategory[]>(QUIZ_CATEGORIES_CACHE_KEY);
-        if (cached) {
-            setMemoryCache(QUIZ_CATEGORIES_CACHE_KEY, cached);
-            return cached;
-        }
-        
-        // Re-throw if no cache available
-        if (error.message) {
-            throw error;
-        }
-        throw new Error(error.message || 'Failed to fetch quiz categories');
+        // Return default if retries failed
+        return {
+            openCategoryId: null,
+            openCategoryName: null,
+            questionIds: [],
+            answers: {},
+            nextUnlockAt: null,
+        };
     }
 }
 
 /**
- * Start a new quiz - get questions for a category
+ * Start a new quiz - get questionIds and load questions from local
+ * الأسئلة موجودة في الفرونت إند - يتم جلبها محلياً بناءً على questionIds
  */
 export async function startQuiz(
     categoryId: string,
     getToken: GetTokenFunction,
     count?: number
 ): Promise<{
-    category: QuizCategory;
-    questions: QuizQuestion[];
+    categoryId: string;
+    categoryName: string;
+    questionIds: string[];
+    questions: QuizQuestion[]; // الأسئلة من الفرونت إند
     count: number;
 }> {
     try {
@@ -289,12 +313,88 @@ export async function startQuiz(
 
         const data = await response.json();
         if (data.status === 'SUCCESS') {
-            return data.data;
+            const { questionIds, categoryId: catId, categoryName } = data.data;
+            
+            // جلب الأسئلة من الفرونت إند بناءً على questionIds
+            const questions = getQuestionsByIds(questionIds);
+            
+            if (questions.length !== questionIds.length) {
+                console.warn(`⚠️ Some questions not found locally. Expected ${questionIds.length}, found ${questions.length}`);
+            }
+            
+            return {
+                categoryId: catId,
+                categoryName,
+                questionIds,
+                questions,
+                count: questions.length,
+            };
         }
 
         throw new Error(data.message || 'Failed to start quiz');
     } catch (error: any) {
         console.error('Error starting quiz:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get correct answers for questions
+ * جلب الإجابات الصحيحة للأسئلة
+ * يتم cache الإجابات لمدة 24 ساعة
+ */
+export async function getQuizAnswers(
+    questionIds: string[],
+    getToken: GetTokenFunction
+): Promise<Record<string, string>> {
+    try {
+        // محاولة جلب من memory cache أولاً
+        const cacheKey = `quiz_answers_${questionIds.sort().join('_')}`;
+        const memoryCached = getFromMemoryCache(cacheKey);
+        if (memoryCached) {
+            return memoryCached;
+        }
+
+        // محاولة جلب من AsyncStorage cache
+        const cached = await cacheService.get<Record<string, string>>(cacheKey);
+        if (cached) {
+            setMemoryCache(cacheKey, cached);
+            return cached;
+        }
+
+        // يجب إرسال categoryId أيضاً
+        // نحتاج categoryId من context أو من questionIds
+        // للآن سنستخدم طريقة بديلة: جلب categoryId من أول سؤال
+        const firstQuestion = getQuestionById(questionIds[0]);
+        const categoryId = firstQuestion?.categoryId;
+        
+        if (!categoryId) {
+            throw new Error('Category ID not found for questions');
+        }
+
+        const response = await fetchWithAuth('/quiz/answers', getToken, {
+            method: 'POST',
+            body: JSON.stringify({ questionIds, categoryId }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to get answers: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'SUCCESS') {
+            const answers = data.data; // { questionId: correctAnswer }
+            
+            // حفظ في cache (24 ساعة)
+            setMemoryCache(cacheKey, answers);
+            await cacheService.set(cacheKey, answers, 24 * 60 * 60 * 1000);
+            
+            return answers;
+        }
+
+        throw new Error(data.message || 'Failed to get answers');
+    } catch (error: any) {
+        console.error('Error getting quiz answers:', error);
         throw error;
     }
 }
@@ -411,6 +511,7 @@ export type { GetTokenFunction };
 // Export all functions as default object for convenience
 export const quizApi = {
     getCategories: getQuizCategories,
+    getAnswers: getQuizAnswers,
     startQuiz,
     submitQuiz,
     getStats: getQuizStats,

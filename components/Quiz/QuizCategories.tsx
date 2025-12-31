@@ -3,9 +3,10 @@ import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ImageBackground, 
 import { useLanguage } from '../../contexts/LanguageContext';
 import { COLORS } from '../reels/constants';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getQuizCategories, checkQuizCooldown, QuizCategory } from '../../services/quizApi';
+import { getQuizCategories } from '../../services/quizApi';
 import { useAuth } from '@clerk/clerk-expo';
 import { Clock } from 'lucide-react-native';
+import { QUIZ_CATEGORIES, getCategoryById, QuizCategoryLocal } from '../../data/quizCategories';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -30,15 +31,16 @@ const CATEGORY_IMAGES: Record<string, any> = {
 export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory }) => {
     const { t } = useLanguage();
     const { getToken } = useAuth();
-    const [categories, setCategories] = useState<QuizCategory[]>([]);
+    const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
+    const [openCategoryName, setOpenCategoryName] = useState<string | null>(null);
+    const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [cooldowns, setCooldowns] = useState<Record<string, { canStart: boolean; hoursRemaining?: number }>>({});
 
     useEffect(() => {
-        loadCategories();
+        loadOpenCategory();
     }, []);
 
-    const loadCategories = async () => {
+    const loadOpenCategory = async () => {
         if (!getToken) {
             console.error('getToken is not available');
             setLoading(false);
@@ -56,57 +58,67 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
                 return;
             }
 
-            const fetchedCategories = await getQuizCategories(getToken);
-            setCategories(fetchedCategories);
-
-            // Parallelize cooldown checks for faster loading
-            const cooldownPromises = fetchedCategories.map(category =>
-                checkQuizCooldown(category.id, getToken)
-                    .then(cooldown => ({ categoryId: category.id, cooldown }))
-                    .catch(() => ({ categoryId: category.id, cooldown: { canStart: true } }))
-            );
-
-            const cooldownResults = await Promise.all(cooldownPromises);
-            const cooldownMap: Record<string, { canStart: boolean; hoursRemaining?: number }> = {};
-            cooldownResults.forEach(({ categoryId, cooldown }) => {
-                cooldownMap[categoryId] = cooldown;
-            });
-            setCooldowns(cooldownMap);
+            // جلب النوع المفتوح مع questionIds والإجابات
+            // يتم جلب الإجابات تلقائياً وحفظها في cache
+            const result = await getQuizCategories(getToken);
+            setOpenCategoryId(result.openCategoryId);
+            setOpenCategoryName(result.openCategoryName);
+            setNextUnlockAt(result.nextUnlockAt);
+            
+            if (result.openCategoryName) {
+                console.log(`✅ Daily quiz loaded: ${result.openCategoryName}, ${result.questionIds?.length || 0} questions, ${Object.keys(result.answers || {}).length} answers cached`);
+            }
         } catch (error: any) {
-            console.error('Error loading quiz categories:', error);
-            // Don't set empty categories - keep existing state or show error
-            // This prevents UI flicker and allows showing cached data if available
+            console.error('Error loading open category:', error);
+            // في حالة الخطأ، نعرض الكاتيجوري المحلية فقط بدون تحديد النوع المفتوح
+            setOpenCategoryId(null);
+            setOpenCategoryName(null);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCategoryPress = async (category: QuizCategory) => {
-        if (category.isLocked) {
+    const handleCategoryPress = async (category: QuizCategoryLocal) => {
+        // التحقق من أن النوع مفتوح بناءً على الاسم
+        if (category.name !== openCategoryName) {
             return;
         }
 
-        // Check cooldown before starting
-        const cooldown = cooldowns[category.id];
-        if (cooldown && !cooldown.canStart) {
-            // Show cooldown message
-            return;
+        // استخدام openCategoryId من الباك إند (UUID)
+        if (openCategoryId) {
+            onSelectCategory(openCategoryId);
         }
+    };
 
-        onSelectCategory(category.id);
+    const calculateTimeUntilUnlock = (unlockAt?: string) => {
+        if (!unlockAt) return null;
+        
+        const now = new Date().getTime();
+        const unlockTime = new Date(unlockAt).getTime();
+        const diff = unlockTime - now;
+
+        if (diff <= 0) return null;
+
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        return { hours, minutes, seconds };
     };
 
     const getCategoryImage = (categoryName: string) => {
         return CATEGORY_IMAGES[categoryName] || 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80';
     };
 
-    const formatCooldownTime = (hours?: number) => {
-        if (!hours) return '';
-        if (hours < 1) {
-            const minutes = Math.ceil(hours * 60);
-            return `${minutes}m`;
+    const formatTimeUntilUnlock = (time: { hours: number; minutes: number; seconds: number } | null) => {
+        if (!time) return '';
+        if (time.hours > 0) {
+            return `${time.hours}h ${time.minutes}m`;
         }
-        return `${Math.ceil(hours)}h`;
+        if (time.minutes > 0) {
+            return `${time.minutes}m ${time.seconds}s`;
+        }
+        return `${time.seconds}s`;
     };
 
     if (loading) {
@@ -124,15 +136,16 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
             showsVerticalScrollIndicator={false}
         >
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Quiz Categories</Text>
-                <Text style={styles.headerSubtitle}>Test your football knowledge</Text>
+                <Text style={styles.headerTitle}>Daily Quiz</Text>
+                <Text style={styles.headerSubtitle}>One quiz category opens every 24 hours</Text>
             </View>
 
+            {/* عرض كل الكاتيجوري دائماً، محلية من الفرونت إند */}
             <View style={styles.grid}>
-                {categories.map((category) => {
-                    const cooldown = cooldowns[category.id];
-                    const isOnCooldown = cooldown && !cooldown.canStart;
+                {QUIZ_CATEGORIES.map((category) => {
                     const imageSource = getCategoryImage(category.name);
+                    // التحقق من أن النوع مفتوح بناءً على الاسم (ليس ID)
+                    const isOpen = category.name === openCategoryName;
 
                     return (
                         <View
@@ -142,7 +155,7 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
                             <TouchableOpacity
                                 activeOpacity={0.85}
                                 onPress={() => handleCategoryPress(category)}
-                                disabled={category.isLocked || isOnCooldown}
+                                disabled={!isOpen}
                                 style={styles.touchable}
                             >
                                 <View style={styles.cardContent}>
@@ -161,18 +174,11 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
                                             style={styles.gradient}
                                         />
 
-                                        {(category.isLocked || isOnCooldown) && (
+                                        {!isOpen && (
                                             <View style={styles.lockedOverlay}>
                                                 <View style={styles.lockIconContainer}>
-                                                    <Text style={styles.lockIcon}>
-                                                        {category.isLocked ? '🔒' : '⏰'}
-                                                    </Text>
+                                                    <Text style={styles.lockIcon}>🔒</Text>
                                                 </View>
-                                                {isOnCooldown && cooldown?.hoursRemaining && (
-                                                    <Text style={styles.cooldownText}>
-                                                        {formatCooldownTime(cooldown.hoursRemaining)}
-                                                    </Text>
-                                                )}
                                             </View>
                                         )}
 
@@ -180,6 +186,11 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
                                             <Text style={styles.title}>{category.name}</Text>
                                             {category.description && (
                                                 <Text style={styles.description}>{category.description}</Text>
+                                            )}
+                                            {isOpen && (
+                                                <View style={styles.openBadge}>
+                                                    <Text style={styles.openBadgeText}>Available Now</Text>
+                                                </View>
                                             )}
                                         </View>
                                     </ImageBackground>
@@ -191,6 +202,35 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
                     );
                 })}
             </View>
+            
+            {/* عرض countdown إذا لم يكن هناك نوع مفتوح */}
+            {!openCategoryId && nextUnlockAt && (() => {
+                const [timeUntilUnlock, setTimeUntilUnlock] = React.useState(calculateTimeUntilUnlock(nextUnlockAt));
+                
+                React.useEffect(() => {
+                    if (!timeUntilUnlock) return;
+                    
+                    const interval = setInterval(() => {
+                        const newTime = calculateTimeUntilUnlock(nextUnlockAt);
+                        setTimeUntilUnlock(newTime);
+                        if (!newTime) {
+                            clearInterval(interval);
+                            loadOpenCategory(); // Reload when unlocked
+                        }
+                    }, 1000);
+                    
+                    return () => clearInterval(interval);
+                }, [nextUnlockAt]);
+                
+                return timeUntilUnlock ? (
+                    <View style={styles.countdownContainer}>
+                        <Clock size={24} color={COLORS.neonBlue} />
+                        <Text style={styles.countdownText}>
+                            Next quiz unlocks in: {formatTimeUntilUnlock(timeUntilUnlock)}
+                        </Text>
+                    </View>
+                ) : null;
+            })()}
         </ScrollView>
     );
 };
@@ -278,6 +318,48 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0,0,0,0.75)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+        minHeight: 300,
+    },
+    emptyTitle: {
+        color: COLORS.white,
+        fontSize: 20,
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    countdownContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 255, 255, 0.1)',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.neonBlue,
+    },
+    countdownText: {
+        color: COLORS.neonBlue,
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 12,
+    },
+    openBadge: {
+        backgroundColor: COLORS.neonBlue,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        marginTop: 8,
+        alignSelf: 'flex-start',
+    },
+    openBadgeText: {
+        color: COLORS.deepBlack,
+        fontSize: 12,
+        fontWeight: 'bold',
     },
     glassBorder: {
         ...StyleSheet.absoluteFillObject,
