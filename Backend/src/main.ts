@@ -197,7 +197,7 @@ try {
     logger.info(`📝 Attempting to register quiz routes at ${API_PREFIX}/quiz`);
     app.use(`${API_PREFIX}/quiz`, quizRoutes);
     logger.info(`✅ Quiz routes registered successfully at ${API_PREFIX}/quiz`);
-    logger.info(`✅ Available quiz endpoints: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories`);
+    logger.info(`✅ Available quiz endpoints: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories, ${API_PREFIX}/quiz/daily-status`); // Updated: Added daily-status endpoint
 } catch (error: any) {
     logger.error(`❌ Failed to register quiz routes: ${error.message}`, error);
     logger.error(`❌ Error stack: ${error.stack}`);
@@ -352,6 +352,7 @@ app.use((req: Request, res: Response) => {
         availableRoutes: {
             quiz: [
                 `${API_PREFIX}/quiz/categories`,
+                `${API_PREFIX}/quiz/daily-status`,
                 `${API_PREFIX}/quiz/stats`,
                 `${API_PREFIX}/quiz/history`,
                 `${API_PREFIX}/quiz/:categoryId/start`,
@@ -402,7 +403,7 @@ async function startServer() {
             try {
                 const quizRoutesPath = require.resolve('./routes/quiz.routes');
                 logger.info(`✅ Quiz routes file found at: ${quizRoutesPath}`);
-                logger.info(`✅ Quiz routes available at: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories`);
+                logger.info(`✅ Quiz routes available at: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories, ${API_PREFIX}/quiz/daily-status`);
             } catch (error: any) {
                 logger.error(`❌ Quiz routes file not found: ${error.message}`);
             }
