@@ -36,6 +36,9 @@ RUN npm run verify:build || echo 'Warning: quiz.routes.js verification failed'
 # Expose port
 EXPOSE 3000
 
+# Create startup script
+RUN echo '#!/bin/sh\nnpx prisma migrate deploy && node dist/src/main.js' > /app/start.sh && chmod +x /app/start.sh
+
 # Start command
-CMD npx prisma migrate deploy && node dist/src/main.js
+ENTRYPOINT ["/app/start.sh"]
 
