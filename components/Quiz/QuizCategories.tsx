@@ -3,10 +3,17 @@ import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ImageBackground, 
 import { useLanguage } from '../../contexts/LanguageContext';
 import { COLORS } from '../reels/constants';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getQuizCategories } from '../../services/quizApi';
+import { fetchAnswersForCategory } from '../../services/quizApi';
 import { useAuth } from '@clerk/clerk-expo';
 import { Clock } from 'lucide-react-native';
 import { QUIZ_CATEGORIES, getCategoryById, QuizCategoryLocal } from '../../data/quizCategories';
+import { 
+    getCurrentQuizState, 
+    shouldOpenNewQuiz, 
+    openNewQuiz 
+} from '../../services/quizLocalState';
+import { startQuizSync, stopQuizSync } from '../../services/quizSyncService';
+import { getCategoryMapping } from '../../services/quizApi';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -30,7 +37,7 @@ const CATEGORY_IMAGES: Record<string, any> = {
 
 export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory }) => {
     const { t } = useLanguage();
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
     const [openCategoryName, setOpenCategoryName] = useState<string | null>(null);
     const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null);
@@ -38,35 +45,79 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
 
     useEffect(() => {
         loadOpenCategory();
+        
+        // بدء خدمة المزامنة إذا كان getToken متاحاً
+        if (getToken) {
+            startQuizSync(getToken, userId || null);
+        }
+
+        // تنظيف عند unmount
+        return () => {
+            stopQuizSync();
+        };
     }, []);
 
     const loadOpenCategory = async () => {
-        if (!getToken) {
-            console.error('getToken is not available');
-            setLoading(false);
-            return;
-        }
-
         try {
             setLoading(true);
             
-            // Verify token is available before making request
-            const token = await getToken();
-            if (!token) {
-                console.error('No authentication token available');
-                setLoading(false);
-                return;
+            // جلب category mapping من الباك إند
+            let categoryMapping: Record<string, string> = {};
+            if (getToken) {
+                try {
+                    categoryMapping = await getCategoryMapping(getToken);
+                } catch (error: any) {
+                    console.warn('Error getting category mapping, continuing without it:', error);
+                }
             }
-
-            // جلب النوع المفتوح مع questionIds والإجابات
-            // يتم جلب الإجابات تلقائياً وحفظها في cache
-            const result = await getQuizCategories(getToken);
-            setOpenCategoryId(result.openCategoryId);
-            setOpenCategoryName(result.openCategoryName);
-            setNextUnlockAt(result.nextUnlockAt);
             
-            if (result.openCategoryName) {
-                console.log(`✅ Daily quiz loaded: ${result.openCategoryName}, ${result.questionIds?.length || 0} questions, ${Object.keys(result.answers || {}).length} answers cached`);
+            // فحص الحالة المحلية للمستخدم الحالي
+            const currentState = await getCurrentQuizState(userId || null);
+            
+            // فحص إذا كان يجب فتح كويز جديد (مرت 24 ساعة)
+            const shouldOpen = await shouldOpenNewQuiz(userId || null);
+            
+            if (shouldOpen || !currentState.currentCategoryId) {
+                // فتح كويز جديد
+                console.log(`[QuizCategories] Opening new quiz for user ${userId || 'guest'}...`);
+                const newQuiz = await openNewQuiz(userId || null, categoryMapping);
+                
+                setOpenCategoryId(newQuiz.categoryId);
+                setOpenCategoryName(newQuiz.categoryName);
+                
+                // جلب الإجابات من الباك إند إذا كان getToken متاحاً
+                if (getToken && newQuiz.questionIds.length > 0) {
+                    try {
+                        const token = await getToken();
+                        if (token) {
+                            const answers = await fetchAnswersForCategory(
+                                newQuiz.categoryId,
+                                newQuiz.questionIds,
+                                getToken
+                            );
+                            console.log(`✅ Daily quiz opened: ${newQuiz.categoryName}, ${newQuiz.questionIds.length} questions, ${Object.keys(answers).length} answers fetched`);
+                        }
+                    } catch (error: any) {
+                        console.error('Error fetching answers:', error);
+                        // لا نوقف العملية، الإجابات قد تكون في cache
+                    }
+                }
+                
+                // حساب nextUnlockAt (24 ساعة من الآن)
+                const unlockAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                setNextUnlockAt(unlockAt.toISOString());
+            } else {
+                // استخدام الكويز الحالي
+                setOpenCategoryId(currentState.currentCategoryId);
+                setOpenCategoryName(currentState.currentCategoryName);
+                
+                // حساب nextUnlockAt بناءً على lastQuizOpenedAt
+                if (currentState.lastQuizOpenedAt) {
+                    const unlockAt = new Date(currentState.lastQuizOpenedAt + 24 * 60 * 60 * 1000);
+                    setNextUnlockAt(unlockAt.toISOString());
+                }
+                
+                console.log(`✅ Using existing quiz for user ${userId || 'guest'}: ${currentState.currentCategoryName}, ${currentState.currentQuestionIds.length} questions`);
             }
         } catch (error: any) {
             console.error('Error loading open category:', error);
@@ -84,8 +135,11 @@ export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory
             return;
         }
 
-        // استخدام openCategoryId من الباك إند (UUID)
-        if (openCategoryId) {
+        // استخدام category.id مباشرة (UUID) - الأسئلة المحلية مرتبطة به
+        if (category.id) {
+            onSelectCategory(category.id);
+        } else if (openCategoryId) {
+            // Fallback: استخدام openCategoryId من الباك إند
             onSelectCategory(openCategoryId);
         }
     };

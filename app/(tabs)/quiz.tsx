@@ -17,15 +17,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { QUIZ_QUESTIONS, Question } from '@/constants/quizData';
 import {
-  Pause,
-  Play,
-  SkipForward,
   Lightbulb,
   Heart,
   Zap,
   Trophy,
-  Volume2,
-  VolumeX,
   RotateCcw,
   Star,
   Award,
@@ -40,6 +35,9 @@ import { CoinsBadge } from '../../components/common/CoinsBadge';
 import { QuizCategories } from '../../components/Quiz/QuizCategories';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import { markQuizCompleted, getCurrentQuizState, getCurrentQuestions } from '../../services/quizLocalState';
+import { getQuestionsByIds, getQuestionsByCategoryId, getQuestionsByCategoryIdWithDifficulty, QuizQuestion, DisplayMode } from '../../data/quizQuestions/index';
+import { getQuizAnswers } from '../../services/quizApi';
 
 const { width, height } = Dimensions.get('window');
 
@@ -51,7 +49,7 @@ const MAX_QUESTIONS = 20; // حد أقصى 20 سؤال
 export default function QuizScreen() {
   const { t } = useTranslation();
   const { coins, addCoins, subtractCoins } = useCoins();
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isSignedIn, isLoaded, userId, getToken } = useAuth();
 
   // Prevent guest access - redirect to auth
   useEffect(() => {
@@ -83,27 +81,17 @@ export default function QuizScreen() {
     return null;
   }
 
-  // فلترة الأسئلة - فقط Q&A (FAQ) كما طلب المستخدم
-  const gameQuestions = QUIZ_QUESTIONS
-    .filter(q => {
-      // إبقاء فقط أسئلة Q&A أو FAQ
-      const category = q.category?.toLowerCase() || '';
-      return category.includes('q&a') || category.includes('faq') || category.includes('أسئلة');
-    })
-    .slice(0, MAX_QUESTIONS);
-  
-  // إذا لم يكن هناك أسئلة Q&A، استخدم جميع الأسئلة كـ fallback
-  const finalQuestions = gameQuestions.length > 0 ? gameQuestions : QUIZ_QUESTIONS.slice(0, MAX_QUESTIONS);
-
   // States الأساسية
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({}); // { questionId: correctAnswer }
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [coinsEarned, setCoinsEarned] = useState(0);
 
@@ -122,6 +110,8 @@ export default function QuizScreen() {
   const [bestStreak, setBestStreak] = useState(0);
   const [showStreakAnimation, setShowStreakAnimation] = useState(false);
   const [showImage, setShowImage] = useState(false); // للتحكم في إظهار الصورة
+  const [blurIntensity, setBlurIntensity] = useState(20); // للصورة المشوشة في legends
+  const [showQuestionText, setShowQuestionText] = useState(true); // للتحكم في عرض السؤال في flash mode
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -136,9 +126,108 @@ export default function QuizScreen() {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const imageScaleAnim = useRef(new Animated.Value(0.9)).current;
   const imageFadeAnim = useRef(new Animated.Value(0)).current; // أنيميشن ظهور الصورة
+  const blurAnim = useRef(new Animated.Value(20)).current; // animation للصورة المشوشة
+  const questionTextAnim = useRef(new Animated.Value(0)).current; // animation للسؤال في flash mode
 
+  // استخدام useRef لتخزين getToken وتجنب re-renders
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  // جلب الأسئلة من الملفات المحلية عند اختيار كاتيجوري
+  useEffect(() => {
+    let isMounted = true; // لتجنب state updates بعد unmount
+    
+    const loadQuizQuestions = async () => {
+      if (!selectedMode) {
+        if (isMounted) {
+          setLoadingQuestions(false);
+          setQuizQuestions([]);
+        }
+        return;
+      }
+
+      try {
+        if (isMounted) {
+          setLoadingQuestions(true);
+        }
+        
+        // استخدام الأسئلة المحلية مع تصفية حسب الصعوبة
+        // 5 سهلة، 10 متوسطة، 5 صعبة (باستثناء الأنواع التي تعتمد على الصورة)
+        const categoryQuestions = getQuestionsByCategoryIdWithDifficulty(selectedMode);
+        
+        if (categoryQuestions.length > 0) {
+          if (isMounted) {
+            setQuizQuestions(categoryQuestions);
+          }
+          
+          // جلب الإجابات من الباك إند (مع cache)
+          const currentGetToken = getTokenRef.current;
+          const questionIds = categoryQuestions.map(q => q.id);
+          
+          if (currentGetToken) {
+            try {
+              // getQuizAnswers يستخدم cache تلقائياً (memory + AsyncStorage)
+              const answers = await getQuizAnswers(questionIds, currentGetToken);
+              
+              if (isMounted) {
+                setQuizAnswers(answers);
+                console.log(`✅ Loaded ${Object.keys(answers).length} answers for ${categoryQuestions.length} questions`);
+              }
+            } catch (error) {
+              console.error('Error loading quiz answers:', error);
+              // في حالة فشل جلب الإجابات، نستخدم cache كبديل
+              try {
+                const cacheKey = `quiz_answers_${questionIds.sort().join('_')}`;
+                const { cacheService } = await import('../../services/cacheService');
+                const cachedAnswers = await cacheService.get<Record<string, string>>(cacheKey);
+                
+                if (isMounted) {
+                  setQuizAnswers(cachedAnswers || {});
+                  if (cachedAnswers) {
+                    console.log(`✅ Using cached answers: ${Object.keys(cachedAnswers).length} answers`);
+                  } else {
+                    console.warn('No cached answers found');
+                  }
+                }
+              } catch (cacheError) {
+                console.error('Error loading from cache:', cacheError);
+                if (isMounted) {
+                  setQuizAnswers({});
+                }
+              }
+            }
+          }
+        } else {
+          if (isMounted) {
+            console.warn(`No questions found for category: ${selectedMode}`);
+            setQuizQuestions([]);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading quiz questions:', error);
+        if (isMounted) {
+          setQuizQuestions([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingQuestions(false);
+        }
+      }
+    };
+
+    loadQuizQuestions();
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedMode]); // إزالة userId و getToken من dependencies
+
+  const finalQuestions = quizQuestions;
   const currentQuestion = finalQuestions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / finalQuestions.length) * 100;
+  const progress = finalQuestions.length > 0 ? ((currentQuestionIndex + 1) / finalQuestions.length) * 100 : 0;
 
   // Progress Animation
   useEffect(() => {
@@ -153,37 +242,113 @@ export default function QuizScreen() {
     animateQuestionEntry();
     setHintUsed(false);
     setEliminatedOptions([]);
-    setShowImage(false); // إخفاء الصورة عند السؤال الجديد
-    imageFadeAnim.setValue(0);
-  }, [currentQuestionIndex]);
+    
+    // تحديد طريقة عرض الصورة حسب displayMode
+    const displayMode: DisplayMode = currentQuestion?.displayMode || 'never';
+    
+    switch (displayMode) {
+      case 'after-answer':
+        // الصورة تظهر بعد الإجابة فقط
+        setShowImage(false);
+        imageFadeAnim.setValue(0);
+        setShowQuestionText(true);
+        questionTextAnim.setValue(1);
+        break;
+        
+      case 'before-question':
+        // الصورة تظهر أولاً، السؤال يظهر بعد ثانية
+        if (currentQuestion?.imageUrl) {
+          setShowImage(true);
+          imageFadeAnim.setValue(1);
+          imageScaleAnim.setValue(1);
+          setShowQuestionText(false);
+          questionTextAnim.setValue(0);
+          // السؤال يظهر بعد ثانية واحدة
+          setTimeout(() => {
+            setShowQuestionText(true);
+            Animated.timing(questionTextAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: true,
+            }).start();
+          }, 1000);
+        }
+        break;
+        
+      case 'in-question':
+        // الصورة في السؤال بدون hint
+        if (currentQuestion?.imageUrl) {
+          setShowImage(true);
+          imageFadeAnim.setValue(1);
+          imageScaleAnim.setValue(1);
+        } else {
+          setShowImage(false);
+        }
+        setShowQuestionText(true);
+        questionTextAnim.setValue(1);
+        break;
+        
+      case 'after-wrong':
+        // الصورة تظهر فقط بعد الإجابة الخاطئة
+        setShowImage(false);
+        imageFadeAnim.setValue(0);
+        setShowQuestionText(true);
+        questionTextAnim.setValue(1);
+        break;
+        
+      case 'blur-reveal':
+        // الصورة تظهر مشوشة في البداية
+        if (currentQuestion?.imageUrl) {
+          setShowImage(true);
+          imageFadeAnim.setValue(1);
+          imageScaleAnim.setValue(1);
+          setBlurIntensity(20);
+          blurAnim.setValue(20);
+        } else {
+          setShowImage(false);
+        }
+        setShowQuestionText(true);
+        questionTextAnim.setValue(1);
+        break;
+        
+      case 'never':
+      default:
+        // لا صورة قبل الإجابة
+        setShowImage(false);
+        imageFadeAnim.setValue(0);
+        setShowQuestionText(true);
+        questionTextAnim.setValue(1);
+        break;
+    }
+  }, [currentQuestionIndex, currentQuestion]);
 
   const animateQuestionEntry = () => {
     fadeAnim.setValue(0);
-    scaleAnim.setValue(0.8);
+    scaleAnim.setValue(0.85);
     imageScaleAnim.setValue(0.9);
     optionAnims.forEach(anim => anim.setValue(0));
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 500,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 8,
-        tension: 40,
+        friction: 7,
+        tension: 50,
         useNativeDriver: true,
       }),
     ]).start();
 
     optionAnims.forEach((anim, index) => {
       Animated.sequence([
-        Animated.delay(index * 100),
+        Animated.delay(index * 80 + 200),
         Animated.spring(anim, {
           toValue: 1,
-          friction: 8,
-          tension: 40,
+          friction: 6,
+          tension: 50,
           useNativeDriver: true,
         }),
       ]).start();
@@ -233,22 +398,94 @@ export default function QuizScreen() {
   };
 
   const handleAnswerSelect = async (answerIndex: number) => {
-    if (isAnswered || eliminatedOptions.includes(answerIndex)) return;
+    if (isAnswered || eliminatedOptions.includes(answerIndex) || !currentQuestion) return;
 
+    // Haptic feedback محسن
     if (soundEnabled && Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    
+    // Animation للزر المضغوط
+    if (optionAnims[answerIndex]) {
+      Animated.sequence([
+        Animated.timing(optionAnims[answerIndex], {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(optionAnims[answerIndex], {
+          toValue: 1,
+          friction: 3,
+          tension: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
 
     setSelectedAnswer(answerIndex);
     setIsAnswered(true);
     setTotalQuestions(prev => prev + 1);
 
-    // إظهار الصورة بعد الإجابة (إذا كانت موجودة)
-    if (currentQuestion.image) {
-      animateImageReveal();
-    }
+    // جلب الإجابة الصحيحة من quizAnswers
+    const correctAnswer = quizAnswers[currentQuestion.id] || '0';
+    const correctAnswerIndex = parseInt(correctAnswer, 10);
+    const isCorrect = answerIndex === correctAnswerIndex;
 
-    const isCorrect = answerIndex === currentQuestion.correctAnswer;
+    // تحديد طريقة عرض الصورة حسب displayMode بعد الإجابة
+    const displayMode: DisplayMode = currentQuestion.displayMode || 'never';
+    
+    switch (displayMode) {
+      case 'after-answer':
+        // الصورة تظهر بعد الإجابة (صحيحة أو خاطئة)
+        if (currentQuestion.imageUrl) {
+          animateImageReveal();
+        }
+        break;
+        
+      case 'after-wrong':
+        // الصورة تظهر فقط بعد الإجابة الخاطئة
+        if (!isCorrect && currentQuestion.imageUrl) {
+          animateImageReveal();
+        }
+        break;
+        
+      case 'blur-reveal':
+        // الصورة تتضح عند الإجابة (سواء صح أو خطأ)
+        if (currentQuestion.imageUrl) {
+          Animated.timing(blurAnim, {
+            toValue: 0,
+            duration: 800,
+            useNativeDriver: false,
+          }).start(() => {
+            setBlurIntensity(0);
+          });
+        }
+        break;
+        
+      case 'before-question':
+        // الصورة موجودة بالفعل، لا حاجة لتغيير
+        break;
+        
+      case 'in-question':
+        // إزالة التعتيم عن الصورة عند الإجابة
+        if (currentQuestion.imageUrl) {
+          Animated.timing(blurAnim, {
+            toValue: 0,
+            duration: 800,
+            useNativeDriver: false,
+          }).start(() => {
+            setBlurIntensity(0);
+          });
+        }
+        break;
+        
+      default:
+        // إظهار الصورة بعد الإجابة (إذا كانت موجودة ولم تكن ظاهرة)
+        if (currentQuestion.imageUrl && !showImage) {
+          animateImageReveal();
+        }
+        break;
+    }
 
     if (isCorrect) {
       // كل إجابة صحيحة = 5 نقاط ثابتة
@@ -346,32 +583,19 @@ export default function QuizScreen() {
     });
   };
 
-  const handleSkip = async () => {
-    if (coins >= 20 && currentQuestionIndex < finalQuestions.length - 1) {
-      const success = await subtractCoins(20);
-      if (success) {
-        setSelectedAnswer(null);
-        setIsAnswered(false);
-        setTotalQuestions(prev => prev + 1);
-        setCurrentQuestionIndex(prev => prev + 1);
-        setStreak(0);
-      }
-    }
-  };
 
-  const handlePause = () => {
-    setIsPaused(!isPaused);
-  };
 
   const handleHint = async () => {
-    if (coins >= HINT_COST && !hintUsed) {
+    if (coins >= HINT_COST && !hintUsed && currentQuestion) {
       const success = await subtractCoins(HINT_COST);
       if (success) {
         setHintUsed(true);
 
+        const correctAnswer = quizAnswers[currentQuestion.id] || '0';
+        const correctAnswerIndex = parseInt(correctAnswer, 10);
         const wrongOptions = currentQuestion.options
           .map((_, index) => index)
-          .filter(index => index !== currentQuestion.correctAnswer);
+          .filter(index => index !== correctAnswerIndex);
 
         const optionsToEliminate = wrongOptions
           .sort(() => Math.random() - 0.5)
@@ -402,6 +626,23 @@ export default function QuizScreen() {
   };
 
   const accuracy = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+
+  // حفظ النتائج في quizLocalState عند الانتهاء
+  useEffect(() => {
+    if (showResult && totalQuestions > 0) {
+      // حساب الوقت المستغرق (تقريبي - يمكن تحسينه لاحقاً)
+      const timeTaken = totalQuestions * 15; // افتراض 15 ثانية لكل سؤال
+      
+      markQuizCompleted({
+        score,
+        correctAnswers,
+        totalQuestions,
+        timeTaken,
+      }).catch((error) => {
+        console.error('Error saving quiz results:', error);
+      });
+    }
+  }, [showResult, score, correctAnswers, totalQuestions]);
 
   if (showResult) {
     return (
@@ -469,22 +710,6 @@ export default function QuizScreen() {
                 <Text style={styles.resultCoinsText}>💰 +{coinsEarned} {t.quiz.goldCoins}</Text>
               </LinearGradient>
             </View>
-
-            <TouchableOpacity
-              style={styles.restartButton}
-              onPress={handleRestart}
-              activeOpacity={0.9}
-            >
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                style={styles.restartButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <RotateCcw size={22} color="#fff" strokeWidth={2.5} />
-                <Text style={styles.restartButtonText}>{t.quiz.playAgain}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         </LinearGradient>
       </SafeAreaView>
@@ -500,6 +725,34 @@ export default function QuizScreen() {
     setSelectedMode(null);
     handleRestart();
   };
+
+  // Safety check: Don't render quiz if no questions or currentQuestion is undefined
+  if (selectedMode && (loadingQuestions || !currentQuestion || finalQuestions.length === 0)) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="light-content" />
+        <LinearGradient
+          colors={['#0a0a0a', '#1a1a1a']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerLeft}>
+              <TouchableOpacity onPress={handleBackToCategories} style={{ marginRight: 12 }}>
+                <RotateCcw size={24} color="#fff" />
+              </TouchableOpacity>
+              <CoinsBadge />
+            </View>
+          </View>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#fff', fontSize: 16 }}>
+            {loadingQuestions ? 'Loading questions...' : 'No questions available'}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!selectedMode) {
     return (
@@ -577,15 +830,33 @@ export default function QuizScreen() {
           </View>
 
           <View style={styles.headerRight}>
-            <View style={styles.scoreContainer}>
+            {/* Hint Button في مكان الكأس */}
+            <TouchableOpacity
+              style={[
+                styles.headerHintButton,
+                !hintUsed && coins >= HINT_COST && styles.headerHintButtonActive,
+                (hintUsed || coins < HINT_COST) && styles.headerHintButtonDisabled
+              ]}
+              onPress={handleHint}
+              disabled={hintUsed || coins < HINT_COST}
+              activeOpacity={0.7}
+            >
               <LinearGradient
-                colors={['rgba(16, 185, 129, 0.2)', 'rgba(16, 185, 129, 0.1)']}
-                style={styles.scoreGradientBadge}
+                colors={
+                  hintUsed || coins < HINT_COST
+                    ? ['rgba(42, 42, 42, 0.6)', 'rgba(26, 26, 26, 0.6)']
+                    : ['#fbbf24', '#f59e0b']
+                }
+                style={styles.headerHintGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
               >
-                <Trophy size={16} color="#10b981" />
-                <Text style={styles.scoreValue}>{score}</Text>
+                <Lightbulb size={18} color="#fff" strokeWidth={2.5} />
+                {!hintUsed && (
+                  <Text style={styles.headerHintCost}>{HINT_COST}</Text>
+                )}
               </LinearGradient>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -638,96 +909,164 @@ export default function QuizScreen() {
             },
           ]}
         >
-          {/* عرض السؤال دائماً بنفس التنسيق */}
+
+          {/* محتوى السؤال */}
           <View style={styles.textOnlyQuestionContainer}>
-            <View style={styles.categoryWrapper}>
-              <LinearGradient
-                colors={['rgba(16, 185, 129, 0.2)', 'rgba(16, 185, 129, 0.1)']}
-                style={styles.categoryGradient}
-              >
-                <Text style={styles.categoryText}>{currentQuestion.category}</Text>
-              </LinearGradient>
-            </View>
+            {/* Question Number Badge و Result Badge في الأعلى */}
+            <View style={styles.topBadgesContainer}>
+              {/* Question Number Badge - في اليسار */}
+              <View style={styles.questionNumberBadgeTop}>
+                <LinearGradient
+                  colors={['rgba(16, 185, 129, 0.2)', 'rgba(16, 185, 129, 0.1)']}
+                  style={styles.questionNumberGradient}
+                >
+                  <Text style={styles.questionNumberTextTop}>
+                    {currentQuestionIndex + 1} / {finalQuestions.length}
+                  </Text>
+                </LinearGradient>
+              </View>
 
-            <View style={styles.questionTextWrapper}>
-              <Text style={styles.questionTextOnly}>{currentQuestion.question}</Text>
-            </View>
-
-            <View style={styles.questionNumberBadge}>
-              <Text style={styles.questionNumberText}>
-                {currentQuestionIndex + 1} / {finalQuestions.length}
-              </Text>
-            </View>
-
-            {/* عرض الصورة بعد الإجابة فقط */}
-            {showImage && currentQuestion.image && (
-              <Animated.View
-                style={[
-                  styles.revealedImageContainer,
-                  {
-                    opacity: imageFadeAnim,
-                    transform: [{ scale: imageScaleAnim }],
-                  },
-                ]}
-              >
-                <Image
-                  source={{ uri: currentQuestion.image }}
+              {/* Result Badge - في اليمين (مقابل عدد الأسئلة) */}
+              {isAnswered && (
+                <Animated.View
                   style={[
-                    styles.revealedImage,
-                    currentQuestion.imageType === 'club' && styles.clubImage,
+                    styles.resultBadge,
+                    {
+                      opacity: resultAnim,
+                      transform: [
+                        {
+                          scale: resultAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.8, 1],
+                          }),
+                        },
+                      ],
+                    },
                   ]}
-                  resizeMode={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
-                />
-              </Animated.View>
-            )}
+                >
+                  <LinearGradient
+                    colors={
+                      selectedAnswer === parseInt(quizAnswers[currentQuestion?.id || ''] || '0', 10)
+                        ? ['rgba(16, 185, 129, 0.9)', 'rgba(5, 150, 105, 0.9)']
+                        : ['rgba(239, 68, 68, 0.9)', 'rgba(220, 38, 38, 0.9)']
+                    }
+                    style={styles.resultBadgeGradient}
+                  >
+                    <Text style={styles.resultBadgeEmoji}>
+                      {selectedAnswer === parseInt(quizAnswers[currentQuestion?.id || ''] || '0', 10) ? '✓' : '✗'}
+                    </Text>
+                    <Text style={styles.resultBadgeText}>
+                      {selectedAnswer === parseInt(quizAnswers[currentQuestion?.id || ''] || '0', 10) ? t.quiz.excellent : '😔'}
+                    </Text>
+                  </LinearGradient>
+                </Animated.View>
+              )}
+            </View>
+
+            {/* Question Text و/أو Image */}
+            <View style={styles.questionContentWrapper}>
+              {/* عرض الصورة حسب displayMode - في الأعلى */}
+              {currentQuestion?.imageUrl && showImage && (
+                <Animated.View
+                  style={[
+                    styles.questionImageContainer,
+                    {
+                      opacity: imageFadeAnim,
+                      transform: [{ scale: imageScaleAnim }],
+                    },
+                  ]}
+                >
+                  {(currentQuestion.displayMode === 'blur-reveal' || 
+                    (currentQuestion.displayMode === 'in-question' && !isAnswered)) ? (
+                    // الصورة المشوشة
+                    <View style={styles.blurImageWrapper}>
+                      <Image
+                        source={{ uri: currentQuestion.imageUrl }}
+                        style={[
+                          styles.questionImage,
+                          currentQuestion.imageType === 'club' && styles.clubImage,
+                        ]}
+                        resizeMode={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
+                      />
+                      {!isAnswered && (
+                        <Animated.View
+                          style={[
+                            styles.blurOverlay,
+                            {
+                              opacity: currentQuestion.displayMode === 'blur-reveal' 
+                                ? blurAnim.interpolate({
+                                    inputRange: [0, 20],
+                                    outputRange: [0, 1],
+                                  })
+                                : 1,
+                            },
+                          ]}
+                        >
+                          <BlurView
+                            intensity={currentQuestion.displayMode === 'blur-reveal' ? blurIntensity : 20}
+                            style={StyleSheet.absoluteFillObject}
+                            tint="dark"
+                          />
+                        </Animated.View>
+                      )}
+                    </View>
+                  ) : (
+                    // الصورة العادية
+                    <Image
+                      source={{ uri: currentQuestion.imageUrl }}
+                      style={[
+                        styles.questionImage,
+                        currentQuestion.imageType === 'club' && styles.clubImage,
+                      ]}
+                      resizeMode={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
+                    />
+                  )}
+                  
+                  {/* Overlay للصورة - يظهر فقط في in-question mode */}
+                  {!isAnswered && 
+                   currentQuestion.displayMode === 'in-question' && 
+                   currentQuestion?.imageUrl && (
+                    <View style={styles.imageOverlay}>
+                      <Text style={styles.imageQuizLabel}>Image Quiz</Text>
+                    </View>
+                  )}
+                </Animated.View>
+              )}
+
+              {/* نص السؤال - يظهر تحت الصورة */}
+              {currentQuestion?.question && showQuestionText && (
+                <Animated.View
+                  style={[
+                    styles.questionTextWrapper,
+                    currentQuestion?.imageUrl && showImage && styles.questionTextWithImage,
+                    !currentQuestion?.imageUrl && { marginTop: 0 },
+                    {
+                      opacity: questionTextAnim,
+                      transform: [
+                        {
+                          translateY: questionTextAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-20, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Text style={styles.questionTextOnly}>{currentQuestion.question}</Text>
+                </Animated.View>
+              )}
+            </View>
           </View>
 
-          {/* Result Overlay */}
-          {isAnswered && (
-            <Animated.View
-              style={[
-                styles.resultOverlay,
-                {
-                  opacity: resultAnim,
-                  transform: [
-                    {
-                      scale: resultAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.8, 1],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              <BlurView intensity={80} style={styles.blurOverlay}>
-                <LinearGradient
-                  colors={
-                    selectedAnswer === currentQuestion.correctAnswer
-                      ? ['rgba(16, 185, 129, 0.9)', 'rgba(5, 150, 105, 0.9)']
-                      : ['rgba(239, 68, 68, 0.9)', 'rgba(220, 38, 38, 0.9)']
-                  }
-                  style={styles.resultGradientOverlay}
-                >
-                  <Text style={styles.resultEmoji}>
-                    {selectedAnswer === currentQuestion.correctAnswer ? '🎉' : '😔'}
-                  </Text>
-                  <Text style={styles.resultMainText}>
-                    {selectedAnswer === currentQuestion.correctAnswer ? t.quiz.excellent : t.quiz.wrong}
-                  </Text>
-                  {selectedAnswer === currentQuestion.correctAnswer && (
-                    <Text style={styles.resultPointsText}>+5 {t.quiz.points}</Text>
-                  )}
-                </LinearGradient>
-              </BlurView>
-            </Animated.View>
-          )}
         </Animated.View>
 
         {/* Options Grid محسن */}
         <View style={styles.optionsGrid}>
-          {currentQuestion.options.map((option, index) => {
-            const isCorrect = index === currentQuestion.correctAnswer;
+          {currentQuestion?.options?.map((option, index) => {
+            const correctAnswer = quizAnswers[currentQuestion?.id || ''] || '0';
+            const correctAnswerIndex = parseInt(correctAnswer, 10);
+            const isCorrect = index === correctAnswerIndex;
             const isSelected = index === selectedAnswer;
             const shouldShowCorrect = isAnswered && isCorrect;
             const shouldShowWrong = isAnswered && isSelected && !isCorrect;
@@ -802,92 +1141,7 @@ export default function QuizScreen() {
         </View>
       </ScrollView>
 
-      {/* Bottom Bar محسن */}
-      <View style={styles.bottomBar}>
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.8)']}
-          style={styles.bottomGradient}
-        >
-          <View style={styles.powerUpsRow}>
-            <TouchableOpacity
-              style={[styles.powerUpButton, !hintUsed && coins >= HINT_COST && styles.powerUpActive]}
-              onPress={handleHint}
-              disabled={hintUsed || coins < HINT_COST}
-            >
-              <LinearGradient
-                colors={hintUsed || coins < HINT_COST ? ['#2a2a2a', '#1a1a1a'] : ['#fbbf24', '#f59e0b']}
-                style={styles.powerUpGradient}
-              >
-                <Lightbulb size={20} color="#fff" />
-                <Text style={styles.powerUpText}>{HINT_COST}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
 
-            <TouchableOpacity style={styles.pauseButton} onPress={handlePause}>
-              <LinearGradient
-                colors={['#3b82f6', '#2563eb']}
-                style={styles.pauseGradient}
-              >
-                {isPaused ? <Play size={24} color="#fff" /> : <Pause size={24} color="#fff" />}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.powerUpButton, coins >= 20 && styles.powerUpActive]}
-              onPress={handleSkip}
-              disabled={coins < 20}
-            >
-              <LinearGradient
-                colors={coins < 20 ? ['#2a2a2a', '#1a1a1a'] : ['#10b981', '#059669']}
-                style={styles.powerUpGradient}
-              >
-                <SkipForward size={20} color="#fff" />
-                <Text style={styles.powerUpText}>20</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-      </View>
-
-      {/* Pause Modal */}
-      <Modal
-        visible={isPaused}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsPaused(false)}
-      >
-        <BlurView intensity={100} style={styles.pauseOverlay}>
-          <View style={styles.pauseModal}>
-            <LinearGradient
-              colors={['#1e293b', '#0f172a']}
-              style={styles.pauseModalGradient}
-            >
-              <View style={styles.pauseIconWrapper}>
-                <LinearGradient
-                  colors={['#3b82f6', '#2563eb']}
-                  style={styles.pauseIconGradient}
-                >
-                  <Pause size={40} color="#fff" />
-                </LinearGradient>
-              </View>
-              <Text style={styles.pauseTitle}>{t.quiz.gamePaused}</Text>
-              <Text style={styles.pauseSubtitle}>{t.quiz.pressToResume}</Text>
-              <TouchableOpacity
-                style={styles.resumeButton}
-                onPress={() => setIsPaused(false)}
-              >
-                <LinearGradient
-                  colors={['#10b981', '#059669']}
-                  style={styles.resumeGradient}
-                >
-                  <Play size={22} color="#fff" />
-                  <Text style={styles.resumeText}>{t.quiz.continue}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        </BlurView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -955,21 +1209,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scoreContainer: {
-    borderRadius: 25,
+  // Header Hint Button (في مكان الكأس)
+  headerHintButton: {
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#fbbf24',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  scoreGradientBadge: {
+  headerHintButtonActive: {
+    shadowOpacity: 0.5,
+  },
+  headerHintButtonDisabled: {
+    opacity: 0.5,
+  },
+  headerHintGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 6,
   },
-  scoreValue: {
-    color: '#10b981',
-    fontSize: 15,
-    fontWeight: 'bold',
+  headerHintCost: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   streakBanner: {
     position: 'absolute',
@@ -993,52 +1259,177 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
   questionCard: {
     marginTop: 12,
     backgroundColor: '#1a1a1a',
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  // Quiz Type Image Container (نوع الاختبار - صور)
+  quizTypeImageContainer: {
+    width: '100%',
+    height: 200,
+    overflow: 'hidden',
+  },
+  quizTypeImageBackground: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
+  quizTypeImage: {
+    borderRadius: 0,
+  },
+  quizTypeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  quizTypeBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  quizTypeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   textOnlyQuestionContainer: {
     padding: 24,
     alignItems: 'center',
-    minHeight: 200,
-    justifyContent: 'center',
+    minHeight: 180,
+    justifyContent: 'flex-start',
   },
-  categoryWrapper: {
+  // Top Badges Container
+  topBadgesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
     marginBottom: 20,
-    borderRadius: 25,
-    overflow: 'hidden',
   },
-  categoryGradient: {
-    paddingHorizontal: 20,
+  // Question Number Badge - في اليسار
+  questionNumberBadgeTop: {
+    alignSelf: 'flex-start',
+  },
+  questionNumberGradient: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
-  categoryText: {
+  questionNumberTextTop: {
     color: '#10b981',
     fontSize: 13,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  questionTextWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  // Result Badge - في اليمين (مقابل عدد الأسئلة)
+  resultBadge: {
+    alignSelf: 'flex-end',
     borderRadius: 20,
-    padding: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  resultBadgeGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  resultBadgeEmoji: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  resultBadgeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  questionContentWrapper: {
     width: '100%',
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  // Question Image Container
+  questionImageContainer: {
+    width: '100%',
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+    position: 'relative',
+    height: height * 0.25, // ربع الشاشة تقريباً
+  },
+  questionImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageQuizLabel: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  questionTextWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    marginTop: 16,
+  },
+  questionTextWithImage: {
+    marginTop: 16,
   },
   questionTextOnly: {
-    fontSize: 20,
+    fontSize: Platform.OS === 'ios' ? 22 : 20,
     color: '#fff',
     textAlign: 'center',
-    lineHeight: 30,
+    lineHeight: Platform.OS === 'ios' ? 34 : 32,
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
   questionNumberBadge: {
     marginTop: 16,
@@ -1052,22 +1443,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  revealedImageContainer: {
-    marginTop: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    padding: 10,
-  },
-  revealedImage: {
-    width: width - 112,
-    height: 180,
-    borderRadius: 12,
-  },
   clubImage: {
-    width: 100,
-    height: 100,
-    backgroundColor: 'transparent',
+    height: '100%',
   },
   resultOverlay: {
     position: 'absolute',
@@ -1078,6 +1455,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
+  },
+  blurImageWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
   },
   blurOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1118,19 +1500,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   optionGradient: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: Platform.OS === 'ios' ? 18 : 16,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
+    minHeight: Platform.OS === 'ios' ? 64 : 60,
+    borderRadius: 18,
   },
   optionText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: Platform.OS === 'ios' ? 16 : 15,
     textAlign: 'center',
     fontWeight: '600',
     flex: 1,
+    letterSpacing: 0.2,
+    lineHeight: Platform.OS === 'ios' ? 24 : 22,
   },
   optionTextCorrect: {
     fontWeight: 'bold',
@@ -1161,17 +1546,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  bottomGradient: {
-    paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    paddingHorizontal: 20,
-  },
   powerUpsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1195,68 +1569,6 @@ const styles = StyleSheet.create({
   powerUpText: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: 'bold',
-  },
-  pauseButton: {
-    borderRadius: 35,
-    overflow: 'hidden',
-  },
-  pauseGradient: {
-    width: 70,
-    height: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pauseOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pauseModal: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    width: width * 0.85,
-  },
-  pauseModalGradient: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  pauseIconWrapper: {
-    marginBottom: 24,
-    borderRadius: 40,
-    overflow: 'hidden',
-  },
-  pauseIconGradient: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pauseTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-  },
-  pauseSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 32,
-  },
-  resumeButton: {
-    borderRadius: 30,
-    overflow: 'hidden',
-  },
-  resumeGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    gap: 8,
-  },
-  resumeText: {
-    color: '#fff',
-    fontSize: 17,
     fontWeight: 'bold',
   },
   resultGradient: {
@@ -1357,22 +1669,6 @@ const styles = StyleSheet.create({
   },
   resultCoinsText: {
     color: '#fbbf24',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  restartButton: {
-    borderRadius: 30,
-    overflow: 'hidden',
-  },
-  restartButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  restartButtonText: {
-    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },

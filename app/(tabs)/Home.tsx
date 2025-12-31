@@ -31,6 +31,7 @@ import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
 import { useTranslation } from '../../src/i18n';
 import { getApiUrl } from '../../config/api.config';
+import { getDailyQuizStatus, DailyQuizStatus } from '../../services/quizApi';
 
 const API_URL = getApiUrl();
 
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   const [luckyWheelVisible, setLuckyWheelVisible] = useState(false);
   const [spinWheelAvailable, setSpinWheelAvailable] = useState(true);
   const [nextSpinTime, setNextSpinTime] = useState<Date | undefined>(undefined);
+  const [dailyQuizStatus, setDailyQuizStatus] = useState<DailyQuizStatus | null>(null);
 
   const { isSignedIn, getToken } = useAuth();
   const { user } = useUser();
@@ -75,6 +77,17 @@ export default function HomeScreen() {
       }
     } catch (error) {
       logger.error('Error fetching spin status:', error);
+    }
+  }, [getToken]);
+
+  // جلب حالة الكويز اليومي
+  const fetchDailyQuizStatus = useCallback(async () => {
+    try {
+      if (!getToken) return;
+      const status = await getDailyQuizStatus(getToken);
+      setDailyQuizStatus(status);
+    } catch (error) {
+      logger.error('Error fetching daily quiz status:', error);
     }
   }, [getToken]);
 
@@ -150,16 +163,23 @@ export default function HomeScreen() {
           fetchHomeData(token),
           fetchRankingsData(token),
           fetchSpinWheelStatus(),
+          fetchDailyQuizStatus(),
         ]);
       };
       
       loadData();
 
       // Update username from globalState (in case it changed in Profile)
-      if (globalState.userProfile?.username) {
-        setCurrentUsername(globalState.userProfile.username);
-      } else if (globalState.username) {
-        setCurrentUsername(globalState.username);
+      // Priority: globalState.userProfile.username > globalState.username > email-based username
+      const email = user?.primaryEmailAddress?.emailAddress || '';
+      const emailUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+      
+      const displayUsername = globalState.userProfile?.username 
+        || globalState.username 
+        || emailUsername;
+      
+      if (displayUsername) {
+        setCurrentUsername(displayUsername);
       }
 
       // Sync userMode with globalState
@@ -283,7 +303,8 @@ export default function HomeScreen() {
           userRank={globalState.userProfile?.stats?.level || 0}
           spinWheelAvailable={spinWheelAvailable}
           nextSpinTime={nextSpinTime}
-          loginStreak={globalState.userProfile?.stats?.level || 3}
+          loginStreak={(globalState.userProfile as any)?.consecutiveLoginDays || 0}
+          dailyQuizStatus={dailyQuizStatus}
         />
 
         <MatchList

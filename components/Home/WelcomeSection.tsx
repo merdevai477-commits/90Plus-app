@@ -31,6 +31,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
+import { DailyQuizStatus } from '../../services/quizApi';
 
 const { width } = Dimensions.get('window');
 const CARD_HEIGHT = 200;
@@ -51,6 +52,7 @@ interface WelcomeSectionProps {
   spinWheelAvailable?: boolean;
   nextSpinTime?: Date;
   loginStreak?: number; // أيام الدخول المتتالي
+  dailyQuizStatus?: DailyQuizStatus | null;
 }
 
 type SlideType = 'welcome' | 'spinWheel' | 'predictions' | 'quiz' | 'rank';
@@ -241,6 +243,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   spinWheelAvailable = true,
   nextSpinTime,
   loginStreak = 0,
+  dailyQuizStatus = null,
 }) => {
   const { userMode } = useHomeStore();
   const { t } = useTranslation();
@@ -248,6 +251,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   
   const [currentSlide, setCurrentSlide] = useState(0);
   const [countdown, setCountdown] = useState('');
+  const [quizCountdown, setQuizCountdown] = useState('');
   const autoScrollRef = useRef<NodeJS.Timeout | null>(null);
   
   // Animation values
@@ -304,6 +308,45 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
       return () => clearInterval(interval);
     }
   }, [spinWheelAvailable, nextSpinTime]);
+
+  // Countdown for daily quiz
+  useEffect(() => {
+    if (dailyQuizStatus && !dailyQuizStatus.canTake && dailyQuizStatus.timeRemaining) {
+      const updateQuizCountdown = () => {
+        const { hours, minutes, seconds } = dailyQuizStatus.timeRemaining!;
+        const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+        
+        if (totalSeconds <= 0) {
+          setQuizCountdown('');
+          return;
+        }
+        
+        // Calculate remaining time
+        const now = new Date();
+        if (dailyQuizStatus.canRetryAt) {
+          const retryDate = new Date(dailyQuizStatus.canRetryAt);
+          const diff = retryDate.getTime() - now.getTime();
+          
+          if (diff <= 0) {
+            setQuizCountdown('');
+            return;
+          }
+          
+          const h = Math.floor(diff / (1000 * 60 * 60));
+          const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((diff % (1000 * 60)) / 1000);
+          
+          setQuizCountdown(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        }
+      };
+      
+      updateQuizCountdown();
+      const interval = setInterval(updateQuizCountdown, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setQuizCountdown('');
+    }
+  }, [dailyQuizStatus]);
 
   // Shimmer animation
   useEffect(() => {
@@ -362,13 +405,21 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     },
     {
       type: 'quiz',
-      gradient: ['#4776E6', '#8E54E9', '#667eea'],
-      accentColor: '#8E54E9',
+      gradient: dailyQuizStatus?.canTake 
+        ? ['#4776E6', '#8E54E9', '#667eea']
+        : ['#2c3e50', '#34495e', '#2c3e50'],
+      accentColor: dailyQuizStatus?.canTake ? '#8E54E9' : '#7f8c8d',
       icon: 'bulb',
-      title: t.home.knowledgeChallenge,
-      subtitle: t.home.testKnowledge,
-      buttonText: t.home.startQuiz,
-      onPress: onQuizPress || (() => {}),
+      title: dailyQuizStatus?.categoryName || 'الأسئلة اليومية',
+      subtitle: dailyQuizStatus?.canTake 
+        ? 'اختبر معرفتك اليوم'
+        : dailyQuizStatus?.timeRemaining 
+          ? `متاح بعد ${quizCountdown || `${dailyQuizStatus.timeRemaining.hours}:${dailyQuizStatus.timeRemaining.minutes.toString().padStart(2, '0')}`}`
+          : 'غير متاح حالياً',
+      buttonText: dailyQuizStatus?.canTake 
+        ? 'ابدأ الكويز'
+        : quizCountdown || 'انتظر',
+      onPress: dailyQuizStatus?.canTake ? (onQuizPress || (() => {})) : (() => {}),
     },
     {
       type: 'rank',

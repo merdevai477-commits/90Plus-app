@@ -6,7 +6,8 @@
 import { getApiUrl } from '../config/api.config';
 import { useAuth } from '@clerk/clerk-expo';
 import { cacheService } from './cacheService';
-import { getQuestionsByIds, getQuestionById, QuizQuestion as LocalQuizQuestion } from '../data/quizQuestions';
+import { getQuestionsByIds, getQuestionById, QuizQuestion as LocalQuizQuestion } from '../data/quizQuestions/index';
+import { logger } from '../utils/logger';
 
 const API_URL = getApiUrl();
 const API_TIMEOUT = 10000; // 10 seconds
@@ -43,19 +44,32 @@ const fetchWithAuth = async (
 ): Promise<Response> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const startTime = Date.now();
 
     try {
         // Get auth token from Clerk using the provided getToken function
         const token = await getToken();
         
         if (!token) {
+            console.error('[QuizAPI] No authentication token available', {
+                endpoint,
+                apiUrl: API_URL,
+                fullUrl: `${API_URL}${endpoint}`,
+            });
             throw new Error('No authentication token available. Please sign in.');
         }
         
         const url = `${API_URL}${endpoint}`;
-        console.log(`[QuizAPI] Fetching: ${url}`);
+        const fullUrl = url;
         
-        const response = await fetch(url, {
+        console.log(`[QuizAPI] Fetching: ${fullUrl}`, {
+            method: options.method || 'GET',
+            endpoint,
+            apiUrl: API_URL,
+            hasToken: !!token,
+        });
+        
+        const response = await fetch(fullUrl, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
@@ -66,18 +80,55 @@ const fetchWithAuth = async (
         });
         
         clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
         
         // Log response status for debugging
         if (!response.ok) {
-            console.error(`[QuizAPI] Request failed: ${response.status} ${response.statusText} for ${url}`);
+            const errorText = await response.text().catch(() => 'Unable to read error response');
+            console.error(`[QuizAPI] Request failed`, {
+                status: response.status,
+                statusText: response.statusText,
+                url: fullUrl,
+                endpoint,
+                apiUrl: API_URL,
+                duration: `${duration}ms`,
+                errorText: errorText.substring(0, 200), // Limit error text length
+                headers: Object.fromEntries(response.headers.entries()),
+            });
+        } else {
+            console.log(`[QuizAPI] Request successful`, {
+                status: response.status,
+                url: fullUrl,
+                endpoint,
+                duration: `${duration}ms`,
+            });
         }
         
         return response;
     } catch (error: any) {
         clearTimeout(timeoutId);
+        const duration = Date.now() - startTime;
+        
         if (error.name === 'AbortError') {
+            console.error('[QuizAPI] Request timeout', {
+                endpoint,
+                apiUrl: API_URL,
+                fullUrl: `${API_URL}${endpoint}`,
+                timeout,
+                duration: `${duration}ms`,
+            });
             throw new Error('Request timeout - please check your connection');
         }
+        
+        console.error('[QuizAPI] Network error', {
+            error: error.message,
+            errorName: error.name,
+            endpoint,
+            apiUrl: API_URL,
+            fullUrl: `${API_URL}${endpoint}`,
+            duration: `${duration}ms`,
+        });
+        
         if (error.message) {
             throw error;
         }
@@ -131,6 +182,19 @@ export interface QuizCooldown {
     hoursRemaining?: number;
 }
 
+export interface DailyQuizStatus {
+    canTake: boolean;
+    categoryId: string | null;
+    categoryName: string | null;
+    canRetryAt: string | null;
+    timeRemaining: {
+        hours: number;
+        minutes: number;
+        seconds: number;
+        totalSeconds: number;
+    } | null;
+}
+
 export interface QuizStats {
     totalAttempts: number;
     totalScore: number;
@@ -168,9 +232,198 @@ export interface QuizHistoryItem {
 }
 
 /**
+ * Get daily quiz status (can take, cooldown, etc.)
+ * جلب حالة الكويز اليومي
+ */
+export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<DailyQuizStatus> {
+    const startTime = Date.now();
+    try {
+        if (!getToken) {
+            logger.error('[QuizAPI] getDailyQuizStatus - No getToken function provided', {
+                apiUrl: API_URL,
+                endpoint: '/quiz/daily-status',
+                fullUrl: `${API_URL}/quiz/daily-status`,
+            });
+            throw new Error('Authentication token function is not available');
+        }
+
+        logger.debug('[QuizAPI] getDailyQuizStatus - Starting request', {
+            apiUrl: API_URL,
+            endpoint: '/quiz/daily-status',
+            fullUrl: `${API_URL}/quiz/daily-status`,
+        });
+
+        const response = await fetchWithAuth('/quiz/daily-status', getToken, {
+            method: 'GET',
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage = `Failed to fetch daily quiz status: ${response.status} ${response.statusText}`;
+            let errorData: any = null;
+            
+            try {
+                errorData = JSON.parse(errorText);
+                errorMessage = errorData.message || errorData.error || errorMessage;
+            } catch {
+                if (errorText) {
+                    errorMessage = errorText;
+                }
+            }
+            
+            logger.error('[QuizAPI] getDailyQuizStatus - Request failed', {
+                status: response.status,
+                statusText: response.statusText,
+                errorMessage,
+                errorData,
+                apiUrl: API_URL,
+                endpoint: '/quiz/daily-status',
+                fullUrl: `${API_URL}/quiz/daily-status`,
+                duration: `${Date.now() - startTime}ms`,
+            });
+            
+            // If 404, provide helpful error message
+            if (response.status === 404) {
+                throw new Error(`Endpoint not found. Please check if the server is running and the route is registered. URL: ${API_URL}/quiz/daily-status`);
+            }
+            
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const duration = Date.now() - startTime;
+        
+        if (data.status === 'SUCCESS') {
+            console.log('[QuizAPI] getDailyQuizStatus - Success', {
+                canTake: data.data?.canTake,
+                categoryId: data.data?.categoryId,
+                duration: `${duration}ms`,
+            });
+            
+            return data.data || {
+                canTake: false,
+                categoryId: null,
+                categoryName: null,
+                canRetryAt: null,
+                timeRemaining: null,
+            };
+        }
+
+        throw new Error(data.message || 'Failed to fetch daily quiz status');
+    } catch (error: any) {
+        const duration = Date.now() - startTime;
+        console.error('[QuizAPI] getDailyQuizStatus - Error', {
+            error: error.message,
+            errorName: error.name,
+            apiUrl: API_URL,
+            endpoint: '/quiz/daily-status',
+            fullUrl: `${API_URL}/quiz/daily-status`,
+            duration: `${duration}ms`,
+        });
+        
+        // Return default on error
+        return {
+            canTake: false,
+            categoryId: null,
+            categoryName: null,
+            canRetryAt: null,
+            timeRemaining: null,
+        };
+    }
+}
+
+/**
+ * Get quiz answers for a specific category and questionIds
+ * جلب الإجابات لكاتيجوري معينة و questionIds
+ * يتم استخدامها عند فتح كويز جديد محلياً
+ */
+export async function fetchAnswersForCategory(
+    categoryId: string,
+    questionIds: string[],
+    getToken: GetTokenFunction
+): Promise<Record<string, string>> {
+    try {
+        return await getQuizAnswers(questionIds, getToken);
+    } catch (error: any) {
+        console.error('Error fetching answers for category:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get category mapping from backend (categoryId -> categoryName)
+ * جلب mapping الكاتيجوريز من الباك إند
+ */
+export async function getCategoryMapping(getToken: GetTokenFunction): Promise<Record<string, string>> {
+    try {
+        // Check if getToken is available
+        if (!getToken) {
+            console.warn('[QuizAPI] getCategoryMapping - No getToken function provided');
+            return {};
+        }
+
+        const response = await fetchWithAuth('/quiz/categories', getToken, {
+            method: 'GET',
+        });
+
+        if (!response.ok) {
+            // Log warning instead of error for non-critical failures
+            console.warn(`[QuizAPI] getCategoryMapping - Request failed: ${response.status} ${response.statusText}`);
+            return {}; // Return empty mapping instead of throwing
+        }
+
+        const data = await response.json();
+        
+        // Check if response has the expected structure
+        if (data.status === 'SUCCESS' && data.data?.categories) {
+            const mapping: Record<string, string> = {};
+            data.data.categories.forEach((cat: { id: string; name: string }) => {
+                if (cat.id && cat.name) {
+                    mapping[cat.id] = cat.name;
+                }
+            });
+            console.log(`[QuizAPI] getCategoryMapping - Successfully loaded ${Object.keys(mapping).length} categories`);
+            return mapping;
+        }
+
+        // If response structure is different, try alternative formats
+        if (data.status === 'SUCCESS' && Array.isArray(data.data)) {
+            const mapping: Record<string, string> = {};
+            data.data.forEach((cat: { id: string; name: string }) => {
+                if (cat.id && cat.name) {
+                    mapping[cat.id] = cat.name;
+                }
+            });
+            console.log(`[QuizAPI] getCategoryMapping - Successfully loaded ${Object.keys(mapping).length} categories (alternative format)`);
+            return mapping;
+        }
+
+        // Log warning for unexpected response structure
+        console.warn('[QuizAPI] getCategoryMapping - Unexpected response structure:', {
+            status: data.status,
+            hasData: !!data.data,
+            hasCategories: !!data.data?.categories,
+            message: data.message,
+        });
+        
+        return {}; // Return empty mapping instead of throwing
+    } catch (error: any) {
+        // Log as warning instead of error since this is non-critical
+        console.warn('[QuizAPI] getCategoryMapping - Error (non-critical):', {
+            error: error.message,
+            errorName: error.name,
+        });
+        return {}; // إرجاع mapping فارغ في حالة الخطأ
+    }
+}
+
+/**
  * Get open quiz category with questionIds and answers
  * الكاتيجوري موجودة في الفرونت إند
  * يتم جلب questionIds والإجابات عند تسجيل الدخول وكل 24 ساعة
+ * 
+ * @deprecated This function is being replaced by local quiz state management
+ * Use quizLocalState instead for managing quiz state locally
  */
 export async function getQuizCategories(getToken: GetTokenFunction, retryCount: number = 0): Promise<{
     openCategoryId: string | null;
@@ -178,6 +431,14 @@ export async function getQuizCategories(getToken: GetTokenFunction, retryCount: 
     questionIds: string[];
     answers: Record<string, string>; // { questionId: correctAnswer }
     nextUnlockAt: string | null;
+    canTake: boolean; // هل يمكن أخذ الكويز
+    canRetryAt: string | null;
+    timeRemaining: {
+        hours: number;
+        minutes: number;
+        seconds: number;
+        totalSeconds: number;
+    } | null;
 }> {
     try {
         // Check if getToken is available
@@ -251,6 +512,9 @@ export async function getQuizCategories(getToken: GetTokenFunction, retryCount: 
                 questionIds: result.questionIds || [],
                 answers,
                 nextUnlockAt: result.nextUnlockAt,
+                canTake: result.canTake ?? true, // افتراضياً يمكن أخذ الكويز
+                canRetryAt: result.canRetryAt || null,
+                timeRemaining: result.timeRemaining || null,
             };
             
             // Cache in memory
@@ -277,6 +541,9 @@ export async function getQuizCategories(getToken: GetTokenFunction, retryCount: 
             questionIds: [],
             answers: {},
             nextUnlockAt: null,
+            canTake: false,
+            canRetryAt: null,
+            timeRemaining: null,
         };
     }
 }
@@ -348,23 +615,38 @@ export async function getQuizAnswers(
     getToken: GetTokenFunction
 ): Promise<Record<string, string>> {
     try {
-        // محاولة جلب من memory cache أولاً
-        const cacheKey = `quiz_answers_${questionIds.sort().join('_')}`;
+        // إنشاء cache key من questionIds مرتبة
+        const sortedIds = [...questionIds].sort();
+        const cacheKey = `quiz_answers_${sortedIds.join('_')}`;
+        
+        // 1. محاولة جلب من memory cache أولاً (أسرع)
         const memoryCached = getFromMemoryCache(cacheKey);
         if (memoryCached) {
+            logger.debug('[QuizAPI] getQuizAnswers - Using memory cache', { 
+                questionCount: questionIds.length,
+                answersCount: Object.keys(memoryCached).length 
+            });
             return memoryCached;
         }
 
-        // محاولة جلب من AsyncStorage cache
+        // 2. محاولة جلب من AsyncStorage cache (24 ساعة)
         const cached = await cacheService.get<Record<string, string>>(cacheKey);
         if (cached) {
+            // تحديث memory cache للوصول السريع
             setMemoryCache(cacheKey, cached);
+            logger.debug('[QuizAPI] getQuizAnswers - Using AsyncStorage cache', { 
+                questionCount: questionIds.length,
+                answersCount: Object.keys(cached).length 
+            });
             return cached;
         }
 
-        // يجب إرسال categoryId أيضاً
-        // نحتاج categoryId من context أو من questionIds
-        // للآن سنستخدم طريقة بديلة: جلب categoryId من أول سؤال
+        // 3. جلب من الباك إند (إذا لم يكن في cache)
+        logger.debug('[QuizAPI] getQuizAnswers - Fetching from API', { 
+            questionCount: questionIds.length 
+        });
+        
+        // جلب categoryId من أول سؤال
         const firstQuestion = getQuestionById(questionIds[0]);
         const categoryId = firstQuestion?.categoryId;
         
@@ -385,16 +667,21 @@ export async function getQuizAnswers(
         if (data.status === 'SUCCESS') {
             const answers = data.data; // { questionId: correctAnswer }
             
-            // حفظ في cache (24 ساعة)
+            // حفظ في cache (24 ساعة) - memory + AsyncStorage
             setMemoryCache(cacheKey, answers);
             await cacheService.set(cacheKey, answers, 24 * 60 * 60 * 1000);
+            
+            logger.debug('[QuizAPI] getQuizAnswers - Saved to cache', { 
+                questionCount: questionIds.length,
+                answersCount: Object.keys(answers).length 
+            });
             
             return answers;
         }
 
         throw new Error(data.message || 'Failed to get answers');
     } catch (error: any) {
-        console.error('Error getting quiz answers:', error);
+        logger.error('[QuizAPI] Error getting quiz answers:', error);
         throw error;
     }
 }
@@ -425,6 +712,49 @@ export async function submitQuiz(
         throw new Error(data.message || 'Failed to submit quiz');
     } catch (error: any) {
         console.error('Error submitting quiz:', error);
+        throw error;
+    }
+}
+
+/**
+ * Submit quiz results (simplified version for sync service)
+ * إرسال نتائج الكويز للباك إند
+ */
+export async function submitQuizResults(
+    categoryId: string,
+    results: {
+        questionIds: string[];
+        answers: Record<string, string>; // { questionId: correctAnswer } - غير مستخدم حالياً
+        score: number;
+        correctAnswers: number;
+        totalQuestions: number;
+        timeTaken: number;
+    },
+    getToken: GetTokenFunction
+): Promise<QuizResult> {
+    try {
+        // تحويل النتائج إلى تنسيق QuizSubmission
+        // نحتاج إلى إنشاء QuizAnswer[] من questionIds
+        // لكننا لا نملك userAnswer لكل سؤال، لذا سنستخدم إجابات افتراضية
+        const quizAnswers: QuizAnswer[] = results.questionIds.map((questionId, index) => {
+            // استخدام الإجابة الصحيحة من results.answers إن وجدت
+            // أو استخدام index 0 كافتراضي
+            const correctAnswer = results.answers[questionId] || '0';
+            return {
+                questionId,
+                userAnswer: correctAnswer, // استخدام الإجابة الصحيحة
+                timeTaken: Math.floor(results.timeTaken / results.totalQuestions), // توزيع الوقت بالتساوي
+            };
+        });
+
+        const submission: QuizSubmission = {
+            answers: quizAnswers,
+            totalTime: results.timeTaken,
+        };
+
+        return await submitQuiz(categoryId, submission, getToken);
+    } catch (error: any) {
+        console.error('Error submitting quiz results:', error);
         throw error;
     }
 }
