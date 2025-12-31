@@ -24,7 +24,34 @@ const router = Router();
 
 // Log router initialization for debugging
 logger.info('Quiz routes router initialized');
-logger.info('Quiz routes endpoints: /health, /categories, /daily-status, /answers, /:categoryId/start, /:categoryId/submit');
+logger.info('Quiz routes endpoints: /health, /test-daily-status, /routes, /categories, /daily-status, /answers, /stats, /history, /:categoryId/start, /:categoryId/submit, /:categoryId/cooldown');
+
+// Verify daily-status route is registered
+const verifyRouteRegistration = () => {
+    const routes = router.stack
+        .filter((layer: any) => layer.route)
+        .map((layer: any) => {
+            const methods = Object.keys(layer.route.methods);
+            return methods.map((method: string) => `${method.toUpperCase()} ${layer.route.path}`);
+        })
+        .flat();
+    
+    const hasDailyStatus = routes.some((route: string) => route.includes('daily-status'));
+    if (hasDailyStatus) {
+        logger.info('✅ /daily-status route is registered in router stack', {
+            totalRoutes: routes.length,
+            routes: routes,
+        });
+    } else {
+        logger.error('❌ /daily-status route is NOT found in router stack!', {
+            totalRoutes: routes.length,
+            registeredRoutes: routes,
+        });
+    }
+};
+
+// Call verification after routes are registered
+setTimeout(verifyRouteRegistration, 100);
 
 // ============================================
 // STATIC ROUTES (يجب أن تكون قبل Dynamic Routes)
@@ -39,6 +66,76 @@ router.get('/health', (_req: Request, res: Response): void => {
         status: 'SUCCESS',
         message: 'Quiz API is healthy',
         timestamp: new Date().toISOString(),
+    });
+});
+
+/**
+ * GET /api/quiz/test-daily-status
+ * Test endpoint للتحقق من أن daily-status route يعمل (بدون authentication)
+ */
+router.get('/test-daily-status', (_req: Request, res: Response): void => {
+    res.json({
+        status: 'SUCCESS',
+        message: 'Daily status route is accessible',
+        timestamp: new Date().toISOString(),
+        path: '/quiz/daily-status',
+        note: 'This is a test endpoint. The actual endpoint requires authentication.',
+    });
+});
+
+/**
+ * GET /api/quiz/routes
+ * Debug endpoint لعرض جميع الـ routes المسجلة في quiz router
+ */
+router.get('/routes', (_req: Request, res: Response): void => {
+    const routes: Array<{ method: string; path: string; requiresAuth: boolean }> = [];
+    
+    // Extract routes from router stack
+    router.stack.forEach((middleware: any) => {
+        if (middleware.route) {
+            const methods = Object.keys(middleware.route.methods);
+            methods.forEach((method: string) => {
+                routes.push({
+                    method: method.toUpperCase(),
+                    path: middleware.route.path,
+                    requiresAuth: middleware.route.stack.some((layer: any) => 
+                        layer.name === 'requireAuth' || 
+                        (layer.handle && layer.handle.toString().includes('requireAuth'))
+                    ),
+                });
+            });
+        }
+    });
+
+    res.json({
+        status: 'SUCCESS',
+        message: 'Quiz routes registered',
+        timestamp: new Date().toISOString(),
+        totalRoutes: routes.length,
+        routes: routes.sort((a, b) => {
+            // Sort static routes before dynamic routes
+            const aIsStatic = !a.path.includes(':');
+            const bIsStatic = !b.path.includes(':');
+            if (aIsStatic !== bIsStatic) return aIsStatic ? -1 : 1;
+            return a.path.localeCompare(b.path);
+        }),
+        endpoints: {
+            static: [
+                'GET /api/quiz/health',
+                'GET /api/quiz/test-daily-status',
+                'GET /api/quiz/routes',
+                'GET /api/quiz/categories (requires auth)',
+                'GET /api/quiz/daily-status (requires auth)',
+                'POST /api/quiz/answers (requires auth)',
+                'GET /api/quiz/stats (requires auth)',
+                'GET /api/quiz/history (requires auth)',
+            ],
+            dynamic: [
+                'GET /api/quiz/:categoryId/start (requires auth)',
+                'POST /api/quiz/:categoryId/submit (requires auth)',
+                'GET /api/quiz/:categoryId/cooldown (requires auth)',
+            ],
+        },
     });
 });
 
@@ -161,15 +258,42 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
  * GET /api/quiz/daily-status
  * التحقق من حالة الكويز اليومي (هل يمكن أخذ الكويز أم هناك cooldown)
  * Requires authentication
+ * 
+ * IMPORTANT: This route MUST be defined before any dynamic routes like /:categoryId/*
+ * to prevent Express from matching "daily-status" as a categoryId parameter
  */
 router.get('/daily-status', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    logger.info(`📥 Quiz daily status endpoint called`);
+    const startTime = Date.now();
+    logger.info(`📥 Quiz daily status endpoint called`, {
+        path: req.path,
+        method: req.method,
+        originalUrl: req.originalUrl,
+        baseUrl: req.baseUrl,
+        url: req.url,
+        query: req.query,
+        headers: {
+            'authorization': req.headers.authorization ? 'Bearer ***' : 'missing',
+            'user-agent': req.headers['user-agent'],
+            'x-forwarded-for': req.headers['x-forwarded-for'],
+        },
+        ip: req.ip,
+    });
+    
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
+            logger.warn('Daily status endpoint called without valid authentication', {
+                path: req.path,
+                originalUrl: req.originalUrl,
+            });
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
         }
+        
+        logger.info('Daily status endpoint - User authenticated', {
+            userId: clerkUserId,
+            path: req.path,
+        });
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
@@ -233,7 +357,7 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
             }
         }
 
-        res.json({
+        const responseData = {
             status: 'SUCCESS',
             data: {
                 canTake: cooldownInfo.canStart,
@@ -242,9 +366,27 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
                 canRetryAt: cooldownInfo.canRetryAt?.toISOString() || null,
                 timeRemaining,
             },
+        };
+        
+        const duration = Date.now() - startTime;
+        logger.info('Daily status endpoint - Success', {
+            userId: user.id,
+            canTake: cooldownInfo.canStart,
+            categoryId: currentCategoryId,
+            duration: `${duration}ms`,
         });
+        
+        res.json(responseData);
     } catch (error: any) {
-        logger.error('Error getting daily quiz status:', error);
+        const duration = Date.now() - startTime;
+        logger.error('Error getting daily quiz status', {
+            error: error.message,
+            stack: error.stack,
+            path: req.path,
+            originalUrl: req.originalUrl,
+            userId: req.auth?.userId,
+            duration: `${duration}ms`,
+        });
         res.status(500).json({
             status: 'ERROR',
             message: error.message || 'Failed to get daily quiz status',

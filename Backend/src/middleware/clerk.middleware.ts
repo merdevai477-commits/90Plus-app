@@ -90,11 +90,18 @@ export const requireAuth = async (
     res: Response,
     next: NextFunction
 ): Promise<void> => {
+    const startTime = Date.now();
     try {
         // Get token from Authorization header
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            logger.warn('requireAuth middleware - No token provided', {
+                path: req.path,
+                method: req.method,
+                originalUrl: req.originalUrl,
+                ip: req.ip,
+            });
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized - No token provided',
@@ -109,12 +116,23 @@ export const requireAuth = async (
             const decoded = decodeJwt(token);
 
             if (!decoded || !decoded.sub) {
+                logger.warn('requireAuth middleware - Invalid token format', {
+                    path: req.path,
+                    method: req.method,
+                    originalUrl: req.originalUrl,
+                });
                 res.status(401).json({
                     status: 'ERROR',
                     message: 'Unauthorized - Invalid token format',
                 });
                 return;
             }
+            
+            logger.debug('requireAuth middleware - Token decoded', {
+                userId: decoded.sub,
+                path: req.path,
+                method: req.method,
+            });
 
             // Verify user exists in Clerk (with caching)
             const userExists = await getVerifiedUser(decoded.sub);
@@ -143,9 +161,24 @@ export const requireAuth = async (
                 sessionClaims: decoded,
             };
 
+            const duration = Date.now() - startTime;
+            logger.debug('requireAuth middleware - Authentication successful', {
+                userId: decoded.sub,
+                path: req.path,
+                duration: `${duration}ms`,
+            });
+
             next();
         } catch (verifyError: any) {
-            logger.error('Token verification error:', verifyError);
+            const duration = Date.now() - startTime;
+            logger.error('Token verification error', {
+                error: verifyError.message,
+                stack: verifyError.stack,
+                path: req.path,
+                method: req.method,
+                originalUrl: req.originalUrl,
+                duration: `${duration}ms`,
+            });
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized - Token verification failed',
@@ -153,7 +186,15 @@ export const requireAuth = async (
             return;
         }
     } catch (error: any) {
-        logger.error('Auth middleware error:', error);
+        const duration = Date.now() - startTime;
+        logger.error('Auth middleware error', {
+            error: error.message,
+            stack: error.stack,
+            path: req.path,
+            method: req.method,
+            originalUrl: req.originalUrl,
+            duration: `${duration}ms`,
+        });
         res.status(500).json({
             status: 'ERROR',
             message: 'Internal server error',

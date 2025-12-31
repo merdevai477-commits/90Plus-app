@@ -109,6 +109,21 @@ if (!isProduction) {
     });
 }
 
+// Route verification middleware - logs route matching attempts
+app.use((req: Request, res: Response, next: NextFunction) => {
+    // Only log for quiz routes to avoid too much logging
+    if (req.path.includes('/quiz/')) {
+        logger.debug('Route verification - Quiz route request', {
+            method: req.method,
+            path: req.path,
+            originalUrl: req.originalUrl,
+            baseUrl: req.baseUrl,
+            url: req.url,
+        });
+    }
+    next();
+});
+
 // Upload timeout middleware - 15 minutes for upload routes
 const UPLOAD_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 app.use(`${API_PREFIX}/upload`, (req: Request, res: Response, next: NextFunction) => {
@@ -194,13 +209,80 @@ app.use(`${API_PREFIX}/coins`, coinsRoutes);
 // Register quiz routes with error handling
 try {
     // Log before registration
-    logger.info(`📝 Attempting to register quiz routes at ${API_PREFIX}/quiz`);
+    logger.info(`📝 Attempting to register quiz routes at ${API_PREFIX}/quiz`, {
+        apiPrefix: API_PREFIX,
+        routePath: `${API_PREFIX}/quiz`,
+        environment: process.env.NODE_ENV || 'development',
+    });
+    
     app.use(`${API_PREFIX}/quiz`, quizRoutes);
-    logger.info(`✅ Quiz routes registered successfully at ${API_PREFIX}/quiz`);
-    logger.info(`✅ Available quiz endpoints: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories, ${API_PREFIX}/quiz/daily-status`); // Updated: Added daily-status endpoint
+    
+    // Log successful registration with all available endpoints
+    const quizEndpoints = [
+        `${API_PREFIX}/quiz/health`,
+        `${API_PREFIX}/quiz/test-daily-status`,
+        `${API_PREFIX}/quiz/routes`,
+        `${API_PREFIX}/quiz/categories`,
+        `${API_PREFIX}/quiz/daily-status`,
+        `${API_PREFIX}/quiz/answers`,
+        `${API_PREFIX}/quiz/stats`,
+        `${API_PREFIX}/quiz/history`,
+        `${API_PREFIX}/quiz/:categoryId/start`,
+        `${API_PREFIX}/quiz/:categoryId/submit`,
+        `${API_PREFIX}/quiz/:categoryId/cooldown`,
+    ];
+    
+    logger.info(`✅ Quiz routes registered successfully`, {
+        routePath: `${API_PREFIX}/quiz`,
+        totalEndpoints: quizEndpoints.length,
+        endpoints: quizEndpoints,
+    });
+    
+    // Verify daily-status route is registered
+    setTimeout(() => {
+        const routeStack = app._router?.stack || [];
+        const quizRoutesInStack = routeStack.filter((layer: any) => 
+            layer.regexp && layer.regexp.toString().includes('quiz')
+        );
+        
+        // Check if daily-status route exists in router
+        const quizRouter = quizRoutesInStack.find((layer: any) => 
+            layer.name === 'router' || layer.handle === quizRoutes
+        );
+        
+        if (quizRouter && quizRouter.handle) {
+            const routerStack = quizRouter.handle.stack || [];
+            const dailyStatusRoute = routerStack.find((layer: any) => 
+                layer.route && layer.route.path === '/daily-status'
+            );
+            
+            if (dailyStatusRoute) {
+                logger.info('✅ /daily-status route verified in router stack');
+            } else {
+                logger.error('❌ /daily-status route NOT found in router stack!');
+                logger.error('Router stack routes:', routerStack
+                    .filter((l: any) => l.route)
+                    .map((l: any) => `${Object.keys(l.route.methods)[0].toUpperCase()} ${l.route.path}`)
+                );
+            }
+        }
+        
+        logger.debug('Quiz routes in Express stack', {
+            count: quizRoutesInStack.length,
+            layers: quizRoutesInStack.map((layer: any) => ({
+                path: layer.regexp?.toString(),
+                name: layer.name,
+            })),
+        });
+    }, 200);
+    
 } catch (error: any) {
-    logger.error(`❌ Failed to register quiz routes: ${error.message}`, error);
-    logger.error(`❌ Error stack: ${error.stack}`);
+    logger.error(`❌ Failed to register quiz routes`, {
+        error: error.message,
+        stack: error.stack,
+        apiPrefix: API_PREFIX,
+        routePath: `${API_PREFIX}/quiz`,
+    });
     // Continue even if quiz routes fail to register
 }
 
@@ -343,23 +425,44 @@ app.get(`${API_PREFIX}/users`, async (_req: Request, res: Response) => {
 // ============================================
 // 404 Handler - يجب أن يكون بعد جميع الـ routes
 app.use((req: Request, res: Response) => {
-    logger.warn(`404 - Route not found: ${req.method} ${req.path}`);
+    logger.warn(`404 - Route not found`, {
+        method: req.method,
+        path: req.path,
+        originalUrl: req.originalUrl,
+        baseUrl: req.baseUrl,
+        url: req.url,
+        query: req.query,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+    });
+    
+    // Log available routes for debugging
+    const availableQuizRoutes = [
+        `${API_PREFIX}/quiz/health`,
+        `${API_PREFIX}/quiz/test-daily-status`,
+        `${API_PREFIX}/quiz/routes`,
+        `${API_PREFIX}/quiz/categories`,
+        `${API_PREFIX}/quiz/daily-status`,
+        `${API_PREFIX}/quiz/answers`,
+        `${API_PREFIX}/quiz/stats`,
+        `${API_PREFIX}/quiz/history`,
+        `${API_PREFIX}/quiz/:categoryId/start`,
+        `${API_PREFIX}/quiz/:categoryId/submit`,
+        `${API_PREFIX}/quiz/:categoryId/cooldown`,
+    ];
+    
     res.status(404).json({
         status: 'ERROR',
         message: 'Route not found',
         path: req.path,
         method: req.method,
+        originalUrl: req.originalUrl,
         availableRoutes: {
-            quiz: [
-                `${API_PREFIX}/quiz/categories`,
-                `${API_PREFIX}/quiz/daily-status`,
-                `${API_PREFIX}/quiz/stats`,
-                `${API_PREFIX}/quiz/history`,
-                `${API_PREFIX}/quiz/:categoryId/start`,
-                `${API_PREFIX}/quiz/:categoryId/submit`,
-                `${API_PREFIX}/quiz/:categoryId/cooldown`,
-            ],
+            quiz: availableQuizRoutes,
         },
+        suggestion: req.path.includes('/quiz/') 
+            ? `Did you mean one of these quiz routes? ${availableQuizRoutes.join(', ')}`
+            : `Check available routes for ${req.path.split('/')[1] || 'root'}`,
     });
 });
 
@@ -403,7 +506,34 @@ async function startServer() {
             try {
                 const quizRoutesPath = require.resolve('./routes/quiz.routes');
                 logger.info(`✅ Quiz routes file found at: ${quizRoutesPath}`);
-                logger.info(`✅ Quiz routes available at: ${API_PREFIX}/quiz/health, ${API_PREFIX}/quiz/categories, ${API_PREFIX}/quiz/daily-status`);
+                
+                // Log all quiz routes for verification
+                const quizRoutesList = [
+                    `${API_PREFIX}/quiz/health`,
+                    `${API_PREFIX}/quiz/test-daily-status`,
+                    `${API_PREFIX}/quiz/routes`,
+                    `${API_PREFIX}/quiz/categories`,
+                    `${API_PREFIX}/quiz/daily-status`,
+                    `${API_PREFIX}/quiz/answers`,
+                    `${API_PREFIX}/quiz/stats`,
+                    `${API_PREFIX}/quiz/history`,
+                    `${API_PREFIX}/quiz/:categoryId/start`,
+                    `${API_PREFIX}/quiz/:categoryId/submit`,
+                    `${API_PREFIX}/quiz/:categoryId/cooldown`,
+                ];
+                
+                logger.info(`✅ Quiz routes available:`, {
+                    totalRoutes: quizRoutesList.length,
+                    routes: quizRoutesList,
+                });
+                
+                // Verify route stack
+                const routeStack = app._router?.stack || [];
+                const quizRoutesInStack = routeStack.filter((layer: any) => 
+                    layer.regexp && layer.regexp.toString().includes('quiz')
+                );
+                
+                logger.info(`✅ Quiz routes in Express stack: ${quizRoutesInStack.length} layers found`);
             } catch (error: any) {
                 logger.error(`❌ Quiz routes file not found: ${error.message}`);
             }
