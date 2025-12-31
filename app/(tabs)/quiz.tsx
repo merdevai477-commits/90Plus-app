@@ -8,12 +8,12 @@ import {
   Dimensions,
   StatusBar,
   Platform,
-  Image,
   ScrollView,
   Modal,
   Vibration,
   ImageBackground,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { QUIZ_QUESTIONS, Question } from '@/constants/quizData';
 import {
@@ -38,6 +38,7 @@ import { router } from 'expo-router';
 import { markQuizCompleted, getCurrentQuizState, getCurrentQuestions } from '../../services/quizLocalState';
 import { getQuestionsByIds, getQuestionsByCategoryId, getQuestionsByCategoryIdWithDifficulty, QuizQuestion, DisplayMode } from '../../data/quizQuestions/index';
 import { getQuizAnswers } from '../../services/quizApi';
+import { prefetchQuizImages, extractImageUrlsFromQuestions } from '../../services/imageCache';
 
 const { width, height } = Dimensions.get('window');
 
@@ -160,6 +161,14 @@ export default function QuizScreen() {
         if (categoryQuestions.length > 0) {
           if (isMounted) {
             setQuizQuestions(categoryQuestions);
+          }
+          
+          // تحميل الصور في الخلفية
+          const imageUrls = extractImageUrlsFromQuestions(categoryQuestions);
+          if (imageUrls.length > 0) {
+            prefetchQuizImages(imageUrls).catch((error) => {
+              console.warn('Failed to prefetch quiz images:', error);
+            });
           }
           
           // جلب الإجابات من الباك إند (مع cache)
@@ -357,6 +366,9 @@ export default function QuizScreen() {
 
   const animateImageReveal = () => {
     setShowImage(true);
+    // تهيئة القيم قبل البدء بالأنيميشن
+    imageScaleAnim.setValue(0.9);
+    imageFadeAnim.setValue(0);
     Animated.parallel([
       Animated.timing(imageFadeAnim, {
         toValue: 1,
@@ -1068,9 +1080,22 @@ export default function QuizScreen() {
             const correctAnswerIndex = parseInt(correctAnswer, 10);
             const isCorrect = index === correctAnswerIndex;
             const isSelected = index === selectedAnswer;
+            // إظهار الإجابة الصحيحة باللون الأخضر دائماً بعد الإجابة
             const shouldShowCorrect = isAnswered && isCorrect;
             const shouldShowWrong = isAnswered && isSelected && !isCorrect;
             const isEliminated = eliminatedOptions.includes(index);
+            
+            // Debug logging
+            if (isAnswered && index === 0 && currentQuestion?.id) {
+              console.log(`[Quiz] Question ${currentQuestion.id}:`, {
+                correctAnswer,
+                correctAnswerIndex,
+                isAnswered,
+                isCorrect: index === correctAnswerIndex,
+                shouldShowCorrect,
+                quizAnswersCount: Object.keys(quizAnswers).length
+              });
+            }
 
             return (
               <Animated.View
