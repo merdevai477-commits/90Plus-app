@@ -37,5 +37,5 @@ RUN npm run verify:build || echo 'Warning: quiz.routes.js verification failed'
 EXPOSE 3000
 
 # Start command
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+CMD npx prisma migrate deploy && node dist/src/main.js
 
