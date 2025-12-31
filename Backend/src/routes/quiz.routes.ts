@@ -307,18 +307,64 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
         }
 
         // جلب الاختبار اليومي الموحد
-        const dailyQuiz = await getCurrentDailyQuiz();
+        let dailyQuiz = null;
+        try {
+            dailyQuiz = await getCurrentDailyQuiz();
+        } catch (error: any) {
+            logger.error('Error getting current daily quiz in daily-status endpoint', {
+                error: error.message,
+                stack: error.stack,
+            });
+            // المتابعة لإعادة المحاولة
+        }
 
         if (!dailyQuiz) {
             // إنشاء اختبار جديد إذا لم يكن موجوداً
-            const newDailyQuiz = await getOrCreateDailyQuiz();
-            const canTakeInfo = await canUserTakeDailyQuiz(user.id);
+            let newDailyQuiz;
+            try {
+                newDailyQuiz = await getOrCreateDailyQuiz();
+            } catch (error: any) {
+                logger.error('Error creating daily quiz in daily-status endpoint', {
+                    error: error.message,
+                    stack: error.stack,
+                });
+                res.status(500).json({
+                    status: 'ERROR',
+                    message: 'Failed to create daily quiz',
+                });
+                return;
+            }
+
+            let canTakeInfo;
+            try {
+                canTakeInfo = await canUserTakeDailyQuiz(user.id);
+            } catch (error: any) {
+                logger.error('Error checking if user can take daily quiz', {
+                    error: error.message,
+                    stack: error.stack,
+                    userId: user.id,
+                });
+                res.status(500).json({
+                    status: 'ERROR',
+                    message: 'Failed to check quiz availability',
+                });
+                return;
+            }
 
             // جلب اسم الكاتيجوري
-            const category = await prisma.quizCategory.findUnique({
-                where: { id: newDailyQuiz.categoryId },
-                select: { name: true },
-            });
+            let category = null;
+            try {
+                category = await prisma.quizCategory.findUnique({
+                    where: { id: newDailyQuiz.categoryId },
+                    select: { name: true },
+                });
+            } catch (error: any) {
+                logger.error('Error fetching category in daily-status endpoint', {
+                    error: error.message,
+                    categoryId: newDailyQuiz.categoryId,
+                });
+                // المتابعة بدون اسم الكاتيجوري
+            }
 
             res.json({
                 status: 'SUCCESS',
@@ -334,14 +380,28 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
         }
 
         // التحقق من أن المستخدم يمكنه أخذ الاختبار اليومي
-        const canTakeInfo = await canUserTakeDailyQuiz(user.id);
+        let canTakeInfo;
+        try {
+            canTakeInfo = await canUserTakeDailyQuiz(user.id);
+        } catch (error: any) {
+            logger.error('Error checking if user can take daily quiz', {
+                error: error.message,
+                stack: error.stack,
+                userId: user.id,
+            });
+            res.status(500).json({
+                status: 'ERROR',
+                message: 'Failed to check quiz availability',
+            });
+            return;
+        }
 
         const responseData = {
             status: 'SUCCESS',
             data: {
                 canTake: canTakeInfo.canTake,
                 categoryId: dailyQuiz.categoryId,
-                categoryName: dailyQuiz.categoryName,
+                categoryName: dailyQuiz.categoryName || 'Daily Quiz',
                 canRetryAt: canTakeInfo.canRetryAt?.toISOString() || null,
                 timeRemaining: canTakeInfo.timeRemaining || null,
             },

@@ -217,6 +217,30 @@ export async function getCurrentDailyQuiz(): Promise<{
       return null;
     }
 
+    // التحقق من وجود category
+    if (!dailyQuiz.category) {
+      logger.error('Daily quiz category is null', { dailyQuizId: dailyQuiz.id, categoryId: dailyQuiz.categoryId });
+      // محاولة جلب الكاتيجوري مباشرة
+      const category = await prisma.quizCategory.findUnique({
+        where: { id: dailyQuiz.categoryId },
+        select: { name: true },
+      });
+      
+      if (!category) {
+        logger.error('Category not found for daily quiz', { categoryId: dailyQuiz.categoryId });
+        return null;
+      }
+      
+      return {
+        id: dailyQuiz.id,
+        categoryId: dailyQuiz.categoryId,
+        categoryName: category.name,
+        questionIds: dailyQuiz.questionIds,
+        date: dailyQuiz.date,
+        expiresAt: dailyQuiz.expiresAt,
+      };
+    }
+
     return {
       id: dailyQuiz.id,
       categoryId: dailyQuiz.categoryId,
