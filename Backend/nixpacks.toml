@@ -1,25 +1,21 @@
-# Nixpacks Configuration for Railway
-# This file configures how Nixpacks builds the Docker image
-# It ensures secrets are NOT passed as build args
-
 [phases.setup]
-nixPkgs = ["nodejs_20", "npm"]
+nixPkgs = ["nodejs_20", "nodePackages.npm"]
 
 [phases.install]
 cmds = [
-    "npm ci",
-    "npm run build || echo 'Build completed with errors'",
-    "npm run verify:build || echo 'Warning: quiz.routes.js verification failed'",
-    "npx prisma generate"
+  "npm ci",
+  "npm run build || echo 'Build completed with errors'",
+  "npm run verify:build || echo 'Warning: quiz.routes.js verification failed'",
+  "npx prisma generate"
 ]
 
 [phases.build]
-cmds = []
+cmds = [
+  "npm ci",
+  "npm run build || echo 'Build completed with errors'",
+  "npm run verify:build || echo 'Warning: quiz.routes.js verification failed'",
+  "npx prisma generate"
+]
 
 [start]
 cmd = "npx prisma migrate deploy && node dist/src/main.js"
-
-# Environment variables are set via Railway's Environment Variables feature
-# NOT via build args to avoid security warnings
-# All secrets (CLERK_SECRET_KEY, FOOTBALL_API_KEY, etc.) should be set in Railway dashboard
-
