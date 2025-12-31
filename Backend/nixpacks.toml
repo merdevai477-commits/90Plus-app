@@ -6,6 +6,7 @@ nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = [
+  "rm -f .tsbuildinfo || true",
   "npm ci",
   "npm run build || echo 'Build completed with errors'",
   "npm run verify:build || echo 'Warning: quiz.routes.js verification failed'",
@@ -14,6 +15,7 @@ cmds = [
 
 [phases.build]
 cmds = [
+  "rm -f .tsbuildinfo || true",
   "npm ci",
   "npm run build || echo 'Build completed with errors'",
   "npm run verify:build || echo 'Warning: quiz.routes.js verification failed'",
