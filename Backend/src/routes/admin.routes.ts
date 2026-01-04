@@ -407,6 +407,100 @@ router.post('/users/:id/unsuspend', requireAdmin, async (req: Request, res: Resp
 });
 
 /**
+ * POST /api/admin/users/:username/verify
+ * Verify user and grant developer access
+ */
+router.post('/users/:username/verify', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { username } = req.params;
+        const adminUser = (req as any).adminUser;
+
+        // Find user by username (case-insensitive)
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    {
+                        username: {
+                            equals: username,
+                            mode: 'insensitive',
+                        },
+                    },
+                    {
+                        displayName: {
+                            equals: username,
+                            mode: 'insensitive',
+                        },
+                    },
+                ],
+            },
+        });
+
+        if (!user) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: `User with username "${username}" not found`,
+            });
+            return;
+        }
+
+        // Update user to verified and developer
+        const updatedUser = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                isVerified: true,
+                isDeveloper: true,
+            },
+        });
+
+        // Create notification for user
+        await NotificationService.createNotification({
+            userId: user.id,
+            title: 'تم توثيق حسابك',
+            message: 'تم توثيق حسابك ومنحك صلاحيات المطور',
+            type: 'GENERAL',
+            data: {
+                action: 'VERIFIED',
+            },
+        });
+
+        // Audit log (using existing action or create new one)
+        try {
+            await AuditService.createAuditLog({
+                action: AuditAction.USER_SUSPENDED, // Using existing action for now
+                actorId: adminUser.id,
+                targetId: user.id,
+                targetType: AuditTargetType.USER,
+                metadata: {
+                    username: user.username,
+                    isDeveloper: true,
+                    action: 'VERIFIED',
+                },
+            });
+        } catch (auditError) {
+            // Continue even if audit log fails
+            logger.warn('Failed to create audit log:', auditError);
+        }
+
+        logger.info(`User ${username} verified and granted developer access by admin ${adminUser.id}`);
+
+        res.json({
+            status: 'SUCCESS',
+            message: 'تم توثيق المستخدم ومنحه صلاحيات المطور بنجاح',
+            data: {
+                id: updatedUser.id,
+                username: updatedUser.username,
+                email: updatedUser.email,
+                isVerified: updatedUser.isVerified,
+                isDeveloper: updatedUser.isDeveloper,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Verify user error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
  * GET /api/admin/audit
  * List audit logs with filters
  */

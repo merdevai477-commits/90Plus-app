@@ -163,6 +163,51 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
 });
 
 /**
+ * DELETE /api/notifications/:id
+ * Delete a single notification
+ */
+router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        const { id } = req.params;
+
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Verify ownership before deleting
+        const notification = await prisma.notification.findFirst({
+            where: { id, userId: user.id }
+        });
+
+        if (!notification) {
+            res.status(404).json({ status: 'ERROR', message: 'Notification not found' });
+            return;
+        }
+
+        await prisma.notification.delete({
+            where: { id }
+        });
+
+        res.json({ status: 'SUCCESS', message: 'تم حذف الإشعار' });
+    } catch (error: any) {
+        logger.error('Delete notification error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
  * DELETE /api/notifications/clear-all
  * Delete all notifications for user
  */

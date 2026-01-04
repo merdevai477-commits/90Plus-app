@@ -45,6 +45,7 @@ export class ProfileController {
           brandLogo: true,
           coverImage: true,
           socialLinks: true,
+          consecutiveLoginDays: true,
           _count: {
             select: {
               followers: true,

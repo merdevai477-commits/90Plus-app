@@ -467,6 +467,9 @@ router.post('/reel', requireAuth, upload.fields([
 
         const totalTime = Date.now() - startTime;
         logger.info(`Reel upload completed successfully in ${totalTime}ms (${(totalTime/1000).toFixed(2)}s). Reel ID: ${reel.id}, User: ${user.id}, Hashtags: ${hashtags.length}, Mentions: ${mentions.length}`);
+        
+        // Log videoUrl for debugging
+        logger.info(`[Upload] Reel created with videoUrl: ${videoResult.url}, reelId: ${reel.id}`);
 
         res.json({
             status: 'SUCCESS',

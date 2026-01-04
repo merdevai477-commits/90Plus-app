@@ -101,6 +101,10 @@ app.use(performanceMiddleware());
 import { metricsMiddleware, getMetricsHandler } from './middleware/metrics.middleware';
 app.use(metricsMiddleware);
 
+// App version check middleware (before routes)
+import { checkAppVersion } from './middleware/app-version.middleware';
+app.use(checkAppVersion);
+
 // Route logging middleware (for debugging in development)
 if (!isProduction) {
     app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -174,6 +178,7 @@ import predictionsRoutes from './routes/predictions.routes';
 import coinsRoutes from './routes/coins.routes';
 import quizRoutes from './routes/quiz.routes';
 import adminRoutes from './routes/admin.routes';
+import appVersionRoutes from './routes/app-version.routes';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
@@ -206,6 +211,7 @@ app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
+app.use(`${API_PREFIX}/app`, appVersionRoutes);
 // Register quiz routes with error handling
 try {
     // Log before registration

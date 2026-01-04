@@ -129,10 +129,16 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         const nextCursor = hasMore ? data[data.length - 1]?.id : null;
 
         // Format response
-        const formattedReels = data.map(reel => ({
-            id: reel.id,
-            videoUrl: reel.videoUrl,
-            thumbnail: reel.thumbnail,
+        const formattedReels = data.map(reel => {
+            // Log videoUrl for debugging
+            if (!reel.videoUrl || reel.videoUrl.trim() === '') {
+                logger.warn(`[ReelsFeed] Reel ${reel.id} has empty or missing videoUrl`);
+            }
+            
+            return {
+                id: reel.id,
+                videoUrl: reel.videoUrl,
+                thumbnail: reel.thumbnail,
             caption: reel.caption,
             views: reel.views,
             likesCount: reel._count.likes,
@@ -145,7 +151,8 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             previewComments: reel.comments,
             user: reel.user,
             createdAt: reel.createdAt,
-        }));
+            };
+        });
 
         const responseData = {
             status: 'SUCCESS',
@@ -934,6 +941,150 @@ router.get('/search/users', requireAuth, async (req: Request, res: Response): Pr
 
         res.json({ status: 'SUCCESS', data: { users } });
     } catch (error: any) {
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * GET /api/reels/search
+ * Search reels by caption, hashtags, or username - OPTIMIZED WITH CACHING
+ */
+router.get('/search', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { q, limit = '10', type = 'all' } = req.query;
+        const query = (q as string || '').trim();
+        const searchLimit = Math.min(parseInt(limit as string) || 10, 20);
+        const searchType = type as 'all' | 'reels' | 'hashtags';
+
+        if (query.length < 1) {
+            res.json({ status: 'SUCCESS', data: { reels: [], hashtags: [] } });
+            return;
+        }
+
+        const currentUserId = req.auth?.userId;
+        let currentUser: { id: string } | null = null;
+        if (currentUserId) {
+            const cachedUserId = userIdCache.get(currentUserId);
+            if (cachedUserId && Date.now() - cachedUserId.timestamp < USER_ID_CACHE_TTL) {
+                currentUser = { id: cachedUserId.id };
+            } else {
+                currentUser = await prisma.user.findUnique({
+                    where: { clerkUserId: currentUserId },
+                    select: { id: true }
+                });
+                if (currentUser) {
+                    userIdCache.set(currentUserId, { id: currentUser.id, timestamp: Date.now() });
+                }
+            }
+        }
+
+        const results: { reels: any[]; hashtags: any[] } = { reels: [], hashtags: [] };
+
+        // Search reels if type is 'all' or 'reels'
+        if (searchType === 'all' || searchType === 'reels') {
+            const reels = await prisma.reel.findMany({
+                where: {
+                    isDeleted: false,
+                    OR: [
+                        { caption: { contains: query, mode: 'insensitive' } },
+                        {
+                            hashtags: {
+                                some: {
+                                    hashtag: {
+                                        name: { contains: query.toLowerCase(), mode: 'insensitive' }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            user: {
+                                OR: [
+                                    { username: { contains: query, mode: 'insensitive' } },
+                                    { displayName: { contains: query, mode: 'insensitive' } }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                take: searchLimit,
+                orderBy: [
+                    { views: 'desc' },
+                    { createdAt: 'desc' }
+                ],
+                select: {
+                    id: true,
+                    videoUrl: true,
+                    thumbnail: true,
+                    caption: true,
+                    views: true,
+                    sharesCount: true,
+                    createdAt: true,
+                    user: {
+                        select: {
+                            id: true,
+                            username: true,
+                            displayName: true,
+                            avatar: true,
+                            isVerified: true,
+                        }
+                    },
+                    _count: {
+                        select: {
+                            likes: true,
+                            comments: true
+                        }
+                    },
+                    hashtags: {
+                        select: {
+                            hashtag: {
+                                select: { name: true }
+                            }
+                        }
+                    },
+                    likes: currentUser ? {
+                        where: { userId: currentUser.id },
+                        select: { id: true }
+                    } : false,
+                }
+            });
+
+            results.reels = reels.map(reel => ({
+                id: reel.id,
+                videoUrl: reel.videoUrl,
+                thumbnail: reel.thumbnail,
+                caption: reel.caption,
+                views: reel.views,
+                likesCount: reel._count.likes,
+                commentsCount: reel._count.comments,
+                sharesCount: reel.sharesCount || 0,
+                isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
+                hashtags: reel.hashtags.map(h => h.hashtag.name),
+                user: reel.user,
+                createdAt: reel.createdAt,
+            }));
+        }
+
+        // Search hashtags if type is 'all' or 'hashtags'
+        if (searchType === 'all' || searchType === 'hashtags') {
+            const hashtags = await prisma.hashtag.findMany({
+                where: {
+                    name: { contains: query.toLowerCase(), mode: 'insensitive' }
+                },
+                take: 10,
+                orderBy: { reelCount: 'desc' },
+                select: {
+                    id: true,
+                    name: true,
+                    reelCount: true,
+                }
+            });
+
+            results.hashtags = hashtags;
+        }
+
+        res.json({ status: 'SUCCESS', data: results });
+    } catch (error: any) {
+        logger.error('Search reels error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
@@ -2610,6 +2761,102 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
         });
     } catch (error: any) {
         logger.error('Award team of month error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * GET /api/reels/rankings/user-rank
+ * Get current user's rank in all categories
+ * جلب رتبة المستخدم الحالي في كل الفئات
+ */
+router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        // Find user
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Calculate date 3 days ago
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+        // Get user's rank in each category
+        const [viewsRank, sharesRank, predictionsRank, commentersRank] = await Promise.all([
+            // Views rank
+            (async () => {
+                const reels = await prisma.reel.findMany({
+                    where: { createdAt: { gte: threeDaysAgo } },
+                    orderBy: { views: 'desc' },
+                    select: { userId: true, views: true }
+                });
+                const userReel = reels.find(r => r.userId === user.id);
+                if (!userReel) return null;
+                const rank = reels.findIndex(r => r.userId === user.id) + 1;
+                return rank <= 10 ? rank : null;
+            })(),
+            // Shares rank
+            (async () => {
+                const reels = await prisma.reel.findMany({
+                    where: { createdAt: { gte: threeDaysAgo } },
+                    orderBy: { sharesCount: 'desc' },
+                    select: { userId: true, sharesCount: true }
+                });
+                const userReel = reels.find(r => r.userId === user.id);
+                if (!userReel) return null;
+                const rank = reels.findIndex(r => r.userId === user.id) + 1;
+                return rank <= 10 ? rank : null;
+            })(),
+            // Predictions rank
+            (async () => {
+                const topPredictors = await prisma.prediction.groupBy({
+                    by: ['userId'],
+                    where: { isCorrect: true },
+                    _count: { id: true },
+                    orderBy: { _count: { id: 'desc' } },
+                    take: 10
+                });
+                const userIndex = topPredictors.findIndex(p => p.userId === user.id);
+                return userIndex >= 0 ? userIndex + 1 : null;
+            })(),
+            // Commenters rank
+            (async () => {
+                const topCommenters = await prisma.comment.groupBy({
+                    by: ['userId'],
+                    where: { createdAt: { gte: threeDaysAgo } },
+                    _count: { id: true },
+                    orderBy: { _count: { id: 'desc' } },
+                    take: 10
+                });
+                const userIndex = topCommenters.findIndex(c => c.userId === user.id);
+                return userIndex >= 0 ? userIndex + 1 : null;
+            })()
+        ]);
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                views: viewsRank,
+                shares: sharesRank,
+                predictions: predictionsRank,
+                comments: commentersRank,
+                hasAnyRank: !!(viewsRank || sharesRank || predictionsRank || commentersRank)
+            }
+        });
+    } catch (error: any) {
+        logger.error('Get user rank error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
