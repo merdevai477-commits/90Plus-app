@@ -10,11 +10,54 @@
 import Queue from 'bull';
 import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
-import { redisCacheService } from './redis-cache.service';
+import { isRedisConnected } from '../lib/redis';
 
-// Create transfers sync queue
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-export const transfersSyncQueue = new Queue('transfers-sync', REDIS_URL);
+// Create transfers sync queue (only if Redis is available)
+let transfersSyncQueue: Queue | null = null;
+
+// Initialize queue only if Redis is available
+function initializeQueue(): void {
+    if (transfersSyncQueue) return; // Already initialized
+    
+    try {
+        // Check if Redis is available
+        if (!isRedisConnected()) {
+            logger.info('[TransfersSync] Redis not available, will use interval-based sync only');
+            return;
+        }
+
+        const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+        transfersSyncQueue = new Queue('transfers-sync', REDIS_URL, {
+            settings: {
+                maxRetriesPerRequest: 3, // Reduce retries
+                retryStrategy: (times: number) => {
+                    if (times > 3) {
+                        logger.warn('[TransfersSync] Redis connection failed, falling back to interval-based sync');
+                        return null; // Stop retrying
+                    }
+                    return Math.min(times * 200, 2000);
+                },
+            },
+        });
+
+        transfersSyncQueue.on('error', (error) => {
+            logger.error('[TransfersSync] Queue error:', error);
+            // Disable queue on persistent errors
+            if (error.message?.includes('max retries')) {
+                logger.warn('[TransfersSync] Disabling queue due to persistent errors, using interval-based sync');
+                transfersSyncQueue = null;
+            }
+        });
+
+        logger.info('[TransfersSync] ✅ Queue initialized');
+    } catch (error) {
+        logger.warn('[TransfersSync] Failed to initialize Bull Queue, will use interval-based sync:', error);
+        transfersSyncQueue = null;
+    }
+}
+
+// Try to initialize queue (will retry if Redis becomes available later)
+initializeQueue();
 
 interface TransfersSyncJobData {
     type: 'recent' | 'old';
@@ -69,40 +112,60 @@ class TransfersSyncService {
             this.oldTransfersInterval = null;
         }
 
+        // Close queue if available
+        if (transfersSyncQueue) {
+            transfersSyncQueue.close().catch((err) => {
+                logger.error('[TransfersSync] Error closing queue:', err);
+            });
+        }
+
         logger.info('[TransfersSync] ⏹️ Service stopped');
     }
 
     /**
-     * Setup queue processor
+     * Setup queue processor (only if queue is available)
      */
     private setupQueueProcessor(): void {
-        transfersSyncQueue.process(async (job) => {
-            const { type, dateRange } = job.data as TransfersSyncJobData;
+        if (!transfersSyncQueue) {
+            logger.info('[TransfersSync] Queue not available, using interval-based sync only');
+            return;
+        }
 
-            try {
-                logger.info(`[TransfersSync] Processing ${type} transfers sync job...`);
+        try {
+            transfersSyncQueue.process(async (job) => {
+                const { type, dateRange } = job.data as TransfersSyncJobData;
 
-                if (type === 'recent') {
-                    await this.syncTransfersByDateRange(dateRange || this.getRecentDateRange());
-                } else if (type === 'old') {
-                    await this.syncTransfersByDateRange(dateRange || this.getOldDateRange());
+                try {
+                    logger.info(`[TransfersSync] Processing ${type} transfers sync job...`);
+
+                    if (type === 'recent') {
+                        await this.syncTransfersByDateRange(dateRange || this.getRecentDateRange());
+                    } else if (type === 'old') {
+                        await this.syncTransfersByDateRange(dateRange || this.getOldDateRange());
+                    }
+
+                    logger.info(`[TransfersSync] ✅ Completed ${type} transfers sync`);
+                    return { success: true, type };
+                } catch (error) {
+                    logger.error(`[TransfersSync] ❌ Error processing ${type} transfers sync:`, error);
+                    throw error;
                 }
+            });
 
-                logger.info(`[TransfersSync] ✅ Completed ${type} transfers sync`);
-                return { success: true, type };
-            } catch (error) {
-                logger.error(`[TransfersSync] ❌ Error processing ${type} transfers sync:`, error);
-                throw error;
-            }
-        });
+            transfersSyncQueue.on('completed', (job, result) => {
+                logger.debug(`[TransfersSync] Job ${job.id} completed:`, result);
+            });
 
-        transfersSyncQueue.on('completed', (job, result) => {
-            logger.debug(`[TransfersSync] Job ${job.id} completed:`, result);
-        });
+            transfersSyncQueue.on('failed', (job, err) => {
+                logger.error(`[TransfersSync] Job ${job.id} failed:`, err);
+            });
 
-        transfersSyncQueue.on('failed', (job, err) => {
-            logger.error(`[TransfersSync] Job ${job.id} failed:`, err);
-        });
+            transfersSyncQueue.on('error', (error) => {
+                logger.error('[TransfersSync] Queue error:', error);
+            });
+        } catch (error) {
+            logger.error('[TransfersSync] Error setting up queue processor:', error);
+        }
     }
 
     /**
@@ -149,18 +212,30 @@ class TransfersSyncService {
             const dateRange = this.getRecentDateRange();
             logger.info(`[TransfersSync] 🔄 Syncing recent transfers (${dateRange.from} to ${dateRange.to})...`);
             
-            await transfersSyncQueue.add('recent-sync', {
-                type: 'recent',
-                dateRange,
-            }, {
-                attempts: 3,
-                backoff: {
-                    type: 'exponential',
-                    delay: 5000,
-                },
-            });
+            // If queue is available, use it; otherwise sync directly
+            if (transfersSyncQueue) {
+                try {
+                    await transfersSyncQueue.add('recent-sync', {
+                        type: 'recent',
+                        dateRange,
+                    }, {
+                        attempts: 3,
+                        backoff: {
+                            type: 'exponential',
+                            delay: 5000,
+                        },
+                    });
+                } catch (queueError) {
+                    logger.warn('[TransfersSync] Queue error, syncing directly:', queueError);
+                    // Fallback to direct sync
+                    await this.syncTransfersByDateRange(dateRange);
+                }
+            } else {
+                // Direct sync without queue
+                await this.syncTransfersByDateRange(dateRange);
+            }
         } catch (error) {
-            logger.error('[TransfersSync] Error scheduling recent transfers sync:', error);
+            logger.error('[TransfersSync] Error syncing recent transfers:', error);
         }
     }
 
@@ -174,18 +249,30 @@ class TransfersSyncService {
             const dateRange = this.getOldDateRange();
             logger.info(`[TransfersSync] 🔄 Syncing old transfers (${dateRange.from} to ${dateRange.to})...`);
             
-            await transfersSyncQueue.add('old-sync', {
-                type: 'old',
-                dateRange,
-            }, {
-                attempts: 2,
-                backoff: {
-                    type: 'exponential',
-                    delay: 10000,
-                },
-            });
+            // If queue is available, use it; otherwise sync directly
+            if (transfersSyncQueue) {
+                try {
+                    await transfersSyncQueue.add('old-sync', {
+                        type: 'old',
+                        dateRange,
+                    }, {
+                        attempts: 2,
+                        backoff: {
+                            type: 'exponential',
+                            delay: 10000,
+                        },
+                    });
+                } catch (queueError) {
+                    logger.warn('[TransfersSync] Queue error, syncing directly:', queueError);
+                    // Fallback to direct sync
+                    await this.syncTransfersByDateRange(dateRange);
+                }
+            } else {
+                // Direct sync without queue
+                await this.syncTransfersByDateRange(dateRange);
+            }
         } catch (error) {
-            logger.error('[TransfersSync] Error scheduling old transfers sync:', error);
+            logger.error('[TransfersSync] Error syncing old transfers:', error);
         }
     }
 

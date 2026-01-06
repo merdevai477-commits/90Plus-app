@@ -90,36 +90,54 @@ class FootballDataCacheService {
      * ✅ All finished matches are permanently stored and shared
      */
     async getMatchesByDate(dateString: string): Promise<any[]> {
-        const date = new Date(dateString);
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const isPastDate = date < today;
-
-        // ✅ For past dates, try database first (permanent, shared for all users, no API call)
-        if (isPastDate) {
-            const dbMatches = await matchCacheService.getFinishedMatchesFromDb(startOfDay, endOfDay);
-            if (dbMatches.length > 0) {
-                logger.debug(`📦 [${dateString}] Got ${dbMatches.length} matches from DB (shared for all users, no API call)`);
-                return dbMatches.map(m => matchCacheService.convertDbMatchToApiFormat(m));
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                throw new Error(`Invalid date: ${dateString}`);
             }
+
+            const startOfDay = new Date(date);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(date);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const isPastDate = date < today;
+
+            // ✅ For past dates, try database first (permanent, shared for all users, no API call)
+            if (isPastDate) {
+                try {
+                    const dbMatches = await matchCacheService.getFinishedMatchesFromDb(startOfDay, endOfDay);
+                    if (dbMatches.length > 0) {
+                        logger.debug(`📦 [${dateString}] Got ${dbMatches.length} matches from DB (shared for all users, no API call)`);
+                        return dbMatches.map(m => matchCacheService.convertDbMatchToApiFormat(m));
+                    }
+                } catch (dbError) {
+                    logger.warn(`[${dateString}] Error getting matches from DB, falling back to API:`, dbError);
+                }
+            }
+
+            // ✅ Fetch from API (with request deduplication - if 1000 users request, only 1 API call)
+            logger.debug(`📡 [${dateString}] Fetching matches from API (request will be shared with concurrent users)...`);
+            const apiMatches = await footballService.getFixtures({ date: dateString });
+
+            // ✅ Archive finished matches to database (permanent, shared for all users)
+            if (apiMatches.length > 0) {
+                try {
+                    await matchCacheService.archiveFinishedMatches(apiMatches);
+                    logger.debug(`💾 [${dateString}] Archived finished matches to DB (shared for all users)`);
+                } catch (archiveError) {
+                    logger.warn(`[${dateString}] Error archiving matches to DB:`, archiveError);
+                    // Continue even if archiving fails
+                }
+            }
+
+            return apiMatches;
+        } catch (error) {
+            logger.error(`[${dateString}] Error in getMatchesByDate:`, error);
+            throw error;
         }
-
-        // ✅ Fetch from API (with request deduplication - if 1000 users request, only 1 API call)
-        logger.debug(`📡 [${dateString}] Fetching matches from API (request will be shared with concurrent users)...`);
-        const apiMatches = await footballService.getFixtures({ date: dateString });
-
-        // ✅ Archive finished matches to database (permanent, shared for all users)
-        if (apiMatches.length > 0) {
-            await matchCacheService.archiveFinishedMatches(apiMatches);
-            logger.debug(`💾 [${dateString}] Archived finished matches to DB (shared for all users)`);
-        }
-
-        return apiMatches;
     }
 
     // ============================================
