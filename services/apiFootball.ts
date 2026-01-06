@@ -387,6 +387,300 @@ export interface Standing {
   update: string;
 }
 
+export interface TopScorer {
+  player: {
+    id: number;
+    name: string;
+    photo: string;
+  };
+  statistics: Array<{
+    team: {
+      id: number;
+      name: string;
+      logo: string;
+    };
+    games: {
+      appearances: number;
+      lineups: number;
+      minutes: number;
+      position: string;
+      rating: string;
+      captain: boolean;
+    };
+    substitutes: {
+      in: number;
+      out: number;
+      bench: number;
+    };
+    shots: {
+      total: number;
+      on: number;
+    };
+    goals: {
+      total: number;
+      conceded: number;
+      assists: number;
+      saves: number;
+    };
+    passes: {
+      total: number;
+      key: number;
+      accuracy: number;
+    };
+    tackles: {
+      total: number;
+      blocks: number;
+      interceptions: number;
+    };
+    duels: {
+      total: number;
+      won: number;
+    };
+    dribbles: {
+      attempts: number;
+      success: number;
+      past: number;
+    };
+    fouls: {
+      drawn: number;
+      committed: number;
+    };
+    cards: {
+      yellow: number;
+      red: number;
+    };
+    penalty: {
+      won: number;
+      commited: number;
+      scored: number;
+      missed: number;
+      saved: number;
+    };
+  }>;
+}
+
+export interface TopAssist {
+  player: {
+    id: number;
+    name: string;
+    photo: string;
+  };
+  statistics: Array<{
+    team: {
+      id: number;
+      name: string;
+      logo: string;
+    };
+    games: {
+      appearances: number;
+      lineups: number;
+      minutes: number;
+      position: string;
+      rating: string;
+      captain: boolean;
+    };
+    goals: {
+      total: number;
+      conceded: number;
+      assists: number;
+      saves: number;
+    };
+    passes: {
+      total: number;
+      key: number;
+      accuracy: number;
+    };
+  }>;
+}
+
+export interface Injury {
+  player: {
+    id: number;
+    name: string;
+    photo: string;
+  };
+  team: {
+    id: number;
+    name: string;
+    logo: string;
+  };
+  fixture: {
+    id: number;
+    referee: string | null;
+    timezone: string;
+    date: string;
+    timestamp: number;
+    venue: {
+      id: number | null;
+      name: string | null;
+      city: string | null;
+    };
+    status: {
+      long: string;
+      short: string;
+      elapsed: number | null;
+    };
+  };
+  league: {
+    id: number;
+    name: string;
+    country: string;
+    logo: string;
+    flag: string | null;
+    season: number;
+    round: string;
+  };
+  type: string;
+  reason: string;
+}
+
+export interface Transfer {
+  player: {
+    id: number;
+    name: string;
+    photo: string;
+  };
+  update: string;
+  league?: {
+    id: number;
+    name: string;
+    logo: string;
+  };
+  transfers: Array<{
+    date: string;
+    type: string;
+    teams: {
+      in: {
+        id: number;
+        name: string;
+        logo: string;
+      } | null;
+      out: {
+        id: number;
+        name: string;
+        logo: string;
+      } | null;
+    };
+  }>;
+}
+
+export interface TransfersByLeague {
+  leagueId: number;
+  leagueName: string;
+  leagueLogo?: string;
+  transfers: Transfer[];
+}
+
+export interface Trophy {
+  league: {
+    id: number;
+    name: string;
+    country: string;
+    logo: string;
+    flag: string | null;
+  };
+  season: string;
+  place: string;
+}
+
+export interface Coach {
+  id: number;
+  name: string;
+  firstname: string;
+  lastname: string;
+  age: number;
+  birth: {
+    date: string;
+    place: string;
+    country: string;
+  };
+  nationality: string;
+  height: string;
+  weight: string;
+  photo: string;
+  team: {
+    id: number;
+    name: string;
+    logo: string;
+  };
+  career: Array<{
+    team: {
+      id: number;
+      name: string;
+      logo: string;
+    };
+    start: string;
+    end: string | null;
+  }>;
+}
+
+export interface Venue {
+  id: number;
+  name: string;
+  address: string;
+  city: string;
+  country: string;
+  capacity: number;
+  surface: string;
+  image: string;
+}
+
+export interface LeagueRound {
+  league: {
+    id: number;
+    name: string;
+    country: string;
+    logo: string;
+    flag: string | null;
+    season: number;
+  };
+  fixture: {
+    id: number;
+    referee: string | null;
+    timezone: string;
+    date: string;
+    timestamp: number;
+    venue: {
+      id: number | null;
+      name: string | null;
+      city: string | null;
+    };
+    status: {
+      long: string;
+      short: string;
+      elapsed: number | null;
+    };
+  };
+  teams: {
+    home: {
+      id: number;
+      name: string;
+      logo: string;
+      winner: boolean | null;
+    };
+    away: {
+      id: number;
+      name: string;
+      logo: string;
+      winner: boolean | null;
+    };
+  };
+  goals: {
+    home: number | null;
+    away: number | null;
+  };
+  score: {
+    halftime: {
+      home: number | null;
+      away: number | null;
+    };
+    fulltime: {
+      home: number | null;
+      away: number | null;
+    };
+  };
+}
+
 
 interface ProxyResponse<T> {
   status: 'SUCCESS' | 'ERROR';
@@ -1433,6 +1727,239 @@ export const ApiFootballService = {
     } catch (error) {
       console.error(`Error unfavoriting match ${matchId}:`, error);
       return false;
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Team Statistics
+  // ============================================
+
+  /**
+   * Get team statistics for a league and season
+   */
+  async getTeamStatistics(teamId: number, leagueId: number, season?: number): Promise<any> {
+    const currentSeason = season || 2024;
+    try {
+      const result = await fetchFromProxy<any>(`/teams/${teamId}/statistics`, {
+        league: leagueId,
+        season: currentSeason,
+      });
+      return result?.response || result || null;
+    } catch (error) {
+      console.error('Error fetching team statistics:', error);
+      return null;
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Top Scorers & Assists
+  // ============================================
+
+  /**
+   * Get top scorers for a league
+   */
+  async getTopScorers(leagueId: number, season?: number): Promise<TopScorer[]> {
+    const currentSeason = season || 2024;
+    try {
+      const result = await fetchFromProxy<TopScorer[]>('/players/top/scorers', {
+        league: leagueId,
+        season: currentSeason,
+      });
+      return result?.response || result || [];
+    } catch (error) {
+      console.error('Error fetching top scorers:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get top assists/playmakers for a league
+   */
+  async getTopAssists(leagueId: number, season?: number): Promise<TopAssist[]> {
+    const currentSeason = season || 2024;
+    try {
+      const result = await fetchFromProxy<TopAssist[]>('/players/top/assists', {
+        league: leagueId,
+        season: currentSeason,
+      });
+      return result?.response || result || [];
+    } catch (error) {
+      console.error('Error fetching top assists:', error);
+      return [];
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Injuries
+  // ============================================
+
+  /**
+   * Get team injuries
+   */
+  async getTeamInjuries(teamId: number): Promise<Injury[]> {
+    try {
+      const result = await fetchFromProxy<Injury[]>(`/teams/${teamId}/injuries`);
+      return result?.response || result || [];
+    } catch (error) {
+      console.error('Error fetching team injuries:', error);
+      return [];
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Transfers
+  // ============================================
+
+  /**
+   * Get transfers
+   * Note: This endpoint may not be available in all API-Football plans
+   */
+  async getTransfers(params: { team?: number; player?: number; date?: string; from?: string; to?: string }): Promise<Transfer[]> {
+    try {
+      const queryParams: Record<string, any> = {};
+      if (params.team) queryParams.team = params.team;
+      if (params.player) queryParams.player = params.player;
+      if (params.date) queryParams.date = params.date;
+      if (params.from) queryParams.from = params.from;
+      if (params.to) queryParams.to = params.to;
+
+      const result = await fetchFromProxy<Transfer[]>('/transfers', queryParams);
+      return result?.response || result || [];
+    } catch (error) {
+      // Silently handle 404 errors - transfers endpoint may not be available
+      if (error instanceof ApiFootballError && error.statusCode === 404) {
+        if (__DEV__) {
+          logger.debug('Transfers endpoint not available (404) - returning empty array');
+        }
+        return [];
+      }
+      
+      // Log other errors only in dev mode
+      if (__DEV__) {
+        logger.warn('Error fetching transfers:', error);
+      }
+      return [];
+    }
+  },
+
+  /**
+   * Get transfers by date range
+   */
+  async getTransfersByDateRange(dateRange: { from: string; to: string }): Promise<Transfer[]> {
+    try {
+      const result = await fetchFromProxy<Transfer[]>('/transfers', {
+        from: dateRange.from,
+        to: dateRange.to,
+      });
+      return result?.response || result || [];
+    } catch (error) {
+      if (__DEV__) {
+        logger.warn('Error fetching transfers by date range:', error);
+      }
+      return [];
+    }
+  },
+
+  /**
+   * Get transfers by leagues with optional date range
+   * Fetches transfers for all teams in specified leagues
+   */
+  async getTransfersByLeagues(params: { 
+    leagues?: number[]; 
+    dateRange?: { from: string; to: string } 
+  }): Promise<TransfersByLeague[]> {
+    try {
+      const queryParams: Record<string, any> = {};
+      if (params.leagues && params.leagues.length > 0) {
+        queryParams.leagues = params.leagues.join(',');
+      }
+      if (params.dateRange) {
+        queryParams.from = params.dateRange.from;
+        queryParams.to = params.dateRange.to;
+      }
+
+      const result = await fetchFromProxy<{ response: TransfersByLeague[] }>('/transfers/by-leagues', queryParams);
+      return result?.response || result || [];
+    } catch (error) {
+      if (__DEV__) {
+        logger.warn('Error fetching transfers by leagues:', error);
+      }
+      return [];
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Trophies
+  // ============================================
+
+  /**
+   * Get team trophies
+   */
+  async getTeamTrophies(teamId: number): Promise<Trophy[]> {
+    try {
+      const result = await fetchFromProxy<Trophy[]>(`/teams/${teamId}/trophies`);
+      return result?.response || result || [];
+    } catch (error) {
+      console.error('Error fetching team trophies:', error);
+      return [];
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Coaches
+  // ============================================
+
+  /**
+   * Get team coaches
+   */
+  async getTeamCoaches(teamId: number): Promise<Coach[]> {
+    try {
+      const result = await fetchFromProxy<Coach[]>(`/teams/${teamId}/coaches`);
+      return result?.response || result || [];
+    } catch (error) {
+      console.error('Error fetching team coaches:', error);
+      return [];
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Venues
+  // ============================================
+
+  /**
+   * Get venue/stadium information
+   */
+  async getVenueInfo(venueId: number): Promise<Venue | null> {
+    try {
+      const result = await fetchFromProxy<Venue>(`/venues/${venueId}`);
+      return result?.response || result || null;
+    } catch (error) {
+      console.error('Error fetching venue info:', error);
+      return null;
+    }
+  },
+
+  // ============================================
+  // NEW FEATURES - Rounds
+  // ============================================
+
+  /**
+   * Get league rounds
+   */
+  async getLeagueRounds(leagueId: number, season?: number, current?: boolean): Promise<string[]> {
+    const currentSeason = season || 2024;
+    try {
+      const params: Record<string, any> = {
+        league: leagueId,
+        season: currentSeason,
+      };
+      if (current !== undefined) params.current = current;
+
+      const result = await fetchFromProxy<string[]>('/fixtures/rounds', params);
+      return result?.response || result || [];
+    } catch (error) {
+      console.error('Error fetching league rounds:', error);
+      return [];
     }
   },
 };
