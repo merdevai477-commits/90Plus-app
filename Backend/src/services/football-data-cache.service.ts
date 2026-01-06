@@ -22,14 +22,12 @@
  * 4. Offline-capable for cached data
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
+import prisma from '../lib/prisma';
 import { footballService } from './football.service';
 import { matchCacheService } from './match-cache.service';
 import { playerCacheService } from './player-cache.service';
 import { leagueCacheService } from './league-cache.service';
-
-const prisma = new PrismaClient();
 
 // Memory cache for frequently accessed data
 interface MemoryCacheEntry<T> {
@@ -48,6 +46,9 @@ class FootballDataCacheService {
     private eventsCache = new Map<number, MemoryCacheEntry<any>>();
     private teamStatisticsCache = new Map<string, MemoryCacheEntry<any>>();
     private topScorersCache = new Map<string, MemoryCacheEntry<any>>();
+    
+    // Request deduplication for transfers
+    private pendingTransfersRequests = new Map<string, Promise<any[]>>();
     private topAssistsCache = new Map<string, MemoryCacheEntry<any>>();
     private injuriesCache = new Map<number, MemoryCacheEntry<any>>();
     private transfersCache = new Map<string, MemoryCacheEntry<any>>();
@@ -982,10 +983,130 @@ class FootballDataCacheService {
     }
 
     /**
-     * Get transfers with caching
+     * Helper function to convert API transfer to CachedTransfer format
+     */
+    private async saveTransfersToDatabase(transfers: any[]): Promise<void> {
+        try {
+            for (const transfer of transfers) {
+                if (!transfer.player?.id) continue;
+
+                for (const t of transfer.transfers || []) {
+                    const transferDate = t.date || transfer.update || new Date().toISOString().split('T')[0];
+                    
+                    // Check if transfer already exists
+                    const existing = await prisma.cachedTransfer.findFirst({
+                        where: {
+                            playerId: transfer.player.id,
+                            transferDate: transferDate,
+                            teamInId: t.teams?.in?.id || null,
+                            teamOutId: t.teams?.out?.id || null,
+                        },
+                    });
+
+                    if (!existing) {
+                        await prisma.cachedTransfer.create({
+                            data: {
+                                playerId: transfer.player.id,
+                                playerName: transfer.player.name || '',
+                                playerPhoto: transfer.player.photo || null,
+                                teamInId: t.teams?.in?.id || null,
+                                teamInName: t.teams?.in?.name || null,
+                                teamInLogo: t.teams?.in?.logo || null,
+                                teamOutId: t.teams?.out?.id || null,
+                                teamOutName: t.teams?.out?.name || null,
+                                teamOutLogo: t.teams?.out?.logo || null,
+                                transferType: t.type || null,
+                                transferDate: transferDate,
+                                transferValue: t.value ? parseFloat(t.value.toString().replace(/[^0-9.]/g, '')) : null,
+                                leagueId: transfer.league?.id || null,
+                                leagueName: transfer.league?.name || null,
+                                leagueLogo: transfer.league?.logo || null,
+                            },
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('Error saving transfers to database:', error);
+        }
+    }
+
+    /**
+     * Get transfers with caching (Database first, then Redis, then Memory, then API)
      */
     async getTransfers(params: { team?: number; player?: number; date?: string }): Promise<any[]> {
         const cacheKey = `transfers_${params.team || 'all'}_${params.player || 'all'}_${params.date || 'all'}`;
+        
+        try {
+            // Check Database first (for permanent storage)
+            const dbTransfers = await prisma.cachedTransfer.findMany({
+                where: {
+                    ...(params.player ? { playerId: params.player } : {}),
+                    ...(params.team ? { OR: [{ teamInId: params.team }, { teamOutId: params.team }] } : {}),
+                    ...(params.date ? { transferDate: params.date } : {}),
+                },
+                orderBy: { transferDate: 'desc' },
+                take: 1000, // Limit to prevent huge queries
+            });
+
+            if (dbTransfers.length > 0) {
+                logger.debug(`📦 Transfers from Database (${dbTransfers.length} records)`);
+                
+                // Convert database format to API format
+                const transfersMap = new Map<number, any>();
+                for (const dbTransfer of dbTransfers) {
+                    if (!transfersMap.has(dbTransfer.playerId)) {
+                        transfersMap.set(dbTransfer.playerId, {
+                            player: {
+                                id: dbTransfer.playerId,
+                                name: dbTransfer.playerName,
+                                photo: dbTransfer.playerPhoto,
+                            },
+                            transfers: [],
+                            league: dbTransfer.leagueId ? {
+                                id: dbTransfer.leagueId,
+                                name: dbTransfer.leagueName,
+                                logo: dbTransfer.leagueLogo,
+                            } : null,
+                            update: dbTransfer.transferDate,
+                        });
+                    }
+                    
+                    const transfer = transfersMap.get(dbTransfer.playerId)!;
+                    transfer.transfers.push({
+                        date: dbTransfer.transferDate,
+                        type: dbTransfer.transferType,
+                        teams: {
+                            in: dbTransfer.teamInId ? {
+                                id: dbTransfer.teamInId,
+                                name: dbTransfer.teamInName,
+                                logo: dbTransfer.teamInLogo,
+                            } : null,
+                            out: dbTransfer.teamOutId ? {
+                                id: dbTransfer.teamOutId,
+                                name: dbTransfer.teamOutName,
+                                logo: dbTransfer.teamOutLogo,
+                            } : null,
+                        },
+                    });
+                }
+
+                const result = Array.from(transfersMap.values());
+                
+                // Cache in Redis and Memory
+                const entry: MemoryCacheEntry<any[]> = {
+                    data: result,
+                    timestamp: Date.now(),
+                    ttl: this.TTL.TRANSFERS,
+                };
+                this.transfersCache.set(cacheKey, entry);
+                await redisCacheService.set(`transfers:${cacheKey}`, entry, this.TTL.TRANSFERS);
+                
+                return result;
+            }
+        } catch (error) {
+            logger.warn('Error querying database for transfers, falling back to cache/API:', error);
+        }
         
         // Check Redis cache
         const redisKey = `transfers:${cacheKey}`;
@@ -1003,19 +1124,44 @@ class FootballDataCacheService {
             return cached.data;
         }
 
-        // Fetch from API
-        const data = await footballService.getTransfers(params);
-        const entry: MemoryCacheEntry<any[]> = {
-            data,
-            timestamp: Date.now(),
-            ttl: this.TTL.TRANSFERS,
-        };
+        // Check for pending request (deduplication)
+        const pendingRequest = this.pendingTransfersRequests.get(cacheKey);
+        if (pendingRequest) {
+            logger.debug(`📦 Waiting for pending transfer request: ${cacheKey}`);
+            return pendingRequest;
+        }
 
-        // Store in both caches
-        this.transfersCache.set(cacheKey, entry);
-        await redisCacheService.set(redisKey, entry, this.TTL.TRANSFERS);
+        // Create new request
+        const requestPromise = (async () => {
+            try {
+                // Fetch from API
+                const data = await footballService.getTransfers(params);
+                
+                // Save to database (async, don't wait)
+                this.saveTransfersToDatabase(data).catch(err => {
+                    logger.error('Failed to save transfers to database:', err);
+                });
+                
+                const entry: MemoryCacheEntry<any[]> = {
+                    data,
+                    timestamp: Date.now(),
+                    ttl: this.TTL.TRANSFERS,
+                };
 
-        return data;
+                // Store in both caches
+                this.transfersCache.set(cacheKey, entry);
+                await redisCacheService.set(redisKey, entry, this.TTL.TRANSFERS);
+
+                return data;
+            } finally {
+                // Remove from pending requests
+                this.pendingTransfersRequests.delete(cacheKey);
+            }
+        })();
+
+        // Store pending request
+        this.pendingTransfersRequests.set(cacheKey, requestPromise);
+        return requestPromise;
     }
 
     /**

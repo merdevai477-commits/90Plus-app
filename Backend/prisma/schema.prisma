@@ -1289,3 +1289,37 @@ model PopularSearch {
   @@index([lastSearchedAt])
   @@map("popular_searches")
 }
+
+// ============================================
+// CACHED TRANSFERS (API Optimization)
+// Stores transfer data to reduce API calls
+// ============================================
+
+model CachedTransfer {
+  id            String   @id @default(cuid())
+  playerId      Int
+  playerName    String
+  playerPhoto   String?
+  teamInId      Int?
+  teamInName    String?
+  teamInLogo    String?
+  teamOutId     Int?
+  teamOutName   String?
+  teamOutLogo   String?
+  transferType  String?
+  transferDate  String
+  transferValue Float?
+  leagueId      Int?
+  leagueName    String?
+  leagueLogo    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([playerId])
+  @@index([teamInId])
+  @@index([teamOutId])
+  @@index([leagueId])
+  @@index([transferDate])
+  @@index([transferType])
+  @@map("cached_transfers")
+}

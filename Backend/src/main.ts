@@ -10,6 +10,7 @@ import { logger } from './utils/logger';
 import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
+import { transfersSyncService } from './services/transfers-sync.service';
 
 // Load environment variables
 dotenv.config();
@@ -559,6 +560,10 @@ async function startServer() {
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();
                     logger.info('✅ Background preload service started');
+                    
+                    // ✅ Start transfers sync service
+                    transfersSyncService.start();
+                    logger.info('✅ Transfers sync service started');
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
                 }
@@ -592,6 +597,7 @@ process.on('SIGINT', async () => {
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
+    transfersSyncService.stop(); // ✅ Stop transfers sync service
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
@@ -603,6 +609,7 @@ process.on('SIGTERM', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
+    transfersSyncService.stop(); // ✅ Stop transfers sync service
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
