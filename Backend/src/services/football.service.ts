@@ -137,10 +137,11 @@ class FootballService {
       this.windowStart = Date.now();
     }
 
-    // Ensure minimum delay between requests
+    // Ensure minimum delay between requests (increased for better rate limit compliance)
     const timeSinceLastRequest = now - this.lastRequestTime;
-    if (timeSinceLastRequest < this.minDelay && this.lastRequestTime > 0) {
-      await this.sleep(this.minDelay - timeSinceLastRequest);
+    const requiredDelay = this.minDelay * 2; // Double the delay for transfers
+    if (timeSinceLastRequest < requiredDelay && this.lastRequestTime > 0) {
+      await this.sleep(requiredDelay - timeSinceLastRequest);
     }
   }
 

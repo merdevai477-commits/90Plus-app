@@ -1275,12 +1275,14 @@ class FootballDataCacheService {
             const result: Array<{ leagueId: number; leagueName: string; leagueLogo?: string; transfers: any[] }> = [];
             const teamTransfersMap = new Map<number, any[]>(); // Cache transfers per team
 
-            // Process leagues in batches to avoid overwhelming the API
-            const batchSize = 5;
+            // Process leagues sequentially to avoid overwhelming the API
+            const batchSize = 1; // Process one league at a time to avoid rate limits
             for (let i = 0; i < targetLeagues.length; i += batchSize) {
                 const leagueBatch = targetLeagues.slice(i, i + batchSize);
                 
-                await Promise.all(leagueBatch.map(async (league) => {
+                // Process leagues sequentially
+                for (const league of leagueBatch) {
+                    await (async () => {
                     const leagueId = league.league?.id || league.id;
                     const leagueName = league.league?.name || league.name;
                     const leagueLogo = league.league?.logo || league.logo;
@@ -1306,48 +1308,60 @@ class FootballDataCacheService {
 
                         logger.debug(`📡 Fetching transfers for ${teamIds.length} teams in ${leagueName}...`);
 
-                        // Fetch transfers for all teams in parallel (with rate limiting)
-                        const teamTransferPromises = teamIds.map(async (teamId) => {
-                            // Check if we already have transfers for this team
-                            if (teamTransfersMap.has(teamId)) {
-                                return teamTransfersMap.get(teamId)!;
-                            }
-
-                            // Fetch transfers for this team across date range
-                            const allTeamTransfers: any[] = [];
+                        // Fetch transfers for teams sequentially to avoid rate limits
+                        const leagueTransfers: any[] = [];
+                        const teamBatchSize = 1; // Process one team at a time
+                        
+                        for (let teamIdx = 0; teamIdx < teamIds.length; teamIdx += teamBatchSize) {
+                            const teamBatch = teamIds.slice(teamIdx, teamIdx + teamBatchSize);
                             
-                            // Fetch transfers for each date (in smaller batches)
-                            const dateBatchSize = 3;
-                            for (let j = 0; j < dates.length; j += dateBatchSize) {
-                                const dateBatch = dates.slice(j, j + dateBatchSize);
-                                
-                                const datePromises = dateBatch.map(async (date) => {
-                                    try {
-                                        const transfers = await this.getTransfers({ team: teamId, date });
-                                        return transfers || [];
-                                    } catch (error) {
-                                        logger.warn(`Failed to fetch transfers for team ${teamId} on ${date}:`, error);
-                                        return [];
-                                    }
-                                });
+                            for (const teamId of teamBatch) {
+                                // Check if we already have transfers for this team
+                                if (teamTransfersMap.has(teamId)) {
+                                    leagueTransfers.push(...teamTransfersMap.get(teamId)!);
+                                    continue;
+                                }
 
-                                const dateResults = await Promise.all(datePromises);
-                                allTeamTransfers.push(...dateResults.flat());
+                                try {
+                                    // Fetch transfers for this team across date range (sequentially)
+                                    const allTeamTransfers: any[] = [];
+                                    
+                                    for (const date of dates) {
+                                        try {
+                                            const transfers = await this.getTransfers({ team: teamId, date });
+                                            if (transfers && transfers.length > 0) {
+                                                allTeamTransfers.push(...transfers);
+                                            }
+                                            
+                                            // Delay between date requests (1 second to avoid rate limits)
+                                            await new Promise(resolve => setTimeout(resolve, 1000));
+                                        } catch (error: any) {
+                                            // Check if it's a rate limit error
+                                            if (error?.message?.includes('Rate limit') || error?.message?.includes('rateLimit')) {
+                                                logger.warn(`⚠️ Rate limit hit for team ${teamId} on ${date}, waiting 60 seconds...`);
+                                                // Wait 60 seconds before continuing
+                                                await new Promise(resolve => setTimeout(resolve, 60000));
+                                                // Skip this date and continue
+                                                continue;
+                                            } else {
+                                                logger.warn(`Failed to fetch transfers for team ${teamId} on ${date}:`, error);
+                                            }
+                                        }
+                                    }
+
+                                    // Cache team transfers
+                                    teamTransfersMap.set(teamId, allTeamTransfers);
+                                    leagueTransfers.push(...allTeamTransfers);
+                                } catch (error) {
+                                    logger.warn(`Failed to fetch transfers for team ${teamId}:`, error);
+                                }
                                 
-                                // Small delay to respect rate limits
-                                if (j + dateBatchSize < dates.length) {
-                                    await new Promise(resolve => setTimeout(resolve, 200));
+                                // Delay between teams (2 seconds)
+                                if (teamIdx + teamBatchSize < teamIds.length) {
+                                    await new Promise(resolve => setTimeout(resolve, 2000));
                                 }
                             }
-
-                            // Cache team transfers
-                            teamTransfersMap.set(teamId, allTeamTransfers);
-                            return allTeamTransfers;
-                        });
-
-                        // Wait for all teams in this league
-                        const teamResults = await Promise.all(teamTransferPromises);
-                        const leagueTransfers = teamResults.flat();
+                        }
 
                         // Add league info to each transfer
                         const transfersWithLeague = leagueTransfers.map(transfer => ({
@@ -1368,9 +1382,9 @@ class FootballDataCacheService {
                             });
                         }
 
-                        // Rate limiting delay between leagues
+                        // Rate limiting delay between leagues (5 seconds)
                         if (i + batchSize < targetLeagues.length) {
-                            await new Promise(resolve => setTimeout(resolve, 300));
+                            await new Promise(resolve => setTimeout(resolve, 5000));
                         }
                     } catch (error) {
                         logger.error(`Error fetching transfers for league ${leagueId}:`, error);
