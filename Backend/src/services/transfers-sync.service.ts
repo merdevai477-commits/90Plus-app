@@ -13,7 +13,7 @@ import { footballDataCacheService } from './football-data-cache.service';
 import { isRedisConnected } from '../lib/redis';
 
 // Create transfers sync queue (only if Redis is available)
-let transfersSyncQueue: Queue | null = null;
+let transfersSyncQueue: Queue.Queue | null = null;
 
 // Initialize queue only if Redis is available
 function initializeQueue(): void {
@@ -27,27 +27,16 @@ function initializeQueue(): void {
         }
 
         const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-        transfersSyncQueue = new Queue('transfers-sync', REDIS_URL, {
-            settings: {
-                maxRetriesPerRequest: 3, // Reduce retries
-                retryStrategy: (times: number) => {
-                    if (times > 3) {
-                        logger.warn('[TransfersSync] Redis connection failed, falling back to interval-based sync');
-                        return null; // Stop retrying
-                    }
-                    return Math.min(times * 200, 2000);
-                },
-            },
-        });
+        transfersSyncQueue = new Queue('transfers-sync', REDIS_URL);
 
-        transfersSyncQueue.on('error', (error) => {
-            logger.error('[TransfersSync] Queue error:', error);
-            // Disable queue on persistent errors
-            if (error.message?.includes('max retries')) {
-                logger.warn('[TransfersSync] Disabling queue due to persistent errors, using interval-based sync');
-                transfersSyncQueue = null;
-            }
-        });
+            transfersSyncQueue.on('error', (error: Error) => {
+                logger.error('[TransfersSync] Queue error:', error);
+                // Disable queue on persistent errors
+                if (error.message?.includes('max retries')) {
+                    logger.warn('[TransfersSync] Disabling queue due to persistent errors, using interval-based sync');
+                    transfersSyncQueue = null;
+                }
+            });
 
         logger.info('[TransfersSync] ✅ Queue initialized');
     } catch (error) {
@@ -114,7 +103,7 @@ class TransfersSyncService {
 
         // Close queue if available
         if (transfersSyncQueue) {
-            transfersSyncQueue.close().catch((err) => {
+            transfersSyncQueue.close().catch((err: Error) => {
                 logger.error('[TransfersSync] Error closing queue:', err);
             });
         }
@@ -132,7 +121,7 @@ class TransfersSyncService {
         }
 
         try {
-            transfersSyncQueue.process(async (job) => {
+            transfersSyncQueue.process(async (job: Queue.Job) => {
                 const { type, dateRange } = job.data as TransfersSyncJobData;
 
                 try {
@@ -152,15 +141,15 @@ class TransfersSyncService {
                 }
             });
 
-            transfersSyncQueue.on('completed', (job, result) => {
+            transfersSyncQueue.on('completed', (job: Queue.Job, result: any) => {
                 logger.debug(`[TransfersSync] Job ${job.id} completed:`, result);
             });
 
-            transfersSyncQueue.on('failed', (job, err) => {
+            transfersSyncQueue.on('failed', (job: Queue.Job, err: Error) => {
                 logger.error(`[TransfersSync] Job ${job.id} failed:`, err);
             });
 
-            transfersSyncQueue.on('error', (error) => {
+            transfersSyncQueue.on('error', (error: Error) => {
                 logger.error('[TransfersSync] Queue error:', error);
             });
         } catch (error) {

@@ -1282,7 +1282,6 @@ class FootballDataCacheService {
                 
                 // Process leagues sequentially
                 for (const league of leagueBatch) {
-                    await (async () => {
                     const leagueId = league.league?.id || league.id;
                     const leagueName = league.league?.name || league.name;
                     const leagueLogo = league.league?.logo || league.logo;
@@ -1298,12 +1297,12 @@ class FootballDataCacheService {
                         } catch (standingsError) {
                             // Some leagues (like cups) may not have standings
                             logger.debug(`⚠️ Could not get standings for league ${leagueId}, skipping...`);
-                            return;
+                            continue;
                         }
 
                         if (teamIds.length === 0) {
                             logger.debug(`⚠️ No teams found for league ${leagueId}`);
-                            return;
+                            continue;
                         }
 
                         logger.debug(`📡 Fetching transfers for ${teamIds.length} teams in ${leagueName}...`);
@@ -1389,7 +1388,7 @@ class FootballDataCacheService {
                     } catch (error) {
                         logger.error(`Error fetching transfers for league ${leagueId}:`, error);
                     }
-                }));
+                }
             }
 
             // Cache the result
