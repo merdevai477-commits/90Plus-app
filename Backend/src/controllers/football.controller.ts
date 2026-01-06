@@ -699,12 +699,293 @@ export class FootballController {
         return;
       }
 
-      const scorers = await footballService.getTopScorers(league, season);
+      const scorers = await footballDataCacheService.getTopScorers(league, season);
 
       res.json({
         status: 'SUCCESS',
         results: scorers.length,
         response: scorers,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/players/top/assists - Get top assists/playmakers
+   */
+  static async getTopAssists(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const league = parseInt(req.query.league as string);
+      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+
+      if (isNaN(league)) {
+        res.status(400).json({ status: 'ERROR', message: 'League ID is required' });
+        return;
+      }
+
+      const assists = await footballDataCacheService.getTopAssists(league, season);
+
+      res.json({
+        status: 'SUCCESS',
+        results: assists.length,
+        response: assists,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/teams/:id/statistics - Get team statistics
+   */
+  static async getTeamStatistics(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const teamId = parseInt(req.params.id);
+      const league = req.query.league ? parseInt(req.query.league as string) : undefined;
+      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+
+      if (isNaN(teamId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
+        return;
+      }
+
+      if (!league) {
+        res.status(400).json({ status: 'ERROR', message: 'League ID is required' });
+        return;
+      }
+
+      const statistics = await footballDataCacheService.getTeamStatistics(teamId, league, season);
+
+      res.json({
+        status: 'SUCCESS',
+        results: statistics ? 1 : 0,
+        response: statistics,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/teams/:id/injuries - Get team injuries
+   */
+  static async getTeamInjuries(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const teamId = parseInt(req.params.id);
+
+      if (isNaN(teamId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
+        return;
+      }
+
+      const injuries = await footballDataCacheService.getTeamInjuries(teamId);
+
+      res.json({
+        status: 'SUCCESS',
+        results: injuries.length,
+        response: injuries,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/teams/:id/trophies - Get team trophies
+   */
+  static async getTeamTrophies(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const teamId = parseInt(req.params.id);
+
+      if (isNaN(teamId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
+        return;
+      }
+
+      const trophies = await footballDataCacheService.getTeamTrophies(teamId);
+
+      res.json({
+        status: 'SUCCESS',
+        results: trophies.length,
+        response: trophies,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/teams/:id/coaches - Get team coaches
+   */
+  static async getTeamCoaches(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const teamId = parseInt(req.params.id);
+
+      if (isNaN(teamId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
+        return;
+      }
+
+      const coaches = await footballDataCacheService.getTeamCoaches(teamId);
+
+      res.json({
+        status: 'SUCCESS',
+        results: coaches.length,
+        response: coaches,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/transfers - Get transfers
+   */
+  static async getTransfers(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const team = req.query.team ? parseInt(req.query.team as string) : undefined;
+      const player = req.query.player ? parseInt(req.query.player as string) : undefined;
+      const date = req.query.date as string | undefined;
+
+      const params: Record<string, any> = {};
+      if (team) params.team = team;
+      if (player) params.player = player;
+      if (date) params.date = date;
+
+      const transfers = await footballDataCacheService.getTransfers(params);
+
+      res.json({
+        status: 'SUCCESS',
+        results: transfers.length,
+        response: transfers,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/transfers/by-leagues - Get transfers by leagues with date range
+   */
+  static async getTransfersByLeagues(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const leaguesParam = req.query.leagues as string | undefined;
+      const fromDate = req.query.from as string | undefined;
+      const toDate = req.query.to as string | undefined;
+
+      const leagueIds = leaguesParam 
+        ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        : undefined;
+
+      const dateRange = (fromDate && toDate) 
+        ? { from: fromDate, to: toDate }
+        : undefined;
+
+      const transfersByLeagues = await footballDataCacheService.getTransfersByLeagues(leagueIds, dateRange);
+
+      const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
+
+      res.json({
+        status: 'SUCCESS',
+        results: totalTransfers,
+        leagues: transfersByLeagues.length,
+        response: transfersByLeagues,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/venues/:id - Get venue/stadium information
+   */
+  static async getVenueInfo(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const venueId = parseInt(req.params.id);
+
+      if (isNaN(venueId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid venue ID' });
+        return;
+      }
+
+      const venue = await footballDataCacheService.getVenueInfo(venueId);
+
+      res.json({
+        status: 'SUCCESS',
+        results: venue ? 1 : 0,
+        response: venue,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/fixtures/rounds - Get league rounds
+   */
+  static async getLeagueRounds(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const league = parseInt(req.query.league as string);
+      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+      const current = req.query.current === 'true';
+
+      if (isNaN(league)) {
+        res.status(400).json({ status: 'ERROR', message: 'League ID is required' });
+        return;
+      }
+
+      const rounds = await footballDataCacheService.getLeagueRounds(league, season, current);
+
+      res.json({
+        status: 'SUCCESS',
+        results: rounds.length,
+        response: rounds,
       });
     } catch (error) {
       FootballController.handleError(res, error);

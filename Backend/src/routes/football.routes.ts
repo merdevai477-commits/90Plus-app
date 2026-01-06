@@ -143,6 +143,10 @@ router.get('/h2h/cached', FootballController.getH2HWithCache);
 // Must be before /players/:id to avoid route conflicts
 router.get('/players/top/scorers', FootballController.getTopScorers);
 
+// GET /api/football/players/top/assists
+// Top assists/playmakers
+router.get('/players/top/assists', FootballController.getTopAssists);
+
 // GET /api/football/players/:id
 router.get('/players/:id', FootballController.getPlayerById);
 
@@ -154,8 +158,53 @@ router.get('/players/:id', FootballController.getPlayerById);
 // Must be before /teams/:id to avoid route conflicts
 router.get('/teams/:id/squad', FootballController.getTeamSquad);
 
+// GET /api/football/teams/:id/statistics
+// Team statistics
+router.get('/teams/:id/statistics', FootballController.getTeamStatistics);
+
+// GET /api/football/teams/:id/injuries
+// Team injuries
+router.get('/teams/:id/injuries', FootballController.getTeamInjuries);
+
+// GET /api/football/teams/:id/trophies
+// Team trophies and awards
+router.get('/teams/:id/trophies', FootballController.getTeamTrophies);
+
+// GET /api/football/teams/:id/coaches
+// Team coaches
+router.get('/teams/:id/coaches', FootballController.getTeamCoaches);
+
 // GET /api/football/teams/:id
 router.get('/teams/:id', FootballController.getTeamById);
+
+// ============================================
+// TRANSFERS ROUTES
+// ============================================
+
+// GET /api/football/transfers
+// Player transfers
+router.get('/transfers', FootballController.getTransfers);
+
+// GET /api/football/transfers/by-leagues
+// Get transfers by leagues with date range
+// Query params: leagues (comma-separated IDs), from (YYYY-MM-DD), to (YYYY-MM-DD)
+router.get('/transfers/by-leagues', FootballController.getTransfersByLeagues);
+
+// ============================================
+// VENUES ROUTES
+// ============================================
+
+// GET /api/football/venues/:id
+// Venue/stadium information
+router.get('/venues/:id', FootballController.getVenueInfo);
+
+// ============================================
+// ROUNDS ROUTES
+// ============================================
+
+// GET /api/football/fixtures/rounds
+// League rounds
+router.get('/fixtures/rounds', FootballController.getLeagueRounds);
 
 export default router;
 

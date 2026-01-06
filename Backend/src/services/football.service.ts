@@ -495,10 +495,9 @@ class FootballService {
   /**
    * Get team statistics for a season
    */
-  async getTeamStatistics(teamId: number, season?: number, league?: number): Promise<any> {
+  async getTeamStatistics(teamId: number, leagueId: number, season?: number): Promise<any> {
     const currentSeason = season || 2024;
-    const params: any = { team: teamId, season: currentSeason };
-    if (league) params.league = league;
+    const params: any = { team: teamId, league: leagueId, season: currentSeason };
     return this.fetchFromApi<any>('/teams/statistics', params);
   }
 
@@ -515,6 +514,80 @@ class FootballService {
       league: leagueId,
       season: currentSeason,
     });
+  }
+
+  /**
+   * Get top assists/playmakers for a league
+   */
+  async getTopAssists(leagueId: number, season?: number): Promise<any[]> {
+    const currentSeason = season || 2024;
+    return this.fetchFromApi<any[]>('/players/topassists', {
+      league: leagueId,
+      season: currentSeason,
+    });
+  }
+
+  /**
+   * Get team injuries
+   */
+  async getTeamInjuries(teamId: number): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/injuries', {
+      team: teamId,
+    });
+  }
+
+  /**
+   * Get transfers
+   */
+  async getTransfers(params: { team?: number; player?: number; date?: string }): Promise<any[]> {
+    const apiParams: Record<string, any> = {};
+    if (params.team) apiParams.team = params.team;
+    if (params.player) apiParams.player = params.player;
+    if (params.date) apiParams.date = params.date;
+    
+    return this.fetchFromApi<any[]>('/transfers', apiParams);
+  }
+
+  /**
+   * Get team trophies
+   */
+  async getTeamTrophies(teamId: number): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/trophies', {
+      team: teamId,
+    });
+  }
+
+  /**
+   * Get team coaches
+   */
+  async getTeamCoaches(teamId: number): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/coaches', {
+      team: teamId,
+    });
+  }
+
+  /**
+   * Get venue/stadium information
+   */
+  async getVenueInfo(venueId: number): Promise<any> {
+    const venues = await this.fetchFromApi<any[]>('/venues', {
+      id: venueId,
+    });
+    return venues && venues.length > 0 ? venues[0] : null;
+  }
+
+  /**
+   * Get league rounds
+   */
+  async getLeagueRounds(leagueId: number, season?: number, current?: boolean): Promise<string[]> {
+    const currentSeason = season || 2024;
+    const params: Record<string, any> = {
+      league: leagueId,
+      season: currentSeason,
+    };
+    if (current !== undefined) params.current = current;
+    
+    return this.fetchFromApi<string[]>('/fixtures/rounds', params);
   }
 
   /**
