@@ -3,9 +3,10 @@
     "name": "90Plus",
     "slug": "90plus",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
-    "scheme": "90plus",
+    "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -32,8 +33,7 @@
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "SCHEDULE_EXACT_ALARM"
-      ],
-      "versionCode": 2
+      ]
     },
     "web": {
       "output": "static",
@@ -56,23 +56,35 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
+          "icon": "./assets/images/90Plus.png",
           "color": "#22c55e"
         }
       ],
       "expo-video",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "minSdkVersion": 24
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "jsEngine": "hermes",
-    "optimization": {
-      "images": {
-        "allowUpscaling": false
-      }
+    "updates": {
+      "url": "https://u.expo.dev/99512023-6916-4b26-be1e-8635ec3e0338",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "sportmonksToken": "mDAf5ClZwcEKXgFCkQoSpUtoumBDl4hT5FYzF8LtAYSNsZ0i19AdekwZQcSy",

@@ -1,6 +1,7 @@
 /**
- * Premium Leagues Screen - Complete Implementation
- * All 15 mandatory features implemented
+ * Leagues Screen - 365 Days Style Design
+ * ✅ INTEGRATED: Direct backend API integration
+ * Clean, modern design inspired by 365 Days app
  * Uses react-native-reanimated, FlatList/SectionList, and optimized performance
  */
 
@@ -16,6 +17,11 @@ import {
   Share,
   ActionSheetIOS,
   Alert,
+  TouchableOpacity,
+  Text,
+  Image,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,7 +36,6 @@ import Animated, {
   FadeIn,
   SharedValue,
 } from 'react-native-reanimated';
-// Clipboard not available - using Share API only
 import * as Haptics from 'expo-haptics';
 import { logger } from '../../utils/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -54,6 +59,7 @@ import { Match } from '../../components/league-center/matchCardUtils';
 import { useHomeStore } from '../../src/store/home.store';
 import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
 import { fetchLiveMatches } from '../../components/league-center/leagueApiUtils';
+import ApiFootballService, { TopScorer, TopAssist } from '../../services/apiFootball';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -75,8 +81,8 @@ const DEFAULT_SORT: SortState = {
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Match>);
 
 /**
- * Premium Leagues Screen - Redesigned with 365-style UI
- * All 15 mandatory features implemented
+ * Leagues Screen - 365 Days Style
+ * Clean, modern design with direct backend integration
  */
 const LeaguesScreen = () => {
   const router = useRouter();
@@ -91,6 +97,14 @@ const LeaguesScreen = () => {
   const [activeTab, setActiveTab] = useState<'predictions' | 'matches'>('matches');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const [leagueView, setLeagueView] = useState<'matches' | 'scorers' | 'assists' | 'rounds'>('matches');
+  
+  // League features data
+  const [topScorers, setTopScorers] = useState<TopScorer[]>([]);
+  const [topAssists, setTopAssists] = useState<TopAssist[]>([]);
+  const [rounds, setRounds] = useState<string[]>([]);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(null);
+  const [loadingFeatures, setLoadingFeatures] = useState(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,8 +134,18 @@ const LeaguesScreen = () => {
     submitPrediction,
   } = usePredictionsStore();
 
-  // Fetch data
+  // Fetch data - Direct backend integration
   const { matches: apiMatches, loading, error, refetch } = useLeagueCenterData(selectedDate);
+  
+  // Log backend integration status
+  useEffect(() => {
+    if (apiMatches.length > 0) {
+      logger.debug('[LeaguesScreen] Matches loaded from backend', {
+        count: apiMatches.length,
+        date: selectedDate.toISOString().split('T')[0],
+      });
+    }
+  }, [apiMatches.length, selectedDate]);
 
   // Scroll position for sticky header
   const scrollY = useSharedValue(0);
@@ -200,6 +224,42 @@ const LeaguesScreen = () => {
       loadData();
     }
   }, [userId, getToken, fetchUserData, fetchUserPredictions]);
+
+  // Load league features when league is selected
+  const loadLeagueFeatures = useCallback(async (leagueId: number, season: number = 2024) => {
+    if (!leagueId) return;
+    
+    try {
+      setLoadingFeatures(true);
+      const [scorers, assists, roundsData] = await Promise.allSettled([
+        ApiFootballService.getTopScorers(leagueId, season),
+        ApiFootballService.getTopAssists(leagueId, season),
+        ApiFootballService.getLeagueRounds(leagueId, season, true),
+      ]);
+
+      if (scorers.status === 'fulfilled') setTopScorers(scorers.value);
+      if (assists.status === 'fulfilled') setTopAssists(assists.value);
+      if (roundsData.status === 'fulfilled') setRounds(roundsData.value);
+    } catch (error) {
+      logger.error('Failed to load league features:', error);
+    } finally {
+      setLoadingFeatures(false);
+    }
+  }, []);
+
+  // Auto-detect league from matches and load features when view changes
+  useEffect(() => {
+    if (apiMatches.length > 0 && leagueView !== 'matches' && !selectedLeagueId) {
+      const firstMatch = apiMatches[0];
+      const leagueId = firstMatch.league?.id;
+      if (leagueId) {
+        setSelectedLeagueId(leagueId);
+        loadLeagueFeatures(leagueId);
+      }
+    } else if (leagueView !== 'matches' && selectedLeagueId) {
+      loadLeagueFeatures(selectedLeagueId);
+    }
+  }, [leagueView, selectedLeagueId, loadLeagueFeatures, apiMatches]);
 
   // Live matches auto-refresh (30 seconds) - Feature 12
   useEffect(() => {
@@ -573,6 +633,130 @@ const LeaguesScreen = () => {
     );
   }, [storePredictions]);
 
+  // Render functions for new features
+  const renderTopScorers = () => {
+    if (loadingFeatures) {
+      return (
+        <View style={styles.featuresLoading}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+        </View>
+      );
+    }
+
+    if (topScorers.length === 0) {
+      return (
+        <View style={styles.emptyFeatures}>
+          <Text style={styles.emptyFeaturesText}>No top scorers data available</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.featuresContainer}>
+        <Text style={styles.featuresTitle}>Top Scorers</Text>
+        {topScorers.map((scorer, index) => {
+          const stats = scorer.statistics?.[0];
+          return (
+            <View key={scorer.player.id} style={styles.scorerCard}>
+              <View style={styles.scorerRank}>
+                <Text style={styles.scorerRankText}>{index + 1}</Text>
+              </View>
+              <Image source={{ uri: scorer.player.photo }} style={styles.scorerPhoto} />
+              <View style={styles.scorerInfo}>
+                <Text style={styles.scorerName}>{scorer.player.name}</Text>
+                <Text style={styles.scorerTeam}>{stats?.team?.name}</Text>
+              </View>
+              <View style={styles.scorerStats}>
+                <Text style={styles.scorerGoals}>{stats?.goals?.total || 0}</Text>
+                <Text style={styles.scorerLabel}>Goals</Text>
+              </View>
+              <View style={styles.scorerStats}>
+                <Text style={styles.scorerAssists}>{stats?.goals?.assists || 0}</Text>
+                <Text style={styles.scorerLabel}>Assists</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderTopAssists = () => {
+    if (loadingFeatures) {
+      return (
+        <View style={styles.featuresLoading}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+        </View>
+      );
+    }
+
+    if (topAssists.length === 0) {
+      return (
+        <View style={styles.emptyFeatures}>
+          <Text style={styles.emptyFeaturesText}>No top assists data available</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.featuresContainer}>
+        <Text style={styles.featuresTitle}>Top Assists / Playmakers</Text>
+        {topAssists.map((assist, index) => {
+          const stats = assist.statistics?.[0];
+          return (
+            <View key={assist.player.id} style={styles.scorerCard}>
+              <View style={styles.scorerRank}>
+                <Text style={styles.scorerRankText}>{index + 1}</Text>
+              </View>
+              <Image source={{ uri: assist.player.photo }} style={styles.scorerPhoto} />
+              <View style={styles.scorerInfo}>
+                <Text style={styles.scorerName}>{assist.player.name}</Text>
+                <Text style={styles.scorerTeam}>{stats?.team?.name}</Text>
+              </View>
+              <View style={styles.scorerStats}>
+                <Text style={styles.scorerAssists}>{stats?.goals?.assists || 0}</Text>
+                <Text style={styles.scorerLabel}>Assists</Text>
+              </View>
+              <View style={styles.scorerStats}>
+                <Text style={styles.scorerGoals}>{stats?.goals?.total || 0}</Text>
+                <Text style={styles.scorerLabel}>Goals</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderRounds = () => {
+    if (loadingFeatures) {
+      return (
+        <View style={styles.featuresLoading}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+        </View>
+      );
+    }
+
+    if (rounds.length === 0) {
+      return (
+        <View style={styles.emptyFeatures}>
+          <Text style={styles.emptyFeaturesText}>No rounds data available</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.featuresContainer}>
+        <Text style={styles.featuresTitle}>League Rounds</Text>
+        {rounds.map((round, index) => (
+          <View key={index} style={styles.roundCard}>
+            <Text style={styles.roundText}>{round}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   // Quick actions for match cards - Feature 14
   const handleMatchLongPress = useCallback(
     (match: Match) => {
@@ -757,8 +941,37 @@ const LeaguesScreen = () => {
       {/* Date Picker Strip - Feature 7 */}
       <DatePickerStrip selectedDate={selectedDate} onDateSelect={setSelectedDate} scrollY={scrollY} />
 
+      {/* League View Selector - New Features */}
+      {activeTab === 'matches' && sortedMatches.length > 0 && (
+        <View style={styles.viewSelector}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.viewSelectorScroll}>
+            {[
+              { key: 'matches', label: 'Matches', icon: 'football' },
+              { key: 'scorers', label: 'Top Scorers', icon: 'trophy' },
+              { key: 'assists', label: 'Top Assists', icon: 'football-outline' },
+              { key: 'rounds', label: 'Rounds', icon: 'calendar' },
+            ].map((view) => (
+              <TouchableOpacity
+                key={view.key}
+                style={[styles.viewButton, leagueView === view.key && styles.activeViewButton]}
+                onPress={() => {
+                  setLeagueView(view.key as any);
+                  if (view.key !== 'matches' && selectedLeagueId) {
+                    loadLeagueFeatures(selectedLeagueId);
+                  }
+                }}
+              >
+                <Text style={[styles.viewButtonText, leagueView === view.key && styles.activeViewButtonText]}>
+                  {view.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* CouponsBar - Feature 13 */}
-      {sortedMatches.length > 0 && (
+      {sortedMatches.length > 0 && leagueView === 'matches' && (
         <CouponsBar activeCoupon={activeCoupon} onCouponPress={setActiveCoupon} matchesCount={sortedMatches.length} />
       )}
 
@@ -794,40 +1007,64 @@ const LeaguesScreen = () => {
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       ) : (
-        // For matches tab, use ScrollView with CollapsibleLeagueSection
-        // since CollapsibleLeagueSection already renders matches internally
-        <Animated.ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 100 },
-          ]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#3B82F6"
-              colors={['#3B82F6']}
-            />
-          }
-          onScroll={scrollHandler}
-          scrollEventThrottle={16}
-        >
-          {groupedByLeague.map((group, groupIndex) => (
-            <CollapsibleLeagueSection
-              key={group.leagueId}
-              leagueId={group.leagueId}
-              leagueName={group.leagueName}
-              leagueLogo={group.leagueLogo}
-              matches={group.matches}
-              isFavorite={group.isFavorite}
-              onFavoriteToggle={handleFavoriteLeagueToggle}
-              onMatchPress={handleMatchPress}
-              startIndex={groupIndex * 100} // Approximate index for animations
-            />
-          ))}
-        </Animated.ScrollView>
+        // For matches tab, show different views based on leagueView state
+        leagueView === 'matches' ? (
+          <Animated.ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + 100 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#3B82F6"
+                colors={['#3B82F6']}
+              />
+            }
+            onScroll={scrollHandler}
+            scrollEventThrottle={16}
+          >
+            {groupedByLeague.map((group, groupIndex) => (
+              <CollapsibleLeagueSection
+                key={group.leagueId}
+                leagueId={group.leagueId}
+                leagueName={group.leagueName}
+                leagueLogo={group.leagueLogo}
+                matches={group.matches}
+                isFavorite={group.isFavorite}
+                onFavoriteToggle={handleFavoriteLeagueToggle}
+                onMatchPress={handleMatchPress}
+                startIndex={groupIndex * 100}
+              />
+            ))}
+          </Animated.ScrollView>
+        ) : (
+          <Animated.ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + 100 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#3B82F6"
+                colors={['#3B82F6']}
+              />
+            }
+            onScroll={scrollHandler}
+            scrollEventThrottle={16}
+          >
+            {leagueView === 'scorers' && renderTopScorers()}
+            {leagueView === 'assists' && renderTopAssists()}
+            {leagueView === 'rounds' && renderRounds()}
+          </Animated.ScrollView>
+        )
       )}
 
       {/* Filter Modal - Feature 3 */}
@@ -869,6 +1106,126 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 50,
+  },
+  viewSelector: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  viewSelectorScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  viewButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginRight: 8,
+  },
+  activeViewButton: {
+    backgroundColor: '#3B82F6',
+  },
+  viewButtonText: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  activeViewButtonText: {
+    color: '#fff',
+  },
+  featuresContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  featuresTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  featuresLoading: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyFeatures: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyFeaturesText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  scorerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  scorerRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  scorerRankText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  scorerPhoto: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  scorerInfo: {
+    flex: 1,
+  },
+  scorerName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scorerTeam: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  scorerStats: {
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  scorerGoals: {
+    color: '#3B82F6',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  scorerAssists: {
+    color: '#22c55e',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  scorerLabel: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  roundCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  roundText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

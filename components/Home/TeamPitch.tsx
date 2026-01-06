@@ -254,9 +254,13 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     title: {
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 22,
+        fontWeight: '800',
         color: COLORS.white,
+        letterSpacing: 0.5,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
     formationBadge: {
         backgroundColor: 'rgba(255,255,255,0.1)',

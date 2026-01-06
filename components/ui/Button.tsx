@@ -1,84 +1,234 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
-import { ButtonProps } from '@/types';
+/**
+ * Button Component
+ * Material Design 3 button with variants and animations
+ */
 
-const Button: React.FC<ButtonProps> = ({
-  title,
+import React from 'react';
+import { Text, StyleSheet, TextStyle, ViewStyle, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { Colors, Typography, BorderRadius, Spacing, Animation, TouchTargets } from '../../src/designSystem/designSystem';
+
+import { TouchableOpacity as RNTouchableOpacity } from 'react-native';
+const AnimatedTouchable = Animated.createAnimatedComponent(RNTouchableOpacity) as any;
+
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost';
+type ButtonSize = 'small' | 'medium' | 'large';
+
+export interface ButtonProps {
+  label: string;
+  onPress: () => void;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  disabled?: boolean;
+  loading?: boolean;
+  fullWidth?: boolean;
+  style?: ViewStyle;
+  textStyle?: TextStyle;
+  haptic?: boolean;
+}
+
+const sizeConfig = {
+  small: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    fontSize: Typography.label.small.fontSize,
+    minHeight: TouchTargets.minimum,
+  },
+  medium: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    fontSize: Typography.label.medium.fontSize,
+    minHeight: TouchTargets.comfortable,
+  },
+  large: {
+    paddingVertical: Spacing.md + 4,
+    paddingHorizontal: Spacing.xl,
+    fontSize: Typography.label.large.fontSize,
+    minHeight: TouchTargets.large,
+  },
+};
+
+export const Button: React.FC<ButtonProps> = ({
+  label,
   onPress,
   variant = 'primary',
+  size = 'medium',
   disabled = false,
   loading = false,
+  fullWidth = false,
   style,
+  textStyle,
+  haptic = true,
 }) => {
-  const buttonStyle = [
-    styles.button,
-    styles[variant],
-    disabled && styles.disabled,
-    style,
-  ];
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
 
-  const textStyle = [
-    styles.text,
-    styles[`${variant}Text`],
-    disabled && styles.disabledText,
-  ];
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  const handlePressIn = () => {
+    if (!disabled && !loading) {
+      scale.value = withSpring(0.97, Animation.spring.standard);
+      opacity.value = withTiming(0.8, { duration: Animation.duration.short });
+      if (haptic) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, Animation.spring.standard);
+    opacity.value = withTiming(1, { duration: Animation.duration.short });
+  };
+
+  const handlePress = () => {
+    if (!disabled && !loading && onPress) {
+      if (haptic) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      onPress();
+    }
+  };
+
+  const config = sizeConfig[size];
+  const isDisabled = disabled || loading;
+
+  const getButtonStyle = (): ViewStyle => {
+    const baseStyle: ViewStyle = {
+      minHeight: config.minHeight,
+      borderRadius: BorderRadius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: Spacing.sm,
+    };
+
+    if (fullWidth) {
+      baseStyle.width = '100%';
+    }
+
+    if (variant === 'primary') {
+      return baseStyle;
+    }
+
+    if (variant === 'outline') {
+      return {
+        ...baseStyle,
+        borderWidth: 1.5,
+        borderColor: Colors.primary[500],
+        backgroundColor: 'transparent',
+      };
+    }
+
+    if (variant === 'ghost') {
+      return {
+        ...baseStyle,
+        backgroundColor: 'transparent',
+      };
+    }
+
+    return baseStyle;
+  };
+
+  const getTextColor = (): string => {
+    if (variant === 'primary') {
+      return Colors.onPrimary;
+    }
+    if (variant === 'secondary') {
+      return Colors.onSecondary;
+    }
+    return Colors.primary[500];
+  };
+
+  const buttonContent = (
+    <>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color={variant === 'primary' ? Colors.onPrimary : Colors.primary[500]}
+        />
+      ) : null}
+      <Text
+        style={[
+          styles.text,
+          {
+            fontSize: config.fontSize,
+            color: isDisabled
+              ? Colors.onSurface.disabled
+              : getTextColor(),
+            fontWeight: Typography.label.medium.fontWeight,
+          },
+          textStyle,
+        ]}
+      >
+        {label}
+      </Text>
+    </>
+  );
+
+  if (variant === 'primary' && !isDisabled) {
+    return (
+      <AnimatedTouchable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={isDisabled}
+        activeOpacity={1}
+        style={[animatedStyle, style]}
+      >
+        <LinearGradient
+          colors={[Colors.primary[500], Colors.primary[600]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[
+            getButtonStyle(),
+            {
+              paddingVertical: config.paddingVertical,
+              paddingHorizontal: config.paddingHorizontal,
+            },
+          ]}
+        >
+          {buttonContent}
+        </LinearGradient>
+      </AnimatedTouchable>
+    );
+  }
 
   return (
-    <TouchableOpacity
-      style={buttonStyle}
-      onPress={onPress}
-      disabled={disabled || loading}
-      activeOpacity={0.7}
+    <AnimatedTouchable
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={isDisabled}
+      activeOpacity={1}
+      style={[
+        animatedStyle,
+        getButtonStyle(),
+        {
+          paddingVertical: config.paddingVertical,
+          paddingHorizontal: config.paddingHorizontal,
+          opacity: isDisabled ? 0.5 : 1,
+        },
+        style,
+      ]}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#007AFF'} />
-      ) : (
-        <Text style={textStyle}>{title}</Text>
-      )}
-    </TouchableOpacity>
+      {buttonContent}
+    </AnimatedTouchable>
   );
 };
 
 const styles = StyleSheet.create({
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  primary: {
-    backgroundColor: '#007AFF',
-  },
-  secondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  danger: {
-    backgroundColor: '#FF3B30',
-  },
-  disabled: {
-    backgroundColor: '#C7C7CC',
-    borderColor: '#C7C7CC',
-  },
   text: {
-    fontSize: 16,
     fontWeight: '600',
-  },
-  primaryText: {
-    color: '#fff',
-  },
-  secondaryText: {
-    color: '#007AFF',
-  },
-  dangerText: {
-    color: '#fff',
-  },
-  disabledText: {
-    color: '#8E8E93',
+    letterSpacing: 0.5,
   },
 });
-
-export default Button;

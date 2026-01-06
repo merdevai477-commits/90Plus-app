@@ -26,6 +26,7 @@ interface UserInfoProps {
     clubLogo?: string; // Club logo URL
     onEditPress?: () => void;
     socials?: SocialLinks; // روابط السوشيال ميديا
+    consecutiveLoginDays?: number; // أيام تسجيل الدخول المتتالية
 }
 
 const UserInfo = memo(function UserInfo({
@@ -41,6 +42,7 @@ const UserInfo = memo(function UserInfo({
     clubLogo,
     onEditPress,
     socials,
+    consecutiveLoginDays = 0,
 }: UserInfoProps) {
 
     const handleSocialPress = (url: string) => {
@@ -63,6 +65,22 @@ const UserInfo = memo(function UserInfo({
             >
                 <View style={styles.nameRow}>
                     <Text style={styles.name}>{name}</Text>
+                    
+                    {/* Fire Streak Badge (10+ days) */}
+                    {consecutiveLoginDays >= 10 && (
+                        <View style={styles.fireStreakBadge}>
+                            <LinearGradient
+                                colors={['#ff6b35', '#ff8c42', '#ff6b35']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.fireStreakGradient}
+                            >
+                                <Text style={styles.fireEmoji}>🔥</Text>
+                                <Text style={styles.fireStreakNumber}>{consecutiveLoginDays}</Text>
+                            </LinearGradient>
+                        </View>
+                    )}
+                    
                     {isDeveloper && (
                         <View style={styles.badgeContainer}>
                             <DeveloperBadge size={24} />
@@ -270,5 +288,36 @@ const styles = StyleSheet.create({
         height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
-    }
+    },
+    // Fire Streak Badge (10+ days)
+    fireStreakBadge: {
+        marginLeft: 8,
+        marginRight: 8,
+    },
+    fireStreakGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
+        shadowColor: '#ff6b35',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 8,
+        elevation: 6,
+        gap: 4,
+    },
+    fireEmoji: {
+        fontSize: 18,
+    },
+    fireStreakNumber: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '800',
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    },
 });

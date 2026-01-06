@@ -60,6 +60,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
 import { useFollowStore } from '../../src/store/useFollowStore';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { preloadNextVideos, isVideoPreloaded } from '../../utils/videoPreloader';
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService';
@@ -514,11 +515,12 @@ const ReportModal: React.FC<{
 
 // Main Reels Feed Component
 const ReelsFeed: React.FC = () => {
-  const params = useLocalSearchParams<{ reelId?: string }>();
+  const params = useLocalSearchParams<{ reelId?: string; commentId?: string; autoOpenComments?: string }>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
+  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Hashtag filtering
@@ -562,6 +564,12 @@ const ReelsFeed: React.FC = () => {
   // Transform backend reels to ReelData format
   const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData => {
     const followState = useFollowStore.getState();
+    
+    // Validate videoUrl
+    if (!reel.videoUrl || reel.videoUrl.trim() === '') {
+      logger.error('[ReelsFeed] Reel missing videoUrl', { reelId: reel.id });
+    }
+    
     return {
       id: reel.id,
       user: {
@@ -573,8 +581,8 @@ const ReelsFeed: React.FC = () => {
         followers: 0,
         isFollowing: followState.isFollowing(reel.user.id)
     },
-    videoUrl: reel.videoUrl,
-    thumbnail: reel.thumbnail || reel.videoUrl,
+    videoUrl: reel.videoUrl || '', // Fallback to empty string if missing
+    thumbnail: reel.thumbnail || reel.videoUrl || '',
     duration: 0,
     likes: reel.likesCount,
     views: reel.views,
@@ -595,6 +603,8 @@ const ReelsFeed: React.FC = () => {
     try {
       const token = await getToken();
       if (!token) return;
+
+      logger.debug('[ReelsFeed] Loading reels from backend', { cursor, skipCache });
 
       // Cache-first loading for initial load (Requirement 3.1)
       if (!cursor && !skipCache && !selectedHashtag) {
@@ -648,7 +658,26 @@ const ReelsFeed: React.FC = () => {
         // Load feed
         const result = await ReelsService.getFeed(token, cursor);
         if (result) {
+          // Log video URLs for debugging
+          logger.debug('[ReelsFeed] Received reels from backend', { 
+            count: result.reels.length,
+            videoUrls: result.reels.map(r => ({ 
+              id: r.id, 
+              videoUrl: r.videoUrl ? (r.videoUrl.substring(0, 50) + '...') : 'MISSING',
+              hasThumbnail: !!r.thumbnail
+            }))
+          });
+          
           const transformed = result.reels.map(transformBackendReel);
+          
+          // Validate video URLs
+          const invalidReels = transformed.filter(r => !r.videoUrl || r.videoUrl.trim() === '');
+          if (invalidReels.length > 0) {
+            logger.warn('[ReelsFeed] Found reels with invalid videoUrl', { 
+              count: invalidReels.length,
+              reelIds: invalidReels.map(r => r.id)
+            });
+          }
           
           if (cursor) {
             // Deduplicate when appending
@@ -691,6 +720,29 @@ const ReelsFeed: React.FC = () => {
     }
   }, []);
 
+  // Reload when screen comes into focus (e.g., after uploading a reel)
+  useFocusEffect(
+    useCallback(() => {
+      // Only reload if we've already loaded once (to avoid double loading on initial mount)
+      if (hasLoadedRef.current) {
+        // Small delay to ensure navigation is complete
+        const timer = setTimeout(() => {
+          logger.debug('[ReelsFeed] Screen focused, refreshing reels...');
+          setIsRefreshing(true);
+          setBackendReels([]);
+          setNextCursor(null);
+          setHasMore(true);
+          loadReelsFromBackend(undefined, true).finally(() => {
+            setIsRefreshing(false);
+            setIsInitialLoading(false);
+          });
+        }, 300);
+        
+        return () => clearTimeout(timer);
+      }
+    }, [loadReelsFromBackend])
+  );
+
   // Reload when hashtag changes
   useEffect(() => {
     if (hasLoadedRef.current) {
@@ -732,7 +784,7 @@ const ReelsFeed: React.FC = () => {
     setReels(updatedBackendReels);
   }, [reelComments, likedReelIds, backendReels]);
 
-  // Handle deep link navigation to specific reel
+  // Handle deep link navigation to specific reel and comment
   useEffect(() => {
     if (params.reelId && reels.length > 0 && flatListRef.current) {
       const reelIndex = reels.findIndex(r => r.id === params.reelId);
@@ -742,16 +794,29 @@ const ReelsFeed: React.FC = () => {
           try {
             flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
             setCurrentIndex(reelIndex);
+            setSelectedReelId(params.reelId!);
+            
+            // If commentId exists and autoOpenComments is true, open comments modal
+            if (params.commentId && params.autoOpenComments === 'true') {
+              setHighlightCommentId(params.commentId);
+              setShowComments(true);
+            }
           } catch (error) {
             // Fallback to scrollToOffset if scrollToIndex fails
             const itemHeight = SCREEN_HEIGHT;
             flatListRef.current?.scrollToOffset({ offset: reelIndex * itemHeight, animated: true });
             setCurrentIndex(reelIndex);
+            setSelectedReelId(params.reelId!);
+            
+            if (params.commentId && params.autoOpenComments === 'true') {
+              setHighlightCommentId(params.commentId);
+              setShowComments(true);
+            }
           }
         }, 500); // Small delay to ensure list is rendered
       }
     }
-  }, [params.reelId, reels]);
+  }, [params.reelId, params.commentId, params.autoOpenComments, reels]);
 
   // Load viewed reels from AsyncStorage on mount
   useEffect(() => {
@@ -1275,11 +1340,15 @@ const ReelsFeed: React.FC = () => {
       {/* Comments Modal */}
       <CommentsModal
         visible={showComments}
-        onClose={() => setShowComments(false)}
+        onClose={() => {
+          setShowComments(false);
+          setHighlightCommentId(null);
+        }}
         reelId={selectedReelId}
         comments={useMemo(() => reelComments[selectedReelId] || [], [reelComments, selectedReelId])}
         onAddComment={(comment) => handleAddComment(selectedReelId, comment)}
         onToggleLike={(commentId) => handleToggleCommentLike(selectedReelId, commentId)}
+        highlightCommentId={highlightCommentId}
       />
 
       {/* Report Modal */}

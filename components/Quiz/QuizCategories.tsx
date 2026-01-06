@@ -23,16 +23,17 @@ interface QuizCategoriesProps {
     onSelectCategory: (categoryId: string) => void;
 }
 
-// Map category names to local image resources
-const CATEGORY_IMAGES: Record<string, any> = {
+// Map category names to image URLs from server
+// All images are stored on server to reduce app size
+const CATEGORY_IMAGES: Record<string, string> = {
     'In Common': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80',
-    'Flash': require('../../assets/Quiz/Flash.png'),
-    'Who Am I?': require('../../assets/Quiz/احدذر من اللاعب.png'),
+    'Flash': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80',
+    'Who Am I?': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80',
     'High Five': 'https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800&q=80',
-    'Q&A': require('../../assets/Quiz/Mcq.png'),
+    'Q&A': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80',
     'Teammates': 'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=800&q=80',
-    'Guess the Number': require('../../assets/Quiz/Guess the numer.png'),
-    'Legends': require('../../assets/Quiz/legand.png'),
+    'Guess the Number': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80',
+    'Legends': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80',
 };
 
 export const QuizCategories: React.FC<QuizCategoriesProps> = ({ onSelectCategory }) => {

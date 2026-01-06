@@ -522,7 +522,7 @@ export default function PlayerProfileScreen() {
                                     </>
                                 )}
 
-                                {stats.cards?.red && (
+                                {stats.cards?.red != null && (
                                     <>
                                         <View style={styles.statRowDivider} />
                                         <View style={styles.statRow}>
@@ -537,7 +537,7 @@ export default function PlayerProfileScreen() {
                                     </>
                                 )}
 
-                                {stats.passes?.accuracy && (
+                                {stats.passes?.accuracy != null && (
                                     <>
                                         <View style={styles.statRowDivider} />
                                         <View style={styles.statRow}>
@@ -550,7 +550,7 @@ export default function PlayerProfileScreen() {
                                     </>
                                 )}
 
-                                {stats.shots?.on && (
+                                {stats.shots?.on != null && (
                                     <>
                                         <View style={styles.statRowDivider} />
                                         <View style={styles.statRow}>

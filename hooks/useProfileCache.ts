@@ -57,6 +57,7 @@ export interface ProfileUserData {
   clubLogo?: string;
   brandLogo?: string;
   coverImage?: string;
+  consecutiveLoginDays?: number; // أيام تسجيل الدخول المتتالية
 }
 
 // Video type for profile
@@ -226,6 +227,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       clubLogo: user.clubLogo || undefined,
       brandLogo: user.brandLogo || undefined,
       coverImage: user.coverImage || undefined,
+      consecutiveLoginDays: (user as any).consecutiveLoginDays || 0,
     };
   }, []);
 

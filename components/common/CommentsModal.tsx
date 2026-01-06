@@ -77,6 +77,7 @@ interface CommentsModalProps {
     comments: Comment[];
     onAddComment?: (comment: Comment) => void;
     onToggleLike?: (commentId: string) => void;
+    highlightCommentId?: string | null;
 }
 
 export default function CommentsModal({
@@ -99,6 +100,7 @@ export default function CommentsModal({
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const shakeAnim = useRef(new Animated.Value(0)).current;
     const loadedReelIdRef = useRef<string | null>(null);
+    const commentsListRef = useRef<FlatList>(null);
     const haptic = useHaptic();
     const { t } = useLanguage();
     const { getToken, userId: sessionUserId } = useAuth();
@@ -211,6 +213,27 @@ export default function CommentsModal({
         
         loadComments();
     }, [visible, reelId, getToken, stableComments]); // Include stableComments in dependencies
+
+    // Scroll to highlighted comment when modal opens or highlightCommentId changes
+    useEffect(() => {
+        if (visible && highlightCommentId && commentsWithReplies.length > 0 && commentsListRef.current) {
+            const commentIndex = commentsWithReplies.findIndex(c => c.id === highlightCommentId);
+            if (commentIndex >= 0) {
+                setTimeout(() => {
+                    try {
+                        commentsListRef.current?.scrollToIndex({ 
+                            index: commentIndex, 
+                            animated: true,
+                            viewPosition: 0.5 // Center the comment
+                        });
+                    } catch (error) {
+                        // Fallback if scrollToIndex fails
+                        console.warn('Failed to scroll to comment:', error);
+                    }
+                }, 300);
+            }
+        }
+    }, [visible, highlightCommentId, commentsWithReplies]);
 
     // Track comment IDs separately to detect when base comments actually change
     const commentIdsRef = useRef<string>('');
@@ -712,6 +735,7 @@ export default function CommentsModal({
         const isOwnComment = currentUserId && item.user.id && 
             String(currentUserId) === String(item.user.id);
         const showActionIcon = longPressedCommentId === item.id;
+        const isHighlighted = highlightCommentId === item.id;
 
         return (
             <View style={styles.commentContainer}>
@@ -729,7 +753,10 @@ export default function CommentsModal({
                     }}
                     delayLongPress={300}
                 >
-                    <View style={styles.commentItem}>
+                    <View style={[
+                        styles.commentItem,
+                        isHighlighted && styles.commentItemHighlighted
+                    ]}>
                         <Image
                             source={{ 
                                 uri: item.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.name || 'User')}&background=0D8ABC&color=fff`
@@ -856,11 +883,21 @@ export default function CommentsModal({
                     </View>
 
                     <FlatList
+                        ref={commentsListRef}
                         data={displayedComments}
                         keyExtractor={item => item.id}
                         renderItem={renderItem}
                         contentContainerStyle={styles.listContent}
                         showsVerticalScrollIndicator={false}
+                        onScrollToIndexFailed={(info) => {
+                            // Fallback if scroll fails
+                            setTimeout(() => {
+                                commentsListRef.current?.scrollToOffset({ 
+                                    offset: info.averageItemLength * info.index, 
+                                    animated: true 
+                                });
+                            }, 100);
+                        }}
                         onScrollBeginDrag={() => {
                             // Hide action icon when scrolling starts
                             if (longPressedCommentId) {
@@ -1035,6 +1072,13 @@ const styles = StyleSheet.create({
     },
     commentContainer: {
         marginBottom: 16,
+    },
+    commentItemHighlighted: {
+        backgroundColor: 'rgba(50, 205, 50, 0.2)',
+        borderWidth: 2,
+        borderColor: COLORS.primary,
+        borderRadius: 12,
+        padding: 8,
     },
     commentItem: {
         flexDirection: 'row',

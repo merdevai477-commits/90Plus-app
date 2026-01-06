@@ -1,130 +1,290 @@
 /**
- * Skeleton loading placeholder for GradientMatchCard
- * Maintains layout stability during loading
+ * Match Card Skeleton Component
+ * Skeleton loading placeholder for match cards using react-native-reanimated
+ * Supports both PredictionMatchCard and LiveScoreMatchCard layouts
  */
 
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  interpolate,
+  Easing,
+} from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { FadeIn } from 'react-native-reanimated';
+
+export type SkeletonType = 'prediction' | 'live';
 
 interface MatchCardSkeletonProps {
-  gradientIndex?: number;
+  type?: SkeletonType;
+  index?: number;
 }
 
-const SKELETON_GRADIENTS: [string, string][] = [
-  ['#1a1a3e', '#0d4f4f'],
-  ['#2d1b4e', '#1a4a3a'],
-  ['#1a2a4a', '#2a4a3a'],
-];
-
-const MatchCardSkeleton: React.FC<MatchCardSkeletonProps> = ({ gradientIndex = 0 }) => {
-  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+const MatchCardSkeleton: React.FC<MatchCardSkeletonProps> = ({
+  type = 'live',
+  index = 0,
+}) => {
+  const shimmer = useSharedValue(0);
 
   useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.6,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0.3,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
+    shimmer.value = withRepeat(
+      withTiming(1, {
+        duration: 1500,
+        easing: Easing.linear,
+      }),
+      -1,
+      false
     );
-    animation.start();
-    return () => animation.stop();
-  }, [pulseAnim]);
+  }, [shimmer]);
 
-  const gradientColors = SKELETON_GRADIENTS[gradientIndex % SKELETON_GRADIENTS.length];
+  const shimmerStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(shimmer.value, [0, 0.5, 1], [0.3, 0.7, 0.3]);
+    return {
+      opacity,
+    };
+  });
 
+  const SkeletonBox: React.FC<{
+    width: number | string;
+    height: number;
+    borderRadius?: number;
+    style?: any;
+  }> = ({ width, height, borderRadius = 8, style }) => {
+    return (
+      <Animated.View
+        style={[
+          {
+            width,
+            height,
+            borderRadius,
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          },
+          shimmerStyle,
+          style,
+        ]}
+      />
+    );
+  };
+
+  if (type === 'prediction') {
+    return (
+      <Animated.View
+        entering={FadeIn.delay(index * 50).springify()}
+        style={styles.container}
+      >
+        <BlurView intensity={25} tint="dark" style={styles.blurContainer}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0.08)', 'transparent', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Top Row - Status & Time */}
+          <View style={styles.topRow}>
+            <View style={styles.statusContainer}>
+              <SkeletonBox width={8} height={8} borderRadius={4} />
+              <SkeletonBox width={60} height={12} style={styles.statusTextSkeleton} />
+            </View>
+            <SkeletonBox width={50} height={14} />
+          </View>
+
+          {/* Teams Row */}
+          <View style={styles.teamsRow}>
+            <View style={styles.teamContainer}>
+              <SkeletonBox width={60} height={60} borderRadius={12} />
+              <SkeletonBox width={80} height={14} style={styles.teamNameSkeleton} />
+            </View>
+
+            <SkeletonBox width={30} height={16} />
+
+            <View style={styles.teamContainer}>
+              <SkeletonBox width={60} height={60} borderRadius={12} />
+              <SkeletonBox width={80} height={14} style={styles.teamNameSkeleton} />
+            </View>
+          </View>
+
+          {/* Prediction Buttons Row */}
+          <View style={styles.predictionButtonsRow}>
+            {[1, 2, 3].map((i) => (
+              <SkeletonBox
+                key={i}
+                width={90}
+                height={50}
+                borderRadius={12}
+                style={styles.predictionButtonSkeleton}
+              />
+            ))}
+          </View>
+
+          {/* Bottom Row - League & View Details */}
+          <View style={styles.bottomRow}>
+            <SkeletonBox width={100} height={14} />
+            <SkeletonBox width={100} height={32} borderRadius={16} />
+          </View>
+        </BlurView>
+      </Animated.View>
+    );
+  }
+
+  // Live/Finished match skeleton
   return (
-    <LinearGradient
-      colors={gradientColors}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+    <Animated.View
+      entering={FadeIn.delay(index * 50).springify()}
       style={styles.container}
     >
-      <View style={styles.matchContent}>
-        {/* Home Team Skeleton */}
-        <View style={styles.team}>
-          <Animated.View style={[styles.teamLogo, { opacity: pulseAnim }]} />
-          <Animated.View style={[styles.teamName, { opacity: pulseAnim }]} />
-        </View>
+      <LinearGradient
+        colors={['rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.02)', 'rgba(255, 255, 255, 0.04)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cardGradient}
+      >
+        <BlurView intensity={20} tint="dark" style={styles.blurContainer}>
+          {/* League Header */}
+          <View style={styles.leagueHeader}>
+            <SkeletonBox width={16} height={16} borderRadius={8} />
+            <SkeletonBox width={100} height={12} style={styles.leagueNameSkeleton} />
+          </View>
 
-        {/* Center Skeleton */}
-        <View style={styles.centerArea}>
-          <Animated.View style={[styles.liveBadge, { opacity: pulseAnim }]} />
-          <Animated.View style={[styles.score, { opacity: pulseAnim }]} />
-          <Animated.View style={[styles.minute, { opacity: pulseAnim }]} />
-        </View>
+          {/* Status Badge */}
+          <View style={styles.statusBadgeContainer}>
+            <SkeletonBox width={80} height={24} borderRadius={16} />
+          </View>
 
-        {/* Away Team Skeleton */}
-        <View style={styles.team}>
-          <Animated.View style={[styles.teamLogo, { opacity: pulseAnim }]} />
-          <Animated.View style={[styles.teamName, { opacity: pulseAnim }]} />
-        </View>
-      </View>
-    </LinearGradient>
+          {/* Teams & Score */}
+          <View style={styles.teamsRowLive}>
+            {/* Home Team */}
+            <View style={styles.teamSection}>
+              <SkeletonBox width={72} height={72} borderRadius={36} />
+              <SkeletonBox width={100} height={14} style={styles.teamNameSkeleton} />
+            </View>
+
+            {/* Score Container */}
+            <View style={styles.scoreContainer}>
+              <View style={styles.scoreRow}>
+                <SkeletonBox width={32} height={32} borderRadius={8} />
+                <SkeletonBox width={12} height={24} borderRadius={4} />
+                <SkeletonBox width={32} height={32} borderRadius={8} />
+              </View>
+            </View>
+
+            {/* Away Team */}
+            <View style={styles.teamSection}>
+              <SkeletonBox width={72} height={72} borderRadius={36} />
+              <SkeletonBox width={100} height={14} style={styles.teamNameSkeleton} />
+            </View>
+          </View>
+        </BlurView>
+      </LinearGradient>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  matchContent: {
+  blurContainer: {
+    padding: 16,
+    borderRadius: 16,
+  },
+  cardGradient: {
+    borderRadius: 16,
+  },
+  // Prediction card styles
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
   },
-  team: {
+  statusTextSkeleton: {
+    marginLeft: 4,
+  },
+  teamsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  teamContainer: {
     flex: 1,
     alignItems: 'center',
     gap: 8,
   },
-  teamLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  teamNameSkeleton: {
+    marginTop: 8,
   },
-  teamName: {
-    width: 60,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  predictionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 16,
   },
-  centerArea: {
+  predictionButtonSkeleton: {
     flex: 1,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  // Live match card styles
+  leagueHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 12,
     gap: 6,
   },
-  liveBadge: {
-    width: 50,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  leagueNameSkeleton: {
+    marginLeft: 4,
   },
-  score: {
-    width: 60,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  statusBadgeContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  minute: {
-    width: 40,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  teamsRowLive: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamSection: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 10,
+  },
+  scoreContainer: {
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });
 
 export default MatchCardSkeleton;
-

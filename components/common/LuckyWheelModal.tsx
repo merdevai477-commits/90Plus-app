@@ -139,14 +139,16 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     // بدء الدوران فوراً مع الجائزة المبدئية
     const startSpin = (prizeIndex: number) => {
       const targetAngle = 360 - (prizeIndex * segmentAngle) - (segmentAngle / 2);
-      const totalRotation = 360 * 2.5 + targetAngle; // 2.5 دورات فقط - سرعة معقولة
+      const totalRotation = 360 * 3 + targetAngle; // 3 دورات كاملة كما طلب المستخدم
 
+      // إعادة تعيين الـ animation إلى الصفر قبل البدء
       spinAnim.setValue(0);
       
+      // بدء الـ animation بعد تأكيد إعادة التعيين
       Animated.timing(spinAnim, {
         toValue: totalRotation,
-        duration: 3000, // 3 ثواني بدلاً من 5
-        easing: Easing.bezier(0.2, 0.8, 0.2, 1),
+        duration: 5000, // 5 ثواني ليكون أبطأ وأوضح - يمكن رؤية اللفات
+        easing: Easing.out(Easing.cubic), // Easing أفضل للدوران
         useNativeDriver: true,
       }).start(async () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -383,9 +385,13 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     );
   };
 
+  // Interpolation يدعم أي قيمة للدوران (حتى 3 دورات كاملة + زاوية إضافية)
+  // totalRotation = 360 * 3 + targetAngle (حيث targetAngle يمكن أن يكون حتى 360)
+  // إذن الحد الأقصى = 1080 + 360 = 1440
   const spinRotation = spinAnim.interpolate({
-    inputRange: [0, 360],
-    outputRange: ['0deg', '360deg'],
+    inputRange: [0, 1440], // يدعم حتى 3 دورات كاملة + زاوية إضافية
+    outputRange: ['0deg', '1440deg'],
+    extrapolate: 'clamp', // منع القيم خارج النطاق
   });
 
   const glowOpacity = glowAnim.interpolate({

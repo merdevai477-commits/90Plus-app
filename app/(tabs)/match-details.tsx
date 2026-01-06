@@ -14,7 +14,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent } from '../../services/apiFootball';
+import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent, Venue } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
@@ -52,7 +52,9 @@ const MatchDetailsScreen = () => {
     );
   }
 
-  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings'>('events');
+  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium'>('events');
+  const [venue, setVenue] = useState<Venue | null>(null);
+  const [venueLoading, setVenueLoading] = useState(false);
 
   const [lineups, setLineups] = useState<Lineup[]>([]);
   const [statistics, setStatistics] = useState<TeamStatistics[]>([]);
@@ -230,6 +232,20 @@ const MatchDetailsScreen = () => {
                 setStandingsError(err?.message || 'فشل تحميل الترتيب');
               })
               .finally(() => setStandingsLoading(false));
+
+            // Fetch Venue Info
+            if (details.fixture.venue?.id) {
+              setVenueLoading(true);
+              ApiFootballService.getVenueInfo(details.fixture.venue.id)
+                .then(data => {
+                  console.log('✅ Venue loaded');
+                  setVenue(data);
+                })
+                .catch(err => {
+                  console.error('❌ Venue error:', err);
+                })
+                .finally(() => setVenueLoading(false));
+            }
           } else {
             setFormLoading(false);
             setStandingsLoading(false);
@@ -690,6 +706,78 @@ const MatchDetailsScreen = () => {
     );
   };
 
+  const renderStadium = () => {
+    if (venueLoading) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#22c55e" />
+          <Text style={styles.emptyStateText}>{t.common.loading}</Text>
+        </View>
+      );
+    }
+
+    if (!venue && !fixture?.fixture.venue) {
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="business-outline" size={64} color="#333" />
+          <Text style={styles.emptyStateText}>No stadium information available</Text>
+        </View>
+      );
+    }
+
+    const venueData = venue || {
+      id: fixture?.fixture.venue?.id,
+      name: fixture?.fixture.venue?.name,
+      city: fixture?.fixture.venue?.city,
+      address: null,
+      country: null,
+      capacity: null,
+      surface: null,
+      image: null,
+    };
+
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.stadiumContainer}>
+          {venueData.image && (
+            <Image source={{ uri: venueData.image }} style={styles.stadiumImage} />
+          )}
+          <View style={styles.stadiumInfo}>
+            <Text style={styles.stadiumName}>{venueData.name || 'Unknown Stadium'}</Text>
+            {venueData.city && (
+              <View style={styles.stadiumDetail}>
+                <Ionicons name="location" size={16} color="#888" />
+                <Text style={styles.stadiumDetailText}>{venueData.city}</Text>
+                {venueData.country && <Text style={styles.stadiumDetailText}> • {venueData.country}</Text>}
+              </View>
+            )}
+            {venueData.address && (
+              <View style={styles.stadiumDetail}>
+                <Ionicons name="map" size={16} color="#888" />
+                <Text style={styles.stadiumDetailText}>{venueData.address}</Text>
+              </View>
+            )}
+            {venueData.capacity && (
+              <View style={styles.stadiumDetail}>
+                <Ionicons name="people" size={16} color="#888" />
+                <Text style={styles.stadiumDetailText}>Capacity: {venueData.capacity.toLocaleString()}</Text>
+              </View>
+            )}
+            {venueData.surface && (
+              <View style={styles.stadiumDetail}>
+                <Ionicons name="football" size={16} color="#888" />
+                <Text style={styles.stadiumDetailText}>Surface: {venueData.surface}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
+
   const renderStandings = () => {
     if (standingsLoading) {
       return (
@@ -783,6 +871,7 @@ const MatchDetailsScreen = () => {
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
+    { key: 'stadium', label: 'Stadium', icon: 'business' as const },
   ];
 
   return (
@@ -793,7 +882,7 @@ const MatchDetailsScreen = () => {
       <View style={styles.customHeader}>
         <TouchableOpacity
           style={styles.backButtonRound}
-          onPress={() => router.replace('/(tabs)/leagues')}
+          onPress={() => router.back()}
         >
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -835,6 +924,7 @@ const MatchDetailsScreen = () => {
           {activeTab === 'stats' && renderStatistics()}
           {activeTab === 'form' && renderForm()}
           {activeTab === 'standings' && renderStandings()}
+          {activeTab === 'stadium' && renderStadium()}
         </View>
       </ScrollView>
     </View>
@@ -1441,6 +1531,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     textAlign: 'center',
+  },
+  stadiumContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 20,
+    overflow: 'hidden',
+  },
+  stadiumImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  stadiumInfo: {
+    gap: 12,
+  },
+  stadiumName: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  stadiumDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stadiumDetailText: {
+    color: '#888',
+    fontSize: 14,
   },
 });
 

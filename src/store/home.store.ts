@@ -168,16 +168,24 @@ const refreshMatchesInBackground = async (
         if (favoriteIds.length > 0) {
             const allCached = await matchesBatchService.getAllCachedMatches();
             favoritedFixtures = allCached.filter(f =>
-                favoriteIds.includes(String(f.fixture.id))
+                f?.fixture?.id && favoriteIds.includes(String(f.fixture.id))
             );
         }
 
         // Combine all fixtures
         const uniqueFixturesMap = new Map<number, Fixture>();
-        favoritedFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
-        liveFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
+        favoritedFixtures.forEach(f => {
+            if (f?.fixture?.id) {
+                uniqueFixturesMap.set(f.fixture.id, f);
+            }
+        });
+        liveFixtures.forEach(f => {
+            if (f?.fixture?.id) {
+                uniqueFixturesMap.set(f.fixture.id, f);
+            }
+        });
         batchedFixtures.forEach(f => {
-            if (!uniqueFixturesMap.has(f.fixture.id)) {
+            if (f?.fixture?.id && !uniqueFixturesMap.has(f.fixture.id)) {
                 uniqueFixturesMap.set(f.fixture.id, f);
             }
         });
@@ -387,7 +395,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
                 // Get all cached matches to find favorites
                 const allCached = await matchesBatchService.getAllCachedMatches();
                 favoritedFixtures = allCached.filter(f =>
-                    favoriteIds.includes(String(f.fixture.id))
+                    f?.fixture?.id && favoriteIds.includes(String(f.fixture.id))
                 );
                 logger.debug(`⭐ Found ${favoritedFixtures.length} favorited matches`);
             }
@@ -396,14 +404,22 @@ export const useHomeStore = create<HomeState>((set, get) => ({
             const uniqueFixturesMap = new Map<number, Fixture>();
 
             // Add favorited matches first (higher priority)
-            favoritedFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
+            favoritedFixtures.forEach(f => {
+                if (f?.fixture?.id) {
+                    uniqueFixturesMap.set(f.fixture.id, f);
+                }
+            });
 
             // Add live matches
-            liveFixtures.forEach(f => uniqueFixturesMap.set(f.fixture.id, f));
+            liveFixtures.forEach(f => {
+                if (f?.fixture?.id) {
+                    uniqueFixturesMap.set(f.fixture.id, f);
+                }
+            });
 
             // Add batched matches
             batchedFixtures.forEach(f => {
-                if (!uniqueFixturesMap.has(f.fixture.id)) {
+                if (f?.fixture?.id && !uniqueFixturesMap.has(f.fixture.id)) {
                     uniqueFixturesMap.set(f.fixture.id, f);
                 }
             });

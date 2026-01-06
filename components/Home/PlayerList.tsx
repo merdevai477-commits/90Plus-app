@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
 import { Player } from '../../src/store/home.store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '../../src/i18n';
-import { Star, Trophy, User } from 'lucide-react-native';
+import { Star, User } from 'lucide-react-native';
+import { Skeleton } from '../ui/Skeleton';
+import { Colors, Typography, Spacing, BorderRadius } from '../../src/designSystem/designSystem';
 
 interface PlayerListProps {
     players: Player[];
@@ -76,71 +79,107 @@ export const PlayerList: React.FC<PlayerListProps> = ({ players, onPlayerPress, 
     
     // If no players, show placeholder cards
     const hasPlayers = players && players.length > 0;
+    const isLoading = !hasPlayers;
     const placeholderData = [
         { id: 'empty-1' }, { id: 'empty-2' }, { id: 'empty-3' }, 
         { id: 'empty-4' }, { id: 'empty-5' }
     ];
+    const skeletonData = useMemo(() => Array.from({ length: 5 }, (_, i) => ({ id: `skeleton-${i}` })), []);
     
     const renderItem = React.useCallback(({ item, index }: { item: Player | { id: string }; index: number }) => {
         if ('name' in item) {
-            return <PlayerCard player={item as Player} onPress={() => onPlayerPress(item as Player)} />; // ✅ Pass full player object
+            return (
+                <Animated.View entering={FadeInDown.delay(index * 50).springify().damping(15)}>
+                    <PlayerCard player={item as Player} onPress={() => onPlayerPress(item as Player)} />
+                </Animated.View>
+            );
         }
-        return <EmptyPlayerCard index={index} onPress={onViewAllPress} t={t} />;
+        return (
+            <Animated.View entering={FadeInDown.delay(index * 50)}>
+                <EmptyPlayerCard index={index} onPress={onViewAllPress} t={t} />
+            </Animated.View>
+        );
     }, [onPlayerPress, onViewAllPress, t]);
 
+    const renderSkeleton = React.useCallback(({ index }: { index: number }) => (
+        <Animated.View 
+            entering={FadeInDown.delay(index * 50)}
+            style={{ marginRight: Spacing.md }}
+        >
+            <Skeleton width={140} height={200} borderRadius={BorderRadius.lg} />
+        </Animated.View>
+    ), []);
+
     return (
-        <View style={styles.container}>
+        <Animated.View entering={FadeInDown.delay(200)} style={styles.container}>
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <Star size={20} color={COLORS.neonGreen} fill={COLORS.neonGreen} />
+                    <Star size={20} color={Colors.primary[500]} fill={Colors.primary[500]} />
                     <Text style={styles.title}>{t.home.playerOfWeek || 'Player of the Week'}</Text>
                 </View>
-                <TouchableOpacity onPress={onViewAllPress}>
-                    <Text style={styles.viewAll}>{t.home.viewAll}</Text>
-                </TouchableOpacity>
+                {!isLoading && (
+                    <TouchableOpacity 
+                        onPress={onViewAllPress}
+                        accessibilityLabel="View all players"
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.viewAll}>{t.home.viewAll}</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <FlatList
-                data={hasPlayers ? players : placeholderData}
-                renderItem={renderItem}
+                data={isLoading ? skeletonData : (hasPlayers ? players : placeholderData)}
+                renderItem={isLoading ? renderSkeleton : renderItem}
                 keyExtractor={(item) => item.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
-                ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+                ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
                 initialNumToRender={3}
                 windowSize={3}
                 maxToRenderPerBatch={3}
                 removeClippedSubviews={true}
+                getItemLayout={(data, index) => ({
+                    length: 140 + Spacing.md,
+                    offset: (140 + Spacing.md) * index,
+                    index,
+                })}
             />
-        </View>
+        </Animated.View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 24,
+        marginBottom: Spacing.lg,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 12,
+        paddingHorizontal: Spacing.md,
+        marginBottom: Spacing.md,
+        paddingTop: Spacing.sm,
     },
     headerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: Spacing.sm,
     },
     title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.white,
+        ...Typography.title.large,
+        color: Colors.onSurface.primary,
+        fontWeight: Typography.title.large.fontWeight,
+        letterSpacing: 0.5,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
     viewAll: {
-        fontSize: 14,
-        color: COLORS.neonGreen,
+        ...Typography.label.medium,
+        color: Colors.primary[500],
+        fontWeight: Typography.label.medium.fontWeight,
     },
     listContent: {
         paddingHorizontal: 16,
@@ -148,11 +187,17 @@ const styles = StyleSheet.create({
     cardContainer: {
         width: 140,
         height: 200,
-        borderRadius: 16,
-        padding: 12,
-        alignItems: 'center',
+        borderRadius: BorderRadius.lg,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 10,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: Colors.glass.border,
+        padding: Spacing.md,
+        alignItems: 'center',
     },
     emptyCardContainer: {
         width: 140,

@@ -1,6 +1,7 @@
 /**
  * Custom hook for managing League Center data fetching and state
  * ✅ OPTIMIZED: Cache-first pattern with background refresh
+ * ✅ INTEGRATED: Direct backend API integration
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,6 +9,7 @@ import { Match } from './matchCardUtils';
 import { fetchMatchesByDate, fetchLiveMatches } from './leagueApiUtils';
 import { cacheService } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
+import { getApiUrl } from '../../config/api.config';
 
 export interface UseLeagueCenterDataResult {
   matches: Match[];
@@ -41,7 +43,9 @@ export const useLeagueCenterData = (selectedDate: Date): UseLeagueCenterDataResu
       if (!forceRefresh) {
         const cached = await cacheService.get<Match[]>(cacheKey);
         if (cached && cached.length > 0) {
-          logger.debug(`📦 League center cache hit for ${dateString}`);
+          logger.debug(`📦 League center cache hit for ${dateString}`, {
+            cachedCount: cached.length,
+          });
           setMatches(cached);
           setLoading(false);
           
@@ -55,6 +59,12 @@ export const useLeagueCenterData = (selectedDate: Date): UseLeagueCenterDataResu
           fetchDataInBackground(selectedDate, isToday, cacheKey);
           isFetchingRef.current = false;
           return;
+        } else {
+          logger.debug(`📦 No cache found for ${dateString}`, {
+            cacheKey,
+            cachedExists: !!cached,
+            cachedLength: cached?.length || 0,
+          });
         }
       }
 
@@ -79,6 +89,18 @@ export const useLeagueCenterData = (selectedDate: Date): UseLeagueCenterDataResu
       }
 
       setMatches(fetchedMatches);
+      
+      logger.debug('[useLeagueCenterData] Fetched and set matches', {
+        count: fetchedMatches.length,
+        date: dateString,
+        isToday,
+        firstMatch: fetchedMatches[0] ? {
+          id: fetchedMatches[0].id,
+          homeTeam: fetchedMatches[0].homeTeam?.name,
+          awayTeam: fetchedMatches[0].awayTeam?.name,
+          status: fetchedMatches[0].status,
+        } : null,
+      });
       
       // Cache the results
       const cacheTTL = dateString < today 

@@ -1,13 +1,25 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, TouchableOpacity, StyleSheet, Text, AppState, AppStateStatus, Animated, Easing } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { View, TouchableOpacity, StyleSheet, Text, AppState, AppStateStatus } from 'react-native';
 import { Search, Bell, Settings } from 'lucide-react-native';
-import { COLORS } from '../reels/constants';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  interpolate,
+  Easing,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CoinsBadge } from '../common/CoinsBadge';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { NotificationService } from '../../src/services/authService';
+import { useHomeStore } from '../../src/store/home.store';
 import * as Haptics from 'expo-haptics';
+import { Colors, Elevation, BorderRadius, Spacing, Animation as AnimConfig, TouchTargets, FontWeights, BorderWidth } from '../../src/designSystem/designSystem';
 
 interface HomeHeaderProps {
   onSettingsPress: () => void;
@@ -22,11 +34,29 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [backendUnreadCount, setBackendUnreadCount] = useState(0);
   const [prevUnreadCount, setPrevUnreadCount] = useState(0);
   const appState = useRef(AppState.currentState);
   const lastFetchTime = useRef(0);
-  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useSharedValue(0);
+  
+  // Button press animations
+  const settingsScale = useSharedValue(1);
+  const searchScale = useSharedValue(1);
+  const notificationScale = useSharedValue(1);
+  
+  // Get match notifications from store
+  const { notifications: matchNotifications } = useHomeStore();
+  
+  // Calculate local unread match notifications count
+  const localUnreadCount = useMemo(() => {
+    return matchNotifications.filter(n => !n.read).length;
+  }, [matchNotifications]);
+  
+  // Total unread count = backend + local match notifications
+  const totalUnreadCount = useMemo(() => {
+    return backendUnreadCount + localUnreadCount;
+  }, [backendUnreadCount, localUnreadCount]);
 
   const fetchUnreadCount = useCallback(async () => {
     // Throttle: don't fetch more than once per minute
@@ -41,18 +71,19 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
         const count = await NotificationService.getUnreadCount(token);
         
         // إذا في إشعار جديد، اعمل haptic feedback
-        if (count > prevUnreadCount && prevUnreadCount >= 0) {
+        const newTotalCount = count + localUnreadCount;
+        if (newTotalCount > prevUnreadCount && prevUnreadCount >= 0) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
         
-        setPrevUnreadCount(unreadCount);
-        setUnreadCount(count);
+        setPrevUnreadCount(totalUnreadCount);
+        setBackendUnreadCount(count);
       }
     } catch (error) {
       // Silent fail
       console.log('Error fetching notifications:', error);
     }
-  }, [getToken, prevUnreadCount, unreadCount]);
+  }, [getToken, localUnreadCount, totalUnreadCount]);
 
   useEffect(() => {
     // Initial fetch
@@ -75,48 +106,81 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
     };
   }, [fetchUnreadCount]);
 
-  // أنيميشن النبض للدائرة الحمراء
+  // Pulse animation for notification badge (reanimated)
   useEffect(() => {
-    if (unreadCount > 0) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
+    if (totalUnreadCount > 0) {
+      pulseAnim.value = withRepeat(
+        withSequence(
+          withTiming(1, {
             duration: 800,
             easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
           }),
-          Animated.timing(pulseAnim, {
-            toValue: 0,
+          withTiming(0, {
             duration: 800,
             easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
+          })
+        ),
+        -1,
+        false
+      );
     } else {
-      pulseAnim.setValue(0);
+      pulseAnim.value = 0;
     }
-  }, [unreadCount, pulseAnim]);
+  }, [totalUnreadCount]);
 
-  const pulseScale = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.2],
+  const pulseStyle = useAnimatedStyle(() => {
+    const scale = interpolate(pulseAnim.value, [0, 1], [1, 1.2]);
+    return {
+      transform: [{ scale }],
+    };
   });
+
+  // Button press animations
+  const createButtonStyle = (scale: SharedValue<number>) => {
+    return useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }],
+    }));
+  };
+
+  const handleButtonPress = useCallback((scale: SharedValue<number>, callback: () => void) => {
+    Haptics.selectionAsync();
+    scale.value = withSequence(
+      withTiming(0.95, { duration: AnimConfig.duration.short }),
+      withTiming(1, { duration: AnimConfig.duration.short })
+    );
+    callback();
+  }, []);
+
+  const settingsStyle = createButtonStyle(settingsScale);
+  const searchStyle = createButtonStyle(searchScale);
+  const notificationStyle = createButtonStyle(notificationScale);
 
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
-      <BlurView intensity={20} tint="dark" style={styles.blurBackground} />
+      <LinearGradient
+        colors={['rgba(0,0,0,0.95)', 'rgba(0,0,0,0.85)', 'rgba(0,0,0,0.7)']}
+        style={StyleSheet.absoluteFill}
+      />
+      <BlurView intensity={30} tint="dark" style={styles.blurBackground} />
       
       <View style={styles.headerContent}>
         {/* Left: Settings */}
-        <TouchableOpacity 
-          style={styles.iconButton} 
-          onPress={onSettingsPress}
-          activeOpacity={0.7}
-        >
-          <Settings size={22} color={COLORS.white} />
-        </TouchableOpacity>
+        <Animated.View style={settingsStyle}>
+          <TouchableOpacity 
+            style={styles.iconButton} 
+            onPress={() => handleButtonPress(settingsScale, onSettingsPress)}
+            activeOpacity={1}
+            accessibilityLabel="Settings"
+            accessibilityRole="button"
+          >
+            <LinearGradient
+              colors={[Colors.glass.medium, Colors.glass.dark]}
+              style={styles.iconButtonGradient}
+            >
+              <Settings size={22} color={Colors.onSurface.primary} />
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* Right: Actions */}
         <View style={styles.rightActions}>
@@ -125,34 +189,60 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
             <CoinsBadge />
           </View>
 
-          <TouchableOpacity 
-            style={styles.iconButton} 
-            onPress={onSearchPress}
-            activeOpacity={0.7}
-          >
-            <Search size={22} color={COLORS.white} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.iconButton} 
-            onPress={onNotificationPress}
-            activeOpacity={0.7}
-          >
-            <Bell size={22} color={COLORS.white} />
-            
-            {unreadCount > 0 && (
-              <Animated.View 
-                style={[
-                  styles.notificationBadge,
-                  { transform: [{ scale: pulseScale }] }
-                ]}
+          <Animated.View style={searchStyle}>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              onPress={() => handleButtonPress(searchScale, onSearchPress)}
+              activeOpacity={1}
+              accessibilityLabel="Search"
+              accessibilityRole="button"
+            >
+              <LinearGradient
+                colors={[Colors.glass.medium, Colors.glass.dark]}
+                style={styles.iconButtonGradient}
               >
-                <Text style={styles.notificationBadgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </Animated.View>
-            )}
-          </TouchableOpacity>
+                <Search size={22} color={Colors.onSurface.primary} />
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+
+          <Animated.View style={notificationStyle}>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              onPress={() => handleButtonPress(notificationScale, onNotificationPress)}
+              activeOpacity={1}
+              accessibilityLabel={`Notifications${totalUnreadCount > 0 ? `, ${totalUnreadCount} unread` : ''}`}
+              accessibilityRole="button"
+            >
+              <LinearGradient
+                colors={[Colors.glass.medium, Colors.glass.dark]}
+                style={styles.iconButtonGradient}
+              >
+                <Bell size={22} color={Colors.onSurface.primary} />
+                
+                {totalUnreadCount > 0 && (
+                  <Animated.View 
+                    style={[styles.notificationBadge, pulseStyle]}
+                  >
+                    <View style={styles.badgeContainer}>
+                      <LinearGradient
+                        colors={[Colors.error.default, Colors.error.light]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.badgeGradient}
+                      >
+                        <Text style={styles.notificationBadgeText}>
+                          {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                        </Text>
+                      </LinearGradient>
+                      {/* Glow effect */}
+                      <View style={styles.badgeGlow} />
+                    </View>
+                  </Animated.View>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       </View>
     </View>
@@ -166,8 +256,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   blurBackground: {
     ...StyleSheet.absoluteFillObject,
@@ -176,48 +266,86 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    height: 50,
+    height: TouchTargets.comfortable,
+    minHeight: TouchTargets.comfortable,
   },
   rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
     flex: 1,
     justifyContent: 'flex-end',
   },
   coinsContainer: {
     flexShrink: 0,
-    marginRight: 4,
+    marginRight: Spacing.xs,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: TouchTargets.minimum,
+    height: TouchTargets.minimum,
+    borderRadius: BorderRadius.round,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: BorderWidth.default,
+    borderColor: Colors.glass.border,
     flexShrink: 0,
+    ...Elevation[6],
+  },
+  iconButtonGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   notificationBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.neonGreen,
+    top: -2,
+    right: -2,
+    zIndex: 10,
+  },
+  badgeContainer: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: BorderRadius.round,
+    overflow: 'visible',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
-    borderWidth: 2,
-    borderColor: COLORS.deepBlack,
-    paddingHorizontal: 4,
+    position: 'relative',
+  },
+  badgeGradient: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: BorderRadius.round,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    borderWidth: BorderWidth.thick,
+    borderColor: Colors.background.default,
+    shadowColor: Colors.error.default,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  badgeGlow: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    right: -2,
+    bottom: -2,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.error.default,
+    opacity: 0.3,
+    zIndex: -1,
   },
   notificationBadgeText: {
-    color: COLORS.deepBlack,
-    fontSize: 10,
-    fontWeight: 'bold',
+    color: Colors.onError,
+    fontSize: 11,
+    fontWeight: FontWeights.extrabold,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
 });

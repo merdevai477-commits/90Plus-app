@@ -140,16 +140,14 @@ export async function openNewQuiz(
   categoryId: string;
   questionIds: string[];
 }> {
-  // اختيار categoryId عشوائياً من quizQuestions.ts
-  const categoryIds = Object.keys(QUIZ_QUESTIONS_BY_CATEGORY);
+  // اختيار كويز الأساطير فقط (Legends) لجميع الحسابات
+  const LEGENDS_CATEGORY_ID = 'b2f62d8d-81b6-4e1e-a6c6-8f662ee4eb36';
+  const selectedCategoryId = LEGENDS_CATEGORY_ID;
   
-  if (categoryIds.length === 0) {
-    throw new Error('No quiz categories available');
+  // التحقق من وجود الأسئلة للأساطير
+  if (!QUIZ_QUESTIONS_BY_CATEGORY[selectedCategoryId]) {
+    throw new Error('Legends quiz category not found');
   }
-
-  // اختيار categoryId عشوائي
-  const randomIndex = Math.floor(Math.random() * categoryIds.length);
-  const selectedCategoryId = categoryIds[randomIndex];
 
   // جلب الأسئلة من الكاتيجوري المختارة
   const categoryQuestions = getQuestionsByCategoryId(selectedCategoryId);
@@ -169,15 +167,9 @@ export async function openNewQuiz(
   // الحصول على categoryName من mapping الباك إند
   let selectedCategoryName = categoryMapping?.[selectedCategoryId];
   
-  // إذا لم نجد في mapping، نستخدم fallback
+  // إذا لم نجد في mapping، نستخدم اسم "Legends" مباشرة
   if (!selectedCategoryName) {
-    // محاولة البحث في QUIZ_CATEGORIES (لكن لا يوجد mapping مباشر)
-    if (QUIZ_CATEGORIES.length > 0) {
-      const randomCategoryIndex = Math.floor(Math.random() * QUIZ_CATEGORIES.length);
-      selectedCategoryName = QUIZ_CATEGORIES[randomCategoryIndex].name;
-    } else {
-      selectedCategoryName = selectedCategoryId; // استخدام categoryId كاسم
-    }
+    selectedCategoryName = 'Legends'; // اسم كويز الأساطير
   }
 
   // حفظ الحالة الجديدة

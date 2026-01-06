@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -25,6 +25,7 @@ import LuckyWheelModal from '../../components/common/LuckyWheelModal';
 // Username is now auto-set from email, no modal needed
 import { useHomeStore } from '../../src/store/home.store';
 import { COLORS } from '../../components/reels/constants';
+import { Colors as DesignColors, Spacing } from '../../src/designSystem/designSystem';
 import { useHapticFeedback } from '../../components/leagues/HapticFeedback';
 import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import { globalState } from '../../globalState';
@@ -32,6 +33,7 @@ import { logger } from '../../utils/logger';
 import { useTranslation } from '../../src/i18n';
 import { getApiUrl } from '../../config/api.config';
 import { getDailyQuizStatus, DailyQuizStatus } from '../../services/quizApi';
+import { usePredictionsStore } from '../../src/store/usePredictionsStore';
 
 const API_URL = getApiUrl();
 
@@ -43,7 +45,12 @@ export default function HomeScreen() {
   const [searchVisible, setSearchVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUsername, setCurrentUsername] = useState('');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const [loginStreak, setLoginStreak] = useState<number>(0);
+  const [remainingPredictions, setRemainingPredictions] = useState<number>(5);
+  const [userRank, setUserRank] = useState<number | null>(null);
   const [luckyWheelVisible, setLuckyWheelVisible] = useState(false);
+  const isLoadingRef = useRef(false);
   const [spinWheelAvailable, setSpinWheelAvailable] = useState(true);
   const [nextSpinTime, setNextSpinTime] = useState<Date | undefined>(undefined);
   const [dailyQuizStatus, setDailyQuizStatus] = useState<DailyQuizStatus | null>(null);
@@ -91,6 +98,79 @@ export default function HomeScreen() {
     }
   }, [getToken]);
 
+  // جلب رتبة المستخدم من الباك إند
+  const fetchUserRank = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token || !isSignedIn) return;
+
+      const response = await fetch(`${API_URL}/reels/rankings/user-rank`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'SUCCESS' && data.data) {
+          // الحصول على أول رتبة متاحة (views, shares, predictions, comments)
+          const rank = data.data.views || data.data.shares || data.data.predictions || data.data.comments || null;
+          setUserRank(rank);
+        }
+      }
+    } catch (error) {
+      logger.error('Error fetching user rank:', error);
+      setUserRank(null);
+    }
+  }, [getToken, isSignedIn]);
+
+  // جلب بيانات المستخدم من الباك إند (username, avatar, login streak)
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token || !isSignedIn) return;
+
+      const response = await fetch(`${API_URL}/clerk/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'SUCCESS' && data.data?.user) {
+          const userData = data.data.user;
+          
+          // تحديث username
+          if (userData.username) {
+            setCurrentUsername(userData.username);
+            // تحديث globalState أيضاً
+            if (globalState.userProfile) {
+              globalState.userProfile.username = userData.username;
+            }
+          }
+          
+          // تحديث avatar
+          if (userData.avatar) {
+            setUserAvatar(userData.avatar);
+            if (globalState.userProfile) {
+              globalState.userProfile.avatar = userData.avatar;
+            }
+          }
+          
+          // تحديث login streak
+          if (userData.consecutiveLoginDays !== undefined) {
+            setLoginStreak(userData.consecutiveLoginDays || 0);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error fetching user profile:', error);
+      // Fallback to Clerk user data
+      if (user?.primaryEmailAddress?.emailAddress) {
+        const emailUsername = user.primaryEmailAddress.emailAddress.split('@')[0];
+        setCurrentUsername(globalState.userProfile?.username || emailUsername);
+        setUserAvatar(user.imageUrl || null);
+      }
+    }
+  }, [getToken, isSignedIn, user]);
+
   const {
     userMode,
     matches,
@@ -101,7 +181,11 @@ export default function HomeScreen() {
     fetchRankingsData,
     setUserMode,
     toggleFavorite,
+    loadingMatches,
+    loadingRankings,
   } = useHomeStore();
+
+  const { remainingPredictions: predictionsRemaining, fetchUserData: fetchPredictionsData } = usePredictionsStore();
 
   // Set username automatically from email (no popup needed)
   useEffect(() => {
@@ -151,68 +235,178 @@ export default function HomeScreen() {
   // 🔔 Monitor favorited matches for live events
   useMatchEventsMonitor();
 
-  // Auto-refresh when screen comes into focus
+  // تحديث remaining predictions عند تغيير predictionsRemaining
+  useEffect(() => {
+    setRemainingPredictions(predictionsRemaining);
+  }, [predictionsRemaining]);
+
+  // Store functions in refs to prevent re-renders
+  const fetchUserProfileRef = useRef(fetchUserProfile);
+  const fetchSpinWheelStatusRef = useRef(fetchSpinWheelStatus);
+  const fetchDailyQuizStatusRef = useRef(fetchDailyQuizStatus);
+  const fetchUserRankRef = useRef(fetchUserRank);
+  const fetchPredictionsDataRef = useRef(fetchPredictionsData);
+  const fetchHomeDataRef = useRef(fetchHomeData);
+  const fetchRankingsDataRef = useRef(fetchRankingsData);
+  const getTokenRef = useRef(getToken);
+  const setUserModeRef = useRef(setUserMode);
+  const lastLoadTimeRef = useRef(0);
+  const LOAD_THROTTLE_MS = 5000; // 5 seconds minimum between loads
+  
+  // Update refs when functions change
+  useEffect(() => {
+    fetchUserProfileRef.current = fetchUserProfile;
+    fetchSpinWheelStatusRef.current = fetchSpinWheelStatus;
+    fetchDailyQuizStatusRef.current = fetchDailyQuizStatus;
+    fetchUserRankRef.current = fetchUserRank;
+    fetchPredictionsDataRef.current = fetchPredictionsData;
+    fetchHomeDataRef.current = fetchHomeData;
+    fetchRankingsDataRef.current = fetchRankingsData;
+    getTokenRef.current = getToken;
+    setUserModeRef.current = setUserMode;
+  }, [fetchUserProfile, fetchSpinWheelStatus, fetchDailyQuizStatus, fetchUserRank, fetchPredictionsData, fetchHomeData, fetchRankingsData, getToken, setUserMode]);
+
+  // Sync userMode separately to avoid re-render loop
+  useEffect(() => {
+    const shouldBeUser = globalState.userType !== 'guest';
+    if (shouldBeUser && userMode !== 'user') {
+      setUserMode('user');
+    } else if (!shouldBeUser && userMode !== 'guest') {
+      setUserMode('guest');
+    }
+  }, [userMode, setUserMode]);
+
+  // Auto-refresh when screen comes into focus - FIXED: No infinite loop
   useFocusEffect(
     useCallback(() => {
-      // Removed console.log for production
+      // Throttle: Don't load if we just loaded recently
+      const now = Date.now();
+      if (now - lastLoadTimeRef.current < LOAD_THROTTLE_MS) {
+        return;
+      }
+      
+      // تجنب التحميل المتكرر
+      if (isLoadingRef.current) return;
+      
+      isLoadingRef.current = true;
+      lastLoadTimeRef.current = now;
+      let isMounted = true;
+      let abortController = new AbortController();
       
       const loadData = async () => {
-        const token = await getToken();
-        // ✅ FIX: Load data in parallel for faster loading
-        await Promise.all([
-          fetchHomeData(token),
-          fetchRankingsData(token),
-          fetchSpinWheelStatus(),
-          fetchDailyQuizStatus(),
-        ]);
+        if (!isMounted || abortController.signal.aborted) return;
+        
+        try {
+          const token = await getTokenRef.current();
+          if (!token || abortController.signal.aborted) {
+            if (isMounted) isLoadingRef.current = false;
+            return;
+          }
+          
+          // ✅ Load critical data first (user profile, home data)
+          // Then load secondary data in parallel
+          const criticalPromises = [
+            fetchHomeDataRef.current(token).catch(err => {
+              logger.error('Error fetching home data:', err);
+              return null;
+            }),
+            fetchUserProfileRef.current().catch(err => {
+              logger.error('Error fetching user profile:', err);
+              return null;
+            }),
+          ];
+          
+          // ✅ Load secondary data in parallel (non-blocking)
+          const secondaryPromises = [
+            fetchRankingsDataRef.current(token).catch(err => {
+              logger.error('Error fetching rankings:', err);
+              return null;
+            }),
+            fetchSpinWheelStatusRef.current().catch(err => {
+              logger.error('Error fetching spin status:', err);
+              return null;
+            }),
+            fetchDailyQuizStatusRef.current().catch(err => {
+              logger.error('Error fetching quiz status:', err);
+              return null;
+            }),
+            fetchPredictionsDataRef.current(token).catch(err => {
+              logger.error('Error fetching predictions:', err);
+              return null;
+            }),
+            fetchUserRankRef.current().catch(err => {
+              logger.error('Error fetching user rank:', err);
+              return null;
+            }),
+          ];
+          
+          // ✅ Load critical data first, then secondary
+          await Promise.all(criticalPromises);
+          
+          // ✅ Load secondary data without blocking
+          Promise.all(secondaryPromises).catch(() => {
+            // Silent fail for secondary data
+          });
+          
+        } catch (error) {
+          logger.error('Error loading home screen data:', error);
+        } finally {
+          if (isMounted && !abortController.signal.aborted) {
+            isLoadingRef.current = false;
+          }
+        }
       };
       
       loadData();
 
-      // Update username from globalState (in case it changed in Profile)
-      // Priority: globalState.userProfile.username > globalState.username > email-based username
-      const email = user?.primaryEmailAddress?.emailAddress || '';
-      const emailUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
-      
-      const displayUsername = globalState.userProfile?.username 
-        || globalState.username 
-        || emailUsername;
-      
-      if (displayUsername) {
-        setCurrentUsername(displayUsername);
-      }
-
-      // Sync userMode with globalState
-      const shouldBeUser = globalState.userType !== 'guest';
-      if (shouldBeUser && userMode !== 'user') {
-        setUserMode('user');
-      } else if (!shouldBeUser && userMode !== 'guest') {
-        setUserMode('guest');
-      }
-    }, [])
+      return () => {
+        isMounted = false;
+        abortController.abort();
+        isLoadingRef.current = false;
+      };
+    }, []) // Empty dependency array - uses refs only
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
+    try {
     const token = await getToken();
+      // ✅ Refresh critical data only for pull-to-refresh (faster)
     await Promise.all([
-      fetchHomeData(token),
-      fetchRankingsData(token),
+        fetchHomeDataRef.current(token).catch(err => {
+          logger.error('Refresh error:', err);
+          return null;
+        }),
+        fetchRankingsDataRef.current(token).catch(err => {
+          logger.error('Refresh error:', err);
+          return null;
+        }),
+        fetchUserProfileRef.current().catch(err => {
+          logger.error('Refresh error:', err);
+          return null;
+        }),
     ]);
+    } catch (error) {
+      logger.error('Error refreshing home screen:', error);
+    } finally {
     setRefreshing(false);
+    }
   };
 
-  const handleSettingsPress = () => {
-    router.push('/settings');
-  };
+  const handleSettingsPress = useCallback(() => {
+    haptic.selection();
+    router.push('/(tabs)/settings');
+  }, [router, haptic]);
 
-  const handleSearchPress = () => {
+  const handleSearchPress = useCallback(() => {
+    haptic.selection();
     setSearchVisible(true);
-  };
+  }, [haptic]);
 
-  const handleNotificationPress = () => {
+  const handleNotificationPress = useCallback(() => {
+    haptic.selection();
     router.push('/notifications');
-  };
+  }, [router, haptic]);
 
   const handleSearchResult = (result: SearchResult) => {
     setSearchVisible(false);
@@ -261,10 +455,11 @@ export default function HomeScreen() {
       <StatusBar style="light" />
 
       <LinearGradient
-        colors={[COLORS.deepBlack, '#0a1a0a', COLORS.deepBlack]}
+        colors={[DesignColors.background.default, DesignColors.surface.default, DesignColors.surface.bright, DesignColors.background.default]}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        locations={[0, 0.3, 0.7, 1]}
       />
 
       <HomeHeader
@@ -278,14 +473,15 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: insets.top + 80,
-          paddingBottom: 100
+          paddingBottom: Spacing['3xl'] + Spacing.xl
         }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={COLORS.neonGreen}
-            colors={[COLORS.neonGreen]}
+            tintColor={DesignColors.primary[500]}
+            colors={[DesignColors.primary[500]]}
+            progressViewOffset={insets.top + 80}
           />
         }
       >
@@ -298,12 +494,13 @@ export default function HomeScreen() {
           onQuizPress={() => router.push('/(tabs)/quiz')}
           onRankPress={() => router.push('/(tabs)/rank')}
           username={currentUsername}
-          predictionsCount={5}
+          userAvatar={userAvatar}
+          predictionsCount={remainingPredictions}
           streakDays={globalState.userProfile?.stats?.predictions || 0}
-          userRank={globalState.userProfile?.stats?.level || 0}
+          userRank={userRank || 0}
           spinWheelAvailable={spinWheelAvailable}
           nextSpinTime={nextSpinTime}
-          loginStreak={(globalState.userProfile as any)?.consecutiveLoginDays || 0}
+          loginStreak={loginStreak}
           dailyQuizStatus={dailyQuizStatus}
         />
 
@@ -318,6 +515,7 @@ export default function HomeScreen() {
           videos={videos}
           onVideoPress={(id) => router.push('/reels')}
           onViewAllPress={() => router.push('/reels')}
+          isLoading={loadingRankings} // Use loading state from store
         />
 
         <PlayerList
@@ -374,7 +572,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.deepBlack,
+    backgroundColor: DesignColors.background.default,
   },
   scrollView: {
     flex: 1,

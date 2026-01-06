@@ -259,6 +259,28 @@ export default function RootLayout() {
     };
   }, []);
 
+  // Check app version on mount
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const { checkAppVersion, showUpdateDialog, showMaintenanceDialog } = await import('../services/appVersionService');
+        const versionInfo = await checkAppVersion();
+        
+        if (versionInfo) {
+          if (versionInfo.maintenance) {
+            showMaintenanceDialog(versionInfo);
+          } else if (versionInfo.needsUpdate) {
+            showUpdateDialog(versionInfo);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to check app version:', error);
+      }
+    };
+    
+    checkVersion();
+  }, []);
+
   useEffect(() => {
     // 1. Configure Audio/Video
     configureAudioVideo();

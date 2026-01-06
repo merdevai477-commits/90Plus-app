@@ -1,14 +1,19 @@
-import React from 'react';
-import { View, Text, FlatList, StyleSheet, Image, TouchableOpacity, ImageBackground } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
 import { Video } from '../../src/store/home.store';
-import { Play, Video as VideoIcon, Upload, TrendingUp } from 'lucide-react-native';
+import { Play, Upload, TrendingUp } from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Skeleton } from '../ui/Skeleton';
+import { Colors, Typography, Spacing, BorderRadius } from '../../src/designSystem/designSystem';
 
 interface VideoListProps {
     videos: Video[];
     onVideoPress: (videoId: string) => void;
+    isLoading?: boolean; // Separate loading state
+    onViewAllPress?: () => void;
 }
 
 // Empty State Placeholder Card
@@ -62,76 +67,149 @@ const VideoCard = React.memo(({ video, onPress }: { video: Video; onPress: () =>
     </TouchableOpacity>
 ));
 
-export const VideoList: React.FC<VideoListProps & { onViewAllPress?: () => void }> = ({ videos, onVideoPress, onViewAllPress }) => {
+export const VideoList: React.FC<VideoListProps> = ({ videos, onVideoPress, onViewAllPress, isLoading = false }) => {
     const { t } = useTranslation();
     
-    // If no videos, show placeholder cards
+    // Separate loading state from empty state
     const hasVideos = videos && videos.length > 0;
+    const isEmpty = !isLoading && !hasVideos; // Only empty if not loading and no videos
+    
     const placeholderData = [{ id: 'empty-1' }, { id: 'empty-2' }, { id: 'empty-3' }];
+    const skeletonData = useMemo(() => Array.from({ length: 3 }, (_, i) => ({ id: `skeleton-${i}` })), []);
     
     const renderItem = React.useCallback(({ item, index }: { item: Video | { id: string }; index: number }) => {
         if ('title' in item) {
-            return <VideoCard video={item as Video} onPress={() => onVideoPress(item.id)} />;
+            return (
+                <Animated.View entering={FadeInDown.delay(index * 50).springify().damping(15)}>
+                    <VideoCard video={item as Video} onPress={() => onVideoPress(item.id)} />
+                </Animated.View>
+            );
         }
-        return <EmptyVideoCard index={index} onPress={() => onViewAllPress?.()} t={t} />;
+        return (
+            <Animated.View entering={FadeInDown.delay(index * 50)}>
+                <EmptyVideoCard index={index} onPress={() => onViewAllPress?.()} t={t} />
+            </Animated.View>
+        );
     }, [onVideoPress, onViewAllPress, t]);
 
+    const renderSkeleton = React.useCallback(({ index }: { index: number }) => (
+        <Animated.View 
+            entering={FadeInDown.delay(index * 50)}
+            style={{ marginRight: Spacing.md }}
+        >
+            <Skeleton width={120} height={200} borderRadius={BorderRadius.md} />
+        </Animated.View>
+    ), []);
+
     return (
-        <View style={styles.container}>
+        <Animated.View entering={FadeInDown.delay(150)} style={styles.container}>
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <TrendingUp size={20} color={COLORS.neonGreen} />
+                    <TrendingUp size={20} color={Colors.primary[500]} />
                     <Text style={styles.title}>{t.home.trendingReels || 'Trending Reels'}</Text>
                 </View>
-                <TouchableOpacity onPress={onViewAllPress}>
-                    <Text style={styles.viewAll}>{t.home.viewAll}</Text>
-                </TouchableOpacity>
+                {!isLoading && hasVideos && (
+                    <TouchableOpacity 
+                        onPress={onViewAllPress}
+                        accessibilityLabel="View all videos"
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.viewAll}>{t.home.viewAll}</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
-            <FlatList
-                data={hasVideos ? videos : placeholderData}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-                ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
-                initialNumToRender={3}
-                windowSize={3}
-                maxToRenderPerBatch={3}
-                removeClippedSubviews={true}
-            />
-        </View>
+            {isLoading ? (
+                <FlatList
+                    data={skeletonData}
+                    renderItem={renderSkeleton}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.listContent}
+                    ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
+                    initialNumToRender={3}
+                    windowSize={3}
+                    maxToRenderPerBatch={3}
+                    removeClippedSubviews={true}
+                    getItemLayout={(data, index) => ({
+                        length: 120 + Spacing.md,
+                        offset: (120 + Spacing.md) * index,
+                        index,
+                    })}
+                />
+            ) : hasVideos ? (
+                <FlatList
+                    data={videos}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.listContent}
+                    ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
+                    initialNumToRender={3}
+                    windowSize={3}
+                    maxToRenderPerBatch={3}
+                    removeClippedSubviews={true}
+                    getItemLayout={(data, index) => ({
+                        length: 120 + Spacing.md,
+                        offset: (120 + Spacing.md) * index,
+                        index,
+                    })}
+                />
+            ) : (
+                // Empty state - show placeholder cards with encouraging messages
+                <FlatList
+                    data={placeholderData}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.listContent}
+                    ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
+                    initialNumToRender={3}
+                    windowSize={3}
+                    maxToRenderPerBatch={3}
+                    removeClippedSubviews={true}
+                />
+            )}
+        </Animated.View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 24,
+        marginBottom: Spacing.lg,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 12,
+        paddingHorizontal: Spacing.md,
+        marginBottom: Spacing.md,
+        paddingTop: Spacing.sm,
     },
     headerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: Spacing.sm,
     },
     title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.white,
+        ...Typography.title.large,
+        color: Colors.onSurface.primary,
+        fontWeight: Typography.title.large.fontWeight,
+        letterSpacing: 0.5,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
     viewAll: {
-        fontSize: 14,
-        color: COLORS.neonGreen,
+        ...Typography.label.medium,
+        color: Colors.primary[500],
+        fontWeight: Typography.label.medium.fontWeight,
     },
     listContent: {
-        paddingHorizontal: 16,
+        paddingHorizontal: Spacing.md,
     },
     cardContainer: {
         width: 120,
@@ -188,8 +266,8 @@ const styles = StyleSheet.create({
     },
     uploadHintText: {
         fontSize: 10,
-        color: COLORS.neonGreen,
-        fontWeight: '600',
+        color: Colors.primary[500],
+        fontWeight: Typography.label.small.fontWeight,
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
@@ -226,9 +304,9 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     videoTitle: {
-        fontSize: 12,
-        color: COLORS.white,
-        fontWeight: '600',
-        marginBottom: 4,
+        ...Typography.body.small,
+        color: Colors.onSurface.primary,
+        fontWeight: Typography.body.small.fontWeight,
+        marginBottom: Spacing.xs,
     },
 });

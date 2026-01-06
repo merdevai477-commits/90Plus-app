@@ -7,6 +7,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   FadeInDown,
@@ -46,6 +47,7 @@ interface WelcomeSectionProps {
   onQuizPress?: () => void;
   onRankPress?: () => void;
   username?: string;
+  userAvatar?: string | null;
   predictionsCount?: number;
   streakDays?: number;
   userRank?: number;
@@ -69,118 +71,29 @@ interface SlideData {
   badge?: string;
 }
 
-// 🔥 Fire Streak Component
+// 🔥 Fire Streak Component - Simple Design (No Glow)
 const FireStreak: React.FC<{ days: number; dayLabel: string }> = ({ days, dayLabel }) => {
-  const flameAnim1 = useSharedValue(0);
-  const flameAnim2 = useSharedValue(0);
-  const flameAnim3 = useSharedValue(0);
-  const glowAnim = useSharedValue(0);
-  const scaleAnim = useSharedValue(1);
-
-  useEffect(() => {
-    // Flame animations with different timings
-    flameAnim1.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 400, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
-    );
-    
-    flameAnim2.value = withDelay(150,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1,
-        true
-      )
-    );
-    
-    flameAnim3.value = withDelay(300,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: 350, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: 350, easing: Easing.inOut(Easing.ease) })
-        ),
-        -1,
-        true
-      )
-    );
-
-    // Glow pulse
-    glowAnim.value = withRepeat(
-      withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true
-    );
-
-    // Scale bounce
-    scaleAnim.value = withRepeat(
-      withSequence(
-        withSpring(1.1, { damping: 8 }),
-        withSpring(1, { damping: 8 })
-      ),
-      -1,
-      true
-    );
-  }, []);
-
-  const flame1Style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(flameAnim1.value, [0, 1], [0, -8]) },
-      { scale: interpolate(flameAnim1.value, [0, 1], [1, 1.15]) },
-    ],
-    opacity: interpolate(flameAnim1.value, [0, 0.5, 1], [0.8, 1, 0.8]),
-  }));
-
-  const flame2Style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(flameAnim2.value, [0, 1], [0, -6]) },
-      { scale: interpolate(flameAnim2.value, [0, 1], [0.9, 1.1]) },
-    ],
-    opacity: interpolate(flameAnim2.value, [0, 0.5, 1], [0.7, 1, 0.7]),
-  }));
-
-  const flame3Style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(flameAnim3.value, [0, 1], [0, -10]) },
-      { scale: interpolate(flameAnim3.value, [0, 1], [0.85, 1.2]) },
-    ],
-    opacity: interpolate(flameAnim3.value, [0, 0.5, 1], [0.6, 0.9, 0.6]),
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(glowAnim.value, [0, 1], [0.3, 0.7]),
-    transform: [{ scale: interpolate(glowAnim.value, [0, 1], [1, 1.3]) }],
-  }));
-
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scaleAnim.value }],
-  }));
-
   if (days <= 0) return null;
 
   return (
-    <Animated.View style={[styles.fireContainer, containerStyle]}>
-      {/* Glow effect */}
-      <Animated.View style={[styles.fireGlow, glowStyle]} />
-      
-      {/* Fire layers */}
-      <View style={styles.fireStack}>
-        <Animated.Text style={[styles.fireEmoji, styles.fireLayer3, flame3Style]}>🔥</Animated.Text>
-        <Animated.Text style={[styles.fireEmoji, styles.fireLayer2, flame2Style]}>🔥</Animated.Text>
-        <Animated.Text style={[styles.fireEmoji, styles.fireLayer1, flame1Style]}>🔥</Animated.Text>
-      </View>
+    <View style={styles.fireContainerNew}>
+      {/* Main container with gradient */}
+      <LinearGradient
+        colors={['#ff6b35', '#ff8c42', '#ff6b35']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.fireGradient}
+      >
+        {/* Fire emoji */}
+        <Text style={styles.fireEmojiNew}>🔥</Text>
       
       {/* Streak count */}
-      <View style={styles.streakBadge}>
-        <Text style={styles.streakNumber}>{days}</Text>
-        <Text style={styles.streakLabel}>{dayLabel}</Text>
+        <View style={styles.streakBadgeNew}>
+          <Text style={styles.streakNumberNew}>{days}</Text>
+          <Text style={styles.streakLabelNew}>{dayLabel}</Text>
       </View>
-    </Animated.View>
+      </LinearGradient>
+    </View>
   );
 };
 
@@ -237,6 +150,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   onQuizPress,
   onRankPress,
   username: propUsername,
+  userAvatar: propUserAvatar,
   predictionsCount = 0,
   streakDays = 0,
   userRank = 0,
@@ -423,13 +337,17 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     },
     {
       type: 'rank',
-      gradient: ['#f093fb', '#f5576c', '#eb3349'],
-      accentColor: '#f5576c',
+      gradient: userRank > 0 
+        ? ['#f093fb', '#f5576c', '#eb3349']
+        : ['#2c3e50', '#34495e', '#2c3e50'],
+      accentColor: userRank > 0 ? '#f5576c' : '#7f8c8d',
       icon: 'trophy',
       title: userRank > 0 ? `${t.home.rankPosition} #${userRank}` : t.home.ranking,
-      subtitle: t.home.competeWithBest,
-      buttonText: t.home.seeYourRank,
-      onPress: onRankPress || (() => {}),
+      subtitle: userRank > 0 
+        ? t.home.competeWithBest 
+        : 'ارفع فيديو أو شارك لتظهر في الرانك',
+      buttonText: userRank > 0 ? t.home.seeYourRank : 'ابدأ الآن',
+      onPress: userRank > 0 ? (onRankPress || (() => {})) : (onRankPress || (() => {})),
       badge: userRank > 0 ? `#${userRank}` : undefined,
     },
   ];
@@ -574,10 +492,21 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
               <View style={styles.cardContent}>
                 {/* Header Row */}
                 <View style={styles.cardHeader}>
-                  {/* Left: Icon */}
+                  {/* Left: Icon or Avatar */}
+                  {currentSlideData.type === 'welcome' && (propUserAvatar || clerkUser?.imageUrl) ? (
+                    <View style={styles.iconBox}>
+                      <Image
+                        source={{ uri: propUserAvatar || clerkUser?.imageUrl || '' }}
+                        style={styles.iconBoxAvatar}
+                        contentFit="cover"
+                        transition={200}
+                      />
+                    </View>
+                  ) : (
                   <View style={[styles.iconBox, { backgroundColor: `${currentSlideData.accentColor}30` }]}>
                     <Ionicons name={currentSlideData.icon as any} size={28} color="#fff" />
                   </View>
+                  )}
                   
                   {/* Center: Title & Subtitle */}
                   <View style={styles.textContainer}>
@@ -585,17 +514,18 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
                     <Text style={styles.cardSubtitle} numberOfLines={1}>{currentSlideData.subtitle}</Text>
                   </View>
                   
-                  {/* Right: Fire streak or Badge */}
-                  {currentSlideData.type === 'welcome' && actualLoginStreak > 0 ? (
-                    <FireStreak days={actualLoginStreak} dayLabel={t.home.day} />
-                  ) : currentSlideData.badge ? (
+                  {/* Right: Badge */}
+                  {currentSlideData.badge && currentSlideData.type !== 'welcome' ? (
                     <View style={[styles.badge, { backgroundColor: currentSlideData.accentColor }]}>
                       <Text style={styles.badgeText}>{currentSlideData.badge}</Text>
                     </View>
                   ) : null}
                 </View>
 
-                {/* Action button */}
+                {/* Action button with Fire streak (for welcome card) */}
+                {currentSlideData.type === 'welcome' && actualLoginStreak > 0 ? (
+                  <View style={styles.actionButtonWithStreak}>
+                    <FireStreak days={actualLoginStreak} dayLabel={t.home.day} />
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={() => handleButtonPress(currentSlideData)}
@@ -611,6 +541,24 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
                     <Ionicons name="chevron-back" size={16} color="#fff" />
                   </LinearGradient>
                 </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleButtonPress(currentSlideData)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.1)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.actionButtonGradient}
+                    >
+                      <Text style={styles.actionButtonText}>{currentSlideData.buttonText}</Text>
+                      <Ionicons name="chevron-back" size={16} color="#fff" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
 
                 {/* Dots */}
                 <View style={styles.dotsContainer}>
@@ -652,8 +600,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
     position: 'relative',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
   },
   cardContent: {
     flex: 1,
@@ -700,83 +653,90 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  iconBoxAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
   },
   
-  // Fire Streak
-  fireContainer: {
+  // Fire Streak - Simple Design (No Glow)
+  fireContainerNew: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 60,
+    marginRight: 12,
   },
-  fireGlow: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#ff6b35',
-  },
-  fireStack: {
-    position: 'relative',
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fireEmoji: {
-    position: 'absolute',
-    fontSize: 32,
-  },
-  fireLayer1: {
-    zIndex: 3,
-  },
-  fireLayer2: {
-    zIndex: 2,
-    opacity: 0.7,
-    transform: [{ scale: 0.85 }, { translateX: -5 }],
-  },
-  fireLayer3: {
-    zIndex: 1,
-    opacity: 0.5,
-    transform: [{ scale: 0.7 }, { translateX: 5 }],
-  },
-  streakBadge: {
-    position: 'absolute',
-    bottom: -8,
-    backgroundColor: '#ff6b35',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  fireGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: 'rgba(255,255,255,0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    gap: 8,
   },
-  streakNumber: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+  fireEmojiNew: {
+    fontSize: 24,
   },
-  streakLabel: {
+  streakBadgeNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  streakNumberNew: {
     color: '#fff',
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  streakLabelNew: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   
   // Badge
   badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    minWidth: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 44,
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   badgeText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   
   // Text
@@ -785,21 +745,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
+  welcomeHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  welcomeTextContainer: {
+    flex: 1,
+  },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 21,
+    fontWeight: '800',
     color: '#fff',
     marginBottom: 4,
     textAlign: 'right',
-    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 6,
+    letterSpacing: 0.3,
   },
   cardSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
     textAlign: 'right',
-    lineHeight: 18,
+    lineHeight: 20,
+    fontWeight: '500',
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   
   // Action Button
@@ -808,20 +793,35 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
   },
+  actionButtonWithStreak: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
   actionButtonGradient: {
     flexDirection: 'row-reverse', // RTL
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     gap: 6,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   actionButtonText: {
     color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   
   // Dots

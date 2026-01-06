@@ -286,8 +286,14 @@ export const en = {
     title: 'Notifications',
     loading: 'Loading notifications...',
     clearAll: 'Clear All',
+    markAllRead: 'Mark All Read',
     noNotifications: 'No notifications yet',
     noNotificationsSubtitle: 'Follow, like, and comment notifications will appear here',
+    noUnread: 'No unread notifications',
+    noMentions: 'No mentions yet',
+    noSearchResults: 'No results found',
+    tryDifferentSearch: 'Try a different search term',
+    searchPlaceholder: 'Search notifications...',
     luckyWheelReady: '🎡 Lucky Wheel Ready!',
     tapToWin: 'Tap here to win free coins',
     wheelAvailableIn: 'Lucky wheel available in',
@@ -296,6 +302,15 @@ export const en = {
     minutesAgo: '{n} minutes ago',
     hoursAgo: '{n} hours ago',
     daysAgo: '{n} days ago',
+    tabs: {
+      all: 'All',
+      unread: 'Unread',
+      mentions: 'Mentions',
+    },
+    swipe: {
+      delete: 'Delete',
+      markRead: 'Read',
+    },
   },
 
   // Security Settings

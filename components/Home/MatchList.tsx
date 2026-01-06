@@ -1,12 +1,11 @@
-import React from 'react';
-import { View, Text, FlatList, StyleSheet, Image, TouchableOpacity, Animated } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useMemo } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
 import { Match } from '../../src/store/home.store';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '../../src/i18n';
-import { LiveTimer } from '../common/LiveTimer';
-
+import { SkeletonCard } from '../ui/Skeleton';
+import { Colors, Typography, Spacing, BorderRadius } from '../../src/designSystem/designSystem';
 import GradientMatchCard, { Match as GradientMatch } from '../league-center/GradientMatchCard';
 
 interface MatchListProps {
@@ -49,66 +48,94 @@ const mapStoreMatchToGradientMatch = (storeMatch: Match): GradientMatch => ({
 
 export const MatchList: React.FC<MatchListProps> = ({ matches, onMatchPress, onViewAllPress, onFavoritePress }) => {
     const { t } = useTranslation();
+    const isLoading = matches.length === 0;
 
     const renderItem = React.useCallback(({ item, index }: { item: Match, index: number }) => (
-        <View style={{ width: 330 }}>
+        <Animated.View 
+            entering={FadeInDown.delay(index * 50).springify().damping(15)}
+            style={{ width: 330 }}
+        >
             <GradientMatchCard
                 match={mapStoreMatchToGradientMatch(item)}
                 gradientIndex={index}
                 onPress={() => onMatchPress(item.id)}
                 onFavoritePress={() => onFavoritePress(item.id)}
             />
-        </View>
+        </Animated.View>
     ), [onMatchPress, onFavoritePress]);
 
+    const renderSkeleton = React.useCallback(({ index }: { index: number }) => (
+        <Animated.View 
+            entering={FadeInDown.delay(index * 50)}
+            style={{ marginRight: Spacing.md }}
+        >
+            <SkeletonCard width={330} height={180} />
+        </Animated.View>
+    ), []);
+
+    const skeletonData = useMemo(() => Array.from({ length: 3 }, (_, i) => ({ id: `skeleton-${i}` })), []);
+
     return (
-        <View style={styles.container}>
+        <Animated.View entering={FadeInDown.delay(100)} style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>{t.home.importantMatches || 'Important Matches'}</Text>
-                <TouchableOpacity onPress={onViewAllPress}>
-                    <Text style={styles.viewAll}>{t.home.viewAll || 'View All'}</Text>
-                </TouchableOpacity>
+                {!isLoading && (
+                    <TouchableOpacity 
+                        onPress={onViewAllPress}
+                        accessibilityLabel="View all matches"
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.viewAll}>{t.home.viewAll || 'View All'}</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <FlatList
-                data={matches}
-                renderItem={renderItem}
+                data={isLoading ? skeletonData : matches}
+                renderItem={isLoading ? renderSkeleton : renderItem}
                 keyExtractor={(item) => item.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
-                ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
+                ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
                 initialNumToRender={3}
                 windowSize={3}
                 maxToRenderPerBatch={3}
                 removeClippedSubviews={true}
+                getItemLayout={(data, index) => ({
+                    length: 330 + Spacing.md,
+                    offset: (330 + Spacing.md) * index,
+                    index,
+                })}
             />
-        </View>
+        </Animated.View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 24,
+        marginBottom: Spacing.lg,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 12,
+        paddingHorizontal: Spacing.md,
+        marginBottom: Spacing.md,
+        paddingTop: Spacing.sm,
     },
     title: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
+        ...Typography.title.large,
+        color: Colors.onSurface.primary,
+        fontWeight: Typography.title.large.fontWeight,
     },
     viewAll: {
-        fontSize: 14,
-        color: '#32cd32',
+        ...Typography.label.medium,
+        color: Colors.primary[500],
+        fontWeight: Typography.label.medium.fontWeight,
     },
     listContent: {
-        paddingHorizontal: 16,
+        paddingHorizontal: Spacing.md,
     },
 });
 

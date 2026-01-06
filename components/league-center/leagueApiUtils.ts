@@ -1,11 +1,13 @@
 /**
  * Utility functions for mapping API-Football responses to League Center component models
+ * ✅ INTEGRATED: Direct backend API integration
  */
 
 import { Fixture, ApiFootballService, MAJOR_LEAGUES } from '../../services/apiFootball';
 import { Match, LeagueInfo, TeamInfo } from './matchCardUtils';
 import { cacheService } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
+import { getApiUrl } from '../../config/api.config';
 
 /**
  * Maps API fixture status to component match status
@@ -107,10 +109,11 @@ export const mapFixturesToMatches = (fixtures: Fixture[]): Match[] => {
 };
 
 /**
- * Fetches matches for a specific date from the API.
+ * Fetches matches for a specific date directly from backend API.
  * Uses caching: past dates cached for 30 days (permanent), today for 5 min, future for 2 hours.
  * ✅ FIX: Always return cached data for past dates without re-fetching
  * ✅ OPTIMIZED: Backend has permanent cache for finished matches
+ * ✅ INTEGRATED: Direct backend API integration
  */
 export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
   const dateString = date.toISOString().split('T')[0];
@@ -126,8 +129,34 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
     }
   }
   
-  // Fetch from backend (which has permanent DB cache for past dates)
-  logger.debug(`🔍 Fetching matches for date ${dateString} from backend...`);
+  try {
+    // Try direct backend API call first (optimized endpoint)
+    const apiUrl = getApiUrl();
+    const response = await fetch(`${apiUrl}/football/cached/matches/${dateString}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const fixtures: Fixture[] = await response.json();
+      const matches = mapFixturesToMatches(fixtures);
+      
+      // Cache the results locally
+      if (matches.length > 0) {
+        await cacheService.cacheMatchesByDate(dateString, matches);
+        logger.debug(`💾 Cached ${matches.length} matches for ${dateString} from backend`);
+      }
+      
+      return matches;
+    }
+  } catch (error) {
+    logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
+  }
+  
+  // Fallback to ApiFootballService
+  logger.debug(`🔍 Fetching matches for date ${dateString} from backend via ApiFootballService...`);
   const fixtures = await ApiFootballService.getFixturesByDate(dateString);
   const matches = mapFixturesToMatches(fixtures);
   
@@ -141,9 +170,29 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
 };
 
 /**
- * Fetches live matches from the API
+ * Fetches live matches directly from backend API
+ * ✅ INTEGRATED: Direct backend API integration
  */
 export const fetchLiveMatches = async (): Promise<Match[]> => {
+  try {
+    // Try direct backend API call first
+    const apiUrl = getApiUrl();
+    const response = await fetch(`${apiUrl}/football/fixtures/live`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const fixtures: Fixture[] = await response.json();
+      return mapFixturesToMatches(fixtures);
+    }
+  } catch (error) {
+    logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
+  }
+  
+  // Fallback to ApiFootballService
   const fixtures = await ApiFootballService.getLiveFixtures();
   return mapFixturesToMatches(fixtures);
 };

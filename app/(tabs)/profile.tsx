@@ -1328,6 +1328,7 @@ export default function ProfileScreen() {
           clubLogo={club}
           onEditPress={handleEditProfile}
           socials={userData?.socials}
+          consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
         />
 
         {/* Social Links Section */}

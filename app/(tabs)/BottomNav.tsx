@@ -112,12 +112,12 @@ const BottomNav = () => {
       .map(() => new Animated.Value(1))
   ).current;
 
-  type AppRoute = '/Home' | '/leagues' | '/quiz' | '/profile' | '/reels' | '/rank';
+  type AppRoute = '/Home' | '/matches' | '/quiz' | '/profile' | '/reels' | '/rank';
   type TabName = 'Home' | 'Leagues' | 'Quiz' | 'Profile' | 'Reels' | 'Rank';
 
   const tabs: { name: TabName; icon: typeof Home | null; customIcon?: boolean; route: AppRoute }[] = [
     { name: 'Home', icon: Home, route: '/Home' },
-    { name: 'Leagues', icon: null, customIcon: true, route: '/leagues' },
+    { name: 'Leagues', icon: null, customIcon: true, route: '/matches' },
     { name: 'Quiz', icon: Brain, route: '/quiz' },
     { name: 'Profile', icon: User, route: '/profile' },
     { name: 'Reels', icon: Video, route: '/reels' },
@@ -125,8 +125,8 @@ const BottomNav = () => {
   ];
 
   const isMatchDetails = pathname?.includes('match-details');
-  const isLeagues = pathname?.includes('leagues');
-  const activeTab = isMatchDetails || isLeagues
+  const isMatches = pathname?.includes('matches');
+  const activeTab = isMatchDetails || isMatches
     ? 'Leagues'
     : tabs.find((tab) => pathname === tab.route)?.name || 'Home';
 

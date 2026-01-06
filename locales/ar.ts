@@ -324,8 +324,14 @@ export const ar = {
     title: 'الإشعارات',
     loading: 'جاري تحميل الإشعارات...',
     clearAll: 'مسح الكل',
+    markAllRead: 'تحديد الكل كمقروء',
     noNotifications: 'لا توجد إشعارات بعد',
     noNotificationsSubtitle: 'ستظهر هنا إشعارات المتابعات والإعجابات والتعليقات',
+    noUnread: 'لا توجد إشعارات غير مقروءة',
+    noMentions: 'لا توجد إشارات بعد',
+    noSearchResults: 'لا توجد نتائج',
+    tryDifferentSearch: 'جرب كلمة بحث مختلفة',
+    searchPlaceholder: 'البحث في الإشعارات...',
     luckyWheelReady: '🎡 عجلة الحظ جاهزة!',
     tapToWin: 'اضغط هنا لتربح كوينات مجانية',
     wheelAvailableIn: 'عجلة الحظ متاحة بعد',
@@ -334,6 +340,15 @@ export const ar = {
     minutesAgo: 'منذ {n} دقيقة',
     hoursAgo: 'منذ {n} ساعة',
     daysAgo: 'منذ {n} يوم',
+    tabs: {
+      all: 'الكل',
+      unread: 'غير مقروء',
+      mentions: 'الإشارات',
+    },
+    swipe: {
+      delete: 'حذف',
+      markRead: 'مقروء',
+    },
   },
 
   // Security Settings

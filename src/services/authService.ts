@@ -1060,14 +1060,45 @@ export class ReelsService {
     }
 
     /**
-     * Get trending hashtags
+     * Search reels/videos by caption, hashtags, or username
      */
-    static async getTrendingHashtags(token: string): Promise<HashtagInfo[]> {
+    static async searchReels(
+        token: string,
+        query: string,
+        limit: number = 10,
+        type: 'all' | 'reels' | 'hashtags' = 'all'
+    ): Promise<{ reels: any[]; hashtags: any[] }> {
+        try {
+            const response = await fetch(
+                `${API_URL}/reels/search?q=${encodeURIComponent(query)}&limit=${limit}&type=${type}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return data.data || { reels: [], hashtags: [] };
+            }
+            return { reels: [], hashtags: [] };
+        } catch (error) {
+            console.error('Error searching reels:', error);
+            return { reels: [], hashtags: [] };
+        }
+    }
+
+    /**
+     * Get trending hashtags (no auth required)
+     */
+    static async getTrendingHashtags(): Promise<any[]> {
         try {
             const response = await fetch(`${API_URL}/reels/trending-hashtags`, {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
             });
@@ -1581,6 +1612,27 @@ export class NotificationService {
             return data.status === 'SUCCESS';
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Delete a single notification
+     */
+    static async deleteNotification(token: string, notificationId: string): Promise<boolean> {
+        try {
+            const response = await fetch(`${API_URL}/notifications/${notificationId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+            return data.status === 'SUCCESS';
+        } catch (error) {
+            console.error('Error deleting notification:', error);
             return false;
         }
     }
