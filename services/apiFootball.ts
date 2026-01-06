@@ -1878,8 +1878,15 @@ export const ApiFootballService = {
         queryParams.to = params.dateRange.to;
       }
 
-      const result = await fetchFromProxy<{ response: TransfersByLeague[] }>('/transfers/by-leagues', queryParams);
-      return result?.response || result || [];
+      const result = await fetchFromProxy<TransfersByLeague[]>('/transfers/by-leagues', queryParams);
+      if (__DEV__) {
+        console.log('📦 Transfers by leagues result:', result?.length || 0, 'leagues');
+        if (result && result.length > 0) {
+          const totalTransfers = result.reduce((sum, league) => sum + (league.transfers?.length || 0), 0);
+          console.log('📦 Total transfers:', totalTransfers);
+        }
+      }
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       if (__DEV__) {
         logger.warn('Error fetching transfers by leagues:', error);

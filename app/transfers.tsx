@@ -287,13 +287,23 @@ export default function TransfersScreen() {
         dateRange,
       });
 
-      setTransfersByLeague(data);
+      console.log('📦 Loaded transfers data:', {
+        leaguesCount: data?.length || 0,
+        data: data,
+      });
+
+      setTransfersByLeague(data || []);
       
       // Flatten all transfers
       const flattened: Transfer[] = [];
-      data.forEach(leagueData => {
-        flattened.push(...leagueData.transfers);
-      });
+      if (data && Array.isArray(data)) {
+        data.forEach(leagueData => {
+          if (leagueData.transfers && Array.isArray(leagueData.transfers)) {
+            flattened.push(...leagueData.transfers);
+          }
+        });
+      }
+      console.log('📦 Flattened transfers:', flattened.length);
       setAllTransfers(flattened);
 
       // Extract unique leagues for filter
