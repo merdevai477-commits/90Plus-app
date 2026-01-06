@@ -1009,42 +1009,57 @@ class FootballDataCacheService {
                 if (!transfer.player?.id) continue;
 
                 for (const t of transfer.transfers || []) {
-                    const transferDate = t.date || transfer.update || new Date().toISOString().split('T')[0];
-                    
-                    // Check if transfer already exists
-                    const existing = await prisma.cachedTransfer.findFirst({
-                        where: {
-                            playerId: transfer.player.id,
-                            transferDate: transferDate,
-                            teamInId: t.teams?.in?.id || null,
-                            teamOutId: t.teams?.out?.id || null,
-                        },
-                    });
-
-                    if (!existing) {
-                        await prisma.cachedTransfer.create({
-                            data: {
+                    try {
+                        const transferDate = t.date || transfer.update || new Date().toISOString().split('T')[0];
+                        
+                        // Check if transfer already exists
+                        const existing = await prisma.cachedTransfer.findFirst({
+                            where: {
                                 playerId: transfer.player.id,
-                                playerName: transfer.player.name || '',
-                                playerPhoto: transfer.player.photo || null,
-                                teamInId: t.teams?.in?.id || null,
-                                teamInName: t.teams?.in?.name || null,
-                                teamInLogo: t.teams?.in?.logo || null,
-                                teamOutId: t.teams?.out?.id || null,
-                                teamOutName: t.teams?.out?.name || null,
-                                teamOutLogo: t.teams?.out?.logo || null,
-                                transferType: t.type || null,
                                 transferDate: transferDate,
-                                transferValue: t.value ? parseFloat(t.value.toString().replace(/[^0-9.]/g, '')) : null,
-                                leagueId: transfer.league?.id || null,
-                                leagueName: transfer.league?.name || null,
-                                leagueLogo: transfer.league?.logo || null,
+                                teamInId: t.teams?.in?.id || null,
+                                teamOutId: t.teams?.out?.id || null,
                             },
                         });
+
+                        if (!existing) {
+                            await prisma.cachedTransfer.create({
+                                data: {
+                                    playerId: transfer.player.id,
+                                    playerName: transfer.player.name || '',
+                                    playerPhoto: transfer.player.photo || null,
+                                    teamInId: t.teams?.in?.id || null,
+                                    teamInName: t.teams?.in?.name || null,
+                                    teamInLogo: t.teams?.in?.logo || null,
+                                    teamOutId: t.teams?.out?.id || null,
+                                    teamOutName: t.teams?.out?.name || null,
+                                    teamOutLogo: t.teams?.out?.logo || null,
+                                    transferType: t.type || null,
+                                    transferDate: transferDate,
+                                    transferValue: t.value ? parseFloat(t.value.toString().replace(/[^0-9.]/g, '')) : null,
+                                    leagueId: transfer.league?.id || null,
+                                    leagueName: transfer.league?.name || null,
+                                    leagueLogo: transfer.league?.logo || null,
+                                },
+                            });
+                        }
+                    } catch (dbError: any) {
+                        // P2021 = Table does not exist - skip silently
+                        if (dbError?.code === 'P2021') {
+                            // Table doesn't exist, skip saving (will be created by migration)
+                            return;
+                        }
+                        // Other errors - log but continue
+                        logger.warn('Error saving individual transfer to database:', dbError);
                     }
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
+            // P2021 = Table does not exist - skip silently
+            if (error?.code === 'P2021') {
+                logger.debug('CachedTransfer table does not exist yet. Run migration to enable database caching.');
+                return;
+            }
             logger.error('Error saving transfers to database:', error);
         }
     }
@@ -1057,70 +1072,81 @@ class FootballDataCacheService {
         
         try {
             // Check Database first (for permanent storage)
-            const dbTransfers = await prisma.cachedTransfer.findMany({
-                where: {
-                    ...(params.player ? { playerId: params.player } : {}),
-                    ...(params.team ? { OR: [{ teamInId: params.team }, { teamOutId: params.team }] } : {}),
-                    ...(params.date ? { transferDate: params.date } : {}),
-                },
-                orderBy: { transferDate: 'desc' },
-                take: 1000, // Limit to prevent huge queries
-            });
+            // Only if table exists (check for P2021 error which means table doesn't exist)
+            try {
+                const dbTransfers = await prisma.cachedTransfer.findMany({
+                    where: {
+                        ...(params.player ? { playerId: params.player } : {}),
+                        ...(params.team ? { OR: [{ teamInId: params.team }, { teamOutId: params.team }] } : {}),
+                        ...(params.date ? { transferDate: params.date } : {}),
+                    },
+                    orderBy: { transferDate: 'desc' },
+                    take: 1000, // Limit to prevent huge queries
+                });
 
-            if (dbTransfers.length > 0) {
-                logger.debug(`📦 Transfers from Database (${dbTransfers.length} records)`);
-                
-                // Convert database format to API format
-                const transfersMap = new Map<number, any>();
-                for (const dbTransfer of dbTransfers) {
-                    if (!transfersMap.has(dbTransfer.playerId)) {
-                        transfersMap.set(dbTransfer.playerId, {
-                            player: {
-                                id: dbTransfer.playerId,
-                                name: dbTransfer.playerName,
-                                photo: dbTransfer.playerPhoto,
+                if (dbTransfers.length > 0) {
+                    logger.debug(`📦 Transfers from Database (${dbTransfers.length} records)`);
+                    
+                    // Convert database format to API format
+                    const transfersMap = new Map<number, any>();
+                    for (const dbTransfer of dbTransfers) {
+                        if (!transfersMap.has(dbTransfer.playerId)) {
+                            transfersMap.set(dbTransfer.playerId, {
+                                player: {
+                                    id: dbTransfer.playerId,
+                                    name: dbTransfer.playerName,
+                                    photo: dbTransfer.playerPhoto,
+                                },
+                                transfers: [],
+                                league: dbTransfer.leagueId ? {
+                                    id: dbTransfer.leagueId,
+                                    name: dbTransfer.leagueName,
+                                    logo: dbTransfer.leagueLogo,
+                                } : null,
+                                update: dbTransfer.transferDate,
+                            });
+                        }
+                        
+                        const transfer = transfersMap.get(dbTransfer.playerId)!;
+                        transfer.transfers.push({
+                            date: dbTransfer.transferDate,
+                            type: dbTransfer.transferType,
+                            teams: {
+                                in: dbTransfer.teamInId ? {
+                                    id: dbTransfer.teamInId,
+                                    name: dbTransfer.teamInName,
+                                    logo: dbTransfer.teamInLogo,
+                                } : null,
+                                out: dbTransfer.teamOutId ? {
+                                    id: dbTransfer.teamOutId,
+                                    name: dbTransfer.teamOutName,
+                                    logo: dbTransfer.teamOutLogo,
+                                } : null,
                             },
-                            transfers: [],
-                            league: dbTransfer.leagueId ? {
-                                id: dbTransfer.leagueId,
-                                name: dbTransfer.leagueName,
-                                logo: dbTransfer.leagueLogo,
-                            } : null,
-                            update: dbTransfer.transferDate,
                         });
                     }
-                    
-                    const transfer = transfersMap.get(dbTransfer.playerId)!;
-                    transfer.transfers.push({
-                        date: dbTransfer.transferDate,
-                        type: dbTransfer.transferType,
-                        teams: {
-                            in: dbTransfer.teamInId ? {
-                                id: dbTransfer.teamInId,
-                                name: dbTransfer.teamInName,
-                                logo: dbTransfer.teamInLogo,
-                            } : null,
-                            out: dbTransfer.teamOutId ? {
-                                id: dbTransfer.teamOutId,
-                                name: dbTransfer.teamOutName,
-                                logo: dbTransfer.teamOutLogo,
-                            } : null,
-                        },
-                    });
-                }
 
-                const result = Array.from(transfersMap.values());
-                
-                // Cache in Redis and Memory
-                const entry: MemoryCacheEntry<any[]> = {
-                    data: result,
-                    timestamp: Date.now(),
-                    ttl: this.TTL.TRANSFERS,
-                };
-                this.transfersCache.set(cacheKey, entry);
-                await redisCacheService.set(`transfers:${cacheKey}`, entry, this.TTL.TRANSFERS);
-                
-                return result;
+                    const result = Array.from(transfersMap.values());
+                    
+                    // Cache in Redis and Memory
+                    const entry: MemoryCacheEntry<any[]> = {
+                        data: result,
+                        timestamp: Date.now(),
+                        ttl: this.TTL.TRANSFERS,
+                    };
+                    this.transfersCache.set(cacheKey, entry);
+                    await redisCacheService.set(`transfers:${cacheKey}`, entry, this.TTL.TRANSFERS);
+                    
+                    return result;
+                }
+            } catch (dbError: any) {
+                // P2021 = Table does not exist
+                if (dbError?.code === 'P2021') {
+                    logger.warn('⚠️ CachedTransfer table does not exist. Run migration to create it. Falling back to API.');
+                    // Don't log as error, just continue to API
+                } else {
+                    logger.warn('Error querying database for transfers, falling back to cache/API:', dbError);
+                }
             }
         } catch (error) {
             logger.warn('Error querying database for transfers, falling back to cache/API:', error);
