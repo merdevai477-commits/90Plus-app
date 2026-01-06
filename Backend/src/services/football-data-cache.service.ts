@@ -1256,22 +1256,6 @@ class FootballDataCacheService {
             const fromDate = dateRange?.from || oneYearAgo.toISOString().split('T')[0];
             const toDate = dateRange?.to || now.toISOString().split('T')[0];
 
-            // Generate date list (monthly chunks for performance)
-            const dates: string[] = [];
-            const start = new Date(fromDate);
-            const end = new Date(toDate);
-            const current = new Date(start);
-            
-            // Add dates monthly to reduce API calls
-            while (current <= end) {
-                dates.push(current.toISOString().split('T')[0]);
-                current.setMonth(current.getMonth() + 1);
-            }
-            // Add the end date
-            if (dates[dates.length - 1] !== toDate) {
-                dates.push(toDate);
-            }
-
             const result: Array<{ leagueId: number; leagueName: string; leagueLogo?: string; transfers: any[] }> = [];
             const teamTransfersMap = new Map<number, any[]>(); // Cache transfers per team
 
@@ -1325,26 +1309,42 @@ class FootballDataCacheService {
                                     // Fetch transfers for this team across date range (sequentially)
                                     const allTeamTransfers: any[] = [];
                                     
-                                    for (const date of dates) {
-                                        try {
-                                            const transfers = await this.getTransfers({ team: teamId, date });
-                                            if (transfers && transfers.length > 0) {
-                                                allTeamTransfers.push(...transfers);
-                                            }
+                                    // Fetch all transfers for this team (API doesn't support date filtering)
+                                    try {
+                                        const transfers = await this.getTransfers({ team: teamId });
+                                        if (transfers && transfers.length > 0) {
+                                            // Filter transfers by date range client-side
+                                            const filteredTransfers = transfers.filter((transfer: any) => {
+                                                if (!transfer.transfers || !Array.isArray(transfer.transfers)) {
+                                                    return false;
+                                                }
+                                                // Check if any transfer in the array falls within date range
+                                                return transfer.transfers.some((t: any) => {
+                                                    if (!t.date) return false;
+                                                    const transferDate = new Date(t.date);
+                                                    const fromDateObj = new Date(fromDate);
+                                                    const toDateObj = new Date(toDate);
+                                                    return transferDate >= fromDateObj && transferDate <= toDateObj;
+                                                });
+                                            });
                                             
-                                            // Delay between date requests (1 second to avoid rate limits)
-                                            await new Promise(resolve => setTimeout(resolve, 1000));
-                                        } catch (error: any) {
-                                            // Check if it's a rate limit error
-                                            if (error?.message?.includes('Rate limit') || error?.message?.includes('rateLimit')) {
-                                                logger.warn(`⚠️ Rate limit hit for team ${teamId} on ${date}, waiting 60 seconds...`);
-                                                // Wait 60 seconds before continuing
-                                                await new Promise(resolve => setTimeout(resolve, 60000));
-                                                // Skip this date and continue
-                                                continue;
-                                            } else {
-                                                logger.warn(`Failed to fetch transfers for team ${teamId} on ${date}:`, error);
+                                            if (filteredTransfers.length > 0) {
+                                                allTeamTransfers.push(...filteredTransfers);
                                             }
+                                        }
+                                        
+                                        // Delay between team requests (2 seconds to avoid rate limits)
+                                        await new Promise(resolve => setTimeout(resolve, 2000));
+                                    } catch (error: any) {
+                                        // Check if it's a rate limit error
+                                        if (error?.message?.includes('Rate limit') || error?.message?.includes('rateLimit')) {
+                                            logger.warn(`⚠️ Rate limit hit for team ${teamId}, waiting 60 seconds...`);
+                                            // Wait 60 seconds before continuing
+                                            await new Promise(resolve => setTimeout(resolve, 60000));
+                                            // Skip this team and continue
+                                            continue;
+                                        } else {
+                                            logger.warn(`Failed to fetch transfers for team ${teamId}:`, error);
                                         }
                                     }
 
