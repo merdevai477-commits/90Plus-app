@@ -1,13 +1,19 @@
 /**
  * League Section Component
- * Groups matches by league
- * 365Scores style
+ * Enhanced with animations and unified colors
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-import { COLORS } from '../reels/constants';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Match } from '../league-center/matchCardUtils';
+import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 import MatchCard from './MatchCard';
 
 export interface LeagueSectionProps {
@@ -16,28 +22,49 @@ export interface LeagueSectionProps {
   leagueLogo?: string;
   matches: Match[];
   onMatchPress?: (matchId: string) => void;
+  index?: number;
 }
 
-const LeagueSection: React.FC<LeagueSectionProps> = ({
+const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
   leagueId,
   leagueName,
   leagueLogo,
   matches,
   onMatchPress,
+  index = 0,
 }) => {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+
+  useEffect(() => {
+    const delay = index * 30; // Slight delay for stagger effect
+    setTimeout(() => {
+      opacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });
+      translateY.value = withSpring(0, ANIMATION_CONFIG.spring);
+    }, delay);
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
   if (matches.length === 0) {
     return null;
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, animatedStyle]}>
       {/* League Header */}
       <View style={styles.header}>
         {leagueLogo && (
           <Image
             source={{ uri: leagueLogo }}
             style={styles.leagueLogo}
-            resizeMode="contain"
+            contentFit="contain"
+            transition={200}
+            cachePolicy="memory-disk"
+            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
           />
         )}
         <Text style={styles.leagueName} numberOfLines={1}>
@@ -50,17 +77,26 @@ const LeagueSection: React.FC<LeagueSectionProps> = ({
 
       {/* Matches List */}
       <View style={styles.matchesList}>
-        {matches.map((match) => (
+        {matches.map((match, matchIndex) => (
           <MatchCard
             key={match.id}
             match={match}
             onPress={onMatchPress}
+            index={matchIndex}
           />
         ))}
       </View>
-    </View>
+    </Animated.View>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.leagueId === nextProps.leagueId &&
+    prevProps.matches.length === nextProps.matches.length &&
+    prevProps.matches.every((match, index) => match.id === nextProps.matches[index]?.id)
+  );
+});
+
+LeagueSection.displayName = 'LeagueSection';
 
 const styles = StyleSheet.create({
   container: {
@@ -82,26 +118,27 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
     letterSpacing: 0.2,
   },
   matchCountBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: MATCH_DETAILS_COLORS.cardSecondary,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 12,
     minWidth: 28,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: MATCH_DETAILS_COLORS.border,
   },
   matchCountText: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
   },
   matchesList: {
-    paddingHorizontal: 0,
+    gap: 12,
   },
 });
 
 export default LeagueSection;
-

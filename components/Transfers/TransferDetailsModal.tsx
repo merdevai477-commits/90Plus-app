@@ -17,7 +17,7 @@ interface TransferDetailsModalProps {
   onClose: () => void;
   transfer: Transfer | null;
   relatedTransfers?: Transfer[];
-  onPlayerPress?: (playerId: number) => void;
+  onPlayerPress?: (transfer: Transfer) => void;
   onTeamPress?: (teamId: number) => void;
   onShare?: (transfer: Transfer) => void;
   onFavorite?: (transferId: number) => void;
@@ -97,7 +97,7 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
             {/* Player Info */}
             <View style={styles.playerSection}>
               <TouchableOpacity
-                onPress={() => onPlayerPress?.(transfer.player.id)}
+                onPress={() => onPlayerPress?.(transfer)}
                 style={styles.playerCard}
               >
                 <Image

@@ -780,13 +780,8 @@ const fetchFromProxy = async <T>(
             await new Promise(resolve => setTimeout(resolve, retryDelay));
             continue; // Retry the request
           } else {
-            // All retries exhausted - return empty/cached data instead of throwing
+            // All retries exhausted - return empty array instead of throwing
             // This prevents error spam in console
-            const cached = await footballCacheService.getMatches();
-            if (cached && cached.length > 0) {
-              return cached as T;
-            }
-            // Return empty array/object based on expected type
             return [] as T;
           }
         }
@@ -833,15 +828,7 @@ const fetchFromProxy = async <T>(
           if (__DEV__) {
             logger.debug('⏸️ Rate limit encountered, returning empty result');
           }
-          // Try to return cached data if available, otherwise empty array
-          try {
-            const cached = await footballCacheService.getMatches().catch(() => null);
-            if (cached && Array.isArray(cached) && cached.length > 0) {
-              return cached as T;
-            }
-          } catch (e) {
-            // Ignore cache errors
-          }
+          // Return empty array since we don't have context to fetch cached matches
           return [] as T;
         }
         // Continue to retry logic below for rate limit errors
@@ -1765,7 +1752,7 @@ export const ApiFootballService = {
         league: leagueId,
         season: currentSeason,
       });
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Error fetching top scorers:', error);
       return [];
@@ -1782,7 +1769,7 @@ export const ApiFootballService = {
         league: leagueId,
         season: currentSeason,
       });
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Error fetching top assists:', error);
       return [];
@@ -1799,7 +1786,7 @@ export const ApiFootballService = {
   async getTeamInjuries(teamId: number): Promise<Injury[]> {
     try {
       const result = await fetchFromProxy<Injury[]>(`/teams/${teamId}/injuries`);
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Error fetching team injuries:', error);
       return [];
@@ -1824,7 +1811,7 @@ export const ApiFootballService = {
       if (params.to) queryParams.to = params.to;
 
       const result = await fetchFromProxy<Transfer[]>('/transfers', queryParams);
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       // Silently handle 404 errors - transfers endpoint may not be available
       if (error instanceof ApiFootballError && error.statusCode === 404) {
@@ -1851,7 +1838,7 @@ export const ApiFootballService = {
         from: dateRange.from,
         to: dateRange.to,
       });
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       if (__DEV__) {
         logger.warn('Error fetching transfers by date range:', error);
@@ -1905,7 +1892,7 @@ export const ApiFootballService = {
   async getTeamTrophies(teamId: number): Promise<Trophy[]> {
     try {
       const result = await fetchFromProxy<Trophy[]>(`/teams/${teamId}/trophies`);
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Error fetching team trophies:', error);
       return [];
@@ -1922,7 +1909,7 @@ export const ApiFootballService = {
   async getTeamCoaches(teamId: number): Promise<Coach[]> {
     try {
       const result = await fetchFromProxy<Coach[]>(`/teams/${teamId}/coaches`);
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Error fetching team coaches:', error);
       return [];
@@ -1939,7 +1926,7 @@ export const ApiFootballService = {
   async getVenueInfo(venueId: number): Promise<Venue | null> {
     try {
       const result = await fetchFromProxy<Venue>(`/venues/${venueId}`);
-      return result?.response || result || null;
+      return result || null;
     } catch (error) {
       console.error('Error fetching venue info:', error);
       return null;
@@ -1963,7 +1950,7 @@ export const ApiFootballService = {
       if (current !== undefined) params.current = current;
 
       const result = await fetchFromProxy<string[]>('/fixtures/rounds', params);
-      return result?.response || result || [];
+      return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Error fetching league rounds:', error);
       return [];

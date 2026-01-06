@@ -1,12 +1,18 @@
 /**
  * Match Tabs Component
- * All, Live 🔴, Upcoming, Finished, Favorites ⭐
- * Minimal, clean design
+ * Enhanced with animations, haptic feedback, and unified colors
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { COLORS } from '../reels/constants';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 
 export type MatchTabType = 'all' | 'live' | 'upcoming' | 'finished' | 'favorites' | 'transfers';
 
@@ -24,7 +30,33 @@ const tabs: Array<{ id: MatchTabType; label: string; icon?: string }> = [
   { id: 'transfers', label: 'الانتقالات', icon: '🔄' },
 ];
 
-const MatchTabs: React.FC<MatchTabsProps> = ({ activeTab, onTabChange }) => {
+const MatchTabs: React.FC<MatchTabsProps> = React.memo(({ activeTab, onTabChange }) => {
+  const tabPositions = useRef<Map<MatchTabType, number>>(new Map());
+  const indicatorPosition = useSharedValue(0);
+  const indicatorWidth = useSharedValue(0);
+  const tabsOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    tabsOpacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });
+  }, []);
+
+  useEffect(() => {
+    // Animate indicator when tab changes
+    const position = tabPositions.current.get(activeTab) || 0;
+    indicatorPosition.value = withSpring(position, ANIMATION_CONFIG.spring);
+  }, [activeTab]);
+
+  const handleTabPress = (tabId: MatchTabType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onTabChange(tabId);
+  };
+
+  const animatedIndicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorPosition.value }],
+    width: indicatorWidth.value,
+    opacity: tabsOpacity.value,
+  }));
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -32,14 +64,22 @@ const MatchTabs: React.FC<MatchTabsProps> = ({ activeTab, onTabChange }) => {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {tabs.map((tab) => {
+        {tabs.map((tab, index) => {
           const isActive = activeTab === tab.id;
           return (
             <TouchableOpacity
               key={tab.id}
               style={[styles.tab, isActive && styles.tabActive]}
-              onPress={() => onTabChange(tab.id)}
+              onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.7}
+              onLayout={(event) => {
+                const { x, width } = event.nativeEvent.layout;
+                tabPositions.current.set(tab.id, x);
+                if (isActive) {
+                  indicatorPosition.value = x;
+                  indicatorWidth.value = width;
+                }
+              }}
             >
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                 {tab.icon && <Text>{tab.icon} </Text>}
@@ -49,14 +89,20 @@ const MatchTabs: React.FC<MatchTabsProps> = ({ activeTab, onTabChange }) => {
           );
         })}
       </ScrollView>
+      <Animated.View style={[styles.indicator, animatedIndicatorStyle]} />
     </View>
   );
-};
+}, (prevProps, nextProps) => {
+  return prevProps.activeTab === nextProps.activeTab;
+});
+
+MatchTabs.displayName = 'MatchTabs';
 
 const styles = StyleSheet.create({
   container: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomColor: MATCH_DETAILS_COLORS.border,
+    position: 'relative',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -71,20 +117,26 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   tabActive: {
-    backgroundColor: 'rgba(50, 205, 50, 0.15)',
+    backgroundColor: `rgba(34, 197, 94, 0.15)`,
     borderWidth: 1,
-    borderColor: 'rgba(50, 205, 50, 0.3)',
+    borderColor: `rgba(34, 197, 94, 0.3)`,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.textSecondary,
+    color: MATCH_DETAILS_COLORS.textSecondary,
   },
   tabTextActive: {
-    color: COLORS.neonGreen,
+    color: MATCH_DETAILS_COLORS.accent,
     fontWeight: '700',
+  },
+  indicator: {
+    position: 'absolute',
+    bottom: 0,
+    height: 2,
+    backgroundColor: MATCH_DETAILS_COLORS.accent,
+    borderRadius: 1,
   },
 });
 
 export default MatchTabs;
-

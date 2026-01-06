@@ -1,7 +1,6 @@
 /**
  * Match Top Bar Component
- * Today default, swipe navigation, filter button (optional)
- * Sticky on scroll
+ * Enhanced with unified colors
  */
 
 import React from 'react';
@@ -12,8 +11,8 @@ import Animated, {
   interpolate,
   SharedValue,
 } from 'react-native-reanimated';
-import { ChevronLeft, ChevronRight, Filter } from 'lucide-react-native';
-import { COLORS } from '../reels/constants';
+import { Ionicons } from '@expo/vector-icons';
+import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 import { formatDateItem, isSameDay } from '../league-center/dateUtils';
 
 interface MatchTopBarProps {
@@ -23,7 +22,7 @@ interface MatchTopBarProps {
   scrollY?: SharedValue<number>;
 }
 
-const MatchTopBar: React.FC<MatchTopBarProps> = ({
+const MatchTopBar: React.FC<MatchTopBarProps> = React.memo(({
   selectedDate,
   onDateChange,
   onFilterPress,
@@ -60,7 +59,7 @@ const MatchTopBar: React.FC<MatchTopBarProps> = ({
     const backgroundColor = interpolate(scrollY.value, [0, 50], [0, 1], 'clamp');
 
     return {
-      backgroundColor: `rgba(0, 0, 0, ${backgroundColor * 0.95})`,
+      backgroundColor: `rgba(15, 7, 32, ${backgroundColor * 0.95})`,
     };
   });
 
@@ -76,7 +75,7 @@ const MatchTopBar: React.FC<MatchTopBarProps> = ({
             onPress={handlePreviousDay}
             activeOpacity={0.7}
           >
-            <ChevronLeft size={20} color={COLORS.white} />
+            <Ionicons name="chevron-back" size={20} color={MATCH_DETAILS_COLORS.text} />
           </TouchableOpacity>
 
           {/* Date Display */}
@@ -96,7 +95,7 @@ const MatchTopBar: React.FC<MatchTopBarProps> = ({
             onPress={handleNextDay}
             activeOpacity={0.7}
           >
-            <ChevronRight size={20} color={COLORS.white} />
+            <Ionicons name="chevron-forward" size={20} color={MATCH_DETAILS_COLORS.text} />
           </TouchableOpacity>
         </View>
 
@@ -107,20 +106,25 @@ const MatchTopBar: React.FC<MatchTopBarProps> = ({
             onPress={onFilterPress}
             activeOpacity={0.7}
           >
-            <Filter size={20} color={COLORS.white} />
+            <Ionicons name="filter" size={20} color={MATCH_DETAILS_COLORS.text} />
           </TouchableOpacity>
         )}
       </View>
     </Animated.View>
   );
-};
+}, (prevProps, nextProps) => {
+  return prevProps.selectedDate.getTime() === nextProps.selectedDate.getTime();
+});
+
+MatchTopBar.displayName = 'MatchTopBar';
 
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomColor: MATCH_DETAILS_COLORS.border,
     zIndex: 10,
+    backgroundColor: MATCH_DETAILS_COLORS.background,
   },
   content: {
     flexDirection: 'row',
@@ -139,11 +143,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: MATCH_DETAILS_COLORS.card,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: MATCH_DETAILS_COLORS.border,
   },
   dateButton: {
     alignItems: 'center',
@@ -151,38 +155,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: MATCH_DETAILS_COLORS.card,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: MATCH_DETAILS_COLORS.border,
     minWidth: 80,
   },
   dateButtonToday: {
-    backgroundColor: 'rgba(50, 205, 50, 0.15)',
-    borderColor: 'rgba(50, 205, 50, 0.3)',
+    backgroundColor: `rgba(34, 197, 94, 0.15)`,
+    borderColor: `rgba(34, 197, 94, 0.3)`,
   },
   dateText: {
     fontSize: 12,
     fontWeight: '600',
-    color: COLORS.textTertiary,
+    color: MATCH_DETAILS_COLORS.textTertiary,
     textTransform: 'uppercase',
     marginBottom: 2,
   },
   dateNumber: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
   },
   filterButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: MATCH_DETAILS_COLORS.card,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: MATCH_DETAILS_COLORS.border,
   },
 });
 
 export default MatchTopBar;
-

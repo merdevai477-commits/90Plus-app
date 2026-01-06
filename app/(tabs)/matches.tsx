@@ -1,20 +1,15 @@
-
 /**
- * Match Listing Screen - 365Scores Style
- * Main screen for viewing matches grouped by league
+ * Match Listing Screen - Enhanced
+ * Performance optimized with animations, haptic feedback, and unified colors
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   StatusBar,
   RefreshControl,
   ScrollView,
-  Image,
-  ActivityIndicator,
-  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,7 +18,7 @@ import Animated, {
   useAnimatedScrollHandler,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 // Components
 import MatchTopBar from '../../components/Matches/MatchTopBar';
@@ -31,7 +26,9 @@ import QuickIndicators from '../../components/Matches/QuickIndicators';
 import MatchTabs, { MatchTabType } from '../../components/Matches/MatchTabs';
 import LeagueSection from '../../components/Matches/LeagueSection';
 import MatchCardSkeleton from '../../components/Matches/MatchCardSkeleton';
-import { COLORS } from '../../components/reels/constants';
+import TransfersSection from '../../components/Matches/TransfersSection';
+import EmptyState from '../../components/Matches/EmptyState';
+import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 
 // Hooks & Data
 import { useMatchesData } from '../../hooks/useMatchesData';
@@ -44,7 +41,7 @@ const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 /**
  * Match Listing Screen
- * 365Scores style implementation
+ * Enhanced with performance optimizations and unified design
  */
 const MatchesScreen = () => {
   const router = useRouter();
@@ -57,11 +54,10 @@ const MatchesScreen = () => {
   const [transfersError, setTransfersError] = useState<string | null>(null);
   
   // Transfer filters
-  const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]); // Empty = all major leagues
+  const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]);
   const [transferType, setTransferType] = useState<'all' | 'free' | 'loan'>('all');
   const [timeRange, setTimeRange] = useState<'1month' | '3months' | '6months' | '1year'>('1year');
   const [availableLeagues, setAvailableLeagues] = useState<Array<{ id: number; name: string; logo?: string }>>([]);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Scroll position for sticky header
   const scrollY = useSharedValue(0);
@@ -82,8 +78,9 @@ const MatchesScreen = () => {
     leaguesCount,
   } = useMatchesData(selectedDate);
 
-  // Favorite leagues hook
+  // Favorite leagues hook - convert to Set for O(1) lookup
   const { favoriteLeagues } = useFavoriteLeagues();
+  const favoriteLeaguesSet = useMemo(() => new Set(favoriteLeagues), [favoriteLeagues]);
 
   // Get date range based on time range selection
   const getDateRange = useCallback((range: typeof timeRange) => {
@@ -113,13 +110,23 @@ const MatchesScreen = () => {
   }, []);
 
   // Load transfers when transfers tab is active or filters change
+  const loadTransfersRef = useRef(false);
   useEffect(() => {
-    if (activeTab === 'transfers') {
+    if (activeTab === 'transfers' && !loadTransfersRef.current) {
+      loadTransfersRef.current = true;
+      loadTransfers();
+    } else if (activeTab !== 'transfers') {
+      loadTransfersRef.current = false;
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'transfers' && (selectedLeagues.length > 0 || timeRange !== '1year')) {
       loadTransfers();
     }
-  }, [activeTab, selectedLeagues, timeRange]);
+  }, [selectedLeagues, timeRange]);
 
-  const loadTransfers = async () => {
+  const loadTransfers = useCallback(async () => {
     try {
       setTransfersLoading(true);
       setTransfersError(null);
@@ -163,37 +170,9 @@ const MatchesScreen = () => {
     } finally {
       setTransfersLoading(false);
     }
-  };
+  }, [selectedLeagues, timeRange, getDateRange]);
 
-  // Filter transfers by type (free/loan)
-  const filteredTransfers = useMemo(() => {
-    let filtered = [...transfers];
-
-    if (transferType !== 'all') {
-      filtered = filtered.filter(transfer => {
-        return transfer.transfers.some(t => {
-          const typeLower = t.type?.toLowerCase() || '';
-          if (transferType === 'free') {
-            return typeLower.includes('free') || typeLower.includes('عارية');
-          } else if (transferType === 'loan') {
-            return typeLower.includes('loan') || typeLower.includes('سوا');
-          }
-          return true;
-        });
-      });
-    }
-
-    // Sort by date (newest first)
-    filtered.sort((a, b) => {
-      const dateA = a.transfers[0]?.date || '';
-      const dateB = b.transfers[0]?.date || '';
-      return dateB.localeCompare(dateA);
-    });
-
-    return filtered;
-  }, [transfers, transferType]);
-
-  // Filter matches by active tab
+  // Filter matches by active tab - using Set for O(1) lookup
   const filteredMatches = useMemo(() => {
     let filtered = [...matches];
 
@@ -212,7 +191,7 @@ const MatchesScreen = () => {
       case 'favorites':
         filtered = filtered.filter((m) => {
           const leagueId = m.league?.id || 0;
-          return favoriteLeagues.includes(leagueId);
+          return favoriteLeaguesSet.has(leagueId);
         });
         break;
       case 'all':
@@ -222,9 +201,9 @@ const MatchesScreen = () => {
     }
 
     return filtered;
-  }, [matches, activeTab, favoriteLeagues]);
+  }, [matches, activeTab, favoriteLeaguesSet]);
 
-  // Group filtered matches by league
+  // Group filtered matches by league - using Set for O(1) lookup
   const filteredGroupedMatches = useMemo(() => {
     const groupsMap = new Map<number, typeof groupedMatches[0]>();
 
@@ -248,8 +227,8 @@ const MatchesScreen = () => {
     // Convert to array and sort: favorites first, then alphabetically
     const groups = Array.from(groupsMap.values());
     groups.sort((a, b) => {
-      const aIsFavorite = favoriteLeagues.includes(a.leagueId);
-      const bIsFavorite = favoriteLeagues.includes(b.leagueId);
+      const aIsFavorite = favoriteLeaguesSet.has(a.leagueId);
+      const bIsFavorite = favoriteLeaguesSet.has(b.leagueId);
       if (aIsFavorite && !bIsFavorite) return -1;
       if (bIsFavorite && !aIsFavorite) return 1;
       return a.leagueName.localeCompare(b.leagueName);
@@ -268,19 +247,18 @@ const MatchesScreen = () => {
     });
 
     return groups;
-  }, [filteredMatches, favoriteLeagues]);
+  }, [filteredMatches, favoriteLeaguesSet]);
 
   // Calculate filtered counts for indicators
-  const filteredCounts = useMemo(() => {
-    return {
-      matchesCount: filteredMatches.length,
-      leaguesCount: filteredGroupedMatches.length,
-    };
-  }, [filteredMatches.length, filteredGroupedMatches.length]);
+  const filteredCounts = useMemo(() => ({
+    matchesCount: filteredMatches.length,
+    leaguesCount: filteredGroupedMatches.length,
+  }), [filteredMatches.length, filteredGroupedMatches.length]);
 
   // Handle match press
   const handleMatchPress = useCallback(
     (matchId: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const match = matches.find((m) => m.id === matchId);
       if (match) {
         router.push({
@@ -307,14 +285,44 @@ const MatchesScreen = () => {
 
   // Handle refresh
   const handleRefresh = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRefreshing(true);
-    if (activeTab === 'transfers') {
-      await loadTransfers();
-    } else {
-      await refetch();
+    try {
+      if (activeTab === 'transfers') {
+        await loadTransfers();
+      } else {
+        await refetch();
+      }
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
-  }, [refetch, activeTab]);
+  }, [refetch, activeTab, loadTransfers]);
+
+  // Handle tab change
+  const handleTabChange = useCallback((tab: MatchTabType) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveTab(tab);
+  }, []);
+
+  // Handle player press in transfers
+  const handlePlayerPress = useCallback((transfer: Transfer) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const latestTransfer = transfer.transfers && transfer.transfers.length > 0 
+      ? transfer.transfers[transfer.transfers.length - 1] 
+      : null;
+    const currentTeam = latestTransfer?.teams.in;
+    
+    router.push({
+      pathname: '/player-profile' as any,
+      params: {
+        id: transfer.player.id.toString(),
+        name: transfer.player.name,
+        photo: transfer.player.photo || '',
+        teamName: currentTeam?.name || '',
+        teamLogo: currentTeam?.logo || '',
+      }
+    } as any);
+  }, [router]);
 
   // Loading state
   if (loading && !refreshing && matches.length === 0) {
@@ -322,7 +330,7 @@ const MatchesScreen = () => {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <LinearGradient
-          colors={[COLORS.deepBlack, COLORS.deepBlack]}
+          colors={[MATCH_DETAILS_COLORS.background, MATCH_DETAILS_COLORS.background]}
           style={StyleSheet.absoluteFill}
         />
         <MatchTopBar
@@ -345,7 +353,7 @@ const MatchesScreen = () => {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <LinearGradient
-          colors={[COLORS.deepBlack, COLORS.deepBlack]}
+          colors={[MATCH_DETAILS_COLORS.background, MATCH_DETAILS_COLORS.background]}
           style={StyleSheet.absoluteFill}
         />
         <MatchTopBar
@@ -353,14 +361,12 @@ const MatchesScreen = () => {
           onDateChange={setSelectedDate}
           scrollY={scrollY}
         />
-        <View style={styles.errorContainer}>
-          <View style={styles.errorContent}>
-            <View style={styles.errorText}>
-              <Text style={styles.errorTitle}>Error Loading Matches</Text>
-              <Text style={styles.errorMessage}>{error}</Text>
-            </View>
-          </View>
-        </View>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Error Loading Matches"
+          message={error}
+          iconColor={MATCH_DETAILS_COLORS.error}
+        />
       </View>
     );
   }
@@ -372,7 +378,7 @@ const MatchesScreen = () => {
       {/* Background */}
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={[COLORS.deepBlack, COLORS.deepBlack]}
+          colors={[MATCH_DETAILS_COLORS.background, MATCH_DETAILS_COLORS.background]}
           style={StyleSheet.absoluteFill}
         />
       </View>
@@ -393,138 +399,7 @@ const MatchesScreen = () => {
       )}
 
       {/* Tabs */}
-      <MatchTabs activeTab={activeTab} onTabChange={setActiveTab} />
-
-      {/* Transfer Filters */}
-      {activeTab === 'transfers' && (
-        <View style={styles.filtersContainer}>
-          <TouchableOpacity
-            style={styles.filterToggle}
-            onPress={() => setShowFilters(!showFilters)}
-          >
-            <Ionicons 
-              name={showFilters ? 'chevron-up' : 'chevron-down'} 
-              size={20} 
-              color={COLORS.neonGreen} 
-            />
-            <Text style={styles.filterToggleText}>Filters</Text>
-            {(selectedLeagues.length > 0 || transferType !== 'all' || timeRange !== '1year') && (
-              <View style={styles.filterBadge} />
-            )}
-          </TouchableOpacity>
-
-          {showFilters && (
-            <View style={styles.filtersContent}>
-              {/* Time Range Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterLabel}>Time Period</Text>
-                <View style={styles.filterOptions}>
-                  {(['1month', '3months', '6months', '1year'] as const).map((range) => (
-                    <TouchableOpacity
-                      key={range}
-                      style={[
-                        styles.filterOption,
-                        timeRange === range && styles.filterOptionActive
-                      ]}
-                      onPress={() => setTimeRange(range)}
-                    >
-                      <Text style={[
-                        styles.filterOptionText,
-                        timeRange === range && styles.filterOptionTextActive
-                      ]}>
-                        {range === '1month' ? '1 Month' : 
-                         range === '3months' ? '3 Months' :
-                         range === '6months' ? '6 Months' : '1 Year'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Transfer Type Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterLabel}>Transfer Type</Text>
-                <View style={styles.filterOptions}>
-                  {(['all', 'free', 'loan'] as const).map((type) => (
-                    <TouchableOpacity
-                      key={type}
-                      style={[
-                        styles.filterOption,
-                        transferType === type && styles.filterOptionActive
-                      ]}
-                      onPress={() => setTransferType(type)}
-                    >
-                      <Text style={[
-                        styles.filterOptionText,
-                        transferType === type && styles.filterOptionTextActive
-                      ]}>
-                        {type === 'all' ? 'All' : 
-                         type === 'free' ? 'Free (عارية)' : 'Loan (سوا)'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* League Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterLabel}>
-                  Leagues {selectedLeagues.length > 0 && `(${selectedLeagues.length} selected)`}
-                </Text>
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.leagueFilterScroll}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.leagueFilterItem,
-                      selectedLeagues.length === 0 && styles.leagueFilterItemActive
-                    ]}
-                    onPress={() => setSelectedLeagues([])}
-                  >
-                    <Text style={[
-                      styles.leagueFilterText,
-                      selectedLeagues.length === 0 && styles.leagueFilterTextActive
-                    ]}>
-                      Top 5 Leagues
-                    </Text>
-                  </TouchableOpacity>
-                  {availableLeagues.map((league) => {
-                    const isSelected = selectedLeagues.includes(league.id);
-                    return (
-                      <TouchableOpacity
-                        key={league.id}
-                        style={[
-                          styles.leagueFilterItem,
-                          isSelected && styles.leagueFilterItemActive
-                        ]}
-                        onPress={() => {
-                          if (isSelected) {
-                            setSelectedLeagues(selectedLeagues.filter(id => id !== league.id));
-                          } else {
-                            setSelectedLeagues([...selectedLeagues, league.id]);
-                          }
-                        }}
-                      >
-                        {league.logo && (
-                          <Image source={{ uri: league.logo }} style={styles.leagueFilterLogo} />
-                        )}
-                        <Text style={[
-                          styles.leagueFilterText,
-                          isSelected && styles.leagueFilterTextActive
-                        ]} numberOfLines={1}>
-                          {league.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </View>
-          )}
-        </View>
-      )}
+      <MatchTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Content */}
       <AnimatedScrollView
@@ -538,110 +413,35 @@ const MatchesScreen = () => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor={COLORS.neonGreen}
-            colors={[COLORS.neonGreen]}
+            tintColor={MATCH_DETAILS_COLORS.accent}
+            colors={[MATCH_DETAILS_COLORS.accent]}
           />
         }
         onScroll={scrollHandler}
         scrollEventThrottle={16}
       >
         {activeTab === 'transfers' ? (
-          // Transfers Content
-          transfersLoading && transfers.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={COLORS.neonGreen} />
-              <Text style={styles.emptySubtext}>Loading transfers...</Text>
-            </View>
-          ) : transfersError && transfers.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyContent}>
-                <Ionicons name="alert-circle-outline" size={48} color={COLORS.textSecondary} />
-                <Text style={styles.emptyText}>Error Loading Transfers</Text>
-                <Text style={styles.emptySubtext}>{transfersError}</Text>
-              </View>
-            </View>
-          ) : filteredTransfers.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyContent}>
-                <Ionicons name="swap-horizontal-outline" size={48} color={COLORS.textSecondary} />
-                <Text style={styles.emptyText}>No transfers found</Text>
-                <Text style={styles.emptySubtext}>
-                  {transfers.length === 0 
-                    ? 'Try refreshing or check back later'
-                    : 'Try adjusting your filters'}
-                </Text>
-              </View>
-            </View>
-          ) : (
-            filteredTransfers.map((transfer, index) => (
-              <View key={index} style={styles.transferCard}>
-                <View style={styles.transferHeader}>
-                  <Image
-                    source={{ uri: transfer.player.photo }}
-                    style={styles.playerPhoto}
-                  />
-                  <View style={styles.playerInfo}>
-                    <Text style={styles.playerName}>{transfer.player.name}</Text>
-                    <Text style={styles.transferDate}>{transfer.update}</Text>
-                  </View>
-                </View>
-
-                {transfer.league && (
-                  <View style={styles.leagueBadge}>
-                    {transfer.league.logo && (
-                      <Image source={{ uri: transfer.league.logo }} style={styles.leagueLogoSmall} />
-                    )}
-                    <Text style={styles.leagueNameSmall}>{transfer.league.name}</Text>
-                  </View>
-                )}
-
-                {transfer.transfers.map((t, tIndex) => (
-                  <View key={tIndex} style={styles.transferDetails}>
-                    {t.teams.out && (
-                      <View style={styles.teamBox}>
-                        <Image
-                          source={{ uri: t.teams.out.logo }}
-                          style={styles.teamLogo}
-                        />
-                        <Text style={styles.teamName} numberOfLines={2}>
-                          {t.teams.out.name}
-                        </Text>
-                      </View>
-                    )}
-
-                    <View style={styles.transferArrow}>
-                      <Ionicons name="arrow-forward" size={20} color={COLORS.neonGreen} />
-                      <Text style={styles.transferType}>{t.type}</Text>
-                      {t.date && <Text style={styles.transferDateSmall}>{t.date}</Text>}
-                    </View>
-
-                    {t.teams.in && (
-                      <View style={styles.teamBox}>
-                        <Image
-                          source={{ uri: t.teams.in.logo }}
-                          style={styles.teamLogo}
-                        />
-                        <Text style={styles.teamName} numberOfLines={2}>
-                          {t.teams.in.name}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            ))
-          )
+          <TransfersSection
+            transfers={transfers}
+            loading={transfersLoading}
+            error={transfersError}
+            selectedLeagues={selectedLeagues}
+            onSelectedLeaguesChange={setSelectedLeagues}
+            transferType={transferType}
+            onTransferTypeChange={setTransferType}
+            timeRange={timeRange}
+            onTimeRangeChange={setTimeRange}
+            availableLeagues={availableLeagues}
+            onPlayerPress={handlePlayerPress}
+          />
         ) : filteredGroupedMatches.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyContent}>
-              <Text style={styles.emptyText}>No matches found</Text>
-              <Text style={styles.emptySubtext}>
-                Try selecting a different date or tab
-              </Text>
-            </View>
-          </View>
+          <EmptyState
+            icon="calendar-outline"
+            title="No matches found"
+            message="Try selecting a different date or tab"
+          />
         ) : (
-          filteredGroupedMatches.map((group) => (
+          filteredGroupedMatches.map((group, index) => (
             <LeagueSection
               key={group.leagueId}
               leagueId={group.leagueId}
@@ -649,6 +449,7 @@ const MatchesScreen = () => {
               leagueLogo={group.leagueLogo}
               matches={group.matches}
               onMatchPress={handleMatchPress}
+              index={index}
             />
           ))
         )}
@@ -660,7 +461,7 @@ const MatchesScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.deepBlack,
+    backgroundColor: MATCH_DETAILS_COLORS.background,
   },
   scrollView: {
     flex: 1,
@@ -675,246 +476,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     gap: 12,
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  errorContent: {
-    alignItems: 'center',
-  },
-  errorText: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 32,
-  },
-  emptyContent: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  transferCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  transferHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  playerPhoto: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  playerInfo: {
-    flex: 1,
-  },
-  playerName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: 4,
-  },
-  transferDate: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  transferDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  teamBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  teamLogo: {
-    width: 40,
-    height: 40,
-    marginBottom: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  teamName: {
-    fontSize: 11,
-    color: COLORS.white,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  transferArrow: {
-    alignItems: 'center',
-    marginHorizontal: 12,
-    minWidth: 80,
-  },
-  transferType: {
-    fontSize: 10,
-    color: COLORS.neonGreen,
-    fontWeight: '600',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  transferDateSmall: {
-    fontSize: 9,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  filtersContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  filterToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterToggleText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  filterBadge: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.neonGreen,
-  },
-  filtersContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 16,
-  },
-  filterSection: {
-    gap: 8,
-  },
-  filterLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  filterOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  filterOptionActive: {
-    backgroundColor: COLORS.neonGreen,
-    borderColor: COLORS.neonGreen,
-  },
-  filterOptionText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  filterOptionTextActive: {
-    color: COLORS.deepBlack,
-    fontWeight: '700',
-  },
-  leagueFilterScroll: {
-    maxHeight: 50,
-  },
-  leagueFilterItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  leagueFilterItemActive: {
-    backgroundColor: COLORS.neonGreen,
-    borderColor: COLORS.neonGreen,
-  },
-  leagueFilterLogo: {
-    width: 16,
-    height: 16,
-    marginRight: 6,
-    borderRadius: 8,
-  },
-  leagueFilterText: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  leagueFilterTextActive: {
-    color: COLORS.deepBlack,
-    fontWeight: '700',
-  },
-  leagueBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0, 255, 136, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  leagueLogoSmall: {
-    width: 14,
-    height: 14,
-    marginRight: 6,
-    borderRadius: 7,
-  },
-  leagueNameSmall: {
-    color: COLORS.neonGreen,
-    fontSize: 10,
-    fontWeight: '600',
-  },
 });
 
 export default MatchesScreen;
-

@@ -1,40 +1,110 @@
 /**
  * Quick Indicators Row
- * Shows matches count (🔴) and leagues count (🟢)
- * Lightweight, informative design
+ * Enhanced with animations and unified colors
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '../reels/constants';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withDelay,
+  useAnimatedReaction,
+} from 'react-native-reanimated';
+import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 
 interface QuickIndicatorsProps {
   matchesCount: number;
   leaguesCount: number;
 }
 
-const QuickIndicators: React.FC<QuickIndicatorsProps> = ({
+const QuickIndicators: React.FC<QuickIndicatorsProps> = React.memo(({
   matchesCount,
   leaguesCount,
 }) => {
+  const matchesOpacity = useSharedValue(0);
+  const leaguesOpacity = useSharedValue(0);
+  const matchesScale = useSharedValue(0.8);
+  const leaguesScale = useSharedValue(0.8);
+  const prevMatchesCount = useSharedValue(matchesCount);
+  const prevLeaguesCount = useSharedValue(leaguesCount);
+
+  // Entrance animation
+  useEffect(() => {
+    matchesOpacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });
+    leaguesOpacity.value = withDelay(
+      100,
+      withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration })
+    );
+    matchesScale.value = withSpring(1, ANIMATION_CONFIG.spring);
+    leaguesScale.value = withDelay(
+      100,
+      withSpring(1, ANIMATION_CONFIG.spring)
+    );
+  }, []);
+
+  // Animate count changes
+  useAnimatedReaction(
+    () => matchesCount,
+    (current, previous) => {
+      if (previous !== null && current !== previous) {
+        matchesScale.value = withSpring(1.2, ANIMATION_CONFIG.spring, () => {
+          matchesScale.value = withSpring(1, ANIMATION_CONFIG.spring);
+        });
+        prevMatchesCount.value = current;
+      }
+    }
+  );
+
+  useAnimatedReaction(
+    () => leaguesCount,
+    (current, previous) => {
+      if (previous !== null && current !== previous) {
+        leaguesScale.value = withSpring(1.2, ANIMATION_CONFIG.spring, () => {
+          leaguesScale.value = withSpring(1, ANIMATION_CONFIG.spring);
+        });
+        prevLeaguesCount.value = current;
+      }
+    }
+  );
+
+  const matchesStyle = useAnimatedStyle(() => ({
+    opacity: matchesOpacity.value,
+    transform: [{ scale: matchesScale.value }],
+  }));
+
+  const leaguesStyle = useAnimatedStyle(() => ({
+    opacity: leaguesOpacity.value,
+    transform: [{ scale: leaguesScale.value }],
+  }));
+
   return (
     <View style={styles.container}>
       {/* Matches Count */}
-      <View style={styles.indicator}>
+      <Animated.View style={[styles.indicator, matchesStyle]}>
         <View style={styles.redDot} />
-        <Text style={styles.countText}>{matchesCount}</Text>
+        <Animated.Text style={styles.countText}>{matchesCount}</Animated.Text>
         <Text style={styles.labelText}>Matches</Text>
-      </View>
+      </Animated.View>
 
       {/* Leagues Count */}
-      <View style={styles.indicator}>
+      <Animated.View style={[styles.indicator, leaguesStyle]}>
         <View style={styles.greenDot} />
-        <Text style={styles.countText}>{leaguesCount}</Text>
+        <Animated.Text style={styles.countText}>{leaguesCount}</Animated.Text>
         <Text style={styles.labelText}>Leagues</Text>
-      </View>
+      </Animated.View>
     </View>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.matchesCount === nextProps.matchesCount &&
+    prevProps.leaguesCount === nextProps.leaguesCount
+  );
+});
+
+QuickIndicators.displayName = 'QuickIndicators';
 
 const styles = StyleSheet.create({
   container: {
@@ -53,25 +123,24 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.neonRed,
+    backgroundColor: MATCH_DETAILS_COLORS.error,
   },
   greenDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.neonGreen,
+    backgroundColor: MATCH_DETAILS_COLORS.accent,
   },
   countText: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
   },
   labelText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    color: MATCH_DETAILS_COLORS.textSecondary,
   },
 });
 
 export default QuickIndicators;
-

@@ -42,12 +42,17 @@ const TransferCard = React.memo(({
 }: { 
   transfer: Transfer; 
   index: number;
-  onPlayerPress?: (playerId: number) => void;
+  onPlayerPress?: (transfer: Transfer) => void;
   onTeamPress?: (teamId: number) => void;
 }) => (
   <View style={styles.transferCard}>
     <View style={styles.transferHeader}>
-      <TouchableOpacity onPress={() => onPlayerPress?.(transfer.player.id)}>
+      <TouchableOpacity 
+        onPress={(e) => {
+          e.stopPropagation();
+          onPlayerPress?.(transfer);
+        }}
+      >
         <Image 
           source={{ uri: transfer.player.photo }} 
           style={styles.playerPhoto}
@@ -58,7 +63,12 @@ const TransferCard = React.memo(({
         />
       </TouchableOpacity>
       <View style={styles.playerInfo}>
-        <TouchableOpacity onPress={() => onPlayerPress?.(transfer.player.id)}>
+        <TouchableOpacity 
+          onPress={(e) => {
+            e.stopPropagation();
+            onPlayerPress?.(transfer);
+          }}
+        >
           <Text style={styles.playerName}>{transfer.player.name}</Text>
         </TouchableOpacity>
         <Text style={styles.transferDate}>{transfer.update}</Text>
@@ -85,7 +95,10 @@ const TransferCard = React.memo(({
         {t.teams.out && (
           <TouchableOpacity 
             style={styles.teamBox}
-            onPress={() => onTeamPress?.(t.teams.out!.id)}
+            onPress={(e) => {
+              e.stopPropagation();
+              onTeamPress?.(t.teams.out!.id);
+            }}
           >
             <Image 
               source={{ uri: t.teams.out.logo }} 
@@ -110,7 +123,10 @@ const TransferCard = React.memo(({
         {t.teams.in && (
           <TouchableOpacity 
             style={styles.teamBox}
-            onPress={() => onTeamPress?.(t.teams.in!.id)}
+            onPress={(e) => {
+              e.stopPropagation();
+              onTeamPress?.(t.teams.in!.id);
+            }}
           >
             <Image 
               source={{ uri: t.teams.in.logo }} 
@@ -353,8 +369,29 @@ export default function TransfersScreen() {
   }, [loadTransfers]);
 
   // Navigation handlers
-  const handlePlayerPress = useCallback((playerId: number) => {
-    router.push(`/player-profile?id=${playerId}`);
+  const handlePlayerPress = useCallback((transfer: Transfer) => {
+    console.log('🔄 Navigating to player profile:', transfer.player.name, transfer.player.id);
+    
+    // Get the current team (team "in" from the latest transfer)
+    const latestTransfer = transfer.transfers && transfer.transfers.length > 0 
+      ? transfer.transfers[transfer.transfers.length - 1] 
+      : null;
+    const currentTeam = latestTransfer?.teams.in;
+    
+    const params = {
+      id: transfer.player.id.toString(),
+      name: transfer.player.name,
+      photo: transfer.player.photo || '',
+      teamName: currentTeam?.name || '',
+      teamLogo: currentTeam?.logo || '',
+    };
+    
+    console.log('📋 Navigation params:', params);
+    
+    router.push({
+      pathname: '/player-profile' as any,
+      params: params
+    } as any);
   }, [router]);
 
   const handleTeamPress = useCallback((teamId: number) => {

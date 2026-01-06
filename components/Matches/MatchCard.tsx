@@ -1,63 +1,91 @@
 /**
  * Match Card Component
- * 365Scores style - Lightweight, clickable, zero visual noise
+ * Enhanced with animations, haptic feedback, and unified colors
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useAnimatedStyle, withSpring, useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+  withRepeat,
+  withTiming,
+  useSharedValue,
+  interpolate,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Match } from '../league-center/matchCardUtils';
-import { COLORS } from '../reels/constants';
-import { useRouter } from 'expo-router';
+import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 
 interface MatchCardProps {
   match: Match;
   onPress?: (matchId: string) => void;
+  index?: number;
 }
 
-const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
-  const router = useRouter();
+const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index = 0 }) => {
   const scale = useSharedValue(1);
+  const pulseScale = useSharedValue(1);
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+  const glowOpacity = useSharedValue(0.3);
 
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
   const isUpcoming = match.status === 'upcoming' || match.status === 'NS' || match.status === 'TBD';
 
+  // Entrance animation
+  useEffect(() => {
+    const delay = index * ANIMATION_CONFIG.staggerDelay;
+    setTimeout(() => {
+      opacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });
+      translateY.value = withSpring(0, ANIMATION_CONFIG.spring);
+    }, delay);
+  }, []);
+
+  // Pulse animation for live matches
+  useEffect(() => {
+    if (isLive) {
+      pulseScale.value = withRepeat(
+        withTiming(1.02, { duration: ANIMATION_CONFIG.pulseDuration / 2 }),
+        -1,
+        true
+      );
+      glowOpacity.value = withRepeat(
+        withTiming(0.6, { duration: ANIMATION_CONFIG.pulseDuration }),
+        -1,
+        true
+      );
+    }
+  }, [isLive]);
+
   const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (onPress) {
       onPress(match.id);
-    } else {
-      router.push({
-        pathname: '/(tabs)/match-details',
-        params: {
-          fixtureId: match.id,
-          homeTeam: match.homeTeam.name,
-          awayTeam: match.awayTeam.name,
-          homeLogo: match.homeTeam.logo,
-          awayLogo: match.awayTeam.logo,
-          homeScore: match.score.home?.toString() || '',
-          awayScore: match.score.away?.toString() || '',
-          league: match.league?.name || '',
-          leagueLogo: match.league?.logo || '',
-          date: match.fixtureDate || '',
-          time: match.time || '',
-          status: match.status,
-        },
-      });
     }
   };
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.98, { damping: 15 });
+    scale.value = withSpring(0.96, ANIMATION_CONFIG.spring);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15 });
+    scale.value = withSpring(1, ANIMATION_CONFIG.spring);
   };
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      { scale: scale.value * pulseScale.value },
+      { translateY: translateY.value },
+    ],
+    opacity: opacity.value,
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
   }));
 
   const renderStatus = () => {
@@ -84,7 +112,7 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
   };
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[animatedStyle, { marginBottom: 12 }]}>
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={handlePress}
@@ -92,6 +120,16 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
         onPressOut={handlePressOut}
         style={[styles.container, isLive && styles.liveContainer]}
       >
+        {/* Glow effect for live matches */}
+        {isLive && (
+          <Animated.View style={[styles.glowOverlay, glowStyle]} pointerEvents="none">
+            <LinearGradient
+              colors={['rgba(34, 197, 94, 0.1)', 'transparent']}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        )}
+
         {/* League Header */}
         {match.league?.name && (
           <View style={styles.leagueHeader}>
@@ -99,7 +137,10 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
               <Image
                 source={{ uri: match.league.logo }}
                 style={styles.leagueLogo}
-                resizeMode="contain"
+                contentFit="contain"
+                transition={200}
+                cachePolicy="memory-disk"
+                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
               />
             )}
             <Text style={styles.leagueName} numberOfLines={1}>
@@ -121,7 +162,10 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
               <Image
                 source={{ uri: match.homeTeam.logo }}
                 style={styles.teamLogo}
-                resizeMode="contain"
+                contentFit="contain"
+                transition={200}
+                cachePolicy="memory-disk"
+                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
               />
             </View>
             <Text style={styles.teamName} numberOfLines={2}>
@@ -152,7 +196,10 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
               <Image
                 source={{ uri: match.awayTeam.logo }}
                 style={styles.teamLogo}
-                resizeMode="contain"
+                contentFit="contain"
+                transition={200}
+                cachePolicy="memory-disk"
+                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
               />
             </View>
             <Text style={styles.teamName} numberOfLines={2}>
@@ -163,27 +210,50 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress }) => {
       </TouchableOpacity>
     </Animated.View>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison for React.memo
+  return (
+    prevProps.match.id === nextProps.match.id &&
+    prevProps.match.status === nextProps.match.status &&
+    prevProps.match.score.home === nextProps.match.score.home &&
+    prevProps.match.score.away === nextProps.match.score.away &&
+    prevProps.match.minute === nextProps.match.minute
+  );
+});
+
+MatchCard.displayName = 'MatchCard';
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: COLORS.darkGray,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: MATCH_DETAILS_COLORS.card,
+    borderRadius: 20,
+    padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: MATCH_DETAILS_COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   liveContainer: {
-    borderColor: 'rgba(255, 59, 48, 0.3)',
-    backgroundColor: 'rgba(255, 59, 48, 0.05)',
+    borderColor: MATCH_DETAILS_COLORS.accent,
+    shadowColor: MATCH_DETAILS_COLORS.accent,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  glowOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
   leagueHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
-    gap: 6,
+    gap: 8,
   },
   leagueLogo: {
     width: 16,
@@ -192,7 +262,7 @@ const styles = StyleSheet.create({
   leagueName: {
     fontSize: 11,
     fontWeight: '600',
-    color: COLORS.textTertiary,
+    color: MATCH_DETAILS_COLORS.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -203,7 +273,7 @@ const styles = StyleSheet.create({
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.neonRed,
+    backgroundColor: MATCH_DETAILS_COLORS.accent,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -213,39 +283,39 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: COLORS.white,
+    backgroundColor: MATCH_DETAILS_COLORS.text,
   },
   liveText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
     letterSpacing: 0.5,
   },
   finishedBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: MATCH_DETAILS_COLORS.cardSecondary,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: MATCH_DETAILS_COLORS.borderLight,
   },
   finishedText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textSecondary,
+    color: MATCH_DETAILS_COLORS.textSecondary,
   },
   upcomingBadge: {
-    backgroundColor: 'rgba(0, 217, 255, 0.15)',
+    backgroundColor: `rgba(59, 130, 246, 0.15)`,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0, 217, 255, 0.3)',
+    borderColor: `rgba(59, 130, 246, 0.3)`,
   },
   upcomingText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.neonBlue,
+    color: MATCH_DETAILS_COLORS.blue,
   },
   teamsRow: {
     flexDirection: 'row',
@@ -255,17 +325,17 @@ const styles = StyleSheet.create({
   teamSection: {
     flex: 1,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   teamLogoContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: MATCH_DETAILS_COLORS.cardSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: MATCH_DETAILS_COLORS.border,
   },
   teamLogo: {
     width: 44,
@@ -274,7 +344,7 @@ const styles = StyleSheet.create({
   teamName: {
     fontSize: 13,
     fontWeight: '700',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
     textAlign: 'center',
     maxWidth: 110,
     lineHeight: 18,
@@ -292,26 +362,25 @@ const styles = StyleSheet.create({
   score: {
     fontSize: 28,
     fontWeight: '900',
-    color: COLORS.white,
+    color: MATCH_DETAILS_COLORS.text,
     letterSpacing: 1,
     minWidth: 28,
     textAlign: 'center',
   },
   scoreLive: {
-    color: COLORS.neonBlue,
+    color: MATCH_DETAILS_COLORS.accent,
   },
   scoreSeparator: {
     fontSize: 24,
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: MATCH_DETAILS_COLORS.textTertiary,
   },
   vsText: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.textTertiary,
+    color: MATCH_DETAILS_COLORS.textTertiary,
     letterSpacing: 2,
   },
 });
 
 export default MatchCard;
-
