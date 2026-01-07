@@ -119,7 +119,8 @@ class FootballDataCacheService {
             }
 
             // ✅ Fetch from API (with request deduplication - if 1000 users request, only 1 API call)
-            logger.debug(`📡 [${dateString}] Fetching matches from API (request will be shared with concurrent users)...`);
+            // Fetch ALL leagues (no league filter = maximum matches)
+            logger.debug(`📡 [${dateString}] Fetching matches from API (all leagues, request will be shared with concurrent users)...`);
             const apiMatches = await footballService.getFixtures({ date: dateString });
 
             // ✅ Archive finished matches to database (permanent, shared for all users)
@@ -1206,6 +1207,125 @@ class FootballDataCacheService {
         // Store pending request
         this.pendingTransfersRequests.set(cacheKey, requestPromise);
         return requestPromise;
+    }
+
+    /**
+     * Get cached transfers by leagues from database only (no API calls)
+     * Fast database query for zero-delay frontend display
+     */
+    async getCachedTransfersByLeagues(
+        leagueIds?: number[],
+        season?: number,
+        dateRange?: { from: string; to: string }
+    ): Promise<Array<{ leagueId: number; leagueName: string; leagueLogo?: string; transfers: any[] }>> {
+        try {
+            // Build where clause
+            const where: any = {};
+            
+            if (leagueIds && leagueIds.length > 0) {
+                where.leagueId = { in: leagueIds };
+            }
+            
+            if (dateRange) {
+                where.transferDate = {
+                    gte: dateRange.from,
+                    lte: dateRange.to,
+                };
+            }
+
+            // Query database
+            const dbTransfers = await prisma.cachedTransfer.findMany({
+                where,
+                orderBy: { transferDate: 'desc' },
+                take: 5000, // Reasonable limit
+            });
+
+            if (dbTransfers.length === 0) {
+                logger.debug('📦 No cached transfers found in database');
+                return [];
+            }
+
+            logger.debug(`📦 Found ${dbTransfers.length} cached transfers in database`);
+
+            // Group by league
+            const leagueMap = new Map<number, {
+                leagueId: number;
+                leagueName: string;
+                leagueLogo?: string;
+                transfers: any[];
+            }>();
+
+            // Group transfers by player
+            const playerTransfersMap = new Map<number, any>();
+
+            for (const dbTransfer of dbTransfers) {
+                // Initialize league if not exists
+                if (dbTransfer.leagueId && !leagueMap.has(dbTransfer.leagueId)) {
+                    leagueMap.set(dbTransfer.leagueId, {
+                        leagueId: dbTransfer.leagueId,
+                        leagueName: dbTransfer.leagueName || 'Unknown League',
+                        leagueLogo: dbTransfer.leagueLogo || undefined,
+                        transfers: [],
+                    });
+                }
+
+                // Initialize player transfer if not exists
+                if (!playerTransfersMap.has(dbTransfer.playerId)) {
+                    const playerTransfer: any = {
+                        player: {
+                            id: dbTransfer.playerId,
+                            name: dbTransfer.playerName,
+                            photo: dbTransfer.playerPhoto,
+                        },
+                        transfers: [],
+                        league: dbTransfer.leagueId ? {
+                            id: dbTransfer.leagueId,
+                            name: dbTransfer.leagueName,
+                            logo: dbTransfer.leagueLogo,
+                        } : null,
+                        update: dbTransfer.transferDate,
+                    };
+                    playerTransfersMap.set(dbTransfer.playerId, playerTransfer);
+                }
+
+                // Add transfer to player
+                const playerTransfer = playerTransfersMap.get(dbTransfer.playerId)!;
+                playerTransfer.transfers.push({
+                    date: dbTransfer.transferDate,
+                    type: dbTransfer.transferType,
+                    teams: {
+                        in: dbTransfer.teamInId ? {
+                            id: dbTransfer.teamInId,
+                            name: dbTransfer.teamInName,
+                            logo: dbTransfer.teamInLogo,
+                        } : null,
+                        out: dbTransfer.teamOutId ? {
+                            id: dbTransfer.teamOutId,
+                            name: dbTransfer.teamOutName,
+                            logo: dbTransfer.teamOutLogo,
+                        } : null,
+                    },
+                });
+
+                // Add player transfer to league
+                if (dbTransfer.leagueId && leagueMap.has(dbTransfer.leagueId)) {
+                    const league = leagueMap.get(dbTransfer.leagueId)!;
+                    // Check if player transfer already added to this league
+                    if (!league.transfers.some(t => t.player.id === dbTransfer.playerId)) {
+                        league.transfers.push(playerTransfer);
+                    }
+                }
+            }
+
+            return Array.from(leagueMap.values());
+        } catch (error: any) {
+            if (error?.code === 'P2021') {
+                logger.debug('CachedTransfer table does not exist yet');
+                return [];
+            }
+            logger.error('Error getting cached transfers from database:', error);
+            return [];
+        }
     }
 
     /**

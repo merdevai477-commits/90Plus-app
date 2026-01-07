@@ -933,6 +933,43 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/transfers/cached
+   * Get cached transfers from database (fast, no API calls)
+   * Query params: leagues (comma-separated IDs), season (optional, default current), from (YYYY-MM-DD), to (YYYY-MM-DD)
+   */
+  static async getCachedTransfers(req: Request, res: Response): Promise<void> {
+    try {
+      const leaguesParam = req.query.leagues as string | undefined;
+      const seasonParam = req.query.season as string | undefined;
+      const fromDate = req.query.from as string | undefined;
+      const toDate = req.query.to as string | undefined;
+
+      const leagueIds = leaguesParam 
+        ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        : undefined;
+
+      const season = seasonParam ? parseInt(seasonParam) : new Date().getFullYear();
+
+      const dateRange = (fromDate && toDate) 
+        ? { from: fromDate, to: toDate }
+        : undefined;
+
+      const transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, season, dateRange);
+
+      const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
+
+      res.json({
+        status: 'SUCCESS',
+        results: totalTransfers,
+        leagues: transfersByLeagues.length,
+        response: transfersByLeagues,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/venues/:id - Get venue/stadium information
    */
   static async getVenueInfo(req: Request, res: Response): Promise<void> {

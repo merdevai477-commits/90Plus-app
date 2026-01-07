@@ -190,6 +190,11 @@ router.get('/transfers', FootballController.getTransfers);
 // Query params: leagues (comma-separated IDs), from (YYYY-MM-DD), to (YYYY-MM-DD)
 router.get('/transfers/by-leagues', FootballController.getTransfersByLeagues);
 
+// GET /api/football/transfers/cached
+// Get cached transfers from database (fast, zero-delay)
+// Query params: leagues (comma-separated IDs), season (optional), from (YYYY-MM-DD), to (YYYY-MM-DD)
+router.get('/transfers/cached', FootballController.getCachedTransfers);
+
 // ============================================
 // VENUES ROUTES
 // ============================================
