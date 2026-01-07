@@ -166,10 +166,10 @@ export const transfersCacheService = {
       }
 
       if (!response.ok) {
-        // If 404, return empty array instead of throwing (endpoint might not be available yet)
+        // If 404, try fallback to /by-leagues endpoint to fetch from API
         if (response.status === 404) {
-          logger.warn(`⚠️ Transfers cached endpoint not available (404) - Season: ${season}, Leagues: ${leagueIds.length > 0 ? leagueIds.join(',') : 'ALL'}`);
-          return [];
+          logger.warn(`⚠️ Transfers cached endpoint not available (404), trying /by-leagues as fallback...`);
+          return await this.fetchTransfersFromAPI(leagueIds, dateRange, season);
         }
         const errorText = await response.text().catch(() => 'Unknown error');
         logger.error(`❌ Failed to fetch cached transfers: ${response.status} - ${errorText}`);
@@ -181,17 +181,89 @@ export const transfersCacheService = {
       logger.debug(`📡 Backend response - Status: ${result.status}, Leagues: ${result.leagues || 0}, Results: ${result.results || 0}`);
       
       if (result.status === 'SUCCESS' && result.response) {
+        // If database is empty, fetch from API as fallback
+        if (result.results === 0 || result.leagues === 0) {
+          logger.warn(`⚠️ Database is empty (0 transfers), fetching from API as fallback...`);
+          return await this.fetchTransfersFromAPI(leagueIds, dateRange, season);
+        }
+        
         logger.debug(`✅ Successfully fetched ${result.response.length} leagues with transfers`);
         // Cache the result
         await this.cacheTransfers(result.response, season, leagueIds);
         return result.response;
       }
 
-      logger.warn(`⚠️ Backend returned empty or invalid response - Status: ${result.status}, Response: ${result.response ? 'exists' : 'missing'}`);
-      return [];
+      logger.warn(`⚠️ Backend returned empty or invalid response, trying API fallback...`);
+      return await this.fetchTransfersFromAPI(leagueIds, dateRange, season);
     } catch (error) {
       logger.error('Error fetching cached transfers:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Fetch transfers from API endpoint (/by-leagues) as fallback
+   * This endpoint fetches from API and saves to database
+   */
+  async fetchTransfersFromAPI(
+    leagueIds: number[] = [],
+    dateRange?: { from: string; to: string },
+    season?: number
+  ): Promise<Array<{ leagueId: number; leagueName: string; leagueLogo?: string; transfers: Transfer[] }>> {
+    try {
+      const apiUrl = getApiUrl();
+      const params = new URLSearchParams();
+      
+      // If leagueIds is empty, don't send leagues parameter (means all leagues)
+      if (leagueIds.length > 0) {
+        params.append('leagues', leagueIds.join(','));
+      }
+      
+      if (dateRange) {
+        params.append('from', dateRange.from);
+        params.append('to', dateRange.to);
+      }
+
+      // Build URL - check if apiUrl already includes /api
+      let url = `${apiUrl}/api/football/transfers/by-leagues`;
+      if (apiUrl.endsWith('/api')) {
+        url = `${apiUrl}/football/transfers/by-leagues`;
+      }
+      
+      const fullUrl = `${url}?${params.toString()}`;
+      logger.debug(`📡 Fetching transfers from API endpoint: ${fullUrl}`);
+
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        logger.error(`❌ Failed to fetch transfers from API: ${response.status} - ${errorText}`);
+        return [];
+      }
+
+      const result = await response.json();
+      
+      logger.debug(`📡 API response - Status: ${result.status}, Leagues: ${result.leagues || 0}, Results: ${result.results || 0}`);
+      
+      if (result.status === 'SUCCESS' && result.response) {
+        logger.debug(`✅ Successfully fetched ${result.response.length} leagues with transfers from API`);
+        // Cache the result (API endpoint saves to database automatically)
+        if (season) {
+          await this.cacheTransfers(result.response, season, leagueIds);
+        }
+        return result.response;
+      }
+
+      logger.warn(`⚠️ API returned empty or invalid response`);
+      return [];
+    } catch (error) {
+      logger.error('Error fetching transfers from API:', error);
+      return [];
     }
   },
 };
