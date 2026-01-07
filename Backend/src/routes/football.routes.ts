@@ -24,6 +24,10 @@ router.get('/leagues/all', FootballController.getAllLeagues);
 // Query params: page (optional), limit (optional, default 100)
 router.get('/teams/all-logos', FootballController.getAllTeamLogos);
 
+// GET /api/football/teams/african-logos
+// Get logos for 10 major African teams
+router.get('/teams/african-logos', FootballController.getAfricanTeamLogos);
+
 // ============================================
 // GET /api/football/fixtures
 // Get fixtures with filters

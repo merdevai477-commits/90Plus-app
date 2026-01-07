@@ -1142,7 +1142,7 @@ export class FootballController {
 
   /**
    * GET /api/football/teams/african-logos
-   * Get logos for 10 African teams
+   * Get logos for 10 major African teams
    */
   static async getAfricanTeamLogos(req: Request, res: Response): Promise<void> {
     try {
@@ -1174,7 +1174,6 @@ export class FootballController {
         
         // Algerian teams
         6962, // CR Belouizdad
-        6961, // JS Kabylie
       ];
 
       const teamsWithLogos: Array<{ id: number; name: string; logo: string; country?: string }> = [];
