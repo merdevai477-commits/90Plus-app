@@ -200,6 +200,60 @@ export const ar = {
 
   notificationCancelled: 'لن تتلقى إشعارات حول هذه المباراة',
 
+  matches: {
+    tabs: {
+      all: 'الكل',
+      live: 'مباشر',
+      upcoming: 'قادمة',
+      finished: 'انتهت',
+      favorites: 'المفضلة',
+      transfers: 'الانتقالات',
+    },
+    status: {
+      live: 'مباشر',
+      halftime: 'استراحة',
+      finished: 'انتهت',
+      extraTime: 'وقت إضافي',
+      penalties: 'ركلات ترجيح',
+      upcoming: 'قادمة',
+    },
+    time: {
+      today: 'اليوم',
+      yesterday: 'أمس',
+      tomorrow: 'غداً',
+    },
+    empty: {
+      noMatches: 'لا توجد مباريات',
+      tryDifferentDate: 'جرب اختيار تاريخ أو تبويب مختلف',
+      noTransfers: 'لا توجد انتقالات',
+      errorLoadingMatches: 'خطأ في تحميل المباريات',
+    },
+    indicators: {
+      matches: 'مباريات',
+      leagues: 'دوريات',
+    },
+    transfers: {
+      title: 'الانتقالات',
+      filters: 'الفلاتر',
+      timePeriod: 'الفترة الزمنية',
+      transferType: 'نوع الانتقال',
+      leagues: 'الدوريات',
+      loading: 'جاري تحميل الانتقالات...',
+      error: 'فشل تحميل الانتقالات',
+      noTransfersFound: 'لا توجد انتقالات',
+      tryRefreshing: 'جرب التحديث أو تحقق لاحقاً',
+      tryAdjustingFilters: 'جرب تعديل الفلاتر',
+      top5Leagues: 'الدوريات الخمس الكبرى',
+      all: 'الكل',
+      free: 'عارية',
+      loan: 'إعارة',
+      oneMonth: 'شهر واحد',
+      threeMonths: '3 أشهر',
+      sixMonths: '6 أشهر',
+      oneYear: 'سنة واحدة',
+    },
+  },
+
   matchDetails: {
     title: 'تفاصيل المباراة',
     vs: 'ضد',

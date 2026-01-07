@@ -27,28 +27,35 @@ export const mapFixtureStatus = (statusShort: string): 'live' | 'upcoming' | 'fi
 
 /**
  * Formats match minute for display
+ * Uses unified status engine with correct 90+X format
  */
 export const formatMatchMinute = (fixture: Fixture): string | undefined => {
   const status = fixture.fixture.status.short;
   const elapsed = fixture.fixture.status.elapsed;
 
-  if (!elapsed && status !== 'HT') return undefined;
-
-  switch (status) {
-    case '1H':
-    case '2H':
-      return `${elapsed}'`;
-    case 'HT':
-      return 'HT';
-    case 'ET':
-      return `${elapsed}' (ET)`;
-    case 'BT':
-      return 'Break';
-    case 'P':
-      return 'Penalties';
-    default:
-      return undefined;
+  // Import the unified status utility
+  // Using inline logic to avoid circular dependencies
+  // Never show > 90 minutes directly
+  if (status === 'FT' || status === 'AET') return undefined; // Parent shows "FT"
+  if (status === 'PEN' || status === 'P') return undefined; // Parent shows "PEN"
+  if (status === 'HT') return 'HT';
+  if (status === 'BT') return 'BT';
+  
+  if (status === 'ET' && elapsed !== null && elapsed !== undefined) {
+    if (elapsed > 90) {
+      return `90+${elapsed - 90}' (ET)`;
+    }
+    return `${elapsed}' (ET)`;
   }
+  
+  if ((status === '1H' || status === '2H') && elapsed !== null && elapsed !== undefined) {
+    if (elapsed > 90) {
+      return `90+${elapsed - 90}'`;
+    }
+    return `${elapsed}'`;
+  }
+  
+  return undefined;
 };
 
 /**
@@ -143,10 +150,13 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
       const fixtures: Fixture[] = await response.json();
       const matches = mapFixturesToMatches(fixtures);
       
-      // Cache the results locally
+      // Cache the results locally - permanent for past dates
       if (matches.length > 0) {
-        await cacheService.cacheMatchesByDate(dateString, matches);
-        logger.debug(`💾 Cached ${matches.length} matches for ${dateString} from backend`);
+        const cacheTTL = isPastDate 
+          ? Number.MAX_SAFE_INTEGER // Permanent cache for past matches
+          : undefined; // Use default TTL for future matches
+        await cacheService.cacheMatchesByDate(dateString, matches, cacheTTL);
+        logger.debug(`💾 Cached ${matches.length} matches for ${dateString} from backend (permanent: ${isPastDate})`);
       }
       
       return matches;
@@ -160,10 +170,13 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
   const fixtures = await ApiFootballService.getFixturesByDate(dateString);
   const matches = mapFixturesToMatches(fixtures);
   
-  // Cache the results locally
+  // Cache the results locally - permanent for past dates
   if (matches.length > 0) {
-    await cacheService.cacheMatchesByDate(dateString, matches);
-    logger.debug(`💾 Cached ${matches.length} matches for ${dateString}`);
+    const cacheTTL = isPastDate 
+      ? Number.MAX_SAFE_INTEGER // Permanent cache for past matches
+      : undefined; // Use default TTL for future matches
+    await cacheService.cacheMatchesByDate(dateString, matches, cacheTTL);
+    logger.debug(`💾 Cached ${matches.length} matches for ${dateString} (permanent: ${isPastDate})`);
   }
   
   return matches;

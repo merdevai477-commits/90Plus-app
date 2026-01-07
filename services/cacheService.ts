@@ -480,25 +480,30 @@ class CacheService {
    * Today's matches are cached for 5 minutes (matches may be live).
    * Future dates are cached for 2 hours.
    */
-  async cacheMatchesByDate(dateString: string, matches: any[]): Promise<void> {
+  async cacheMatchesByDate(dateString: string, matches: any[], ttl?: number): Promise<void> {
     const key = `${CACHE_KEYS.MATCHES_BY_DATE}_${dateString}`;
     
-    // Determine TTL based on date
-    const today = new Date().toISOString().split('T')[0];
-    let ttl: number;
+    // Use provided TTL, or determine TTL based on date
+    let cacheTTL: number;
     
-    if (dateString < today) {
-      // Past dates - cache for 30 days (matches are finished - almost permanent)
-      ttl = CACHE_TTL.LOGOS; // 30 days - finished matches don't change
-    } else if (dateString === today) {
-      // Today - cache for 5 minutes (matches may be live, need frequent updates)
-      ttl = 5 * 60 * 1000; // 5 minutes for live data
+    if (ttl !== undefined) {
+      cacheTTL = ttl;
     } else {
-      // Future dates - cache for 2 hours (schedule rarely changes)
-      ttl = 2 * 60 * 60 * 1000; // 2 hours
+      const today = new Date().toISOString().split('T')[0];
+      
+      if (dateString < today) {
+        // Past dates - permanent cache (matches are finished, never change)
+        cacheTTL = Number.MAX_SAFE_INTEGER;
+      } else if (dateString === today) {
+        // Today - cache for 5 minutes (matches may be live, need frequent updates)
+        cacheTTL = 5 * 60 * 1000; // 5 minutes for live data
+      } else {
+        // Future dates - cache for 3 days (schedule rarely changes)
+        cacheTTL = 3 * 24 * 60 * 60 * 1000; // 3 days
+      }
     }
     
-    await this.set(key, matches, ttl);
+    await this.set(key, matches, cacheTTL);
   }
 
   /**

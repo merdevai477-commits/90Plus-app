@@ -87,11 +87,28 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
+  const initialLoadRef = useRef(true);
 
   const dateString = useMemo(() => selectedDate.toISOString().split('T')[0], [selectedDate]);
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
   const isToday = dateString === today;
   const isPastDate = dateString < today;
+  
+  // Try to load from memory cache immediately on mount
+  useEffect(() => {
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      const memoryCached = memoryCache.get(dateString);
+      if (memoryCached) {
+        const age = Date.now() - memoryCached.timestamp;
+        const ttl = isPastDate ? 30 * 24 * 60 * 60 * 1000 : isToday ? 2 * 60 * 1000 : 60 * 60 * 1000;
+        if (age < ttl) {
+          setMatches(memoryCached.data);
+          setLoading(false);
+        }
+      }
+    }
+  }, [dateString, isToday, isPastDate]);
 
   // Group matches by league
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
@@ -142,11 +159,10 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
             logger.debug(`📦 AsyncStorage cache hit for ${dateString}`, {
               cachedCount: cached.length,
             });
+            // Update memory cache first
+            memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
             setMatches(cached);
             setLoading(false);
-            
-            // Update memory cache
-            memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
             
             // For past dates, don't refresh
             if (isPastDate) {
@@ -154,13 +170,14 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
               return;
             }
             
-            // For today/future, refresh in background
+            // For today/future, refresh in background (non-blocking)
             fetchDataInBackground(dateString, isToday, isPastDate);
             isFetchingRef.current = false;
             return;
           }
         }
 
+        // Only set loading if no cache found
         setLoading(true);
 
         let fetchedMatches: Match[];
@@ -176,8 +193,14 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
           const liveMatchIds = new Set(liveMatches.map((m) => m.id));
           const uniqueScheduledMatches = scheduledMatches.filter((m) => !liveMatchIds.has(m.id));
           fetchedMatches = [...liveMatches, ...uniqueScheduledMatches];
+          
+          // Pre-fetch and cache upcoming 3 days in background
+          preloadUpcomingDays(3);
+        } else if (!isPastDate) {
+          // For future dates, just fetch scheduled matches
+          fetchedMatches = await fetchMatchesByDate(selectedDate);
         } else {
-          // For other dates, just fetch scheduled matches
+          // For past dates, fetch from cache only (permanent storage)
           fetchedMatches = await fetchMatchesByDate(selectedDate);
         }
 
@@ -185,10 +208,10 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
         // Update caches
         const cacheTTL = isPastDate
-          ? 30 * 24 * 60 * 60 * 1000 // 30 days for past
+          ? Number.MAX_SAFE_INTEGER // Permanent cache for past matches (never expires)
           : isToday
           ? 2 * 60 * 1000 // 2 minutes for today
-          : 60 * 60 * 1000; // 1 hour for future
+          : 3 * 24 * 60 * 60 * 1000; // 3 days for future
 
         memoryCache.set(dateString, { data: fetchedMatches, timestamp: Date.now() });
         await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
@@ -209,6 +232,42 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     },
     [dateString, selectedDate, isToday, isPastDate]
   );
+
+  // Preload upcoming days in background
+  const preloadUpcomingDays = useCallback(async (days: number) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const preloadPromises: Promise<void>[] = [];
+      for (let i = 1; i <= days; i++) {
+        const futureDate = new Date(today);
+        futureDate.setDate(today.getDate() + i);
+        const futureDateStr = futureDate.toISOString().split('T')[0];
+        
+        // Check if already cached
+        const cached = memoryCache.get(futureDateStr);
+        if (!cached) {
+          preloadPromises.push(
+            fetchMatchesByDate(futureDate).then(matches => {
+              if (matches.length > 0) {
+                memoryCache.set(futureDateStr, { data: matches, timestamp: Date.now() });
+                const cacheKey = getMatchesCacheKey(futureDateStr);
+                cacheService.set(cacheKey, matches, 3 * 24 * 60 * 60 * 1000); // 3 days cache
+              }
+            }).catch(err => {
+              logger.warn(`Failed to preload matches for ${futureDateStr}:`, err);
+            })
+          );
+        }
+      }
+      
+      // Execute in background (don't await)
+      Promise.all(preloadPromises).catch(() => {});
+    } catch (err) {
+      logger.warn('Preload upcoming days failed:', err);
+    }
+  }, []);
 
   // Background refresh function (non-blocking)
   const fetchDataInBackground = useCallback(async (
@@ -236,7 +295,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
       setMatches(fetchedMatches);
 
-      const cacheTTL = isTodayFlag ? 2 * 60 * 1000 : 60 * 60 * 1000;
+      const cacheTTL = isTodayFlag ? 2 * 60 * 1000 : 3 * 24 * 60 * 60 * 1000; // 3 days for future
       const cacheKey = getMatchesCacheKey(dateStr);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });
       await cacheService.set(cacheKey, fetchedMatches, cacheTTL);

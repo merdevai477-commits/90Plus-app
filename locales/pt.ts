@@ -137,6 +137,60 @@ export const pt = {
 
   notificationCancelled: 'Você não receberá notificações sobre este jogo',
 
+  matches: {
+    tabs: {
+      all: 'Todos',
+      live: 'Ao vivo',
+      upcoming: 'Próximos',
+      finished: 'Finalizados',
+      favorites: 'Favoritos',
+      transfers: 'Transferências',
+    },
+    status: {
+      live: 'AO VIVO',
+      halftime: 'INT',
+      finished: 'FT',
+      extraTime: 'ET',
+      penalties: 'PEN',
+      upcoming: 'Próximos',
+    },
+    time: {
+      today: 'Hoje',
+      yesterday: 'Ontem',
+      tomorrow: 'Amanhã',
+    },
+    empty: {
+      noMatches: 'Nenhum jogo encontrado',
+      tryDifferentDate: 'Tente selecionar uma data ou aba diferente',
+      noTransfers: 'Nenhuma transferência encontrada',
+      errorLoadingMatches: 'Erro ao carregar jogos',
+    },
+    indicators: {
+      matches: 'Jogos',
+      leagues: 'Ligas',
+    },
+    transfers: {
+      title: 'Transferências',
+      filters: 'Filtros',
+      timePeriod: 'Período',
+      transferType: 'Tipo de transferência',
+      leagues: 'Ligas',
+      loading: 'Carregando transferências...',
+      error: 'Erro ao carregar transferências',
+      noTransfersFound: 'Nenhuma transferência encontrada',
+      tryRefreshing: 'Tente atualizar ou volte mais tarde',
+      tryAdjustingFilters: 'Tente ajustar seus filtros',
+      top5Leagues: 'Top 5 Ligas',
+      all: 'Todos',
+      free: 'Livre',
+      loan: 'Empréstimo',
+      oneMonth: '1 Mês',
+      threeMonths: '3 Meses',
+      sixMonths: '6 Meses',
+      oneYear: '1 Ano',
+    },
+  },
+
   matchDetails: {
     title: 'Detalhes do jogo',
     vs: 'VS',

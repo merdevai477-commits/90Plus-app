@@ -7,6 +7,7 @@ import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -28,22 +29,13 @@ interface MatchCardProps {
 const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index = 0 }) => {
   const scale = useSharedValue(1);
   const pulseScale = useSharedValue(1);
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(20);
   const glowOpacity = useSharedValue(0.3);
 
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
   const isUpcoming = match.status === 'upcoming' || match.status === 'NS' || match.status === 'TBD';
 
-  // Entrance animation
-  useEffect(() => {
-    const delay = index * ANIMATION_CONFIG.staggerDelay;
-    setTimeout(() => {
-      opacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });
-      translateY.value = withSpring(0, ANIMATION_CONFIG.spring);
-    }, delay);
-  }, []);
+  // No entrance animation for faster initial render
 
   // Pulse animation for live matches
   useEffect(() => {
@@ -79,9 +71,7 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       { scale: scale.value * pulseScale.value },
-      { translateY: translateY.value },
     ],
-    opacity: opacity.value,
   }));
 
   const glowStyle = useAnimatedStyle(() => ({
@@ -90,16 +80,20 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
 
   const renderStatus = () => {
     if (isLive) {
+      // Use minute if available, otherwise show LIVE
+      const displayText = match.minute || 'LIVE';
       return (
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>{match.minute || "LIVE"}'</Text>
+          <Text style={styles.liveText}>{displayText}</Text>
         </View>
       );
     } else if (isFinished) {
+      // Check if it's penalties
+      const isPenalties = match.statusShort === 'P' || match.statusShort === 'PEN';
       return (
         <View style={styles.finishedBadge}>
-          <Text style={styles.finishedText}>FT</Text>
+          <Text style={styles.finishedText}>{isPenalties ? 'PEN' : 'FT'}</Text>
         </View>
       );
     } else {
@@ -120,6 +114,9 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
         onPressOut={handlePressOut}
         style={[styles.container, isLive && styles.liveContainer]}
       >
+        {/* Glass effect background */}
+        <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+
         {/* Glow effect for live matches */}
         {isLive && (
           <Animated.View style={[styles.glowOverlay, glowStyle]} pointerEvents="none">
@@ -138,9 +135,9 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
                 source={{ uri: match.league.logo }}
                 style={styles.leagueLogo}
                 contentFit="contain"
-                transition={200}
+                transition={100}
                 cachePolicy="memory-disk"
-                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                recyclingKey={match.league.id.toString()}
               />
             )}
             <Text style={styles.leagueName} numberOfLines={1}>
@@ -159,17 +156,19 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
           {/* Home Team */}
           <View style={styles.teamSection}>
             <View style={styles.teamLogoContainer}>
+              {match.homeTeam?.logo && (
               <Image
                 source={{ uri: match.homeTeam.logo }}
                 style={styles.teamLogo}
                 contentFit="contain"
-                transition={200}
+                transition={100}
                 cachePolicy="memory-disk"
-                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                recyclingKey={match.homeTeam.name}
               />
+              )}
             </View>
             <Text style={styles.teamName} numberOfLines={2}>
-              {match.homeTeam.name}
+              {match.homeTeam?.name || 'TBD'}
             </Text>
           </View>
 
@@ -180,11 +179,11 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
             ) : (
               <View style={styles.scoreRow}>
                 <Text style={[styles.score, isLive && styles.scoreLive]}>
-                  {match.score.home}
+                  {match.score?.home ?? '-'}
                 </Text>
                 <Text style={styles.scoreSeparator}>:</Text>
                 <Text style={[styles.score, isLive && styles.scoreLive]}>
-                  {match.score.away}
+                  {match.score?.away ?? '-'}
                 </Text>
               </View>
             )}
@@ -193,17 +192,19 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
           {/* Away Team */}
           <View style={styles.teamSection}>
             <View style={styles.teamLogoContainer}>
+              {match.awayTeam?.logo && (
               <Image
                 source={{ uri: match.awayTeam.logo }}
                 style={styles.teamLogo}
                 contentFit="contain"
-                transition={200}
+                transition={100}
                 cachePolicy="memory-disk"
-                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                recyclingKey={match.awayTeam.name}
               />
+              )}
             </View>
             <Text style={styles.teamName} numberOfLines={2}>
-              {match.awayTeam.name}
+              {match.awayTeam?.name || 'TBD'}
             </Text>
           </View>
         </View>
@@ -215,8 +216,8 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
   return (
     prevProps.match.id === nextProps.match.id &&
     prevProps.match.status === nextProps.match.status &&
-    prevProps.match.score.home === nextProps.match.score.home &&
-    prevProps.match.score.away === nextProps.match.score.away &&
+    prevProps.match.score?.home === nextProps.match.score?.home &&
+    prevProps.match.score?.away === nextProps.match.score?.away &&
     prevProps.match.minute === nextProps.match.minute
   );
 });
@@ -225,22 +226,23 @@ MatchCard.displayName = 'MatchCard';
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: MATCH_DETAILS_COLORS.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: MATCH_DETAILS_COLORS.border,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
     elevation: 4,
+    overflow: 'hidden',
   },
   liveContainer: {
-    borderColor: MATCH_DETAILS_COLORS.accent,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
     shadowColor: MATCH_DETAILS_COLORS.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
     elevation: 8,
   },
   glowOverlay: {

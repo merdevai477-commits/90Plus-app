@@ -1,6 +1,6 @@
 /**
  * Transfers Section Component
- * Extracted from matches.tsx with debounced filters and better organization
+ * Enhanced with league grouping and collapsible sections
  */
 
 import React, { useState, useCallback, useMemo, useRef } from 'react';
@@ -15,9 +15,11 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useDebouncedCallback } from 'use-debounce';
-import { Transfer } from '../../services/apiFootball';
+import { Transfer, MAJOR_LEAGUES } from '../../services/apiFootball';
 import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 import EmptyState from './EmptyState';
+import TransfersLeagueSection from './TransfersLeagueSection';
+import { useTranslation } from '../../src/i18n/useTranslation';
 
 interface TransfersSectionProps {
   transfers: Transfer[];
@@ -48,6 +50,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
   onPlayerPress,
   onTeamPress,
 }) => {
+  const { t } = useTranslation();
   const [showFilters, setShowFilters] = useState(false);
 
   // Debounced filter handlers
@@ -90,7 +93,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
       });
     }
 
-    // Sort by date (newest first)
+    // Sort by date (newest first) within each league
     filtered.sort((a, b) => {
       const dateA = a.transfers[0]?.date || '';
       const dateB = b.transfers[0]?.date || '';
@@ -99,6 +102,76 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
 
     return filtered;
   }, [transfers, transferType]);
+
+  // Group transfers by league
+  const groupedTransfersByLeague = useMemo(() => {
+    const groupsMap = new Map<number, {
+      leagueId: number;
+      leagueName: string;
+      leagueLogo?: string;
+      transfers: Transfer[];
+    }>();
+
+    filteredTransfers.forEach((transfer) => {
+      const leagueId = transfer.league?.id || 0;
+      const leagueName = transfer.league?.name || 'Unknown League';
+      const leagueLogo = transfer.league?.logo;
+
+      if (!groupsMap.has(leagueId)) {
+        groupsMap.set(leagueId, {
+          leagueId,
+          leagueName,
+          leagueLogo,
+          transfers: [],
+        });
+      }
+
+      groupsMap.get(leagueId)!.transfers.push(transfer);
+    });
+
+    // Convert to array and filter out empty leagues
+    const groups = Array.from(groupsMap.values()).filter(group => group.transfers.length > 0);
+
+    // Major leagues IDs (Top 5)
+    const majorLeaguesSet = new Set([
+      MAJOR_LEAGUES.PREMIER_LEAGUE,
+      MAJOR_LEAGUES.LA_LIGA,
+      MAJOR_LEAGUES.BUNDESLIGA,
+      MAJOR_LEAGUES.SERIE_A,
+      MAJOR_LEAGUES.LIGUE_1,
+    ]);
+
+    // Sort: Major leagues first (in order), then alphabetically
+    groups.sort((a, b) => {
+      const aIsMajor = majorLeaguesSet.has(a.leagueId);
+      const bIsMajor = majorLeaguesSet.has(b.leagueId);
+      
+      // Major leagues come first
+      if (aIsMajor && !bIsMajor) return -1;
+      if (bIsMajor && !aIsMajor) return 1;
+      
+      // If both are major, maintain order: Premier League, La Liga, Bundesliga, Serie A, Ligue 1
+      if (aIsMajor && bIsMajor) {
+        const majorOrder = [
+          MAJOR_LEAGUES.PREMIER_LEAGUE,
+          MAJOR_LEAGUES.LA_LIGA,
+          MAJOR_LEAGUES.BUNDESLIGA,
+          MAJOR_LEAGUES.SERIE_A,
+          MAJOR_LEAGUES.LIGUE_1,
+        ];
+        const aIndex = majorOrder.indexOf(a.leagueId);
+        const bIndex = majorOrder.indexOf(b.leagueId);
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+      }
+      
+      // Finally alphabetically
+      return a.leagueName.localeCompare(b.leagueName);
+    });
+
+    return groups;
+  }, [filteredTransfers]);
 
   const handleLeagueToggle = useCallback((leagueId: number) => {
     const isSelected = selectedLeagues.includes(leagueId);
@@ -112,7 +185,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={MATCH_DETAILS_COLORS.accent} />
-        <Text style={styles.loadingText}>Loading transfers...</Text>
+        <Text style={styles.loadingText}>{t.matches.transfers.loading}</Text>
       </View>
     );
   }
@@ -121,22 +194,22 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
     return (
       <EmptyState
         icon="alert-circle-outline"
-        title="Error Loading Transfers"
+        title={t.matches.transfers.error}
         message={error}
         iconColor={MATCH_DETAILS_COLORS.error}
       />
     );
   }
 
-  if (filteredTransfers.length === 0) {
+  if (groupedTransfersByLeague.length === 0) {
     return (
       <EmptyState
         icon="swap-horizontal-outline"
-        title="No transfers found"
+        title={t.matches.transfers.noTransfersFound}
         message={
           transfers.length === 0
-            ? 'Try refreshing or check back later'
-            : 'Try adjusting your filters'
+            ? t.matches.transfers.tryRefreshing
+            : t.matches.transfers.tryAdjustingFilters
         }
       />
     );
@@ -155,7 +228,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
             size={20}
             color={MATCH_DETAILS_COLORS.accent}
           />
-          <Text style={styles.filterToggleText}>Filters</Text>
+          <Text style={styles.filterToggleText}>{t.matches.transfers.filters}</Text>
           {(selectedLeagues.length > 0 || transferType !== 'all' || timeRange !== '1year') && (
             <View style={styles.filterBadge} />
           )}
@@ -165,7 +238,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
           <View style={styles.filtersContent}>
             {/* Time Range Filter */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Time Period</Text>
+              <Text style={styles.filterLabel}>{t.matches.transfers.timePeriod}</Text>
               <View style={styles.filterOptions}>
                 {(['1month', '3months', '6months', '1year'] as const).map((range) => (
                   <TouchableOpacity
@@ -180,9 +253,9 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
                       styles.filterOptionText,
                       timeRange === range && styles.filterOptionTextActive
                     ]}>
-                      {range === '1month' ? '1 Month' :
-                       range === '3months' ? '3 Months' :
-                       range === '6months' ? '6 Months' : '1 Year'}
+                      {range === '1month' ? t.matches.transfers.oneMonth :
+                       range === '3months' ? t.matches.transfers.threeMonths :
+                       range === '6months' ? t.matches.transfers.sixMonths : t.matches.transfers.oneYear}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -191,7 +264,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
 
             {/* Transfer Type Filter */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Transfer Type</Text>
+              <Text style={styles.filterLabel}>{t.matches.transfers.transferType}</Text>
               <View style={styles.filterOptions}>
                 {(['all', 'free', 'loan'] as const).map((type) => (
                   <TouchableOpacity
@@ -206,8 +279,8 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
                       styles.filterOptionText,
                       transferType === type && styles.filterOptionTextActive
                     ]}>
-                      {type === 'all' ? 'All' :
-                       type === 'free' ? 'Free (عارية)' : 'Loan (سوا)'}
+                      {type === 'all' ? t.matches.transfers.all :
+                       type === 'free' ? t.matches.transfers.free : t.matches.transfers.loan}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -217,7 +290,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
             {/* League Filter */}
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>
-                Leagues {selectedLeagues.length > 0 && `(${selectedLeagues.length} selected)`}
+                {t.matches.transfers.leagues} {selectedLeagues.length > 0 && `(${selectedLeagues.length} selected)`}
               </Text>
               <ScrollView
                 horizontal
@@ -235,7 +308,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
                     styles.leagueFilterText,
                     selectedLeagues.length === 0 && styles.leagueFilterTextActive
                   ]}>
-                    Top 5 Leagues
+                    {t.matches.transfers.top5Leagues}
                   </Text>
                 </TouchableOpacity>
                 {availableLeagues.map((league) => {
@@ -273,95 +346,19 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
         )}
       </View>
 
-      {/* Transfers List */}
-      <View style={styles.transfersList}>
-        {filteredTransfers.map((transfer, index) => (
-          <View key={`${transfer.player.id}-${index}`} style={styles.transferCard}>
-            <View style={styles.transferHeader}>
-              <TouchableOpacity
-                onPress={() => onPlayerPress?.(transfer)}
-                style={styles.playerPhotoContainer}
-              >
-                <Image
-                  source={{ uri: transfer.player.photo }}
-                  style={styles.playerPhoto}
-                  contentFit="cover"
-                  transition={200}
-                  cachePolicy="memory-disk"
-                  placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                />
-              </TouchableOpacity>
-              <View style={styles.playerInfo}>
-                <TouchableOpacity onPress={() => onPlayerPress?.(transfer)}>
-                  <Text style={styles.playerName}>{transfer.player.name}</Text>
-                </TouchableOpacity>
-                <Text style={styles.transferDate}>{transfer.update}</Text>
-              </View>
-            </View>
-
-            {transfer.league && (
-              <View style={styles.leagueBadge}>
-                {transfer.league.logo && (
-                  <Image
-                    source={{ uri: transfer.league.logo }}
-                    style={styles.leagueLogoSmall}
-                    contentFit="cover"
-                    transition={200}
-                    cachePolicy="memory-disk"
-                  />
-                )}
-                <Text style={styles.leagueNameSmall}>{transfer.league.name}</Text>
-              </View>
-            )}
-
-            {transfer.transfers.map((t, tIndex) => (
-              <View key={tIndex} style={styles.transferDetails}>
-                {t.teams.out && (
-                  <TouchableOpacity
-                    style={styles.teamBox}
-                    onPress={() => onTeamPress?.(t.teams.out!.id)}
-                  >
-                    <Image
-                      source={{ uri: t.teams.out.logo }}
-                      style={styles.teamLogo}
-                      contentFit="cover"
-                      transition={200}
-                      cachePolicy="memory-disk"
-                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                    />
-                    <Text style={styles.teamName} numberOfLines={2}>
-                      {t.teams.out.name}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                <View style={styles.transferArrow}>
-                  <Ionicons name="arrow-forward" size={20} color={MATCH_DETAILS_COLORS.accent} />
-                  <Text style={styles.transferType}>{t.type}</Text>
-                  {t.date && <Text style={styles.transferDateSmall}>{t.date}</Text>}
-                </View>
-
-                {t.teams.in && (
-                  <TouchableOpacity
-                    style={styles.teamBox}
-                    onPress={() => onTeamPress?.(t.teams.in!.id)}
-                  >
-                    <Image
-                      source={{ uri: t.teams.in.logo }}
-                      style={styles.teamLogo}
-                      contentFit="cover"
-                      transition={200}
-                      cachePolicy="memory-disk"
-                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                    />
-                    <Text style={styles.teamName} numberOfLines={2}>
-                      {t.teams.in.name}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </View>
+      {/* Transfers List Grouped by League */}
+      <View style={styles.leaguesList}>
+        {groupedTransfersByLeague.map((group, index) => (
+          <TransfersLeagueSection
+            key={group.leagueId}
+            leagueId={group.leagueId}
+            leagueName={group.leagueName}
+            leagueLogo={group.leagueLogo}
+            transfers={group.transfers}
+            onPlayerPress={onPlayerPress}
+            onTeamPress={onTeamPress}
+            index={index}
+          />
         ))}
       </View>
     </View>
@@ -491,107 +488,9 @@ const styles = StyleSheet.create({
     color: MATCH_DETAILS_COLORS.text,
     fontWeight: '700',
   },
-  transfersList: {
+  leaguesList: {
     gap: 12,
-  },
-  transferCard: {
-    backgroundColor: MATCH_DETAILS_COLORS.card,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: MATCH_DETAILS_COLORS.border,
-  },
-  transferHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  playerPhotoContainer: {
-    marginRight: 12,
-  },
-  playerPhoto: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: MATCH_DETAILS_COLORS.cardSecondary,
-  },
-  playerInfo: {
-    flex: 1,
-  },
-  playerName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: MATCH_DETAILS_COLORS.text,
-    marginBottom: 4,
-  },
-  transferDate: {
-    fontSize: 12,
-    color: MATCH_DETAILS_COLORS.textSecondary,
-  },
-  leagueBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: `rgba(34, 197, 94, 0.15)`,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  leagueLogoSmall: {
-    width: 14,
-    height: 14,
-    marginRight: 6,
-    borderRadius: 7,
-  },
-  leagueNameSmall: {
-    color: MATCH_DETAILS_COLORS.accent,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  transferDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: MATCH_DETAILS_COLORS.border,
-  },
-  teamBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  teamLogo: {
-    width: 40,
-    height: 40,
-    marginBottom: 8,
-    backgroundColor: MATCH_DETAILS_COLORS.cardSecondary,
-    borderRadius: 20,
-  },
-  teamName: {
-    fontSize: 11,
-    color: MATCH_DETAILS_COLORS.text,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  transferArrow: {
-    alignItems: 'center',
-    marginHorizontal: 12,
-    minWidth: 80,
-  },
-  transferType: {
-    fontSize: 10,
-    color: MATCH_DETAILS_COLORS.accent,
-    fontWeight: '600',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  transferDateSmall: {
-    fontSize: 9,
-    color: MATCH_DETAILS_COLORS.textSecondary,
-    marginTop: 2,
   },
 });
 
 export default TransfersSection;
-

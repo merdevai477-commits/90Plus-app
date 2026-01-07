@@ -5,10 +5,10 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  Animated,
   Modal,
   Alert,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,32 +60,35 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
   onPredictionSubmit,
 }) => {
   const { trigger } = useHaptic();
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
-  const modalScaleAnim = React.useRef(new Animated.Value(0)).current;
+  const scaleAnim = useSharedValue(1);
+  const modalScaleAnim = useSharedValue(0);
 
-  // Use team-based gradients
-  const gradientColors = getTeamGradients(match.homeTeam.name, match.awayTeam.name);
+  // Use team-based gradients with fallback for undefined teams - memoized for performance
+  const gradientColors = React.useMemo(() => getTeamGradients(
+    match.homeTeam?.name || 'Team 1',
+    match.awayTeam?.name || 'Team 2'
+  ), [match.homeTeam?.name, match.awayTeam?.name]);
 
   const [showPredictionModal, setShowPredictionModal] = useState(false);
   const [selectedPrediction, setSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scaleAnim.value }],
+  }));
+
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.98,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 10,
-    }).start();
+    scaleAnim.value = withSpring(0.98, {
+      damping: 15,
+      stiffness: 300,
+    });
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 10,
-    }).start();
+    scaleAnim.value = withSpring(1, {
+      damping: 15,
+      stiffness: 300,
+    });
   };
 
   const handleFavoritePress = () => {
@@ -100,16 +103,19 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
     onPress();
   };
 
+  const modalAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: modalScaleAnim.value }],
+    opacity: modalScaleAnim.value,
+  }));
+
   const openPredictionModal = () => {
     trigger('selection');
     setShowPredictionModal(true);
-    modalScaleAnim.setValue(0);
-    Animated.spring(modalScaleAnim, {
-      toValue: 1,
-      tension: 100,
-      friction: 8,
-      useNativeDriver: true,
-    }).start();
+    modalScaleAnim.value = 0;
+    modalScaleAnim.value = withSpring(1, {
+      damping: 12,
+      stiffness: 200,
+    });
   };
 
   const handleSubmitPrediction = async () => {
@@ -143,8 +149,8 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
 
   const getPredictionLabel = (type: string) => {
     switch (type) {
-      case 'home': return `${match.homeTeam.name} Win`;
-      case 'away': return `${match.awayTeam.name} Win`;
+      case 'home': return `${match.homeTeam?.name || 'Home'} Win`;
+      case 'away': return `${match.awayTeam?.name || 'Away'} Win`;
       case 'draw': return 'Draw';
       default: return '';
     }
@@ -210,14 +216,16 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                 {/* Home Team */}
                 <View style={styles.team}>
                   <View style={styles.logoWrapper}>
-                    <Image
-                      source={{ uri: match.homeTeam.logo }}
-                      style={styles.teamLogo}
-                      resizeMode="contain"
-                    />
+                    {match.homeTeam?.logo && (
+                      <Image
+                        source={{ uri: match.homeTeam.logo }}
+                        style={styles.teamLogo}
+                        resizeMode="contain"
+                      />
+                    )}
                   </View>
                   <Text style={styles.teamName} numberOfLines={2}>
-                    {match.homeTeam.name}
+                    {match.homeTeam?.name || 'TBD'}
                   </Text>
                 </View>
 
@@ -227,7 +235,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     <Text style={styles.matchTime}>{match.time || 'TBD'}</Text>
                   ) : (
                     <Text style={styles.score}>
-                      {match.score.home} : {match.score.away}
+                      {match.score?.home ?? '-'} : {match.score?.away ?? '-'}
                     </Text>
                   )}
 
@@ -270,14 +278,16 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                 {/* Away Team */}
                 <View style={styles.team}>
                   <View style={styles.logoWrapper}>
-                    <Image
-                      source={{ uri: match.awayTeam.logo }}
-                      style={styles.teamLogo}
-                      resizeMode="contain"
-                    />
+                    {match.awayTeam?.logo && (
+                      <Image
+                        source={{ uri: match.awayTeam.logo }}
+                        style={styles.teamLogo}
+                        resizeMode="contain"
+                      />
+                    )}
                   </View>
                   <Text style={styles.teamName} numberOfLines={2}>
-                    {match.awayTeam.name}
+                    {match.awayTeam?.name || 'TBD'}
                   </Text>
                 </View>
               </View>
@@ -314,10 +324,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
             <Animated.View
               style={[
                 styles.modalWrapper,
-                {
-                  transform: [{ scale: modalScaleAnim }],
-                  opacity: modalScaleAnim,
-                },
+                modalAnimatedStyle,
               ]}
             >
               <View style={styles.modalContent}>
@@ -340,7 +347,9 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     ]}
                     onPress={() => setSelectedPrediction('home')}
                   >
-                    <Image source={{ uri: match.homeTeam.logo }} style={styles.optionLogo} />
+                    {match.homeTeam?.logo && (
+                      <Image source={{ uri: match.homeTeam.logo }} style={styles.optionLogo} />
+                    )}
                     <Text style={styles.optionText}>Home Win</Text>
                     {selectedPrediction === 'home' && (
                       <Ionicons name="checkmark-circle" size={20} color="#22c55e" style={styles.checkIcon} />
@@ -372,7 +381,9 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     ]}
                     onPress={() => setSelectedPrediction('away')}
                   >
-                    <Image source={{ uri: match.awayTeam.logo }} style={styles.optionLogo} />
+                    {match.awayTeam?.logo && (
+                      <Image source={{ uri: match.awayTeam.logo }} style={styles.optionLogo} />
+                    )}
                     <Text style={styles.optionText}>Away Win</Text>
                     {selectedPrediction === 'away' && (
                       <Ionicons name="checkmark-circle" size={20} color="#ef4444" style={styles.checkIcon} />

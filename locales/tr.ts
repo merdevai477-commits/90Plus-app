@@ -137,6 +137,60 @@ export const tr = {
 
   notificationCancelled: 'Bu maç hakkında bildirim almayacaksınız',
 
+  matches: {
+    tabs: {
+      all: 'Tümü',
+      live: 'Canlı',
+      upcoming: 'Yaklaşan',
+      finished: 'Biten',
+      favorites: 'Favoriler',
+      transfers: 'Transferler',
+    },
+    status: {
+      live: 'CANLI',
+      halftime: 'DEV',
+      finished: 'MS',
+      extraTime: 'UZ',
+      penalties: 'PEN',
+      upcoming: 'Yaklaşan',
+    },
+    time: {
+      today: 'Bugün',
+      yesterday: 'Dün',
+      tomorrow: 'Yarın',
+    },
+    empty: {
+      noMatches: 'Maç bulunamadı',
+      tryDifferentDate: 'Farklı bir tarih veya sekme seçmeyi deneyin',
+      noTransfers: 'Transfer bulunamadı',
+      errorLoadingMatches: 'Maçlar yüklenirken hata',
+    },
+    indicators: {
+      matches: 'Maçlar',
+      leagues: 'Ligler',
+    },
+    transfers: {
+      title: 'Transferler',
+      filters: 'Filtreler',
+      timePeriod: 'Zaman Aralığı',
+      transferType: 'Transfer Türü',
+      leagues: 'Ligler',
+      loading: 'Transferler yükleniyor...',
+      error: 'Transferler yüklenirken hata',
+      noTransfersFound: 'Transfer bulunamadı',
+      tryRefreshing: 'Yenilemeyi deneyin veya daha sonra tekrar kontrol edin',
+      tryAdjustingFilters: 'Filtrelerinizi ayarlamayı deneyin',
+      top5Leagues: 'Top 5 Lig',
+      all: 'Tümü',
+      free: 'Bedava',
+      loan: 'Kiralama',
+      oneMonth: '1 Ay',
+      threeMonths: '3 Ay',
+      sixMonths: '6 Ay',
+      oneYear: '1 Yıl',
+    },
+  },
+
   matchDetails: {
     title: 'Maç detayları',
     vs: 'VS',

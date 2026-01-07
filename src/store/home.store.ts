@@ -210,10 +210,30 @@ const refreshMatchesInBackground = async (
 const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Match => {
     const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(fixture.fixture.status.short);
 
-    // Get minute for live matches
+    // Get minute for live matches using unified status engine
     let minute: string | undefined;
-    if (isLive && fixture.fixture.status.elapsed) {
-        minute = `${fixture.fixture.status.elapsed}'`;
+    if (isLive) {
+        const status = fixture.fixture.status.short;
+        const elapsed = fixture.fixture.status.elapsed;
+        
+        // Use unified status logic: never show > 90 minutes directly
+        if (status === 'HT') {
+            minute = 'HT';
+        } else if (status === 'ET' && elapsed !== null && elapsed !== undefined) {
+            if (elapsed > 90) {
+                minute = `90+${elapsed - 90}' (ET)`;
+            } else {
+                minute = `${elapsed}' (ET)`;
+            }
+        } else if ((status === '1H' || status === '2H') && elapsed !== null && elapsed !== undefined) {
+            if (elapsed > 90) {
+                minute = `90+${elapsed - 90}'`;
+            } else {
+                minute = `${elapsed}'`;
+            }
+        } else if (status === 'P' || status === 'PEN') {
+            minute = 'PEN';
+        }
     }
 
     //  Format time

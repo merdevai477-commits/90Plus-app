@@ -1,6 +1,6 @@
 /**
  * Match Listing Screen - Enhanced
- * Performance optimized with animations, haptic feedback, and unified colors
+ * Performance optimized with faster loading and smooth scrolling
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
@@ -9,6 +9,8 @@ import {
   StyleSheet,
   StatusBar,
   RefreshControl,
+  FlatList,
+  InteractionManager,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,22 +38,27 @@ import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
 import { Match } from '../../components/league-center/matchCardUtils';
 import { logger } from '../../utils/logger';
 import ApiFootballService, { Transfer, MAJOR_LEAGUES } from '../../services/apiFootball';
+import { useTranslation } from '../../src/i18n/useTranslation';
+import { transfersCacheService } from '../../services/transfersCache.service';
 
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 /**
  * Match Listing Screen
- * Enhanced with performance optimizations and unified design
+ * Optimized for performance
  */
 const MatchesScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<MatchTabType>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transfersLoading, setTransfersLoading] = useState(false);
   const [transfersError, setTransfersError] = useState<string | null>(null);
+  const [initialRenderDone, setInitialRenderDone] = useState(false);
   
   // Transfer filters
   const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]);
@@ -61,6 +68,8 @@ const MatchesScreen = () => {
 
   // Scroll position for sticky header
   const scrollY = useSharedValue(0);
+  const flatListRef = useRef<FlatList>(null);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
@@ -81,6 +90,14 @@ const MatchesScreen = () => {
   // Favorite leagues hook - convert to Set for O(1) lookup
   const { favoriteLeagues } = useFavoriteLeagues();
   const favoriteLeaguesSet = useMemo(() => new Set(favoriteLeagues), [favoriteLeagues]);
+
+  // Optimize initial render
+  useEffect(() => {
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      setInitialRenderDone(true);
+    });
+    return () => interaction.cancel();
+  }, []);
 
   // Get date range based on time range selection
   const getDateRange = useCallback((range: typeof timeRange) => {
@@ -143,11 +160,39 @@ const MatchesScreen = () => {
           ];
 
       const dateRange = getDateRange(timeRange);
-      
-      const data = await ApiFootballService.getTransfersByLeagues({
-        leagues: leaguesToFetch,
-        dateRange,
-      });
+      const currentSeason = new Date().getFullYear();
+
+      // Try cache first for zero-delay display
+      const cached = await transfersCacheService.getCachedTransfers(currentSeason, leaguesToFetch);
+      if (cached && cached.length > 0) {
+        logger.debug('📦 Transfers from cache, displaying immediately');
+        const allTransfers: Transfer[] = [];
+        const leaguesList: Array<{ id: number; name: string; logo?: string }> = [];
+        
+        cached.forEach(leagueData => {
+          allTransfers.push(...leagueData.transfers);
+          leaguesList.push({
+            id: leagueData.leagueId,
+            name: leagueData.leagueName,
+            logo: leagueData.leagueLogo,
+          });
+        });
+
+        setTransfers(allTransfers);
+        setAvailableLeagues(leaguesList);
+        setTransfersLoading(false);
+
+        // Refresh in background
+        loadTransfersInBackground(leaguesToFetch, dateRange, currentSeason);
+        return;
+      }
+
+      // No cache, fetch from backend cached endpoint
+      const data = await transfersCacheService.fetchCachedTransfers(
+        currentSeason,
+        leaguesToFetch,
+        dateRange
+      );
 
       // Flatten transfers from all leagues
       const allTransfers: Transfer[] = [];
@@ -171,6 +216,39 @@ const MatchesScreen = () => {
       setTransfersLoading(false);
     }
   }, [selectedLeagues, timeRange, getDateRange]);
+
+  // Background refresh function
+  const loadTransfersInBackground = useCallback(async (
+    leaguesToFetch: number[],
+    dateRange: { from: string; to: string },
+    season: number
+  ) => {
+    try {
+      const data = await transfersCacheService.fetchCachedTransfers(
+        season,
+        leaguesToFetch,
+        dateRange
+      );
+
+      const allTransfers: Transfer[] = [];
+      const leaguesList: Array<{ id: number; name: string; logo?: string }> = [];
+      
+      data.forEach(leagueData => {
+        allTransfers.push(...leagueData.transfers);
+        leaguesList.push({
+          id: leagueData.leagueId,
+          name: leagueData.leagueName,
+          logo: leagueData.leagueLogo,
+        });
+      });
+
+      setTransfers(allTransfers);
+      setAvailableLeagues(leaguesList);
+    } catch (err) {
+      // Silent fail for background refresh
+      logger.warn('Background transfers refresh failed:', err);
+    }
+  }, []);
 
   // Filter matches by active tab - using Set for O(1) lookup
   const filteredMatches = useMemo(() => {
@@ -224,13 +302,50 @@ const MatchesScreen = () => {
       groupsMap.get(leagueId)!.matches.push(match);
     });
 
-    // Convert to array and sort: favorites first, then alphabetically
-    const groups = Array.from(groupsMap.values());
+    // Convert to array and filter out empty leagues
+    const groups = Array.from(groupsMap.values()).filter(group => group.matches.length > 0);
+
+    // Major leagues IDs (Top 5)
+    const majorLeaguesSet = new Set([
+      MAJOR_LEAGUES.PREMIER_LEAGUE,
+      MAJOR_LEAGUES.LA_LIGA,
+      MAJOR_LEAGUES.BUNDESLIGA,
+      MAJOR_LEAGUES.SERIE_A,
+      MAJOR_LEAGUES.LIGUE_1,
+    ]);
+
+    // Sort: Major leagues first (in order), then favorites, then alphabetically
     groups.sort((a, b) => {
+      const aIsMajor = majorLeaguesSet.has(a.leagueId);
+      const bIsMajor = majorLeaguesSet.has(b.leagueId);
+      
+      // Major leagues come first
+      if (aIsMajor && !bIsMajor) return -1;
+      if (bIsMajor && !aIsMajor) return 1;
+      
+      // If both are major, maintain order: Premier League, La Liga, Bundesliga, Serie A, Ligue 1
+      if (aIsMajor && bIsMajor) {
+        const majorOrder = [
+          MAJOR_LEAGUES.PREMIER_LEAGUE,
+          MAJOR_LEAGUES.LA_LIGA,
+          MAJOR_LEAGUES.BUNDESLIGA,
+          MAJOR_LEAGUES.SERIE_A,
+          MAJOR_LEAGUES.LIGUE_1,
+        ];
+        const aIndex = majorOrder.indexOf(a.leagueId);
+        const bIndex = majorOrder.indexOf(b.leagueId);
+        if (aIndex !== -1 && bIndex !== -1) {
+          return aIndex - bIndex;
+        }
+      }
+      
+      // Then favorites
       const aIsFavorite = favoriteLeaguesSet.has(a.leagueId);
       const bIsFavorite = favoriteLeaguesSet.has(b.leagueId);
       if (aIsFavorite && !bIsFavorite) return -1;
       if (bIsFavorite && !aIsFavorite) return 1;
+      
+      // Finally alphabetically
       return a.leagueName.localeCompare(b.leagueName);
     });
 
@@ -260,17 +375,17 @@ const MatchesScreen = () => {
     (matchId: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const match = matches.find((m) => m.id === matchId);
-      if (match) {
+      if (match && match.homeTeam && match.awayTeam) {
         router.push({
           pathname: '/(tabs)/match-details',
           params: {
             fixtureId: matchId,
-            homeTeam: match.homeTeam.name,
-            awayTeam: match.awayTeam.name,
-            homeLogo: match.homeTeam.logo,
-            awayLogo: match.awayTeam.logo,
-            homeScore: match.score.home?.toString() || '',
-            awayScore: match.score.away?.toString() || '',
+            homeTeam: match.homeTeam.name || 'Home',
+            awayTeam: match.awayTeam.name || 'Away',
+            homeLogo: match.homeTeam.logo || '',
+            awayLogo: match.awayTeam.logo || '',
+            homeScore: match.score?.home?.toString() || '',
+            awayScore: match.score?.away?.toString() || '',
             league: match.league?.name || '',
             leagueLogo: match.league?.logo || '',
             date: match.fixtureDate || '',
@@ -283,10 +398,20 @@ const MatchesScreen = () => {
     [router, matches]
   );
 
-  // Handle refresh
+  // Handle refresh - optimized to skip if recently refreshed
+  const lastRefreshRef = React.useRef<number>(0);
   const handleRefresh = useCallback(async () => {
+    const now = Date.now();
+    // Skip if refreshed less than 3 seconds ago
+    if (now - lastRefreshRef.current < 3000) {
+      setRefreshing(false);
+      return;
+    }
+    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRefreshing(true);
+    lastRefreshRef.current = now;
+    
     try {
       if (activeTab === 'transfers') {
         await loadTransfers();
@@ -323,6 +448,21 @@ const MatchesScreen = () => {
       }
     } as any);
   }, [router]);
+
+  // Render league section
+  const renderLeagueSection = useCallback(({ item: group, index }: { item: typeof filteredGroupedMatches[0]; index: number }) => (
+    <LeagueSection
+      leagueId={group.leagueId}
+      leagueName={group.leagueName}
+      leagueLogo={group.leagueLogo}
+      matches={group.matches}
+      onMatchPress={handleMatchPress}
+      index={index}
+    />
+  ), [handleMatchPress]);
+
+  // Key extractor
+  const keyExtractor = useCallback((item: typeof filteredGroupedMatches[0]) => item.leagueId.toString(), []);
 
   // Loading state
   if (loading && !refreshing && matches.length === 0) {
@@ -363,7 +503,7 @@ const MatchesScreen = () => {
         />
         <EmptyState
           icon="alert-circle-outline"
-          title="Error Loading Matches"
+          title={t.matches.empty.errorLoadingMatches}
           message={error}
           iconColor={MATCH_DETAILS_COLORS.error}
         />
@@ -401,26 +541,26 @@ const MatchesScreen = () => {
       {/* Tabs */}
       <MatchTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {/* Content */}
-      <AnimatedScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 20 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={MATCH_DETAILS_COLORS.accent}
-            colors={[MATCH_DETAILS_COLORS.accent]}
-          />
-        }
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-      >
-        {activeTab === 'transfers' ? (
+      {/* Content - Using FlatList for better performance */}
+      {activeTab === 'transfers' ? (
+        <AnimatedScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 20 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={MATCH_DETAILS_COLORS.accent}
+              colors={[MATCH_DETAILS_COLORS.accent]}
+            />
+          }
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+        >
           <TransfersSection
             transfers={transfers}
             loading={transfersLoading}
@@ -434,26 +574,44 @@ const MatchesScreen = () => {
             availableLeagues={availableLeagues}
             onPlayerPress={handlePlayerPress}
           />
-        ) : filteredGroupedMatches.length === 0 ? (
+        </AnimatedScrollView>
+      ) : filteredGroupedMatches.length === 0 ? (
+        <View style={styles.emptyContainer}>
           <EmptyState
             icon="calendar-outline"
-            title="No matches found"
-            message="Try selecting a different date or tab"
+            title={t.matches.empty.noMatches}
+            message={t.matches.empty.tryDifferentDate}
           />
-        ) : (
-          filteredGroupedMatches.map((group, index) => (
-            <LeagueSection
-              key={group.leagueId}
-              leagueId={group.leagueId}
-              leagueName={group.leagueName}
-              leagueLogo={group.leagueLogo}
-              matches={group.matches}
-              onMatchPress={handleMatchPress}
-              index={index}
+        </View>
+      ) : (
+        <AnimatedFlatList
+          ref={flatListRef as any}
+          data={filteredGroupedMatches}
+          renderItem={renderLeagueSection}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 20 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={MATCH_DETAILS_COLORS.accent}
+              colors={[MATCH_DETAILS_COLORS.accent]}
             />
-          ))
-        )}
-      </AnimatedScrollView>
+          }
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={2}
+          updateCellsBatchingPeriod={100}
+          initialNumToRender={2}
+          windowSize={3}
+          // Remove getItemLayout as item heights vary significantly
+        />
+      )}
     </View>
   );
 };
@@ -462,9 +620,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MATCH_DETAILS_COLORS.background,
-  },
-  scrollView: {
-    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -475,6 +630,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     gap: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

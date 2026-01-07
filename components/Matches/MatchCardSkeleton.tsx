@@ -24,22 +24,13 @@ const MatchCardSkeleton: React.FC<MatchCardSkeletonProps> = React.memo(({ index 
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    const delay = index * ANIMATION_CONFIG.staggerDelay;
-    
-    // Fade in animation
-    opacity.value = withDelay(
-      delay,
-      withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration })
-    );
-
+    // Remove delay for faster initial render
+    opacity.value = 1;
     // Shimmer animation
-    shimmer.value = withDelay(
-      delay,
-      withRepeat(
-        withTiming(1, { duration: 1500 }),
-        -1,
-        false
-      )
+    shimmer.value = withRepeat(
+      withTiming(1, { duration: 1500 }),
+      -1,
+      false
     );
   }, []);
 

@@ -1,20 +1,22 @@
 /**
  * League Section Component
- * Enhanced with animations and unified colors
+ * Optimized with lazy loading and faster animations
  */
 
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Match } from '../league-center/matchCardUtils';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
-import MatchCard from './MatchCard';
+import GradientMatchCard from '../league-center/GradientMatchCard';
 
 export interface LeagueSectionProps {
   leagueId: number;
@@ -23,6 +25,7 @@ export interface LeagueSectionProps {
   matches: Match[];
   onMatchPress?: (matchId: string) => void;
   index?: number;
+  isExpandedByDefault?: boolean;
 }
 
 const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
@@ -32,37 +35,62 @@ const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
   matches,
   onMatchPress,
   index = 0,
+  isExpandedByDefault = false,
 }) => {
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(20);
+  const [isExpanded, setIsExpanded] = useState(isExpandedByDefault);
+  const [shouldRenderContent, setShouldRenderContent] = useState(isExpandedByDefault);
+  const rotation = useSharedValue(isExpandedByDefault ? 90 : 0);
 
+  // Simplified entrance animation - only for header, no delay
   useEffect(() => {
-    const delay = index * 30; // Slight delay for stagger effect
-    setTimeout(() => {
-      opacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });
-      translateY.value = withSpring(0, ANIMATION_CONFIG.spring);
-    }, delay);
+    if (isExpandedByDefault && !shouldRenderContent) {
+      setShouldRenderContent(true);
+    }
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
+  // Fast toggle animation
+  useEffect(() => {
+    rotation.value = withSpring(isExpanded ? 90 : 0, {
+      damping: 15,
+      stiffness: 200,
+    });
+    
+    // Only render content when expanded (lazy loading)
+    if (isExpanded && !shouldRenderContent) {
+      setShouldRenderContent(true);
+    }
+  }, [isExpanded]);
+
+  const toggleExpanded = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsExpanded(prev => !prev);
+  }, []);
+
+  const arrowStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
+
+  // Don't render if no matches
   if (matches.length === 0) {
     return null;
   }
 
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
-      {/* League Header */}
-      <View style={styles.header}>
+    <View style={styles.container}>
+      {/* League Header - Clickable */}
+      <TouchableOpacity
+        style={styles.header}
+        onPress={toggleExpanded}
+        activeOpacity={0.7}
+      >
+        <BlurView intensity={10} tint="dark" style={StyleSheet.absoluteFill} />
         {leagueLogo && (
           <Image
             source={{ uri: leagueLogo }}
             style={styles.leagueLogo}
             contentFit="contain"
-            transition={200}
+            transition={100}
             cachePolicy="memory-disk"
             placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
           />
@@ -73,42 +101,67 @@ const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
         <View style={styles.matchCountBadge}>
           <Text style={styles.matchCountText}>{matches.length}</Text>
         </View>
-      </View>
-
-      {/* Matches List */}
-      <View style={styles.matchesList}>
-        {matches.map((match, matchIndex) => (
-          <MatchCard
-            key={match.id}
-            match={match}
-            onPress={onMatchPress}
-            index={matchIndex}
+        <Animated.View style={arrowStyle}>
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={MATCH_DETAILS_COLORS.textSecondary}
           />
-        ))}
-      </View>
-    </Animated.View>
+        </Animated.View>
+      </TouchableOpacity>
+
+      {/* Matches List - Lazy rendered only when expanded - Using map instead of FlatList for better performance */}
+      {shouldRenderContent && isExpanded && (
+        <View style={styles.matchesContainer}>
+          {matches.map((match, matchIndex) => (
+            <View key={match.id} style={{ marginBottom: 12 }}>
+              <GradientMatchCard
+                match={match}
+                gradientIndex={matchIndex}
+                onPress={() => onMatchPress?.(match.id)}
+              />
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }, (prevProps, nextProps) => {
-  return (
-    prevProps.leagueId === nextProps.leagueId &&
-    prevProps.matches.length === nextProps.matches.length &&
-    prevProps.matches.every((match, index) => match.id === nextProps.matches[index]?.id)
-  );
+  // More detailed comparison to reduce re-renders
+  if (prevProps.leagueId !== nextProps.leagueId) return false;
+  if (prevProps.leagueName !== nextProps.leagueName) return false;
+  if (prevProps.leagueLogo !== nextProps.leagueLogo) return false;
+  if (prevProps.matches.length !== nextProps.matches.length) return false;
+  if (prevProps.isExpandedByDefault !== nextProps.isExpandedByDefault) return false;
+  
+  // Check if matches actually changed by comparing IDs
+  if (prevProps.matches.length > 0 && nextProps.matches.length > 0) {
+    const prevIds = prevProps.matches.map(m => m.id).join(',');
+    const nextIds = nextProps.matches.map(m => m.id).join(',');
+    if (prevIds !== nextIds) return false;
+  }
+  
+  return true;
 });
 
 LeagueSection.displayName = 'LeagueSection';
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 12,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 8,
+    paddingVertical: 14,
+    marginBottom: 4,
     gap: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
   },
   leagueLogo: {
     width: 24,
@@ -122,7 +175,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   matchCountBadge: {
-    backgroundColor: MATCH_DETAILS_COLORS.cardSecondary,
+    backgroundColor: MATCH_DETAILS_COLORS.card,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -136,8 +189,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: MATCH_DETAILS_COLORS.text,
   },
+  matchesContainer: {
+    overflow: 'hidden',
+    paddingHorizontal: 4,
+  },
   matchesList: {
     gap: 12,
+    paddingTop: 8,
   },
 });
 

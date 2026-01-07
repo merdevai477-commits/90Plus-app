@@ -3,7 +3,7 @@
  * Enhanced with animations, haptic feedback, and unified colors
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
+import { useTranslation } from '../../src/i18n/useTranslation';
 
 export type MatchTabType = 'all' | 'live' | 'upcoming' | 'finished' | 'favorites' | 'transfers';
 
@@ -21,20 +22,21 @@ interface MatchTabsProps {
   onTabChange: (tab: MatchTabType) => void;
 }
 
-const tabs: Array<{ id: MatchTabType; label: string; icon?: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'live', label: 'Live', icon: '🔴' },
-  { id: 'upcoming', label: 'Upcoming' },
-  { id: 'finished', label: 'Finished' },
-  { id: 'favorites', label: 'Favorites', icon: '⭐' },
-  { id: 'transfers', label: 'الانتقالات', icon: '🔄' },
-];
-
 const MatchTabs: React.FC<MatchTabsProps> = React.memo(({ activeTab, onTabChange }) => {
+  const { t } = useTranslation();
   const tabPositions = useRef<Map<MatchTabType, number>>(new Map());
   const indicatorPosition = useSharedValue(0);
   const indicatorWidth = useSharedValue(0);
   const tabsOpacity = useSharedValue(0);
+
+  const tabs = useMemo<Array<{ id: MatchTabType; label: string; icon?: string }>>(() => [
+    { id: 'all', label: t.matches.tabs.all },
+    { id: 'live', label: t.matches.tabs.live, icon: '🔴' },
+    { id: 'upcoming', label: t.matches.tabs.upcoming },
+    { id: 'finished', label: t.matches.tabs.finished },
+    { id: 'favorites', label: t.matches.tabs.favorites, icon: '⭐' },
+    { id: 'transfers', label: t.matches.tabs.transfers, icon: '🔄' },
+  ], [t]);
 
   useEffect(() => {
     tabsOpacity.value = withTiming(1, { duration: ANIMATION_CONFIG.fadeInDuration });

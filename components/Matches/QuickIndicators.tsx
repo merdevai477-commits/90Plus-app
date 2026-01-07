@@ -14,6 +14,7 @@ import Animated, {
   useAnimatedReaction,
 } from 'react-native-reanimated';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
+import { useTranslation } from '../../src/i18n/useTranslation';
 
 interface QuickIndicatorsProps {
   matchesCount: number;
@@ -24,6 +25,7 @@ const QuickIndicators: React.FC<QuickIndicatorsProps> = React.memo(({
   matchesCount,
   leaguesCount,
 }) => {
+  const { t } = useTranslation();
   const matchesOpacity = useSharedValue(0);
   const leaguesOpacity = useSharedValue(0);
   const matchesScale = useSharedValue(0.8);
@@ -86,14 +88,14 @@ const QuickIndicators: React.FC<QuickIndicatorsProps> = React.memo(({
       <Animated.View style={[styles.indicator, matchesStyle]}>
         <View style={styles.redDot} />
         <Animated.Text style={styles.countText}>{matchesCount}</Animated.Text>
-        <Text style={styles.labelText}>Matches</Text>
+        <Text style={styles.labelText}>{t.matches.indicators.matches}</Text>
       </Animated.View>
 
       {/* Leagues Count */}
       <Animated.View style={[styles.indicator, leaguesStyle]}>
         <View style={styles.greenDot} />
         <Animated.Text style={styles.countText}>{leaguesCount}</Animated.Text>
-        <Text style={styles.labelText}>Leagues</Text>
+        <Text style={styles.labelText}>{t.matches.indicators.leagues}</Text>
       </Animated.View>
     </View>
   );
