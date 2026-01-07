@@ -4,6 +4,12 @@ import { FootballController } from '../controllers/football.controller';
 const router = Router();
 
 // ============================================
+// GET /api/football/health
+// Health check for Football API
+// ============================================
+router.get('/health', FootballController.getHealth);
+
+// ============================================
 // GET /api/football/leagues
 // Get all available leagues
 // ============================================

@@ -179,6 +179,57 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/health - Health check for Football API
+   * Checks API configuration, rate limits, and database connectivity
+   */
+  static async getHealth(req: Request, res: Response): Promise<void> {
+    try {
+      const isConfigured = footballService.isConfigured();
+      const rateLimitStatus = footballService.getRateLimitStatus();
+      const cacheStats = matchCacheService.getCacheStats();
+      
+      // Check database connectivity for cached transfers
+      let dbStatus = 'Unknown';
+      let transfersCount = 0;
+      try {
+        const { PrismaClient } = await import('@prisma/client');
+        const prisma = new PrismaClient();
+        const count = await prisma.cachedTransfer.count().catch(() => 0);
+        transfersCount = count;
+        dbStatus = 'Connected';
+        await prisma.$disconnect();
+      } catch (error: any) {
+        dbStatus = error?.code === 'P2021' ? 'Table not found' : 'Disconnected';
+      }
+
+      const health = {
+        status: isConfigured ? 'OK' : 'WARNING',
+        timestamp: new Date().toISOString(),
+        api: {
+          configured: isConfigured,
+          baseUrl: 'https://v3.football.api-sports.io',
+          message: isConfigured 
+            ? 'Football API is configured and ready' 
+            : 'Football API key not configured (FOOTBALL_API_KEY missing)',
+        },
+        rateLimit: rateLimitStatus,
+        cache: {
+          matchCache: cacheStats,
+          transfersInDatabase: transfersCount,
+        },
+        database: {
+          status: dbStatus,
+          transfersCount,
+        },
+      };
+
+      res.status(isConfigured ? 200 : 503).json(health);
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cache/stats - Get cache statistics
    */
   static async getCacheStats(req: Request, res: Response): Promise<void> {
