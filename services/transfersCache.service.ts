@@ -155,20 +155,26 @@ export const transfersCacheService = {
       if (!response.ok) {
         // If 404, return empty array instead of throwing (endpoint might not be available yet)
         if (response.status === 404) {
-          logger.warn('Transfers cached endpoint not available, returning empty array');
+          logger.warn(`⚠️ Transfers cached endpoint not available (404) - Season: ${season}, Leagues: ${leagueIds.length > 0 ? leagueIds.join(',') : 'ALL'}`);
           return [];
         }
-        throw new Error(`Failed to fetch cached transfers: ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unknown error');
+        logger.error(`❌ Failed to fetch cached transfers: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to fetch cached transfers: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
       
+      logger.debug(`📡 Backend response - Status: ${result.status}, Leagues: ${result.leagues || 0}, Results: ${result.results || 0}`);
+      
       if (result.status === 'SUCCESS' && result.response) {
+        logger.debug(`✅ Successfully fetched ${result.response.length} leagues with transfers`);
         // Cache the result
         await this.cacheTransfers(result.response, season, leagueIds);
         return result.response;
       }
 
+      logger.warn(`⚠️ Backend returned empty or invalid response - Status: ${result.status}, Response: ${result.response ? 'exists' : 'missing'}`);
       return [];
     } catch (error) {
       logger.error('Error fetching cached transfers:', error);

@@ -212,6 +212,8 @@ const MatchesScreen = () => {
       // Only check current year if we're in the middle of the season
       const isEarlyInYear = new Date().getMonth() < 6; // Before July
       const seasonToFetch = isEarlyInYear ? lastYear : currentYear;
+      
+      logger.debug(`🔍 Loading transfers - Year: ${currentYear}, Last Year: ${lastYear}, Date Range: ${dateRange.from} to ${dateRange.to}, Leagues: ${leaguesToFetch.length > 0 ? leaguesToFetch.join(',') : 'ALL'}`);
 
       // Try cache first for zero-delay display - prioritize last year (السنة الفاتت)
       // For all leagues, use empty array as key
@@ -253,12 +255,17 @@ const MatchesScreen = () => {
 
       // No cache, fetch from backend cached endpoint
       // Prioritize last year (السنة الفاتت) - the completed season
+      logger.debug(`📡 Fetching transfers from backend - Last Year: ${lastYear}, Current Year: ${currentYear}, Date Range: ${dateRange.from} to ${dateRange.to}`);
+      
       const fetchPromises = [
         transfersCacheService.fetchCachedTransfers(
           lastYear,
           leaguesToFetch,
           dateRange
-        ).catch(() => []), // Don't fail if one fails
+        ).catch((err) => {
+          logger.warn(`⚠️ Failed to fetch transfers for ${lastYear}:`, err);
+          return [];
+        }), // Don't fail if one fails
       ];
       
       // Only fetch current year if we're not early in the year
@@ -268,13 +275,18 @@ const MatchesScreen = () => {
             currentYear,
             leaguesToFetch,
             dateRange
-          ).catch(() => [])
+          ).catch((err) => {
+            logger.warn(`⚠️ Failed to fetch transfers for ${currentYear}:`, err);
+            return [];
+          })
         );
       }
       
       const results = await Promise.all(fetchPromises);
       const lastYearData = results[0];
       const currentYearData = results[1] || [];
+      
+      logger.debug(`📡 Backend response - Last Year: ${lastYearData.length} leagues, Current Year: ${currentYearData.length} leagues`);
 
       // Merge transfers from both years
       const leagueMap = new Map<number, { leagueId: number; leagueName: string; leagueLogo?: string; transfers: Transfer[] }>();
@@ -319,6 +331,16 @@ const MatchesScreen = () => {
       });
 
       logger.debug(`📦 Fetched transfers: ${allTransfers.length} transfers from ${leaguesList.length} leagues (season: ${seasonToFetch})`);
+      
+      // If no transfers found, set a helpful error message
+      if (allTransfers.length === 0) {
+        const errorMsg = `No transfers found in database. The database might be empty. Please ensure transfers are being saved to the database first. Date Range: ${dateRange.from} to ${dateRange.to}, Season: ${lastYear}`;
+        logger.warn(`⚠️ ${errorMsg}`);
+        setTransfersError(errorMsg);
+      } else {
+        setTransfersError(null);
+      }
+      
       setTransfers(allTransfers);
       setAvailableLeagues(leaguesList);
       setRetryCount(0); // Reset retry count on success
