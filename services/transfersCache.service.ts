@@ -134,11 +134,16 @@ export const transfersCacheService = {
         params.append('to', dateRange.to);
       }
 
-      // Build URL - check if apiUrl already includes /api
-      let url = `${apiUrl}/api/football/transfers/cached`;
-      // Remove duplicate /api if apiUrl already ends with /api
+      // Build URL - getApiUrl() already includes /api, so we don't add it again
+      // apiUrl format: https://domain.com/api or http://localhost:3000/api
+      // We need: https://domain.com/api/football/transfers/cached
+      let url: string;
       if (apiUrl.endsWith('/api')) {
+        // apiUrl already ends with /api, just append the path
         url = `${apiUrl}/football/transfers/cached`;
+      } else {
+        // apiUrl doesn't have /api, add it
+        url = `${apiUrl}/api/football/transfers/cached`;
       }
       
       const fullUrl = `${url}?${params.toString()}`;
@@ -151,12 +156,12 @@ export const transfersCacheService = {
         },
       });
 
-      // If 404, try alternative URL format
+      // If 404, try alternative URL format (without /api prefix)
       if (response.status === 404) {
-        const altUrl = apiUrl.endsWith('/api') 
-          ? `${apiUrl.replace(/\/api$/, '')}/api/football/transfers/cached`
+        const altUrl = apiUrl.endsWith('/api')
+          ? `${apiUrl.replace(/\/api$/, '')}/football/transfers/cached`
           : `${apiUrl}/football/transfers/cached`;
-        logger.debug(`📡 Trying alternative URL: ${altUrl}`);
+        logger.debug(`📡 Trying alternative URL (without /api): ${altUrl}`);
         response = await fetch(`${altUrl}?${params.toString()}`, {
           method: 'GET',
           headers: {
@@ -224,10 +229,14 @@ export const transfersCacheService = {
         params.append('to', dateRange.to);
       }
 
-      // Build URL - check if apiUrl already includes /api
-      let url = `${apiUrl}/api/football/transfers/by-leagues`;
+      // Build URL - getApiUrl() already includes /api, so we don't add it again
+      let url: string;
       if (apiUrl.endsWith('/api')) {
+        // apiUrl already ends with /api, just append the path
         url = `${apiUrl}/football/transfers/by-leagues`;
+      } else {
+        // apiUrl doesn't have /api, add it
+        url = `${apiUrl}/api/football/transfers/by-leagues`;
       }
       
       const fullUrl = `${url}?${params.toString()}`;
