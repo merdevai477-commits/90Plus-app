@@ -145,6 +145,8 @@ const MatchesScreen = () => {
   const getDateRange = useCallback((range: typeof timeRange) => {
     const now = new Date();
     const from = new Date(now);
+    const currentYear = now.getFullYear();
+    const lastYear = currentYear - 1;
     
     switch (range) {
       case '1month':
@@ -158,14 +160,23 @@ const MatchesScreen = () => {
         break;
       case '1year':
       default:
-        // Include last year's transfers (السنة الفاتت) - go back 2 years to include previous season
-        from.setFullYear(now.getFullYear() - 2);
+        // Include last year's transfers (السنة الفاتت) - start from beginning of last year
+        // Set to January 1st of last year
+        from.setFullYear(lastYear);
+        from.setMonth(0); // January
+        from.setDate(1);
         break;
+    }
+    
+    // For '1year', end date should be end of last year, not current date
+    let toDate = now;
+    if (range === '1year') {
+      toDate = new Date(lastYear, 11, 31); // December 31st of last year
     }
     
     return {
       from: from.toISOString().split('T')[0],
-      to: now.toISOString().split('T')[0],
+      to: toDate.toISOString().split('T')[0],
     };
   }, []);
 

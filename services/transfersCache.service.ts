@@ -134,17 +134,30 @@ export const transfersCacheService = {
         params.append('to', dateRange.to);
       }
 
-      // Try with /api prefix first, fallback to without if 404
-      let response = await fetch(`${apiUrl}/api/football/transfers/cached?${params.toString()}`, {
+      // Build URL - check if apiUrl already includes /api
+      let url = `${apiUrl}/api/football/transfers/cached`;
+      // Remove duplicate /api if apiUrl already ends with /api
+      if (apiUrl.endsWith('/api')) {
+        url = `${apiUrl}/football/transfers/cached`;
+      }
+      
+      const fullUrl = `${url}?${params.toString()}`;
+      logger.debug(`📡 Fetching transfers from: ${fullUrl}`);
+      
+      let response = await fetch(fullUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
       });
 
-      // If 404, try without /api prefix
+      // If 404, try alternative URL format
       if (response.status === 404) {
-        response = await fetch(`${apiUrl}/football/transfers/cached?${params.toString()}`, {
+        const altUrl = apiUrl.endsWith('/api') 
+          ? `${apiUrl.replace(/\/api$/, '')}/api/football/transfers/cached`
+          : `${apiUrl}/football/transfers/cached`;
+        logger.debug(`📡 Trying alternative URL: ${altUrl}`);
+        response = await fetch(`${altUrl}?${params.toString()}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
