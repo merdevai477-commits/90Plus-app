@@ -141,43 +141,11 @@ const MatchesScreen = () => {
   }, []);
 
   // Get date range based on time range selection
-  // For transfers, we want to include last year's transfers (السنة الفاتت)
+  // For transfers, fetch ALL transfers (no date restrictions) to get maximum data
   const getDateRange = useCallback((range: typeof timeRange) => {
-    const now = new Date();
-    const from = new Date(now);
-    const currentYear = now.getFullYear();
-    const lastYear = currentYear - 1;
-    
-    switch (range) {
-      case '1month':
-        from.setMonth(now.getMonth() - 1);
-        break;
-      case '3months':
-        from.setMonth(now.getMonth() - 3);
-        break;
-      case '6months':
-        from.setMonth(now.getMonth() - 6);
-        break;
-      case '1year':
-      default:
-        // Include last year's transfers (السنة الفاتت) - start from beginning of last year
-        // Set to January 1st of last year
-        from.setFullYear(lastYear);
-        from.setMonth(0); // January
-        from.setDate(1);
-        break;
-    }
-    
-    // For '1year', end date should be end of last year, not current date
-    let toDate = now;
-    if (range === '1year') {
-      toDate = new Date(lastYear, 11, 31); // December 31st of last year
-    }
-    
-    return {
-      from: from.toISOString().split('T')[0],
-      to: toDate.toISOString().split('T')[0],
-    };
+    // Return undefined to fetch ALL transfers without date restrictions
+    // This allows fetching maximum transfers from all time
+    return undefined;
   }, []);
 
   // Load transfers when transfers tab is active or filters change
@@ -224,7 +192,7 @@ const MatchesScreen = () => {
       const isEarlyInYear = new Date().getMonth() < 6; // Before July
       const seasonToFetch = isEarlyInYear ? lastYear : currentYear;
       
-      logger.debug(`🔍 Loading transfers - Year: ${currentYear}, Last Year: ${lastYear}, Date Range: ${dateRange.from} to ${dateRange.to}, Leagues: ${leaguesToFetch.length > 0 ? leaguesToFetch.join(',') : 'ALL'}`);
+      logger.debug(`🔍 Loading transfers - Year: ${currentYear}, Last Year: ${lastYear}, Date Range: ALL (no restrictions), Leagues: ${leaguesToFetch.length > 0 ? leaguesToFetch.join(',') : 'ALL'}`);
 
       // Try cache first for zero-delay display - prioritize last year (السنة الفاتت)
       // For all leagues, use empty array as key
@@ -259,20 +227,21 @@ const MatchesScreen = () => {
 
         // Refresh in background only if online
         if (isOnline) {
-          loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentYear, isEarlyInYear);
+          loadTransfersInBackground(leaguesToFetch, undefined, lastYear, currentYear, isEarlyInYear);
         }
         return;
       }
 
       // No cache, fetch from backend cached endpoint
       // Prioritize last year (السنة الفاتت) - the completed season
-      logger.debug(`📡 Fetching transfers from backend - Last Year: ${lastYear}, Current Year: ${currentYear}, Date Range: ${dateRange.from} to ${dateRange.to}`);
+      // No dateRange = fetch ALL transfers (maximum data)
+      logger.debug(`📡 Fetching transfers from backend - Last Year: ${lastYear}, Current Year: ${currentYear}, Date Range: ALL (no restrictions)`);
       
       const fetchPromises = [
         transfersCacheService.fetchCachedTransfers(
           lastYear,
           leaguesToFetch,
-          dateRange
+          undefined // No date range = ALL transfers
         ).catch((err) => {
           logger.warn(`⚠️ Failed to fetch transfers for ${lastYear}:`, err);
           return [];
@@ -345,7 +314,7 @@ const MatchesScreen = () => {
       
       // If no transfers found, set a helpful error message
       if (allTransfers.length === 0) {
-        const errorMsg = `No transfers found in database. The database might be empty. Please ensure transfers are being saved to the database first. Date Range: ${dateRange.from} to ${dateRange.to}, Season: ${lastYear}`;
+        const errorMsg = `No transfers found in database. The database might be empty. Please ensure transfers are being saved to the database first. Season: ${lastYear}`;
         logger.warn(`⚠️ ${errorMsg}`);
         setTransfersError(errorMsg);
       } else {
@@ -398,7 +367,7 @@ const MatchesScreen = () => {
   // Background refresh function with retry mechanism
   const loadTransfersInBackground = useCallback(async (
     leaguesToFetch: number[],
-    dateRange: { from: string; to: string },
+    dateRange: { from: string; to: string } | undefined,
     lastYear: number,
     currentYear: number,
     isEarlyInYear: boolean,
@@ -411,11 +380,12 @@ const MatchesScreen = () => {
 
     try {
       // Fetch from last year (السنة الفاتت) - prioritize completed season
+      // No dateRange = fetch ALL transfers (maximum data)
       const fetchPromises = [
         transfersCacheService.fetchCachedTransfers(
           lastYear,
           leaguesToFetch,
-          dateRange
+          undefined // No date range = ALL transfers
         ).catch(() => []),
       ];
       
@@ -425,7 +395,7 @@ const MatchesScreen = () => {
           transfersCacheService.fetchCachedTransfers(
             currentYear,
             leaguesToFetch,
-            dateRange
+            undefined // No date range = ALL transfers
           ).catch(() => [])
         );
       }
