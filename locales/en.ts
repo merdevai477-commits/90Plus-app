@@ -240,7 +240,10 @@ export const en = {
       tryDifferentDate: 'Try selecting a different date or tab',
       noTransfers: 'No transfers found',
       errorLoadingMatches: 'Error Loading Matches',
+      errorLoadingTransfers: 'Error Loading Transfers',
+      retry: 'Retry',
     },
+    networkOffline: 'No internet connection',
     indicators: {
       matches: 'Matches',
       leagues: 'Leagues',

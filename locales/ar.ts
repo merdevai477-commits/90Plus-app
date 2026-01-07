@@ -227,7 +227,10 @@ export const ar = {
       tryDifferentDate: 'جرب اختيار تاريخ أو تبويب مختلف',
       noTransfers: 'لا توجد انتقالات',
       errorLoadingMatches: 'خطأ في تحميل المباريات',
+      errorLoadingTransfers: 'خطأ في تحميل الانتقالات',
+      retry: 'إعادة المحاولة',
     },
+    networkOffline: 'لا يوجد اتصال بالإنترنت',
     indicators: {
       matches: 'مباريات',
       leagues: 'دوريات',

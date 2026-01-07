@@ -12,6 +12,8 @@ import {
   FlatList,
   InteractionManager,
   ScrollView,
+  Text,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as Network from 'expo-network';
 
 // Components
 import MatchTopBar from '../../components/Matches/MatchTopBar';
@@ -35,6 +38,7 @@ import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 // Hooks & Data
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
+import { useFavoriteMatches } from '../../hooks/useFavoriteMatches';
 import { Match } from '../../components/league-center/matchCardUtils';
 import { logger } from '../../utils/logger';
 import ApiFootballService, { Transfer, MAJOR_LEAGUES } from '../../services/apiFootball';
@@ -58,7 +62,9 @@ const MatchesScreen = () => {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transfersLoading, setTransfersLoading] = useState(false);
   const [transfersError, setTransfersError] = useState<string | null>(null);
-  const [initialRenderDone, setInitialRenderDone] = useState(false);
+  const [tabLoading, setTabLoading] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   
   // Transfer filters
   const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]);
@@ -91,12 +97,47 @@ const MatchesScreen = () => {
   const { favoriteLeagues } = useFavoriteLeagues();
   const favoriteLeaguesSet = useMemo(() => new Set(favoriteLeagues), [favoriteLeagues]);
 
-  // Optimize initial render
-  useEffect(() => {
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      setInitialRenderDone(true);
+  // Favorite matches hook
+  const { favoriteMatchIds, isFavorite, toggleFavorite } = useFavoriteMatches();
+  const favoriteMatchesSet = useMemo(() => new Set(favoriteMatchIds), [favoriteMatchIds]);
+
+  // Create matches Map for O(1) lookup
+  const matchesMap = useMemo(() => {
+    const map = new Map<string, Match>();
+    matches.forEach((match) => {
+      map.set(match.id, match);
     });
-    return () => interaction.cancel();
+    return map;
+  }, [matches]);
+
+  // Network status detection
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkNetworkStatus = async () => {
+      try {
+        const networkState = await Network.getNetworkStateAsync();
+        if (isMounted) {
+          setIsOnline(networkState.isConnected ?? true);
+        }
+      } catch (err) {
+        logger.warn('Failed to check network status:', err);
+        if (isMounted) {
+          setIsOnline(true); // Default to online on error
+        }
+      }
+    };
+
+    // Check on mount
+    checkNetworkStatus();
+
+    // Check periodically (every 30 seconds)
+    const interval = setInterval(checkNetworkStatus, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Get date range based on time range selection
@@ -135,15 +176,22 @@ const MatchesScreen = () => {
     } else if (activeTab !== 'transfers') {
       loadTransfersRef.current = false;
     }
-  }, [activeTab]);
+  }, [activeTab, loadTransfers]);
 
   useEffect(() => {
     if (activeTab === 'transfers' && (selectedLeagues.length > 0 || timeRange !== '1year')) {
       loadTransfers();
     }
-  }, [selectedLeagues, timeRange]);
+  }, [selectedLeagues, timeRange, loadTransfers]);
 
-  const loadTransfers = useCallback(async () => {
+  const loadTransfers = useCallback(async (retryAttempt = 0): Promise<void> => {
+    // Check network status before attempting to load
+    if (!isOnline && retryAttempt === 0) {
+      setTransfersError('NETWORK_ERROR: No internet connection. Please check your network settings.');
+      setTransfersLoading(false);
+      return;
+    }
+
     try {
       setTransfersLoading(true);
       setTransfersError(null);
@@ -181,9 +229,12 @@ const MatchesScreen = () => {
         setTransfers(allTransfers);
         setAvailableLeagues(leaguesList);
         setTransfersLoading(false);
+        setRetryCount(0); // Reset retry count on success
 
-        // Refresh in background
-        loadTransfersInBackground(leaguesToFetch, dateRange, currentSeason);
+        // Refresh in background only if online
+        if (isOnline) {
+          loadTransfersInBackground(leaguesToFetch, dateRange, currentSeason);
+        }
         return;
       }
 
@@ -209,20 +260,51 @@ const MatchesScreen = () => {
 
       setTransfers(allTransfers);
       setAvailableLeagues(leaguesList);
-    } catch (err: any) {
+      setRetryCount(0); // Reset retry count on success
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      const isNetworkError = errorMessage.toLowerCase().includes('network') || 
+                            errorMessage.toLowerCase().includes('fetch') ||
+                            errorMessage.toLowerCase().includes('connection');
+      
       logger.error('Failed to load transfers:', err);
-      setTransfersError('Failed to load transfers');
+      
+      // Retry with exponential backoff for network errors
+      if (isNetworkError && retryAttempt < 3) {
+        const delay = Math.min(1000 * Math.pow(2, retryAttempt), 10000); // Max 10 seconds
+        logger.info(`Retrying transfers load in ${delay}ms (attempt ${retryAttempt + 1}/3)`);
+        setTimeout(() => {
+          loadTransfers(retryAttempt + 1);
+        }, delay);
+        return;
+      }
+      
+      // Set user-friendly error message
+      if (isNetworkError) {
+        setTransfersError('NETWORK_ERROR: Unable to load transfers. Please check your internet connection and try again.');
+      } else {
+        setTransfersError(`API_ERROR: ${errorMessage}`);
+      }
+      setRetryCount(retryAttempt);
     } finally {
-      setTransfersLoading(false);
+      if (retryAttempt === 0 || retryAttempt >= 3) {
+        setTransfersLoading(false);
+      }
     }
-  }, [selectedLeagues, timeRange, getDateRange]);
+  }, [selectedLeagues, timeRange, getDateRange, isOnline]);
 
-  // Background refresh function
+  // Background refresh function with retry mechanism
   const loadTransfersInBackground = useCallback(async (
     leaguesToFetch: number[],
     dateRange: { from: string; to: string },
-    season: number
+    season: number,
+    retryAttempt = 0
   ) => {
+    // Don't retry in background if offline
+    if (!isOnline) {
+      return;
+    }
+
     try {
       const data = await transfersCacheService.fetchCachedTransfers(
         season,
@@ -245,10 +327,18 @@ const MatchesScreen = () => {
       setTransfers(allTransfers);
       setAvailableLeagues(leaguesList);
     } catch (err) {
-      // Silent fail for background refresh
-      logger.warn('Background transfers refresh failed:', err);
+      // Retry with exponential backoff for background refresh
+      if (retryAttempt < 2) {
+        const delay = Math.min(2000 * Math.pow(2, retryAttempt), 8000);
+        logger.warn(`Background transfers refresh failed, retrying in ${delay}ms:`, err);
+        setTimeout(() => {
+          loadTransfersInBackground(leaguesToFetch, dateRange, season, retryAttempt + 1);
+        }, delay);
+      } else {
+        logger.warn('Background transfers refresh failed after retries:', err);
+      }
     }
-  }, []);
+  }, [isOnline]);
 
   // Filter matches by active tab - using Set for O(1) lookup
   const filteredMatches = useMemo(() => {
@@ -267,9 +357,9 @@ const MatchesScreen = () => {
         filtered = filtered.filter((m) => m.status === 'finished');
         break;
       case 'favorites':
+        // Show matches that are favorited (by bell icon)
         filtered = filtered.filter((m) => {
-          const leagueId = m.league?.id || 0;
-          return favoriteLeaguesSet.has(leagueId);
+          return favoriteMatchesSet.has(m.id);
         });
         break;
       case 'all':
@@ -279,7 +369,7 @@ const MatchesScreen = () => {
     }
 
     return filtered;
-  }, [matches, activeTab, favoriteLeaguesSet]);
+  }, [matches, activeTab, favoriteMatchesSet]);
 
   // Group filtered matches by league - using Set for O(1) lookup
   const filteredGroupedMatches = useMemo(() => {
@@ -368,13 +458,13 @@ const MatchesScreen = () => {
   const filteredCounts = useMemo(() => ({
     matchesCount: filteredMatches.length,
     leaguesCount: filteredGroupedMatches.length,
-  }), [filteredMatches.length, filteredGroupedMatches.length]);
+  }), [filteredMatches, filteredGroupedMatches]);
 
-  // Handle match press
+  // Handle match press - using Map for O(1) lookup
   const handleMatchPress = useCallback(
     (matchId: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const match = matches.find((m) => m.id === matchId);
+      const match = matchesMap.get(matchId);
       if (match && match.homeTeam && match.awayTeam) {
         router.push({
           pathname: '/(tabs)/match-details',
@@ -395,12 +485,18 @@ const MatchesScreen = () => {
         });
       }
     },
-    [router, matches]
+    [router, matchesMap]
   );
 
-  // Handle refresh - optimized to skip if recently refreshed
-  const lastRefreshRef = React.useRef<number>(0);
+  // Handle refresh - optimized to skip if recently refreshed or offline
+  const lastRefreshRef = useRef<number>(0);
   const handleRefresh = useCallback(async () => {
+    // Don't refresh if offline
+    if (!isOnline) {
+      setRefreshing(false);
+      return;
+    }
+
     const now = Date.now();
     // Skip if refreshed less than 3 seconds ago
     if (now - lastRefreshRef.current < 3000) {
@@ -421,15 +517,24 @@ const MatchesScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [refetch, activeTab, loadTransfers]);
+  }, [refetch, activeTab, loadTransfers, isOnline]);
 
-  // Handle tab change
+  // Handle tab change with loading state
   const handleTabChange = useCallback((tab: MatchTabType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveTab(tab);
-  }, []);
+    
+    // Show loading state when switching to transfers tab
+    if (tab === 'transfers' && transfers.length === 0 && !transfersLoading) {
+      setTabLoading(true);
+      // Loading will be handled by loadTransfers
+      setTimeout(() => setTabLoading(false), 100);
+    } else {
+      setTabLoading(false);
+    }
+  }, [transfers.length, transfersLoading]);
 
-  // Handle player press in transfers
+  // Handle player press in transfers - type-safe router navigation
   const handlePlayerPress = useCallback((transfer: Transfer) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const latestTransfer = transfer.transfers && transfer.transfers.length > 0 
@@ -438,16 +543,21 @@ const MatchesScreen = () => {
     const currentTeam = latestTransfer?.teams.in;
     
     router.push({
-      pathname: '/player-profile' as any,
+      pathname: '/player-profile',
       params: {
         id: transfer.player.id.toString(),
         name: transfer.player.name,
         photo: transfer.player.photo || '',
         teamName: currentTeam?.name || '',
         teamLogo: currentTeam?.logo || '',
-      }
-    } as any);
+      },
+    });
   }, [router]);
+
+  // Handle favorite press
+  const handleFavoritePress = useCallback((match: Match) => {
+    toggleFavorite(match);
+  }, [toggleFavorite]);
 
   // Render league section
   const renderLeagueSection = useCallback(({ item: group, index }: { item: typeof filteredGroupedMatches[0]; index: number }) => (
@@ -457,9 +567,11 @@ const MatchesScreen = () => {
       leagueLogo={group.leagueLogo}
       matches={group.matches}
       onMatchPress={handleMatchPress}
+      onFavoritePress={handleFavoritePress}
+      favoriteMatchIds={favoriteMatchIds}
       index={index}
     />
-  ), [handleMatchPress]);
+  ), [handleMatchPress, handleFavoritePress, favoriteMatchIds, filteredGroupedMatches]);
 
   // Key extractor
   const keyExtractor = useCallback((item: typeof filteredGroupedMatches[0]) => item.leagueId.toString(), []);
@@ -487,10 +599,20 @@ const MatchesScreen = () => {
     );
   }
 
-  // Error state
+  // Error state with retry
   if (error && matches.length === 0) {
+    const getErrorMessage = (errorMsg: string): string => {
+      if (errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('fetch')) {
+        return 'NETWORK_ERROR: Unable to load matches. Please check your internet connection.';
+      }
+      if (errorMsg.toLowerCase().includes('timeout')) {
+        return 'TIMEOUT_ERROR: Request timed out. Please try again.';
+      }
+      return `API_ERROR: ${errorMsg}`;
+    };
+
     return (
-      <View style={styles.container}>
+      <View style={styles.container} accessibilityLabel="Matches screen error state">
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <LinearGradient
           colors={[MATCH_DETAILS_COLORS.background, MATCH_DETAILS_COLORS.background]}
@@ -504,15 +626,17 @@ const MatchesScreen = () => {
         <EmptyState
           icon="alert-circle-outline"
           title={t.matches.empty.errorLoadingMatches}
-          message={error}
+          message={getErrorMessage(error)}
           iconColor={MATCH_DETAILS_COLORS.error}
+          onRetry={refetch}
+          retryLabel={t.matches.empty.retry || 'Retry'}
         />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} accessibilityLabel="Matches screen">
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* Background */}
@@ -522,6 +646,15 @@ const MatchesScreen = () => {
           style={StyleSheet.absoluteFill}
         />
       </View>
+
+      {/* Network Status Indicator */}
+      {!isOnline && (
+        <View style={styles.networkIndicator} accessibilityLabel="No internet connection" accessibilityRole="alert">
+          <Text style={styles.networkText}>
+            {t.matches.networkOffline || 'No internet connection'}
+          </Text>
+        </View>
+      )}
 
       {/* Top Bar */}
       <MatchTopBar
@@ -539,42 +672,71 @@ const MatchesScreen = () => {
       )}
 
       {/* Tabs */}
-      <MatchTabs activeTab={activeTab} onTabChange={handleTabChange} />
+      <MatchTabs 
+        activeTab={activeTab} 
+        onTabChange={handleTabChange}
+        accessibilityLabel="Match tabs"
+      />
 
       {/* Content - Using FlatList for better performance */}
       {activeTab === 'transfers' ? (
-        <AnimatedScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={MATCH_DETAILS_COLORS.accent}
-              colors={[MATCH_DETAILS_COLORS.accent]}
-            />
-          }
-          onScroll={scrollHandler}
-          scrollEventThrottle={16}
-        >
-          <TransfersSection
-            transfers={transfers}
-            loading={transfersLoading}
-            error={transfersError}
-            selectedLeagues={selectedLeagues}
-            onSelectedLeaguesChange={setSelectedLeagues}
-            transferType={transferType}
-            onTransferTypeChange={setTransferType}
-            timeRange={timeRange}
-            onTimeRangeChange={setTimeRange}
-            availableLeagues={availableLeagues}
-            onPlayerPress={handlePlayerPress}
-          />
-        </AnimatedScrollView>
+        <>
+          {(transfersLoading || tabLoading) && transfers.length === 0 ? (
+            <View style={styles.skeletonContainer} accessibilityLabel="Loading transfers">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <MatchCardSkeleton key={index} index={index} />
+              ))}
+            </View>
+          ) : (
+            <AnimatedScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: insets.bottom + 20 },
+              ]}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={MATCH_DETAILS_COLORS.accent}
+                  colors={[MATCH_DETAILS_COLORS.accent]}
+                  enabled={isOnline}
+                />
+              }
+              onScroll={scrollHandler}
+              scrollEventThrottle={16}
+              accessibilityLabel="Transfers list"
+            >
+              {transfersError ? (
+                <View style={styles.emptyContainer}>
+                  <EmptyState
+                    icon="alert-circle-outline"
+                    title={t.matches.empty.errorLoadingTransfers || 'Failed to load transfers'}
+                    message={transfersError}
+                    iconColor={MATCH_DETAILS_COLORS.error}
+                    onRetry={() => loadTransfers()}
+                    retryLabel={t.matches.empty.retry || 'Retry'}
+                  />
+                </View>
+              ) : (
+                <TransfersSection
+                  transfers={transfers}
+                  loading={transfersLoading}
+                  error={transfersError}
+                  selectedLeagues={selectedLeagues}
+                  onSelectedLeaguesChange={setSelectedLeagues}
+                  transferType={transferType}
+                  onTransferTypeChange={setTransferType}
+                  timeRange={timeRange}
+                  onTimeRangeChange={setTimeRange}
+                  availableLeagues={availableLeagues}
+                  onPlayerPress={handlePlayerPress}
+                />
+              )}
+            </AnimatedScrollView>
+          )}
+        </>
       ) : filteredGroupedMatches.length === 0 ? (
         <View style={styles.emptyContainer}>
           <EmptyState
@@ -585,7 +747,7 @@ const MatchesScreen = () => {
         </View>
       ) : (
         <AnimatedFlatList
-          ref={flatListRef as any}
+          ref={flatListRef}
           data={filteredGroupedMatches}
           renderItem={renderLeagueSection}
           keyExtractor={keyExtractor}
@@ -600,6 +762,7 @@ const MatchesScreen = () => {
               onRefresh={handleRefresh}
               tintColor={MATCH_DETAILS_COLORS.accent}
               colors={[MATCH_DETAILS_COLORS.accent]}
+              enabled={isOnline}
             />
           }
           onScroll={scrollHandler}
@@ -609,6 +772,7 @@ const MatchesScreen = () => {
           updateCellsBatchingPeriod={100}
           initialNumToRender={2}
           windowSize={3}
+          accessibilityLabel="Matches list"
           // Remove getItemLayout as item heights vary significantly
         />
       )}
@@ -635,6 +799,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  networkIndicator: {
+    backgroundColor: MATCH_DETAILS_COLORS.error + '20',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: MATCH_DETAILS_COLORS.error + '40',
+  },
+  networkText: {
+    color: MATCH_DETAILS_COLORS.error,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

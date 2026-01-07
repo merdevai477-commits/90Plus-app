@@ -3,9 +3,10 @@
  * Enhanced with animations
  */
 
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -20,6 +21,8 @@ interface EmptyStateProps {
   title: string;
   message?: string;
   iconColor?: string;
+  onRetry?: () => void | Promise<void>;
+  retryLabel?: string;
 }
 
 const EmptyState: React.FC<EmptyStateProps> = React.memo(({
@@ -27,7 +30,10 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({
   title,
   message,
   iconColor = MATCH_DETAILS_COLORS.textSecondary,
+  onRetry,
+  retryLabel = 'Retry',
 }) => {
+  const [isRetrying, setIsRetrying] = useState(false);
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
   const iconPulse = useSharedValue(1);
@@ -63,6 +69,19 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({
     transform: [{ scale: iconPulse.value }],
   }));
 
+  const handleRetry = async () => {
+    if (!onRetry) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsRetrying(true);
+    try {
+      await onRetry();
+    } catch (err) {
+      // Error is handled by the caller
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
   return (
     <Animated.View style={[styles.container, containerStyle]}>
       <Animated.View style={iconStyle}>
@@ -70,13 +89,34 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({
       </Animated.View>
       <Text style={styles.title}>{title}</Text>
       {message && <Text style={styles.message}>{message}</Text>}
+      {onRetry && (
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={handleRetry}
+          disabled={isRetrying}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={retryLabel}
+          accessibilityHint="Retry loading data"
+        >
+          {isRetrying ? (
+            <ActivityIndicator size="small" color={MATCH_DETAILS_COLORS.accent} />
+          ) : (
+            <>
+              <Ionicons name="refresh" size={18} color={MATCH_DETAILS_COLORS.accent} />
+              <Text style={styles.retryText}>{retryLabel}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 }, (prevProps, nextProps) => {
   return (
     prevProps.title === nextProps.title &&
     prevProps.message === nextProps.message &&
-    prevProps.icon === nextProps.icon
+    prevProps.icon === nextProps.icon &&
+    prevProps.onRetry === nextProps.onRetry
   );
 });
 
@@ -103,6 +143,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     lineHeight: 20,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: MATCH_DETAILS_COLORS.accent + '20',
+    gap: 8,
+  },
+  retryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: MATCH_DETAILS_COLORS.accent,
   },
 });
 
