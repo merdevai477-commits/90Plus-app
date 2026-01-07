@@ -347,6 +347,34 @@ class FootballDataCacheService {
         }
     }
 
+    /**
+     * Cache team from transfer data (saves logos)
+     */
+    private async cacheTeamFromTransfer(team: any): Promise<void> {
+        try {
+            if (!team?.id) return;
+            
+            await prisma.cachedTeam.upsert({
+                where: { teamId: team.id },
+                update: {
+                    name: team.name || undefined,
+                    logo: team.logo || undefined,
+                    updatedAt: new Date(),
+                },
+                create: {
+                    teamId: team.id,
+                    name: team.name || 'Unknown Team',
+                    logo: team.logo || null,
+                    fullData: { team },
+                },
+            });
+            logger.debug(`✅ Cached team from transfer: ${team.id} - ${team.name || 'Unknown'}`);
+        } catch (error) {
+            // Ignore duplicate errors
+            logger.debug(`⚠️ Failed to cache team from transfer ${team?.id}:`, error);
+        }
+    }
+
     // ============================================
     // HEAD TO HEAD
     // ============================================
@@ -1022,6 +1050,14 @@ class FootballDataCacheService {
                     try {
                         const transferDate = t.date || transfer.update || new Date().toISOString().split('T')[0];
                         
+                        // Cache teams from transfer (to save logos in CachedTeam table)
+                        if (t.teams?.in?.id) {
+                            await this.cacheTeamFromTransfer(t.teams.in).catch(() => {});
+                        }
+                        if (t.teams?.out?.id) {
+                            await this.cacheTeamFromTransfer(t.teams.out).catch(() => {});
+                        }
+                        
                         // Check if transfer already exists
                         const existing = await prisma.cachedTransfer.findFirst({
                             where: {
@@ -1520,6 +1556,40 @@ class FootballDataCacheService {
                                     // Cache team transfers
                                     teamTransfersMap.set(teamId, allTeamTransfers);
                                     leagueTransfers.push(...allTeamTransfers);
+                                    
+                                    // Cache teams from transfers (to save logos)
+                                    // Extract teams from transfers and cache them
+                                    for (const transfer of allTeamTransfers) {
+                                        if (transfer.transfers && Array.isArray(transfer.transfers)) {
+                                            for (const t of transfer.transfers) {
+                                                // Cache team in (destination)
+                                                if (t.teams?.in?.id) {
+                                                    await this.cacheTeamFromTransfer(t.teams.in).catch(() => {});
+                                                }
+                                                // Cache team out (source)
+                                                if (t.teams?.out?.id) {
+                                                    await this.cacheTeamFromTransfer(t.teams.out).catch(() => {});
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Cache teams from transfers (to save logos)
+                                    // Extract teams from transfers and cache them
+                                    for (const transfer of allTeamTransfers) {
+                                        if (transfer.transfers && Array.isArray(transfer.transfers)) {
+                                            for (const t of transfer.transfers) {
+                                                // Cache team in (destination)
+                                                if (t.teams?.in?.id) {
+                                                    await this.cacheTeamFromTransfer(t.teams.in).catch(() => {});
+                                                }
+                                                // Cache team out (source)
+                                                if (t.teams?.out?.id) {
+                                                    await this.cacheTeamFromTransfer(t.teams.out).catch(() => {});
+                                                }
+                                            }
+                                        }
+                                    }
                                 } catch (error) {
                                     logger.warn(`Failed to fetch transfers for team ${teamId}:`, error);
                                 }
