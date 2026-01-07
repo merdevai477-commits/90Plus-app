@@ -1002,9 +1002,18 @@ class FootballDataCacheService {
     }
 
     /**
+     * Public method to sync transfers to database
+     * Used by the sync endpoint
+     */
+    async syncTransfersToDatabase(transfers: any[]): Promise<number> {
+        return this.saveTransfersToDatabase(transfers);
+    }
+
+    /**
      * Helper function to convert API transfer to CachedTransfer format
      */
-    private async saveTransfersToDatabase(transfers: any[]): Promise<void> {
+    private async saveTransfersToDatabase(transfers: any[]): Promise<number> {
+        let savedCount = 0;
         try {
             for (const transfer of transfers) {
                 if (!transfer.player?.id) continue;
@@ -1043,26 +1052,29 @@ class FootballDataCacheService {
                                     leagueLogo: transfer.league?.logo || null,
                                 },
                             });
+                            savedCount++;
                         }
                     } catch (dbError: any) {
                         // P2021 = Table does not exist - skip silently
                         if (dbError?.code === 'P2021') {
                             // Table doesn't exist, skip saving (will be created by migration)
-                            return;
+                            return savedCount;
                         }
                         // Other errors - log but continue
                         logger.warn('Error saving individual transfer to database:', dbError);
                     }
                 }
             }
+            logger.info(`💾 Saved ${savedCount} new transfers to database`);
         } catch (error: any) {
             // P2021 = Table does not exist - skip silently
             if (error?.code === 'P2021') {
                 logger.debug('CachedTransfer table does not exist yet. Run migration to enable database caching.');
-                return;
+                return savedCount;
             }
             logger.error('Error saving transfers to database:', error);
         }
+        return savedCount;
     }
 
     /**
@@ -1399,7 +1411,36 @@ class FootballDataCacheService {
                         // Get teams in this league from standings
                         let teamIds: number[] = [];
                         try {
-                            const standings = await this.getStandings(leagueId, 2024);
+                            // Try multiple recent seasons to find valid standings for this league
+                            const currentYear = new Date().getFullYear();
+                            const seasonsToTry = [
+                                currentYear,
+                                currentYear - 1,
+                                currentYear - 2,
+                                currentYear - 3,
+                                currentYear - 4,
+                                currentYear - 5,
+                            ];
+
+                            let standings: any[] | null = null;
+                            for (const season of seasonsToTry) {
+                                try {
+                                    const s = await this.getStandings(leagueId, season);
+                                    if (Array.isArray(s) && s.length > 0) {
+                                        standings = s;
+                                        logger.debug(`📅 Using standings season ${season} for league ${leagueId}`);
+                                        break;
+                                    }
+                                } catch {
+                                    // ignore and try previous season
+                                }
+                            }
+
+                            if (!standings || standings.length === 0) {
+                                logger.debug(`⚠️ No standings found for league ${leagueId} across recent seasons, skipping...`);
+                                continue;
+                            }
+
                             teamIds = standings
                                 ?.map((s: any) => s.team?.id)
                                 .filter((id: any) => id !== undefined) as number[] || [];

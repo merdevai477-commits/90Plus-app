@@ -196,6 +196,10 @@ router.get('/transfers', FootballController.getTransfers);
 // Query params: leagues (comma-separated IDs), from (YYYY-MM-DD), to (YYYY-MM-DD)
 router.get('/transfers/by-leagues', FootballController.getTransfersByLeagues);
 
+// POST /api/football/transfers/sync
+// Sync transfers from API to database (run this to populate the database)
+router.post('/transfers/sync', FootballController.syncTransfersToDatabase);
+
 // GET /api/football/transfers/cached
 // Get cached transfers from database (fast, zero-delay)
 // Query params: leagues (comma-separated IDs), season (optional), from (YYYY-MM-DD), to (YYYY-MM-DD)

@@ -984,6 +984,46 @@ export class FootballController {
   }
 
   /**
+   * POST /api/football/transfers/sync
+   * Sync transfers from API to database (admin endpoint)
+   * This fetches transfers from the external API and saves them to the database
+   */
+  static async syncTransfersToDatabase(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      logger.info('📡 Starting transfers sync to database...');
+
+      // Get transfers from API (this will automatically save to database)
+      const transfers = await footballService.getTransfers({});
+      
+      if (transfers && transfers.length > 0) {
+        // Save to database
+        await footballDataCacheService.syncTransfersToDatabase(transfers);
+        
+        logger.info(`✅ Synced ${transfers.length} transfers to database`);
+        
+        res.json({
+          status: 'SUCCESS',
+          message: `Synced ${transfers.length} transfers to database`,
+          results: transfers.length,
+        });
+      } else {
+        res.json({
+          status: 'SUCCESS',
+          message: 'No transfers found to sync',
+          results: 0,
+        });
+      }
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/transfers/cached
    * Get cached transfers from database (fast, no API calls)
    * Query params: leagues (comma-separated IDs), season (optional, default current), from (YYYY-MM-DD), to (YYYY-MM-DD)
