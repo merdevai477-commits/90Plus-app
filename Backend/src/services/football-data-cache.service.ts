@@ -1249,11 +1249,11 @@ class FootballDataCacheService {
             });
 
             if (dbTransfers.length === 0) {
-                logger.debug('📦 No cached transfers found in database');
+                logger.debug(`📦 No cached transfers found in database - LeagueIds: ${leagueIds ? leagueIds.join(',') : 'ALL'}, Season: ${season || 'ALL'}, DateRange: ${dateRange ? `${dateRange.from} to ${dateRange.to}` : 'ALL'}`);
                 return [];
             }
 
-            logger.debug(`📦 Found ${dbTransfers.length} cached transfers in database`);
+            logger.debug(`📦 Found ${dbTransfers.length} cached transfers in database - LeagueIds: ${leagueIds ? leagueIds.join(',') : 'ALL'}, Season: ${season || 'ALL'}`);
 
             // Group by league
             const leagueMap = new Map<number, {

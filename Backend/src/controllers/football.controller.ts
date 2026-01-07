@@ -956,9 +956,13 @@ export class FootballController {
         : undefined;
 
       // Get transfers from database (includes last year - السنة الفاتت)
+      logger.debug(`📡 getCachedTransfers request - LeagueIds: ${leagueIds ? leagueIds.join(',') : 'ALL'}, Season: ${season || 'ALL'}, DateRange: ${dateRange ? `${dateRange.from} to ${dateRange.to}` : 'ALL'}`);
+      
       const transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, season, dateRange);
 
       const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
+
+      logger.debug(`📡 getCachedTransfers response - Leagues: ${transfersByLeagues.length}, Total Transfers: ${totalTransfers}`);
 
       res.json({
         status: 'SUCCESS',
