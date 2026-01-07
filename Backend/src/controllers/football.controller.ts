@@ -1020,8 +1020,9 @@ export class FootballController {
 
   /**
    * GET /api/football/teams/all-logos
-   * Fetch all team logos from API-Football and save to database
-   * This endpoint fetches ALL teams (can be 100k+) and saves logos in batches
+   * Fetch all team logos from API-Football by country and save to database
+   * Strategy: Get teams from all leagues (which includes team logos)
+   * This fetches teams from standings of all leagues
    */
   static async getAllTeamLogos(req: Request, res: Response): Promise<void> {
     try {
@@ -1030,128 +1031,111 @@ export class FootballController {
         return;
       }
 
-      logger.info('📡 Starting to fetch all team logos...');
+      logger.info('📡 Starting to fetch all team logos from leagues...');
 
-      const pageParam = req.query.page ? parseInt(req.query.page as string) : undefined;
-      const limitParam = req.query.limit ? parseInt(req.query.limit as string) : 100;
-
-      // If page is specified, fetch that page only
-      if (pageParam) {
-        const result = await footballService.getAllTeams(pageParam, limitParam);
-        
-        // Save teams to database
-        let savedCount = 0;
-        for (const team of result.teams) {
-          try {
-            const teamData = team.team || team;
-            if (teamData?.id) {
-              await footballDataCacheService.cacheTeamFromTransfer({
-                id: teamData.id,
-                name: teamData.name || 'Unknown Team',
-                logo: teamData.logo || null,
-              });
-              savedCount++;
-            }
-          } catch (error) {
-            logger.warn(`Failed to save team ${team.team?.id}:`, error);
-          }
-        }
-
-        res.json({
-          status: 'SUCCESS',
-          message: `Fetched page ${pageParam}`,
-          data: {
-            page: pageParam,
-            totalPages: result.total,
-            hasMore: result.hasMore,
-            teamsInThisPage: result.teams.length,
-            savedToDatabase: savedCount,
-          },
-        });
-        return;
-      }
-
-      // Fetch all teams with pagination
-      let currentPage = 1;
+      const startTime = Date.now();
       let totalTeams = 0;
       let savedCount = 0;
-      let hasMore = true;
-      const startTime = Date.now();
+      const processedTeamIds = new Set<number>();
 
-      logger.info('📡 Fetching all teams with pagination...');
+      // Strategy: Get all leagues, then get standings for each league
+      // Standings include all teams with logos
+      logger.info('📡 Step 1: Fetching all leagues...');
+      const allLeagues = await footballDataCacheService.getAllLeagues();
+      
+      logger.info(`📡 Found ${allLeagues.length} leagues. Fetching teams from standings...`);
 
-      while (hasMore) {
-        try {
-          const result = await footballService.getAllTeams(currentPage, limitParam);
+      // Process leagues in batches to avoid overwhelming the API
+      const batchSize = 5; // Process 5 leagues at a time
+      const currentSeason = new Date().getFullYear();
+      
+      for (let i = 0; i < allLeagues.length; i += batchSize) {
+        const leagueBatch = allLeagues.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        const batchPromises = leagueBatch.map(async (league: any) => {
+          const leagueId = league.league?.id || league.id;
+          const leagueName = league.league?.name || league.name;
           
-          logger.info(`📥 Page ${currentPage}: Fetched ${result.teams.length} teams`);
-
-          // Save teams to database
-          for (const team of result.teams) {
-            try {
-              const teamData = team.team || team;
-              if (teamData?.id) {
-                await footballDataCacheService.cacheTeamFromTransfer({
-                  id: teamData.id,
-                  name: teamData.name || 'Unknown Team',
-                  logo: teamData.logo || null,
-                  code: teamData.code,
-                  country: teamData.country,
-                  founded: teamData.founded,
-                });
-                savedCount++;
+          if (!leagueId) return;
+          
+          try {
+            // Try multiple seasons (current and recent)
+            const seasonsToTry = [currentSeason, currentSeason - 1, currentSeason - 2];
+            
+            for (const season of seasonsToTry) {
+              try {
+                logger.debug(`📡 Fetching standings for ${leagueName} (season ${season})...`);
+                const standings = await footballDataCacheService.getStandings(leagueId, season);
+                
+                if (standings && standings.length > 0) {
+                  // Extract teams from standings and cache them
+                  for (const standing of standings) {
+                    const team = standing.team || standing;
+                    if (team?.id && !processedTeamIds.has(team.id)) {
+                      processedTeamIds.add(team.id);
+                      
+                      await footballDataCacheService.cacheTeamFromTransfer({
+                        id: team.id,
+                        name: team.name || 'Unknown Team',
+                        logo: team.logo || null,
+                        code: team.code,
+                        country: league.league?.country || league.country,
+                      });
+                      
+                      savedCount++;
+                    }
+                  }
+                  
+                  logger.debug(`✅ Found ${standings.length} teams in ${leagueName}`);
+                  break; // Found standings, no need to try other seasons
+                }
+              } catch (error: any) {
+                // Some leagues may not have standings for certain seasons
+                if (error?.message?.includes('404') || error?.message?.includes('Not found')) {
+                  continue; // Try next season
+                }
+                logger.debug(`⚠️ Error fetching standings for ${leagueName} (season ${season}):`, error.message);
               }
-            } catch (error) {
-              // Ignore duplicate errors, continue
             }
+            
+            // Small delay between leagues
+            await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (error: any) {
+            logger.warn(`⚠️ Error processing league ${leagueName}:`, error.message);
           }
+        });
 
-          totalTeams += result.teams.length;
-          hasMore = result.hasMore;
-          currentPage++;
-
-          // Small delay between pages to avoid rate limits
-          if (hasMore) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-
-          // Safety limit - stop at page 1000 (100k teams)
-          if (currentPage > 1000) {
-            logger.warn('⚠️ Reached safety limit of 1000 pages (100k teams). Stopping.');
-            break;
-          }
-        } catch (error: any) {
-          logger.error(`Error fetching page ${currentPage}:`, error);
-          
-          // If rate limit error, wait and retry
-          if (error?.statusCode === 429 || error?.message?.includes('Rate limit')) {
-            logger.warn(`⏳ Rate limit hit. Waiting 60 seconds before continuing...`);
-            await new Promise(resolve => setTimeout(resolve, 60000));
-            continue;
-          }
-          
-          // For other errors, stop
-          break;
+        await Promise.all(batchPromises);
+        
+        totalTeams = processedTeamIds.size;
+        
+        logger.info(`📊 Progress: ${i + leagueBatch.length}/${allLeagues.length} leagues processed, ${totalTeams} unique teams found`);
+        
+        // Rate limit protection: delay between batches
+        if (i + batchSize < allLeagues.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
 
       const duration = Date.now() - startTime;
       const minutes = Math.round(duration / 1000 / 60);
 
-      logger.info(`✅ Completed fetching all team logos: ${totalTeams} teams in ${minutes} minutes, ${savedCount} saved to database`);
+      logger.info(`✅ Completed fetching team logos: ${totalTeams} unique teams in ${minutes} minutes, ${savedCount} saved to database`);
 
       res.json({
         status: 'SUCCESS',
-        message: `Successfully fetched ${totalTeams} teams and saved ${savedCount} logos to database`,
+        message: `Successfully fetched ${totalTeams} unique teams and saved ${savedCount} logos to database`,
         data: {
-          totalTeamsFetched: totalTeams,
+          totalTeamsFound: totalTeams,
           totalTeamsSaved: savedCount,
-          totalPagesProcessed: currentPage - 1,
+          leaguesProcessed: allLeagues.length,
           durationMinutes: minutes,
           durationSeconds: Math.round(duration / 1000),
         },
       });
     } catch (error) {
+      logger.error('Error fetching all team logos:', error);
       FootballController.handleError(res, error);
     }
   }
