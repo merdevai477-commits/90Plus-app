@@ -1240,8 +1240,8 @@ class FootballDataCacheService {
 
             // Query database
             // If no leagueIds specified, get from all leagues (كل الدوريات)
-            // Increase limit for all leagues
-            const limit = leagueIds && leagueIds.length > 0 ? 5000 : 50000; // More for all leagues
+            // Maximum limit to get ALL transfers (no date restrictions)
+            const limit = leagueIds && leagueIds.length > 0 ? 10000 : 100000; // Much higher limit for all leagues/all time
             const dbTransfers = await prisma.cachedTransfer.findMany({
                 where,
                 orderBy: { transferDate: 'desc' },
@@ -1376,13 +1376,10 @@ class FootballDataCacheService {
 
             logger.debug(`📡 Fetching transfers for ${targetLeagues.length} leagues...`);
 
-            // Calculate date range (default: last year)
-            const now = new Date();
-            const oneYearAgo = new Date(now);
-            oneYearAgo.setFullYear(now.getFullYear() - 1);
-            
-            const fromDate = dateRange?.from || oneYearAgo.toISOString().split('T')[0];
-            const toDate = dateRange?.to || now.toISOString().split('T')[0];
+            // No default date range - fetch ALL transfers if no date range specified
+            // This allows fetching maximum transfers from all time
+            const fromDate = dateRange?.from;
+            const toDate = dateRange?.to;
 
             const result: Array<{ leagueId: number; leagueName: string; leagueLogo?: string; transfers: any[] }> = [];
             const teamTransfersMap = new Map<number, any[]>(); // Cache transfers per team
@@ -1437,24 +1434,27 @@ class FootballDataCacheService {
                                     // Fetch transfers for this team across date range (sequentially)
                                     const allTeamTransfers: any[] = [];
                                     
-                                    // Fetch all transfers for this team (API doesn't support date filtering)
+                                    // Fetch ALL transfers for this team (no date filtering to get maximum data)
                                     try {
                                         const transfers = await this.getTransfers({ team: teamId });
                                         if (transfers && transfers.length > 0) {
-                                            // Filter transfers by date range client-side
-                                            const filteredTransfers = transfers.filter((transfer: any) => {
-                                                if (!transfer.transfers || !Array.isArray(transfer.transfers)) {
-                                                    return false;
-                                                }
-                                                // Check if any transfer in the array falls within date range
-                                                return transfer.transfers.some((t: any) => {
-                                                    if (!t.date) return false;
-                                                    const transferDate = new Date(t.date);
-                                                    const fromDateObj = new Date(fromDate);
-                                                    const toDateObj = new Date(toDate);
-                                                    return transferDate >= fromDateObj && transferDate <= toDateObj;
+                                            // If date range specified, filter; otherwise get ALL transfers
+                                            let filteredTransfers = transfers;
+                                            if (fromDate && toDate) {
+                                                filteredTransfers = transfers.filter((transfer: any) => {
+                                                    if (!transfer.transfers || !Array.isArray(transfer.transfers)) {
+                                                        return false;
+                                                    }
+                                                    // Check if any transfer in the array falls within date range
+                                                    return transfer.transfers.some((t: any) => {
+                                                        if (!t.date) return false;
+                                                        const transferDate = new Date(t.date);
+                                                        const fromDateObj = new Date(fromDate);
+                                                        const toDateObj = new Date(toDate);
+                                                        return transferDate >= fromDateObj && transferDate <= toDateObj;
+                                                    });
                                                 });
-                                            });
+                                            }
                                             
                                             if (filteredTransfers.length > 0) {
                                                 allTeamTransfers.push(...filteredTransfers);
