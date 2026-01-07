@@ -1143,7 +1143,7 @@ export class FootballController {
   /**
    * GET /api/football/teams/african-logos
    * Get logos for 10 major African teams
-   * Uses search and known team names to find teams
+   * Fetches from Egyptian Premier League (most reliable source)
    */
   static async getAfricanTeamLogos(req: Request, res: Response): Promise<void> {
     try {
@@ -1152,128 +1152,108 @@ export class FootballController {
         return;
       }
 
-      logger.info('📡 Fetching African team logos...');
-
-      // Major African team names (we'll search for them)
-      const africanTeamNames = [
-        'Al Ahly',           // Egypt
-        'Zamalek',           // Egypt
-        'Pyramids',          // Egypt
-        'Wydad',             // Morocco
-        'Raja Casablanca',   // Morocco
-        'Orlando Pirates',   // South Africa
-        'Kaizer Chiefs',     // South Africa
-        'Espérance',         // Tunisia
-        'Étoile du Sahel',   // Tunisia
-        'Belouizdad',        // Algeria
-      ];
+      logger.info('📡 Fetching African team logos from Egyptian Premier League...');
 
       const teamsWithLogos: Array<{ id: number; name: string; logo: string; country?: string }> = [];
-      const foundTeamIds = new Set<number>(); // Avoid duplicates
 
-      // Search for teams by name
-      const searchPromises = africanTeamNames.map(async (teamName) => {
-        try {
-          logger.debug(`🔍 Searching for team: ${teamName}`);
-          const teams = await footballService.searchTeams(teamName);
-          
-          if (teams && teams.length > 0) {
-            // Take the first result (usually the most relevant)
-            for (const team of teams) {
-              const teamData = team.team || team;
-              if (teamData?.id && !foundTeamIds.has(teamData.id) && teamData.logo) {
-                foundTeamIds.add(teamData.id);
+      try {
+        // Egyptian Premier League ID (most reliable African league)
+        // Try multiple known Egyptian league IDs
+        const egyptianLeagueIds = [233, 226, 245]; // Egyptian Premier League variants
+        
+        for (const leagueId of egyptianLeagueIds) {
+          try {
+            logger.debug(`🔍 Trying league ID: ${leagueId}`);
+            
+            // Try current season and previous seasons
+            const currentYear = new Date().getFullYear();
+            const seasons = [currentYear, currentYear - 1, currentYear - 2];
+            
+            for (const season of seasons) {
+              try {
+                const standings = await footballDataCacheService.getStandings(leagueId, season);
                 
-                // Cache in database
-                await footballDataCacheService.cacheTeamFromTransfer({
-                  id: teamData.id,
-                  name: teamData.name || 'Unknown',
-                  logo: teamData.logo,
-                  country: teamData.country || 'Africa',
-                });
+                if (standings && standings.length > 0) {
+                  logger.debug(`✅ Found ${standings.length} teams in league ${leagueId} (season ${season})`);
+                  
+                  // Get first 10 teams from standings
+                  for (const standing of standings.slice(0, 10)) {
+                    const team = standing.team || standing;
+                    if (team?.id && team?.logo) {
+                      // Cache in database
+                      await footballDataCacheService.cacheTeamFromTransfer({
+                        id: team.id,
+                        name: team.name || 'Unknown',
+                        logo: team.logo,
+                        country: 'Egypt',
+                      });
 
-                teamsWithLogos.push({
-                  id: teamData.id,
-                  name: teamData.name || 'Unknown',
-                  logo: teamData.logo,
-                  country: teamData.country || 'Africa',
-                });
-
-                logger.debug(`✅ Found: ${teamData.name} (${teamData.id})`);
-                break; // Found one match, move to next team name
+                      teamsWithLogos.push({
+                        id: team.id,
+                        name: team.name || 'Unknown',
+                        logo: team.logo,
+                        country: 'Egypt',
+                      });
+                      
+                      if (teamsWithLogos.length >= 10) break;
+                    }
+                  }
+                  
+                  if (teamsWithLogos.length >= 10) break;
+                }
+              } catch (error: any) {
+                logger.debug(`Season ${season} failed for league ${leagueId}:`, error.message);
               }
             }
+            
+            if (teamsWithLogos.length >= 10) break;
+            
+            // Delay between leagues
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error: any) {
+            logger.debug(`League ${leagueId} failed:`, error.message);
           }
-        } catch (error: any) {
-          logger.warn(`Failed to search for team "${teamName}":`, error.message);
         }
         
-        // Small delay between searches to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
-      });
-
-      await Promise.all(searchPromises);
-
-      // If we still don't have enough, try getting from African leagues
-      if (teamsWithLogos.length < 10) {
-        logger.info(`📡 Found ${teamsWithLogos.length} teams. Fetching more from African leagues...`);
-        
-        try {
-          // Get teams from major African leagues
-          const africanCountries = ['Egypt', 'Morocco', 'South Africa', 'Tunisia', 'Algeria'];
+        // If still not enough, try Moroccan league
+        if (teamsWithLogos.length < 10) {
+          logger.info(`📡 Found ${teamsWithLogos.length} teams. Trying Moroccan league...`);
+          const moroccanLeagueId = 200; // Botola Pro
           
-          for (const country of africanCountries) {
-            try {
-              // Get leagues for this country
-              const leagues = await footballService.getLeagues({ country });
-              
-              if (leagues && leagues.length > 0) {
-                // Get standings from first league to get teams
-                const league = leagues[0];
-                const leagueId = league.league?.id || league.id;
-                
-                if (leagueId) {
-                  const standings = await footballDataCacheService.getStandings(leagueId, 2024);
-                  
-                  if (standings && standings.length > 0) {
-                    // Get first few teams from standings
-                    for (const standing of standings.slice(0, 2)) {
-                      const team = standing.team || standing;
-                      if (team?.id && !foundTeamIds.has(team.id) && team.logo) {
-                        foundTeamIds.add(team.id);
-                        
-                        await footballDataCacheService.cacheTeamFromTransfer({
-                          id: team.id,
-                          name: team.name || 'Unknown',
-                          logo: team.logo,
-                          country: country,
-                        });
+          try {
+            const standings = await footballDataCacheService.getStandings(moroccanLeagueId, currentYear);
+            
+            if (standings && standings.length > 0) {
+              for (const standing of standings.slice(0, 10 - teamsWithLogos.length)) {
+                const team = standing.team || standing;
+                if (team?.id && team?.logo) {
+                  const exists = teamsWithLogos.some(t => t.id === team.id);
+                  if (!exists) {
+                    await footballDataCacheService.cacheTeamFromTransfer({
+                      id: team.id,
+                      name: team.name || 'Unknown',
+                      logo: team.logo,
+                      country: 'Morocco',
+                    });
 
-                        teamsWithLogos.push({
-                          id: team.id,
-                          name: team.name || 'Unknown',
-                          logo: team.logo,
-                          country: country,
-                        });
-                        
-                        if (teamsWithLogos.length >= 10) break;
-                      }
-                    }
+                    teamsWithLogos.push({
+                      id: team.id,
+                      name: team.name || 'Unknown',
+                      logo: team.logo,
+                      country: 'Morocco',
+                    });
+                    
+                    if (teamsWithLogos.length >= 10) break;
                   }
                 }
               }
-              
-              if (teamsWithLogos.length >= 10) break;
-              
-              // Delay between countries
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            } catch (error: any) {
-              logger.warn(`Failed to get teams from ${country}:`, error.message);
             }
+          } catch (error: any) {
+            logger.warn('Moroccan league failed:', error.message);
           }
-        } catch (error: any) {
-          logger.warn('Error fetching from African leagues:', error.message);
         }
+      } catch (error: any) {
+        logger.error('Error fetching African teams:', error);
       }
 
       logger.info(`✅ Fetched ${teamsWithLogos.length} African team logos`);
@@ -1282,11 +1262,12 @@ export class FootballController {
         status: 'SUCCESS',
         message: `Fetched ${teamsWithLogos.length} African team logos`,
         data: {
-          teams: teamsWithLogos.slice(0, 10), // Limit to 10
+          teams: teamsWithLogos.slice(0, 10),
           count: Math.min(teamsWithLogos.length, 10),
         },
       });
     } catch (error) {
+      logger.error('Error in getAfricanTeamLogos:', error);
       FootballController.handleError(res, error);
     }
   }
