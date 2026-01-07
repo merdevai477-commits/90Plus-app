@@ -2,15 +2,19 @@
  * Transfers Sync Service
  * Background job service to sync transfers data from API to database
  * 
- * This service runs periodically to:
- * 1. Update recent transfers (last 30 days) every 6 hours
- * 2. Update older transfers (30+ days) daily
+ * Schedule:
+ * 1. Weekly full sync: Every Sunday at 3 AM (checks for new transfers)
+ * 2. Daily quick check: Every day at 6 AM (only recent transfers)
+ * 
+ * Smart sync: Only updates if new data is available
  */
 
 import Queue from 'bull';
 import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
+import { footballService } from './football.service';
 import { isRedisConnected } from '../lib/redis';
+import { prisma } from '../lib/prisma';
 
 // Create transfers sync queue (only if Redis is available)
 let transfersSyncQueue: Queue.Queue | null = null;
@@ -29,14 +33,14 @@ function initializeQueue(): void {
         const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
         transfersSyncQueue = new Queue('transfers-sync', REDIS_URL);
 
-            transfersSyncQueue.on('error', (error: Error) => {
-                logger.error('[TransfersSync] Queue error:', error);
-                // Disable queue on persistent errors
-                if (error.message?.includes('max retries')) {
-                    logger.warn('[TransfersSync] Disabling queue due to persistent errors, using interval-based sync');
-                    transfersSyncQueue = null;
-                }
-            });
+        transfersSyncQueue.on('error', (error: Error) => {
+            logger.error('[TransfersSync] Queue error:', error);
+            // Disable queue on persistent errors
+            if (error.message?.includes('max retries')) {
+                logger.warn('[TransfersSync] Disabling queue due to persistent errors, using interval-based sync');
+                transfersSyncQueue = null;
+            }
+        });
 
         logger.info('[TransfersSync] ✅ Queue initialized');
     } catch (error) {
@@ -49,14 +53,23 @@ function initializeQueue(): void {
 initializeQueue();
 
 interface TransfersSyncJobData {
-    type: 'recent' | 'old';
-    dateRange?: { from: string; to: string };
+    type: 'weekly' | 'daily' | 'manual';
+    force?: boolean;
+}
+
+interface SyncStats {
+    lastSyncDate: Date | null;
+    totalTransfersInDb: number;
+    newTransfersFound: number;
+    syncDuration: number;
 }
 
 class TransfersSyncService {
     private isRunning = false;
-    private recentTransfersInterval: NodeJS.Timeout | null = null;
-    private oldTransfersInterval: NodeJS.Timeout | null = null;
+    private isSyncing = false;
+    private weeklyInterval: NodeJS.Timeout | null = null;
+    private dailyInterval: NodeJS.Timeout | null = null;
+    private lastSyncStats: SyncStats | null = null;
 
     /**
      * Start the transfers sync service
@@ -73,14 +86,16 @@ class TransfersSyncService {
         // Process queue jobs
         this.setupQueueProcessor();
 
-        // Schedule recent transfers sync (every 6 hours)
-        this.scheduleRecentTransfersSync();
+        // Schedule weekly full sync (Sunday at 3 AM)
+        this.scheduleWeeklySync();
 
-        // Schedule old transfers sync (daily at 2 AM)
-        this.scheduleOldTransfersSync();
+        // Schedule daily quick check (every day at 6 AM)
+        this.scheduleDailyCheck();
 
-        // Run initial sync
-        this.syncRecentTransfers();
+        // Run initial check (delayed by 1 minute to let server start)
+        setTimeout(() => {
+            this.runInitialCheck();
+        }, 60 * 1000);
     }
 
     /**
@@ -91,14 +106,14 @@ class TransfersSyncService {
 
         this.isRunning = false;
 
-        if (this.recentTransfersInterval) {
-            clearInterval(this.recentTransfersInterval);
-            this.recentTransfersInterval = null;
+        if (this.weeklyInterval) {
+            clearInterval(this.weeklyInterval);
+            this.weeklyInterval = null;
         }
 
-        if (this.oldTransfersInterval) {
-            clearInterval(this.oldTransfersInterval);
-            this.oldTransfersInterval = null;
+        if (this.dailyInterval) {
+            clearInterval(this.dailyInterval);
+            this.dailyInterval = null;
         }
 
         // Close queue if available
@@ -112,6 +127,25 @@ class TransfersSyncService {
     }
 
     /**
+     * Get sync status
+     */
+    getStatus(): { isRunning: boolean; isSyncing: boolean; lastSync: SyncStats | null } {
+        return {
+            isRunning: this.isRunning,
+            isSyncing: this.isSyncing,
+            lastSync: this.lastSyncStats,
+        };
+    }
+
+    /**
+     * Manual sync trigger (for admin use)
+     */
+    async triggerManualSync(force = false): Promise<SyncStats> {
+        logger.info(`[TransfersSync] 🔄 Manual sync triggered (force: ${force})`);
+        return this.performFullSync(force);
+    }
+
+    /**
      * Setup queue processor (only if queue is available)
      */
     private setupQueueProcessor(): void {
@@ -122,21 +156,21 @@ class TransfersSyncService {
 
         try {
             transfersSyncQueue.process(async (job: Queue.Job) => {
-                const { type, dateRange } = job.data as TransfersSyncJobData;
+                const { type, force } = job.data as TransfersSyncJobData;
 
                 try {
-                    logger.info(`[TransfersSync] Processing ${type} transfers sync job...`);
+                    logger.info(`[TransfersSync] Processing ${type} sync job...`);
 
-                    if (type === 'recent') {
-                        await this.syncTransfersByDateRange(dateRange || this.getRecentDateRange());
-                    } else if (type === 'old') {
-                        await this.syncTransfersByDateRange(dateRange || this.getOldDateRange());
+                    if (type === 'weekly' || type === 'manual') {
+                        await this.performFullSync(force || false);
+                    } else if (type === 'daily') {
+                        await this.performQuickCheck();
                     }
 
-                    logger.info(`[TransfersSync] ✅ Completed ${type} transfers sync`);
-                    return { success: true, type };
+                    logger.info(`[TransfersSync] ✅ Completed ${type} sync`);
+                    return { success: true, type, stats: this.lastSyncStats };
                 } catch (error) {
-                    logger.error(`[TransfersSync] ❌ Error processing ${type} transfers sync:`, error);
+                    logger.error(`[TransfersSync] ❌ Error processing ${type} sync:`, error);
                     throw error;
                 }
             });
@@ -158,158 +192,343 @@ class TransfersSyncService {
     }
 
     /**
-     * Schedule recent transfers sync (every 6 hours)
+     * Schedule weekly full sync (Sunday at 3 AM)
      */
-    private scheduleRecentTransfersSync(): void {
-        // Run immediately, then every 6 hours
-        this.recentTransfersInterval = setInterval(() => {
-            this.syncRecentTransfers();
-        }, 6 * 60 * 60 * 1000); // 6 hours
+    private scheduleWeeklySync(): void {
+        const now = new Date();
+        const nextSunday = new Date();
+        
+        // Find next Sunday
+        const daysUntilSunday = (7 - now.getDay()) % 7 || 7;
+        nextSunday.setDate(now.getDate() + daysUntilSunday);
+        nextSunday.setHours(3, 0, 0, 0);
+        
+        // If it's already past 3 AM on Sunday, schedule for next week
+        if (nextSunday <= now) {
+            nextSunday.setDate(nextSunday.getDate() + 7);
+        }
+
+        const msUntilNextRun = nextSunday.getTime() - now.getTime();
+        const hoursUntil = Math.round(msUntilNextRun / (1000 * 60 * 60));
+
+        logger.info(`[TransfersSync] 📅 Weekly sync scheduled for ${nextSunday.toISOString()} (in ${hoursUntil} hours)`);
+
+        setTimeout(() => {
+            this.runWeeklySync();
+            
+            // Then run every week (7 days)
+            this.weeklyInterval = setInterval(() => {
+                this.runWeeklySync();
+            }, 7 * 24 * 60 * 60 * 1000);
+        }, msUntilNextRun);
     }
 
     /**
-     * Schedule old transfers sync (daily at 2 AM)
+     * Schedule daily quick check (every day at 6 AM)
      */
-    private scheduleOldTransfersSync(): void {
+    private scheduleDailyCheck(): void {
         const now = new Date();
         const nextRun = new Date();
-        nextRun.setHours(2, 0, 0, 0);
+        nextRun.setHours(6, 0, 0, 0);
         
         if (nextRun <= now) {
             nextRun.setDate(nextRun.getDate() + 1);
         }
 
         const msUntilNextRun = nextRun.getTime() - now.getTime();
+        const hoursUntil = Math.round(msUntilNextRun / (1000 * 60 * 60));
+
+        logger.info(`[TransfersSync] 📅 Daily check scheduled for ${nextRun.toISOString()} (in ${hoursUntil} hours)`);
 
         setTimeout(() => {
-            this.syncOldTransfers();
+            this.runDailyCheck();
             
             // Then run daily
-            this.oldTransfersInterval = setInterval(() => {
-                this.syncOldTransfers();
-            }, 24 * 60 * 60 * 1000); // 24 hours
+            this.dailyInterval = setInterval(() => {
+                this.runDailyCheck();
+            }, 24 * 60 * 60 * 1000);
         }, msUntilNextRun);
     }
 
     /**
-     * Sync recent transfers (last 30 days)
+     * Run initial check on startup
      */
-    private async syncRecentTransfers(): Promise<void> {
+    private async runInitialCheck(): Promise<void> {
         if (!this.isRunning) return;
 
         try {
-            const dateRange = this.getRecentDateRange();
-            logger.info(`[TransfersSync] 🔄 Syncing recent transfers (${dateRange.from} to ${dateRange.to})...`);
+            // Check if database has any transfers
+            const count = await this.getTransfersCount();
             
-            // If queue is available, use it; otherwise sync directly
-            if (transfersSyncQueue) {
-                try {
-                    await transfersSyncQueue.add('recent-sync', {
-                        type: 'recent',
-                        dateRange,
-                    }, {
-                        attempts: 3,
-                        backoff: {
-                            type: 'exponential',
-                            delay: 5000,
-                        },
-                    });
-                } catch (queueError) {
-                    logger.warn('[TransfersSync] Queue error, syncing directly:', queueError);
-                    // Fallback to direct sync
-                    await this.syncTransfersByDateRange(dateRange);
-                }
+            if (count === 0) {
+                logger.info('[TransfersSync] 🆕 Database is empty, running initial full sync...');
+                await this.performFullSync(true);
             } else {
-                // Direct sync without queue
-                await this.syncTransfersByDateRange(dateRange);
+                logger.info(`[TransfersSync] ✅ Database has ${count} transfers, skipping initial sync`);
+                // Just do a quick check for new transfers
+                await this.performQuickCheck();
             }
         } catch (error) {
-            logger.error('[TransfersSync] Error syncing recent transfers:', error);
+            logger.error('[TransfersSync] Error in initial check:', error);
         }
     }
 
     /**
-     * Sync old transfers (30+ days ago)
+     * Run weekly full sync
      */
-    private async syncOldTransfers(): Promise<void> {
+    private async runWeeklySync(): Promise<void> {
         if (!this.isRunning) return;
 
-        try {
-            const dateRange = this.getOldDateRange();
-            logger.info(`[TransfersSync] 🔄 Syncing old transfers (${dateRange.from} to ${dateRange.to})...`);
-            
-            // If queue is available, use it; otherwise sync directly
-            if (transfersSyncQueue) {
-                try {
-                    await transfersSyncQueue.add('old-sync', {
-                        type: 'old',
-                        dateRange,
-                    }, {
-                        attempts: 2,
-                        backoff: {
-                            type: 'exponential',
-                            delay: 10000,
-                        },
-                    });
-                } catch (queueError) {
-                    logger.warn('[TransfersSync] Queue error, syncing directly:', queueError);
-                    // Fallback to direct sync
-                    await this.syncTransfersByDateRange(dateRange);
-                }
-            } else {
-                // Direct sync without queue
-                await this.syncTransfersByDateRange(dateRange);
+        logger.info('[TransfersSync] 🔄 Starting weekly full sync...');
+
+        if (transfersSyncQueue) {
+            try {
+                await transfersSyncQueue.add('weekly-sync', {
+                    type: 'weekly',
+                    force: false,
+                }, {
+                    attempts: 3,
+                    backoff: {
+                        type: 'exponential',
+                        delay: 60000, // 1 minute
+                    },
+                });
+            } catch (queueError) {
+                logger.warn('[TransfersSync] Queue error, syncing directly:', queueError);
+                await this.performFullSync(false);
             }
-        } catch (error) {
-            logger.error('[TransfersSync] Error syncing old transfers:', error);
+        } else {
+            await this.performFullSync(false);
         }
     }
 
     /**
-     * Sync transfers by date range
+     * Run daily quick check
      */
-    private async syncTransfersByDateRange(dateRange: { from: string; to: string }): Promise<void> {
+    private async runDailyCheck(): Promise<void> {
+        if (!this.isRunning) return;
+
+        logger.info('[TransfersSync] 🔍 Starting daily quick check...');
+
+        if (transfersSyncQueue) {
+            try {
+                await transfersSyncQueue.add('daily-check', {
+                    type: 'daily',
+                }, {
+                    attempts: 2,
+                    backoff: {
+                        type: 'exponential',
+                        delay: 30000,
+                    },
+                });
+            } catch (queueError) {
+                logger.warn('[TransfersSync] Queue error, checking directly:', queueError);
+                await this.performQuickCheck();
+            }
+        } else {
+            await this.performQuickCheck();
+        }
+    }
+
+    /**
+     * Perform full sync - fetches all transfers and saves new ones
+     */
+    private async performFullSync(force: boolean): Promise<SyncStats> {
+        if (this.isSyncing && !force) {
+            logger.warn('[TransfersSync] Sync already in progress, skipping...');
+            return this.lastSyncStats || {
+                lastSyncDate: null,
+                totalTransfersInDb: 0,
+                newTransfersFound: 0,
+                syncDuration: 0,
+            };
+        }
+
+        this.isSyncing = true;
+        const startTime = Date.now();
+        let newTransfersFound = 0;
+
         try {
-            // Use the existing getTransfersByLeagues which will cache in database
-            await footballDataCacheService.getTransfersByLeagues(undefined, dateRange);
-            logger.info(`[TransfersSync] ✅ Synced transfers for date range ${dateRange.from} to ${dateRange.to}`);
+            // Check if API is configured
+            if (!footballService.isConfigured()) {
+                logger.warn('[TransfersSync] Football API not configured, skipping sync');
+                return {
+                    lastSyncDate: new Date(),
+                    totalTransfersInDb: await this.getTransfersCount(),
+                    newTransfersFound: 0,
+                    syncDuration: Date.now() - startTime,
+                };
+            }
+
+            // Get current count
+            const beforeCount = await this.getTransfersCount();
+            logger.info(`[TransfersSync] 📊 Current transfers in DB: ${beforeCount}`);
+
+            // Fetch transfers from API
+            logger.info('[TransfersSync] 📡 Fetching transfers from API...');
+            const transfers = await footballService.getTransfers({});
+
+            if (transfers && transfers.length > 0) {
+                logger.info(`[TransfersSync] 📥 Received ${transfers.length} transfers from API`);
+                
+                // Save to database
+                newTransfersFound = await footballDataCacheService.syncTransfersToDatabase(transfers);
+                
+                logger.info(`[TransfersSync] 💾 Saved ${newTransfersFound} new transfers to database`);
+            } else {
+                logger.info('[TransfersSync] ℹ️ No transfers received from API');
+            }
+
+            // Get final count
+            const afterCount = await this.getTransfersCount();
+            const duration = Date.now() - startTime;
+
+            this.lastSyncStats = {
+                lastSyncDate: new Date(),
+                totalTransfersInDb: afterCount,
+                newTransfersFound,
+                syncDuration: duration,
+            };
+
+            logger.info(`[TransfersSync] ✅ Full sync completed in ${Math.round(duration / 1000)}s - Total: ${afterCount}, New: ${newTransfersFound}`);
+
+            return this.lastSyncStats;
         } catch (error) {
-            logger.error('[TransfersSync] Error syncing transfers:', error);
+            logger.error('[TransfersSync] ❌ Error in full sync:', error);
+            throw error;
+        } finally {
+            this.isSyncing = false;
+        }
+    }
+
+    /**
+     * Perform quick check - only checks for recent transfers
+     */
+    private async performQuickCheck(): Promise<SyncStats> {
+        if (this.isSyncing) {
+            logger.warn('[TransfersSync] Sync already in progress, skipping quick check...');
+            return this.lastSyncStats || {
+                lastSyncDate: null,
+                totalTransfersInDb: 0,
+                newTransfersFound: 0,
+                syncDuration: 0,
+            };
+        }
+
+        this.isSyncing = true;
+        const startTime = Date.now();
+        let newTransfersFound = 0;
+
+        try {
+            // Check if API is configured
+            if (!footballService.isConfigured()) {
+                logger.warn('[TransfersSync] Football API not configured, skipping check');
+                return {
+                    lastSyncDate: new Date(),
+                    totalTransfersInDb: await this.getTransfersCount(),
+                    newTransfersFound: 0,
+                    syncDuration: Date.now() - startTime,
+                };
+            }
+
+            // Get the most recent transfer date in our database
+            const latestTransfer = await this.getLatestTransferDate();
+            
+            if (latestTransfer) {
+                logger.info(`[TransfersSync] 📅 Latest transfer in DB: ${latestTransfer}`);
+            }
+
+            // Fetch recent transfers from API
+            logger.info('[TransfersSync] 📡 Checking for new transfers...');
+            const transfers = await footballService.getTransfers({});
+
+            if (transfers && transfers.length > 0) {
+                // Filter to only new transfers (if we have a latest date)
+                let newTransfers = transfers;
+                
+                if (latestTransfer) {
+                    newTransfers = transfers.filter((t: any) => {
+                        const updateDate = t.update;
+                        if (!updateDate) return true; // Include if no date
+                        
+                        // Parse the date (format: YYMMDD or YYYY-MM-DD)
+                        let transferDate: Date;
+                        if (updateDate.includes('-')) {
+                            transferDate = new Date(updateDate);
+                        } else {
+                            // YYMMDD format
+                            const year = parseInt(updateDate.substring(0, 2)) + 2000;
+                            const month = parseInt(updateDate.substring(2, 4)) - 1;
+                            const day = parseInt(updateDate.substring(4, 6));
+                            transferDate = new Date(year, month, day);
+                        }
+                        
+                        return transferDate >= latestTransfer;
+                    });
+                }
+
+                if (newTransfers.length > 0) {
+                    logger.info(`[TransfersSync] 📥 Found ${newTransfers.length} potentially new transfers`);
+                    newTransfersFound = await footballDataCacheService.syncTransfersToDatabase(newTransfers);
+                    logger.info(`[TransfersSync] 💾 Saved ${newTransfersFound} new transfers`);
+                } else {
+                    logger.info('[TransfersSync] ℹ️ No new transfers found');
+                }
+            }
+
+            const afterCount = await this.getTransfersCount();
+            const duration = Date.now() - startTime;
+
+            this.lastSyncStats = {
+                lastSyncDate: new Date(),
+                totalTransfersInDb: afterCount,
+                newTransfersFound,
+                syncDuration: duration,
+            };
+
+            logger.info(`[TransfersSync] ✅ Quick check completed in ${Math.round(duration / 1000)}s - New: ${newTransfersFound}`);
+
+            return this.lastSyncStats;
+        } catch (error) {
+            logger.error('[TransfersSync] ❌ Error in quick check:', error);
+            throw error;
+        } finally {
+            this.isSyncing = false;
+        }
+    }
+
+    /**
+     * Get total transfers count in database
+     */
+    private async getTransfersCount(): Promise<number> {
+        try {
+            return await prisma.cachedTransfer.count();
+        } catch (error: any) {
+            if (error?.code === 'P2021') {
+                // Table doesn't exist
+                return 0;
+            }
             throw error;
         }
     }
 
     /**
-     * Get recent date range (last 30 days)
+     * Get the latest transfer date in database
      */
-    private getRecentDateRange(): { from: string; to: string } {
-        const now = new Date();
-        const thirtyDaysAgo = new Date(now);
-        thirtyDaysAgo.setDate(now.getDate() - 30);
-
-        return {
-            from: thirtyDaysAgo.toISOString().split('T')[0],
-            to: now.toISOString().split('T')[0],
-        };
-    }
-
-    /**
-     * Get old date range (30+ days ago, up to 1 year)
-     */
-    private getOldDateRange(): { from: string; to: string } {
-        const now = new Date();
-        const oneYearAgo = new Date(now);
-        oneYearAgo.setFullYear(now.getFullYear() - 1);
-        
-        const thirtyDaysAgo = new Date(now);
-        thirtyDaysAgo.setDate(now.getDate() - 30);
-
-        return {
-            from: oneYearAgo.toISOString().split('T')[0],
-            to: thirtyDaysAgo.toISOString().split('T')[0],
-        };
+    private async getLatestTransferDate(): Promise<Date | null> {
+        try {
+            const latest = await prisma.cachedTransfer.findFirst({
+                orderBy: { updatedAt: 'desc' },
+                select: { updatedAt: true },
+            });
+            return latest?.updatedAt || null;
+        } catch (error: any) {
+            if (error?.code === 'P2021') {
+                return null;
+            }
+            throw error;
+        }
     }
 }
 
 export const transfersSyncService = new TransfersSyncService();
-

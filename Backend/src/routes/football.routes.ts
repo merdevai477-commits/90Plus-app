@@ -198,7 +198,12 @@ router.get('/transfers/by-leagues', FootballController.getTransfersByLeagues);
 
 // POST /api/football/transfers/sync
 // Sync transfers from API to database (run this to populate the database)
+// Query params: force (boolean) - force sync even if already syncing
 router.post('/transfers/sync', FootballController.syncTransfersToDatabase);
+
+// GET /api/football/transfers/sync/status
+// Get the status of the transfers sync service
+router.get('/transfers/sync/status', FootballController.getSyncStatus);
 
 // GET /api/football/transfers/cached
 // Get cached transfers from database (fast, zero-delay)

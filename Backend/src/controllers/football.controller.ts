@@ -987,6 +987,7 @@ export class FootballController {
    * POST /api/football/transfers/sync
    * Sync transfers from API to database (admin endpoint)
    * This fetches transfers from the external API and saves them to the database
+   * Query params: force (boolean) - force sync even if already syncing
    */
   static async syncTransfersToDatabase(req: Request, res: Response): Promise<void> {
     try {
@@ -995,29 +996,54 @@ export class FootballController {
         return;
       }
 
-      logger.info('📡 Starting transfers sync to database...');
+      const force = req.query.force === 'true';
+      logger.info(`📡 Starting transfers sync to database (force: ${force})...`);
 
-      // Get transfers from API (this will automatically save to database)
-      const transfers = await footballService.getTransfers({});
+      // Use the sync service for proper tracking
+      const { transfersSyncService } = await import('../services/transfers-sync.service');
+      const stats = await transfersSyncService.triggerManualSync(force);
       
-      if (transfers && transfers.length > 0) {
-        // Save to database
-        await footballDataCacheService.syncTransfersToDatabase(transfers);
-        
-        logger.info(`✅ Synced ${transfers.length} transfers to database`);
-        
-        res.json({
-          status: 'SUCCESS',
-          message: `Synced ${transfers.length} transfers to database`,
-          results: transfers.length,
-        });
-      } else {
-        res.json({
-          status: 'SUCCESS',
-          message: 'No transfers found to sync',
-          results: 0,
-        });
-      }
+      res.json({
+        status: 'SUCCESS',
+        message: `Sync completed`,
+        data: {
+          totalTransfersInDb: stats.totalTransfersInDb,
+          newTransfersFound: stats.newTransfersFound,
+          syncDuration: `${Math.round(stats.syncDuration / 1000)}s`,
+          lastSyncDate: stats.lastSyncDate,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/transfers/sync/status
+   * Get the status of the transfers sync service
+   */
+  static async getSyncStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const { transfersSyncService } = await import('../services/transfers-sync.service');
+      const status = transfersSyncService.getStatus();
+      
+      res.json({
+        status: 'SUCCESS',
+        data: {
+          serviceRunning: status.isRunning,
+          currentlySyncing: status.isSyncing,
+          lastSync: status.lastSync ? {
+            date: status.lastSync.lastSyncDate,
+            totalTransfersInDb: status.lastSync.totalTransfersInDb,
+            newTransfersFound: status.lastSync.newTransfersFound,
+            duration: `${Math.round(status.lastSync.syncDuration / 1000)}s`,
+          } : null,
+          schedule: {
+            weekly: 'Every Sunday at 3:00 AM',
+            daily: 'Every day at 6:00 AM',
+          },
+        },
+      });
     } catch (error) {
       FootballController.handleError(res, error);
     }
