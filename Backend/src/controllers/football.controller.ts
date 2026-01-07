@@ -1141,6 +1141,90 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/teams/african-logos
+   * Get logos for 10 African teams
+   */
+  static async getAfricanTeamLogos(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      logger.info('📡 Fetching African team logos...');
+
+      // Major African teams IDs (well-known clubs)
+      const africanTeamIds = [
+        // Egyptian teams
+        612,  // Al Ahly
+        611,  // Zamalek
+        614,  // Pyramids FC
+        
+        // Moroccan teams
+        6959, // Wydad Casablanca
+        6960, // Raja Casablanca
+        
+        // South African teams
+        239,  // Orlando Pirates
+        240,  // Kaizer Chiefs
+        
+        // Tunisian teams
+        6955, // Espérance de Tunis
+        6956, // Étoile du Sahel
+        
+        // Algerian teams
+        6962, // CR Belouizdad
+        6961, // JS Kabylie
+      ];
+
+      const teamsWithLogos: Array<{ id: number; name: string; logo: string; country?: string }> = [];
+
+      // Fetch teams in parallel
+      const teamPromises = africanTeamIds.map(async (teamId) => {
+        try {
+          const team = await footballService.getTeamById(teamId);
+          if (team && team.length > 0) {
+            const teamData = team[0]?.team || team[0];
+            if (teamData?.logo) {
+              // Cache in database
+              await footballDataCacheService.cacheTeamFromTransfer({
+                id: teamData.id,
+                name: teamData.name || 'Unknown',
+                logo: teamData.logo,
+                country: teamData.country || 'Africa',
+              });
+
+              teamsWithLogos.push({
+                id: teamData.id,
+                name: teamData.name || 'Unknown',
+                logo: teamData.logo,
+                country: teamData.country || 'Africa',
+              });
+            }
+          }
+        } catch (error) {
+          logger.warn(`Failed to fetch team ${teamId}:`, error);
+        }
+      });
+
+      await Promise.all(teamPromises);
+
+      logger.info(`✅ Fetched ${teamsWithLogos.length} African team logos`);
+
+      res.json({
+        status: 'SUCCESS',
+        message: `Fetched ${teamsWithLogos.length} African team logos`,
+        data: {
+          teams: teamsWithLogos,
+          count: teamsWithLogos.length,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/transfers/sync/status
    * Get the status of the transfers sync service
    */
