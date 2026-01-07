@@ -24,6 +24,8 @@ export interface LeagueSectionProps {
   leagueLogo?: string;
   matches: Match[];
   onMatchPress?: (matchId: string) => void;
+  onFavoritePress?: (match: Match) => void;
+  favoriteMatchIds?: string[];
   index?: number;
   isExpandedByDefault?: boolean;
 }
@@ -34,6 +36,8 @@ const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
   leagueLogo,
   matches,
   onMatchPress,
+  onFavoritePress,
+  favoriteMatchIds = [],
   index = 0,
   isExpandedByDefault = false,
 }) => {
@@ -119,6 +123,9 @@ const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
                 match={match}
                 gradientIndex={matchIndex}
                 onPress={() => onMatchPress?.(match.id)}
+                onFavoritePress={onFavoritePress ? () => onFavoritePress(match) : undefined}
+                showFavorite={!!onFavoritePress}
+                isFavorite={favoriteMatchIds.includes(match.id)}
               />
             </View>
           ))}

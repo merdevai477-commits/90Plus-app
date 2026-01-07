@@ -8,6 +8,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -23,13 +24,16 @@ import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDet
 interface MatchCardProps {
   match: Match;
   onPress?: (matchId: string) => void;
+  onFavoritePress?: (match: Match) => void;
+  isFavorite?: boolean;
   index?: number;
 }
 
-const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index = 0 }) => {
+const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavoritePress, isFavorite = false, index = 0 }) => {
   const scale = useSharedValue(1);
   const pulseScale = useSharedValue(1);
   const glowOpacity = useSharedValue(0.3);
+  const favoriteScale = useSharedValue(1);
 
   const isLive = match.status === 'live';
   const isFinished = match.status === 'finished';
@@ -67,6 +71,24 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
   const handlePressOut = () => {
     scale.value = withSpring(1, ANIMATION_CONFIG.spring);
   };
+
+  const handleFavoritePress = (e: any) => {
+    e.stopPropagation(); // Prevent card press
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Animate favorite button
+    favoriteScale.value = withSpring(0.8, { damping: 10 }, () => {
+      favoriteScale.value = withSpring(1, { damping: 10 });
+    });
+
+    if (onFavoritePress) {
+      onFavoritePress(match);
+    }
+  };
+
+  const favoriteStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: favoriteScale.value }],
+  }));
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -146,9 +168,26 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
           </View>
         )}
 
-        {/* Status Badge */}
+        {/* Status Badge & Favorite Button */}
         <View style={styles.statusContainer}>
           {renderStatus()}
+          
+          {/* Favorite Button */}
+          {onFavoritePress && (
+            <Animated.View style={[styles.favoriteButtonContainer, favoriteStyle]}>
+              <TouchableOpacity
+                style={[styles.favoriteButton, isFavorite && styles.favoriteButtonActive]}
+                onPress={handleFavoritePress}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={isFavorite ? "notifications" : "notifications-outline"}
+                  size={20}
+                  color={isFavorite ? "#32cd32" : "rgba(255,255,255,0.6)"}
+                />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </View>
 
         {/* Teams & Score */}
@@ -218,7 +257,8 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, index 
     prevProps.match.status === nextProps.match.status &&
     prevProps.match.score?.home === nextProps.match.score?.home &&
     prevProps.match.score?.away === nextProps.match.score?.away &&
-    prevProps.match.minute === nextProps.match.minute
+    prevProps.match.minute === nextProps.match.minute &&
+    prevProps.isFavorite === nextProps.isFavorite
   );
 });
 
@@ -269,8 +309,30 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   statusContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  favoriteButtonContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  favoriteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  favoriteButtonActive: {
+    backgroundColor: 'rgba(50, 205, 50, 0.2)',
+    borderColor: 'rgba(50, 205, 50, 0.4)',
   },
   liveBadge: {
     flexDirection: 'row',

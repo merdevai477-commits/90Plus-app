@@ -141,6 +141,7 @@ const MatchesScreen = () => {
   }, []);
 
   // Get date range based on time range selection
+  // For transfers, we want to include last year's transfers (السنة الفاتت)
   const getDateRange = useCallback((range: typeof timeRange) => {
     const now = new Date();
     const from = new Date(now);
@@ -157,7 +158,8 @@ const MatchesScreen = () => {
         break;
       case '1year':
       default:
-        from.setFullYear(now.getFullYear() - 1);
+        // Include last year's transfers (السنة الفاتت) - go back 2 years to include previous season
+        from.setFullYear(now.getFullYear() - 2);
         break;
     }
     
@@ -208,10 +210,15 @@ const MatchesScreen = () => {
           ];
 
       const dateRange = getDateRange(timeRange);
+      // Get transfers from last year (السنة الفاتت) and current year
+      const lastYear = new Date().getFullYear() - 1;
       const currentSeason = new Date().getFullYear();
 
-      // Try cache first for zero-delay display
-      const cached = await transfersCacheService.getCachedTransfers(currentSeason, leaguesToFetch);
+      // Try cache first for zero-delay display - check both last year and current year
+      let cached = await transfersCacheService.getCachedTransfers(currentSeason, leaguesToFetch);
+      if (!cached || cached.length === 0) {
+        cached = await transfersCacheService.getCachedTransfers(lastYear, leaguesToFetch);
+      }
       if (cached && cached.length > 0) {
         logger.debug('📦 Transfers from cache, displaying immediately');
         const allTransfers: Transfer[] = [];
@@ -233,17 +240,52 @@ const MatchesScreen = () => {
 
         // Refresh in background only if online
         if (isOnline) {
-          loadTransfersInBackground(leaguesToFetch, dateRange, currentSeason);
+          loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentSeason);
         }
         return;
       }
 
       // No cache, fetch from backend cached endpoint
-      const data = await transfersCacheService.fetchCachedTransfers(
-        currentSeason,
-        leaguesToFetch,
-        dateRange
-      );
+      // Fetch from both last year and current year, then merge
+      const [lastYearData, currentYearData] = await Promise.all([
+        transfersCacheService.fetchCachedTransfers(
+          lastYear,
+          leaguesToFetch,
+          dateRange
+        ).catch(() => []), // Don't fail if one fails
+        transfersCacheService.fetchCachedTransfers(
+          currentSeason,
+          leaguesToFetch,
+          dateRange
+        ).catch(() => []), // Don't fail if one fails
+      ]);
+
+      // Merge transfers from both years
+      const leagueMap = new Map<number, { leagueId: number; leagueName: string; leagueLogo?: string; transfers: Transfer[] }>();
+      
+      [...lastYearData, ...currentYearData].forEach(leagueData => {
+        if (leagueMap.has(leagueData.leagueId)) {
+          // Merge transfers if league already exists
+          const existing = leagueMap.get(leagueData.leagueId)!;
+          // Merge player transfers, avoiding duplicates
+          const playerMap = new Map<number, Transfer>();
+          existing.transfers.forEach(t => playerMap.set(t.player.id, t));
+          leagueData.transfers.forEach(t => {
+            if (playerMap.has(t.player.id)) {
+              // Merge transfers array for same player
+              const existingTransfer = playerMap.get(t.player.id)!;
+              existingTransfer.transfers = [...(existingTransfer.transfers || []), ...(t.transfers || [])];
+            } else {
+              playerMap.set(t.player.id, t);
+            }
+          });
+          existing.transfers = Array.from(playerMap.values());
+        } else {
+          leagueMap.set(leagueData.leagueId, { ...leagueData });
+        }
+      });
+
+      const data = Array.from(leagueMap.values());
 
       // Flatten transfers from all leagues
       const allTransfers: Transfer[] = [];
@@ -297,7 +339,8 @@ const MatchesScreen = () => {
   const loadTransfersInBackground = useCallback(async (
     leaguesToFetch: number[],
     dateRange: { from: string; to: string },
-    season: number,
+    lastYear: number,
+    currentSeason: number,
     retryAttempt = 0
   ) => {
     // Don't retry in background if offline
@@ -306,11 +349,43 @@ const MatchesScreen = () => {
     }
 
     try {
-      const data = await transfersCacheService.fetchCachedTransfers(
-        season,
-        leaguesToFetch,
-        dateRange
-      );
+      // Fetch from both years
+      const [lastYearData, currentYearData] = await Promise.all([
+        transfersCacheService.fetchCachedTransfers(
+          lastYear,
+          leaguesToFetch,
+          dateRange
+        ).catch(() => []),
+        transfersCacheService.fetchCachedTransfers(
+          currentSeason,
+          leaguesToFetch,
+          dateRange
+        ).catch(() => []),
+      ]);
+
+      // Merge data
+      const leagueMap = new Map<number, { leagueId: number; leagueName: string; leagueLogo?: string; transfers: Transfer[] }>();
+      
+      [...lastYearData, ...currentYearData].forEach(leagueData => {
+        if (leagueMap.has(leagueData.leagueId)) {
+          const existing = leagueMap.get(leagueData.leagueId)!;
+          const playerMap = new Map<number, Transfer>();
+          existing.transfers.forEach(t => playerMap.set(t.player.id, t));
+          leagueData.transfers.forEach(t => {
+            if (playerMap.has(t.player.id)) {
+              const existingTransfer = playerMap.get(t.player.id)!;
+              existingTransfer.transfers = [...(existingTransfer.transfers || []), ...(t.transfers || [])];
+            } else {
+              playerMap.set(t.player.id, t);
+            }
+          });
+          existing.transfers = Array.from(playerMap.values());
+        } else {
+          leagueMap.set(leagueData.leagueId, { ...leagueData });
+        }
+      });
+
+      const data = Array.from(leagueMap.values());
 
       const allTransfers: Transfer[] = [];
       const leaguesList: Array<{ id: number; name: string; logo?: string }> = [];
@@ -328,12 +403,12 @@ const MatchesScreen = () => {
       setAvailableLeagues(leaguesList);
     } catch (err) {
       // Retry with exponential backoff for background refresh
-      if (retryAttempt < 2) {
-        const delay = Math.min(2000 * Math.pow(2, retryAttempt), 8000);
-        logger.warn(`Background transfers refresh failed, retrying in ${delay}ms:`, err);
-        setTimeout(() => {
-          loadTransfersInBackground(leaguesToFetch, dateRange, season, retryAttempt + 1);
-        }, delay);
+        if (retryAttempt < 2) {
+          const delay = Math.min(2000 * Math.pow(2, retryAttempt), 8000);
+          logger.warn(`Background transfers refresh failed, retrying in ${delay}ms:`, err);
+          setTimeout(() => {
+            loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentSeason, retryAttempt + 1);
+          }, delay);
       } else {
         logger.warn('Background transfers refresh failed after retries:', err);
       }

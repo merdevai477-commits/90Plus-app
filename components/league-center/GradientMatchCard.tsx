@@ -44,7 +44,9 @@ export interface GradientMatchCardProps {
   match: Match;
   gradientIndex: number;
   onPress: () => void;
-  onFavoritePress?: (matchId: string) => void; // ✅ Added onFavoritePress
+  onFavoritePress?: (match: Match) => void; // ✅ Changed to pass match object
+  showFavorite?: boolean;
+  isFavorite?: boolean;
   showPrediction?: boolean;
   userPrediction?: UserPrediction;
   onPredictionSubmit?: (matchId: string, prediction: UserPrediction) => void;
@@ -55,6 +57,8 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
   gradientIndex,
   onPress,
   onFavoritePress,
+  showFavorite = false,
+  isFavorite = false,
   showPrediction = false,
   userPrediction,
   onPredictionSubmit,
@@ -94,9 +98,12 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
   const handleFavoritePress = () => {
     if (onFavoritePress) {
       trigger('selection');
-      onFavoritePress(match.id);
+      onFavoritePress(match);
     }
   };
+
+  // Use prop isFavorite if provided, otherwise fallback to match.isFavorited
+  const matchIsFavorite = showFavorite ? isFavorite : (match.isFavorited || false);
 
   const handlePress = () => {
     trigger('selection');
@@ -194,22 +201,24 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
               </View>
 
               {/* Premium Action Icon - Centered Top */}
-              <TouchableOpacity
-                style={styles.favoriteButton}
-                onPress={handleFavoritePress}
-                activeOpacity={0.7}
-              >
-                <View style={[
-                  styles.iconBackground,
-                  match.isFavorited && styles.iconBackgroundActive
-                ]}>
-                  <Ionicons
-                    name={match.isFavorited ? "notifications" : "notifications-outline"}
-                    size={20}
-                    color={match.isFavorited ? "#32cd32" : "rgba(255,255,255,0.6)"}
-                  />
-                </View>
-              </TouchableOpacity>
+              {(showFavorite || onFavoritePress) && (
+                <TouchableOpacity
+                  style={styles.favoriteButton}
+                  onPress={handleFavoritePress}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.iconBackground,
+                    matchIsFavorite && styles.iconBackgroundActive
+                  ]}>
+                    <Ionicons
+                      name={matchIsFavorite ? "notifications" : "notifications-outline"}
+                      size={20}
+                      color={matchIsFavorite ? "#32cd32" : "rgba(255,255,255,0.6)"}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
 
               {/* Match Content */}
               <View style={styles.matchContent}>

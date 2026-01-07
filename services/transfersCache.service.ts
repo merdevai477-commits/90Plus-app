@@ -28,11 +28,12 @@ const getCacheKey = (season: number, leagueIds: number[]): string => {
 /**
  * Get TTL for transfers cache
  * Current season: 7 days
- * Past seasons: 30 days
+ * Past seasons: Permanent (مدى الحياة) - never expires
  */
 const getCacheTTL = (season: number): number => {
   const isCurrentSeason = season === CURRENT_SEASON;
-  return isCurrentSeason ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+  // Past seasons are permanent (مدى الحياة) - never expire
+  return isCurrentSeason ? 7 * 24 * 60 * 60 * 1000 : Number.MAX_SAFE_INTEGER;
 };
 
 export const transfersCacheService = {
