@@ -1224,14 +1224,19 @@ class FootballDataCacheService {
             
             if (leagueIds && leagueIds.length > 0) {
                 where.leagueId = { in: leagueIds };
+            } else {
+                // If no leagues specified, get from all leagues (كل الدوريات)
+                // Don't filter by leagueId
             }
             
+            // Always use dateRange if provided (to get transfers from last year - السنة الفاتت)
             if (dateRange) {
                 where.transferDate = {
                     gte: dateRange.from,
                     lte: dateRange.to,
                 };
             }
+            // If no dateRange, get all transfers (no date filter)
 
             // Query database
             const dbTransfers = await prisma.cachedTransfer.findMany({
@@ -1511,6 +1516,20 @@ class FootballDataCacheService {
                 }
             }
 
+            // Save transfers to database (permanent storage - مدى الحياة)
+            // Flatten all transfers from all leagues
+            const allTransfers: any[] = [];
+            result.forEach(leagueData => {
+                allTransfers.push(...leagueData.transfers);
+            });
+            
+            if (allTransfers.length > 0) {
+                // Save to database (permanent - never expires)
+                await this.saveTransfersToDatabase(allTransfers).catch(err => {
+                    logger.warn('Error saving transfers to database (non-critical):', err);
+                });
+            }
+
             // Cache the result
             const entry: MemoryCacheEntry<Array<{ leagueId: number; leagueName: string; leagueLogo?: string; transfers: any[] }>> = {
                 data: result,
@@ -1521,7 +1540,7 @@ class FootballDataCacheService {
             this.transfersCache.set(cacheKey, entry);
             await redisCacheService.set(redisKey, entry, this.TTL.TRANSFERS);
 
-            logger.debug(`✅ Fetched transfers for ${result.length} leagues`);
+            logger.debug(`✅ Fetched transfers for ${result.length} leagues and saved to database`);
             return result;
         } catch (error) {
             logger.error('Error in getTransfersByLeagues:', error);

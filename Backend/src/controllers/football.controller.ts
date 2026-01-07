@@ -946,14 +946,16 @@ export class FootballController {
 
       const leagueIds = leaguesParam 
         ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-        : undefined;
+        : undefined; // undefined means get from all leagues (كل الدوريات)
 
-      const season = seasonParam ? parseInt(seasonParam) : new Date().getFullYear();
+      // Season is optional - if not provided, get from all seasons (including last year)
+      const season = seasonParam ? parseInt(seasonParam) : undefined;
 
       const dateRange = (fromDate && toDate) 
         ? { from: fromDate, to: toDate }
         : undefined;
 
+      // Get transfers from database (includes last year - السنة الفاتت)
       const transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, season, dateRange);
 
       const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
