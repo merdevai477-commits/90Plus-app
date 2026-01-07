@@ -1189,17 +1189,15 @@ export class FootballController {
         logger.warn('Error checking database:', error.message);
       }
 
-      // If we need more teams, fetch from API
+      // If we need more teams, fetch from API using standings
       if (teamsWithLogos.length < 10) {
-        logger.info(`📡 Need ${10 - teamsWithLogos.length} more teams. Fetching from API...`);
+        logger.info(`📡 Need ${10 - teamsWithLogos.length} more teams. Fetching from API using standings...`);
 
         try {
-          // Try to get teams from leagues - use direct API call to standings
-          // Known working league IDs for African leagues
+          // Known working league IDs for African leagues (from MAJOR_LEAGUES constant)
           const africanLeagues = [
             { id: 233, name: 'Egyptian Premier League', country: 'Egypt', seasons: [2024, 2023, 2022] },
             { id: 200, name: 'Moroccan Botola', country: 'Morocco', seasons: [2024, 2023, 2022] },
-            { id: 226, name: 'South African Premier League', country: 'South Africa', seasons: [2024, 2023] },
           ];
 
           for (const league of africanLeagues) {
@@ -1209,57 +1207,80 @@ export class FootballController {
               if (teamsWithLogos.length >= 10) break;
 
               try {
-                logger.debug(`🔍 Trying ${league.name} (ID: ${league.id}, Season: ${season})`);
+                logger.info(`🔍 Trying ${league.name} (ID: ${league.id}, Season: ${season})`);
                 
-                // Direct API call using footballService
-                const standings = await footballService.getStandings(league.id, season);
+                // Use footballDataCacheService.getStandings which handles caching
+                const standings = await footballDataCacheService.getStandings(league.id, season);
                 
-                if (standings && Array.isArray(standings) && standings.length > 0) {
-                  logger.info(`✅ Found ${standings.length} teams in ${league.name}`);
+                logger.debug(`📊 Standings response type: ${typeof standings}, isArray: ${Array.isArray(standings)}`);
+                
+                if (standings) {
+                  // Handle different response formats
+                  let standingsArray: any[] = [];
                   
-                  for (const standing of standings.slice(0, 10 - teamsWithLogos.length)) {
-                    const team = standing.team || standing;
-                    const teamId = team?.id || team?.team?.id;
-                    const teamName = team?.name || team?.team?.name;
-                    const teamLogo = team?.logo || team?.team?.logo;
-                    
-                    if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
-                      foundTeamIds.add(teamId);
-                      
-                      // Cache in database
-                      await footballDataCacheService.cacheTeamFromTransfer({
-                        id: teamId,
-                        name: teamName || 'Unknown',
-                        logo: teamLogo,
-                        country: league.country,
-                      });
-
-                      teamsWithLogos.push({
-                        id: teamId,
-                        name: teamName || 'Unknown',
-                        logo: teamLogo,
-                        country: league.country,
-                      });
-                    }
+                  if (Array.isArray(standings)) {
+                    standingsArray = standings;
+                  } else if (standings[0]?.league?.standings && Array.isArray(standings[0].league.standings[0])) {
+                    // Nested format: standings[0].league.standings[0][]
+                    standingsArray = standings[0].league.standings[0];
+                  } else if (standings[0]?.league?.standings) {
+                    // Format: standings[0].league.standings[]
+                    standingsArray = Array.isArray(standings[0].league.standings) 
+                      ? standings[0].league.standings.flat() 
+                      : [];
                   }
                   
-                  // Found teams, try next league
-                  break;
+                  logger.info(`✅ Found ${standingsArray.length} teams in ${league.name} (season ${season})`);
+                  
+                  if (standingsArray.length > 0) {
+                    for (const standing of standingsArray.slice(0, 10 - teamsWithLogos.length)) {
+                      const team = standing.team || standing;
+                      const teamId = team?.id;
+                      const teamName = team?.name;
+                      const teamLogo = team?.logo;
+                      
+                      if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
+                        foundTeamIds.add(teamId);
+                        
+                        logger.debug(`✅ Found team: ${teamName} (${teamId})`);
+                        
+                        // Cache in database
+                        await footballDataCacheService.cacheTeamFromTransfer({
+                          id: teamId,
+                          name: teamName || 'Unknown',
+                          logo: teamLogo,
+                          country: league.country,
+                        });
+
+                        teamsWithLogos.push({
+                          id: teamId,
+                          name: teamName || 'Unknown',
+                          logo: teamLogo,
+                          country: league.country,
+                        });
+                      }
+                    }
+                    
+                    // Found teams, try next league
+                    if (teamsWithLogos.length > 0) break;
+                  }
+                } else {
+                  logger.debug(`⚠️ No standings returned for ${league.name} (season ${season})`);
                 }
               } catch (error: any) {
-                logger.debug(`Season ${season} failed for ${league.name}:`, error.message);
+                logger.warn(`❌ Season ${season} failed for ${league.name}: ${error.message}`);
                 // Continue to next season
               }
               
               // Small delay
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
             
             // Delay between leagues
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         } catch (error: any) {
-          logger.error('Error fetching from API:', error);
+          logger.error('❌ Error fetching from API:', error);
         }
       }
 
