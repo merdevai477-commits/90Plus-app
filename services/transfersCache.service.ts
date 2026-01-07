@@ -19,6 +19,7 @@ interface CachedTransfers {
 
 /**
  * Get cache key for transfers
+ * Empty array means all leagues (كل الدوريات)
  */
 const getCacheKey = (season: number, leagueIds: number[]): string => {
   const leaguesKey = leagueIds.length > 0 ? leagueIds.sort().join(',') : 'all';
@@ -119,10 +120,14 @@ export const transfersCacheService = {
       const apiUrl = getApiUrl();
       const params = new URLSearchParams();
       
+      // If leagueIds is empty, don't send leagues parameter (means all leagues - كل الدوريات)
       if (leagueIds.length > 0) {
         params.append('leagues', leagueIds.join(','));
       }
-      params.append('season', season.toString());
+      // Season is optional - if not provided, get from all seasons
+      if (season) {
+        params.append('season', season.toString());
+      }
       
       if (dateRange) {
         params.append('from', dateRange.from);

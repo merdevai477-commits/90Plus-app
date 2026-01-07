@@ -198,16 +198,9 @@ const MatchesScreen = () => {
       setTransfersLoading(true);
       setTransfersError(null);
 
-      // Default: Top 5 leagues if no selection
-      const leaguesToFetch = selectedLeagues.length > 0 
-        ? selectedLeagues 
-        : [
-            MAJOR_LEAGUES.PREMIER_LEAGUE,
-            MAJOR_LEAGUES.LA_LIGA,
-            MAJOR_LEAGUES.BUNDESLIGA,
-            MAJOR_LEAGUES.SERIE_A,
-            MAJOR_LEAGUES.LIGUE_1,
-          ];
+      // Get transfers from all leagues (كل الدوريات) if no selection
+      // If leagues are selected, use them; otherwise fetch from all leagues
+      const leaguesToFetch = selectedLeagues.length > 0 ? selectedLeagues : [];
 
       const dateRange = getDateRange(timeRange);
       // Get transfers from last year (السنة الفاتت) and current year
@@ -215,24 +208,29 @@ const MatchesScreen = () => {
       const currentSeason = new Date().getFullYear();
 
       // Try cache first for zero-delay display - check both last year and current year
-      let cached = await transfersCacheService.getCachedTransfers(currentSeason, leaguesToFetch);
+      // For all leagues, use empty array as key
+      const cacheKey = leaguesToFetch.length > 0 ? leaguesToFetch : [];
+      let cached = await transfersCacheService.getCachedTransfers(currentSeason, cacheKey);
       if (!cached || cached.length === 0) {
-        cached = await transfersCacheService.getCachedTransfers(lastYear, leaguesToFetch);
+        cached = await transfersCacheService.getCachedTransfers(lastYear, cacheKey);
       }
       if (cached && cached.length > 0) {
-        logger.debug('📦 Transfers from cache, displaying immediately');
+        logger.debug(`📦 Transfers from cache: ${cached.length} leagues, displaying immediately`);
         const allTransfers: Transfer[] = [];
         const leaguesList: Array<{ id: number; name: string; logo?: string }> = [];
         
         cached.forEach(leagueData => {
-          allTransfers.push(...leagueData.transfers);
-          leaguesList.push({
-            id: leagueData.leagueId,
-            name: leagueData.leagueName,
-            logo: leagueData.leagueLogo,
-          });
+          if (leagueData.transfers && leagueData.transfers.length > 0) {
+            allTransfers.push(...leagueData.transfers);
+            leaguesList.push({
+              id: leagueData.leagueId,
+              name: leagueData.leagueName,
+              logo: leagueData.leagueLogo,
+            });
+          }
         });
 
+        logger.debug(`📦 Total transfers from cache: ${allTransfers.length} transfers from ${leaguesList.length} leagues`);
         setTransfers(allTransfers);
         setAvailableLeagues(leaguesList);
         setTransfersLoading(false);
@@ -292,17 +290,28 @@ const MatchesScreen = () => {
       const leaguesList: Array<{ id: number; name: string; logo?: string }> = [];
       
       data.forEach(leagueData => {
-        allTransfers.push(...leagueData.transfers);
-        leaguesList.push({
-          id: leagueData.leagueId,
-          name: leagueData.leagueName,
-          logo: leagueData.leagueLogo,
-        });
+        if (leagueData.transfers && leagueData.transfers.length > 0) {
+          allTransfers.push(...leagueData.transfers);
+          leaguesList.push({
+            id: leagueData.leagueId,
+            name: leagueData.leagueName,
+            logo: leagueData.leagueLogo,
+          });
+        }
       });
 
+      logger.debug(`📦 Fetched transfers: ${allTransfers.length} transfers from ${leaguesList.length} leagues`);
       setTransfers(allTransfers);
       setAvailableLeagues(leaguesList);
       setRetryCount(0); // Reset retry count on success
+      
+      // Cache the result
+      if (allTransfers.length > 0) {
+        await transfersCacheService.cacheTransfers(data, currentSeason, leaguesToFetch).catch(() => {});
+        if (lastYear !== currentSeason) {
+          await transfersCacheService.cacheTransfers(data, lastYear, leaguesToFetch).catch(() => {});
+        }
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       const isNetworkError = errorMessage.toLowerCase().includes('network') || 
@@ -783,7 +792,7 @@ const MatchesScreen = () => {
               scrollEventThrottle={16}
               accessibilityLabel="Transfers list"
             >
-              {transfersError ? (
+              {transfersError && transfers.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <EmptyState
                     icon="alert-circle-outline"
