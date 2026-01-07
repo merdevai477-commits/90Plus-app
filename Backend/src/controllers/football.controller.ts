@@ -1210,41 +1210,30 @@ export class FootballController {
                 logger.info(`🔍 Trying ${league.name} (ID: ${league.id}, Season: ${season})`);
                 
                 // Use footballDataCacheService.getStandings which handles caching
+                // This returns flattened standings array already
                 const standings = await footballDataCacheService.getStandings(league.id, season);
                 
-                logger.debug(`📊 Standings response type: ${typeof standings}, isArray: ${Array.isArray(standings)}`);
+                logger.info(`📊 Standings response for ${league.name}: type=${typeof standings}, isArray=${Array.isArray(standings)}, length=${Array.isArray(standings) ? standings.length : 'N/A'}`);
                 
-                if (standings) {
-                  // Handle different response formats
-                  let standingsArray: any[] = [];
+                if (standings && Array.isArray(standings) && standings.length > 0) {
+                  logger.info(`✅ Found ${standings.length} teams in ${league.name} (season ${season})`);
                   
-                  if (Array.isArray(standings)) {
-                    standingsArray = standings;
-                  } else if (standings[0]?.league?.standings && Array.isArray(standings[0].league.standings[0])) {
-                    // Nested format: standings[0].league.standings[0][]
-                    standingsArray = standings[0].league.standings[0];
-                  } else if (standings[0]?.league?.standings) {
-                    // Format: standings[0].league.standings[]
-                    standingsArray = Array.isArray(standings[0].league.standings) 
-                      ? standings[0].league.standings.flat() 
-                      : [];
-                  }
-                  
-                  logger.info(`✅ Found ${standingsArray.length} teams in ${league.name} (season ${season})`);
-                  
-                  if (standingsArray.length > 0) {
-                    for (const standing of standingsArray.slice(0, 10 - teamsWithLogos.length)) {
-                      const team = standing.team || standing;
-                      const teamId = team?.id;
-                      const teamName = team?.name;
-                      const teamLogo = team?.logo;
+                  for (const standing of standings.slice(0, 10 - teamsWithLogos.length)) {
+                    // standings from getStandings are already flattened, so standing.team should exist
+                    const team = standing.team || standing;
+                    const teamId = team?.id;
+                    const teamName = team?.name;
+                    const teamLogo = team?.logo;
+                    
+                    logger.debug(`📋 Processing team: ${teamName} (ID: ${teamId}, Logo: ${teamLogo ? 'YES' : 'NO'})`);
+                    
+                    if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
+                      foundTeamIds.add(teamId);
                       
-                      if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
-                        foundTeamIds.add(teamId);
-                        
-                        logger.debug(`✅ Found team: ${teamName} (${teamId})`);
-                        
-                        // Cache in database
+                      logger.info(`✅ Adding team: ${teamName} (${teamId})`);
+                      
+                      // Cache in database
+                      try {
                         await footballDataCacheService.cacheTeamFromTransfer({
                           id: teamId,
                           name: teamName || 'Unknown',
@@ -1258,14 +1247,25 @@ export class FootballController {
                           logo: teamLogo,
                           country: league.country,
                         });
+                        
+                        logger.info(`✅ Successfully added ${teamName} (${teamsWithLogos.length}/10)`);
+                      } catch (cacheError: any) {
+                        logger.warn(`⚠️ Failed to cache team ${teamId}:`, cacheError.message);
                       }
+                    } else {
+                      if (!teamId) logger.debug(`⚠️ Team missing ID: ${JSON.stringify(team)}`);
+                      if (!teamLogo) logger.debug(`⚠️ Team ${teamName} (${teamId}) missing logo`);
+                      if (foundTeamIds.has(teamId)) logger.debug(`⚠️ Team ${teamName} (${teamId}) already added`);
                     }
-                    
-                    // Found teams, try next league
-                    if (teamsWithLogos.length > 0) break;
+                  }
+                  
+                  // Found teams, try next league
+                  if (teamsWithLogos.length > 0) {
+                    logger.info(`✅ Got ${teamsWithLogos.length} teams from ${league.name}, continuing...`);
+                    break;
                   }
                 } else {
-                  logger.debug(`⚠️ No standings returned for ${league.name} (season ${season})`);
+                  logger.warn(`⚠️ No standings returned for ${league.name} (season ${season}) - Response: ${JSON.stringify(standings).substring(0, 200)}`);
                 }
               } catch (error: any) {
                 logger.warn(`❌ Season ${season} failed for ${league.name}: ${error.message}`);
