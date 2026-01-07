@@ -1189,7 +1189,70 @@ export class FootballController {
         logger.warn('Error checking database:', error.message);
       }
 
-      // If we need more teams, fetch from API using standings
+      // If we need more teams, try fetching major teams by ID first
+      if (teamsWithLogos.length < 10) {
+        logger.info(`📡 Need ${10 - teamsWithLogos.length} more teams. Trying major African teams by ID...`);
+
+        // Major African teams IDs (known from clubs.ts and common knowledge)
+        const majorAfricanTeamIds = [
+          // Egyptian big teams
+          { id: 1020, name: 'Al Ahly', country: 'Egypt' },
+          { id: 1021, name: 'Zamalek', country: 'Egypt' },
+          { id: 5765, name: 'Pyramids FC', country: 'Egypt' },
+          { id: 1022, name: 'Ismaily', country: 'Egypt' },
+          // Moroccan big teams
+          { id: 6959, name: 'Wydad Casablanca', country: 'Morocco' },
+          { id: 6960, name: 'Raja Casablanca', country: 'Morocco' },
+          // Tunisian big teams
+          { id: 6955, name: 'Espérance de Tunis', country: 'Tunisia' },
+          { id: 6956, name: 'Étoile du Sahel', country: 'Tunisia' },
+          // South African big teams
+          { id: 239, name: 'Orlando Pirates', country: 'South Africa' },
+          { id: 240, name: 'Kaizer Chiefs', country: 'South Africa' },
+        ];
+
+        // Try to fetch major teams by ID
+        const teamFetchPromises = majorAfricanTeamIds
+          .filter(team => !foundTeamIds.has(team.id))
+          .slice(0, 10 - teamsWithLogos.length)
+          .map(async (teamInfo) => {
+            try {
+              logger.debug(`🔍 Fetching team by ID: ${teamInfo.name} (${teamInfo.id})`);
+              const team = await footballService.getTeamById(teamInfo.id);
+              
+              if (team && team.length > 0) {
+                const teamData = team[0]?.team || team[0];
+                if (teamData?.id && teamData?.logo && !foundTeamIds.has(teamData.id)) {
+                  foundTeamIds.add(teamData.id);
+                  
+                  await footballDataCacheService.cacheTeamFromTransfer({
+                    id: teamData.id,
+                    name: teamData.name || teamInfo.name,
+                    logo: teamData.logo,
+                    country: teamData.country || teamInfo.country,
+                  });
+
+                  teamsWithLogos.push({
+                    id: teamData.id,
+                    name: teamData.name || teamInfo.name,
+                    logo: teamData.logo,
+                    country: teamData.country || teamInfo.country,
+                  });
+                  
+                  logger.info(`✅ Added major team: ${teamData.name} (${teamData.id})`);
+                  return true;
+                }
+              }
+            } catch (error: any) {
+              logger.debug(`⚠️ Failed to fetch team ${teamInfo.id} (${teamInfo.name}):`, error.message);
+            }
+            return false;
+          });
+
+        await Promise.all(teamFetchPromises);
+      }
+
+      // If still need more teams, fetch from API using standings
       if (teamsWithLogos.length < 10) {
         logger.info(`📡 Need ${10 - teamsWithLogos.length} more teams. Fetching from API using standings...`);
 
