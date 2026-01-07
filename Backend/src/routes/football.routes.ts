@@ -19,6 +19,11 @@ router.get('/leagues', FootballController.getLeagues);
 // Get all available leagues with caching
 router.get('/leagues/all', FootballController.getAllLeagues);
 
+// GET /api/football/teams/all-logos
+// Fetch ALL team logos from API-Football and save to database
+// Query params: page (optional), limit (optional, default 100)
+router.get('/teams/all-logos', FootballController.getAllTeamLogos);
+
 // ============================================
 // GET /api/football/fixtures
 // Get fixtures with filters

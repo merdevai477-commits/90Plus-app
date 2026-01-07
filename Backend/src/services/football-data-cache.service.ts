@@ -349,8 +349,9 @@ class FootballDataCacheService {
 
     /**
      * Cache team from transfer data (saves logos)
+     * Public method to allow external access
      */
-    private async cacheTeamFromTransfer(team: any): Promise<void> {
+    async cacheTeamFromTransfer(team: any): Promise<void> {
         try {
             if (!team?.id) return;
             
@@ -359,12 +360,18 @@ class FootballDataCacheService {
                 update: {
                     name: team.name || undefined,
                     logo: team.logo || undefined,
+                    code: team.code || undefined,
+                    country: team.country || undefined,
+                    founded: team.founded || undefined,
                     updatedAt: new Date(),
                 },
                 create: {
                     teamId: team.id,
                     name: team.name || 'Unknown Team',
                     logo: team.logo || null,
+                    code: team.code || null,
+                    country: team.country || null,
+                    founded: team.founded || null,
                     fullData: { team },
                 },
             });

@@ -454,6 +454,34 @@ class FootballService {
    * ✅ OPTIMIZATION 2: Batch fetch multiple teams in one request
    * Get multiple teams by IDs (up to 10 teams per request to avoid URL length limits)
    */
+  /**
+   * Get all teams (with pagination support)
+   * Fetches all teams from API-Football by paginating through results
+   */
+  async getAllTeams(page: number = 1, limit: number = 100): Promise<{ teams: any[]; hasMore: boolean; total: number }> {
+    const params: Record<string, any> = {
+      page,
+    };
+    
+    if (limit) {
+      params.per_page = limit;
+    }
+
+    const response = await this.fetchFromApi<{
+      paging: { current: number; total: number };
+      response: any[];
+    }>('/teams', params);
+
+    const teams = Array.isArray(response) ? response : response.response || [];
+    const paging = (response as any).paging || { current: page, total: 1 };
+
+    return {
+      teams,
+      hasMore: paging.current < paging.total,
+      total: paging.total,
+    };
+  }
+
   async getTeamsByIds(teamIds: number[]): Promise<any[]> {
     if (teamIds.length === 0) return [];
     
