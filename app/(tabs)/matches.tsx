@@ -203,16 +203,24 @@ const MatchesScreen = () => {
       const leaguesToFetch = selectedLeagues.length > 0 ? selectedLeagues : [];
 
       const dateRange = getDateRange(timeRange);
-      // Get transfers from last year (السنة الفاتت) and current year
-      const lastYear = new Date().getFullYear() - 1;
-      const currentSeason = new Date().getFullYear();
+      // Get transfers from last year (السنة الفاتت) - the completed season
+      // Use last year as the main season since current year might not have started yet
+      const currentYear = new Date().getFullYear();
+      const lastYear = currentYear - 1; // السنة الفاتت (completed season)
+      
+      // For transfers, we primarily want last year's data (السنة الفاتت)
+      // Only check current year if we're in the middle of the season
+      const isEarlyInYear = new Date().getMonth() < 6; // Before July
+      const seasonToFetch = isEarlyInYear ? lastYear : currentYear;
 
-      // Try cache first for zero-delay display - check both last year and current year
+      // Try cache first for zero-delay display - prioritize last year (السنة الفاتت)
       // For all leagues, use empty array as key
       const cacheKey = leaguesToFetch.length > 0 ? leaguesToFetch : [];
-      let cached = await transfersCacheService.getCachedTransfers(currentSeason, cacheKey);
-      if (!cached || cached.length === 0) {
-        cached = await transfersCacheService.getCachedTransfers(lastYear, cacheKey);
+      // Try last year first (السنة الفاتت) since it's the completed season
+      let cached = await transfersCacheService.getCachedTransfers(lastYear, cacheKey);
+      // If not found and we're not early in the year, try current year
+      if ((!cached || cached.length === 0) && !isEarlyInYear) {
+        cached = await transfersCacheService.getCachedTransfers(currentYear, cacheKey);
       }
       if (cached && cached.length > 0) {
         logger.debug(`📦 Transfers from cache: ${cached.length} leagues, displaying immediately`);
@@ -238,25 +246,35 @@ const MatchesScreen = () => {
 
         // Refresh in background only if online
         if (isOnline) {
-          loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentSeason);
+          loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentYear, isEarlyInYear);
         }
         return;
       }
 
       // No cache, fetch from backend cached endpoint
-      // Fetch from both last year and current year, then merge
-      const [lastYearData, currentYearData] = await Promise.all([
+      // Prioritize last year (السنة الفاتت) - the completed season
+      const fetchPromises = [
         transfersCacheService.fetchCachedTransfers(
           lastYear,
           leaguesToFetch,
           dateRange
         ).catch(() => []), // Don't fail if one fails
-        transfersCacheService.fetchCachedTransfers(
-          currentSeason,
-          leaguesToFetch,
-          dateRange
-        ).catch(() => []), // Don't fail if one fails
-      ]);
+      ];
+      
+      // Only fetch current year if we're not early in the year
+      if (!isEarlyInYear) {
+        fetchPromises.push(
+          transfersCacheService.fetchCachedTransfers(
+            currentYear,
+            leaguesToFetch,
+            dateRange
+          ).catch(() => [])
+        );
+      }
+      
+      const results = await Promise.all(fetchPromises);
+      const lastYearData = results[0];
+      const currentYearData = results[1] || [];
 
       // Merge transfers from both years
       const leagueMap = new Map<number, { leagueId: number; leagueName: string; leagueLogo?: string; transfers: Transfer[] }>();
@@ -300,16 +318,16 @@ const MatchesScreen = () => {
         }
       });
 
-      logger.debug(`📦 Fetched transfers: ${allTransfers.length} transfers from ${leaguesList.length} leagues`);
+      logger.debug(`📦 Fetched transfers: ${allTransfers.length} transfers from ${leaguesList.length} leagues (season: ${seasonToFetch})`);
       setTransfers(allTransfers);
       setAvailableLeagues(leaguesList);
       setRetryCount(0); // Reset retry count on success
       
-      // Cache the result
+      // Cache the result - prioritize last year (السنة الفاتت)
       if (allTransfers.length > 0) {
-        await transfersCacheService.cacheTransfers(data, currentSeason, leaguesToFetch).catch(() => {});
-        if (lastYear !== currentSeason) {
-          await transfersCacheService.cacheTransfers(data, lastYear, leaguesToFetch).catch(() => {});
+        await transfersCacheService.cacheTransfers(data, lastYear, leaguesToFetch).catch(() => {});
+        if (!isEarlyInYear && lastYear !== currentYear) {
+          await transfersCacheService.cacheTransfers(data, currentYear, leaguesToFetch).catch(() => {});
         }
       }
     } catch (err: unknown) {
@@ -349,7 +367,8 @@ const MatchesScreen = () => {
     leaguesToFetch: number[],
     dateRange: { from: string; to: string },
     lastYear: number,
-    currentSeason: number,
+    currentYear: number,
+    isEarlyInYear: boolean,
     retryAttempt = 0
   ) => {
     // Don't retry in background if offline
@@ -358,19 +377,29 @@ const MatchesScreen = () => {
     }
 
     try {
-      // Fetch from both years
-      const [lastYearData, currentYearData] = await Promise.all([
+      // Fetch from last year (السنة الفاتت) - prioritize completed season
+      const fetchPromises = [
         transfersCacheService.fetchCachedTransfers(
           lastYear,
           leaguesToFetch,
           dateRange
         ).catch(() => []),
-        transfersCacheService.fetchCachedTransfers(
-          currentSeason,
-          leaguesToFetch,
-          dateRange
-        ).catch(() => []),
-      ]);
+      ];
+      
+      // Only fetch current year if we're not early in the year
+      if (!isEarlyInYear) {
+        fetchPromises.push(
+          transfersCacheService.fetchCachedTransfers(
+            currentYear,
+            leaguesToFetch,
+            dateRange
+          ).catch(() => [])
+        );
+      }
+      
+      const results = await Promise.all(fetchPromises);
+      const lastYearData = results[0];
+      const currentYearData = results[1] || [];
 
       // Merge data
       const leagueMap = new Map<number, { leagueId: number; leagueName: string; leagueLogo?: string; transfers: Transfer[] }>();
@@ -416,7 +445,7 @@ const MatchesScreen = () => {
           const delay = Math.min(2000 * Math.pow(2, retryAttempt), 8000);
           logger.warn(`Background transfers refresh failed, retrying in ${delay}ms:`, err);
           setTimeout(() => {
-            loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentSeason, retryAttempt + 1);
+            loadTransfersInBackground(leaguesToFetch, dateRange, lastYear, currentYear, isEarlyInYear, retryAttempt + 1);
           }, delay);
       } else {
         logger.warn('Background transfers refresh failed after retries:', err);
