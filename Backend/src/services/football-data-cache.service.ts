@@ -1239,10 +1239,13 @@ class FootballDataCacheService {
             // If no dateRange, get all transfers (no date filter)
 
             // Query database
+            // If no leagueIds specified, get from all leagues (كل الدوريات)
+            // Increase limit for all leagues
+            const limit = leagueIds && leagueIds.length > 0 ? 5000 : 50000; // More for all leagues
             const dbTransfers = await prisma.cachedTransfer.findMany({
                 where,
                 orderBy: { transferDate: 'desc' },
-                take: 5000, // Reasonable limit
+                take: limit,
             });
 
             if (dbTransfers.length === 0) {
