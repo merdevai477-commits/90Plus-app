@@ -1157,7 +1157,7 @@ export class FootballController {
       const teamsWithLogos: Array<{ id: number; name: string; logo: string; country?: string }> = [];
       const foundTeamIds = new Set<number>();
 
-      // First: Check if we have any African teams in database
+      // First: Check if we have any African teams in database - RETURN IMMEDIATELY if found
       try {
         const { PrismaClient } = await import('@prisma/client');
         const prisma = new PrismaClient();
@@ -1168,11 +1168,11 @@ export class FootballController {
             country: { in: africanCountries },
             logo: { not: null },
           },
-          take: 10,
+          take: 50, // Get more teams from database
         });
 
         if (dbTeams.length > 0) {
-          logger.info(`📦 Found ${dbTeams.length} African teams in database`);
+          logger.info(`📦 Found ${dbTeams.length} African teams in database - returning immediately`);
           for (const team of dbTeams) {
             teamsWithLogos.push({
               id: team.teamId,
@@ -1182,6 +1182,29 @@ export class FootballController {
             });
             foundTeamIds.add(team.teamId);
           }
+
+          await prisma.$disconnect();
+
+          // Return immediately with database results
+          res.json({
+            status: 'SUCCESS',
+            message: `Fetched ${teamsWithLogos.length} African team logos from database`,
+            data: {
+              teams: teamsWithLogos,
+              count: teamsWithLogos.length,
+            },
+          });
+
+          // Fetch more in background (don't wait)
+          setImmediate(async () => {
+            try {
+              await this.fetchMoreAfricanTeamsInBackground(foundTeamIds);
+            } catch (error) {
+              logger.warn('Background fetch failed:', error);
+            }
+          });
+
+          return;
         }
 
         await prisma.$disconnect();
@@ -1189,159 +1212,61 @@ export class FootballController {
         logger.warn('Error checking database:', error.message);
       }
 
-      // If we need more teams, try fetching major teams by ID first
-      if (teamsWithLogos.length < 10) {
-        logger.info(`📡 Need ${10 - teamsWithLogos.length} more teams. Trying major African teams by ID...`);
+      // If database didn't have enough teams, try quick API fetch with timeout
+      // But limit to 5 seconds max to avoid timeout
+      const timeoutPromise = new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), 5000); // 5 second timeout
+      });
 
-        // Major African teams IDs (known from clubs.ts and common knowledge)
+      const fetchPromise = (async () => {
+        // Try fetching major teams by ID first (faster)
         const majorAfricanTeamIds = [
-          // Egyptian big teams
           { id: 1020, name: 'Al Ahly', country: 'Egypt' },
           { id: 1021, name: 'Zamalek', country: 'Egypt' },
           { id: 5765, name: 'Pyramids FC', country: 'Egypt' },
           { id: 1022, name: 'Ismaily', country: 'Egypt' },
-          // Moroccan big teams
           { id: 6959, name: 'Wydad Casablanca', country: 'Morocco' },
           { id: 6960, name: 'Raja Casablanca', country: 'Morocco' },
-          // Tunisian big teams
           { id: 6955, name: 'Espérance de Tunis', country: 'Tunisia' },
           { id: 6956, name: 'Étoile du Sahel', country: 'Tunisia' },
-          // South African big teams
           { id: 239, name: 'Orlando Pirates', country: 'South Africa' },
           { id: 240, name: 'Kaizer Chiefs', country: 'South Africa' },
         ];
 
-        // Try to fetch major teams by ID (no limit, fetch all)
         const teamFetchPromises = majorAfricanTeamIds
           .filter(team => !foundTeamIds.has(team.id))
+          .slice(0, 5) // Limit to 5 teams max to avoid timeout
           .map(async (teamInfo) => {
             try {
-              logger.debug(`🔍 Fetching team by ID: ${teamInfo.name} (${teamInfo.id})`);
               const team = await footballService.getTeamById(teamInfo.id);
-              
               if (team && team.length > 0) {
                 const teamData = team[0]?.team || team[0];
                 if (teamData?.id && teamData?.logo && !foundTeamIds.has(teamData.id)) {
                   foundTeamIds.add(teamData.id);
-                  
                   await footballDataCacheService.cacheTeamFromTransfer({
                     id: teamData.id,
                     name: teamData.name || teamInfo.name,
                     logo: teamData.logo,
                     country: teamData.country || teamInfo.country,
                   });
-
                   teamsWithLogos.push({
                     id: teamData.id,
                     name: teamData.name || teamInfo.name,
                     logo: teamData.logo,
                     country: teamData.country || teamInfo.country,
                   });
-                  
-                  logger.info(`✅ Added major team: ${teamData.name} (${teamData.id})`);
-                  return true;
                 }
               }
             } catch (error: any) {
-              logger.debug(`⚠️ Failed to fetch team ${teamInfo.id} (${teamInfo.name}):`, error.message);
+              logger.debug(`⚠️ Failed to fetch team ${teamInfo.id}:`, error.message);
             }
-            return false;
           });
 
         await Promise.all(teamFetchPromises);
-      }
+      })();
 
-      // Fetch more teams from API using standings (no limit, get all)
-      logger.info(`📡 Fetching more teams from standings to get all African teams...`);
-
-      try {
-        // Known working league IDs for African leagues (from MAJOR_LEAGUES constant)
-        const africanLeagues = [
-          { id: 233, name: 'Egyptian Premier League', country: 'Egypt', seasons: [2024, 2023, 2022] },
-          { id: 200, name: 'Moroccan Botola', country: 'Morocco', seasons: [2024, 2023, 2022] },
-        ];
-
-        for (const league of africanLeagues) {
-          for (const season of league.seasons) {
-
-              try {
-                logger.info(`🔍 Trying ${league.name} (ID: ${league.id}, Season: ${season})`);
-                
-                // Use footballDataCacheService.getStandings which handles caching
-                // This returns flattened standings array already
-                const standings = await footballDataCacheService.getStandings(league.id, season);
-                
-                logger.info(`📊 Standings response for ${league.name}: type=${typeof standings}, isArray=${Array.isArray(standings)}, length=${Array.isArray(standings) ? standings.length : 'N/A'}`);
-                
-                if (standings && Array.isArray(standings) && standings.length > 0) {
-                  logger.info(`✅ Found ${standings.length} teams in ${league.name} (season ${season})`);
-                  
-                  // Get all teams, not limited to 10
-                  for (const standing of standings) {
-                    // standings from getStandings are already flattened, so standing.team should exist
-                    const team = standing.team || standing;
-                    const teamId = team?.id;
-                    const teamName = team?.name;
-                    const teamLogo = team?.logo;
-                    
-                    logger.debug(`📋 Processing team: ${teamName} (ID: ${teamId}, Logo: ${teamLogo ? 'YES' : 'NO'})`);
-                    
-                    if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
-                      foundTeamIds.add(teamId);
-                      
-                      logger.info(`✅ Adding team: ${teamName} (${teamId})`);
-                      
-                      // Cache in database
-                      try {
-                        await footballDataCacheService.cacheTeamFromTransfer({
-                          id: teamId,
-                          name: teamName || 'Unknown',
-                          logo: teamLogo,
-                          country: league.country,
-                        });
-
-                        teamsWithLogos.push({
-                          id: teamId,
-                          name: teamName || 'Unknown',
-                          logo: teamLogo,
-                          country: league.country,
-                        });
-                        
-                        logger.info(`✅ Successfully added ${teamName} (total: ${teamsWithLogos.length})`);
-                      } catch (cacheError: any) {
-                        logger.warn(`⚠️ Failed to cache team ${teamId}:`, cacheError.message);
-                      }
-                    } else {
-                      if (!teamId) logger.debug(`⚠️ Team missing ID: ${JSON.stringify(team)}`);
-                      if (!teamLogo) logger.debug(`⚠️ Team ${teamName} (${teamId}) missing logo`);
-                      if (foundTeamIds.has(teamId)) logger.debug(`⚠️ Team ${teamName} (${teamId}) already added`);
-                    }
-                  }
-                  
-                  // Found teams, continue to get more from other seasons/leagues
-                  if (standings && Array.isArray(standings) && standings.length > 0) {
-                    logger.info(`✅ Got teams from ${league.name} (season ${season}), continuing to get more...`);
-                    // Don't break - continue to get all teams from all seasons/leagues
-                  }
-                } else {
-                  logger.warn(`⚠️ No standings returned for ${league.name} (season ${season}) - Response: ${JSON.stringify(standings).substring(0, 200)}`);
-                }
-              } catch (error: any) {
-                logger.warn(`❌ Season ${season} failed for ${league.name}: ${error.message}`);
-                // Continue to next season
-              }
-              
-              // Small delay
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
-            // Delay between leagues
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        } catch (error: any) {
-          logger.error('❌ Error fetching from API:', error);
-        }
-      }
+      // Wait for either completion or timeout
+      await Promise.race([fetchPromise, timeoutPromise]);
 
       logger.info(`✅ Total fetched: ${teamsWithLogos.length} African team logos`);
 
@@ -1349,13 +1274,69 @@ export class FootballController {
         status: 'SUCCESS',
         message: `Fetched ${teamsWithLogos.length} African team logos`,
         data: {
-          teams: teamsWithLogos, // Return all teams, not limited to 10
+          teams: teamsWithLogos,
           count: teamsWithLogos.length,
         },
+      });
+
+      // Fetch more in background (don't wait)
+      setImmediate(async () => {
+        try {
+          await this.fetchMoreAfricanTeamsInBackground(foundTeamIds);
+        } catch (error) {
+          logger.warn('Background fetch failed:', error);
+        }
       });
     } catch (error) {
       logger.error('Error in getAfricanTeamLogos:', error);
       FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * Background method to fetch more African teams (called asynchronously)
+   */
+  private static async fetchMoreAfricanTeamsInBackground(foundTeamIds: Set<number>): Promise<void> {
+    try {
+      logger.info('📡 Background: Fetching more African teams from standings...');
+      
+      const africanLeagues = [
+        { id: 233, name: 'Egyptian Premier League', country: 'Egypt', seasons: [2024, 2023] },
+        { id: 200, name: 'Moroccan Botola', country: 'Morocco', seasons: [2024, 2023] },
+      ];
+
+      for (const league of africanLeagues) {
+        for (const season of league.seasons) {
+          try {
+            const standings = await footballDataCacheService.getStandings(league.id, season);
+            if (standings && Array.isArray(standings) && standings.length > 0) {
+              for (const standing of standings) {
+                const team = standing.team || standing;
+                const teamId = team?.id;
+                const teamLogo = team?.logo;
+                
+                if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
+                  foundTeamIds.add(teamId);
+                  await footballDataCacheService.cacheTeamFromTransfer({
+                    id: teamId,
+                    name: team?.name || 'Unknown',
+                    logo: teamLogo,
+                    country: league.country,
+                  });
+                }
+              }
+            }
+          } catch (error: any) {
+            logger.debug(`Background: Failed to fetch ${league.name} season ${season}:`, error.message);
+          }
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      logger.info('✅ Background: Finished fetching more African teams');
+    } catch (error) {
+      logger.warn('Background fetch error:', error);
     }
   }
 
@@ -1397,37 +1378,54 @@ export class FootballController {
    */
   static async getCachedTransfers(req: Request, res: Response): Promise<void> {
     try {
-      const leaguesParam = req.query.leagues as string | undefined;
-      const seasonParam = req.query.season as string | undefined;
-      const fromDate = req.query.from as string | undefined;
-      const toDate = req.query.to as string | undefined;
+      // Set timeout to 10 seconds to avoid hanging
+      const timeout = setTimeout(() => {
+        if (!res.headersSent) {
+          res.status(504).json({
+            status: 'ERROR',
+            message: 'Request timeout - database query took too long',
+          });
+        }
+      }, 10000);
 
-      const leagueIds = leaguesParam 
-        ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-        : undefined; // undefined means get from all leagues (كل الدوريات)
+      try {
+        const leaguesParam = req.query.leagues as string | undefined;
+        const seasonParam = req.query.season as string | undefined;
+        const fromDate = req.query.from as string | undefined;
+        const toDate = req.query.to as string | undefined;
 
-      // Season is optional - if not provided, get from all seasons (including last year)
-      const season = seasonParam ? parseInt(seasonParam) : undefined;
+        const leagueIds = leaguesParam 
+          ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+          : undefined; // undefined means get from all leagues (كل الدوريات)
 
-      const dateRange = (fromDate && toDate) 
-        ? { from: fromDate, to: toDate }
-        : undefined;
+        // Season is optional - if not provided, get from all seasons (including last year)
+        const season = seasonParam ? parseInt(seasonParam) : undefined;
 
-      // Get transfers from database (includes last year - السنة الفاتت)
-      logger.debug(`📡 getCachedTransfers request - LeagueIds: ${leagueIds ? leagueIds.join(',') : 'ALL'}, Season: ${season || 'ALL'}, DateRange: ${dateRange ? `${dateRange.from} to ${dateRange.to}` : 'ALL'}`);
-      
-      const transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, season, dateRange);
+        const dateRange = (fromDate && toDate) 
+          ? { from: fromDate, to: toDate }
+          : undefined;
 
-      const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
+        // Get transfers from database (includes last year - السنة الفاتت)
+        logger.debug(`📡 getCachedTransfers request - LeagueIds: ${leagueIds ? leagueIds.join(',') : 'ALL'}, Season: ${season || 'ALL'}, DateRange: ${dateRange ? `${dateRange.from} to ${dateRange.to}` : 'ALL'}`);
+        
+        const transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, season, dateRange);
 
-      logger.debug(`📡 getCachedTransfers response - Leagues: ${transfersByLeagues.length}, Total Transfers: ${totalTransfers}`);
+        clearTimeout(timeout);
 
-      res.json({
-        status: 'SUCCESS',
-        results: totalTransfers,
-        leagues: transfersByLeagues.length,
-        response: transfersByLeagues,
-      });
+        const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
+
+        logger.debug(`📡 getCachedTransfers response - Leagues: ${transfersByLeagues.length}, Total Transfers: ${totalTransfers}`);
+
+        res.json({
+          status: 'SUCCESS',
+          results: totalTransfers,
+          leagues: transfersByLeagues.length,
+          response: transfersByLeagues,
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+        FootballController.handleError(res, error);
+      }
     } catch (error) {
       FootballController.handleError(res, error);
     }

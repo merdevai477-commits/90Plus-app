@@ -1293,14 +1293,29 @@ class FootballDataCacheService {
             }
             // If no dateRange, get all transfers (no date filter)
 
-            // Query database
+            // Query database with reasonable limits to avoid timeout
             // If no leagueIds specified, get from all leagues (كل الدوريات)
-            // Maximum limit to get ALL transfers (no date restrictions)
-            const limit = leagueIds && leagueIds.length > 0 ? 10000 : 100000; // Much higher limit for all leagues/all time
+            // Use reasonable limits to avoid timeout (max 20000 for all leagues)
+            const limit = leagueIds && leagueIds.length > 0 ? 5000 : 20000; // Reduced limits to avoid timeout
             const dbTransfers = await prisma.cachedTransfer.findMany({
                 where,
                 orderBy: { transferDate: 'desc' },
                 take: limit,
+                select: {
+                    id: true,
+                    playerId: true,
+                    playerName: true,
+                    teamId: true,
+                    teamName: true,
+                    leagueId: true,
+                    leagueName: true,
+                    leagueLogo: true,
+                    transferDate: true,
+                    transferType: true,
+                    transferFee: true,
+                    fromTeam: true,
+                    toTeam: true,
+                },
             });
 
             if (dbTransfers.length === 0) {
