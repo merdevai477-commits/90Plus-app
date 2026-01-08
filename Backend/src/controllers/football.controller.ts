@@ -8,6 +8,32 @@ import { logger } from '../utils/logger';
  * Football API Proxy Controller
  * Proxies requests to API-Football v3 while keeping API key secure on backend
  */
+// Helper function to format transfer date
+function formatTransferDate(dateStr: string): string {
+  if (!dateStr) return 'Unknown';
+  
+  try {
+    // Handle YYMMDD format (e.g., "310812" = 31/08/2012)
+    if (dateStr.length === 6 && /^\d{6}$/.test(dateStr)) {
+      const year = 2000 + parseInt(dateStr.substring(0, 2));
+      const month = parseInt(dateStr.substring(2, 4)) - 1;
+      const day = parseInt(dateStr.substring(4, 6));
+      const date = new Date(year, month, day);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    
+    // Handle YYYY-MM-DD format
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+}
+
 export class FootballController {
   /**
    * GET /api/football/leagues - Get all available leagues
@@ -1139,14 +1165,66 @@ export class FootballController {
             logger.debug(`📡 Filtered to ${filteredTransfers.length} transfers within date range`);
           }
 
-          // Group transfers by league
-          // Since transfers don't have league info directly, we return all in one group
+          // Group transfers by league and enhance with additional info
+          // Try to determine league from team info or group by date
           if (filteredTransfers.length > 0) {
-            transfersByLeagues = [{
-              leagueId: leagueIds && leagueIds.length > 0 ? leagueIds[0] : 0,
-              leagueName: leagueIds && leagueIds.length > 0 ? `League ${leagueIds[0]}` : 'All Leagues',
-              transfers: filteredTransfers, // Array of player transfers
-            }];
+            // Group by league if available, otherwise group by date ranges
+            const leagueMap = new Map<number | string, {
+              leagueId: number;
+              leagueName: string;
+              leagueLogo?: string;
+              transfers: any[];
+            }>();
+
+            for (const transfer of filteredTransfers) {
+              // Try to get league from transfer data
+              const leagueId = transfer.league?.id || 0;
+              const leagueName = transfer.league?.name || 'Unknown League';
+              const leagueLogo = transfer.league?.logo;
+              
+              // Use league ID as key, or use date range if no league
+              const key = leagueId || 'all';
+              
+              if (!leagueMap.has(key)) {
+                leagueMap.set(key, {
+                  leagueId: leagueId || 0,
+                  leagueName: leagueId ? leagueName : 'All Leagues',
+                  leagueLogo: leagueLogo,
+                  transfers: [],
+                });
+              }
+              
+              // Enhance transfer with additional info
+              const firstTransfer = transfer.transfers?.[0];
+              const lastTransfer = transfer.transfers?.[transfer.transfers.length - 1];
+              
+              const enhancedTransfer = {
+                ...transfer,
+                // Add classification (player/coach) - assume player for now
+                classification: 'player', // Can be enhanced later with player/coach detection
+                // Add formatted dates
+                formattedDate: transfer.update ? formatTransferDate(transfer.update) : null,
+                // Add date range info
+                dateRange: {
+                  start: firstTransfer?.date ? formatTransferDate(firstTransfer.date) : null,
+                  end: lastTransfer?.date ? formatTransferDate(lastTransfer.date) : null,
+                  startRaw: firstTransfer?.date || null,
+                  endRaw: lastTransfer?.date || null,
+                },
+                // Add transfer value if available
+                transferValue: firstTransfer?.type || null,
+                // Add transfer count
+                transferCount: transfer.transfers?.length || 0,
+                // Add current team info
+                currentTeam: lastTransfer?.teams?.in || null,
+                // Add previous team info
+                previousTeam: firstTransfer?.teams?.out || null,
+              };
+              
+              leagueMap.get(key)!.transfers.push(enhancedTransfer);
+            }
+
+            transfersByLeagues = Array.from(leagueMap.values());
             logger.debug(`✅ Returning ${filteredTransfers.length} transfers grouped in ${transfersByLeagues.length} league(s)`);
           }
         } else {
@@ -1158,11 +1236,23 @@ export class FootballController {
 
       const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
 
+      // Sort leagues by name for better organization
+      transfersByLeagues.sort((a, b) => {
+        if (a.leagueId === 0) return 1; // "All Leagues" at the end
+        if (b.leagueId === 0) return -1;
+        return (a.leagueName || '').localeCompare(b.leagueName || '');
+      });
+
       res.json({
         status: 'SUCCESS',
         results: totalTransfers,
         leagues: transfersByLeagues.length,
         response: transfersByLeagues,
+        metadata: {
+          hasLeagueInfo: transfersByLeagues.some(l => l.leagueId > 0),
+          dateRange: dateRange || null,
+          cached: transfersByLeagues.length > 0 && transfersByLeagues[0].transfers.length > 0,
+        },
       });
     } catch (error) {
       FootballController.handleError(res, error);
