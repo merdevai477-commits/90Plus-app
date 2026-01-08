@@ -10,7 +10,8 @@ import { logger } from './utils/logger';
 import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
-import { transfersSyncService } from './services/transfers-sync.service';
+// Dynamic import for transfersSyncService to avoid top-level await issues
+let transfersSyncService: any;
 
 // Load environment variables
 dotenv.config();
@@ -564,6 +565,11 @@ async function startServer() {
                     // ✅ Start transfers sync service
                     // Start transfers sync service (will work with or without Redis)
                     try {
+                        // Dynamic import to avoid top-level await issues
+                        if (!transfersSyncService) {
+                            const transfersSyncModule = await import('./services/transfers-sync.service');
+                            transfersSyncService = transfersSyncModule.transfersSyncService;
+                        }
                         transfersSyncService.start();
                         logger.info('✅ Transfers Sync Service started');
                     } catch (error) {
@@ -604,7 +610,9 @@ process.on('SIGINT', async () => {
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
-    transfersSyncService.stop(); // ✅ Stop transfers sync service
+    if (transfersSyncService) {
+        transfersSyncService.stop(); // ✅ Stop transfers sync service
+    }
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
@@ -616,7 +624,9 @@ process.on('SIGTERM', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
-    transfersSyncService.stop(); // ✅ Stop transfers sync service
+    if (transfersSyncService) {
+        transfersSyncService.stop(); // ✅ Stop transfers sync service
+    }
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
