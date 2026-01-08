@@ -1251,21 +1251,18 @@ export class FootballController {
         await Promise.all(teamFetchPromises);
       }
 
-      // If still need more teams, fetch from API using standings
-      if (teamsWithLogos.length < 10) {
-        logger.info(`📡 Need ${10 - teamsWithLogos.length} more teams. Fetching from API using standings...`);
+      // Fetch more teams from API using standings (no limit, get all)
+      logger.info(`📡 Fetching more teams from standings to get all African teams...`);
 
-        try {
-          // Known working league IDs for African leagues (from MAJOR_LEAGUES constant)
-          const africanLeagues = [
-            { id: 233, name: 'Egyptian Premier League', country: 'Egypt', seasons: [2024, 2023, 2022] },
-            { id: 200, name: 'Moroccan Botola', country: 'Morocco', seasons: [2024, 2023, 2022] },
-          ];
+      try {
+        // Known working league IDs for African leagues (from MAJOR_LEAGUES constant)
+        const africanLeagues = [
+          { id: 233, name: 'Egyptian Premier League', country: 'Egypt', seasons: [2024, 2023, 2022] },
+          { id: 200, name: 'Moroccan Botola', country: 'Morocco', seasons: [2024, 2023, 2022] },
+        ];
 
-          for (const league of africanLeagues) {
-            if (teamsWithLogos.length >= 10) break;
-
-            for (const season of league.seasons) {
+        for (const league of africanLeagues) {
+          for (const season of league.seasons) {
 
               try {
                 logger.info(`🔍 Trying ${league.name} (ID: ${league.id}, Season: ${season})`);
@@ -1310,7 +1307,7 @@ export class FootballController {
                           country: league.country,
                         });
                         
-                        logger.info(`✅ Successfully added ${teamName} (${teamsWithLogos.length}/10)`);
+                        logger.info(`✅ Successfully added ${teamName} (total: ${teamsWithLogos.length})`);
                       } catch (cacheError: any) {
                         logger.warn(`⚠️ Failed to cache team ${teamId}:`, cacheError.message);
                       }
