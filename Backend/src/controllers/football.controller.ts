@@ -1211,10 +1211,9 @@ export class FootballController {
           { id: 240, name: 'Kaizer Chiefs', country: 'South Africa' },
         ];
 
-        // Try to fetch major teams by ID
+        // Try to fetch major teams by ID (no limit, fetch all)
         const teamFetchPromises = majorAfricanTeamIds
           .filter(team => !foundTeamIds.has(team.id))
-          .slice(0, 10 - teamsWithLogos.length)
           .map(async (teamInfo) => {
             try {
               logger.debug(`🔍 Fetching team by ID: ${teamInfo.name} (${teamInfo.id})`);
@@ -1267,7 +1266,6 @@ export class FootballController {
             if (teamsWithLogos.length >= 10) break;
 
             for (const season of league.seasons) {
-              if (teamsWithLogos.length >= 10) break;
 
               try {
                 logger.info(`🔍 Trying ${league.name} (ID: ${league.id}, Season: ${season})`);
@@ -1281,7 +1279,8 @@ export class FootballController {
                 if (standings && Array.isArray(standings) && standings.length > 0) {
                   logger.info(`✅ Found ${standings.length} teams in ${league.name} (season ${season})`);
                   
-                  for (const standing of standings.slice(0, 10 - teamsWithLogos.length)) {
+                  // Get all teams, not limited to 10
+                  for (const standing of standings) {
                     // standings from getStandings are already flattened, so standing.team should exist
                     const team = standing.team || standing;
                     const teamId = team?.id;
@@ -1353,8 +1352,8 @@ export class FootballController {
         status: 'SUCCESS',
         message: `Fetched ${teamsWithLogos.length} African team logos`,
         data: {
-          teams: teamsWithLogos.slice(0, 10),
-          count: Math.min(teamsWithLogos.length, 10),
+          teams: teamsWithLogos, // Return all teams, not limited to 10
+          count: teamsWithLogos.length,
         },
       });
     } catch (error) {
