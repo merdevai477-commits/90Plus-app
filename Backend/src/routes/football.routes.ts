@@ -158,9 +158,21 @@ router.get('/h2h/cached', FootballController.getH2HWithCache);
 // Must be before /players/:id to avoid route conflicts
 router.get('/players/top/scorers', FootballController.getTopScorers);
 
+// GET /api/football/players/top/scorers/predictions
+// Get predictions for top scorers based on current performance
+router.get('/players/top/scorers/predictions', FootballController.getTopScorersPredictions);
+
 // GET /api/football/players/top/assists
 // Top assists/playmakers
 router.get('/players/top/assists', FootballController.getTopAssists);
+
+// GET /api/football/players/top/yellow-cards
+// Top yellow cards
+router.get('/players/top/yellow-cards', FootballController.getTopYellowCards);
+
+// GET /api/football/players/top/red-cards
+// Top red cards
+router.get('/players/top/red-cards', FootballController.getTopRedCards);
 
 // GET /api/football/players/:id
 router.get('/players/:id', FootballController.getPlayerById);

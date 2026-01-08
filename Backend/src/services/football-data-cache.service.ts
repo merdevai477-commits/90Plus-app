@@ -50,6 +50,8 @@ class FootballDataCacheService {
     // Request deduplication for transfers
     private pendingTransfersRequests = new Map<string, Promise<any[]>>();
     private topAssistsCache = new Map<string, MemoryCacheEntry<any>>();
+    private topYellowCardsCache = new Map<string, MemoryCacheEntry<any>>();
+    private topRedCardsCache = new Map<string, MemoryCacheEntry<any>>();
     private injuriesCache = new Map<number, MemoryCacheEntry<any>>();
     private transfersCache = new Map<string, MemoryCacheEntry<any>>();
     private trophiesCache = new Map<number, MemoryCacheEntry<any>>();
@@ -877,6 +879,8 @@ class FootballDataCacheService {
         this.teamStatisticsCache.clear();
         this.topScorersCache.clear();
         this.topAssistsCache.clear();
+        this.topYellowCardsCache.clear();
+        this.topRedCardsCache.clear();
         this.injuriesCache.clear();
         this.transfersCache.clear();
         this.trophiesCache.clear();
@@ -997,6 +1001,80 @@ class FootballDataCacheService {
         // Store in both caches
         this.topAssistsCache.set(cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TOP_ASSISTS);
+
+        return data;
+    }
+
+    /**
+     * Get top yellow cards with caching
+     */
+    async getTopYellowCards(leagueId: number, season: number): Promise<any[]> {
+        const cacheKey = `top_yellow_cards_${leagueId}_${season}`;
+        
+        // Check Redis cache
+        const redisKey = `top_yellow_cards:${cacheKey}`;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+            logger.debug(`📦 Top yellow cards from Redis cache`);
+            this.topYellowCardsCache.set(cacheKey, redisCached);
+            return redisCached.data;
+        }
+
+        // Check memory cache
+        const cached = this.topYellowCardsCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < cached.ttl) {
+            logger.debug(`📦 Top yellow cards from memory cache`);
+            return cached.data;
+        }
+
+        // Fetch from API
+        const data = await footballService.getTopYellowCards(leagueId, season);
+        const entry: MemoryCacheEntry<any[]> = {
+            data,
+            timestamp: Date.now(),
+            ttl: this.TTL.TOP_SCORERS, // Same TTL as top scorers
+        };
+
+        // Store in both caches
+        this.topYellowCardsCache.set(cacheKey, entry);
+        await redisCacheService.set(redisKey, entry, this.TTL.TOP_SCORERS);
+
+        return data;
+    }
+
+    /**
+     * Get top red cards with caching
+     */
+    async getTopRedCards(leagueId: number, season: number): Promise<any[]> {
+        const cacheKey = `top_red_cards_${leagueId}_${season}`;
+        
+        // Check Redis cache
+        const redisKey = `top_red_cards:${cacheKey}`;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+            logger.debug(`📦 Top red cards from Redis cache`);
+            this.topRedCardsCache.set(cacheKey, redisCached);
+            return redisCached.data;
+        }
+
+        // Check memory cache
+        const cached = this.topRedCardsCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < cached.ttl) {
+            logger.debug(`📦 Top red cards from memory cache`);
+            return cached.data;
+        }
+
+        // Fetch from API
+        const data = await footballService.getTopRedCards(leagueId, season);
+        const entry: MemoryCacheEntry<any[]> = {
+            data,
+            timestamp: Date.now(),
+            ttl: this.TTL.TOP_SCORERS, // Same TTL as top scorers
+        };
+
+        // Store in both caches
+        this.topRedCardsCache.set(cacheKey, entry);
+        await redisCacheService.set(redisKey, entry, this.TTL.TOP_SCORERS);
 
         return data;
     }

@@ -558,6 +558,55 @@ class FootballService {
   }
 
   /**
+   * Get top yellow cards (players with most yellow cards)
+   * Note: API-Football doesn't have a direct endpoint, so we'll use players statistics
+   */
+  async getTopYellowCards(leagueId: number, season?: number): Promise<any[]> {
+    const currentSeason = season || 2024;
+    // Use top scorers endpoint which includes cards statistics
+    const players = await this.fetchFromApi<any[]>('/players/topscorers', {
+      league: leagueId,
+      season: currentSeason,
+    });
+    
+    // Extract and sort by yellow cards
+    return players
+      .map((player: any) => {
+        const stats = player.statistics?.[0];
+        return {
+          ...player,
+          yellowCards: stats?.cards?.yellow || 0,
+        };
+      })
+      .filter((player: any) => player.yellowCards > 0)
+      .sort((a: any, b: any) => b.yellowCards - a.yellowCards);
+  }
+
+  /**
+   * Get top red cards (players with most red cards)
+   */
+  async getTopRedCards(leagueId: number, season?: number): Promise<any[]> {
+    const currentSeason = season || 2024;
+    // Use top scorers endpoint which includes cards statistics
+    const players = await this.fetchFromApi<any[]>('/players/topscorers', {
+      league: leagueId,
+      season: currentSeason,
+    });
+    
+    // Extract and sort by red cards
+    return players
+      .map((player: any) => {
+        const stats = player.statistics?.[0];
+        return {
+          ...player,
+          redCards: stats?.cards?.red || 0,
+        };
+      })
+      .filter((player: any) => player.redCards > 0)
+      .sort((a: any, b: any) => b.redCards - a.redCards);
+  }
+
+  /**
    * Get team injuries
    */
   async getTeamInjuries(teamId: number): Promise<any[]> {

@@ -793,6 +793,130 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/players/top/yellow-cards - Get top yellow cards
+   */
+  static async getTopYellowCards(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const league = parseInt(req.query.league as string);
+      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+
+      if (isNaN(league)) {
+        res.status(400).json({ status: 'ERROR', message: 'League ID is required' });
+        return;
+      }
+
+      const players = await footballDataCacheService.getTopYellowCards(league, season);
+
+      res.json({
+        status: 'SUCCESS',
+        results: players.length,
+        response: players,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/players/top/red-cards - Get top red cards
+   */
+  static async getTopRedCards(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const league = parseInt(req.query.league as string);
+      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+
+      if (isNaN(league)) {
+        res.status(400).json({ status: 'ERROR', message: 'League ID is required' });
+        return;
+      }
+
+      const players = await footballDataCacheService.getTopRedCards(league, season);
+
+      res.json({
+        status: 'SUCCESS',
+        results: players.length,
+        response: players,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/players/top/scorers/predictions - Get predictions for top scorers
+   * This endpoint provides predictions based on current season performance
+   */
+  static async getTopScorersPredictions(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const league = parseInt(req.query.league as string);
+      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+
+      if (isNaN(league)) {
+        res.status(400).json({ status: 'ERROR', message: 'League ID is required' });
+        return;
+      }
+
+      // Get current top scorers
+      const currentScorers = await footballDataCacheService.getTopScorers(league, season);
+
+      // Calculate predictions based on:
+      // 1. Current goals per game ratio
+      // 2. Remaining matches estimate
+      // 3. Historical performance
+      const predictions = currentScorers.map((scorer: any) => {
+        const stats = scorer.statistics?.[0];
+        const currentGoals = stats?.goals?.total || 0;
+        const gamesPlayed = stats?.games?.appearances || 1;
+        const goalsPerGame = currentGoals / gamesPlayed;
+        
+        // Estimate remaining games (assuming ~38 games per season for most leagues)
+        const estimatedTotalGames = 38;
+        const remainingGames = Math.max(0, estimatedTotalGames - gamesPlayed);
+        const predictedGoals = Math.round(currentGoals + (goalsPerGame * remainingGames));
+
+        return {
+          player: scorer.player,
+          current: {
+            goals: currentGoals,
+            games: gamesPlayed,
+            goalsPerGame: parseFloat(goalsPerGame.toFixed(2)),
+          },
+          prediction: {
+            predictedGoals: predictedGoals,
+            remainingGames: remainingGames,
+            confidence: gamesPlayed >= 10 ? 'high' : gamesPlayed >= 5 ? 'medium' : 'low',
+          },
+          statistics: scorer.statistics,
+        };
+      }).sort((a: any, b: any) => b.prediction.predictedGoals - a.prediction.predictedGoals);
+
+      res.json({
+        status: 'SUCCESS',
+        results: predictions.length,
+        response: predictions,
+        note: 'Predictions are based on current season performance and estimated remaining games',
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/teams/:id/statistics - Get team statistics
    */
   static async getTeamStatistics(req: Request, res: Response): Promise<void> {
