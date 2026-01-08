@@ -1096,16 +1096,62 @@ export class FootballController {
       // ✅ First try database cache (fast, no API calls)
       let transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, undefined, dateRange);
 
-      // ✅ If no data in database, we cannot use /transfers endpoint without parameters
-      // API-Football requires at least one parameter (team or player)
-      // Instead, return empty result - user should use /transfers/sync to populate database first
+      // ✅ If no data in database, use /transfers endpoint directly
       if (transfersByLeagues.length === 0) {
-        logger.debug('📡 No cached transfers found in database');
-        logger.debug('⚠️ Cannot fetch from API /transfers without team/player parameter');
-        logger.debug('💡 Tip: Use /transfers/sync endpoint to populate database, or specify leagueIds');
+        logger.debug('📡 No cached transfers found in database, fetching from API...');
         
-        // Return empty result - user should use /transfers/sync to populate database first
-        transfersByLeagues = [];
+        // Use direct transfers endpoint (same as /transfers endpoint)
+        const allTransfers = await footballDataCacheService.getTransfers({});
+        
+        if (allTransfers && allTransfers.length > 0) {
+          logger.debug(`📡 Fetched ${allTransfers.length} transfers from API`);
+          
+          // Filter by date range if specified
+          let filteredTransfers = allTransfers;
+          if (dateRange) {
+            filteredTransfers = allTransfers.filter((transfer: any) => {
+              if (!transfer.transfers || !Array.isArray(transfer.transfers)) {
+                return false;
+              }
+              // Check if any transfer in the array falls within date range
+              return transfer.transfers.some((t: any) => {
+                if (!t.date) return false;
+                // Handle different date formats (YYMMDD or YYYY-MM-DD)
+                let transferDate: Date;
+                try {
+                  if (t.date.length === 6) {
+                    // YYMMDD format (e.g., "310812" = 31/08/2012)
+                    const year = 2000 + parseInt(t.date.substring(0, 2));
+                    const month = parseInt(t.date.substring(2, 4)) - 1;
+                    const day = parseInt(t.date.substring(4, 6));
+                    transferDate = new Date(year, month, day);
+                  } else {
+                    transferDate = new Date(t.date);
+                  }
+                } catch {
+                  return false;
+                }
+                const fromDateObj = new Date(dateRange.from);
+                const toDateObj = new Date(dateRange.to);
+                return transferDate >= fromDateObj && transferDate <= toDateObj;
+              });
+            });
+            logger.debug(`📡 Filtered to ${filteredTransfers.length} transfers within date range`);
+          }
+
+          // Group transfers by league
+          // Since transfers don't have league info directly, we return all in one group
+          if (filteredTransfers.length > 0) {
+            transfersByLeagues = [{
+              leagueId: leagueIds && leagueIds.length > 0 ? leagueIds[0] : 0,
+              leagueName: leagueIds && leagueIds.length > 0 ? `League ${leagueIds[0]}` : 'All Leagues',
+              transfers: filteredTransfers, // Array of player transfers
+            }];
+            logger.debug(`✅ Returning ${filteredTransfers.length} transfers grouped in ${transfersByLeagues.length} league(s)`);
+          }
+        } else {
+          logger.debug('⚠️ No transfers returned from API');
+        }
       } else {
         logger.debug(`✅ Using ${transfersByLeagues.length} leagues from database cache`);
       }

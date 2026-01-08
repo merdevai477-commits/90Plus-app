@@ -619,20 +619,15 @@ class FootballService {
    * Get transfers
    * Note: API-Football does not support 'date' parameter for transfers endpoint
    * Date filtering should be done client-side after fetching
-   * Note: API-Football requires at least one parameter (team or player)
+   * Note: Can be called without parameters to get all transfers
    */
   async getTransfers(params: { team?: number; player?: number; date?: string }): Promise<any[]> {
-    // API-Football requires at least one parameter (team or player)
-    if (!params.team && !params.player) {
-      logger.warn('⚠️ getTransfers called without team or player parameter - API requires at least one');
-      return []; // Return empty array instead of calling API
-    }
-    
     const apiParams: Record<string, any> = {};
     if (params.team) apiParams.team = params.team;
     if (params.player) apiParams.player = params.player;
     // Note: date parameter is not supported by API-Football transfers endpoint
     // We'll filter by date in the cache service instead
+    // Note: Can be called without parameters to get all transfers
     
     const allTransfers = await this.fetchFromApi<any[]>('/transfers', apiParams);
     
