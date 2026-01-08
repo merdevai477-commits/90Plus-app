@@ -1318,10 +1318,10 @@ export class FootballController {
                     }
                   }
                   
-                  // Found teams, try next league
-                  if (teamsWithLogos.length > 0) {
-                    logger.info(`✅ Got ${teamsWithLogos.length} teams from ${league.name}, continuing...`);
-                    break;
+                  // Found teams, continue to get more from other seasons/leagues
+                  if (standings && Array.isArray(standings) && standings.length > 0) {
+                    logger.info(`✅ Got teams from ${league.name} (season ${season}), continuing to get more...`);
+                    // Don't break - continue to get all teams from all seasons/leagues
                   }
                 } else {
                   logger.warn(`⚠️ No standings returned for ${league.name} (season ${season}) - Response: ${JSON.stringify(standings).substring(0, 200)}`);
