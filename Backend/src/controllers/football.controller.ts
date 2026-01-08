@@ -1096,13 +1096,16 @@ export class FootballController {
       // ✅ First try database cache (fast, no API calls)
       let transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, undefined, dateRange);
 
-      // ✅ If no data in database, use direct API call to /transfers endpoint
-      // This is MUCH faster than getTransfersByLeagues which tries to get standings first
+      // ✅ If no data in database, we cannot use /transfers endpoint without parameters
+      // API-Football requires at least one parameter (team or player)
+      // Instead, return empty result or use cached transfers from database
       if (transfersByLeagues.length === 0) {
-        logger.debug('📡 No cached transfers found, fetching directly from API /transfers endpoint...');
+        logger.debug('📡 No cached transfers found in database');
+        logger.debug('⚠️ Cannot fetch from API /transfers without team/player parameter');
+        logger.debug('💡 Tip: Use /transfers/sync endpoint to populate database, or specify leagueIds');
         
-        // Use direct transfers endpoint (faster - same as /transfers endpoint)
-        const allTransfers = await footballDataCacheService.getTransfers({});
+        // Return empty result - user should use /transfers/sync to populate database first
+        transfersByLeagues = [];
         
         if (allTransfers && allTransfers.length > 0) {
           logger.debug(`📡 Fetched ${allTransfers.length} transfers from API`);

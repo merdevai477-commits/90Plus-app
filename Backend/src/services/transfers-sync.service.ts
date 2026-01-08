@@ -439,10 +439,13 @@ class TransfersSyncService {
             }
 
             // Fetch recent transfers from API
-            logger.info('[TransfersSync] 📡 Checking for new transfers...');
-            const transfers = await footballService.getTransfers({});
-
-            if (transfers && transfers.length > 0) {
+            // Note: API-Football requires at least one parameter (team or player)
+            // For quick check, we skip API call and rely on database sync from other sources
+            logger.info('[TransfersSync] 📡 Quick check: Skipping API call (requires team/player parameter)');
+            logger.info('[TransfersSync] ℹ️ New transfers will be synced via full sync or manual sync endpoints');
+            
+            // Return stats without API call
+            const transfers: any[] = [];
                 // Filter to only new transfers (if we have a latest date)
                 let newTransfers = transfers;
                 
