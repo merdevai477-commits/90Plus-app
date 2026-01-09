@@ -253,6 +253,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (userData) {
       // Update local state from cached user data
+      // ✅ Always use userData from cache (not just on first load)
       if (userData.position) setPosition(userData.position);
       if (userData.countryFlag) setCountryFlag(userData.countryFlag);
       if (userData.avatar) {
@@ -293,7 +294,7 @@ export default function ProfileScreen() {
       }
       if (userData.brandLogo) setBrand(userData.brandLogo);
 
-      // Update stats if available
+      // ✅ Update stats if available - always sync from cache
       if (userData.age || userData.height || userData.weight || userData.preferredFoot) {
         setStats({
           age: userData.age?.toString() || DEFAULT_STATS.age,
@@ -306,7 +307,7 @@ export default function ProfileScreen() {
       // Update globalState
       globalState.username = userData.username;
     }
-  }, [userData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userData]); // ✅ Keep dependency on userData to sync when cache updates
 
   // Ref to store refreshCache to avoid dependency issues
   const refreshCacheRef = useRef(refreshCache);
@@ -609,14 +610,31 @@ export default function ProfileScreen() {
     const token = await getValidatedToken();
     if (!token) return;
 
+    // Store original value for rollback
+    const originalPosition = userData?.position || DEFAULT_POSITION;
+
     try {
       // Optimistic update
       setPosition(pos);
+      await updateCachedUserData({ position: pos }); // ✅ إضافة هذا
 
       // Save to backend
-      await CardProfileService.updateCardProfile(token, { position: pos });
+      const result = await CardProfileService.updateCardProfile(token, { position: pos });
+      if (result.success) {
+        // ✅ Force refresh cache to get latest data
+        await refreshCache(true);
+        toast.showSuccess('تم', 'تم تحديث المركز بنجاح');
+      } else {
+        // Rollback on error
+        setPosition(originalPosition);
+        await updateCachedUserData({ position: originalPosition });
+        toast.showError('خطأ', result.error || 'فشل في حفظ المركز');
+      }
     } catch (error: any) {
       logger.error('Error saving position:', error);
+      // Rollback on error
+      setPosition(originalPosition);
+      await updateCachedUserData({ position: originalPosition });
       toast.showError('خطأ', error.message || 'فشل في حفظ المركز');
     }
   };
@@ -629,6 +647,10 @@ export default function ProfileScreen() {
 
     const token = await getValidatedToken();
     if (!token) return;
+
+    // Store original values for rollback
+    const originalClub = userData?.clubLogo;
+    const originalFavoriteTeam = userData?.favoriteTeam;
 
     try {
       // ✅ Always fetch fresh logo from API to ensure it's real and up-to-date
@@ -658,7 +680,7 @@ export default function ProfileScreen() {
       // ✅ Update cached user data immediately (for instant UI update)
       await updateCachedUserData({ 
         favoriteTeam: selectedClub.name,
-        clubLogo: clubLogo // ✅ Save logo URL with user data
+        clubLogo: clubLogo
       });
 
       // ✅ Save to backend (persistent storage)
@@ -667,17 +689,27 @@ export default function ProfileScreen() {
         favoriteTeam: selectedClub.name
       });
 
-      // ✅ If backend save successful, ensure cache is updated
-      if (result.success && result.data) {
+      if (result.success) {
+        // ✅ Force refresh cache to get latest data
+        await refreshCache(true);
+        toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح`);
+      } else {
+        // Rollback on error
+        setClub(originalClub || undefined);
         await updateCachedUserData({
-          favoriteTeam: result.data.favoriteTeam || selectedClub.name,
-          clubLogo: result.data.clubLogo || clubLogo
+          favoriteTeam: originalFavoriteTeam,
+          clubLogo: originalClub,
         });
+        toast.showError('خطأ', result.error || 'فشل في حفظ النادي');
       }
-      
-      toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح`);
     } catch (error: any) {
       logger.error('Error saving club:', error);
+      // Rollback on error
+      setClub(originalClub || undefined);
+      await updateCachedUserData({
+        favoriteTeam: originalFavoriteTeam,
+        clubLogo: originalClub,
+      });
       toast.showError('خطأ', error.message || 'فشل في حفظ النادي');
     }
   };
@@ -691,6 +723,9 @@ export default function ProfileScreen() {
     const token = await getValidatedToken();
     if (!token) return;
 
+    // Store original value for rollback
+    const originalBrand = userData?.brandLogo;
+
     try {
       // ✅ Validate logo is a valid URL
       if (!selectedBrand.logo.startsWith('http')) {
@@ -703,7 +738,7 @@ export default function ProfileScreen() {
       
       // ✅ Update cached user data immediately (for instant UI update)
       await updateCachedUserData({ 
-        brandLogo: selectedBrand.logo // ✅ Save logo URL with user data
+        brandLogo: selectedBrand.logo
       });
 
       // ✅ Save to backend (persistent storage)
@@ -711,16 +746,25 @@ export default function ProfileScreen() {
         brandLogo: selectedBrand.logo 
       });
 
-      // ✅ If backend save successful, ensure cache is updated
-      if (result.success && result.data) {
+      if (result.success) {
+        // ✅ Force refresh cache to get latest data
+        await refreshCache(true);
+        toast.showSuccess('تم', `تم حفظ ${selectedBrand.name} بنجاح`);
+      } else {
+        // Rollback on error
+        setBrand(originalBrand || undefined);
         await updateCachedUserData({
-          brandLogo: result.data.brandLogo || selectedBrand.logo
+          brandLogo: originalBrand,
         });
+        toast.showError('خطأ', result.error || 'فشل في حفظ البراند');
       }
-      
-      toast.showSuccess('تم', `تم حفظ ${selectedBrand.name} بنجاح`);
     } catch (error: any) {
       logger.error('Error saving brand:', error);
+      // Rollback on error
+      setBrand(originalBrand || undefined);
+      await updateCachedUserData({
+        brandLogo: originalBrand,
+      });
       toast.showError('خطأ', error.message || 'فشل في حفظ البراند');
     }
   };
@@ -754,21 +798,57 @@ export default function ProfileScreen() {
     const token = await getValidatedToken();
     if (!token) return;
 
+    // Store original values for rollback
+    const originalStats = {
+      age: userData?.age?.toString() || DEFAULT_STATS.age,
+      height: userData?.height?.toString() || DEFAULT_STATS.height,
+      weight: userData?.weight?.toString() || DEFAULT_STATS.weight,
+      foot: (userData?.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
+    };
+
     try {
       // Optimistic update
       setStats(newStats);
-
-      // Save to backend
-      await CardProfileService.updateCardProfile(token, {
+      await updateCachedUserData({ // ✅ إضافة هذا
         age,
         height,
         weight,
         preferredFoot: newStats.foot,
       });
 
-      toast.showSuccess('تم', 'تم حفظ البيانات بنجاح');
+      // Save to backend
+      const result = await CardProfileService.updateCardProfile(token, {
+        age,
+        height,
+        weight,
+        preferredFoot: newStats.foot,
+      });
+
+      if (result.success) {
+        // ✅ Force refresh cache to get latest data
+        await refreshCache(true);
+        toast.showSuccess('تم', 'تم حفظ البيانات بنجاح');
+      } else {
+        // Rollback on error
+        setStats(originalStats);
+        await updateCachedUserData({
+          age: parseInt(originalStats.age),
+          height: parseInt(originalStats.height),
+          weight: parseInt(originalStats.weight),
+          preferredFoot: originalStats.foot,
+        });
+        toast.showError('خطأ', result.error || 'فشل في حفظ البيانات');
+      }
     } catch (error: any) {
       logger.error('Error saving stats:', error);
+      // Rollback on error
+      setStats(originalStats);
+      await updateCachedUserData({
+        age: parseInt(originalStats.age),
+        height: parseInt(originalStats.height),
+        weight: parseInt(originalStats.weight),
+        preferredFoot: originalStats.foot,
+      });
       toast.showError('خطأ', error.message || 'فشل في حفظ البيانات');
     }
   };
