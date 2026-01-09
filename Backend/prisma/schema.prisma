@@ -122,6 +122,9 @@ model User {
   // Strikes
   strikes Strike[]
 
+  // Comment Mentions
+  commentMentions CommentMention[] @relation("CommentMentions")
+
   // Favorite Matches
   favoriteMatches FavoriteMatch[]
 
@@ -299,8 +302,8 @@ model QuizCategory {
   unlockLevel Int      @default(1)
   createdAt   DateTime @default(now())
 
-  questions  QuizQuestion[]
-  attempts   QuizAttempt[]
+  questions    QuizQuestion[]
+  attempts     QuizAttempt[]
   dailyQuizzes DailyQuiz[]
 
   @@index([isLocked])
@@ -383,15 +386,15 @@ model UserQuizAnswer {
 }
 
 model UserQuizState {
-  id                   String    @id @default(uuid())
-  userId               String    @unique
-  currentOpenCategoryId String?  // النوع المفتوح حالياً
-  lastCategoryOpenedAt DateTime? // متى فتح آخر نوع
-  nextCategoryUnlockAt DateTime? // متى يفتح النوع التالي
-  completedCategoryIds String[]  @default([]) // الأنواع المكتملة
-  lastAttemptAt        DateTime? // آخر محاولة
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  currentOpenCategoryId String? // النوع المفتوح حالياً
+  lastCategoryOpenedAt  DateTime? // متى فتح آخر نوع
+  nextCategoryUnlockAt  DateTime? // متى يفتح النوع التالي
+  completedCategoryIds  String[]  @default([]) // الأنواع المكتملة
+  lastAttemptAt         DateTime? // آخر محاولة
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -402,13 +405,13 @@ model UserQuizState {
 }
 
 model DailyQuiz {
-  id                String   @id @default(uuid())
-  categoryId        String
-  questionIds       String[] // قائمة معرفات الأسئلة للاختبار اليومي
-  date              DateTime @unique @db.Date // تاريخ اليوم (YYYY-MM-DD)
-  expiresAt         DateTime // وقت انتهاء الاختبار (24 ساعة من بداية اليوم)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id          String   @id @default(uuid())
+  categoryId  String
+  questionIds String[] // قائمة معرفات الأسئلة للاختبار اليومي
+  date        DateTime @unique @db.Date // تاريخ اليوم (YYYY-MM-DD)
+  expiresAt   DateTime // وقت انتهاء الاختبار (24 ساعة من بداية اليوم)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   category QuizCategory @relation(fields: [categoryId], references: [id])
 
@@ -659,13 +662,14 @@ model Comment {
   deletedAt DateTime?
   createdAt DateTime  @default(now())
 
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel    Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
-  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies Comment[]     @relation("CommentReplies")
-  reports Report[]
-  likes   CommentLike[]
-  strikes Strike[]
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reel     Reel             @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  parent   Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[]        @relation("CommentReplies")
+  reports  Report[]
+  likes    CommentLike[]
+  strikes  Strike[]
+  mentions CommentMention[]
 
   @@index([userId])
   @@index([reelId])
@@ -673,6 +677,25 @@ model Comment {
   @@index([createdAt])
   @@index([isDeleted])
   @@map("comments")
+}
+
+// ============================================
+// COMMENT MENTIONS (الإشارات في التعليقات)
+// ============================================
+
+model CommentMention {
+  id              String   @id @default(uuid())
+  commentId       String
+  mentionedUserId String
+  createdAt       DateTime @default(now())
+
+  comment       Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedUser User    @relation("CommentMentions", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, mentionedUserId])
+  @@index([commentId])
+  @@index([mentionedUserId])
+  @@map("comment_mentions")
 }
 
 // ============================================

@@ -692,7 +692,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
     // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
-        const { content, parentId } = req.body;
+        const { content, parentId, mentions } = req.body;
         const clerkUserId = req.auth?.userId;
 
         if (!content || content.trim().length === 0) {
@@ -795,6 +795,52 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
                 }
             }
         });
+
+        // Parse mentions from content if not provided
+        let parsedMentions: string[] = mentions || [];
+        if (!mentions && content) {
+            const mentionRegex = /@(\w+)/g;
+            const matches = content.match(mentionRegex);
+            if (matches) {
+                parsedMentions = matches.map(m => m.replace('@', ''));
+            }
+        }
+
+        // Process mentions in comments
+        if (parsedMentions && parsedMentions.length > 0) {
+            const { NotificationService } = await import('../services/notification.service');
+            
+            for (const username of parsedMentions) {
+                const mentionedUser = await prisma.user.findUnique({
+                    where: { username: username.replace(/^@/, '') },
+                    select: { id: true, username: true, displayName: true, avatar: true }
+                });
+
+                if (mentionedUser && mentionedUser.id !== user.id) {
+                    // Create CommentMention record
+                    await prisma.commentMention.create({
+                        data: {
+                            commentId: comment.id,
+                            mentionedUserId: mentionedUser.id
+                        }
+                    });
+
+                    // Create notification using NotificationService
+                    await NotificationService.createSocialNotification({
+                        userId: mentionedUser.id,
+                        actorId: user.id,
+                        title: 'تم الإشارة إليك في تعليق',
+                        message: `قام ${user.displayName || user.username} بالإشارة إليك في تعليق`,
+                        type: 'MENTION',
+                        data: {
+                            reelId: id,
+                            commentId: comment.id,
+                            parentCommentId: parentId || null,
+                        },
+                    });
+                }
+            }
+        }
 
         // Get reel info
         const reel = await prisma.reel.findUnique({
@@ -1162,22 +1208,19 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
 
         const likesCount = await prisma.commentLike.count({ where: { commentId } });
 
-        // Notify comment owner (if not self)
+        // Notify comment owner (if not self) using NotificationService
         if (comment.userId !== user.id) {
-            await prisma.notification.create({
+            const { NotificationService } = await import('../services/notification.service');
+            await NotificationService.createSocialNotification({
+                userId: comment.userId,
+                actorId: user.id,
+                title: 'إعجاب على تعليقك',
+                message: `أعجب ${user.displayName || user.username} بتعليقك`,
+                type: 'LIKE',
                 data: {
-                    userId: comment.userId,
-                    title: 'إعجاب على تعليقك',
-                    message: `أعجب ${user.displayName || user.username} بتعليقك`,
-                    type: 'LIKE',
-                    data: { 
-                        commentId,
-                        reelId: comment.reelId,
-                        userId: user.id,
-                        username: user.username,
-                        avatar: user.avatar
-                    }
-                }
+                    commentId,
+                    reelId: comment.reelId,
+                },
             });
         }
 
@@ -1242,7 +1285,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
         // Check if comment exists and belongs to user
         const comment = await prisma.comment.findUnique({
             where: { id: commentId },
-            select: { id: true, userId: true }
+            select: { id: true, userId: true, reelId: true }
         });
 
         if (!comment) {
@@ -1255,10 +1298,19 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
             return;
         }
 
-        // Delete comment (cascade will delete replies and likes)
-        await prisma.comment.delete({
-            where: { id: commentId }
+        // Soft delete comment
+        await prisma.comment.update({
+            where: { id: commentId },
+            data: {
+                isDeleted: true,
+                deletedAt: new Date(),
+                content: '[تم حذف هذا التعليق]'
+            }
         });
+
+        // Invalidate cache
+        await clearResponseCache(`/reels/${comment.reelId}/comments`);
+        await redisCacheService.del(`reel:${comment.reelId}:comments`);
 
         res.json({ status: 'SUCCESS', message: 'Comment deleted successfully' });
     } catch (error: any) {
