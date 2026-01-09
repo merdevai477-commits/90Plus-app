@@ -224,7 +224,7 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
             return;
         }
 
-        const { position, countryFlag, age, height, weight, preferredFoot, clubLogo, brandLogo, favoriteTeam } = req.body;
+        const { position, countryFlag, age, height, weight, preferredFoot, clubLogo, brandLogo, favoriteTeam, country } = req.body;
 
         // Validate fields
         const validPositions = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'];
@@ -251,6 +251,7 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
             data: {
                 position: position || undefined,
                 countryFlag: countryFlag || undefined,
+                country: country || undefined, // ✅ NEW
                 age: age ? parseInt(age) : undefined,
                 height: height ? parseInt(height) : undefined,
                 weight: weight ? parseInt(weight) : undefined,
@@ -262,6 +263,7 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
             select: {
                 position: true,
                 countryFlag: true,
+                country: true, // ✅ NEW
                 age: true,
                 height: true,
                 weight: true,
@@ -481,12 +483,14 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
                 // FIFA Card fields
                 position: true,
                 countryFlag: true,
+                country: true, // ✅ NEW
                 age: true,
                 height: true,
                 weight: true,
                 preferredFoot: true,
                 clubLogo: true,
                 brandLogo: true,
+                socialLinks: true, // ✅ NEW
                 _count: {
                     select: {
                         followers: true,
@@ -543,6 +547,8 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
             data: {
                 user: {
                     ...user,
+                    socialLinks: (user.socialLinks as any) || [], // ✅ Ensure array format
+                    country: user.country || null,
                     followersCount: user._count.followers,
                     followingCount: user._count.following,
                     reelsCount: user._count.reels,
