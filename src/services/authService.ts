@@ -440,12 +440,19 @@ export interface SearchUserResult {
     // FIFA Card fields
     position?: string | null;
     countryFlag?: string | null;
+    country?: string; // ✅ NEW
+    location?: string; // ✅ NEW (optional for compatibility)
     age?: number | null;
     height?: number | null;
     weight?: number | null;
     preferredFoot?: string | null;
     clubLogo?: string | null;
     brandLogo?: string | null;
+    socialLinks?: Array<{ // ✅ NEW
+        platform: string;
+        url: string;
+        username?: string;
+    }>;
 }
 
 export interface UserReel {
@@ -468,6 +475,7 @@ export interface FollowStats {
 export interface CardProfile {
     position?: string;
     countryFlag?: string;
+    country?: string; // ✅ NEW
     age?: number;
     height?: number;
     weight?: number;

@@ -557,15 +557,45 @@ export default function ProfileScreen() {
     const token = await getValidatedToken();
     if (!token) return;
 
+    // Store original values for rollback
+    const originalCountryFlag = userData?.countryFlag || DEFAULT_COUNTRY_FLAG;
+    const originalLocation = userData?.location;
+
     try {
       // Optimistic update
       setCountryFlag(country.flag);
-      await updateCachedUserData({ location: country.name });
+      await updateCachedUserData({ 
+        location: country.name,
+        countryFlag: country.flag 
+      });
 
-      // Save to backend
-      await CardProfileService.updateCardProfile(token, { countryFlag: country.flag });
+      // Save to backend - إضافة country
+      const result = await CardProfileService.updateCardProfile(token, { 
+        countryFlag: country.flag,
+        country: country.name // ✅ NEW
+      });
+
+      if (result.success) {
+        // Force refresh cache to get latest data
+        await refreshCache(true);
+        toast.showSuccess('تم', 'تم تحديث البلد بنجاح');
+      } else {
+        // Rollback on error
+        setCountryFlag(originalCountryFlag);
+        await updateCachedUserData({ 
+          location: originalLocation,
+          countryFlag: originalCountryFlag 
+        });
+        toast.showError('خطأ', result.error || 'فشل في حفظ البلد');
+      }
     } catch (error: any) {
       logger.error('Error saving country:', error);
+      // Rollback on error
+      setCountryFlag(originalCountryFlag);
+      await updateCachedUserData({ 
+        location: originalLocation,
+        countryFlag: originalCountryFlag 
+      });
       toast.showError('خطأ', error.message || 'فشل في حفظ البلد');
     }
   };

@@ -27,6 +27,7 @@ import { globalState } from '../../globalState';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
 import { useVideos, Comment } from '../../contexts/VideosContext';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
+import SocialLinksSection from '../../components/profile/SocialLinksSection';
 
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
@@ -384,7 +385,7 @@ export default function UserProfileScreen() {
           <View style={styles.detailsRow}>
             <View style={styles.detailItem}>
               <Ionicons name="location-outline" size={16} color={ProfileTheme.colors.textSecondary} />
-              <Text style={styles.detailText}>مصر</Text>
+              <Text style={styles.detailText}>{user.country || user.location || 'مصر'}</Text>
             </View>
             <View style={styles.detailItem}>
               <Ionicons name="football" size={16} color={ProfileTheme.colors.neonGreen} />
@@ -404,6 +405,22 @@ export default function UserProfileScreen() {
                 userId={user.id} 
                 token={null} 
                 compact={true} 
+              />
+            </View>
+          )}
+
+          {/* Social Links Section - الروابط الاجتماعية */}
+          {user.socialLinks && Array.isArray(user.socialLinks) && user.socialLinks.length > 0 && (
+            <View style={styles.socialLinksContainer}>
+              <SocialLinksSection
+                links={user.socialLinks
+                  .map((link: any) => ({
+                    platform: link.platform || 'website',
+                    url: link.url || '',
+                    username: link.username,
+                  }))
+                  .filter((link: any) => link.url && link.url.trim() !== '')}
+                isOwnProfile={false}
               />
             </View>
           )}
@@ -672,5 +689,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 12,
     width: '100%',
+  },
+  socialLinksContainer: {
+    paddingHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 8,
   },
 });
