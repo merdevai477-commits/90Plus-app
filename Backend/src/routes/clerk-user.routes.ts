@@ -274,6 +274,9 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
             },
         });
 
+        // ✅ Invalidate Backend Cache to force refresh on next request
+        invalidateUserCache(clerkUserId);
+
         res.json({
             status: 'SUCCESS',
             message: 'Card profile updated successfully',
