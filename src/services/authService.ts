@@ -960,7 +960,8 @@ export class ReelsService {
     static async addComment(
         token: string, 
         reelId: string, 
-        content: string
+        content: string,
+        mentions?: string[]
     ): Promise<{ success: boolean; comment?: any; error?: string }> {
         try {
             const response = await fetch(`${API_URL}/reels/${reelId}/comments`, {
@@ -969,7 +970,10 @@ export class ReelsService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({ 
+                    content,
+                    mentions: mentions || []
+                }),
             });
 
             const data = await response.json();
@@ -991,7 +995,8 @@ export class ReelsService {
         token: string, 
         reelId: string, 
         parentCommentId: string,
-        content: string
+        content: string,
+        mentions?: string[]
     ): Promise<{ success: boolean; reply?: any; error?: string }> {
         try {
             const response = await fetch(`${API_URL}/reels/${reelId}/comments`, {
@@ -1000,7 +1005,11 @@ export class ReelsService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ content, parentId: parentCommentId }),
+                body: JSON.stringify({ 
+                    content, 
+                    parentId: parentCommentId,
+                    mentions: mentions || []
+                }),
             });
 
             const data = await response.json();

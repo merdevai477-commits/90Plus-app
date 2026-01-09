@@ -27,6 +27,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService } from '../../src/services/authService';
 import { ActionSheetIOS } from 'react-native';
+import { router } from 'expo-router';
 
 const MAX_COMMENTS_DISPLAY = 10;
 // Requirements 15.1, 15.2: Separate limits for comments and replies
@@ -96,6 +97,14 @@ export default function CommentsModal({
     const [commentsWithReplies, setCommentsWithReplies] = useState<CommentWithReplies[]>([]);
     const [loadedComments, setLoadedComments] = useState<Comment[]>([]);
     const [longPressedCommentId, setLongPressedCommentId] = useState<string | null>(null);
+    
+    // Mention picker state
+    const [showMentionPicker, setShowMentionPicker] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [mentionUsers, setMentionUsers] = useState<any[]>([]);
+    const [mentionPosition, setMentionPosition] = useState({ start: 0, end: 0 });
+    const mentionSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    
     const inputRef = useRef<TextInput>(null);
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -104,6 +113,74 @@ export default function CommentsModal({
     const haptic = useHaptic();
     const { t } = useLanguage();
     const { getToken, userId: sessionUserId } = useAuth();
+
+    // Parse mentions from text
+    const parseMentions = useCallback((text: string): string[] => {
+        const mentionRegex = /@(\w+)/g;
+        const matches = text.match(mentionRegex);
+        return matches ? matches.map(m => m.replace('@', '')) : [];
+    }, []);
+
+    // Search users for mentions with debouncing
+    const searchUsers = useCallback(async (query: string) => {
+        if (query.length < 1) {
+            setMentionUsers([]);
+            return;
+        }
+        
+        try {
+            const token = await getToken();
+            if (token) {
+                const users = await ReelsService.searchUsersForMention(token, query);
+                setMentionUsers(users);
+            }
+        } catch (error) {
+            console.error('Error searching users:', error);
+            setMentionUsers([]);
+        }
+    }, [getToken]);
+
+    // Handle text change with mention detection
+    const handleTextChange = useCallback((text: string) => {
+        setNewComment(text);
+        
+        // Detect @ mention
+        const cursorPosition = text.length;
+        const lastAtIndex = text.lastIndexOf('@', cursorPosition - 1);
+        
+        if (lastAtIndex >= 0) {
+            const textAfterAt = text.substring(lastAtIndex + 1, cursorPosition);
+            // Check if there's a space or newline after @ (means mention ended)
+            if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
+                setMentionQuery(textAfterAt);
+                setMentionPosition({ start: lastAtIndex, end: cursorPosition });
+                setShowMentionPicker(true);
+                
+                // Debounce search
+                if (mentionSearchTimeoutRef.current) {
+                    clearTimeout(mentionSearchTimeoutRef.current);
+                }
+                mentionSearchTimeoutRef.current = setTimeout(() => {
+                    searchUsers(textAfterAt);
+                }, 300);
+            } else {
+                setShowMentionPicker(false);
+            }
+        } else {
+            setShowMentionPicker(false);
+        }
+    }, [searchUsers]);
+
+    // Handle mention selection
+    const handleSelectMention = useCallback((username: string) => {
+        const beforeMention = newComment.substring(0, mentionPosition.start);
+        const afterMention = newComment.substring(mentionPosition.end);
+        const newText = `${beforeMention}@${username} ${afterMention}`;
+        setNewComment(newText);
+        setShowMentionPicker(false);
+        setMentionQuery('');
+        setMentionUsers([]);
+    }, [newComment, mentionPosition]);
 
     // Check if current user has reached comment/reply limits - Requirements 15.1, 15.2, 15.4
     // Primary source: active session userId, fallback to globalState only if session unavailable
@@ -316,8 +393,20 @@ export default function CommentsModal({
             }).start();
             setReplyingTo(null);
             setLongPressedCommentId(null);
+            setShowMentionPicker(false);
+            setMentionQuery('');
+            setMentionUsers([]);
         }
     }, [visible]);
+
+    // Cleanup mention search timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (mentionSearchTimeoutRef.current) {
+                clearTimeout(mentionSearchTimeoutRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -623,12 +712,15 @@ export default function CommentsModal({
         haptic.trigger('light');
         setIsSubmitting(true);
 
+        // Parse mentions from comment text
+        const mentions = parseMentions(newComment.trim());
+
         try {
             const token = await getToken();
             if (token && reelId) {
                 if (replyingTo) {
                     // Adding a reply - Requirements 14.2, 14.3
-                    const result = await ReelsService.addReply(token, reelId, replyingTo.commentId, newComment.trim());
+                    const result = await ReelsService.addReply(token, reelId, replyingTo.commentId, newComment.trim(), mentions);
                     if (result.success && result.reply) {
                         // Optimistic update - add reply to UI immediately (Requirement 14.3)
                         const newReply: Reply = {
@@ -660,7 +752,7 @@ export default function CommentsModal({
                     }
                 } else {
                     // Adding a comment
-                    const result = await ReelsService.addComment(token, reelId, newComment.trim());
+                    const result = await ReelsService.addComment(token, reelId, newComment.trim(), mentions);
                     if (!result.success) {
                         if (result.error?.includes('الحد الأقصى') || result.error?.includes('MAX_COMMENTS')) {
                             triggerShake();
@@ -692,44 +784,108 @@ export default function CommentsModal({
         }
 
         setNewComment('');
+        setShowMentionPicker(false);
         setIsSubmitting(false);
         Keyboard.dismiss();
     };
 
+    // Render text with clickable mentions
+    const renderTextWithMentions = useCallback((text: string) => {
+        const parts = text.split(/(@\w+)/g);
+        return (
+            <Text style={styles.commentText}>
+                {parts.map((part, index) => {
+                    if (part.startsWith('@')) {
+                        const username = part.replace('@', '');
+                        return (
+                            <Text
+                                key={index}
+                                style={styles.mentionText}
+                                onPress={() => {
+                                    haptic.trigger('light');
+                                    router.push({
+                                        pathname: '/user/[username]',
+                                        params: { username }
+                                    });
+                                }}
+                            >
+                                {part}
+                            </Text>
+                        );
+                    }
+                    return <Text key={index}>{part}</Text>;
+                })}
+            </Text>
+        );
+    }, [haptic]);
+
     // Render a single reply
-    const renderReply = (reply: Reply, parentCommentId: string) => (
-        <View key={reply.id} style={styles.replyItem}>
-            <Image
-                source={{ 
-                    uri: reply.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(reply.user.name || 'User')}&background=0D8ABC&color=fff`
-                }}
-                style={styles.replyAvatar}
-                contentFit="cover"
-            />
-            <View style={styles.replyContent}>
-                <View style={styles.commentHeader}>
-                    <View style={styles.commentUserInfo}>
-                        <Text style={styles.replyUsername}>{reply.user.name}</Text>
-                        {reply.user.verified && <CheckCircle size={10} color={COLORS.info} />}
+    const renderReply = (reply: Reply, parentCommentId: string) => {
+        const isOwnReply = currentUserId && reply.user.id && 
+            String(currentUserId) === String(reply.user.id);
+        
+        return (
+            <View key={reply.id} style={styles.replyItem}>
+                <Image
+                    source={{ 
+                        uri: reply.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(reply.user.name || 'User')}&background=0D8ABC&color=fff`
+                    }}
+                    style={styles.replyAvatar}
+                    contentFit="cover"
+                />
+                <View style={styles.replyContent}>
+                    <View style={styles.commentHeader}>
+                        <View style={styles.commentUserInfo}>
+                            <Text style={styles.replyUsername}>{reply.user.name}</Text>
+                            {reply.user.verified && <CheckCircle size={10} color={COLORS.info} />}
+                        </View>
+                        <View style={styles.replyHeaderRight}>
+                            <Text style={styles.replyTimestamp}>{reply.timestamp}</Text>
+                            {/* Report and Delete buttons for replies */}
+                            {!isOwnReply && (
+                                <TouchableOpacity
+                                    onPress={() => handleReportComment(reply.id)}
+                                    style={styles.replyReportButton}
+                                >
+                                    <Flag size={12} color={COLORS.info} />
+                                </TouchableOpacity>
+                            )}
+                            {isOwnReply && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        Alert.alert(
+                                            'حذف الرد',
+                                            'هل أنت متأكد من حذف هذا الرد؟',
+                                            [
+                                                { text: 'إلغاء', style: 'cancel' },
+                                                { text: 'حذف', style: 'destructive', onPress: () => handleDeleteComment(reply.id) }
+                                            ]
+                                        );
+                                    }}
+                                    style={styles.replyDeleteButton}
+                                >
+                                    <Trash2 size={12} color={COLORS.error} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
-                    <Text style={styles.replyTimestamp}>{reply.timestamp}</Text>
+                    {renderTextWithMentions(reply.text)}
                 </View>
-                <Text style={styles.replyText}>{reply.text}</Text>
+                {/* Like button for reply */}
+                <TouchableOpacity 
+                    style={styles.replyLike} 
+                    onPress={() => handleToggleReplyLike(reply.id, parentCommentId)}
+                >
+                    <Heart size={12} color={reply.liked ? COLORS.error : '#666'} fill={reply.liked ? COLORS.error : 'none'} />
+                    {reply.likes > 0 && (
+                        <Text style={[styles.replyLikeCount, reply.liked && styles.commentLikeCountActive]}>
+                            {reply.likes}
+                        </Text>
+                    )}
+                </TouchableOpacity>
             </View>
-            {/* Like button for reply */}
-            <TouchableOpacity 
-                style={styles.replyLike} 
-                onPress={() => handleToggleReplyLike(reply.id, parentCommentId)}
-            >
-                <Heart size={12} color={reply.liked ? COLORS.error : '#666'} fill={reply.liked ? COLORS.error : 'none'} />
-                {reply.likes > 0 && (
-                    <Text style={[styles.replyLikeCount, reply.liked && styles.commentLikeCountActive]}>
-                        {reply.likes}
-                    </Text>
-                )}
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     const renderItem = ({ item }: { item: CommentWithReplies }) => {
         const isOwnComment = currentUserId && item.user.id && 
@@ -801,7 +957,7 @@ export default function CommentsModal({
                                     )}
                                 </View>
                             </View>
-                            <Text style={styles.commentText}>{item.text}</Text>
+                            {renderTextWithMentions(item.text)}
 
                             {/* Comment Actions - Requirements 14.1 */}
                             <View style={styles.commentActions}>
@@ -812,6 +968,37 @@ export default function CommentsModal({
                                     <MessageCircle size={14} color="#888" />
                                     <Text style={styles.replyText}>رد</Text>
                                 </TouchableOpacity>
+                                
+                                {/* Report button - visible always */}
+                                {!isOwnComment && (
+                                    <TouchableOpacity
+                                        onPress={() => handleReportComment(item.id)}
+                                        style={styles.reportButton}
+                                    >
+                                        <Flag size={14} color={COLORS.info} />
+                                        <Text style={styles.reportButtonText}>إبلاغ</Text>
+                                    </TouchableOpacity>
+                                )}
+                                
+                                {/* Delete button - visible always */}
+                                {isOwnComment && (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            Alert.alert(
+                                                'حذف التعليق',
+                                                'هل أنت متأكد من حذف هذا التعليق؟',
+                                                [
+                                                    { text: 'إلغاء', style: 'cancel' },
+                                                    { text: 'حذف', style: 'destructive', onPress: () => handleDeleteComment(item.id) }
+                                                ]
+                                            );
+                                        }}
+                                        style={styles.deleteButton}
+                                    >
+                                        <Trash2 size={14} color={COLORS.error} />
+                                        <Text style={styles.deleteButtonText}>حذف</Text>
+                                    </TouchableOpacity>
+                                )}
                                 
                                 {/* View Replies - Requirements 14.4 */}
                                 {(item.repliesCount || 0) > 0 && (
@@ -944,6 +1131,35 @@ export default function CommentsModal({
                         </View>
                     )}
 
+                    {/* Mention Picker */}
+                    {showMentionPicker && mentionUsers.length > 0 && (
+                        <View style={styles.mentionPickerContainer}>
+                            <FlatList
+                                data={mentionUsers}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={styles.mentionItem}
+                                        onPress={() => handleSelectMention(item.username)}
+                                    >
+                                        <Image
+                                            source={{ uri: item.avatar || `https://ui-avatars.com/api/?name=${item.username}` }}
+                                            style={styles.mentionAvatar}
+                                        />
+                                        <View style={styles.mentionInfo}>
+                                            <Text style={styles.mentionUsername}>@{item.username}</Text>
+                                            {item.displayName && (
+                                                <Text style={styles.mentionDisplayName}>{item.displayName}</Text>
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
+                                style={styles.mentionList}
+                                keyboardShouldPersistTaps="handled"
+                            />
+                        </View>
+                    )}
+
                     <Animated.View 
                         style={[
                             styles.inputContainer, 
@@ -965,7 +1181,7 @@ export default function CommentsModal({
                                 }
                                 placeholderTextColor={(replyingTo ? canReply : canComment) ? "#666" : "#FF6B6B"}
                                 value={newComment}
-                                onChangeText={setNewComment}
+                                onChangeText={handleTextChange}
                                 multiline
                                 maxLength={500}
                                 editable={replyingTo ? canReply : canComment}
@@ -1103,6 +1319,11 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     commentHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    replyHeaderRight: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
@@ -1320,5 +1541,85 @@ const styles = StyleSheet.create({
         fontSize: 11,
         textAlign: 'center',
         marginTop: 4,
-    }
+    },
+    // Mention Picker Styles
+    mentionPickerContainer: {
+        position: 'absolute',
+        bottom: 60,
+        left: 12,
+        right: 12,
+        maxHeight: 200,
+        backgroundColor: '#2A2A2A',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.glassBorder,
+        zIndex: 1000,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    mentionList: {
+        maxHeight: 200,
+    },
+    mentionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
+    },
+    mentionAvatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        marginRight: 12,
+    },
+    mentionInfo: {
+        flex: 1,
+    },
+    mentionUsername: {
+        color: COLORS.textPrimary,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    mentionDisplayName: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        marginTop: 2,
+    },
+    mentionText: {
+        color: COLORS.primary,
+        fontWeight: '600',
+    },
+    // Report & Delete Button Styles
+    reportButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    reportButtonText: {
+        color: COLORS.info,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    deleteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    deleteButtonText: {
+        color: COLORS.error,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    replyReportButton: {
+        padding: 4,
+        marginLeft: 8,
+    },
+    replyDeleteButton: {
+        padding: 4,
+        marginLeft: 8,
+    },
 });

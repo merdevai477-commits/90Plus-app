@@ -408,6 +408,7 @@ class PreloadManagerClass {
   /**
    * Preload next reels while viewing
    * Requirement 19.2: Preload next 2-3 reels while viewing
+   * ✅ OPTIMIZED: Increased to 4 reels for smoother scrolling
    * 
    * @param reels - Array of reel objects with videoUrl
    * @param currentIndex - Current viewing index
