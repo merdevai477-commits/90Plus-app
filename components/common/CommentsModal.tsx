@@ -87,7 +87,8 @@ export default function CommentsModal({
     reelId,
     comments = [],
     onAddComment,
-    onToggleLike
+    onToggleLike,
+    highlightCommentId
 }: CommentsModalProps) {
     const [newComment, setNewComment] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,8 +96,11 @@ export default function CommentsModal({
     const [commentLimitReached, setCommentLimitReached] = useState(false);
     const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
     const [commentsWithReplies, setCommentsWithReplies] = useState<CommentWithReplies[]>([]);
-    const [loadedComments, setLoadedComments] = useState<Comment[]>([]);
     const [longPressedCommentId, setLongPressedCommentId] = useState<string | null>(null);
+    
+    // ✅ FIX: Use ref instead of state for loadedComments to prevent re-render loops
+    const loadedCommentsRef = useRef<Comment[]>([]);
+    const [loadedCommentsVersion, setLoadedCommentsVersion] = useState(0); // Only to trigger updates when needed
     
     // Mention picker state
     const [showMentionPicker, setShowMentionPicker] = useState(false);
@@ -162,7 +166,7 @@ export default function CommentsModal({
                 }
                 mentionSearchTimeoutRef.current = setTimeout(() => {
                     searchUsers(textAfterAt);
-                }, 300);
+                }, 300) as unknown as NodeJS.Timeout;
             } else {
                 setShowMentionPicker(false);
             }
@@ -186,51 +190,53 @@ export default function CommentsModal({
     // Primary source: active session userId, fallback to globalState only if session unavailable
     const currentUserId = sessionUserId || (globalState.userProfile?.id && !sessionUserId ? globalState.userProfile.id : null);
 
-    // Memoize comments prop by comparing IDs to prevent unnecessary re-renders
-    // This prevents infinite loops when the comments array reference changes but content is the same
-    const commentsIdsRef = useRef<string>('');
-    const stableCommentsRef = useRef<Comment[]>([]);
-    const stableComments = useMemo(() => {
-        const currentIds = (comments || []).map(c => c.id).join(',');
-        if (commentsIdsRef.current !== currentIds) {
-            commentsIdsRef.current = currentIds;
-            stableCommentsRef.current = comments || [];
+    // ✅ SIMPLIFIED FIX: Use refs to track comment IDs and prevent infinite loops
+    const prevCommentIdsRef = useRef<string>('');
+    const commentsWithRepliesRef = useRef<CommentWithReplies[]>([]);
+    const isInitializedRef = useRef(false);
+    
+    // ✅ Get effective comments - prioritize props, fallback to loaded
+    const getEffectiveComments = useCallback((): Comment[] => {
+        if (comments && comments.length > 0) {
+            return comments;
         }
-        return stableCommentsRef.current;
+        return loadedCommentsRef.current;
     }, [comments]);
-
-    // Use loaded comments if prop comments are empty, otherwise use prop comments
-    const effectiveComments = useMemo(() => {
-        return (stableComments && stableComments.length > 0) ? stableComments : loadedComments;
-    }, [stableComments, loadedComments]);
+    
+    // ✅ Get current comment IDs as string for comparison
+    const getCurrentCommentIds = useCallback((): string => {
+        const effective = getEffectiveComments();
+        return effective.map(c => c.id).join(',');
+    }, [getEffectiveComments]);
 
     // Count top-level comments by current user
     const userCommentsCount = useMemo(() => {
         if (!currentUserId) return 0;
-        return effectiveComments.filter(c => c.user.id === currentUserId).length;
-    }, [effectiveComments, currentUserId]);
+        const effective = getEffectiveComments();
+        return effective.filter(c => c.user.id === currentUserId).length;
+    }, [currentUserId, comments, loadedCommentsVersion, getEffectiveComments]);
 
     // Count replies by current user across all comments
     const userRepliesCount = useMemo(() => {
         if (!currentUserId) return 0;
         let count = 0;
-        commentsWithReplies.forEach(c => {
+        commentsWithRepliesRef.current.forEach(c => {
             if (c.replies) {
                 count += c.replies.filter(r => r.user.id === currentUserId).length;
             }
         });
         return count;
-    }, [commentsWithReplies, currentUserId]);
+    }, [currentUserId, commentsWithReplies]);
 
     const canComment = userCommentsCount < MAX_COMMENTS_PER_USER;
     const canReply = userRepliesCount < MAX_REPLIES_PER_USER;
 
-    // Load comments from backend when modal opens (only once per reelId when visible)
+    // ✅ FIX: Load comments from backend - use refs to prevent infinite loops
     useEffect(() => {
-        // Reset loaded reel ID when modal closes
+        // Reset when modal closes - only reset refs, NOT state
         if (!visible) {
             loadedReelIdRef.current = null;
-            setLoadedComments([]);
+            // ✅ Don't call any setState here - just reset refs
             return;
         }
         
@@ -238,31 +244,27 @@ export default function CommentsModal({
             return;
         }
         
-        // If comments are provided as props, mark as loaded but don't clear loadedComments
-        // This prevents unnecessary state updates that cause infinite loops
-        if (stableComments && stableComments.length > 0) {
+        // If comments are provided as props, mark as loaded
+        if (comments && comments.length > 0) {
             loadedReelIdRef.current = reelId;
-            // Don't call setLoadedComments([]) here - it causes re-renders
             return;
         }
         
-        // Only load if we haven't loaded comments for this reel yet while modal is visible (prevent infinite loop)
-        // This prevents multiple simultaneous requests for the same reelId
+        // Only load if we haven't loaded comments for this reel yet
         if (loadedReelIdRef.current === reelId) {
             return;
         }
         
-        // Load comments from backend (only once per reelId when modal opens)
+        // Load comments from backend
         const loadComments = async () => {
             try {
                 const token = await getToken();
                 if (!token) return;
                 
-                // Mark as loading immediately to prevent duplicate requests
+                // Mark as loading immediately
                 loadedReelIdRef.current = reelId;
                 
                 const backendComments = await ReelsService.getComments(token, reelId, 50);
-                // Transform backend comments (content -> text, format user data)
                 const transformedComments: Comment[] = backendComments.map((c: any) => ({
                     id: c.id,
                     user: {
@@ -271,96 +273,145 @@ export default function CommentsModal({
                         avatar: c.user.avatar,
                         verified: c.user.isVerified
                     },
-                    text: c.content || c.text || '', // Transform content to text
+                    text: c.content || c.text || '',
                     timestamp: formatTimestamp(c.createdAt),
                     likes: (c as any).likes || 0,
                     liked: (c as any).liked || false
                 }));
-                setLoadedComments(transformedComments);
+                
+                // ✅ Update ref first, then trigger minimal re-render
+                loadedCommentsRef.current = transformedComments;
+                setLoadedCommentsVersion(v => v + 1);
             } catch (error) {
                 console.error('Error loading comments:', error);
-                // On rate limit (429), don't reset to prevent retry loop
-                // On other errors, reset to allow retry when modal reopens
                 if ((error as any)?.status !== 429) {
                     loadedReelIdRef.current = null;
                 }
-                // Don't set empty array on error - keep existing comments if any
             }
         };
         
         loadComments();
-    }, [visible, reelId, getToken, stableComments]); // Include stableComments in dependencies
+    }, [visible, reelId, getToken, comments]);
 
     // Scroll to highlighted comment when modal opens or highlightCommentId changes
+    // ✅ Use ref to avoid dependency on commentsWithReplies array (prevents infinite loop)
+    const highlightCommentIdRef = useRef<string | null | undefined>(highlightCommentId);
+    const hasScrolledRef = useRef(false);
+    
     useEffect(() => {
-        if (visible && highlightCommentId && commentsWithReplies.length > 0 && commentsListRef.current) {
-            const commentIndex = commentsWithReplies.findIndex(c => c.id === highlightCommentId);
-            if (commentIndex >= 0) {
-                setTimeout(() => {
-                    try {
-                        commentsListRef.current?.scrollToIndex({ 
-                            index: commentIndex, 
-                            animated: true,
-                            viewPosition: 0.5 // Center the comment
-                        });
-                    } catch (error) {
-                        // Fallback if scrollToIndex fails
-                        console.warn('Failed to scroll to comment:', error);
-                    }
-                }, 300);
+        highlightCommentIdRef.current = highlightCommentId;
+        // Reset scroll flag when highlightCommentId changes
+        if (highlightCommentId) {
+            hasScrolledRef.current = false;
+        }
+    }, [highlightCommentId]);
+    
+    // Reset scroll flag when modal closes
+    useEffect(() => {
+        if (!visible) {
+            hasScrolledRef.current = false;
+        }
+    }, [visible]);
+    
+    // ✅ CRITICAL FIX: Sync commentsWithReplies with effective comments
+    // Only update when comment IDs actually change to prevent infinite loops
+    useEffect(() => {
+        // ✅ Skip if modal is not visible
+        if (!visible) {
+            return;
+        }
+        
+        // ✅ Get current effective comments
+        const effectiveComments = getEffectiveComments();
+        const currentIds = getCurrentCommentIds();
+        
+        // ✅ Skip if IDs haven't changed
+        if (prevCommentIdsRef.current === currentIds && isInitializedRef.current) {
+            return;
+        }
+        
+        // ✅ Handle empty comments
+        if (!effectiveComments || effectiveComments.length === 0) {
+            if (commentsWithRepliesRef.current.length > 0) {
+                commentsWithRepliesRef.current = [];
+                prevCommentIdsRef.current = '';
+                setCommentsWithReplies([]);
             }
+            isInitializedRef.current = true;
+            return;
         }
-    }, [visible, highlightCommentId, commentsWithReplies]);
-
-    // Track comment IDs separately to detect when base comments actually change
-    const commentIdsRef = useRef<string>('');
-    const effectiveCommentsRef = useRef<Comment[]>(effectiveComments);
-    const commentsWithRepliesRef = useRef<CommentWithReplies[]>([]);
-    
-    // Update ref when effectiveComments changes
-    useEffect(() => {
-        effectiveCommentsRef.current = effectiveComments;
-    }, [effectiveComments]);
-    
-    // Memoize current comment IDs to prevent infinite loop
-    // Only recalculate when effectiveComments actually changes
-    const currentCommentIds = useMemo(() => {
-        return (effectiveComments || []).map(c => c.id).join(',');
-    }, [effectiveComments]);
-    
-    // Only update commentsWithReplies when comment IDs actually change (not on every render)
-    // Merge base comments with existing replies/showReplies state
-    useEffect(() => {
-        if (commentIdsRef.current !== currentCommentIds) {
-            commentIdsRef.current = currentCommentIds;
+        
+        // ✅ Update ref BEFORE setState to prevent loops
+        prevCommentIdsRef.current = currentIds;
+        isInitializedRef.current = true;
+        
+        // ✅ Transform comments and preserve existing replies
+        const transformed: CommentWithReplies[] = effectiveComments.map(c => {
+            const commentText = (c as any).content || c.text || '';
+            const existing = commentsWithRepliesRef.current.find(ec => ec.id === c.id);
             
-            // Transform base comments and merge with existing replies state
-            const transformed = effectiveCommentsRef.current.map(c => {
-                // Transform comment: handle both content (backend) and text (frontend) fields
-                const commentText = (c as any).content || c.text || '';
-                
-                // Find existing comment in state to preserve replies/showReplies/loadingReplies
-                const existing = commentsWithRepliesRef.current.find(ec => ec.id === c.id);
-                
-                return {
-                    ...c,
-                    text: commentText, // Ensure text field exists
-                    user: {
-                        ...c.user,
-                        name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
-                    },
-                    replies: existing?.replies || [],
-                    repliesCount: existing?.repliesCount ?? (c as any).repliesCount ?? 0,
-                    showReplies: existing?.showReplies ?? false,
-                    loadingReplies: existing?.loadingReplies ?? false
-                };
-            });
-            
-            // Update ref synchronously BEFORE setState to avoid circular dependency
-            commentsWithRepliesRef.current = transformed;
-            setCommentsWithReplies(transformed);
+            return {
+                ...c,
+                text: commentText,
+                user: {
+                    ...c.user,
+                    name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
+                },
+                replies: existing?.replies || [],
+                repliesCount: existing?.repliesCount ?? (c as any).repliesCount ?? 0,
+                showReplies: existing?.showReplies ?? false,
+                loadingReplies: existing?.loadingReplies ?? false
+            };
+        });
+        
+        // ✅ Update ref synchronously
+        commentsWithRepliesRef.current = transformed;
+        setCommentsWithReplies(transformed);
+        
+    }, [visible, comments, loadedCommentsVersion, getEffectiveComments, getCurrentCommentIds]);
+    
+    // ✅ Separate effect to handle scroll after commentsWithReplies updates
+    // Use a separate ref to track when comments are ready for scrolling
+    const commentsReadyForScrollRef = useRef(false);
+    
+    useEffect(() => {
+        // Only attempt scroll when modal is visible and comments are loaded
+        if (!visible || !highlightCommentIdRef.current) {
+            commentsReadyForScrollRef.current = false;
+            return;
         }
-    }, [currentCommentIds]); // Now currentCommentIds is properly memoized
+        
+        // Wait for comments to be ready
+        if (commentsWithRepliesRef.current.length === 0) {
+            commentsReadyForScrollRef.current = false;
+            return;
+        }
+        
+        // Only scroll once per highlightCommentId change
+        if (hasScrolledRef.current || commentsReadyForScrollRef.current) {
+            return;
+        }
+        
+        const commentIndex = commentsWithRepliesRef.current.findIndex(c => c.id === highlightCommentIdRef.current);
+        if (commentIndex >= 0 && commentsListRef.current) {
+            commentsReadyForScrollRef.current = true;
+            hasScrolledRef.current = true;
+            
+            // Use setTimeout to ensure the list is fully rendered
+            setTimeout(() => {
+                try {
+                    commentsListRef.current?.scrollToIndex({ 
+                        index: commentIndex, 
+                        animated: true,
+                        viewPosition: 0.5 // Center the comment
+                    });
+                } catch (error) {
+                    // Fallback if scrollToIndex fails
+                    console.warn('Failed to scroll to comment:', error);
+                }
+            }, 300);
+        }
+    }, [visible, commentsWithReplies]); // ✅ Depend on visible and commentsWithReplies
 
     // Shake animation for limit warning
     const triggerShake = () => {

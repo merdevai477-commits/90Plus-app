@@ -359,6 +359,7 @@ export const es = {
     waitingForYou: '¡Te espera!',
     beTheBest: 'Sé el mejor',
     competeNow: 'Compite ahora',
+    checkPosition: '¡Consulta tu posición en el ranking!',
   },
 
 

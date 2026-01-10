@@ -83,7 +83,7 @@ const getTransferType = (type?: string): keyof typeof TRANSFER_TYPE_COLORS => {
   if (typeLower.includes('sale') || typeLower === 'بيع') {
     return 'sale';
   }
-  if (typeLower.includes('purchase') || typeLower === 'شراء' || typeLower === 'buy')) {
+  if (typeLower.includes('purchase') || typeLower === 'شراء' || typeLower === 'buy') {
     return 'purchase';
   }
   

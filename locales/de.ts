@@ -359,6 +359,7 @@ export const de = {
     waitingForYou: 'Wartet auf dich!',
     beTheBest: 'Sei der Beste',
     competeNow: 'Jetzt antreten',
+    checkPosition: 'Überprüfen Sie Ihre Position in der Rangliste!',
   },
 
 

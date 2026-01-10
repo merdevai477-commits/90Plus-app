@@ -93,10 +93,12 @@ export const useReelsAudioManager = ({
     for (const [id, video] of videoRefs.current.entries()) {
       if (video && loadedVideosSet.has(id)) {
         pausePromises.push(
-          video.pauseAsync().catch((error) => {
-            // Video might not be ready, ignore error
-            console.log(`[AudioManager] Could not pause video ${id}:`, error?.message || 'unknown');
-          })
+          video.pauseAsync()
+            .then(() => {})
+            .catch((error) => {
+              // Video might not be ready, ignore error
+              console.log(`[AudioManager] Could not pause video ${id}:`, error?.message || 'unknown');
+            })
         );
       }
     }
@@ -106,10 +108,13 @@ export const useReelsAudioManager = ({
   }, [videoRefs, onPauseAll]);
 
   /**
-   * Resume the currently active video
+   * Resume the currently active video with retry logic for AudioFocusNotAcquiredException
    * Requirement 16.3: Resume from paused state when returning to reels page
    */
-  const resumeActiveVideo = useCallback(async (): Promise<void> => {
+  const resumeActiveVideo = useCallback(async (retryCount = 0): Promise<void> => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 500; // 500ms between retries
+
     if (!isPageFocused.current || !isAppActive.current) {
       return;
     }
@@ -122,11 +127,31 @@ export const useReelsAudioManager = ({
       const [id, video] = activeEntry;
       if (video && loadedVideosSet.has(id)) {
         try {
+          // ✅ First ensure audio mode is configured
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            staysActiveInBackground: false,
+            playsInSilentModeIOS: true,
+            shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false,
+          });
+          
           await video.playAsync();
           currentActiveVideoId.current = id;
           onResumeActive?.(currentIndex);
         } catch (error) {
-          console.log(`[AudioManager] Could not resume video ${id}:`, (error as Error)?.message || 'unknown');
+          const errorMessage = (error as Error)?.message || 'unknown';
+          
+          // ✅ Retry on AudioFocusNotAcquiredException
+          if (errorMessage.includes('AudioFocusNotAcquiredException') && retryCount < MAX_RETRIES) {
+            console.log(`[AudioManager] Audio focus not acquired, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+            setTimeout(() => {
+              resumeActiveVideo(retryCount + 1);
+            }, RETRY_DELAY);
+            return;
+          }
+          
+          console.log(`[AudioManager] Could not resume video ${id}:`, errorMessage);
         }
       }
     }
@@ -151,9 +176,9 @@ export const useReelsAudioManager = ({
       // App returning to foreground
       if (previousState.match(/inactive|background/) && nextAppState === 'active') {
         isAppActive.current = true;
-        if (wasPlayingBeforeBackground.current && isPageFocused.current) {
-          await resumeActiveVideo();
-        }
+        // ✅ FIX: Don't call playAsync here - let UnifiedVideoPlayer handle it
+        // The shouldPlay prop will automatically resume when app becomes active
+        // This prevents AudioFocusNotAcquiredException
       }
       
       appState.current = nextAppState;
@@ -181,8 +206,18 @@ export const useReelsAudioManager = ({
     return () => {
       subscription.remove();
     };
-  }, [pauseAllVideos, resumeActiveVideo]);
+  }, [pauseAllVideos]);
 
+  // ✅ FIX: Store functions in refs to avoid re-creating useFocusEffect callback
+  const pauseAllVideosRef = useRef(pauseAllVideos);
+  const resumeActiveVideoRef = useRef(resumeActiveVideo);
+  
+  // Keep refs updated
+  useEffect(() => {
+    pauseAllVideosRef.current = pauseAllVideos;
+    resumeActiveVideoRef.current = resumeActiveVideo;
+  }, [pauseAllVideos, resumeActiveVideo]);
+  
   /**
    * Handle navigation focus/blur
    * Requirement 16.1: Stop all video audio when leaving reels page
@@ -194,28 +229,19 @@ export const useReelsAudioManager = ({
       isPageFocused.current = true;
       console.log('[AudioManager] Reels page focused');
       
-      // Resume active video if app is active
-      if (isAppActive.current) {
-        resumeActiveVideo();
-      }
+      // ✅ FIX: Don't call playAsync here - let UnifiedVideoPlayer's shouldPlay handle it
+      // This prevents AudioFocusNotAcquiredException from multiple play attempts
+      // The Video component's shouldPlay prop will automatically play when isActive becomes true
 
       // Cleanup when screen loses focus
       return () => {
         isPageFocused.current = false;
-        console.log('[AudioManager] Reels page unfocused - stopping all videos');
-        // Stop all videos when navigating away
-        pauseAllVideos();
-        
-        // Also unload all videos to ensure audio stops completely
-        for (const [id, video] of videoRefs.current.entries()) {
-          if (video) {
-            video.stopAsync().catch((error) => {
-              console.log(`[AudioManager] Could not stop video ${id}:`, error?.message || 'unknown');
-            });
-          }
-        }
+        console.log('[AudioManager] Reels page unfocused - pausing all videos');
+        // ✅ FIX: Only pause, don't stop - stopping unloads the video
+        // This allows quick resume when returning to the page
+        pauseAllVideosRef.current();
       };
-    }, [pauseAllVideos, resumeActiveVideo, videoRefs])
+    }, []) // ✅ Empty deps - use refs to avoid re-creating callback
   );
 
   /**

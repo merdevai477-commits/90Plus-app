@@ -649,14 +649,20 @@ export default function NotificationsScreen() {
             },
             // Async action: Execute backend deletion in background (Requirements 1.2)
             asyncAction: async () => {
-                const success = await NotificationService.clearAll(token);
-                if (!success) {
-                    throw new Error('Failed to clear notifications on server');
+                try {
+                    const success = await NotificationService.clearAll(token);
+                    if (!success) {
+                        throw new Error('Failed to clear notifications on server');
+                    }
+                    // ✅ FIX: After successful deletion, verify cache is cleared
+                    // Force a refresh to ensure cache is empty
+                    await cacheService.invalidate(CACHE_KEYS.NOTIFICATIONS);
+                    return success;
+                } catch (error: any) {
+                    // ✅ Better error handling - log and rethrow
+                    console.error('Error in clearAll asyncAction:', error);
+                    throw error;
                 }
-                // ✅ FIX: After successful deletion, verify cache is cleared
-                // Force a refresh to ensure cache is empty
-                await cacheService.invalidate(CACHE_KEYS.NOTIFICATIONS);
-                return success;
             },
             // Rollback action: Restore notifications if backend fails (Requirements 1.3)
             rollbackAction: () => {

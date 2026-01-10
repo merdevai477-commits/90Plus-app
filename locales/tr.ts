@@ -358,6 +358,7 @@ export const tr = {
     waitingForYou: 'Seni bekliyor!',
     beTheBest: 'En iyi ol',
     competeNow: 'Şimdi yarış',
+    checkPosition: 'Liderlik tablosundaki konumunuzu kontrol edin!',
   },
 
 

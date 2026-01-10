@@ -544,17 +544,25 @@ const ReelsFeed: React.FC = () => {
   const { getToken } = useAuth();
   const { uploadedVideos, userVideoData, reelComments, addComment, toggleCommentLike, likedReelIds, toggleReelLike } = useVideos();
 
+  // ✅ Ref to track previous comments for each reel to prevent unnecessary re-renders
+  const commentsRef = useRef<Record<string, Comment[]>>({});
+
+  // ✅ FIX: Memoize callbacks to prevent infinite focus/unfocus loop
+  const handlePauseAll = useCallback(() => {
+    console.log('[ReelsFeed] All videos paused');
+  }, []);
+  
+  const handleResumeActive = useCallback((index: number) => {
+    console.log(`[ReelsFeed] Resumed video at index ${index}`);
+  }, []);
+  
   // Use Reels Audio Manager for navigation and app state audio cleanup
   // Requirements 16.1, 16.2, 16.3: Stop audio on navigation, pause on background, resume on return
   const { pauseAllVideos, markVideoLoaded, markVideoUnloaded } = useReelsAudioManager({
     videoRefs,
     currentIndex,
-    onPauseAll: () => {
-      console.log('[ReelsFeed] All videos paused');
-    },
-    onResumeActive: (index) => {
-      console.log(`[ReelsFeed] Resumed video at index ${index}`);
-    },
+    onPauseAll: handlePauseAll,
+    onResumeActive: handleResumeActive,
   });
   
   // Import useReelsCache for cache-first loading (Requirements 3.1, 3.5, 3.6)
@@ -720,27 +728,46 @@ const ReelsFeed: React.FC = () => {
     }
   }, []);
 
+  // ✅ FIX: Throttle focus refresh to prevent infinite loop
+  const lastFocusRefreshRef = useRef<number>(0);
+  const FOCUS_REFRESH_THROTTLE = 30000; // 30 seconds minimum between focus refreshes
+  const isRefreshingRef = useRef(false);
+  
   // Reload when screen comes into focus (e.g., after uploading a reel)
   useFocusEffect(
     useCallback(() => {
+      // ✅ Skip if already refreshing
+      if (isRefreshingRef.current) {
+        return;
+      }
+      
+      // ✅ Throttle: Don't refresh if we just did recently
+      const now = Date.now();
+      if (now - lastFocusRefreshRef.current < FOCUS_REFRESH_THROTTLE) {
+        return;
+      }
+      
       // Only reload if we've already loaded once (to avoid double loading on initial mount)
-      if (hasLoadedRef.current) {
+      if (hasLoadedRef.current && backendReels.length > 0) {
+        // ✅ Don't clear existing reels - just refresh in background
+        lastFocusRefreshRef.current = now;
+        isRefreshingRef.current = true;
+        
         // Small delay to ensure navigation is complete
         const timer = setTimeout(() => {
-          logger.debug('[ReelsFeed] Screen focused, refreshing reels...');
-          setIsRefreshing(true);
-          setBackendReels([]);
-          setNextCursor(null);
-          setHasMore(true);
+          logger.debug('[ReelsFeed] Screen focused, refreshing reels in background...');
+          // ✅ Don't clear backendReels - keep existing content visible
           loadReelsFromBackend(undefined, true).finally(() => {
-            setIsRefreshing(false);
-            setIsInitialLoading(false);
+            isRefreshingRef.current = false;
           });
-        }, 300);
+        }, 500);
         
-        return () => clearTimeout(timer);
+        return () => {
+          clearTimeout(timer);
+          isRefreshingRef.current = false;
+        };
       }
-    }, [loadReelsFromBackend])
+    }, []) // ✅ Empty deps - use refs to avoid re-creating callback
   );
 
   // Reload when hashtag changes
@@ -771,8 +798,49 @@ const ReelsFeed: React.FC = () => {
     }
   }, [params.reelId, reels]);
 
+  // ✅ FIX: Track previous state to prevent unnecessary updates
+  const prevBackendReelsIdsRef = useRef<string>('');
+  const prevReelCommentsCountRef = useRef<Record<string, number>>({});
+  const prevLikedReelIdsRef = useRef<string>('');
+  
   // Update reels when data changes - ONLY use backend reels (no mock data)
   useEffect(() => {
+    // ✅ Early return if no backend reels
+    if (!backendReels || backendReels.length === 0) {
+      return;
+    }
+    
+    // ✅ Check if backendReels IDs changed
+    const currentBackendIds = backendReels.map(r => r.id).join(',');
+    const backendReelsChanged = prevBackendReelsIdsRef.current !== currentBackendIds;
+    
+    // ✅ Check if liked IDs changed (sorted for consistent comparison)
+    const currentLikedIds = [...likedReelIds].sort().join(',');
+    const likedChanged = prevLikedReelIdsRef.current !== currentLikedIds;
+    
+    // ✅ Check if comment counts changed
+    let commentsChanged = false;
+    for (const reel of backendReels) {
+      const currentCount = reelComments[reel.id]?.length || 0;
+      const prevCount = prevReelCommentsCountRef.current[reel.id] || 0;
+      if (currentCount !== prevCount) {
+        commentsChanged = true;
+        break;
+      }
+    }
+    
+    // ✅ Only update if something actually changed
+    if (!backendReelsChanged && !likedChanged && !commentsChanged) {
+      return;
+    }
+    
+    // ✅ Update refs BEFORE setState to prevent loops
+    prevBackendReelsIdsRef.current = currentBackendIds;
+    prevLikedReelIdsRef.current = currentLikedIds;
+    for (const reel of backendReels) {
+      prevReelCommentsCountRef.current[reel.id] = reelComments[reel.id]?.length || 0;
+    }
+    
     // Update backend reels liked status
     const updatedBackendReels = backendReels.map(reel => ({
       ...reel,
@@ -1093,6 +1161,33 @@ const ReelsFeed: React.FC = () => {
     setShowReport(true);
   }, [haptic]);
 
+  // ✅ Get comments for modal with stable reference - only updates when IDs actually change
+  // ✅ FIX: Use refs to prevent infinite loop by avoiding dependency on object property
+  const prevCommentsIdsRef = useRef<string>('');
+  const prevCommentsResultRef = useRef<Comment[]>([]);
+  
+  const commentsForModal = useMemo(() => {
+    if (!selectedReelId) {
+      prevCommentsIdsRef.current = '';
+      prevCommentsResultRef.current = [];
+      return [];
+    }
+    
+    const currentComments = reelComments[selectedReelId] || [];
+    const currentIds = currentComments.map(c => c.id).join(',');
+    
+    // ✅ Only return new array reference if IDs actually changed
+    if (currentIds === prevCommentsIdsRef.current) {
+      return prevCommentsResultRef.current;
+    }
+    
+    // Update refs and return new comments
+    prevCommentsIdsRef.current = currentIds;
+    prevCommentsResultRef.current = currentComments;
+    commentsRef.current[selectedReelId] = currentComments;
+    return currentComments;
+  }, [selectedReelId, reelComments]); // ✅ Depend on full object, but use refs to prevent unnecessary updates
+
   // Handle Refresh - reload from backend (skip cache for fresh data)
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -1345,7 +1440,7 @@ const ReelsFeed: React.FC = () => {
           setHighlightCommentId(null);
         }}
         reelId={selectedReelId}
-        comments={useMemo(() => reelComments[selectedReelId] || [], [reelComments, selectedReelId])}
+        comments={commentsForModal} // ✅ Use memoized comments
         onAddComment={(comment) => handleAddComment(selectedReelId, comment)}
         onToggleLike={(commentId) => handleToggleCommentLike(selectedReelId, commentId)}
         highlightCommentId={highlightCommentId}

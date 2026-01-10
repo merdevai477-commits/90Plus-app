@@ -358,6 +358,7 @@ export const it = {
     waitingForYou: 'Ti aspetta!',
     beTheBest: 'Sii il migliore',
     competeNow: 'Competi ora',
+    checkPosition: 'Controlla la tua posizione nella classifica!',
   },
 
 

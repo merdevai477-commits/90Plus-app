@@ -499,6 +499,7 @@ export const ar = {
     waitingForYou: 'في انتظارك!',
     beTheBest: 'كن الأفضل',
     competeNow: 'تنافس الآن',
+    checkPosition: 'تحقق من موقعك في لوحة المتصدرين!',
   },
 
   profile: {

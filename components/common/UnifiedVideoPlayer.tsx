@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Play } from 'lucide-react-native';
+import { useFocusEffect } from 'expo-router';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
 import { VIDEO_DEFAULTS } from '../../utils/videoConfig';
@@ -112,23 +113,86 @@ export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = ({
     }
   }, [isActive, resetReplayCount]);
 
+  // ✅ FIX: Track actual playback state to avoid multiple playAsync calls
+  const isActuallyPlayingRef = useRef(false);
+  const playAttemptInProgressRef = useRef(false);
+  const lastControlAttemptRef = useRef<number>(0);
+
   // Control video playback based on active state
   useEffect(() => {
     const controlVideo = async () => {
-      if (videoRef.current && isVideoLoaded) {
-        try {
-          if (isActive && !isPausedByLimit) {
-            await videoRef.current.playAsync();
-          } else {
-            await videoRef.current.pauseAsync();
+      if (!videoRef.current || !isVideoLoaded) return;
+      
+      const shouldBePlaying = isActive && !isPausedByLimit;
+      
+      // ✅ Throttle control attempts to prevent rapid-fire calls
+      const now = Date.now();
+      if (now - lastControlAttemptRef.current < 100) return;
+      lastControlAttemptRef.current = now;
+      
+      try {
+        if (shouldBePlaying) {
+          // ✅ Prevent multiple simultaneous play attempts
+          if (playAttemptInProgressRef.current) return;
+          
+          // ✅ Check actual video status before attempting play
+          const status = await videoRef.current.getStatusAsync();
+          if ('isPlaying' in status && status.isPlaying) {
+            isActuallyPlayingRef.current = true;
+            return; // Already playing
           }
-        } catch (error) {
-          console.warn(`Video control error for ${reel.id}:`, error);
+          
+          playAttemptInProgressRef.current = true;
+          await videoRef.current.playAsync();
+          isActuallyPlayingRef.current = true;
+          playAttemptInProgressRef.current = false;
+        } else {
+          // Only pause if actually playing
+          if (isActuallyPlayingRef.current || playAttemptInProgressRef.current) {
+            await videoRef.current.pauseAsync();
+            isActuallyPlayingRef.current = false;
+            playAttemptInProgressRef.current = false;
+          }
+        }
+      } catch (error) {
+        playAttemptInProgressRef.current = false;
+        // Only log non-trivial errors
+        const errorMessage = (error as Error)?.message || 'unknown';
+        if (!errorMessage.includes('already') && !errorMessage.includes('not ready')) {
+          console.log(`[UnifiedVideoPlayer] Video control for ${reel.id}:`, errorMessage);
         }
       }
     };
     controlVideo();
   }, [isActive, isVideoLoaded, isPausedByLimit, reel.id]);
+
+  // ✅ FIX: Handle page focus to resume video when returning to reels page
+  useFocusEffect(
+    useCallback(() => {
+      // When page gains focus, try to resume if this video should be playing
+      const resumeIfNeeded = async () => {
+        if (!videoRef.current || !isVideoLoaded || !isActive || isPausedByLimit) return;
+        
+        try {
+          const status = await videoRef.current.getStatusAsync();
+          if ('isPlaying' in status && !status.isPlaying) {
+            // Video should be playing but isn't - resume it
+            await videoRef.current.playAsync();
+            isActuallyPlayingRef.current = true;
+          }
+        } catch (error) {
+          // Ignore errors - playback will be handled by useEffect
+        }
+      };
+      
+      // Small delay to let the page settle
+      const timer = setTimeout(resumeIfNeeded, 200);
+      
+      return () => {
+        clearTimeout(timer);
+      };
+    }, [isVideoLoaded, isActive, isPausedByLimit])
+  );
 
   const handleLoad = () => {
     setIsLoading(false);
@@ -163,11 +227,16 @@ export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = ({
   }, [onManualReplay]);
 
   /**
-   * Handle playback status updates to detect video end
+   * Handle playback status updates to detect video end and sync playback state
    */
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if ('isBuffering' in status) {
       setIsBuffering(status.isBuffering || false);
+    }
+    
+    // ✅ Sync actual playback state with ref
+    if ('isPlaying' in status) {
+      isActuallyPlayingRef.current = status.isPlaying || false;
     }
     
     if (!disableReplayLimit && 'isLoaded' in status && status.isLoaded) {

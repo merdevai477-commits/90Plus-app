@@ -282,8 +282,11 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    // 1. Configure Audio/Video
-    configureAudioVideo();
+    // 1. Configure Audio/Video (must be awaited to ensure audio is ready)
+    const initializeAudioAndAssets = async () => {
+      await configureAudioVideo();
+    };
+    initializeAudioAndAssets();
 
     // 2. Load real club logos from API-Football and prefetch images
     const loadLogosAndPrefetch = async () => {

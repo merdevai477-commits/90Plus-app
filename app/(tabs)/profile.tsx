@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
-import UserInfo from '../../components/profile/UserInfo';
+import UserInfo from '../../components/profile/UserInfo'; 
 import StatsRow from '../../components/profile/StatsRow';
 import ContentTabs from '../../components/profile/ContentTabs';
 import VideoGrid from '../../components/profile/VideoGrid';

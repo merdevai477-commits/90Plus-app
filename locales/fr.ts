@@ -360,6 +360,7 @@ export const fr = {
     waitingForYou: 'Vous attend!',
     beTheBest: 'Soyez le meilleur',
     competeNow: 'Compétez maintenant',
+    checkPosition: 'Vérifiez votre position dans le classement!',
   },
 
 

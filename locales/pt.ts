@@ -358,6 +358,7 @@ export const pt = {
     waitingForYou: 'Esperando por você!',
     beTheBest: 'Seja o melhor',
     competeNow: 'Compita agora',
+    checkPosition: 'Verifique sua posição no ranking!',
   },
 
 

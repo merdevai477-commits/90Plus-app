@@ -1667,6 +1667,13 @@ export class NotificationService {
                 },
             });
 
+            // ✅ Check if response is ok before parsing JSON
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Error clearing all notifications:', response.status, errorText);
+                return false;
+            }
+
             const data = await response.json();
             return data.status === 'SUCCESS';
         } catch (error) {

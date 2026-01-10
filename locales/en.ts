@@ -516,6 +516,7 @@ export const en = {
     waitingForYou: 'Waiting for you!',
     beTheBest: 'Be the best',
     competeNow: 'Compete now',
+    checkPosition: 'Check your position in the leaderboard!',
   },
 
   profile: {
