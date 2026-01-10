@@ -41,7 +41,7 @@ import {
 } from 'lucide-react-native';
 
 // للفيديو
-import { Video, Audio, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Video } from 'expo-av';
 
 // للـ Gradient
 import { LinearGradient } from 'expo-linear-gradient';
@@ -62,12 +62,12 @@ import { useFollowStore } from '../../src/store/useFollowStore';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { preloadNextVideos, isVideoPreloaded } from '../../utils/videoPreloader';
+// videoPreloader is now handled by preloadManager
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService';
 import { preloadManager } from '../../services/preloadManager';
 import { ReelsCacheData } from '../../hooks/useReelsCache';
 import { useReelsAudioManager, markVideoAsLoaded, markVideoAsUnloaded, clearLoadedVideos } from '../../hooks/useReelsAudioManager';
-import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
+// useVideoReplayLimit is handled in UnifiedVideoPlayer component
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
 
@@ -549,11 +549,11 @@ const ReelsFeed: React.FC = () => {
 
   // ✅ FIX: Memoize callbacks to prevent infinite focus/unfocus loop
   const handlePauseAll = useCallback(() => {
-    console.log('[ReelsFeed] All videos paused');
+    logger.debug('[ReelsFeed] All videos paused');
   }, []);
   
   const handleResumeActive = useCallback((index: number) => {
-    console.log(`[ReelsFeed] Resumed video at index ${index}`);
+    logger.debug(`[ReelsFeed] Resumed video at index ${index}`);
   }, []);
   
   // Use Reels Audio Manager for navigation and app state audio cleanup
@@ -618,7 +618,7 @@ const ReelsFeed: React.FC = () => {
       if (!cursor && !skipCache && !selectedHashtag) {
         const cachedData = await cacheService.get<ReelsCacheData>(CACHE_KEYS.REELS_FEED);
         if (cachedData && cachedData.reels && cachedData.reels.length > 0) {
-          console.log('[ReelsFeed] Using cached reels data');
+          logger.debug('[ReelsFeed] Using cached reels data');
           // Restore dates from cached data
           const restoredReels = cachedData.reels.map(reel => ({
             ...reel,
@@ -710,13 +710,13 @@ const ReelsFeed: React.FC = () => {
               cachedAt: Date.now(),
             };
             cacheService.set(CACHE_KEYS.REELS_FEED, cacheData, CACHE_TTL.REELS).catch(err => {
-              console.warn('[ReelsFeed] Failed to cache reels:', err);
+              logger.warn('[ReelsFeed] Failed to cache reels:', err);
             });
           }
         }
       }
     } catch (error) {
-      console.error('Error loading reels:', error);
+      logger.error('Error loading reels:', error);
     }
   }, [getToken, selectedHashtag, transformBackendReel, likedReelIds]);
 
@@ -783,20 +783,6 @@ const ReelsFeed: React.FC = () => {
 
   // Reels state - ONLY backend reels (no local videos in global feed)
   const [reels, setReels] = useState<ReelData[]>([]);
-
-  // Handle deep link navigation to specific reel
-  useEffect(() => {
-    if (params.reelId && reels.length > 0 && flatListRef.current) {
-      const reelIndex = reels.findIndex(r => r.id === params.reelId);
-      if (reelIndex >= 0) {
-        // Scroll to the specific reel
-        setTimeout(() => {
-          flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
-          setCurrentIndex(reelIndex);
-        }, 500); // Small delay to ensure list is rendered
-      }
-    }
-  }, [params.reelId, reels]);
 
   // ✅ FIX: Track previous state to prevent unnecessary updates
   const prevBackendReelsIdsRef = useRef<string>('');
@@ -896,7 +882,7 @@ const ReelsFeed: React.FC = () => {
           viewedReelsRef.current = new Set(viewedIds);
         }
       } catch (error) {
-        console.error('Error loading viewed reels:', error);
+        logger.error('Error loading viewed reels:', error);
       }
     };
     loadViewedReels();
@@ -915,7 +901,7 @@ const ReelsFeed: React.FC = () => {
       const viewedArray = Array.from(viewedReelsRef.current);
       await AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray));
     } catch (error) {
-      console.error('Error saving viewed reels:', error);
+      logger.error('Error saving viewed reels:', error);
     }
     
     // Call API to record view
@@ -927,7 +913,7 @@ const ReelsFeed: React.FC = () => {
     } catch (error) {
       // If API call fails, we've already marked as viewed locally
       // This is fine - the backend will handle duplicate prevention
-      console.warn('Error recording view:', error);
+      logger.warn('Error recording view:', error);
     }
   }, [getToken]);
 
@@ -1009,7 +995,7 @@ const ReelsFeed: React.FC = () => {
       }
     } catch (error) {
       // ROLLBACK on failure - restore previous state
-      console.error('Error syncing like, rolling back:', error);
+      logger.error('Error syncing like, rolling back:', error);
       updateReelState(wasLiked, prevLikes);
       toggleReelLike(reelId); // Rollback the toggle too
     }
@@ -1061,7 +1047,7 @@ const ReelsFeed: React.FC = () => {
       }
     } catch (error) {
       // Rollback on failure
-      console.error('Error syncing save, rolling back:', error);
+      logger.error('Error syncing save, rolling back:', error);
       updateSaveState(wasSaved);
     }
   }, [haptic, reels, getToken, t.reels.unsaved, t.reels.saved, t.common.done]);
@@ -1104,11 +1090,11 @@ const ReelsFeed: React.FC = () => {
       if (token && selectedReelId) {
         const result = await ReelsService.reportReel(token, selectedReelId, reason);
         if (result.success) {
-          console.log('Report submitted successfully');
+          logger.info('Report submitted successfully');
         }
       }
     } catch (error) {
-      console.error('Error submitting report:', error);
+      logger.error('Error submitting report:', error);
     }
   }, [getToken, selectedReelId]);
 
@@ -1143,7 +1129,7 @@ const ReelsFeed: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Error sharing:', error);
+      logger.error('Error sharing:', error);
     }
   }, [haptic, getToken]);
 
@@ -1204,30 +1190,44 @@ const ReelsFeed: React.FC = () => {
     setIsRefreshing(false);
   }, [haptic, loadReelsFromBackend]);
 
-  // Update current index, record view, and preload next videos
-  // Requirements 19.2, 19.3: Preload next 2-3 reels while viewing for instant playback
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+  // ✅ FIX: Use refs for stable callbacks to prevent "Changing onViewableItemsChanged on the fly" warning
+  const reelsRef = useRef<ReelData[]>([]);
+  const recordReelViewRef = useRef(recordReelView);
+  
+  // Keep refs updated
+  useEffect(() => {
+    reelsRef.current = reels;
+  }, [reels]);
+  
+  useEffect(() => {
+    recordReelViewRef.current = recordReelView;
+  }, [recordReelView]);
+
+  // ✅ FIX: viewabilityConfig must be stable - use useRef
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50
+  }).current;
+
+  // ✅ FIX: onViewableItemsChanged must be stable - use useRef with callback
+  // This prevents "Changing onViewableItemsChanged on the fly is not supported" warning
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems.length > 0 && viewableItems[0].index !== null) {
       const newIndex = viewableItems[0].index;
       setCurrentIndex(newIndex);
       
-      // Record view for the current reel
+      // Record view for the current reel (use ref for latest function)
       const currentReel = viewableItems[0].item as ReelData;
       if (currentReel?.id) {
-        recordReelView(currentReel.id);
+        recordReelViewRef.current(currentReel.id);
       }
       
       // Preload next 2-3 videos for smooth scrolling (Requirements 19.2, 19.3)
-      // Use PreloadManager for centralized video preloading
-      if (reels.length > 0) {
-        preloadManager.preloadNextReelVideos(reels, newIndex);
+      // Use PreloadManager for centralized video preloading (use ref for latest reels)
+      if (reelsRef.current.length > 0) {
+        preloadManager.preloadNextReelVideos(reelsRef.current, newIndex);
       }
     }
-  }, [recordReelView, reels]);
-
-  const viewabilityConfig = useMemo(() => ({
-    itemVisiblePercentThreshold: 50
-  }), []);
+  }).current;
 
   // Navigate to user profile
   const handleUserPress = useCallback((username: string) => {
@@ -1280,7 +1280,7 @@ const ReelsFeed: React.FC = () => {
       }
     } catch (error) {
       // ROLLBACK on failure
-      console.error('Error following user, rolling back:', error);
+      logger.error('Error following user, rolling back:', error);
       unfollow(userId);
       updateReelsFollowState(userId, false);
     }
@@ -1302,7 +1302,7 @@ const ReelsFeed: React.FC = () => {
       }
     } catch (error) {
       // ROLLBACK on failure
-      console.error('Error unfollowing user, rolling back:', error);
+      logger.error('Error unfollowing user, rolling back:', error);
       follow(userId);
       updateReelsFollowState(userId, true);
     }
