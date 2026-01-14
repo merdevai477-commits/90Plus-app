@@ -562,8 +562,7 @@ async function startServer() {
                     backgroundPreloadService.start();
                     logger.info('✅ Background preload service started');
                     
-                    // ✅ Start transfers sync service
-                    // Start transfers sync service (will work with or without Redis)
+                    // ✅ Start transfers sync service (will work with or without Redis)
                     try {
                         // Dynamic import to avoid top-level await issues
                         if (!transfersSyncService) {
@@ -574,9 +573,9 @@ async function startServer() {
                         logger.info('✅ Transfers Sync Service started');
                     } catch (error) {
                         logger.warn('⚠️ Failed to start Transfers Sync Service:', error);
+                        logger.warn('   App will continue without transfers sync service');
                         // Continue without transfers sync - app will still work
                     }
-                    logger.info('✅ Transfers sync service started');
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
                 }
