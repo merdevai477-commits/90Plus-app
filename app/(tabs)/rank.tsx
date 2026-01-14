@@ -48,7 +48,11 @@ import {
   UserCheck,
   ThumbsUp,
   ThumbsDown,
+  WifiOff,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react-native';
+import * as Network from 'expo-network';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -56,6 +60,14 @@ import { useTranslation } from '../../src/i18n';
 import { useAuth } from '@clerk/clerk-expo';
 import rankingsService, { RankedReel, RankedQuizUser, RankedPredictor, RankedCommenter, RankedPlayer, PlayerPeriod, AllRankingsResponse } from '../../services/rankingsService';
 import { logger } from '../../utils/logger';
+import { cacheService } from '../../services/cacheService';
+
+// Export cache keys for use in the component
+export const RANKINGS_CACHE_KEYS = {
+  ALL_RANKINGS: 'rankings_all',
+  TOP_PLAYERS_WEEKLY: 'rankings_top_players_weekly',
+  TOP_PLAYERS_MONTHLY: 'rankings_top_players_monthly',
+};
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -89,7 +101,7 @@ const customLayoutAnimation = {
 // Types
 interface RankedUser {
   id: string;
-  username?: string; // ✅ Added username for navigation
+  username?: string;
   name: string;
   avatar: string;
   score: number;
@@ -103,6 +115,59 @@ interface RankedUser {
     quizScore?: number;
   };
   change?: number;
+}
+
+// ✅ Proper interfaces for component props
+interface TranslationType {
+  rank: {
+    title: string;
+    rankings: string;
+    playerRating: string;
+    topViewers: string;
+    topComments: string;
+    topShares: string;
+    topPredictors?: string; // ✅ Optional as it might not exist in translations yet
+    quizMasters: string;
+    goals: string;
+    assists: string;
+    yellow: string;
+    matches: string;
+    approval: string;
+    [key: string]: string | undefined;
+  };
+  [key: string]: any;
+}
+
+interface TopPlayerCardProps {
+  player: RankedPlayer;
+  votes: { up: number; down: number; userVote: string | null };
+  onVote: (playerId: string, type: 'up' | 'down') => void;
+  rank: number;
+  t: TranslationType;
+}
+
+interface PlayerRatingCardProps {
+  player: Player;
+  onVote: (playerId: string, type: 'up' | 'down') => void;
+  t: TranslationType;
+}
+
+interface UserCardProps {
+  item: RankedUser;
+  index: number;
+  getRankIcon: (rank: number) => React.ReactNode;
+  getTrendIcon: (trend?: string) => React.ReactNode | null;
+  formatNumber: (num: number) => string;
+  hapticFeedback: () => void;
+  t: TranslationType;
+}
+
+interface MatchCardProps {
+  item: Match;
+  index: number;
+  openPrediction: (match: Match) => void;
+  formatNumber: (num: number) => string;
+  hapticFeedback: () => void;
 }
 
 interface Player {
@@ -152,8 +217,9 @@ interface Match {
   isFollowing?: boolean;
 }
 
-// Skeleton Component
-const SkeletonLoader = memo(() => {
+// Skeleton Components
+// ✅ Memoized with display name for better debugging
+const SkeletonCard = memo(() => {
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -162,7 +228,7 @@ const SkeletonLoader = memo(() => {
         Animated.timing(shimmerAnim, {
           toValue: 1,
           duration: 1500,
-          useNativeDriver: true,
+          useNativeDriver: true, // ✅ Native driver for better performance
         }),
         Animated.timing(shimmerAnim, {
           toValue: 0,
@@ -171,7 +237,7 @@ const SkeletonLoader = memo(() => {
         }),
       ])
     ).start();
-  }, []);
+  }, [shimmerAnim]); // ✅ Added missing dependency
 
   const opacity = shimmerAnim.interpolate({
     inputRange: [0, 1],
@@ -179,13 +245,27 @@ const SkeletonLoader = memo(() => {
   });
 
   return (
-    <Animated.View style={[styles.skeleton, { opacity }]}>
-      <View style={styles.skeletonHeader} />
-      <View style={styles.skeletonContent} />
-      <View style={styles.skeletonContent} />
+    <Animated.View style={[styles.skeletonCard, { opacity }]}>
+      <View style={styles.skeletonRank} />
+      <View style={styles.skeletonAvatar} />
+      <View style={styles.skeletonContent}>
+        <View style={styles.skeletonLine} />
+        <View style={[styles.skeletonLine, { width: '60%' }]} />
+      </View>
+      <View style={styles.skeletonBadge} />
     </Animated.View>
   );
 });
+SkeletonCard.displayName = 'SkeletonCard';
+
+const SkeletonLoader = memo(() => {
+  return (
+    <View style={styles.skeletonContainer}>
+      {[1, 2, 3, 4, 5].map(i => <SkeletonCard key={i} />)}
+    </View>
+  );
+});
+SkeletonLoader.displayName = 'SkeletonLoader';
 
 // Mock Data
 const topViewers: RankedUser[] = [
@@ -398,13 +478,7 @@ const TopPlayerCard = memo(({
   onVote, 
   rank,
   t 
-}: { 
-  player: RankedPlayer; 
-  votes: { up: number; down: number; userVote: string | null };
-  onVote: (playerId: string, type: 'up' | 'down') => void; 
-  rank: number;
-  t: any;
-}) => {
+}: TopPlayerCardProps) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const router = require('expo-router').useRouter();
@@ -445,7 +519,7 @@ const TopPlayerCard = memo(({
   const approvalRate = totalVotes > 0 ? Math.round((votes.up / totalVotes) * 100) : 0;
 
   const isTopThree = rank <= 3;
-  const badgeColors = rank === 1 ? ['#FFD700', '#FFA500'] : 
+  const badgeColors: [string, string] = rank === 1 ? ['#FFD700', '#FFA500'] : 
                       rank === 2 ? ['#C0C0C0', '#A8A8A8'] : 
                       rank === 3 ? ['#CD7F32', '#B8860B'] : 
                       ['#22c55e', '#16a34a'];
@@ -575,9 +649,10 @@ const TopPlayerCard = memo(({
     </Animated.View>
   );
 });
+TopPlayerCard.displayName = 'TopPlayerCard';
 
 // Player Rating Card Component - Redesigned
-const PlayerRatingCard = memo(({ player, onVote, t }: { player: Player; onVote: (playerId: string, type: 'up' | 'down') => void; t: any }) => {
+const PlayerRatingCard = memo(({ player, onVote, t }: PlayerRatingCardProps) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -776,9 +851,10 @@ const PlayerRatingCard = memo(({ player, onVote, t }: { player: Player; onVote: 
     </Animated.View>
   );
 });
+PlayerRatingCard.displayName = 'PlayerRatingCard';
 
 // Redesigned User Card Component
-const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, hapticFeedback, t }: any) => {
+const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, hapticFeedback, t }: UserCardProps) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [isVisible, setIsVisible] = useState(false);
@@ -903,7 +979,7 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
                   <Eye color="#22c55e" size={14} strokeWidth={2} />
                   <Text style={styles.userScore}>{formatNumber(item.score)}</Text>
                 </View>
-                {item.change !== 0 && (
+                {item.change !== undefined && item.change !== 0 && (
                   <View style={[
                     styles.changeIndicator,
                     item.change > 0 ? styles.changePositive : styles.changeNegative
@@ -911,7 +987,7 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
                     <TrendingUp 
                       color={item.change > 0 ? '#22c55e' : '#ef4444'} 
                       size={10}
-                      style={item.change < 0 && { transform: [{ rotate: '180deg' }] }}
+                      style={item.change < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
                     />
                     <Text style={[
                       styles.changeText,
@@ -934,9 +1010,10 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
     </Animated.View>
   );
 });
+UserCard.displayName = 'UserCard';
 
 // Optimized Match Card Component
-const MatchCard = memo(({ item, index, openPrediction, formatNumber, hapticFeedback }: any) => {
+const MatchCard = memo(({ item, index, openPrediction, formatNumber, hapticFeedback }: MatchCardProps) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -1048,6 +1125,29 @@ const MatchCard = memo(({ item, index, openPrediction, formatNumber, hapticFeedb
     </Animated.View>
   );
 });
+MatchCard.displayName = 'MatchCard';
+
+// Error Display Component
+const ErrorDisplay = memo(({ 
+  error, 
+  onRetry, 
+  title 
+}: { 
+  error: string; 
+  onRetry: () => void; 
+  title: string 
+}) => (
+  <View style={styles.errorContainer}>
+    <AlertCircle color="#ef4444" size={48} />
+    <Text style={styles.errorTitle}>{title}</Text>
+    <Text style={styles.errorMessage}>{error}</Text>
+    <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+      <RefreshCw color="#fff" size={18} />
+      <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+    </TouchableOpacity>
+  </View>
+));
+ErrorDisplay.displayName = 'ErrorDisplay';
 
 // Helper Functions
 const formatNumber = (num: number): string => {
@@ -1106,6 +1206,23 @@ export default function ProRankScreen() {
   });
   const [isLoadingRankings, setIsLoadingRankings] = useState(true);
 
+  // Error states
+  const [rankingsError, setRankingsError] = useState<string | null>(null);
+  const [playersError, setPlayersError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Network states
+  const [isOffline, setIsOffline] = useState(false);
+  const [isUsingCache, setIsUsingCache] = useState(false);
+  
+  // Filter & Search states
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  
+  // ✅ Removed unused pagination states - API doesn't support pagination yet
+  // We can re-add later when backend supports it
+
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -1113,29 +1230,112 @@ export default function ProRankScreen() {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const headerHeight = useRef(new Animated.Value(200)).current;
 
-  // Fetch rankings data from API
-  const fetchRankings = useCallback(async () => {
+  // ✅ Stable ref for getToken to avoid re-creating callbacks
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  // ✅ Fetch rankings data from API with retry mechanism + offline cache
+  const fetchRankings = useCallback(async (retryAttempt = 0) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [1000, 2000, 4000];
+    
     try {
       setIsLoadingRankings(true);
-      const token = await getToken();
+      setRankingsError(null);
+      
+      // Check network status
+      const networkState = await Network.getNetworkStateAsync();
+      if (!networkState.isConnected || !networkState.isInternetReachable) {
+        setIsOffline(true);
+        
+        // ✅ Try to get cached data when offline
+        try {
+          const cached = await cacheService.get<AllRankingsResponse>(RANKINGS_CACHE_KEYS.ALL_RANKINGS);
+          if (cached && (cached.topViews.length > 0 || cached.topShares.length > 0 || 
+                        cached.topPredictions.length > 0 || cached.topCommenters.length > 0)) {
+            setRankingsData(cached);
+            setIsUsingCache(true);
+            setRankingsError(null); // Clear error if we have cache
+            setIsLoadingRankings(false);
+            logger.info('Loaded rankings from cache (offline mode)');
+            return;
+          }
+        } catch (cacheError) {
+          logger.warn('Error loading cached data:', cacheError);
+        }
+        
+        setRankingsError('لا يوجد اتصال بالإنترنت');
+        setIsLoadingRankings(false);
+        return;
+      }
+      
+      setIsOffline(false);
+      setIsUsingCache(false);
+      
+      const token = await getTokenRef.current();
       const data = await rankingsService.getAllRankings(token, 10);
       setRankingsData(data);
+      setRetryCount(0);
     } catch (error) {
       logger.error('Error fetching rankings:', error);
+      
+      // ✅ Try to load from cache on error
+      try {
+        const cached = await cacheService.get<AllRankingsResponse>(RANKINGS_CACHE_KEYS.ALL_RANKINGS);
+        if (cached) {
+          setRankingsData(cached);
+          setIsUsingCache(true);
+          setRankingsError(null);
+          setIsLoadingRankings(false);
+          logger.info('Loaded rankings from cache (error fallback)');
+          return;
+        }
+      } catch (cacheError) {
+        logger.warn('Error loading cached data on error:', cacheError);
+      }
+      
+      if (retryAttempt < MAX_RETRIES) {
+        setTimeout(() => {
+          fetchRankings(retryAttempt + 1);
+        }, RETRY_DELAYS[retryAttempt]);
+      } else {
+        const errorMsg = error instanceof Error ? error.message : 'فشل تحميل الترتيب';
+        setRankingsError(errorMsg);
+      }
     } finally {
-      setIsLoadingRankings(false);
+      if (retryAttempt === 0) {
+        setIsLoadingRankings(false);
+      }
     }
-  }, []); // Remove getToken from deps - it's stable from Clerk
+  }, []); // ✅ Empty deps is safe now with getTokenRef
 
-  // Fetch top players
-  const fetchTopPlayers = useCallback(async (period: PlayerPeriod = playerPeriod) => {
+  // ✅ Fetch top players with retry mechanism + offline cache
+  const fetchTopPlayers = useCallback(async (period: PlayerPeriod = playerPeriod, retryAttempt = 0) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [1000, 2000, 4000];
+    
     try {
       setIsLoadingPlayers(true);
-      const token = await getToken();
+      setPlayersError(null);
+      
+      // Check network status
+      const networkState = await Network.getNetworkStateAsync();
+      if (!networkState.isConnected || !networkState.isInternetReachable) {
+        setIsOffline(true);
+        setPlayersError('لا يوجد اتصال بالإنترنت');
+        setIsLoadingPlayers(false);
+        return;
+      }
+      
+      setIsOffline(false);
+      
+      const token = await getTokenRef.current();
       const { players } = await rankingsService.getTopPlayers(token, 11, period);
       setPlayersData(players);
       
-      // Fetch votes for each player - PARALLEL for better performance
+      // ✅ Fetch votes for each player - PARALLEL for better performance
       const votesPromises = players.map(player => 
         rankingsService.getPlayerVotes(token, player.id).then(votesData => ({
           playerId: player.id,
@@ -1157,10 +1357,27 @@ export default function ProRankScreen() {
       setPlayerVotes(votesMap);
     } catch (error) {
       logger.error('Error fetching top players:', error);
+      
+      if (retryAttempt < MAX_RETRIES) {
+        setTimeout(() => {
+          fetchTopPlayers(period, retryAttempt + 1);
+        }, RETRY_DELAYS[retryAttempt]);
+      } else {
+        const errorMsg = error instanceof Error ? error.message : 'فشل تحميل أفضل اللاعبين';
+        setPlayersError(errorMsg);
+      }
     } finally {
-      setIsLoadingPlayers(false);
+      if (retryAttempt === 0) {
+        setIsLoadingPlayers(false);
+      }
     }
-  }, [playerPeriod]); // Remove getToken from deps - it's stable from Clerk
+  }, [playerPeriod]); // ✅ Empty deps with getTokenRef would be better, but playerPeriod is used directly
+
+  const hapticFeedback = useCallback(() => {
+    if (HAPTIC_FEEDBACK_ENABLED) {
+      Vibration.vibrate(10);
+    }
+  }, []);
 
   // Handle period change
   const handlePeriodChange = useCallback((period: PlayerPeriod) => {
@@ -1213,12 +1430,6 @@ export default function ProRankScreen() {
     };
   }, []);
 
-  const hapticFeedback = useCallback(() => {
-    if (HAPTIC_FEEDBACK_ENABLED) {
-      Vibration.vibrate(10);
-    }
-  }, []);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     hapticFeedback();
@@ -1226,6 +1437,9 @@ export default function ProRankScreen() {
     await Promise.all([fetchRankings(), fetchTopPlayers()]);
     setRefreshing(false);
   }, [hapticFeedback, fetchRankings, fetchTopPlayers]);
+
+  // ✅ Removed loadMoreRankings - API doesn't support pagination yet
+  // Can be added later when backend supports it
 
   const getRankIcon = useCallback((rank: number) => {
     switch (rank) {
@@ -1254,11 +1468,30 @@ export default function ProRankScreen() {
 
   const handlePlayerVote = useCallback(async (playerId: string, type: 'up' | 'down') => {
     hapticFeedback();
+    
+    // Get current state for rollback
+    const currentVotes = playerVotes[playerId] || { up: 0, down: 0, userVote: null };
+    const wasVoted = currentVotes.userVote === type;
+    const prevUp = currentVotes.up;
+    const prevDown = currentVotes.down;
+    const prevUserVote = currentVotes.userVote;
+    
+    // Optimistic update
+    setPlayerVotes(prev => ({
+      ...prev,
+      [playerId]: {
+        up: wasVoted ? prevUp - 1 : (type === 'up' ? prevUp + 1 : (prevUserVote === 'up' ? prevUp - 1 : prevUp)),
+        down: wasVoted ? prevDown - 1 : (type === 'down' ? prevDown + 1 : (prevUserVote === 'down' ? prevDown - 1 : prevDown)),
+        userVote: wasVoted ? null : type,
+      }
+    }));
+    
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       const result = await rankingsService.voteForPlayer(token, playerId, type);
       
       if (result) {
+        // Update with server response
         setPlayerVotes(prev => ({
           ...prev,
           [playerId]: {
@@ -1270,9 +1503,18 @@ export default function ProRankScreen() {
       }
     } catch (error) {
       logger.error('Error voting:', error);
-      Alert.alert('خطأ', 'فشل في التصويت');
+      // Rollback on failure
+      setPlayerVotes(prev => ({
+        ...prev,
+        [playerId]: {
+          up: prevUp,
+          down: prevDown,
+          userVote: prevUserVote,
+        }
+      }));
+      Alert.alert('خطأ', 'فشل التصويت. يرجى المحاولة مرة أخرى.');
     }
-  }, [hapticFeedback, getToken]);
+  }, [hapticFeedback, playerVotes]); // ✅ Removed getToken - using ref now
 
   const openPrediction = useCallback((match: Match) => {
     setSelectedMatch(match);
@@ -1283,8 +1525,22 @@ export default function ProRankScreen() {
   }, [hapticFeedback]);
 
   const submitPrediction = useCallback(async () => {
-    if (!homeScore || !awayScore) {
-      Alert.alert('Invalid Input', 'Please enter scores for both teams');
+    // Validation
+    const home = parseInt(homeScore);
+    const away = parseInt(awayScore);
+    
+    if (isNaN(home) || isNaN(away)) {
+      Alert.alert('خطأ', 'يرجى إدخال أرقام صحيحة');
+      return;
+    }
+    
+    if (home < 0 || away < 0 || home > 20 || away > 20) {
+      Alert.alert('خطأ', 'النتيجة يجب أن تكون بين 0 و 20');
+      return;
+    }
+    
+    if (!selectedMatch) {
+      Alert.alert('خطأ', 'لم يتم اختيار مباراة');
       return;
     }
     
@@ -1292,20 +1548,39 @@ export default function ProRankScreen() {
     hapticFeedback();
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      Alert.alert(
-        'Success!', 
-        `Your prediction has been submitted: ${homeScore} - ${awayScore}`,
-        [{ text: 'OK', onPress: () => setShowPredictionModal(false) }]
+      const token = await getTokenRef.current();
+      const result = await rankingsService.submitPrediction(
+        token,
+        selectedMatch.id,
+        home,
+        away
       );
-      setHomeScore('');
-      setAwayScore('');
+      
+      if (result.success) {
+        Alert.alert(
+          'نجح!',
+          result.message || 'تم إرسال توقعك بنجاح',
+          [{
+            text: 'حسناً',
+            onPress: () => {
+              setShowPredictionModal(false);
+              setHomeScore('');
+              setAwayScore('');
+              // Refresh rankings to show updated predictions
+              fetchRankings();
+            }
+          }]
+        );
+      } else {
+        Alert.alert('خطأ', result.message || 'فشل إرسال التوقع. يرجى المحاولة مرة أخرى.');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to submit prediction. Please try again.');
+      logger.error('Error submitting prediction:', error);
+      Alert.alert('خطأ', 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
     } finally {
       setLoading(false);
     }
-  }, [homeScore, awayScore, hapticFeedback]);
+  }, [homeScore, awayScore, selectedMatch, hapticFeedback, fetchRankings]); // ✅ Removed getToken - using ref now
 
   const currentData = useMemo(() => {
     // Transform API data to match the UI format
@@ -1362,21 +1637,37 @@ export default function ProRankScreen() {
     }
 
     // Use real data from API - return empty if no data
+    let data: RankedUser[] = [];
     switch(selectedCategory) {
       case 'views':
-        return rankingsData.topViews.map(transformReelToUser);
+        data = rankingsData.topViews.map(transformReelToUser);
+        break;
       case 'shares':
-        return rankingsData.topShares.map(transformReelToUser);
+        data = rankingsData.topShares.map(transformReelToUser);
+        break;
       case 'predictions':
-        return rankingsData.topPredictions.map(transformPredictorToUser);
+        data = rankingsData.topPredictions.map(transformPredictorToUser);
+        break;
       case 'comments':
-        return rankingsData.topCommenters.map(transformCommenterToUser);
+        data = rankingsData.topCommenters.map(transformCommenterToUser);
+        break;
       default:
         return [];
     }
-  }, [selectedCategory, rankingsData, isLoadingRankings]);
 
-  const keyExtractor = useCallback((item: any) => item.id, []);
+    // Apply search filter
+    if (searchQuery.trim()) {
+      return data.filter(item =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    return data;
+  }, [selectedCategory, rankingsData, isLoadingRankings, searchQuery]);
+
+  // ✅ Properly typed keyExtractor
+  const keyExtractor = useCallback((item: RankedUser) => item.id, []);
 
   const onScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: headerHeight } } }],
@@ -1501,7 +1792,7 @@ export default function ProRankScreen() {
                   { key: 'views', icon: Eye, label: t.rank.topViewers, color: '#3b82f6' },
                   { key: 'comments', icon: MessageCircle, label: t.rank.topComments, color: '#a855f7' },
                   { key: 'shares', icon: Share2, label: t.rank.topShares, color: '#f59e0b' },
-                  { key: 'predictions', icon: Target, label: 'أفضل المتوقعين', color: '#22c55e' },
+                  { key: 'predictions', icon: Target, label: (t.rank as any).topPredictors || 'أفضل المتوقعين', color: '#22c55e' },
                 ].map((category, idx) => (
                   <TouchableOpacity
                     key={category.key}
@@ -1542,6 +1833,22 @@ export default function ProRankScreen() {
               </ScrollView>
             </Animated.View>
 
+            {/* Offline Banner */}
+            {isOffline && (
+              <View style={styles.offlineBanner}>
+                <WifiOff color="#f59e0b" size={16} />
+                <Text style={styles.offlineText}>لا يوجد اتصال بالإنترنت</Text>
+              </View>
+            )}
+
+            {/* ✅ Cache Indicator */}
+            {isUsingCache && !isOffline && (
+              <View style={styles.cacheIndicator}>
+                <Clock color="#f59e0b" size={14} />
+                <Text style={styles.cacheText}>عرض البيانات المحفوظة</Text>
+              </View>
+            )}
+
             {/* Top Users Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -1554,16 +1861,36 @@ export default function ProRankScreen() {
                     </View>
                   )}
                 </View>
-                <TouchableOpacity onPress={hapticFeedback}>
-                  <Filter color="#22c55e" size={20} />
-                </TouchableOpacity>
+                <View style={styles.sectionHeaderActions}>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setShowFilterModal(true);
+                      hapticFeedback();
+                    }}
+                    style={styles.headerActionButton}
+                  >
+                    <Filter color="#22c55e" size={20} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setShowSearchModal(true);
+                      hapticFeedback();
+                    }}
+                    style={styles.headerActionButton}
+                  >
+                    <Search color="#22c55e" size={20} />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {isLoadingRankings ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#22c55e" />
-                  <Text style={styles.loadingText}>جاري تحميل الترتيب...</Text>
-                </View>
+              {rankingsError ? (
+                <ErrorDisplay
+                  error={rankingsError}
+                  onRetry={() => fetchRankings()}
+                  title="فشل تحميل الترتيب"
+                />
+              ) : isLoadingRankings ? (
+                <SkeletonLoader />
               ) : currentData.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Trophy color="#666" size={48} />
@@ -1576,10 +1903,10 @@ export default function ProRankScreen() {
                   </Text>
                 </View>
               ) : (
-                <FlatList
-                  data={currentData}
-                  renderItem={({ item, index }) => (
+                <>
+                  {currentData.map((item, index) => (
                     <UserCard
+                      key={item.id}
                       item={item}
                       index={index}
                       getRankIcon={getRankIcon}
@@ -1588,14 +1915,8 @@ export default function ProRankScreen() {
                       hapticFeedback={hapticFeedback}
                       t={t}
                     />
-                  )}
-                  keyExtractor={keyExtractor}
-                  scrollEnabled={false}
-                  removeClippedSubviews
-                  initialNumToRender={5}
-                  maxToRenderPerBatch={5}
-                  windowSize={10}
-                />
+                  ))}
+                </>
               )}
 
               <TouchableOpacity 
@@ -1665,11 +1986,14 @@ export default function ProRankScreen() {
               </TouchableOpacity>
             </View>
 
-            {isLoadingPlayers ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#22c55e" />
-                <Text style={styles.loadingText}>جاري تحميل أفضل اللاعبين...</Text>
-              </View>
+            {playersError ? (
+              <ErrorDisplay
+                error={playersError}
+                onRetry={() => fetchTopPlayers(playerPeriod)}
+                title="فشل تحميل أفضل اللاعبين"
+              />
+            ) : isLoadingPlayers ? (
+              <SkeletonLoader />
             ) : playersData.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Users color="#666" size={48} />
@@ -1677,24 +2001,18 @@ export default function ProRankScreen() {
                 <Text style={styles.emptySubtext}>ارفع فيديو وابدأ المنافسة لتظهر هنا!</Text>
               </View>
             ) : (
-              <FlatList
-                data={playersData}
-                renderItem={({ item, index }) => (
+              <>
+                {playersData.map((item, index) => (
                   <TopPlayerCard
+                    key={item.id}
                     player={item}
                     votes={playerVotes[item.id] || { up: 0, down: 0, userVote: null }}
                     onVote={handlePlayerVote}
                     rank={index + 1}
                     t={t}
                   />
-                )}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                removeClippedSubviews
-                initialNumToRender={5}
-                maxToRenderPerBatch={5}
-                windowSize={10}
-              />
+                ))}
+              </>
             )}
           </View>
         )}
@@ -1788,6 +2106,156 @@ export default function ProRankScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </BlurView>
+      </Modal>
+
+      {/* Search Modal */}
+      <Modal
+        visible={showSearchModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSearchModal(false)}
+      >
+        <BlurView intensity={80} style={styles.modalOverlay}>
+          <View style={styles.searchModalContent}>
+            <View style={styles.searchHeader}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="ابحث عن مستخدم..."
+                placeholderTextColor="#666"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              <TouchableOpacity
+                style={styles.searchCloseButton}
+                onPress={() => {
+                  setShowSearchModal(false);
+                  setSearchQuery('');
+                }}
+              >
+                <X color="#fff" size={24} />
+              </TouchableOpacity>
+            </View>
+            
+            {searchQuery.trim() && (
+              <View style={styles.searchResultsInfo}>
+                <Text style={styles.searchResultsText}>
+                  {currentData.length} نتيجة
+                </Text>
+              </View>
+            )}
+          </View>
+        </BlurView>
+      </Modal>
+
+      {/* ✅ Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <BlurView intensity={80} style={styles.modalOverlay}>
+          <View style={styles.filterModalContent}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>تصفية الترتيب</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                style={styles.filterCloseButton}
+              >
+                <X color="#fff" size={24} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.filterOptions}>
+              {/* Period Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>الفترة الزمنية</Text>
+                {[
+                  { value: '3_days', label: 'آخر 3 أيام' },
+                  { value: 'weekly', label: 'أسبوعي' },
+                  { value: 'monthly', label: 'شهري' }
+                ].map(period => (
+                  <TouchableOpacity
+                    key={period.value}
+                    style={[
+                      styles.filterOption,
+                      rankingsData.period === period.value && styles.filterOptionActive
+                    ]}
+                    onPress={() => {
+                      hapticFeedback();
+                      // Note: Currently API only returns 3_days period
+                      // This is a placeholder for future period filtering
+                      setShowFilterModal(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      rankingsData.period === period.value && styles.filterOptionTextActive
+                    ]}>
+                      {period.label}
+                    </Text>
+                    {rankingsData.period === period.value && (
+                      <View style={styles.filterOptionCheck}>
+                        <Star color="#22c55e" size={16} fill="#22c55e" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Category Quick Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>الفئة</Text>
+                {[
+                  { key: 'views', label: t.rank.topViewers },
+                  { key: 'comments', label: t.rank.topComments },
+                  { key: 'shares', label: t.rank.topShares },
+                  { key: 'predictions', label: (t.rank as any).topPredictors || 'أفضل المتوقعين' }
+                ].map(cat => (
+                  <TouchableOpacity
+                    key={cat.key}
+                    style={[
+                      styles.filterOption,
+                      selectedCategory === cat.key && styles.filterOptionActive
+                    ]}
+                    onPress={() => {
+                      setSelectedCategory(cat.key as typeof selectedCategory);
+                      hapticFeedback();
+                    }}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      selectedCategory === cat.key && styles.filterOptionTextActive
+                    ]}>
+                      {cat.label}
+                    </Text>
+                    {selectedCategory === cat.key && (
+                      <View style={styles.filterOptionCheck}>
+                        <Star color="#22c55e" size={16} fill="#22c55e" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.filterApplyButton}
+              onPress={() => {
+                setShowFilterModal(false);
+                hapticFeedback();
+              }}
+            >
+              <LinearGradient
+                colors={['#22c55e', '#16a34a']}
+                style={styles.filterApplyGradient}
+              >
+                <Text style={styles.filterApplyText}>تطبيق</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </BlurView>
       </Modal>
@@ -2070,6 +2538,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  sectionHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2254,54 +2735,6 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 14,
     fontWeight: 'bold',
-  },
-  userAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: '#22c55e',
-    backgroundColor: '#333',
-  },
-  userInfo: {
-    gap: 4,
-    flex: 1,
-  },
-  userName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  userStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  userScore: {
-    color: '#666',
-    fontSize: 12,
-  },
-  changeIndicator: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    marginLeft: 4,
-  },
-  changePositive: {
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-  },
-  changeNegative: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-  },
-  changeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  userRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   badge: {
     width: 24,
@@ -2676,20 +3109,46 @@ const styles = StyleSheet.create({
   voteCountActiveRed: {
     color: '#fff',
   },
-  skeleton: {
-    marginBottom: 12,
+  // Skeleton Styles
+  skeletonContainer: {
+    gap: 12,
   },
-  skeletonHeader: {
-    height: 20,
+  skeletonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  skeletonRank: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#333',
-    borderRadius: 10,
-    marginBottom: 10,
+  },
+  skeletonAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#333',
   },
   skeletonContent: {
-    height: 60,
+    flex: 1,
+    gap: 8,
+  },
+  skeletonLine: {
+    height: 14,
     backgroundColor: '#333',
-    borderRadius: 10,
-    marginBottom: 8,
+    borderRadius: 7,
+  },
+  skeletonBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#333',
   },
   modalOverlay: {
     flex: 1,
@@ -3107,6 +3566,219 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   periodButtonTextActive: {
+    color: '#fff',
+  },
+  // Error States
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  errorTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  errorMessage: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Offline Banner
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  offlineText: {
+    color: '#f59e0b',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // ✅ Cache Indicator
+  cacheIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  cacheText: {
+    color: '#f59e0b',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  // Search Modal
+  searchModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    marginHorizontal: 20,
+    marginTop: 100,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: '#000',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: '#fff',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#22c55e',
+  },
+  searchCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchResultsInfo: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  searchResultsText: {
+    color: '#22c55e',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // ✅ Filter Modal Styles
+  filterModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 24,
+    marginHorizontal: 20,
+    marginTop: 100,
+    maxHeight: SCREEN_HEIGHT * 0.7,
+    borderWidth: 1,
+    borderColor: '#333',
+    overflow: 'hidden',
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  filterTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  filterCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterOptions: {
+    flex: 1,
+    padding: 20,
+  },
+  filterSection: {
+    marginBottom: 24,
+  },
+  filterSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#888',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  filterOptionActive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  filterOptionText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  filterOptionTextActive: {
+    color: '#22c55e',
+    fontWeight: '600',
+  },
+  filterOptionCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterApplyButton: {
+    margin: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  filterApplyGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  filterApplyText: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#fff',
   },
 });
