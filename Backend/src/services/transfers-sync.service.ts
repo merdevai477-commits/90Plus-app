@@ -18,10 +18,15 @@ import { prisma } from '../lib/prisma';
 
 // Create transfers sync queue (only if Redis is available)
 let transfersSyncQueue: Queue.Queue | null = null;
+let queueInitialized = false;
 
-// Initialize queue only if Redis is available
+// ✅ Initialize queue only when service starts (not at import time)
 function initializeQueue(): void {
-    if (transfersSyncQueue) return; // Already initialized
+    if (queueInitialized || transfersSyncQueue) {
+        return; // Already initialized
+    }
+    
+    queueInitialized = true;
     
     try {
         // Check if Redis is available
@@ -49,8 +54,7 @@ function initializeQueue(): void {
     }
 }
 
-// Try to initialize queue (will retry if Redis becomes available later)
-initializeQueue();
+// ✅ Removed top-level execution - queue will be initialized in start() method
 
 interface TransfersSyncJobData {
     type: 'weekly' | 'daily' | 'manual';
@@ -82,6 +86,9 @@ class TransfersSyncService {
 
         this.isRunning = true;
         logger.info('[TransfersSync] ✅ Service started');
+
+        // ✅ Initialize queue on start (not at import time)
+        initializeQueue();
 
         // Process queue jobs
         this.setupQueueProcessor();
