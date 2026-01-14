@@ -517,4 +517,194 @@ router.get('/unresolved', async (req: Request, res: Response): Promise<void> => 
     }
 });
 
+/**
+ * POST /api/predictions/submit
+ * Submit a score prediction (for rank page)
+ * Used for predicting exact match scores
+ */
+router.post('/submit', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.headers['x-clerk-user-id'] as string;
+
+        if (!clerkUserId) {
+            res.status(401).json({ 
+                success: false,
+                error: 'Unauthorized',
+                message: 'يجب تسجيل الدخول لإرسال التوقعات' 
+            });
+            return;
+        }
+
+        const { matchId, homeScore, awayScore } = req.body;
+
+        // Validation
+        if (!matchId || homeScore === undefined || awayScore === undefined) {
+            res.status(400).json({ 
+                success: false,
+                error: 'Missing required fields',
+                message: 'يرجى إدخال جميع البيانات المطلوبة' 
+            });
+            return;
+        }
+
+        // Validate scores are numbers
+        const home = parseInt(homeScore);
+        const away = parseInt(awayScore);
+
+        if (isNaN(home) || isNaN(away)) {
+            res.status(400).json({ 
+                success: false,
+                error: 'Invalid scores',
+                message: 'يرجى إدخال أرقام صحيحة' 
+            });
+            return;
+        }
+
+        // Validate score range (0-20)
+        if (home < 0 || away < 0 || home > 20 || away > 20) {
+            res.status(400).json({ 
+                success: false,
+                error: 'Invalid score range',
+                message: 'النتيجة يجب أن تكون بين 0 و 20' 
+            });
+            return;
+        }
+
+        const user = await prisma.user.findFirst({
+            where: { clerkUserId },
+            select: { id: true, coins: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ 
+                success: false,
+                error: 'User not found',
+                message: 'المستخدم غير موجود' 
+            });
+            return;
+        }
+
+        // Check if user has enough coins
+        if (user.coins < PREDICTION_COST) {
+            res.status(400).json({
+                success: false,
+                error: 'Insufficient coins',
+                message: `تحتاج إلى ${PREDICTION_COST} عملة لإرسال توقع`,
+                required: PREDICTION_COST,
+                current: user.coins
+            });
+            return;
+        }
+
+        // Check daily limit
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const todayPredictions = await (prisma as any).prediction.count({
+            where: {
+                userId: user.id,
+                createdAt: {
+                    gte: today,
+                    lt: tomorrow
+                }
+            }
+        });
+
+        if (todayPredictions >= DAILY_PREDICTION_LIMIT) {
+            res.status(400).json({
+                success: false,
+                error: 'Daily prediction limit reached',
+                message: `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`,
+                limit: DAILY_PREDICTION_LIMIT
+            });
+            return;
+        }
+
+        // Check if already predicted on this match
+        const existingPrediction = await (prisma as any).prediction.findUnique({
+            where: {
+                userId_apiMatchId: {
+                    userId: user.id,
+                    apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId
+                }
+            }
+        });
+
+        if (existingPrediction) {
+            res.status(400).json({ 
+                success: false,
+                error: 'Already predicted',
+                message: 'لقد أرسلت توقعاً لهذه المباراة بالفعل' 
+            });
+            return;
+        }
+
+        // Determine prediction type based on scores
+        let predictionType: string;
+        if (home > away) {
+            predictionType = 'home';
+        } else if (away > home) {
+            predictionType = 'away';
+        } else {
+            predictionType = 'draw';
+        }
+
+        // Create prediction and deduct coins in transaction
+        const [prediction, updatedUser] = await prisma.$transaction([
+            (prisma as any).prediction.create({
+                data: {
+                    userId: user.id,
+                    apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId,
+                    predictionType,
+                    coinsSpent: PREDICTION_COST,
+                    // Store the exact score prediction in a JSON field or separate columns
+                    // For now, using homeTeam/awayTeam fields to store scores
+                    homeTeam: `Score: ${home}`,
+                    awayTeam: `Score: ${away}`,
+                }
+            }),
+            prisma.user.update({
+                where: { id: user.id },
+                data: { coins: { decrement: PREDICTION_COST } },
+                select: { coins: true }
+            }),
+            prisma.coinTransaction.create({
+                data: {
+                    userId: user.id,
+                    amount: -PREDICTION_COST,
+                    type: 'PREDICTION' as any,
+                    description: `توقع نتيجة المباراة: ${home}-${away}`
+                }
+            })
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                prediction: {
+                    id: prediction.id,
+                    matchId: prediction.apiMatchId,
+                    homeScore: home,
+                    awayScore: away,
+                    predictionType,
+                    coinsSpent: PREDICTION_COST,
+                    createdAt: prediction.createdAt
+                },
+                newBalance: updatedUser.coins,
+                remaining: DAILY_PREDICTION_LIMIT - todayPredictions - 1
+            },
+            message: '🎯 تم إرسال توقعك بنجاح!'
+        });
+    } catch (error) {
+        console.error('Error submitting score prediction:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Internal server error',
+            message: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.' 
+        });
+    }
+});
+
 export default router;
