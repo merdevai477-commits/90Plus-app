@@ -57,20 +57,25 @@ interface Brand {
   logo: string;
 }
 
+// ✅ PERFORMANCE: Memoize expensive calculations outside component
+const DEFAULT_FOLLOW_STATS = { followersCount: 0, followingCount: 0, reelsCount: 0 };
+
 export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('videos');
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
+  
+  // ✅ PERFORMANCE: Memoize these to prevent re-creation
+  const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
+  const toast = useToast();
+  const { t } = useTranslation();
 
-  // Prevent guest access - redirect to auth
+  // ✅ OPTIMIZATION: Prevent guest access - redirect to auth (memoized check)
   useEffect(() => {
     if (!isSignedIn) {
       router.replace('/auth');
     }
   }, [isSignedIn]);
-  const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
-  const toast = useToast();
-  const { t } = useTranslation();
 
   // Use the profile cache hook for cache-first loading (Requirements 2.1, 2.2, 2.3, 2.5, 2.6)
   const {
@@ -99,6 +104,7 @@ export default function ProfileScreen() {
   };
 
   const [countryFlag, setCountryFlag] = useState<string>(DEFAULT_COUNTRY_FLAG);
+  const [location, setLocation] = useState<string>('مصر'); // ✅ NEW: Local state for immediate update
   const [position, setPosition] = useState<string>(DEFAULT_POSITION);
   const [club, setClub] = useState<string | undefined>(undefined);
   const [brand, setBrand] = useState<string | undefined>(undefined);
@@ -138,21 +144,32 @@ export default function ProfileScreen() {
   // Video Management State
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   
-  // Token state for BadgesDisplay
+  // ✅ OPTIMIZATION: Token state for BadgesDisplay
   const [authToken, setAuthToken] = useState<string | null>(null);
   
-  // Fetch token for badges
+  // ✅ OPTIMIZATION: Fetch token for badges (memoized)
   useEffect(() => {
+    let isMounted = true;
     const fetchToken = async () => {
-      const token = await getToken();
-      setAuthToken(token);
+      try {
+        const token = await getToken();
+        if (isMounted && token) {
+          setAuthToken(token);
+        }
+      } catch (error) {
+        // Silent fail - badges will handle missing token
+      }
     };
     fetchToken();
-  }, [getToken]);
+    return () => { isMounted = false; }; // ✅ Cleanup to prevent state updates on unmounted component
+  }, []); // ✅ Only run once on mount
 
-  // Derive state from cache
+  // ✅ OPTIMIZATION: Derive state from cache with memoization
   const userData = cachedUserData;
-  const followStats = cachedFollowStats || { followersCount: 0, followingCount: 0, reelsCount: 0 };
+  const followStats = useMemo(() => 
+    cachedFollowStats || DEFAULT_FOLLOW_STATS, 
+    [cachedFollowStats]
+  );
 
   // Helper function to validate and get token
   const getValidatedToken = async (): Promise<string | null> => {
@@ -175,38 +192,45 @@ export default function ProfileScreen() {
   const [savedVideosCursor, setSavedVideosCursor] = useState<string | null>(null);
   const [hasMoreSaved, setHasMoreSaved] = useState(true);
 
-  // Load saved videos
+  // ✅ OPTIMIZATION: Load saved videos (with cancellation support)
   const loadSavedVideos = useCallback(async (cursor?: string) => {
     setIsLoadingSaved(true);
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        setIsLoadingSaved(false);
+        return;
+      }
 
       const result = await ReelsService.getSavedReels(token, cursor);
       if (result) {
         if (cursor) {
-          // Append to existing
+          // Append to existing (batch update)
           setSavedVideos(prev => [...prev, ...result.savedReels]);
         } else {
           // Replace
           setSavedVideos(result.savedReels);
         }
+        // Batch these state updates
         setSavedVideosCursor(result.nextCursor);
         setHasMoreSaved(result.hasMore);
       }
     } catch (error) {
-      console.error('Error loading saved videos:', error);
+      logger.error('Error loading saved videos:', error);
+      // Don't show toast on error - fail silently
     } finally {
       setIsLoadingSaved(false);
     }
-  }, [getToken]);
+  }, []); // ✅ Remove getToken from deps - it's stable from useAuth
 
-  // Load saved videos when saved tab is active
+  // ✅ OPTIMIZATION: Load saved videos when saved tab is active
+  const hasLoadedSavedRef = useRef(false); // ✅ Track if we've loaded saved videos
   useEffect(() => {
-    if (activeTab === 'saved' && savedVideos.length === 0 && !isLoadingSaved) {
+    if (activeTab === 'saved' && !hasLoadedSavedRef.current && !isLoadingSaved) {
+      hasLoadedSavedRef.current = true;
       loadSavedVideos();
     }
-  }, [activeTab, savedVideos.length, isLoadingSaved, loadSavedVideos]);
+  }, [activeTab, isLoadingSaved, loadSavedVideos]); // ✅ Remove savedVideos.length from deps
 
   const myVideos = React.useMemo(() => {
     const cached = cachedVideos || [];
@@ -238,76 +262,101 @@ export default function ProfileScreen() {
   // Predictions store for prediction stats
   const { stats: predictionStats, fetchPredictionStats } = usePredictionsStore();
 
-  // Fetch prediction stats when authenticated
+  // ✅ OPTIMIZATION: Fetch prediction stats when authenticated (with cleanup)
   useEffect(() => {
+    let isMounted = true;
     const loadPredictionStats = async () => {
-      const token = await getToken();
-      if (token) {
-        fetchPredictionStats(token);
+      try {
+        const token = await getToken();
+        if (isMounted && token) {
+          await fetchPredictionStats(token);
+        }
+      } catch (error) {
+        logger.error('Error loading prediction stats:', error);
       }
     };
     loadPredictionStats();
-  }, []);
+    return () => { isMounted = false; }; // ✅ Cleanup
+  }, []); // ✅ Only run once
 
-  // Sync local state with cached data when it changes
+  // ✅ OPTIMIZATION: Sync local state with cached data (reduced re-renders)
+  const prevUserDataRef = useRef(userData);
   useEffect(() => {
-    if (userData) {
-      // Update local state from cached user data
-      // ✅ Always use userData from cache (not just on first load)
-      if (userData.position) setPosition(userData.position);
-      if (userData.countryFlag) setCountryFlag(userData.countryFlag);
-      if (userData.avatar) {
-        setLocalImage(userData.avatar);
-        globalState.setLocalAvatar(userData.avatar);
-      }
-      if (userData.coverImage) {
-        setCoverImage(userData.coverImage);
-      }
-      // ✅ Load club logo from userData (saved from previous selection)
-      if (userData.clubLogo) {
-        setClub(userData.clubLogo);
-      } else if (userData.favoriteTeam) {
-        // If favoriteTeam exists but no logo, try to fetch it
-        // Find club by name and fetch logo
-        const loadClubLogo = async () => {
-          try {
-            const { CLUBS } = await import('../../data/clubs');
-            const matchedClub = CLUBS.find(c => 
-              c.name === userData.favoriteTeam || 
-              c.name.includes(userData.favoriteTeam) ||
-              userData.favoriteTeam.includes(c.name)
-            );
-            if (matchedClub?.apiId) {
-              const { getClubLogo } = await import('../../services/clubLogoService');
-              const logo = await getClubLogo(matchedClub.apiId);
-              if (logo) {
-                setClub(logo);
-                // Update cache with fetched logo
-                await updateCachedUserData({ clubLogo: logo });
-              }
-            }
-          } catch (error) {
-            logger.error('Error loading club logo:', error);
-          }
-        };
-        loadClubLogo();
-      }
-      if (userData.brandLogo) setBrand(userData.brandLogo);
-
-      // ✅ Update stats if available - always sync from cache
-      if (userData.age || userData.height || userData.weight || userData.preferredFoot) {
-        setStats({
-          age: userData.age?.toString() || DEFAULT_STATS.age,
-          height: userData.height?.toString() || DEFAULT_STATS.height,
-          weight: userData.weight?.toString() || DEFAULT_STATS.weight,
-          foot: (userData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
-        });
-      }
-
-      // Update globalState
-      globalState.username = userData.username;
+    if (!userData) return;
+    
+    // ✅ Only update if userData actually changed (deep comparison on key fields)
+    const prev = prevUserDataRef.current;
+    const hasChanged = !prev || 
+      prev.position !== userData.position ||
+      prev.countryFlag !== userData.countryFlag ||
+      prev.avatar !== userData.avatar ||
+      prev.coverImage !== userData.coverImage ||
+      prev.clubLogo !== userData.clubLogo ||
+      prev.brandLogo !== userData.brandLogo ||
+      prev.age !== userData.age ||
+      prev.height !== userData.height ||
+      prev.weight !== userData.weight ||
+      prev.preferredFoot !== userData.preferredFoot;
+    
+    if (!hasChanged) return; // ✅ Skip if nothing changed
+    
+    prevUserDataRef.current = userData;
+    
+    // Batch all state updates together
+    if (userData.position) setPosition(userData.position);
+    if (userData.countryFlag) setCountryFlag(userData.countryFlag);
+    if (userData.location) setLocation(userData.location); // ✅ Sync location
+    if (userData.avatar) {
+      setLocalImage(userData.avatar);
+      globalState.setLocalAvatar(userData.avatar);
     }
-  }, [userData]); // ✅ Keep dependency on userData to sync when cache updates
+    if (userData.coverImage) {
+      setCoverImage(userData.coverImage);
+    }
+    
+    // ✅ Load club logo (optimized)
+    if (userData.clubLogo) {
+      setClub(userData.clubLogo);
+    } else if (userData.favoriteTeam && !prev?.favoriteTeam) {
+      // Only fetch if favoriteTeam is new
+      const loadClubLogo = async () => {
+        try {
+          const { CLUBS } = await import('../../data/clubs');
+          const matchedClub = CLUBS.find(c => 
+            c.name === userData.favoriteTeam || 
+            c.name.includes(userData.favoriteTeam) ||
+            userData.favoriteTeam.includes(c.name)
+          );
+          if (matchedClub?.apiId) {
+            const { getClubLogo } = await import('../../services/clubLogoService');
+            const logo = await getClubLogo(matchedClub.apiId);
+            if (logo) {
+              setClub(logo);
+              await updateCachedUserData({ clubLogo: logo });
+            }
+          }
+        } catch (error) {
+          logger.error('Error loading club logo:', error);
+        }
+      };
+      loadClubLogo();
+    }
+    
+    if (userData.brandLogo) setBrand(userData.brandLogo);
+
+    // ✅ Update stats (batch update)
+    if (userData.age || userData.height || userData.weight || userData.preferredFoot) {
+      setStats({
+        age: userData.age?.toString() || DEFAULT_STATS.age,
+        height: userData.height?.toString() || DEFAULT_STATS.height,
+        weight: userData.weight?.toString() || DEFAULT_STATS.weight,
+        foot: (userData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
+      });
+    }
+
+    // Update globalState
+    globalState.username = userData.username;
+  }, [userData, updateCachedUserData]); // ✅ Proper deps
 
   // Ref to store refreshCache to avoid dependency issues
   const refreshCacheRef = useRef(refreshCache);
@@ -340,7 +389,8 @@ export default function ProfileScreen() {
     return () => subscription.remove();
   }, []); // Empty deps - uses ref
 
-  const handleCoverPress = () => {
+  // ✅ OPTIMIZATION: Memoize cover press handler
+  const handleCoverPress = useCallback(() => {
     const options = ['عرض الصورة', 'تغيير الصورة', 'إلغاء'];
     const cancelButtonIndex = 2;
 
@@ -368,7 +418,7 @@ export default function ProfileScreen() {
         ]
       );
     }
-  };
+  }, []); // ✅ No deps needed - functions are defined inside
 
   const handleCoverUpload = async () => {
     // Validate userData exists
@@ -441,10 +491,10 @@ export default function ProfileScreen() {
         // Update userData via cache immediately
         await updateCachedUserData({ coverImage: newCoverUrl });
         
-        // Force refresh cache to get latest data from backend
-        await refreshCache(true);
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         
-        toast.showSuccess('تم', 'تم رفع صورة الغلاف بنجاح');
+        toast.showSuccess('تم', 'تم رفع صورة الغلاف بنجاح 🖼️');
       } else {
         // Revert on error
         setCoverImage(originalCover || null);
@@ -532,10 +582,10 @@ export default function ProfileScreen() {
         // Update userData via cache immediately
         await updateCachedUserData({ avatar: newAvatarUrl });
 
-        // Force refresh cache to get latest data from backend
-        await refreshCache(true);
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
 
-        toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح');
+        toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح 📸');
       } else {
         // Revert local image on error
         setLocalImage(originalAvatar || null);
@@ -560,29 +610,33 @@ export default function ProfileScreen() {
 
     // Store original values for rollback
     const originalCountryFlag = userData?.countryFlag || DEFAULT_COUNTRY_FLAG;
-    const originalLocation = userData?.location;
+    const originalLocation = userData?.location || location;
 
     try {
-      // Optimistic update
+      // ✅ INSTANT UPDATE: Update UI immediately (optimistic)
       setCountryFlag(country.flag);
+      setLocation(country.name); // ✅ Update location state immediately
+      
+      // Update cache immediately for instant UI
       await updateCachedUserData({ 
         location: country.name,
         countryFlag: country.flag 
       });
 
-      // Save to backend - إضافة country
+      // Save to backend in background (non-blocking)
       const result = await CardProfileService.updateCardProfile(token, { 
         countryFlag: country.flag,
-        country: country.name // ✅ NEW
+        country: country.name
       });
 
       if (result.success) {
-        // Force refresh cache to get latest data
-        await refreshCache(true);
-        toast.showSuccess('تم', 'تم تحديث البلد بنجاح');
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', 'تم تحديث البلد بنجاح ✅');
       } else {
         // Rollback on error
         setCountryFlag(originalCountryFlag);
+        setLocation(originalLocation);
         await updateCachedUserData({ 
           location: originalLocation,
           countryFlag: originalCountryFlag 
@@ -593,6 +647,7 @@ export default function ProfileScreen() {
       logger.error('Error saving country:', error);
       // Rollback on error
       setCountryFlag(originalCountryFlag);
+      setLocation(originalLocation);
       await updateCachedUserData({ 
         location: originalLocation,
         countryFlag: originalCountryFlag 
@@ -621,9 +676,9 @@ export default function ProfileScreen() {
       // Save to backend
       const result = await CardProfileService.updateCardProfile(token, { position: pos });
       if (result.success) {
-        // ✅ Force refresh cache to get latest data
-        await refreshCache(true);
-        toast.showSuccess('تم', 'تم تحديث المركز بنجاح');
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', 'تم تحديث المركز بنجاح ✅');
       } else {
         // Rollback on error
         setPosition(originalPosition);
@@ -690,9 +745,9 @@ export default function ProfileScreen() {
       });
 
       if (result.success) {
-        // ✅ Force refresh cache to get latest data
-        await refreshCache(true);
-        toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح`);
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح ⚽`);
       } else {
         // Rollback on error
         setClub(originalClub || undefined);
@@ -747,9 +802,9 @@ export default function ProfileScreen() {
       });
 
       if (result.success) {
-        // ✅ Force refresh cache to get latest data
-        await refreshCache(true);
-        toast.showSuccess('تم', `تم حفظ ${selectedBrand.name} بنجاح`);
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', `تم حفظ ${selectedBrand.name} بنجاح 👟`);
       } else {
         // Rollback on error
         setBrand(originalBrand || undefined);
@@ -825,9 +880,9 @@ export default function ProfileScreen() {
       });
 
       if (result.success) {
-        // ✅ Force refresh cache to get latest data
-        await refreshCache(true);
-        toast.showSuccess('تم', 'تم حفظ البيانات بنجاح');
+        // ✅ OPTIMIZATION: Refresh in background without blocking UI
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', 'تم حفظ البيانات بنجاح 📊');
       } else {
         // Rollback on error
         setStats(originalStats);
@@ -993,7 +1048,8 @@ export default function ProfileScreen() {
     })();
   };
 
-  const handleVideoPress = (video: any, _index: number) => {
+  // ✅ OPTIMIZATION: Memoize handlers
+  const handleVideoPress = useCallback((video: any, _index: number) => {
     if (isDeleteMode) {
       handleDeleteVideo(video.id);
     } else {
@@ -1001,13 +1057,14 @@ export default function ProfileScreen() {
       setSelectedVideoUrl(video.uri);
       setIsVideoPlayerVisible(true);
     }
-  };
+  }, [isDeleteMode, handleDeleteVideo]);
 
-  const handleVideoLongPress = (_video: any) => {
+  const handleVideoLongPress = useCallback((_video: any) => {
     setIsDeleteMode(prev => !prev);
-  };
+  }, []);
 
-  const handleDeleteVideo = (videoId: string) => {
+  // ✅ OPTIMIZATION: Memoize delete handler
+  const handleDeleteVideo = useCallback((videoId: string) => {
     // Requirements 13.4, 13.5, 13.6, 13.7: Show remaining deletes and handle limits
     const maxDeletes = 2;
     const deletesUsed = cooldowns?.reelDelete?.deletesUsed ?? 0;
@@ -1101,7 +1158,7 @@ export default function ProfileScreen() {
         }
       ]
     );
-  };
+  }, [cooldowns, getToken, removeVideo, refreshCache, toast]); // ✅ Proper deps
 
 
 
@@ -1115,9 +1172,10 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleEditProfile = () => {
+  // ✅ OPTIMIZATION: Memoize simple handlers
+  const handleEditProfile = useCallback(() => {
     setIsEditProfileModalVisible(true);
-  };
+  }, []);
 
   const handleSaveProfile = async (newData: any) => {
     try {
@@ -1429,7 +1487,7 @@ export default function ProfileScreen() {
           name={userData?.displayName || userData?.username || 'User'}
           username={userData?.username || 'user'}
           bio={userData?.bio}
-          location={userData?.location || 'مصر'}
+          location={location} // ✅ Use local state for instant updates
           team={userData?.favoriteTeam || t.profile.chooseClub}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}

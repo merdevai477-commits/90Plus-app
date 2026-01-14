@@ -13,6 +13,8 @@ import { useFocusEffect } from 'expo-router';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
 import { VIDEO_DEFAULTS } from '../../utils/videoConfig';
+import { VideoErrorBoundary } from './VideoErrorBoundary';
+import { logger } from '../../utils/logger';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -49,7 +51,7 @@ const COLORS = {
 };
 
 /**
- * Unified Video Player Component
+ * Unified Video Player Component (Internal)
  * 
  * Single source of truth for all video playback across the app.
  * Uses VIDEO_DEFAULTS for consistent behavior (audio ON, autoplay ON).
@@ -60,8 +62,9 @@ const COLORS = {
  * - Manual tap restarts playback
  * - Replay count resets when scrolling away
  * - Audio ON by default (Instagram/TikTok style)
+ * - Error Boundary for graceful error handling
  */
-export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = ({
+const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   reel,
   isActive,
   onVideoRef,
@@ -440,3 +443,22 @@ const styles = StyleSheet.create({
   },
 });
 
+/**
+ * Unified Video Player Component (Exported with Error Boundary)
+ * Requirement: Critical Priority #3 - Add Error Boundary for videos
+ */
+export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = (props) => {
+  return (
+    <VideoErrorBoundary
+      onError={(error, errorInfo) => {
+        logger.error('[UnifiedVideoPlayer] Error caught by boundary:', {
+          reelId: props.reel.id,
+          error: error.message,
+          componentStack: errorInfo.componentStack,
+        });
+      }}
+    >
+      <UnifiedVideoPlayerInternal {...props} />
+    </VideoErrorBoundary>
+  );
+};

@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Image, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import React, { memo } from 'react';
+import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image'; // ✅ Use expo-image for better performance
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 
@@ -11,7 +12,11 @@ interface ProfileHeaderProps {
     onPress?: () => void;
 }
 
-export default function ProfileHeader({ coverImage, onPress }: ProfileHeaderProps) {
+// ✅ PERFORMANCE: Memoize to prevent unnecessary re-renders
+const ProfileHeader = memo(function ProfileHeader({ coverImage, onPress }: ProfileHeaderProps) {
+    // ✅ Default cover image as constant
+    const defaultCoverUri = 'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop';
+    
     return (
         <View style={styles.container}>
             {/* Cover Image with Gradient Overlay */}
@@ -20,16 +25,15 @@ export default function ProfileHeader({ coverImage, onPress }: ProfileHeaderProp
                 onPress={onPress}
                 activeOpacity={0.9}
             >
-                {coverImage ? (
-                    <Image source={coverImage} style={styles.coverImage} resizeMode="cover" />
-                ) : (
-                    // Default Stadium Background if no image
-                    <Image
-                        source={{ uri: 'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop' }}
-                        style={styles.coverImage}
-                        resizeMode="cover"
-                    />
-                )}
+                <Image 
+                    source={coverImage || { uri: defaultCoverUri }}
+                    style={styles.coverImage} 
+                    contentFit="cover"
+                    // ✅ OPTIMIZATION: Enable caching and transitions
+                    cachePolicy="memory-disk"
+                    priority="high"
+                    transition={300}
+                />
                 <LinearGradient
                     colors={ProfileTheme.gradients.darkOverlay}
                     style={styles.gradientOverlay}
@@ -37,7 +41,9 @@ export default function ProfileHeader({ coverImage, onPress }: ProfileHeaderProp
             </TouchableOpacity>
         </View>
     );
-}
+});
+
+export default ProfileHeader;
 
 const styles = StyleSheet.create({
     container: {

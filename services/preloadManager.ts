@@ -53,7 +53,7 @@ const DEFAULT_CONFIG: PreloadConfig = {
 // ✅ OPTIMIZED: Increased preload counts for smoother experience
 const VIDEO_PRELOAD_CONFIG = {
   initialReelsCount: 7,  // ✅ Increased from 5 to 7 for faster initial experience
-  aheadReelsCount: 4,    // ✅ Increased from 3 to 4 for smoother scrolling
+  aheadReelsCount: 5,    // ✅ Increased to 5 for more aggressive preloading
 };
 
 // Cache keys for preloaded data
@@ -89,6 +89,9 @@ class PreloadManagerClass {
   private preloadStatus: Map<ScreenName, PreloadStatus> = new Map();
   private isInitialized = false;
   private preloadedVideoUrls: Set<string> = new Set();
+  private preloadQueue: string[] = [];
+  private isPreloading = false;
+  private preloadedVideos: Set<string> = new Set();
 
   constructor(config: PreloadConfig = DEFAULT_CONFIG) {
     this.config = config;
@@ -408,49 +411,78 @@ class PreloadManagerClass {
   /**
    * Preload next reels while viewing
    * Requirement 19.2: Preload next 2-3 reels while viewing
-   * ✅ OPTIMIZED: Increased to 4 reels for smoother scrolling
+   * ✅ OPTIMIZED: Increased to 5 reels with batch processing
    * 
-   * @param reels - Array of reel objects with videoUrl
+   * @param reels - Array of reel objects with videoUrl and thumbnail
    * @param currentIndex - Current viewing index
    */
   async preloadNextReelVideos(
-    reels: Array<{ videoUrl: string }>,
+    reels: Array<{ videoUrl: string; thumbnail?: string }>,
     currentIndex: number
   ): Promise<void> {
-    if (!reels || reels.length === 0) {
-      return;
-    }
-
     const videosToPreload: string[] = [];
+    const MAX_PRELOAD = 5;
 
-    // Get next N videos that haven't been preloaded yet
-    for (let i = 1; i <= VIDEO_PRELOAD_CONFIG.aheadReelsCount; i++) {
+    // Get next 5 videos that haven't been preloaded yet
+    for (let i = 1; i <= MAX_PRELOAD; i++) {
       const nextIndex = currentIndex + i;
       if (nextIndex < reels.length) {
-        const videoUrl = reels[nextIndex]?.videoUrl;
-        if (videoUrl && !this.preloadedVideoUrls.has(videoUrl) && !isVideoPreloaded(videoUrl)) {
-          videosToPreload.push(videoUrl);
+        const reel = reels[nextIndex];
+        if (reel?.videoUrl && !this.preloadedVideos.has(reel.videoUrl)) {
+          videosToPreload.push(reel.videoUrl);
+          // Also preload thumbnail
+          if (reel.thumbnail) {
+            const { Image } = await import('react-native');
+            Image.prefetch(reel.thumbnail).catch(() => {});
+          }
         }
       }
     }
 
-    if (videosToPreload.length === 0) {
+    // Add videos to queue
+    this.preloadQueue.push(...videosToPreload);
+
+    // Start processing queue if not already processing
+    if (!this.isPreloading) {
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Process preload queue in batches
+   * Processes 3 videos at a time to avoid overwhelming the network
+   */
+  private async processQueue(): Promise<void> {
+    if (this.preloadQueue.length === 0) {
+      this.isPreloading = false;
       return;
     }
 
-    logger.debug(`[PreloadManager] Preloading ${videosToPreload.length} next reel videos from index ${currentIndex}`);
+    this.isPreloading = true;
+    const batch = this.preloadQueue.splice(0, 3);
 
-    // Preload videos sequentially to avoid overwhelming the network
-    for (const url of videosToPreload) {
-      try {
-        const success = await preloadVideo(url);
-        if (success) {
-          this.preloadedVideoUrls.add(url);
+    await Promise.allSettled(
+      batch.map(async (url) => {
+        try {
+          const response = await fetch(url, {
+            method: 'HEAD',
+            headers: {
+              'Range': 'bytes=0-102400', // Preload first 100KB
+            },
+          });
+          
+          if (response.ok) {
+            this.preloadedVideos.add(url);
+            console.log(`[PreloadManager] Preloaded: ${url.substring(0, 50)}...`);
+          }
+        } catch (error) {
+          console.warn(`[PreloadManager] Failed to preload: ${url.substring(0, 50)}...`);
         }
-      } catch (error) {
-        logger.warn(`[PreloadManager] Failed to preload next video: ${url}`, error);
-      }
-    }
+      })
+    );
+
+    // Continue processing queue
+    this.processQueue();
   }
 
   /**

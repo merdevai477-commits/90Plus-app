@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,7 +29,8 @@ const WIDTH = 300;
 const HEIGHT = 460;
 const gradientColors = ['#a17f37', '#FFD700', '#a17f37']; // Gold Gradient
 
-export default function ProfileCard({
+// ✅ PERFORMANCE: Memoize component to prevent unnecessary re-renders
+const ProfileCard = memo(function ProfileCard({
     playerImage,
     cardType = 'gold',
     scale = 0.66,
@@ -51,47 +52,61 @@ export default function ProfileCard({
 }: ProfileCardProps) {
     const shimmerAnim = useRef(new Animated.Value(0)).current;
     const holoAnim = useRef(new Animated.Value(0)).current;
+    // ✅ PERFORMANCE: Store animation instances in refs to properly cleanup
+    const shimmerLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+    const holoLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
     useEffect(() => {
+        // ✅ OPTIMIZATION: Reduce animation complexity for better performance
         // Professional shimmer with slower, more elegant timing
-        const shimmerLoop = Animated.loop(
+        shimmerLoopRef.current = Animated.loop(
             Animated.sequence([
                 Animated.timing(shimmerAnim, {
                     toValue: 1,
-                    duration: 3500, // Slower, more elegant
-                    easing: Easing.bezier(0.4, 0.0, 0.2, 1), // Smooth ease
-                    useNativeDriver: true,
+                    duration: 4000, // Slightly slower for less CPU usage
+                    easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+                    useNativeDriver: true, // ✅ Critical for performance
                 }),
-                Animated.delay(2000) // Longer pause between shimmers
+                Animated.delay(2500) // Longer pause reduces CPU usage
             ])
         );
 
         // Subtle holographic effect
-        const holoLoop = Animated.loop(
+        holoLoopRef.current = Animated.loop(
             Animated.sequence([
                 Animated.timing(holoAnim, {
                     toValue: 1,
-                    duration: 4000, // Slower rotation
+                    duration: 5000, // Slower for less overhead
                     easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
                     useNativeDriver: true,
                 }),
                 Animated.timing(holoAnim, {
                     toValue: 0,
-                    duration: 4000,
+                    duration: 5000,
                     easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
                     useNativeDriver: true,
                 })
             ])
         );
 
-        shimmerLoop.start();
-        holoLoop.start();
+        shimmerLoopRef.current.start();
+        holoLoopRef.current.start();
 
+        // ✅ CRITICAL FIX: Proper cleanup to prevent memory leaks
         return () => {
-            shimmerLoop.stop();
-            holoLoop.stop();
+            if (shimmerLoopRef.current) {
+                shimmerLoopRef.current.stop();
+                shimmerLoopRef.current = null;
+            }
+            if (holoLoopRef.current) {
+                holoLoopRef.current.stop();
+                holoLoopRef.current = null;
+            }
+            // Reset animated values
+            shimmerAnim.setValue(0);
+            holoAnim.setValue(0);
         };
-    }, []);
+    }, []); // ✅ Empty deps - only run once
 
     const shimmerTranslate = shimmerAnim.interpolate({
         inputRange: [0, 1],
@@ -249,33 +264,37 @@ export default function ProfileCard({
                     </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={onCountryPress}>
+                <TouchableOpacity onPress={onCountryPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Text style={{ fontSize: 40 * scale }}>
                         {countryFlag || '🇪🇬'}
                     </Text>
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', marginTop: 5 * scale, gap: 5 * scale }}>
-                    <TouchableOpacity onPress={onClubPress}>
+                    <TouchableOpacity onPress={onClubPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                         {clubLogo ? (
                             <Image
                                 source={{ uri: clubLogo }}
                                 style={{ width: 30 * scale, height: 30 * scale }}
                                 contentFit="contain"
                                 cachePolicy="memory-disk"
+                                priority="high"
+                                transition={200}
                             />
                         ) : (
                             <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale }]} />
                         )}
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={onBrandPress}>
+                    <TouchableOpacity onPress={onBrandPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                         {brandLogo ? (
                             <Image
                                 source={{ uri: brandLogo }}
                                 style={{ width: 30 * scale, height: 30 * scale }}
                                 contentFit="contain"
                                 cachePolicy="memory-disk"
+                                priority="high"
+                                transition={200}
                             />
                         ) : (
                             <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale }]} />
@@ -341,7 +360,10 @@ export default function ProfileCard({
             </View>
         </View>
     );
-}
+});
+
+// ✅ PERFORMANCE: Export memoized component as default
+export default ProfileCard;
 
 const styles = StyleSheet.create({
     container: {

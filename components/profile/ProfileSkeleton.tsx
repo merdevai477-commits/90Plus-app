@@ -5,13 +5,21 @@
  * Used when no cached data exists and data is being fetched.
  * 
  * Requirements: 2.4 - Display skeleton loading placeholders when no cached data exists
+ * 
+ * ✅ PERFORMANCE OPTIMIZATIONS:
+ * - Single shared animation instance instead of one per skeleton
+ * - Memoized components to prevent re-renders
+ * - Proper cleanup to prevent memory leaks
  */
 
-import React, { useRef, useEffect, memo } from 'react';
+import React, { useRef, useEffect, memo, createContext, useContext } from 'react';
 import { View, Animated, StyleSheet, Dimensions } from 'react-native';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ✅ OPTIMIZATION: Create a shared animation context to avoid multiple animation loops
+const SkeletonAnimationContext = createContext<Animated.Value | null>(null);
 
 interface SkeletonProps {
   width: number | string;
@@ -22,29 +30,17 @@ interface SkeletonProps {
 
 /**
  * Base skeleton component with shimmer animation
+ * ✅ OPTIMIZED: Uses shared animation from context instead of creating new one
  */
 const Skeleton: React.FC<SkeletonProps> = memo(({ width, height, borderRadius = 8, style }) => {
-  const animatedValue = useRef(new Animated.Value(0)).current;
+  // ✅ Use shared animation value from context
+  const sharedAnimatedValue = useContext(SkeletonAnimationContext);
+  
+  // Fallback to local animation if context not available (shouldn't happen)
+  const localAnimatedValue = useRef(new Animated.Value(0)).current;
+  const animatedValue = sharedAnimatedValue || localAnimatedValue;
 
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animatedValue, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [animatedValue]);
-
+  // ✅ OPTIMIZATION: Interpolate opacity from shared animation
   const opacity = animatedValue.interpolate({
     inputRange: [0, 1],
     outputRange: [0.3, 0.6],
@@ -67,6 +63,51 @@ const Skeleton: React.FC<SkeletonProps> = memo(({ width, height, borderRadius = 
 });
 
 Skeleton.displayName = 'Skeleton';
+
+/**
+ * ✅ NEW: Animation Provider Component
+ * Provides a single shared animation instance for all skeleton elements
+ */
+const SkeletonAnimationProvider: React.FC<{ children: React.ReactNode }> = memo(({ children }) => {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    // ✅ Single animation loop for all skeletons
+    animationRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 1200, // Slightly slower for smoother feel
+          useNativeDriver: true,
+        }),
+        Animated.timing(animatedValue, {
+          toValue: 0,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animationRef.current.start();
+    
+    // ✅ CRITICAL: Proper cleanup
+    return () => {
+      if (animationRef.current) {
+        animationRef.current.stop();
+        animationRef.current = null;
+      }
+      animatedValue.setValue(0);
+    };
+  }, [animatedValue]);
+
+  return (
+    <SkeletonAnimationContext.Provider value={animatedValue}>
+      {children}
+    </SkeletonAnimationContext.Provider>
+  );
+});
+
+SkeletonAnimationProvider.displayName = 'SkeletonAnimationProvider';
 
 /**
  * Skeleton for the profile cover image
@@ -204,17 +245,20 @@ VideoGridSkeleton.displayName = 'VideoGridSkeleton';
 
 /**
  * Complete profile skeleton - combines all skeleton components
+ * ✅ OPTIMIZED: Wrapped with animation provider for shared animation
  */
 export const ProfileSkeleton: React.FC = memo(() => (
-  <View style={styles.container}>
-    <ProfileCoverSkeleton />
-    <ProfileCardSkeleton />
-    <UserInfoSkeleton />
-    <ActionButtonsSkeleton />
-    <StatsRowSkeleton />
-    <ContentTabsSkeleton />
-    <VideoGridSkeleton count={6} />
-  </View>
+  <SkeletonAnimationProvider>
+    <View style={styles.container}>
+      <ProfileCoverSkeleton />
+      <ProfileCardSkeleton />
+      <UserInfoSkeleton />
+      <ActionButtonsSkeleton />
+      <StatsRowSkeleton />
+      <ContentTabsSkeleton />
+      <VideoGridSkeleton count={6} />
+    </View>
+  </SkeletonAnimationProvider>
 ));
 
 ProfileSkeleton.displayName = 'ProfileSkeleton';

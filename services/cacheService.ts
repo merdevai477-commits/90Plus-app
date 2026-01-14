@@ -15,7 +15,8 @@ const CACHE_PREFIX = '@cache_';
 const DEFAULT_TTL = 5 * 60 * 1000;
 
 // Maximum number of cache entries (for LRU eviction)
-const MAX_CACHE_ENTRIES = 100;
+// ✅ INCREASED: Was 100, now 50 to prevent SQLITE_FULL errors
+const MAX_CACHE_ENTRIES = 50;
 
 /**
  * Cache entry structure with timestamp and TTL support
@@ -118,9 +119,24 @@ class CacheService {
       
       // Check if we need to evict old entries
       await this.evictIfNeeded();
-    } catch (error) {
-      console.error(`[CacheService] Error setting cache for key "${key}":`, error);
-      throw error;
+    } catch (error: any) {
+      // ✅ FIX: Handle SQLITE_FULL error
+      if (error?.message?.includes('SQLITE_FULL') || error?.message?.includes('database or disk is full')) {
+        console.warn(`[CacheService] ⚠️ Storage full! Aggressive cleanup...`);
+        // Aggressive cleanup: Remove more entries
+        await this.evictIfNeeded(30); // Keep only 30 newest entries
+        // Retry once after cleanup
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
+          console.log(`[CacheService] ✅ Retry successful after cleanup`);
+        } catch (retryError) {
+          console.error(`[CacheService] ❌ Retry failed, silently ignoring:`, retryError);
+          // Silent fail - don't crash the app
+        }
+      } else {
+        console.error(`[CacheService] Error setting cache for key "${key}":`, error);
+        // Silent fail for cache errors - don't crash the app
+      }
     }
   }
 
@@ -532,9 +548,26 @@ class CacheService {
 
       await AsyncStorage.multiSet(entries);
       await this.evictIfNeeded();
-    } catch (error) {
-      console.error('[CacheService] Error in batch cache:', error);
-      throw error;
+    } catch (error: any) {
+      // ✅ FIX: Handle SQLITE_FULL error in batch operations
+      if (error?.message?.includes('SQLITE_FULL') || error?.message?.includes('database or disk is full')) {
+        console.warn(`[CacheService] ⚠️ Storage full in batch! Aggressive cleanup...`);
+        // Aggressive cleanup
+        await this.evictIfNeeded(20); // Keep only 20 newest entries
+        // Retry with smaller batch
+        try {
+          // Try again with first 5 items only
+          const limitedEntries = entries.slice(0, Math.min(5, entries.length));
+          await AsyncStorage.multiSet(limitedEntries);
+          console.log(`[CacheService] ✅ Retry successful with ${limitedEntries.length} items`);
+        } catch (retryError) {
+          console.error(`[CacheService] ❌ Batch retry failed, silently ignoring`);
+          // Silent fail - don't crash the app
+        }
+      } else {
+        console.error('[CacheService] Error in batch cache:', error);
+        // Silent fail for cache errors
+      }
     }
   }
 

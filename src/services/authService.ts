@@ -1667,6 +1667,12 @@ export class NotificationService {
                 },
             });
 
+            // ✅ FIX: Handle 404 gracefully (no notifications to clear is OK)
+            if (response.status === 404) {
+                console.log('✅ No notifications to clear (404 - this is OK)');
+                return true; // Return success - no notifications is a valid state
+            }
+
             // ✅ Check if response is ok before parsing JSON
             if (!response.ok) {
                 const errorText = await response.text();

@@ -163,6 +163,11 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
   const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
+    // ✅ FIX: Cleanup expired cache on app start to prevent SQLITE_FULL
+    cacheService.cleanup().catch(err => {
+      logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
+    });
+    
     // ✅ IMPROVED: Start preloading immediately when user signs in
     if (isSignedIn && getToken) {
       preloadManager.initialize(getToken).catch(err => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,8 @@ import {
     Alert,
     ScrollView,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    Keyboard
 } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -54,11 +55,21 @@ const SOCIAL_PLATFORMS = [
     { id: 'website', icon: 'globe', iconLibrary: 'Ionicons' as const, color: '#22c55e' }
 ];
 
-export default function ProfileEditModal({ visible, onClose, initialData, onSave, usernameCooldown }: ProfileEditModalProps) {
+// ✅ PERFORMANCE: Memoize modal to prevent unnecessary re-renders
+const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, initialData, onSave, usernameCooldown }: ProfileEditModalProps) {
     const [name, setName] = useState(initialData.name);
     const [bio, setBio] = useState(initialData.bio);
     const [username, setUsername] = useState(initialData.username);
     const [socials, setSocials] = useState<SocialLink[]>(initialData.socials || []);
+    
+    // ✅ NEW: Validation errors state
+    const [nameError, setNameError] = useState('');
+    const [usernameError, setUsernameError] = useState('');
+    
+    // ✅ Store refs for inputs to manage focus
+    const nameInputRef = useRef<TextInput>(null);
+    const usernameInputRef = useRef<TextInput>(null);
+    const bioInputRef = useRef<TextInput>(null);
 
     // Username restriction logic - use backend cooldown if available, fallback to local calculation
     const canEditUsername = usernameCooldown 
@@ -75,53 +86,117 @@ export default function ProfileEditModal({ visible, onClose, initialData, onSave
     
     const hoursRemaining = usernameCooldown?.hoursRemaining || 0;
 
+    // ✅ OPTIMIZATION: Reset state when modal opens
     useEffect(() => {
         if (visible) {
             setName(initialData.name);
             setBio(initialData.bio);
             setUsername(initialData.username);
             setSocials(initialData.socials || []);
+            setNameError('');
+            setUsernameError('');
         }
     }, [visible, initialData]);
 
-    const handleSave = () => {
-        if (!name.trim()) {
-            Alert.alert('خطأ', 'الاسم مطلوب');
+    // ✅ NEW: Real-time validation for username
+    const validateUsername = useCallback((text: string): string => {
+        if (!text.trim()) {
+            return 'اسم المستخدم مطلوب';
+        }
+        if (text.length < 3) {
+            return 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل';
+        }
+        if (text.length > 20) {
+            return 'اسم المستخدم طويل جداً (الحد الأقصى 20 حرف)';
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(text)) {
+            return 'اسم المستخدم يجب أن يحتوي على حروف وأرقام و _ فقط';
+        }
+        return '';
+    }, []);
+
+    // ✅ NEW: Real-time validation for name
+    const validateName = useCallback((text: string): string => {
+        if (!text.trim()) {
+            return 'الاسم مطلوب';
+        }
+        if (text.length < 2) {
+            return 'الاسم قصير جداً';
+        }
+        if (text.length > 30) {
+            return 'الاسم طويل جداً (الحد الأقصى 30 حرف)';
+        }
+        return '';
+    }, []);
+
+    // ✅ IMPROVED: Enhanced save handler with validation
+    const handleSave = useCallback(() => {
+        // Dismiss keyboard first
+        Keyboard.dismiss();
+        
+        // Validate all fields
+        const nameValidationError = validateName(name);
+        const usernameValidationError = validateUsername(username);
+        
+        if (nameValidationError) {
+            setNameError(nameValidationError);
+            Alert.alert('خطأ', nameValidationError);
             return;
         }
-        if (!username.trim()) {
-            Alert.alert('خطأ', 'اسم المستخدم مطلوب');
+        
+        if (usernameValidationError) {
+            setUsernameError(usernameValidationError);
+            Alert.alert('خطأ', usernameValidationError);
             return;
         }
 
         const updatedData: UserData = {
-            name,
-            bio,
-            username,
-            socials,
+            name: name.trim(),
+            bio: bio.trim(),
+            username: username.trim().toLowerCase(),
+            socials: socials.filter(s => s.url.trim() !== ''), // Remove empty socials
             // If username changed, update timestamp
             lastUsernameChange: username !== initialData.username ? new Date() : initialData.lastUsernameChange
         };
 
         onSave(updatedData);
         onClose();
-    };
+    }, [name, bio, username, socials, initialData, validateName, validateUsername, onSave, onClose]);
 
-    const handleAddSocial = () => {
-        setSocials([...socials, { platform: 'instagram', url: '' }]);
-    };
+    // ✅ OPTIMIZATION: Memoize callbacks
+    const handleAddSocial = useCallback(() => {
+        setSocials(prev => [...prev, { platform: 'instagram', url: '' }]);
+    }, []);
 
-    const handleRemoveSocial = (index: number) => {
-        const newSocials = [...socials];
-        newSocials.splice(index, 1);
-        setSocials(newSocials);
-    };
+    const handleRemoveSocial = useCallback((index: number) => {
+        setSocials(prev => {
+            const newSocials = [...prev];
+            newSocials.splice(index, 1);
+            return newSocials;
+        });
+    }, []);
 
-    const updateSocial = (index: number, field: keyof SocialLink, value: string) => {
-        const newSocials = [...socials];
-        newSocials[index] = { ...newSocials[index], [field]: value };
-        setSocials(newSocials);
-    };
+    const updateSocial = useCallback((index: number, field: keyof SocialLink, value: string) => {
+        setSocials(prev => {
+            const newSocials = [...prev];
+            newSocials[index] = { ...newSocials[index], [field]: value };
+            return newSocials;
+        });
+    }, []);
+    
+    // ✅ NEW: Handle username change with validation
+    const handleUsernameChange = useCallback((text: string) => {
+        setUsername(text);
+        const error = validateUsername(text);
+        setUsernameError(error);
+    }, [validateUsername]);
+    
+    // ✅ NEW: Handle name change with validation
+    const handleNameChange = useCallback((text: string) => {
+        setName(text);
+        const error = validateName(text);
+        setNameError(error);
+    }, [validateName]);
 
     return (
         <Modal
@@ -130,12 +205,17 @@ export default function ProfileEditModal({ visible, onClose, initialData, onSave
             transparent={true}
             onRequestClose={onClose}
         >
-            <View style={styles.container}>
+            <TouchableOpacity 
+                style={styles.container} 
+                activeOpacity={1} 
+                onPress={Keyboard.dismiss}
+            >
                 <BlurView intensity={40} style={StyleSheet.absoluteFill} tint="dark" />
 
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     style={styles.keyboardView}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
                 >
                     <View style={styles.content}>
                         <View style={styles.header}>
@@ -145,17 +225,28 @@ export default function ProfileEditModal({ visible, onClose, initialData, onSave
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                        <ScrollView 
+                            showsVerticalScrollIndicator={false} 
+                            contentContainerStyle={styles.scrollContent}
+                            keyboardShouldPersistTaps="handled"
+                        >
                             {/* Name */}
                             <View style={styles.fieldContainer}>
                                 <Text style={styles.label}>الاسم</Text>
                                 <TextInput
-                                    style={styles.input}
+                                    ref={nameInputRef}
+                                    style={[styles.input, nameError ? styles.inputError : null]}
                                     value={name}
-                                    onChangeText={setName}
+                                    onChangeText={handleNameChange}
                                     placeholder="الاسم الظاهر"
                                     placeholderTextColor="#666"
+                                    returnKeyType="next"
+                                    onSubmitEditing={() => usernameInputRef.current?.focus()}
+                                    blurOnSubmit={false}
                                 />
+                                {nameError ? (
+                                    <Text style={styles.errorText}>⚠️ {nameError}</Text>
+                                ) : null}
                             </View>
 
                             {/* Username */}
@@ -175,24 +266,37 @@ export default function ProfileEditModal({ visible, onClose, initialData, onSave
                                     )}
                                 </View>
                                 <TextInput
-                                    style={[styles.input, !canEditUsername && styles.disabledInput]}
+                                    ref={usernameInputRef}
+                                    style={[
+                                        styles.input, 
+                                        !canEditUsername && styles.disabledInput,
+                                        usernameError ? styles.inputError : null
+                                    ]}
                                     value={username}
-                                    onChangeText={setUsername}
+                                    onChangeText={handleUsernameChange}
                                     placeholder="username"
                                     placeholderTextColor="#666"
                                     editable={canEditUsername}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    returnKeyType="next"
+                                    onSubmitEditing={() => bioInputRef.current?.focus()}
+                                    blurOnSubmit={false}
                                 />
-                                {!canEditUsername && (
+                                {usernameError && canEditUsername ? (
+                                    <Text style={styles.errorText}>⚠️ {usernameError}</Text>
+                                ) : !canEditUsername ? (
                                     <Text style={styles.warningText}>
                                         ⏳ يمكنك تغيير اسم المستخدم بعد {daysRemaining > 0 ? `${daysRemaining} يوم` : ''} {hoursRemaining > 0 ? `${hoursRemaining} ساعة` : ''}
                                     </Text>
-                                )}
+                                ) : null}
                             </View>
 
                             {/* Bio */}
                             <View style={styles.fieldContainer}>
                                 <Text style={styles.label}>البايو (السيرة الذاتية)</Text>
                                 <TextInput
+                                    ref={bioInputRef}
                                     style={[styles.input, styles.textArea]}
                                     value={bio}
                                     onChangeText={setBio}
@@ -200,8 +304,12 @@ export default function ProfileEditModal({ visible, onClose, initialData, onSave
                                     placeholderTextColor="#666"
                                     multiline
                                     maxLength={150}
+                                    returnKeyType="done"
+                                    blurOnSubmit={true}
                                 />
-                                <Text style={styles.charCount}>{bio.length}/150</Text>
+                                <Text style={[styles.charCount, bio.length >= 140 && { color: '#FFA500' }]}>
+                                    {bio.length}/150
+                                </Text>
                             </View>
 
                             {/* Social Links */}
@@ -275,10 +383,13 @@ export default function ProfileEditModal({ visible, onClose, initialData, onSave
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
-            </View>
+            </TouchableOpacity>
         </Modal>
     );
-}
+});
+
+// ✅ PERFORMANCE: Export memoized component
+export default ProfileEditModal;
 
 const styles = StyleSheet.create({
     container: {
@@ -362,6 +473,16 @@ const styles = StyleSheet.create({
     disabledInput: {
         opacity: 0.5,
         backgroundColor: 'rgba(255,255,255,0.02)',
+    },
+    inputError: {
+        borderColor: '#ff4444',
+        borderWidth: 1.5,
+    },
+    errorText: {
+        color: '#ff4444',
+        fontSize: 12,
+        marginTop: 6,
+        textAlign: 'right',
     },
     warningText: {
         color: '#FFA500',

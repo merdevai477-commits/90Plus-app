@@ -23,6 +23,8 @@ import {
   Share,
   StatusBar,
 } from 'react-native';
+import * as Network from 'expo-network';
+import { useDebounce } from 'use-debounce';
 import {
   Heart,
   MessageCircle,
@@ -70,6 +72,8 @@ import { useReelsAudioManager, markVideoAsLoaded, markVideoAsUnloaded, clearLoad
 // useVideoReplayLimit is handled in UnifiedVideoPlayer component
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
+import { SkeletonLoader } from '../../components/common/SkeletonLoader';
+import { ErrorDisplay } from '../../components/common/ErrorDisplay';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -196,6 +200,7 @@ const ActionButton: React.FC<{
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
+      accessibilityState={{ selected: active }}
       activeOpacity={0.8}
     >
       <Animated.View style={[
@@ -300,30 +305,6 @@ const DoubleTapLikeAnimation: React.FC<{
 
 
 
-// Share Sheet Component
-const handleShare = async (reel: ReelData) => {
-  const haptic = useHaptic();
-  haptic.trigger('light');
-
-  try {
-    const message = `شاهد هذا الفيديو الرائع من ${reel.user.name}!\n${reel.description || ''}\n\n`;
-    const result = await Share.share({
-      message,
-      url: reel.videoUrl, // في التطبيق الحقيقي، استخدم deep link
-      title: 'مشاركة فيديو'
-    });
-
-    if (result.action === Share.sharedAction) {
-      if (result.activityType) {
-        // تم المشاركة بنجاح
-        logger.log('Shared with activity type:', result.activityType);
-      }
-    }
-  } catch (error) {
-    Alert.alert('خطأ', 'حدث خطأ أثناء المشاركة');
-  }
-};
-
 // Report Modal Enhanced
 const ReportModal: React.FC<{
   visible: boolean;
@@ -388,8 +369,11 @@ const ReportModal: React.FC<{
         setIsSubmitting(false);
       }, 2000);
     } catch (error) {
-      Alert.alert(t.common.error, t.common.error);
+      // Medium Priority #6 - Fix report modal error messages
+      const errorMessage = (error as Error)?.message || 'حدث خطأ أثناء إرسال البلاغ';
+      Alert.alert(t.common.error, errorMessage);
       setIsSubmitting(false);
+      logger.error('[ReportModal] Error submitting report:', error);
     }
   };
 
@@ -400,6 +384,8 @@ const ReportModal: React.FC<{
       transparent={true}
       onRequestClose={onClose}
       statusBarTranslucent
+      accessible={true}
+      accessibilityViewIsModal={true}
     >
       <View style={styles.modalOverlay}>
         <TouchableOpacity
@@ -449,6 +435,14 @@ const ReportModal: React.FC<{
                       setSelectedReason(reason);
                     }}
                     disabled={isSubmitting}
+                    accessible={true}
+                    accessibilityRole="radio"
+                    accessibilityLabel={reason}
+                    accessibilityState={{ 
+                      selected: selectedReason === reason,
+                      disabled: isSubmitting 
+                    }}
+                    accessibilityHint="اضغط للاختيار"
                   >
                     <View style={[
                       styles.radio,
@@ -485,6 +479,11 @@ const ReportModal: React.FC<{
                   onPress={onClose}
                   style={[styles.reportButton, styles.cancelButton]}
                   disabled={isSubmitting}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="إلغاء البلاغ"
+                  accessibilityHint="اضغط لإلغاء البلاغ والعودة"
+                  accessibilityState={{ disabled: isSubmitting }}
                 >
                   <Text style={styles.cancelButtonText}>{t.reels.cancelReport}</Text>
                 </TouchableOpacity>
@@ -497,6 +496,13 @@ const ReportModal: React.FC<{
                     styles.submitButton,
                     (!selectedReason || isSubmitting) && styles.submitButtonDisabled
                   ]}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="إرسال البلاغ"
+                  accessibilityHint="اضغط لإرسال البلاغ عن هذا المحتوى"
+                  accessibilityState={{ 
+                    disabled: !selectedReason || isSubmitting || (selectedReason === 'أخرى' && !customReason) 
+                  }}
                 >
                   {isSubmitting ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -522,6 +528,12 @@ const ReelsFeed: React.FC = () => {
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Network & Error States (Requirements: Critical Priority #1, #2, #3)
+  const [networkError, setNetworkError] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Hashtag filtering
   const [selectedHashtag, setSelectedHashtag] = useState<string | null>(null);
@@ -569,13 +581,30 @@ const ReelsFeed: React.FC = () => {
   // Note: The hook is available but we're keeping the existing implementation
   // to maintain backward compatibility. The hook can be fully integrated in a future refactor.
 
-  // Transform backend reels to ReelData format
-  const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData => {
+  // Transform backend reels to ReelData format with strong validation
+  // Requirement: Critical Priority #4 - Fix handling of reels without videoUrl
+  const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData | null => {
     const followState = useFollowStore.getState();
     
-    // Validate videoUrl
+    // Strong validation: Reject reels without valid videoUrl
     if (!reel.videoUrl || reel.videoUrl.trim() === '') {
-      logger.error('[ReelsFeed] Reel missing videoUrl', { reelId: reel.id });
+      logger.warn('[ReelsFeed] Skipping reel with missing videoUrl', { 
+        reelId: reel.id,
+        userId: reel.user?.id,
+        caption: reel.caption?.substring(0, 50)
+      });
+      return null; // Return null for invalid reels
+    }
+    
+    // Validate video URL format (basic check)
+    try {
+      new URL(reel.videoUrl);
+    } catch (e) {
+      logger.warn('[ReelsFeed] Skipping reel with invalid videoUrl format', { 
+        reelId: reel.id,
+        videoUrl: reel.videoUrl.substring(0, 50)
+      });
+      return null;
     }
     
     return {
@@ -589,7 +618,7 @@ const ReelsFeed: React.FC = () => {
         followers: 0,
         isFollowing: followState.isFollowing(reel.user.id)
     },
-    videoUrl: reel.videoUrl || '', // Fallback to empty string if missing
+    videoUrl: reel.videoUrl, // Now guaranteed to be valid
     thumbnail: reel.thumbnail || reel.videoUrl || '',
     duration: 0,
     likes: reel.likesCount,
@@ -606,20 +635,34 @@ const ReelsFeed: React.FC = () => {
   };
 }, [likedReelIds]);
 
-  // Load reels from backend with cache-first pattern (Requirements 3.1, 3.4, 3.5)
-  const loadReelsFromBackend = useCallback(async (cursor?: string, skipCache = false) => {
+  // Load reels from backend with cache-first pattern and retry mechanism
+  // Requirements: 3.1, 3.4, 3.5 (cache), Critical Priority #1 (retry), #2 (network check)
+  const loadReelsFromBackend = useCallback(async (
+    cursor?: string, 
+    skipCache = false,
+    attemptNumber = 0
+  ) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [500, 1000, 2000]; // Reduced delays for faster retry
+    
     try {
-      const token = await getToken();
-      if (!token) return;
+      // Use Promise.all for parallel loading of network state and cache
+      const [networkState, cachedData] = await Promise.all([
+        Network.getNetworkStateAsync(),
+        !cursor && !skipCache && !selectedHashtag 
+          ? cacheService.get<ReelsCacheData>(CACHE_KEYS.REELS_FEED)
+          : Promise.resolve(null)
+      ]);
 
-      logger.debug('[ReelsFeed] Loading reels from backend', { cursor, skipCache });
-
-      // Cache-first loading for initial load (Requirement 3.1)
-      if (!cursor && !skipCache && !selectedHashtag) {
-        const cachedData = await cacheService.get<ReelsCacheData>(CACHE_KEYS.REELS_FEED);
-        if (cachedData && cachedData.reels && cachedData.reels.length > 0) {
-          logger.debug('[ReelsFeed] Using cached reels data');
-          // Restore dates from cached data
+      // Check network connectivity (Critical Priority #2)
+      if (!networkState.isConnected || !networkState.isInternetReachable) {
+        setIsOffline(true);
+        setNetworkError(true);
+        setLoadError('لا يوجد اتصال بالإنترنت');
+        
+        // Display cached data immediately if available (offline mode)
+        if (cachedData?.reels && cachedData.reels.length > 0) {
+          logger.debug('[ReelsFeed] Using cached reels (offline)');
           const restoredReels = cachedData.reels.map(reel => ({
             ...reel,
             createdAt: new Date(reel.createdAt),
@@ -627,96 +670,117 @@ const ReelsFeed: React.FC = () => {
           }));
           setBackendReels(restoredReels);
           setNextCursor(cachedData.nextCursor);
-          setHasMore(cachedData.hasMore);
+          setHasMore(false);
           setNoReelsMessage(restoredReels.length === 0);
           setIsInitialLoading(false);
-          // Continue to fetch fresh data in background (Requirement 3.5)
         }
+        return;
+      }
+      
+      // Clear offline/error states if connection is good
+      setIsOffline(false);
+      setNetworkError(false);
+      setLoadError(null);
+      
+      const token = await getToken();
+      if (!token) {
+        setLoadError('فشل التحقق من الهوية');
+        return;
       }
 
+      // Display cached data immediately before fetching fresh data
+      if (cachedData?.reels && cachedData.reels.length > 0 && !cursor) {
+        logger.debug('[ReelsFeed] Displaying cached reels immediately');
+        const restoredReels = cachedData.reels.map(reel => ({
+          ...reel,
+          createdAt: new Date(reel.createdAt),
+          liked: likedReelIds.includes(reel.id) || reel.liked
+        }));
+        setBackendReels(restoredReels);
+        setNextCursor(cachedData.nextCursor);
+        setHasMore(cachedData.hasMore);
+        setIsInitialLoading(false);
+      }
+
+      logger.debug('[ReelsFeed] Fetching fresh reels', { cursor, skipCache, attemptNumber });
+
+      // Fetch fresh data
+      let result;
       if (selectedHashtag) {
-        // Load by hashtag (no caching for hashtag searches)
-        const result = await ReelsService.getByHashtag(token, selectedHashtag, cursor);
-        if (result) {
-          const transformed = result.reels.map((r: any) => transformBackendReel({
-            ...r,
-            likesCount: r.likesCount || r._count?.likes || 0,
-            commentsCount: r.commentsCount || r._count?.comments || 0,
-            isLiked: false,
-            hashtags: [],
-            mentions: [],
-            previewComments: [],
-          }));
-          
-          if (cursor) {
-            // Deduplicate when appending
-            setBackendReels(prev => {
-              const existingIds = new Set(prev.map(r => r.id));
-              const newReels = transformed.filter(r => !existingIds.has(r.id));
-              return [...prev, ...newReels];
-            });
-          } else {
-            setBackendReels(transformed);
-          }
-          setNextCursor(result.nextCursor);
-          setHasMore(result.hasMore);
-          setNoReelsMessage(transformed.length === 0 && !cursor);
-        }
+        result = await ReelsService.getByHashtag(token, selectedHashtag, cursor);
       } else {
-        // Load feed
-        const result = await ReelsService.getFeed(token, cursor);
-        if (result) {
-          // Log video URLs for debugging
-          logger.debug('[ReelsFeed] Received reels from backend', { 
-            count: result.reels.length,
-            videoUrls: result.reels.map(r => ({ 
-              id: r.id, 
-              videoUrl: r.videoUrl ? (r.videoUrl.substring(0, 50) + '...') : 'MISSING',
-              hasThumbnail: !!r.thumbnail
-            }))
+        result = await ReelsService.getFeed(token, cursor);
+      }
+
+      if (result) {
+        // Transform reels in parallel
+        const transformPromises = result.reels.map(reel => 
+          Promise.resolve(transformBackendReel(reel))
+        );
+        const transformed = (await Promise.all(transformPromises))
+          .filter((reel): reel is ReelData => reel !== null);
+        
+        // Log filtered reels
+        const filteredCount = result.reels.length - transformed.length;
+        if (filteredCount > 0) {
+          logger.warn('[ReelsFeed] Filtered invalid reels', { 
+            total: result.reels.length,
+            filtered: filteredCount,
+            valid: transformed.length
           });
-          
-          const transformed = result.reels.map(transformBackendReel);
-          
-          // Validate video URLs
-          const invalidReels = transformed.filter(r => !r.videoUrl || r.videoUrl.trim() === '');
-          if (invalidReels.length > 0) {
-            logger.warn('[ReelsFeed] Found reels with invalid videoUrl', { 
-              count: invalidReels.length,
-              reelIds: invalidReels.map(r => r.id)
-            });
-          }
-          
-          if (cursor) {
-            // Deduplicate when appending
-            setBackendReels(prev => {
-              const existingIds = new Set(prev.map(r => r.id));
-              const newReels = transformed.filter(r => !existingIds.has(r.id));
-              return [...prev, ...newReels];
-            });
-          } else {
-            setBackendReels(transformed);
-          }
-          setNextCursor(result.nextCursor);
-          setHasMore(result.hasMore);
-          setNoReelsMessage(transformed.length === 0 && !cursor);
-          
-          // Save to cache for future visits (Requirement 3.4)
-          if (!cursor) {
-            const cacheData: ReelsCacheData = {
-              reels: transformed,
-              nextCursor: result.nextCursor,
-              hasMore: result.hasMore,
-              cachedAt: Date.now(),
-            };
-            cacheService.set(CACHE_KEYS.REELS_FEED, cacheData, CACHE_TTL.REELS).catch(err => {
-              logger.warn('[ReelsFeed] Failed to cache reels:', err);
-            });
-          }
+        }
+        
+        // Update reels state
+        if (cursor) {
+          setBackendReels(prev => {
+            const existingIds = new Set(prev.map(r => r.id));
+            const newReels = transformed.filter(r => !existingIds.has(r.id));
+            return [...prev, ...newReels];
+          });
+        } else {
+          setBackendReels(transformed);
+        }
+        
+        setNextCursor(result.nextCursor);
+        setHasMore(result.hasMore);
+        setNoReelsMessage(transformed.length === 0 && !cursor);
+        
+        // Save to cache asynchronously without waiting
+        if (!cursor && !selectedHashtag) {
+          const cacheData: ReelsCacheData = {
+            reels: transformed,
+            nextCursor: result.nextCursor,
+            hasMore: result.hasMore,
+            cachedAt: Date.now(),
+          };
+          cacheService.set(CACHE_KEYS.REELS_FEED, cacheData, CACHE_TTL.REELS)
+            .catch(err => logger.warn('[ReelsFeed] Cache save failed:', err));
+        }
+
+        // Auto-preload first 3 videos after initial load
+        if (!cursor && transformed.length > 0) {
+          preloadManager.preloadNextReelVideos(transformed, 0);
         }
       }
     } catch (error) {
-      logger.error('Error loading reels:', error);
+      logger.error('[ReelsFeed] Error loading reels:', error);
+      
+      // Retry mechanism with faster delays (Critical Priority #1)
+      if (attemptNumber < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[attemptNumber];
+        logger.debug(`[ReelsFeed] Retrying in ${delay}ms (${attemptNumber + 1}/${MAX_RETRIES})`);
+        
+        setTimeout(() => {
+          loadReelsFromBackend(cursor, skipCache, attemptNumber + 1);
+        }, delay);
+        
+        setLoadError(`جاري إعادة المحاولة (${attemptNumber + 1}/${MAX_RETRIES})...`);
+      } else {
+        // Max retries reached
+        setLoadError('فشل تحميل الريلز. اضغط لإعادة المحاولة.');
+        setNetworkError(true);
+        setRetryCount(attemptNumber);
+      }
     }
   }, [getToken, selectedHashtag, transformBackendReel, likedReelIds]);
 
@@ -730,7 +794,7 @@ const ReelsFeed: React.FC = () => {
 
   // ✅ FIX: Throttle focus refresh to prevent infinite loop
   const lastFocusRefreshRef = useRef<number>(0);
-  const FOCUS_REFRESH_THROTTLE = 30000; // 30 seconds minimum between focus refreshes
+  const FOCUS_REFRESH_THROTTLE = 10000; // 10 seconds instead of 30
   const isRefreshingRef = useRef(false);
   
   // Reload when screen comes into focus (e.g., after uploading a reel)
@@ -959,9 +1023,22 @@ const ReelsFeed: React.FC = () => {
     };
   }, []);
 
-  // Handle Like with Backend sync - Ultra Fast with Rollback
+  // Like processing state to prevent multiple clicks (Critical Priority #5)
+  const [likingReels, setLikingReels] = useState<Set<string>>(new Set());
+  const likeTimeoutRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  
+  // Handle Like with Backend sync - Ultra Fast with Rollback + Debounce
+  // Requirement: Critical Priority #5 - Add debounce (300ms) to prevent multiple clicks
   const handleLike = useCallback(async (reelId: string) => {
+    // Prevent multiple rapid clicks on the same reel (debounce 300ms)
+    if (likingReels.has(reelId)) {
+      return; // Already processing this reel
+    }
+    
     haptic.trigger('medium');
+    
+    // Mark as processing
+    setLikingReels(prev => new Set(prev).add(reelId));
     
     // Get current state BEFORE update for rollback
     const currentReel = reels.find(r => r.id === reelId);
@@ -983,6 +1060,23 @@ const ReelsFeed: React.FC = () => {
     // Apply optimistic update immediately
     updateReelState(!wasLiked, wasLiked ? prevLikes - 1 : prevLikes + 1);
     
+    // Clear previous timeout for this reel if any
+    const existingTimeout = likeTimeoutRef.current.get(reelId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+    
+    // Set debounce timeout (300ms)
+    const timeout = setTimeout(() => {
+      likeTimeoutRef.current.delete(reelId);
+      setLikingReels(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(reelId);
+        return newSet;
+      });
+    }, 300);
+    likeTimeoutRef.current.set(reelId, timeout);
+    
     // Sync with backend (fire and forget with rollback on error)
     try {
       const token = await getToken();
@@ -999,7 +1093,7 @@ const ReelsFeed: React.FC = () => {
       updateReelState(wasLiked, prevLikes);
       toggleReelLike(reelId); // Rollback the toggle too
     }
-  }, [toggleReelLike, haptic, getToken, reels]);
+  }, [toggleReelLike, haptic, getToken, reels, likingReels]);
 
 
   // Handle Mute Toggle
@@ -1357,12 +1451,26 @@ const ReelsFeed: React.FC = () => {
         </View>
       )}
 
-      {/* Initial Loading */}
-      {isInitialLoading && (
-        <View style={styles.initialLoadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.initialLoadingText}>{t.reels.loadingVideos}</Text>
-        </View>
+      {/* Initial Loading with Skeleton (Medium Priority #7) */}
+      {isInitialLoading && !loadError && (
+        <SkeletonLoader variant="reel" />
+      )}
+      
+      {/* Error Display (Critical Priority #3) */}
+      {loadError && !isInitialLoading && (
+        <ErrorDisplay
+          type={isOffline ? 'offline' : networkError ? 'network' : 'server'}
+          message={loadError}
+          showRetry={true}
+          onRetry={() => {
+            setLoadError(null);
+            setNetworkError(false);
+            setIsInitialLoading(true);
+            loadReelsFromBackend().finally(() => setIsInitialLoading(false));
+          }}
+          showRefresh={!isOffline}
+          onRefresh={handleRefresh}
+        />
       )}
 
       {/* No Reels Message - Improved empty state with guidance (Requirement 3.2) */}
@@ -1400,15 +1508,20 @@ const ReelsFeed: React.FC = () => {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           getItemLayout={getItemLayout}
-          windowSize={3}
+          // Performance optimizations (Medium Priority #10)
+          windowSize={5} // Increased from 3 to 5 for smoother scrolling
           initialNumToRender={2}
-          maxToRenderPerBatch={2}
-          updateCellsBatchingPeriod={50}
-          removeClippedSubviews={Platform.OS === 'android'}
+          maxToRenderPerBatch={3} // Increased from 2 to 3
+          updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
+          removeClippedSubviews={true} // Now enabled on both iOS and Android
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}
           onEndReachedThreshold={0.5}
+          // Accessibility (Low Priority #13)
+          accessible={true}
+          accessibilityLabel="قائمة الفيديوهات"
+          accessibilityHint="اسحب لأعلى لعرض الفيديو التالي، اسحب لأسفل لتحديث"
           ListFooterComponent={
             isLoadingMore ? (
               <View style={styles.loadingMoreContainer}>

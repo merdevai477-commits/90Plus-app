@@ -238,6 +238,20 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         outputRange: [0.3, 0.8],
     });
 
+    // Cleanup timers on unmount
+    useEffect(() => {
+        return () => {
+            if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+            }
+            if (singleTapTimer.current) {
+                clearTimeout(singleTapTimer.current);
+                singleTapTimer.current = null;
+            }
+        };
+    }, []);
+
     return (
         <RNAnimated.View
             style={[

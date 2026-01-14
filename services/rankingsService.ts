@@ -280,6 +280,49 @@ class RankingsService {
   }
 
   /**
+   * Submit match prediction
+   */
+  async submitPrediction(
+    token: string | null,
+    matchId: string,
+    homeScore: number,
+    awayScore: number
+  ): Promise<{ success: boolean; message?: string; data?: any }> {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${this.getBaseUrl()}/predictions/submit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ matchId, homeScore, awayScore }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { 
+        success: true, 
+        message: data.data?.message || data.message || 'تم إرسال توقعك بنجاح',
+        data: data.data 
+      };
+    } catch (error: any) {
+      return { 
+        success: false, 
+        message: error.message || 'فشل إرسال التوقع. يرجى المحاولة مرة أخرى.' 
+      };
+    }
+  }
+
+  /**
    * Get top commenters (last 3 days)
    */
   async getTopCommenters(token: string | null, limit: number = 10): Promise<RankedCommenter[]> {

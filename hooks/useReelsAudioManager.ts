@@ -86,30 +86,45 @@ export const useReelsAudioManager = ({
    * Pause all videos - used when navigating away or app goes to background
    * Requirement 16.1: Stop all video audio when leaving reels page
    * Requirement 16.2: Pause video playback and audio when switching to another app
+   * Low Priority #14: Improved error handling
    */
   const pauseAllVideos = useCallback(async (): Promise<void> => {
     const pausePromises: Promise<void>[] = [];
+    let errorCount = 0;
     
     for (const [id, video] of videoRefs.current.entries()) {
       if (video && loadedVideosSet.has(id)) {
         pausePromises.push(
           video.pauseAsync()
-            .then(() => {})
+            .then(() => {
+              // Successfully paused
+            })
             .catch((error) => {
-              // Video might not be ready, ignore error
-              console.log(`[AudioManager] Could not pause video ${id}:`, error?.message || 'unknown');
+              errorCount++;
+              // Only log significant errors
+              const errorMessage = error?.message || 'unknown';
+              if (!errorMessage.includes('not ready') && !errorMessage.includes('already paused')) {
+                console.warn(`[AudioManager] Error pausing video ${id}:`, errorMessage);
+              }
             })
         );
       }
     }
 
     await Promise.all(pausePromises);
+    
+    // Log summary if there were errors
+    if (errorCount > 0) {
+      console.log(`[AudioManager] Paused videos with ${errorCount} errors (may be expected)`);
+    }
+    
     onPauseAll?.();
   }, [videoRefs, onPauseAll]);
 
   /**
    * Resume the currently active video with retry logic for AudioFocusNotAcquiredException
    * Requirement 16.3: Resume from paused state when returning to reels page
+   * Low Priority #14: Improved error handling with fallback
    */
   const resumeActiveVideo = useCallback(async (retryCount = 0): Promise<void> => {
     const MAX_RETRIES = 3;
@@ -151,7 +166,20 @@ export const useReelsAudioManager = ({
             return;
           }
           
-          console.log(`[AudioManager] Could not resume video ${id}:`, errorMessage);
+          // ✅ After max retries, log warning but don't crash
+          if (retryCount >= MAX_RETRIES) {
+            console.warn(`[AudioManager] Failed to resume video ${id} after ${MAX_RETRIES} retries. Fallback: muted playback.`);
+            // Fallback: Try to play muted as last resort
+            try {
+              await video.setIsMutedAsync(true);
+              await video.playAsync();
+              currentActiveVideoId.current = id;
+            } catch (fallbackError) {
+              console.error(`[AudioManager] Fallback muted playback also failed for ${id}`);
+            }
+          } else {
+            console.log(`[AudioManager] Could not resume video ${id}:`, errorMessage);
+          }
         }
       }
     }
