@@ -207,6 +207,7 @@ export const ar = {
       upcoming: 'قادمة',
       finished: 'انتهت',
       favorites: 'المفضلة',
+      predictions: 'التوقعات',
       transfers: 'الانتقالات',
     },
     status: {

@@ -145,6 +145,7 @@ export const es = {
       upcoming: 'Próximos',
       finished: 'Finalizados',
       favorites: 'Favoritos',
+      predictions: 'Predicciones',
       transfers: 'Traspasos',
     },
     status: {

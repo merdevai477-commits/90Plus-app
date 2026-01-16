@@ -144,6 +144,7 @@ export const pt = {
       upcoming: 'Próximos',
       finished: 'Finalizados',
       favorites: 'Favoritos',
+      predictions: 'Previsões',
       transfers: 'Transferências',
     },
     status: {

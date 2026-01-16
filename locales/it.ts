@@ -144,6 +144,7 @@ export const it = {
       upcoming: 'In arrivo',
       finished: 'Terminati',
       favorites: 'Preferiti',
+      predictions: 'Previsioni',
       transfers: 'Trasferimenti',
     },
     status: {

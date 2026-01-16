@@ -144,6 +144,7 @@ export const tr = {
       upcoming: 'Yaklaşan',
       finished: 'Biten',
       favorites: 'Favoriler',
+      predictions: 'Tahminler',
       transfers: 'Transferler',
     },
     status: {

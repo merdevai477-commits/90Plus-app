@@ -145,6 +145,7 @@ export const de = {
       upcoming: 'Bevorstehend',
       finished: 'Beendet',
       favorites: 'Favoriten',
+      predictions: 'Vorhersagen',
       transfers: 'Transfers',
     },
     status: {

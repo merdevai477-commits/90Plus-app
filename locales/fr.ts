@@ -145,6 +145,7 @@ export const fr = {
       upcoming: 'À venir',
       finished: 'Terminé',
       favorites: 'Favoris',
+      predictions: 'Prédictions',
       transfers: 'Transferts',
     },
     status: {

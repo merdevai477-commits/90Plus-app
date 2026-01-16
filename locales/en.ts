@@ -220,6 +220,7 @@ export const en = {
       upcoming: 'Upcoming',
       finished: 'Finished',
       favorites: 'Favorites',
+      predictions: 'Predictions',
       transfers: 'Transfers',
     },
     status: {

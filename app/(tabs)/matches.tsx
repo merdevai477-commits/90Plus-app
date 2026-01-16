@@ -32,6 +32,7 @@ import MatchTabs, { MatchTabType } from '../../components/Matches/MatchTabs';
 import LeagueSection from '../../components/Matches/LeagueSection';
 import MatchCardSkeleton from '../../components/Matches/MatchCardSkeleton';
 import TransfersSection from '../../components/Matches/TransfersSection';
+import PredictionsSection from '../../components/Matches/PredictionsSection';
 import EmptyState from '../../components/Matches/EmptyState';
 import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 
@@ -478,6 +479,12 @@ const MatchesScreen = () => {
           return favoriteMatchesSet.has(m.id);
         });
         break;
+      case 'predictions':
+        // Show only upcoming matches for predictions (لسه مبدأتش)
+        filtered = filtered.filter(
+          (m) => m.status === 'upcoming' || m.status === 'NS' || m.status === 'TBD'
+        );
+        break;
       case 'all':
       default:
         // No filtering
@@ -779,8 +786,8 @@ const MatchesScreen = () => {
         scrollY={scrollY}
       />
 
-      {/* Quick Indicators - Hide for transfers tab */}
-      {activeTab !== 'transfers' && (
+      {/* Quick Indicators - Hide for transfers and predictions tabs */}
+      {activeTab !== 'transfers' && activeTab !== 'predictions' && (
         <QuickIndicators
           matchesCount={filteredCounts.matchesCount}
           leaguesCount={filteredCounts.leaguesCount}
@@ -853,6 +860,32 @@ const MatchesScreen = () => {
             </AnimatedScrollView>
           )}
         </>
+      ) : activeTab === 'predictions' ? (
+        <AnimatedScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 20 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={MATCH_DETAILS_COLORS.accent}
+              colors={[MATCH_DETAILS_COLORS.accent]}
+              enabled={isOnline}
+            />
+          }
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          accessibilityLabel="Predictions list"
+        >
+          <PredictionsSection
+            matches={filteredMatches}
+            onMatchPress={handleMatchPress}
+          />
+        </AnimatedScrollView>
       ) : filteredGroupedMatches.length === 0 ? (
         <View style={styles.emptyContainer}>
           <EmptyState
