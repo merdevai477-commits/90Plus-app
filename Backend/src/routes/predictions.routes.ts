@@ -10,9 +10,9 @@ import { requireAuth } from '../middleware/clerk.middleware';
 const router = Router();
 
 // Constants
-const DAILY_PREDICTION_LIMIT = 5;
-const PREDICTION_COST = 5; // coins
-const CORRECT_PREDICTION_REWARD = 10; // coins
+const DAILY_PREDICTION_LIMIT = 10; // الحد الأقصى للتوقعات اليومية
+const PREDICTION_COST = 5; // coins - تكلفة كل توقع
+const CORRECT_PREDICTION_REWARD = 10; // coins - مكافأة التوقع الصحيح
 
 /**
  * GET /api/predictions/remaining
