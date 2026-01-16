@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.get('/remaining', async (req: Request, res: Response): Promise<void> => {
             }
         });
     } catch (error) {
-        console.error('Error getting remaining predictions:', error);
+        logger.error('Error getting remaining predictions:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -196,7 +197,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             message: 'تم تسجيل توقعك بنجاح! 🎯'
         });
     } catch (error) {
-        console.error('Error creating prediction:', error);
+        logger.error('Error creating prediction:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -255,7 +256,7 @@ router.get('/user', async (req: Request, res: Response): Promise<void> => {
             }
         });
     } catch (error) {
-        console.error('Error getting user predictions:', error);
+        logger.error('Error getting user predictions:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -297,7 +298,7 @@ router.get('/match/:matchId/count', async (req: Request, res: Response): Promise
             data: stats
         });
     } catch (error) {
-        console.error('Error getting match prediction count:', error);
+        logger.error('Error getting match prediction count:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -338,7 +339,7 @@ router.post('/matches/counts', async (req: Request, res: Response): Promise<void
             data: countsMap
         });
     } catch (error) {
-        console.error('Error getting batch prediction counts:', error);
+        logger.error('Error getting batch prediction counts:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -410,7 +411,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
             }
         });
     } catch (error) {
-        console.error('Error getting prediction stats:', error);
+        logger.error('Error getting prediction stats:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -434,7 +435,7 @@ router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<vo
             res.status(400).json({ success: false, error: result.message });
         }
     } catch (error) {
-        console.error('Error resolving predictions:', error);
+        logger.error('Error resolving predictions:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -473,7 +474,7 @@ router.post('/resolve-all', async (req: Request, res: Response): Promise<void> =
             }
         });
     } catch (error) {
-        console.error('Error resolving all predictions:', error);
+        logger.error('Error resolving all predictions:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -512,7 +513,7 @@ router.get('/unresolved', async (req: Request, res: Response): Promise<void> => 
             }
         });
     } catch (error) {
-        console.error('Error getting unresolved predictions:', error);
+        logger.error('Error getting unresolved predictions:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -698,7 +699,7 @@ router.post('/submit', async (req: Request, res: Response): Promise<void> => {
             message: '🎯 تم إرسال توقعك بنجاح!'
         });
     } catch (error) {
-        console.error('Error submitting score prediction:', error);
+        logger.error('Error submitting score prediction:', error);
         res.status(500).json({ 
             success: false,
             error: 'Internal server error',
