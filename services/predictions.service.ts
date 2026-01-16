@@ -4,8 +4,13 @@
  */
 
 import { logger } from '../utils/logger';
+import { getApiUrl } from '../config/api.config';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const getAPIUrl = () => {
+  const apiUrl = getApiUrl();
+  // Remove /api suffix if present since we'll add it in the endpoints
+  return apiUrl.replace(/\/api$/, '');
+};
 
 export interface PredictionType {
   type: 'home' | 'draw' | 'away';
@@ -41,6 +46,7 @@ export const PredictionsService = {
    */
   getRemainingPredictions: async (token: string): Promise<PredictionRemaining> => {
     try {
+      const API_URL = getAPIUrl();
       const response = await fetch(`${API_URL}/api/predictions/remaining`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -83,6 +89,7 @@ export const PredictionsService = {
     }
   ): Promise<Prediction> => {
     try {
+      const API_URL = getAPIUrl();
       const response = await fetch(`${API_URL}/api/predictions`, {
         method: 'POST',
         headers: {
@@ -116,6 +123,7 @@ export const PredictionsService = {
    */
   getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: { [key: string]: any } }> => {
     try {
+      const API_URL = getAPIUrl();
       const response = await fetch(`${API_URL}/api/predictions/user`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -151,6 +159,7 @@ export const PredictionsService = {
     total: number;
   }> => {
     try {
+      const API_URL = getAPIUrl();
       const response = await fetch(`${API_URL}/api/predictions/match/${matchId}/count`, {
         headers: {
           'Authorization': `Bearer ${token}`,

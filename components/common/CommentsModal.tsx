@@ -11,17 +11,14 @@ import {
     Animated,
     Keyboard,
     Platform,
-    KeyboardAvoidingView,
     Alert,
     Vibration,
     ActivityIndicator
 } from 'react-native';
 import { Image } from 'expo-image';
-import { X, Heart, Send, CheckCircle, AlertCircle, MessageCircle, ChevronDown, ChevronUp, MoreVertical, Trash2, Flag } from 'lucide-react-native';
+import { X, Heart, Send, CheckCircle, AlertCircle, MessageCircle, ChevronDown, ChevronUp, Trash2, Flag } from 'lucide-react-native';
 import { useHaptic } from '@/hooks/useHaptic';
-import { useLanguage } from '../../contexts/LanguageContext';
 import { Comment } from '../../contexts/VideosContext';
-import { ProfileTheme } from '../../constants/ProfileTheme';
 import { globalState } from '../../globalState';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@clerk/clerk-expo';
@@ -104,7 +101,6 @@ export default function CommentsModal({
     
     // Mention picker state
     const [showMentionPicker, setShowMentionPicker] = useState(false);
-    const [mentionQuery, setMentionQuery] = useState('');
     const [mentionUsers, setMentionUsers] = useState<any[]>([]);
     const [mentionPosition, setMentionPosition] = useState({ start: 0, end: 0 });
     const mentionSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -115,7 +111,6 @@ export default function CommentsModal({
     const loadedReelIdRef = useRef<string | null>(null);
     const commentsListRef = useRef<FlatList>(null);
     const haptic = useHaptic();
-    const { t } = useLanguage();
     const { getToken, userId: sessionUserId } = useAuth();
 
     // Parse mentions from text
@@ -156,7 +151,6 @@ export default function CommentsModal({
             const textAfterAt = text.substring(lastAtIndex + 1, cursorPosition);
             // Check if there's a space or newline after @ (means mention ended)
             if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-                setMentionQuery(textAfterAt);
                 setMentionPosition({ start: lastAtIndex, end: cursorPosition });
                 setShowMentionPicker(true);
                 
@@ -182,7 +176,6 @@ export default function CommentsModal({
         const newText = `${beforeMention}@${username} ${afterMention}`;
         setNewComment(newText);
         setShowMentionPicker(false);
-        setMentionQuery('');
         setMentionUsers([]);
     }, [newComment, mentionPosition]);
 
@@ -445,7 +438,6 @@ export default function CommentsModal({
             setReplyingTo(null);
             setLongPressedCommentId(null);
             setShowMentionPicker(false);
-            setMentionQuery('');
             setMentionUsers([]);
         }
     }, [visible]);
