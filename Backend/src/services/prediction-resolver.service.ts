@@ -5,10 +5,12 @@
  * This service is responsible for:
  * 1. Resolving predictions after matches end
  * 2. Awarding coins for correct predictions
+ * 3. Sending push notifications to users
  */
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { NotificationService } from './notification.service';
 
 const CORRECT_PREDICTION_REWARD = 10; // coins for correct prediction
 
@@ -83,6 +85,36 @@ export class PredictionResolverService {
                     ]);
 
                     logger.info(`💰 Awarded ${CORRECT_PREDICTION_REWARD} coins to user ${prediction.userId} for correct prediction`);
+                    
+                    // ✅ Send push notification for correct prediction
+                    try {
+                        const matchInfo = `${prediction.homeTeam || 'Home'} ${homeScore}-${awayScore} ${prediction.awayTeam || 'Away'}`;
+                        await NotificationService.sendPredictionResultNotification(
+                            prediction.userId,
+                            true, // isCorrect
+                            matchInfo,
+                            CORRECT_PREDICTION_REWARD
+                        );
+                        logger.debug(`📱 Sent correct prediction notification to user ${prediction.userId}`);
+                    } catch (notifError) {
+                        logger.warn(`⚠️ Failed to send notification to user ${prediction.userId}:`, notifError);
+                        // Continue even if notification fails
+                    }
+                } else {
+                    // ✅ Send push notification for incorrect prediction
+                    try {
+                        const matchInfo = `${prediction.homeTeam || 'Home'} ${homeScore}-${awayScore} ${prediction.awayTeam || 'Away'}`;
+                        await NotificationService.sendPredictionResultNotification(
+                            prediction.userId,
+                            false, // isCorrect
+                            matchInfo,
+                            0
+                        );
+                        logger.debug(`📱 Sent incorrect prediction notification to user ${prediction.userId}`);
+                    } catch (notifError) {
+                        logger.warn(`⚠️ Failed to send notification to user ${prediction.userId}:`, notifError);
+                        // Continue even if notification fails
+                    }
                 }
             }
 

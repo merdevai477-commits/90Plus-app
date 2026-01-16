@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 import prisma, { startKeepAlive, stopKeepAlive } from './lib/prisma';
 import { logger } from './utils/logger';
 import { WebSocketService } from './services/websocket.service';
@@ -558,6 +559,14 @@ async function startServer() {
                     MatchWatcherService.start();
                     PredictionWatcherService.start(); // ✅ Start prediction watcher
                     LeagueMatchWatcherService.start(); // ✅ Start league match watcher
+                    
+                    // ✅ Setup Cron Job for Prediction Watcher (every 5 minutes)
+                    cron.schedule('*/5 * * * *', () => {
+                        logger.info('⏰ Cron: Running prediction check...');
+                        PredictionWatcherService.checkPredictions();
+                    });
+                    logger.info('✅ Prediction Watcher Cron Job scheduled (every 5 minutes)');
+                    
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();
                     logger.info('✅ Background preload service started');

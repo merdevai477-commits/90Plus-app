@@ -9,6 +9,7 @@ export enum NotificationType {
     MATCH_START = 'MATCH_START',
     MATCH_END = 'MATCH_END',
     MATCH_HALFTIME = 'MATCH_HALFTIME',
+    PREDICTION_RESULT = 'PREDICTION_RESULT',
     FOLLOW = 'FOLLOW',
     LIKE = 'LIKE',
     COMMENT = 'COMMENT',
@@ -263,5 +264,51 @@ export class NotificationService {
                 awayScore
             }
         });
+    }
+
+    /**
+     * Send prediction result notification
+     * ✅ NEW: Notify users about their prediction results
+     */
+    static async sendPredictionResultNotification(
+        userId: string,
+        isCorrect: boolean,
+        matchInfo: string,
+        coinsWon: number
+    ) {
+        try {
+            // Get user's push token
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { pushToken: true },
+            });
+
+            if (!user || !user.pushToken) {
+                logger.debug(`No push token for user ${userId}, skipping notification`);
+                return null;
+            }
+
+            const title = isCorrect ? '🎯 توقع صحيح!' : '❌ توقع خاطئ';
+            const message = isCorrect
+                ? `تهانينا! توقعك كان صحيحاً 🎉\n${matchInfo}\n+${coinsWon} تذاكر`
+                : `للأسف، توقعك لم يكن صحيحاً\n${matchInfo}\nحظ أفضل المرة القادمة!`;
+
+            return this.createNotification({
+                userId,
+                pushToken: user.pushToken,
+                title,
+                message,
+                type: NotificationType.PREDICTION_RESULT,
+                data: {
+                    type: 'PREDICTION_RESULT',
+                    isCorrect,
+                    matchInfo,
+                    coinsWon,
+                }
+            });
+        } catch (error) {
+            logger.error('Error sending prediction result notification:', error);
+            return null;
+        }
     }
 }
