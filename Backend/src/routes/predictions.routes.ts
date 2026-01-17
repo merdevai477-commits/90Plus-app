@@ -19,9 +19,10 @@ const CORRECT_PREDICTION_REWARD = 10; // coins - مكافأة التوقع ال�
  * GET /api/predictions/remaining
  * Get remaining daily predictions for user
  */
-router.get('/remaining', async (req: Request, res: Response): Promise<void> => {
+router.get('/remaining', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const clerkUserId = req.headers['x-clerk-user-id'] as string;
+        // ✅ استخدام req.auth.userId من الـ middleware
+        const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
             res.status(401).json({ error: 'Unauthorized' });
@@ -76,9 +77,10 @@ router.get('/remaining', async (req: Request, res: Response): Promise<void> => {
  * POST /api/predictions
  * Submit a new prediction
  */
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const clerkUserId = req.headers['x-clerk-user-id'] as string;
+        // ✅ استخدام req.auth.userId من الـ middleware
+        const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
             res.status(401).json({ error: 'Unauthorized' });
@@ -206,9 +208,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
  * GET /api/predictions/user
  * Get all predictions for current user
  */
-router.get('/user', async (req: Request, res: Response): Promise<void> => {
+router.get('/user', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const clerkUserId = req.headers['x-clerk-user-id'] as string;
+        // ✅ استخدام req.auth.userId من الـ middleware
+        const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
             res.status(401).json({ error: 'Unauthorized' });
@@ -523,9 +526,10 @@ router.get('/unresolved', async (req: Request, res: Response): Promise<void> => 
  * Submit a score prediction (for rank page)
  * Used for predicting exact match scores
  */
-router.post('/submit', async (req: Request, res: Response): Promise<void> => {
+router.post('/submit', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const clerkUserId = req.headers['x-clerk-user-id'] as string;
+        // ✅ استخدام req.auth.userId من الـ middleware
+        const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
             res.status(401).json({ 
