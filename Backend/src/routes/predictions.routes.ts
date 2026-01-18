@@ -166,6 +166,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                     apiMatchId: parseInt(apiMatchId),
                     predictionType,
                     coinsSpent: PREDICTION_COST,
+                    isCorrect: null, // ✅ Explicitly set to null (pending state)
                     homeTeam,
                     awayTeam,
                     homeTeamLogo,
@@ -664,6 +665,7 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
                     apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId,
                     predictionType,
                     coinsSpent: PREDICTION_COST,
+                    isCorrect: null, // ✅ Explicitly set to null (pending state)
                     // Store the exact score prediction in a JSON field or separate columns
                     // For now, using homeTeam/awayTeam fields to store scores
                     homeTeam: `Score: ${home}`,
