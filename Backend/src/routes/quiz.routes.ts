@@ -511,6 +511,161 @@ router.post('/answers', requireAuth, async (req: Request, res: Response): Promis
 });
 
 /**
+ * POST /api/quiz/daily
+ * جلب الكويز اليومي (20 سؤال من الأساطير)
+ * يتجدد كل 24 ساعة تلقائياً
+ * Requires authentication
+ */
+router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Daily quiz endpoint called - Path: ${req.path}, Method: ${req.method}`);
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        // جلب أو إنشاء الكويز اليومي
+        const dailyQuiz = await getOrCreateDailyQuiz();
+        
+        // جلب الأسئلة من قاعدة البيانات
+        const questions = await prisma.quizQuestion.findMany({
+            where: {
+                id: { in: dailyQuiz.questionIds },
+                categoryId: dailyQuiz.categoryId,
+            },
+            select: {
+                id: true,
+                question: true,
+                options: true,
+                difficulty: true,
+                points: true,
+                imageUrl: true,
+                imageType: true,
+                hint: true,
+                timeLimit: true,
+                displayMode: true,
+                categoryId: true,
+                // لا نرسل correctAnswer للفرونت إند
+            },
+            orderBy: {
+                createdAt: 'asc',
+            },
+        });
+
+        // ترتيب الأسئلة حسب questionIds في dailyQuiz (للحفاظ على الترتيب العشوائي)
+        const orderedQuestions = dailyQuiz.questionIds.map(id => 
+            questions.find(q => q.id === id)
+        ).filter(Boolean);
+
+        logger.info(`Daily quiz fetched successfully`, {
+            dailyQuizId: dailyQuiz.id,
+            categoryId: dailyQuiz.categoryId,
+            questionCount: orderedQuestions.length,
+            expiresAt: dailyQuiz.expiresAt.toISOString(),
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                id: dailyQuiz.id,
+                categoryId: dailyQuiz.categoryId,
+                questions: orderedQuestions,
+                expiresAt: dailyQuiz.expiresAt,
+                date: dailyQuiz.date,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Error getting daily quiz:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get daily quiz',
+        });
+    }
+});
+
+/**
+ * POST /api/quiz/daily/answers
+ * جلب إجابات الكويز اليومي
+ * Requires authentication
+ */
+router.post('/daily/answers', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Daily quiz answers endpoint called - Path: ${req.path}, Method: ${req.method}`);
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const { questionIds } = req.body;
+
+        if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'questionIds array is required',
+            });
+            return;
+        }
+
+        // التحقق من أن الأسئلة من الكويز اليومي الحالي
+        const currentDailyQuiz = await getCurrentDailyQuiz();
+        if (!currentDailyQuiz) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'No active daily quiz found',
+            });
+            return;
+        }
+
+        // التحقق من أن جميع الأسئلة المطلوبة موجودة في الكويز اليومي
+        const invalidQuestions = questionIds.filter(id => !currentDailyQuiz.questionIds.includes(id));
+        if (invalidQuestions.length > 0) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'Some questions are not part of today\'s quiz',
+                invalidQuestions,
+            });
+            return;
+        }
+
+        // جلب الإجابات من قاعدة البيانات
+        const questions = await prisma.quizQuestion.findMany({
+            where: {
+                id: { in: questionIds },
+                categoryId: currentDailyQuiz.categoryId,
+            },
+            select: {
+                id: true,
+                correctAnswer: true,
+            },
+        });
+
+        const answersMap: Record<string, string> = {};
+        questions.forEach((q) => {
+            answersMap[q.id] = q.correctAnswer;
+        });
+
+        logger.info(`Daily quiz answers fetched successfully`, {
+            dailyQuizId: currentDailyQuiz.id,
+            questionCount: questionIds.length,
+            answersCount: Object.keys(answersMap).length,
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: answersMap,
+        });
+    } catch (error: any) {
+        logger.error('Error getting daily quiz answers:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get daily quiz answers',
+        });
+    }
+});
+
+/**
  * GET /api/quiz/stats
  * جلب إحصائيات المستخدم في الكويزات
  */

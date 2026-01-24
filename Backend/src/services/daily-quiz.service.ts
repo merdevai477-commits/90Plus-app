@@ -39,6 +39,8 @@ async function ensureDefaultCategories(): Promise<void> {
 
 /**
  * الحصول على الاختبار اليومي الحالي أو إنشاء واحد جديد
+ * مخصص لكاتيجوري الأساطير (Legends) فقط
+ * 20 سؤال يومياً، يتجدد كل 24 ساعة
  */
 export async function getOrCreateDailyQuiz(): Promise<{
   id: string;
@@ -79,63 +81,105 @@ export async function getOrCreateDailyQuiz(): Promise<{
     }
 
     // إذا لم يكن موجوداً أو انتهى، إنشاء اختبار جديد
-    logger.info('Creating new daily quiz', { date: today.toISOString() });
+    logger.info('Creating new daily quiz for Legends category', { date: today.toISOString() });
 
-    // التأكد من وجود كاتيجوريز افتراضية
-    await ensureDefaultCategories();
-
-    // جلب كل الكاتيجوريز
-    const categories = await prisma.quizCategory.findMany({
-      select: { id: true },
-      orderBy: { createdAt: 'asc' },
+    // البحث عن كاتيجوري الأساطير (Legends)
+    const legendsCategory = await prisma.quizCategory.findFirst({
+      where: {
+        OR: [
+          { name: { contains: 'Legends', mode: 'insensitive' } },
+          { name: { contains: 'أساطير', mode: 'insensitive' } },
+          { name: { contains: 'احذر من الأسطورة', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, name: true },
     });
 
-    if (categories.length === 0) {
-      logger.error('No quiz categories found after ensuring defaults. Database may be corrupted.');
-      throw new Error('No quiz categories found. Please contact administrator.');
+    if (!legendsCategory) {
+      // إنشاء كاتيجوري الأساطير إذا لم تكن موجودة
+      const newLegendsCategory = await prisma.quizCategory.create({
+        data: {
+          name: 'Legends',
+          description: 'Questions about football legends',
+          icon: '👑',
+          isLocked: false,
+          unlockLevel: 1,
+        },
+      });
+      
+      logger.info('Created Legends category', { categoryId: newLegendsCategory.id });
+      
+      // إذا لم تكن هناك أسئلة، إنشاء بعض الأسئلة التجريبية
+      const existingQuestions = await prisma.quizQuestion.count({
+        where: { categoryId: newLegendsCategory.id },
+      });
+      
+      if (existingQuestions === 0) {
+        await createSampleLegendsQuestions(newLegendsCategory.id);
+      }
     }
 
-    // اختيار كاتيجوري عشوائية
-    const randomIndex = Math.floor(Math.random() * categories.length);
-    let selectedCategory = categories[randomIndex];
+    const selectedCategory = legendsCategory || await prisma.quizCategory.findFirst({
+      where: { name: 'Legends' },
+      select: { id: true, name: true },
+    });
 
-    // جلب 20 سؤال عشوائي من الكاتيجوري المختارة
-    let allQuestions = await prisma.quizQuestion.findMany({
+    if (!selectedCategory) {
+      throw new Error('Legends category not found and could not be created');
+    }
+
+    // جلب جميع أسئلة الأساطير
+    const allQuestions = await prisma.quizQuestion.findMany({
       where: { categoryId: selectedCategory.id },
-      select: { id: true },
+      select: { id: true, difficulty: true },
       orderBy: { createdAt: 'asc' },
     });
 
-    // إذا لم تكن هناك أسئلة في هذه الكاتيجوري، جرب كاتيجوري أخرى
     if (allQuestions.length === 0) {
-      logger.warn(`No questions found for category ${selectedCategory.id}, trying other categories...`);
+      // إنشاء أسئلة تجريبية إذا لم تكن موجودة
+      await createSampleLegendsQuestions(selectedCategory.id);
       
-      // جرب كل الكاتيجوريز حتى نجد واحدة بها أسئلة
-      for (const cat of categories) {
-        const questions = await prisma.quizQuestion.findMany({
-          where: { categoryId: cat.id },
-          select: { id: true },
-          take: 20,
-        });
-        
-        if (questions.length > 0) {
-          allQuestions = questions;
-          selectedCategory = cat;
-          logger.info(`Using category ${cat.id} with ${questions.length} questions`);
-          break;
-        }
+      // إعادة جلب الأسئلة
+      const newQuestions = await prisma.quizQuestion.findMany({
+        where: { categoryId: selectedCategory.id },
+        select: { id: true, difficulty: true },
+      });
+      
+      if (newQuestions.length === 0) {
+        throw new Error('No questions found for Legends category and could not create sample questions');
       }
       
-      if (allQuestions.length === 0) {
-        throw new Error('No questions found in any quiz category. Please seed the database with questions.');
-      }
+      allQuestions.push(...newQuestions);
     }
 
-    // اختيار 20 سؤال عشوائي
-    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-    const selectedQuestionIds = shuffled
-      .slice(0, Math.min(20, allQuestions.length))
-      .map((q) => q.id);
+    // توزيع الأسئلة: 8 سهلة، 8 متوسطة، 4 صعبة
+    const easyQuestions = allQuestions.filter(q => q.difficulty === 'EASY');
+    const mediumQuestions = allQuestions.filter(q => q.difficulty === 'MEDIUM');
+    const hardQuestions = allQuestions.filter(q => q.difficulty === 'HARD');
+
+    // خلط الأسئلة وأخذ العدد المطلوب
+    const shuffleArray = (array: any[]) => [...array].sort(() => Math.random() - 0.5);
+    
+    const selectedQuestionIds: string[] = [
+      ...shuffleArray(easyQuestions).slice(0, Math.min(8, easyQuestions.length)).map(q => q.id),
+      ...shuffleArray(mediumQuestions).slice(0, Math.min(8, mediumQuestions.length)).map(q => q.id),
+      ...shuffleArray(hardQuestions).slice(0, Math.min(4, hardQuestions.length)).map(q => q.id),
+    ];
+
+    // إذا لم نحصل على 20 سؤال، أكمل من باقي الأسئلة
+    if (selectedQuestionIds.length < 20) {
+      const remainingQuestions = allQuestions
+        .filter(q => !selectedQuestionIds.includes(q.id))
+        .map(q => q.id);
+      
+      const additionalQuestions = shuffleArray(remainingQuestions)
+        .slice(0, 20 - selectedQuestionIds.length);
+      
+      selectedQuestionIds.push(...additionalQuestions);
+    }
+
+    // خلط الأسئلة المختارة نهائياً
+    const finalQuestionIds = shuffleArray(selectedQuestionIds).slice(0, 20);
 
     // حساب وقت انتهاء الاختبار (24 ساعة من بداية اليوم)
     const expiresAt = new Date(today);
@@ -152,24 +196,22 @@ export async function getOrCreateDailyQuiz(): Promise<{
     const newDailyQuiz = await prisma.dailyQuiz.create({
       data: {
         categoryId: selectedCategory.id,
-        questionIds: selectedQuestionIds,
+        questionIds: finalQuestionIds,
         date: today,
         expiresAt,
       },
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
     });
 
-    logger.info('Daily quiz created successfully', {
+    logger.info('Daily Legends quiz created successfully', {
       id: newDailyQuiz.id,
       categoryId: selectedCategory.id,
-      questionCount: selectedQuestionIds.length,
+      categoryName: selectedCategory.name,
+      questionCount: finalQuestionIds.length,
+      distribution: {
+        easy: Math.min(8, easyQuestions.length),
+        medium: Math.min(8, mediumQuestions.length),
+        hard: Math.min(4, hardQuestions.length),
+      },
       expiresAt: expiresAt.toISOString(),
     });
 
@@ -184,6 +226,57 @@ export async function getOrCreateDailyQuiz(): Promise<{
     logger.error('Error getting or creating daily quiz:', error);
     throw error;
   }
+}
+
+/**
+ * إنشاء أسئلة تجريبية لكاتيجوري الأساطير
+ */
+async function createSampleLegendsQuestions(categoryId: string): Promise<void> {
+  const sampleQuestions = [
+    {
+      question: 'في أي عام فاز ليونيل ميسي بأول كرة ذهبية؟',
+      options: ['2009', '2010', '2008', '2011'],
+      correctAnswer: '0',
+      difficulty: 'EASY',
+      points: 10,
+      imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/27/Lionel_Messi_NE_Revolution_Inter_Miami_7.9.25-178.jpg',
+      displayMode: 'after-answer',
+    },
+    {
+      question: 'كم عدد كؤوس العالم التي فاز بها البرازيل؟',
+      options: ['4', '5', '3', '6'],
+      correctAnswer: '1',
+      difficulty: 'MEDIUM',
+      points: 15,
+      displayMode: 'never',
+    },
+    {
+      question: 'من هو أفضل هداف في تاريخ كأس العالم؟',
+      options: ['ميروسلاف كلوزه', 'رونالدو', 'بيليه', 'جيرد مولر'],
+      correctAnswer: '0',
+      difficulty: 'HARD',
+      points: 20,
+      displayMode: 'never',
+    },
+  ];
+
+  for (const question of sampleQuestions) {
+    await prisma.quizQuestion.create({
+      data: {
+        categoryId,
+        question: question.question,
+        options: question.options,
+        correctAnswer: question.correctAnswer,
+        difficulty: question.difficulty as any,
+        points: question.points,
+        imageUrl: question.imageUrl || null,
+        displayMode: question.displayMode as any,
+        timeLimit: 20,
+      },
+    });
+  }
+
+  logger.info(`Created ${sampleQuestions.length} sample questions for Legends category`);
 }
 
 /**
