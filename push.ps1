@@ -3,7 +3,6 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$message = ""
 )
 
 Write-Host "================================" -ForegroundColor Cyan
