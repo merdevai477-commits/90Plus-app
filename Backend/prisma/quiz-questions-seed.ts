@@ -4,7 +4,17 @@
  * كل سؤال فريد مع صور للأسئلة التي تحتاجها
  */
 
-import { PrismaClient, Difficulty, DisplayMode } from '@prisma/client';
+import { PrismaClient, Difficulty } from '@prisma/client';
+
+// Define DisplayMode enum locally until Prisma client is updated
+enum DisplayMode {
+    NEVER = 'NEVER',
+    AFTER_ANSWER = 'AFTER_ANSWER',
+    BEFORE_QUESTION = 'BEFORE_QUESTION',
+    IN_QUESTION = 'IN_QUESTION',
+    AFTER_WRONG = 'AFTER_WRONG',
+    BLUR_REVEAL = 'BLUR_REVEAL'
+}
 
 interface CategoryIds {
     inCommon: string;
