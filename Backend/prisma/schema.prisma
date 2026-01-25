@@ -322,6 +322,7 @@ model QuizQuestion {
   imageType     String? // player, club, stadium, trophy, manager, flag
   hint          String?
   timeLimit     Int        @default(15) // بالثواني
+  displayMode   DisplayMode @default(NEVER) // كيفية عرض الصورة
   createdAt     DateTime   @default(now())
 
   category QuizCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -336,6 +337,15 @@ enum Difficulty {
   EASY
   MEDIUM
   HARD
+}
+
+enum DisplayMode {
+  NEVER           // لا تظهر الصورة قبل الإجابة
+  AFTER_ANSWER    // تظهر بعد الإجابة (صحيحة أو خاطئة)
+  BEFORE_QUESTION // تظهر قبل السؤال
+  IN_QUESTION     // تظهر مع السؤال
+  AFTER_WRONG     // تظهر فقط بعد الإجابة الخاطئة
+  BLUR_REVEAL     // تظهر مشوشة ثم تتضح
 }
 
 model QuizAttempt {

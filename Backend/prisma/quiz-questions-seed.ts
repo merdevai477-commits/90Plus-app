@@ -4,7 +4,7 @@
  * كل سؤال فريد مع صور للأسئلة التي تحتاجها
  */
 
-import { PrismaClient, Difficulty } from '@prisma/client';
+import { PrismaClient, Difficulty, DisplayMode } from '@prisma/client';
 
 interface CategoryIds {
     inCommon: string;
@@ -52,6 +52,7 @@ function generateInCommonQuestions(categoryId: string): any[] {
         correctAnswer: item.ans,
         difficulty: item.diff as Difficulty,
         points: item.diff === 'EASY' ? 10 : item.diff === 'MEDIUM' ? 20 : 30,
+        displayMode: 'NEVER' as DisplayMode, // Default display mode
     })).concat(
         // Generate remaining questions (80 more) with variations
         Array.from({ length: 80 }, (_, i) => {
@@ -68,6 +69,7 @@ function generateInCommonQuestions(categoryId: string): any[] {
                 correctAnswer: base.ans,
                 difficulty: base.diff as Difficulty,
                 points: base.diff === 'EASY' ? 10 : base.diff === 'MEDIUM' ? 20 : 30,
+                displayMode: 'NEVER' as DisplayMode, // Default display mode
             };
         })
     );

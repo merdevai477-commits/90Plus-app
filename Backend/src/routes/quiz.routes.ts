@@ -544,7 +544,6 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
                 imageType: true,
                 hint: true,
                 timeLimit: true,
-                displayMode: true,
                 categoryId: true,
                 // لا نرسل correctAnswer للفرونت إند
             },
@@ -553,10 +552,31 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
             },
         });
 
+        // جلب displayMode باستخدام raw query لتجنب مشاكل TypeScript
+        const displayModeResults = await prisma.$queryRaw<Array<{id: string, displayMode: string}>>`
+            SELECT id, "displayMode"::text as "displayMode" 
+            FROM quiz_questions 
+            WHERE id = ANY(${dailyQuiz.questionIds})
+        `;
+
+        // تحويل إلى map للوصول السريع
+        const displayModeMap = new Map(
+            displayModeResults.map(item => [
+                item.id, 
+                item.displayMode.toLowerCase().replace('_', '-')
+            ])
+        );
+
         // ترتيب الأسئلة حسب questionIds في dailyQuiz (للحفاظ على الترتيب العشوائي)
-        const orderedQuestions = dailyQuiz.questionIds.map(id => 
-            questions.find(q => q.id === id)
-        ).filter(Boolean);
+        const orderedQuestions = dailyQuiz.questionIds.map(id => {
+            const question = questions.find(q => q.id === id);
+            if (!question) return null;
+            
+            return {
+                ...question,
+                displayMode: displayModeMap.get(id) || 'never',
+            };
+        }).filter(Boolean);
 
         logger.info(`Daily quiz fetched successfully`, {
             dailyQuizId: dailyQuiz.id,
