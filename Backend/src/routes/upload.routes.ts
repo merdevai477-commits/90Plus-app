@@ -376,8 +376,8 @@ router.post('/reel', requireAuth, upload.fields([
 
                 const thumbResult = await Promise.race([thumbUploadPromise, thumbTimeoutPromise]);
                 if (thumbResult.success) {
-                    thumbnailUrl = thumbResult.url;
-                    thumbnailPath = thumbResult.path;
+                    thumbnailUrl = thumbResult.url || null;
+                    thumbnailPath = thumbResult.path || null;
                     thumbnailUploaded = true;
                     const thumbTime = Date.now() - thumbStartTime;
                     logger.info(`Thumbnail uploaded successfully in ${thumbTime}ms: ${thumbFileName}`);
@@ -392,8 +392,10 @@ router.post('/reel', requireAuth, upload.fields([
         // Parse metadata (with error handling)
         let hashtags: string[] = [];
         let mentions: string[] = [];
+        let caption: string | null = null;
         try {
-            const { caption, hashtags: hashtagsJson, mentions: mentionsJson } = req.body;
+            const { caption: captionFromBody, hashtags: hashtagsJson, mentions: mentionsJson } = req.body;
+            caption = captionFromBody || null;
             hashtags = hashtagsJson ? (typeof hashtagsJson === 'string' ? JSON.parse(hashtagsJson) : hashtagsJson) : [];
             mentions = mentionsJson ? (typeof mentionsJson === 'string' ? JSON.parse(mentionsJson) : mentionsJson) : [];
         } catch (parseError: any) {

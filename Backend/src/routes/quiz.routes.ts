@@ -24,7 +24,7 @@ import {
   canUserTakeDailyQuiz,
   createNewDailyQuizFromNow,
 } from '../services/daily-quiz.service';
-import { getAnswers } from '../data/quiz-answers';
+import { LEGENDS_COMPLETE_QUESTIONS, getRandomCompleteQuestions, getCompleteAnswers } from '../data/quiz-questions/legends-complete';
 
 const router = Router();
 
@@ -470,6 +470,7 @@ router.post('/answers', requireAuth, async (req: Request, res: Response): Promis
         
         try {
             // محاولة جلب من الملفات المحلية (static import)
+            const { getAnswers } = await import('../data/quiz-answers/index');
             answersMap = getAnswers(categoryId, questionIds);
             
             // إذا لم نجد إجابات في الملفات، استخدم قاعدة البيانات
@@ -1101,6 +1102,104 @@ router.get(
     }
   }
 );
+
+/**
+ * POST /api/quiz/legends-complete
+ * جلب أسئلة الأساطير الكاملة (السؤال والإجابة والصورة في كائن واحد)
+ * Requires authentication
+ */
+router.post('/legends-complete', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Legends complete questions endpoint called`);
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const { count = 20 } = req.body;
+
+        // جلب الأسئلة العشوائية من الملف المحلي
+        const questions = getRandomCompleteQuestions(count);
+
+        // إزالة الإجابات الصحيحة من البيانات المُرسلة للفرونت إند
+        const questionsWithoutAnswers = questions.map(q => {
+            const { correctAnswer, ...questionWithoutAnswer } = q;
+            return questionWithoutAnswer;
+        });
+
+        logger.info(`Legends complete questions fetched successfully`, {
+            questionCount: questions.length,
+            requestedCount: count,
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                questions: questionsWithoutAnswers,
+                totalAvailable: LEGENDS_COMPLETE_QUESTIONS.length,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Error getting legends complete questions:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get legends complete questions',
+        });
+    }
+});
+
+/**
+ * POST /api/quiz/legends-complete/answers
+ * جلب إجابات أسئلة الأساطير الكاملة
+ * Requires authentication
+ */
+router.post('/legends-complete/answers', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    logger.info(`📥 Legends complete answers endpoint called`);
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const { questionIds } = req.body;
+
+        if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'questionIds array is required',
+            });
+            return;
+        }
+
+        // جلب الإجابات من الملف المحلي
+        const allAnswers = getCompleteAnswers();
+        const answers: Record<string, string> = {};
+
+        questionIds.forEach((id: string) => {
+            if (allAnswers[id]) {
+                answers[id] = allAnswers[id];
+            }
+        });
+
+        logger.info(`Legends complete answers fetched successfully`, {
+            questionCount: questionIds.length,
+            answersFound: Object.keys(answers).length,
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: { answers },
+        });
+    } catch (error: any) {
+        logger.error('Error getting legends complete answers:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Failed to get legends complete answers',
+        });
+    }
+});
 
 export default router;
 
