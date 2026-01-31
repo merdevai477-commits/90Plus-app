@@ -86,6 +86,11 @@ model User {
   banReason      String?
   warningsCount  Int       @default(0)
 
+  // Account Deletion fields (Apple Compliance)
+  isDeleted            Boolean   @default(false)
+  deletedAt            DateTime?
+  scheduledDeletionAt  DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -131,11 +136,16 @@ model User {
   // Predictions
   predictions Prediction[]
 
+  // Terms Acceptance (Apple Compliance)
+  termsAcceptances TermsAcceptance[]
+
   @@index([email])
   @@index([username])
   @@index([level])
   @@index([coins])
   @@index([createdAt])
+  @@index([isDeleted])
+  @@index([scheduledDeletionAt])
   // Case-insensitive search indexes: idx_users_username_lower, idx_users_displayname_lower
   // Created via migration for LOWER(username) and LOWER(displayName) expressions
   @@map("users")
@@ -1355,4 +1365,25 @@ model CachedTransfer {
   @@index([transferDate])
   @@index([transferType])
   @@map("cached_transfers")
+}
+
+// ============================================
+// TERMS OF SERVICE ACCEPTANCE (Apple Compliance)
+// ============================================
+
+model TermsAcceptance {
+  id          String   @id @default(uuid())
+  userId      String
+  version     String   // e.g., "1.0"
+  acceptedAt  DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?  @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, version])
+  @@index([userId])
+  @@index([version])
+  @@index([acceptedAt])
+  @@map("terms_acceptances")
 }

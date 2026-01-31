@@ -84,7 +84,8 @@ export class UserController {
     }
 
     /**
-     * Delete user account
+     * Delete user account (Apple Compliance)
+     * Initiates soft delete with 30-day grace period
      */
     static async deleteAccount(req: Request, res: Response): Promise<void> {
         try {
@@ -99,14 +100,33 @@ export class UserController {
                 return;
             }
 
-            // Delete user (cascade will handle related data)
-            await prisma.user.delete({
+            // Get user from database
+            const user = await prisma.user.findUnique({
                 where: { clerkUserId },
+                select: { id: true, email: true, username: true },
             });
+
+            if (!user) {
+                res.status(404).json({
+                    status: 'ERROR',
+                    message: 'User not found',
+                });
+                return;
+            }
+
+            // Import AccountDeletionService
+            const { AccountDeletionService } = await import('../services/account-deletion.service');
+
+            // Initiate account deletion (soft delete + schedule permanent deletion)
+            await AccountDeletionService.initiateAccountDeletion(user.id, clerkUserId);
 
             res.json({
                 status: 'SUCCESS',
-                message: 'Account deleted successfully',
+                message: 'Account deletion initiated. Your data will be permanently deleted in 30 days.',
+                data: {
+                    deletedAt: new Date(),
+                    scheduledDeletionAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                },
             });
         } catch (error) {
             logger.error('Delete account error:', error);

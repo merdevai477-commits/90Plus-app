@@ -183,6 +183,8 @@ import quizRoutes from './routes/quiz.routes';
 import adminRoutes from './routes/admin.routes';
 import appVersionRoutes from './routes/app-version.routes';
 import supportRoutes from './routes/support.routes';
+import termsRoutes from './routes/terms.routes';
+import reportsRoutes from './routes/reports.routes';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
@@ -216,6 +218,8 @@ app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
+app.use(`${API_PREFIX}/terms`, termsRoutes);
+app.use(`${API_PREFIX}/reports`, reportsRoutes);
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
