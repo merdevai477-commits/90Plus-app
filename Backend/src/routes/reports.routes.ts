@@ -5,10 +5,7 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
-/**
- * POST /api/reports/reel/:reelId
- * Report a reel
- */
+// POST /api/reports/reel/:reelId
 router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { reelId } = req.params;
@@ -17,11 +14,6 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
 
     if (!clerkUserId) {
       res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-      return;
-    }
-
-    if (!reason) {
-      res.status(400).json({ status: 'ERROR', message: 'Reason is required' });
       return;
     }
 
@@ -43,12 +35,6 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
 
     if (!reel) {
       res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
-      return;
-    }
-
-    // Can't report your own content
-    if (reel.userId === user.id) {
-      res.status(400).json({ status: 'ERROR', message: 'Cannot report your own content' });
       return;
     }
 
@@ -92,10 +78,7 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
   }
 });
 
-/**
- * POST /api/reports/comment/:commentId
- * Report a comment
- */
+// POST /api/reports/comment/:commentId
 router.post('/comment/:commentId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { commentId } = req.params;
@@ -104,11 +87,6 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
 
     if (!clerkUserId) {
       res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-      return;
-    }
-
-    if (!reason) {
-      res.status(400).json({ status: 'ERROR', message: 'Reason is required' });
       return;
     }
 
@@ -130,12 +108,6 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
 
     if (!comment) {
       res.status(404).json({ status: 'ERROR', message: 'Comment not found' });
-      return;
-    }
-
-    // Can't report your own content
-    if (comment.userId === user.id) {
-      res.status(400).json({ status: 'ERROR', message: 'Cannot report your own content' });
       return;
     }
 
