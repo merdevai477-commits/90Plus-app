@@ -925,30 +925,55 @@ enum ReportAction {
 model AuditLog {
   id         String          @id @default(uuid())
   action     AuditAction
-  actorId    String // User who performed the action
-  targetId   String // Target user/content ID
-  targetType AuditTargetType
+  actorId    String? // User who performed the action (null for system actions)
+  targetId   String? // Target user/content ID
+  targetType AuditTargetType?
+  resource   String // Resource being accessed (e.g., 'AUTH', 'USER', 'REEL')
   reason     String?         @db.Text
-  metadata   Json? // Additional context
+  metadata   Json? // Additional context (IP, user agent, etc.)
+  ip         String? // IP address of the actor
+  userAgent  String? // User agent string
   createdAt  DateTime        @default(now())
 
   @@index([actorId])
   @@index([targetId])
   @@index([targetType])
   @@index([action])
+  @@index([resource])
   @@index([createdAt])
   @@map("audit_logs")
 }
 
 enum AuditAction {
+  // Authentication
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  TOKEN_REFRESH
+  PASSWORD_RESET
+  
+  // Account Management
+  ACCOUNT_CREATED
+  ACCOUNT_UPDATED
+  ACCOUNT_DELETION_INITIATED
+  ACCOUNT_DELETION_CANCELLED
+  ACCOUNT_DELETED
+  
+  // Moderation
   REPORT_CREATED
   STRIKE_CREATED
   CONTENT_DELETED
   USER_SUSPENDED
   USER_UNSUSPENDED
   USER_BANNED
+  USER_UNBANNED
   ADMIN_REVIEW
   WARNING_ISSUED
+  
+  // Security
+  RATE_LIMIT_EXCEEDED
+  UNAUTHORIZED_ACCESS
+  SUSPICIOUS_ACTIVITY
 }
 
 enum AuditTargetType {
@@ -956,6 +981,7 @@ enum AuditTargetType {
   REEL
   COMMENT
   REPORT
+  ACCOUNT
 }
 
 // ============================================

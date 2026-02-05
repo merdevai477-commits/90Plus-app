@@ -185,6 +185,7 @@ import appVersionRoutes from './routes/app-version.routes';
 import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
+import path from 'path';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
@@ -223,6 +224,11 @@ app.use(`${API_PREFIX}/reports`, reportsRoutes);
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
+
+// Serve static files for privacy and terms (Apple compliance)
+app.use('/privacy', express.static(path.join(__dirname, '../public/privacy.html')));
+app.use('/terms', express.static(path.join(__dirname, '../public/terms.html')));
+
 // Register quiz routes with error handling
 try {
     // Log before registration
@@ -574,6 +580,33 @@ async function startServer() {
                         PredictionWatcherService.checkPredictions();
                     });
                     logger.info('✅ Prediction Watcher Cron Job scheduled (every 5 minutes)');
+                    
+                    // ✅ Setup Cron Job for Account Deletion (daily at 2 AM)
+                    cron.schedule('0 2 * * *', async () => {
+                        logger.info('⏰ Cron: Running scheduled account deletions...');
+                        try {
+                            const { AccountDeletionService } = await import('./services/account-deletion.service');
+                            const usersToDelete = await AccountDeletionService.getUsersScheduledForDeletion();
+                            
+                            if (usersToDelete.length > 0) {
+                                logger.info(`Found ${usersToDelete.length} users scheduled for deletion`);
+                                
+                                for (const user of usersToDelete) {
+                                    try {
+                                        await AccountDeletionService.permanentlyDeleteAccount(user.id);
+                                        logger.info(`✅ Permanently deleted user: ${user.username} (${user.email})`);
+                                    } catch (error) {
+                                        logger.error(`❌ Failed to delete user ${user.id}:`, error);
+                                    }
+                                }
+                            } else {
+                                logger.info('No users scheduled for deletion');
+                            }
+                        } catch (error) {
+                            logger.error('❌ Account deletion cron job failed:', error);
+                        }
+                    });
+                    logger.info('✅ Account Deletion Cron Job scheduled (daily at 2 AM)');
                     
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();

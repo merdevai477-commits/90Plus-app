@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { UserController } from '../controllers/user.controller';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { strictLimiter } from '../middleware/rateLimit.middleware';
+import { accountDeletionRateLimiter } from '../middleware/auth-rate-limit.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
@@ -12,7 +13,7 @@ router.get('/settings', requireAuth, UserController.getSettings);
 router.patch('/settings', requireAuth, UserController.updateSettings);
 
 // Account Routes (Protected + Rate Limited)
-router.delete('/me', requireAuth, strictLimiter, UserController.deleteAccount);
+router.delete('/me', requireAuth, accountDeletionRateLimiter, UserController.deleteAccount);
 
 /**
  * POST /api/users/block/:userId
@@ -157,6 +158,127 @@ router.delete('/block/:userId', requireAuth, async (req: Request, res: Response)
 });
 
 /**
+ * GET /api/users/blocked
+ * Get list of blocked users (protected)
+ */
+router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        // Get current user
+        const currentUser = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+
+        if (!currentUser) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Get blocked users using raw query
+        try {
+            const blockedUsers = await prisma.$queryRaw<any[]>`
+                SELECT 
+                    u.id,
+                    u.username,
+                    u."fullName",
+                    u."avatarUrl",
+                    b."createdAt" as "blockedAt"
+                FROM blocks b
+                JOIN users u ON b."blockedId" = u.id
+                WHERE b."blockerId" = ${currentUser.id}
+                ORDER BY b."createdAt" DESC
+            `;
+
+            res.json({
+                status: 'SUCCESS',
+                data: blockedUsers,
+            });
+        } catch (dbError: any) {
+            if (dbError.code === '42P01') {
+                res.status(503).json({ 
+                    status: 'ERROR', 
+                    message: 'Block feature not available yet. Please run database migration.',
+                    data: []
+                });
+                return;
+            }
+            throw dbError;
+        }
+    } catch (error: any) {
+        logger.error('Get blocked users error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Internal server error',
+        });
+    }
+});
+
+/**
+ * GET /api/users/block/:userId/status
+ * Check if a user is blocked (protected)
+ */
+router.get('/block/:userId/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { userId: targetUserId } = req.params;
+        const clerkUserId = req.auth?.userId;
+
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        // Get current user
+        const currentUser = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+
+        if (!currentUser) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Check if user is blocked using raw query
+        try {
+            const result = await prisma.$queryRaw<any[]>`
+                SELECT COUNT(*) as count
+                FROM blocks
+                WHERE "blockerId" = ${currentUser.id} AND "blockedId" = ${targetUserId}
+            `;
+
+            const isBlocked = result[0]?.count > 0;
+
+            res.json({
+                status: 'SUCCESS',
+                isBlocked,
+            });
+        } catch (dbError: any) {
+            if (dbError.code === '42P01') {
+                res.json({ 
+                    status: 'SUCCESS',
+                    isBlocked: false
+                });
+                return;
+            }
+            throw dbError;
+        }
+    } catch (error: any) {
+        logger.error('Check block status error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Internal server error',
+        });
+    }
+});
+
+/**
  * POST /api/users/report/:userId
  * Report a user (protected)
  */
@@ -216,7 +338,7 @@ router.post('/report/:userId', requireAuth, async (req: Request, res: Response):
         const reportType = reasonToType[reason] || 'OTHER';
 
         // Create report
-        await prisma.report.create({
+        const report = await prisma.report.create({
             data: {
                 reporterId: currentUser.id,
                 reportedUserId: targetUserId,
@@ -227,6 +349,21 @@ router.post('/report/:userId', requireAuth, async (req: Request, res: Response):
         });
 
         logger.info(`User ${currentUser.id} reported user ${targetUserId} for: ${reason}`);
+
+        // Send notification to admin (Apple Guideline 1.2 requirement)
+        try {
+            const { AdminNotificationService } = await import('../services/admin-notification.service');
+            await AdminNotificationService.notifyUserReport({
+                reportId: report.id,
+                reporterUsername: currentUser.id,
+                reportedUsername: targetUser.username,
+                reportType: reportType,
+                reason: additionalInfo || reason,
+            });
+        } catch (notifError) {
+            // Don't fail the request if notification fails
+            logger.error('Failed to send admin notification:', notifError);
+        }
 
         res.json({
             status: 'SUCCESS',

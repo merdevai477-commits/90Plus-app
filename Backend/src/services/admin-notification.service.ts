@@ -122,6 +122,36 @@ export class AdminNotificationService {
     }
 
     /**
+     * Alert admins about user report (Apple Guideline 1.2 requirement)
+     */
+    static async notifyUserReport(params: {
+        reportId: string;
+        reporterUsername: string;
+        reportedUsername: string;
+        reportType: string;
+        reason: string;
+    }) {
+        try {
+            await this.alertAdmins({
+                priority: 'MEDIUM',
+                message: `بلاغ جديد عن مستخدم: ${params.reportedUsername}\nالسبب: ${params.reason}`,
+                reportId: params.reportId,
+                metadata: {
+                    reporterUsername: params.reporterUsername,
+                    reportedUsername: params.reportedUsername,
+                    reportType: params.reportType,
+                    reason: params.reason,
+                },
+            });
+
+            logger.info(`Admin notified about user report: ${params.reportId}`);
+        } catch (error) {
+            logger.error('Error notifying admins about user report:', error);
+            // Don't throw - notification failures shouldn't break the main flow
+        }
+    }
+
+    /**
      * Get priority label in Arabic
      */
     private static getPriorityLabel(priority: ReportPriority): string {

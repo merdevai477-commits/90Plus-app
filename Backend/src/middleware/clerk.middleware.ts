@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import { logger } from '../utils/logger';
+import { AuditService, AuditAction } from '../services/audit.service';
 
 // Extend Express Request to include auth
 declare global {
@@ -65,25 +66,8 @@ setInterval(() => {
 }, 60 * 1000); // Clean every minute
 
 /**
- * Decode JWT without verification (for extracting claims)
- * The actual user verification is done via Clerk API
- */
-function decodeJwt(token: string): any {
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) {
-            return null;
-        }
-        const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
-        return JSON.parse(payload);
-    } catch {
-        return null;
-    }
-}
-
-/**
  * Clerk Authentication Middleware
- * Verifies JWT token and extracts user information
+ * Verifies JWT token signature and extracts user information
  */
 export const requireAuth = async (
     req: Request,
@@ -112,30 +96,31 @@ export const requireAuth = async (
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
         try {
-            // Decode the JWT to get user ID
-            const decoded = decodeJwt(token);
+            // ✅ SECURE: Verify JWT signature using Clerk SDK
+            // Clerk automatically verifies the token signature using JWKS
+            const verifiedToken = await clerkClient.verifyToken(token);
 
-            if (!decoded || !decoded.sub) {
-                logger.warn('requireAuth middleware - Invalid token format', {
+            if (!verifiedToken || !verifiedToken.sub) {
+                logger.warn('requireAuth middleware - Invalid token', {
                     path: req.path,
                     method: req.method,
                     originalUrl: req.originalUrl,
                 });
                 res.status(401).json({
                     status: 'ERROR',
-                    message: 'Unauthorized - Invalid token format',
+                    message: 'Unauthorized - Invalid token',
                 });
                 return;
             }
             
-            logger.debug('requireAuth middleware - Token decoded', {
-                userId: decoded.sub,
+            logger.debug('requireAuth middleware - Token verified', {
+                userId: verifiedToken.sub,
                 path: req.path,
                 method: req.method,
             });
 
-            // Verify user exists in Clerk (with caching)
-            const userExists = await getVerifiedUser(decoded.sub);
+            // Optional: Verify user exists in Clerk (with caching) for extra security
+            const userExists = await getVerifiedUser(verifiedToken.sub);
 
             if (!userExists) {
                 res.status(401).json({
@@ -145,27 +130,30 @@ export const requireAuth = async (
                 return;
             }
 
-            // Check if token is expired
-            if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-                res.status(401).json({
-                    status: 'ERROR',
-                    message: 'Unauthorized - Token expired',
-                });
-                return;
-            }
-
             // Attach user info to request
             req.auth = {
-                userId: decoded.sub,
-                sessionId: decoded.sid || '',
-                sessionClaims: decoded,
+                userId: verifiedToken.sub,
+                sessionId: verifiedToken.sid || '',
+                sessionClaims: verifiedToken,
             };
 
             const duration = Date.now() - startTime;
             logger.debug('requireAuth middleware - Authentication successful', {
-                userId: decoded.sub,
+                userId: verifiedToken.sub,
                 path: req.path,
                 duration: `${duration}ms`,
+            });
+
+            // Log successful authentication
+            await AuditService.logAuth({
+                action: AuditAction.LOGIN,
+                userId: verifiedToken.sub,
+                req,
+                metadata: {
+                    path: req.path,
+                    method: req.method,
+                    duration: `${duration}ms`,
+                },
             });
 
             next();
@@ -179,6 +167,18 @@ export const requireAuth = async (
                 originalUrl: req.originalUrl,
                 duration: `${duration}ms`,
             });
+            
+            // Log failed authentication attempt
+            await AuditService.logAuth({
+                action: AuditAction.LOGIN_FAILED,
+                req,
+                metadata: {
+                    error: verifyError.message,
+                    path: req.path,
+                    method: req.method,
+                },
+            });
+            
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized - Token verification failed',
@@ -223,23 +223,24 @@ export const optionalAuth = async (
         const token = authHeader.substring(7);
 
         try {
-            const decoded = decodeJwt(token);
+            // ✅ SECURE: Verify JWT signature using Clerk SDK
+            const verifiedToken = await clerkClient.verifyToken(token);
 
-            if (decoded && decoded.sub) {
+            if (verifiedToken && verifiedToken.sub) {
                 // Verify user exists (with caching)
-                const userExists = await getVerifiedUser(decoded.sub);
+                const userExists = await getVerifiedUser(verifiedToken.sub);
 
-                if (userExists && (!decoded.exp || decoded.exp * 1000 >= Date.now())) {
+                if (userExists) {
                     req.auth = {
-                        userId: decoded.sub,
-                        sessionId: decoded.sid || '',
-                        sessionClaims: decoded,
+                        userId: verifiedToken.sub,
+                        sessionId: verifiedToken.sid || '',
+                        sessionClaims: verifiedToken,
                     };
                 }
             }
         } catch (verifyError) {
             // Token invalid, continue without auth
-            logger.error('Optional auth - token verification failed');
+            logger.debug('Optional auth - token verification failed');
         }
 
         next();

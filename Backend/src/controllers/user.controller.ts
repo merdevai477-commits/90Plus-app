@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { AuditService, AuditAction } from '../services/audit.service';
 
 export class UserController {
     /**
@@ -93,6 +94,13 @@ export class UserController {
             const clerkUserId = req.auth?.userId;
 
             if (!clerkUserId) {
+                // Log unauthorized access attempt
+                await AuditService.logSecurity({
+                    action: AuditAction.UNAUTHORIZED_ACCESS,
+                    req,
+                    reason: 'Account deletion attempted without authentication',
+                });
+                
                 res.status(401).json({
                     status: 'ERROR',
                     message: 'Unauthorized - No user ID',
@@ -117,8 +125,22 @@ export class UserController {
             // Import AccountDeletionService
             const { AccountDeletionService } = await import('../services/account-deletion.service');
 
+            // Log account deletion initiation
+            await AuditService.logAccountManagement({
+                action: AuditAction.ACCOUNT_DELETION_INITIATED,
+                userId: user.id,
+                req,
+                reason: 'User requested account deletion',
+                metadata: {
+                    email: user.email,
+                    username: user.username,
+                },
+            });
+
             // Initiate account deletion (soft delete + schedule permanent deletion)
             await AccountDeletionService.initiateAccountDeletion(user.id, clerkUserId);
+
+            logger.info(`Account deletion initiated for user ${user.id} (${user.username})`);
 
             res.json({
                 status: 'SUCCESS',
