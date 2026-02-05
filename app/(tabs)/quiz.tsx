@@ -32,13 +32,22 @@ import { BlurView } from 'expo-blur';
 import { useTranslation } from '../../src/i18n';
 import { useCoins } from '../../contexts/CoinsContext';
 import { CoinsBadge } from '../../components/common/CoinsBadge';
-import { QuizCategories } from '../../components/Quiz/QuizCategories';
+import { DailyQuizCategories } from '../../components/Quiz/DailyQuizCategories';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { markQuizCompleted, getCurrentQuizState, getCurrentQuestions } from '../../services/quizLocalState';
 import { getQuestionsByIds, getQuestionsByCategoryId, getQuestionsByCategoryIdWithDifficulty, QuizQuestion, DisplayMode } from '../../data/quizQuestions/index';
 import { getQuizAnswers } from '../../services/quizApi';
 import { prefetchQuizImages, extractImageUrlsFromQuestions } from '../../services/imageCache';
+import { startDailyQuizSync, stopDailyQuizSync } from '../../services/dailyQuizSync';
+import { 
+  startQuizSession, 
+  endQuizSession, 
+  recordQuizLoadTime, 
+  recordQuizAnswer, 
+  recordQuizImageLoad,
+  recordQuizError 
+} from '../../services/quizPerformanceMonitor';
 
 const { width, height } = Dimensions.get('window');
 
@@ -59,30 +68,31 @@ export default function QuizScreen() {
     }
   }, [isLoaded, isSignedIn]);
 
-  // Safety check for translations
-  if (!t || !t.quiz) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
-        <Text style={{ color: '#fff' }}>Loading...</Text>
-      </View>
-    );
-  }
+  // بدء خدمة المزامنة والمراقبة عند تحميل الكومبوننت
+  useEffect(() => {
+    const initializeServices = async () => {
+      if (isSignedIn && getToken) {
+        // بدء خدمة المزامنة
+        startDailyQuizSync(getToken);
+        
+        // بدء جلسة مراقبة الأداء
+        const newSessionId = await startQuizSession();
+        setSessionId(newSessionId);
+      }
+    };
 
-  // Show loading while checking auth
-  if (!isLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
-        <Text style={{ color: '#fff' }}>Loading...</Text>
-      </View>
-    );
-  }
+    initializeServices();
 
-  // Don't render quiz if not signed in (will redirect)
-  if (!isSignedIn) {
-    return null;
-  }
+    // تنظيف عند unmount
+    return () => {
+      stopDailyQuizSync();
+      if (sessionId) {
+        endQuizSession();
+      }
+    };
+  }, [isSignedIn, getToken]);
 
-  // States الأساسية
+  // States الأساسية - moved to top to avoid hoisting issues
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
@@ -113,6 +123,45 @@ export default function QuizScreen() {
   const [showImage, setShowImage] = useState(false); // للتحكم في إظهار الصورة
   const [blurIntensity, setBlurIntensity] = useState(20); // للصورة المشوشة في legends
   const [showQuestionText, setShowQuestionText] = useState(true); // للتحكم في عرض السؤال في flash mode
+  const [imageLoading, setImageLoading] = useState(false); // حالة تحميل الصورة
+  const [imageError, setImageError] = useState(false); // حالة خطأ في تحميل الصورة
+  const [sessionId, setSessionId] = useState<string | null>(null); // معرف الجلسة
+  const [answerStartTime, setAnswerStartTime] = useState<number>(0); // وقت بداية الإجابة
+
+  // Derived state - calculated from other state
+  const finalQuestions = quizQuestions;
+  const currentQuestion = finalQuestions[currentQuestionIndex];
+  const progress = finalQuestions.length > 0 ? ((currentQuestionIndex + 1) / finalQuestions.length) * 100 : 0;
+
+  // تسجيل وقت بداية الإجابة عند عرض سؤال جديد
+  useEffect(() => {
+    if (currentQuestion && !isAnswered) {
+      setAnswerStartTime(Date.now());
+    }
+  }, [currentQuestionIndex, currentQuestion, isAnswered]);
+
+  // Safety check for translations
+  if (!t || !t.quiz) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <Text style={{ color: '#fff' }}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // Show loading while checking auth
+  if (!isLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <Text style={{ color: '#fff' }}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // Don't render quiz if not signed in (will redirect)
+  if (!isSignedIn) {
+    return null;
+  }
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -136,12 +185,12 @@ export default function QuizScreen() {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  // جلب الأسئلة من الملفات المحلية عند اختيار كاتيجوري
+  // جلب الكويز اليومي (الأساطير) من الباك إند مع Cache احترافي
   useEffect(() => {
     let isMounted = true; // لتجنب state updates بعد unmount
     
-    const loadQuizQuestions = async () => {
-      if (!selectedMode) {
+    const loadDailyQuiz = async () => {
+      if (!selectedMode || selectedMode !== 'legends') {
         if (isMounted) {
           setLoadingQuestions(false);
           setQuizQuestions([]);
@@ -154,68 +203,84 @@ export default function QuizScreen() {
           setLoadingQuestions(true);
         }
         
-        // استخدام الأسئلة المحلية مع تصفية حسب الصعوبة
-        // 5 سهلة، 10 متوسطة، 5 صعبة (باستثناء الأنواع التي تعتمد على الصورة)
-        const categoryQuestions = getQuestionsByCategoryIdWithDifficulty(selectedMode);
+        const currentGetToken = getTokenRef.current;
         
-        if (categoryQuestions.length > 0) {
-          if (isMounted) {
-            setQuizQuestions(categoryQuestions);
-          }
-          
-          // تحميل الصور في الخلفية
-          const imageUrls = extractImageUrlsFromQuestions(categoryQuestions);
-          if (imageUrls.length > 0) {
-            prefetchQuizImages(imageUrls).catch((error) => {
-              console.warn('Failed to prefetch quiz images:', error);
-            });
-          }
-          
-          // جلب الإجابات من الباك إند (مع cache)
-          const currentGetToken = getTokenRef.current;
-          const questionIds = categoryQuestions.map(q => q.id);
-          
-          if (currentGetToken) {
-            try {
-              // getQuizAnswers يستخدم cache تلقائياً (memory + AsyncStorage)
-              const answers = await getQuizAnswers(questionIds, currentGetToken);
+        if (currentGetToken) {
+          try {
+            const loadStartTime = Date.now();
+            
+            // استيراد Daily Quiz API
+            const { getDailyQuiz } = await import('../../services/quizApi');
+            
+            // جلب الكويز اليومي (أسئلة + إجابات + صور)
+            const dailyQuizResult = await getDailyQuiz(currentGetToken);
+            
+            const loadTime = Date.now() - loadStartTime;
+            
+            if (isMounted) {
+              setQuizQuestions(dailyQuizResult.questions);
+              setQuizAnswers(dailyQuizResult.answers);
               
-              if (isMounted) {
-                setQuizAnswers(answers);
-                console.log(`✅ Loaded ${Object.keys(answers).length} answers for ${categoryQuestions.length} questions`);
+              // تسجيل وقت التحميل في مراقب الأداء
+              recordQuizLoadTime(loadTime, dailyQuizResult.fromCache);
+              
+              console.log(`✅ Daily Quiz loaded successfully`, {
+                questionCount: dailyQuizResult.questions.length,
+                answersCount: Object.keys(dailyQuizResult.answers).length,
+                fromCache: dailyQuizResult.fromCache,
+                loadTime: `${loadTime}ms`,
+                expiresAt: dailyQuizResult.expiresAt.toISOString(),
+              });
+              
+              // إذا لم تكن من Cache، عرض رسالة نجاح
+              if (!dailyQuizResult.fromCache) {
+                console.log('🎉 Fresh daily quiz loaded and cached for 24 hours!');
               }
-            } catch (error) {
-              console.error('Error loading quiz answers:', error);
-              // في حالة فشل جلب الإجابات، نستخدم cache كبديل
-              try {
-                const cacheKey = `quiz_answers_${questionIds.sort().join('_')}`;
-                const { cacheService } = await import('../../services/cacheService');
-                const cachedAnswers = await cacheService.get<Record<string, string>>(cacheKey);
+            }
+          } catch (error: any) {
+            console.error('Error loading daily quiz:', error);
+            recordQuizError('api', error.message);
+            
+            // Fallback: استخدام الأسئلة المحلية إذا فشل جلب من الباك إند
+            if (isMounted) {
+              console.log('Falling back to local questions...');
+              const categoryQuestions = getQuestionsByCategoryIdWithDifficulty(selectedMode);
+              
+              if (categoryQuestions.length > 0) {
+                setQuizQuestions(categoryQuestions);
                 
-                if (isMounted) {
-                  setQuizAnswers(cachedAnswers || {});
-                  if (cachedAnswers) {
-                    console.log(`✅ Using cached answers: ${Object.keys(cachedAnswers).length} answers`);
-                  } else {
-                    console.warn('No cached answers found');
+                // تحميل الصور في الخلفية
+                const imageUrls = extractImageUrlsFromQuestions(categoryQuestions);
+                if (imageUrls.length > 0) {
+                  prefetchQuizImages(imageUrls).catch((error) => {
+                    console.warn('Failed to prefetch quiz images:', error);
+                    recordQuizError('image', error.message);
+                  });
+                }
+                
+                // جلب الإجابات من الباك إند
+                const questionIds = categoryQuestions.map(q => q.id);
+                try {
+                  const answers = await getQuizAnswers(questionIds, currentGetToken);
+                  if (isMounted) {
+                    setQuizAnswers(answers);
+                  }
+                } catch (answerError: any) {
+                  console.error('Error loading answers for local questions:', answerError);
+                  recordQuizError('api', answerError.message);
+                  if (isMounted) {
+                    setQuizAnswers({});
                   }
                 }
-              } catch (cacheError) {
-                console.error('Error loading from cache:', cacheError);
-                if (isMounted) {
-                  setQuizAnswers({});
-                }
+              } else {
+                setQuizQuestions([]);
               }
             }
           }
-        } else {
-          if (isMounted) {
-            console.warn(`No questions found for category: ${selectedMode}`);
-            setQuizQuestions([]);
-          }
         }
-      } catch (error) {
-        console.error('Error loading quiz questions:', error);
+      } catch (error: any) {
+        console.error('Error loading daily quiz:', error);
+        recordQuizError('network', error.message);
         if (isMounted) {
           setQuizQuestions([]);
         }
@@ -226,17 +291,13 @@ export default function QuizScreen() {
       }
     };
 
-    loadQuizQuestions();
+    loadDailyQuiz();
     
     // Cleanup function
     return () => {
       isMounted = false;
     };
   }, [selectedMode]); // إزالة userId و getToken من dependencies
-
-  const finalQuestions = quizQuestions;
-  const currentQuestion = finalQuestions[currentQuestionIndex];
-  const progress = finalQuestions.length > 0 ? ((currentQuestionIndex + 1) / finalQuestions.length) * 100 : 0;
 
   // Progress Animation
   useEffect(() => {
@@ -251,6 +312,8 @@ export default function QuizScreen() {
     animateQuestionEntry();
     setHintUsed(false);
     setEliminatedOptions([]);
+    setImageLoading(false); // إعادة تعيين حالة التحميل
+    setImageError(false); // إعادة تعيين حالة الخطأ
     
     // تحديد طريقة عرض الصورة حسب displayMode
     const displayMode: DisplayMode = currentQuestion?.displayMode || 'never';
@@ -412,6 +475,9 @@ export default function QuizScreen() {
   const handleAnswerSelect = async (answerIndex: number) => {
     if (isAnswered || eliminatedOptions.includes(answerIndex) || !currentQuestion) return;
 
+    // حساب وقت الإجابة
+    const answerTime = Date.now() - answerStartTime;
+
     // Haptic feedback محسن
     if (soundEnabled && Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -442,6 +508,9 @@ export default function QuizScreen() {
     const correctAnswer = quizAnswers[currentQuestion.id] || '0';
     const correctAnswerIndex = parseInt(correctAnswer, 10);
     const isCorrect = answerIndex === correctAnswerIndex;
+
+    // تسجيل الإجابة في مراقب الأداء
+    recordQuizAnswer(isCorrect, answerTime);
 
     // تحديد طريقة عرض الصورة حسب displayMode بعد الإجابة
     const displayMode: DisplayMode = currentQuestion.displayMode || 'never';
@@ -781,7 +850,7 @@ export default function QuizScreen() {
             </View>
           </View>
         </View>
-        <QuizCategories onSelectCategory={handleCategorySelect} />
+        <DailyQuizCategories onSelectCategory={handleCategorySelect} />
       </SafeAreaView>
     );
   }
@@ -998,9 +1067,17 @@ export default function QuizScreen() {
                           styles.questionImage,
                           currentQuestion.imageType === 'club' && styles.clubImage,
                         ]}
-                        resizeMode={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
+                        contentFit={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
+                        transition={300}
+                        onLoadStart={() => setImageLoading(true)}
+                        onLoadEnd={() => setImageLoading(false)}
+                        onError={(error) => {
+                          console.error('[Quiz] Image load error:', error);
+                          setImageError(true);
+                          setImageLoading(false);
+                        }}
                       />
-                      {!isAnswered && (
+                      {!isAnswered && !imageError && (
                         <Animated.View
                           style={[
                             styles.blurOverlay,
@@ -1021,21 +1098,54 @@ export default function QuizScreen() {
                           />
                         </Animated.View>
                       )}
+                      {imageLoading && (
+                        <View style={styles.imageLoadingOverlay}>
+                          <Text style={styles.imageLoadingText}>⏳</Text>
+                        </View>
+                      )}
+                      {imageError && (
+                        <View style={styles.imageErrorOverlay}>
+                          <Text style={styles.imageErrorText}>🖼️</Text>
+                          <Text style={styles.imageErrorSubtext}>Image unavailable</Text>
+                        </View>
+                      )}
                     </View>
                   ) : (
                     // الصورة العادية
-                    <Image
-                      source={{ uri: currentQuestion.imageUrl }}
-                      style={[
-                        styles.questionImage,
-                        currentQuestion.imageType === 'club' && styles.clubImage,
-                      ]}
-                      resizeMode={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
-                    />
+                    <View style={styles.blurImageWrapper}>
+                      <Image
+                        source={{ uri: currentQuestion.imageUrl }}
+                        style={[
+                          styles.questionImage,
+                          currentQuestion.imageType === 'club' && styles.clubImage,
+                        ]}
+                        contentFit={currentQuestion.imageType === 'club' ? 'contain' : 'cover'}
+                        transition={300}
+                        onLoadStart={() => setImageLoading(true)}
+                        onLoadEnd={() => setImageLoading(false)}
+                        onError={(error) => {
+                          console.error('[Quiz] Image load error:', error);
+                          setImageError(true);
+                          setImageLoading(false);
+                        }}
+                      />
+                      {imageLoading && (
+                        <View style={styles.imageLoadingOverlay}>
+                          <Text style={styles.imageLoadingText}>⏳</Text>
+                        </View>
+                      )}
+                      {imageError && (
+                        <View style={styles.imageErrorOverlay}>
+                          <Text style={styles.imageErrorText}>🖼️</Text>
+                          <Text style={styles.imageErrorSubtext}>Image unavailable</Text>
+                        </View>
+                      )}
+                    </View>
                   )}
                   
                   {/* Overlay للصورة - يظهر فقط في in-question mode */}
                   {!isAnswered && 
+                   !imageError &&
                    currentQuestion.displayMode === 'in-question' && 
                    currentQuestion?.imageUrl && (
                     <View style={styles.imageOverlay}>
@@ -1490,6 +1600,32 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageLoadingText: {
+    fontSize: 48,
+    color: '#fff',
+  },
+  imageErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  imageErrorText: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  imageErrorSubtext: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
   },
   resultGradientOverlay: {
     borderRadius: 24,

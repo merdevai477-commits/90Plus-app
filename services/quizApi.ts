@@ -6,8 +6,24 @@
 import { getApiUrl } from '../config/api.config';
 import { useAuth } from '@clerk/clerk-expo';
 import { cacheService } from './cacheService';
-import { getQuestionsByIds, getQuestionById, QuizQuestion as LocalQuizQuestion } from '../data/quizQuestions/index';
+import { getQuestionsByIds } from '../data/quizQuestions/index';
 import { logger } from '../utils/logger';
+import { Image } from 'react-native';
+
+// Types
+export interface LocalQuizQuestion {
+  id: string;
+  categoryId: string;
+  question: string;
+  options: string[];
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  points: number;
+  imageUrl?: string | null;
+  imageType?: 'player' | 'club' | 'general' | null;
+  hint?: string | null;
+  timeLimit?: number;
+  displayMode?: 'never' | 'after-answer' | 'before-question' | 'in-question' | 'after-wrong' | 'blur-reveal';
+}
 
 const API_URL = getApiUrl();
 const API_TIMEOUT = 10000; // 10 seconds
@@ -646,12 +662,11 @@ export async function getQuizAnswers(
             questionCount: questionIds.length 
         });
         
-        // جلب categoryId من أول سؤال
-        const firstQuestion = getQuestionById(questionIds[0]);
-        const categoryId = firstQuestion?.categoryId;
+        // استخدام categoryId افتراضي للأساطير (لأن الأسئلة الآن تأتي من الباك إند)
+        const categoryId = 'legends'; // Default to legends category for daily quiz
         
         if (!categoryId) {
-            throw new Error('Category ID not found for questions');
+            throw new Error('Category ID not found - using default legends category');
         }
 
         const response = await fetchWithAuth('/quiz/answers', getToken, {
@@ -849,3 +864,374 @@ export const quizApi = {
     checkCooldown: checkQuizCooldown,
 };
 
+
+
+/**
+ * Get quiz questions from backend (without correct answers)
+ * يتم cache الأسئلة لمدة 1 ساعة
+ * يسمح بإضافة أسئلة جديدة بدون تحديث التطبيق
+ */
+export async function getQuizQuestions(
+    categoryId: string,
+    getToken: GetTokenFunction,
+    count: number = 20
+): Promise<LocalQuizQuestion[]> {
+    try {
+        const cacheKey = `quiz_questions_${categoryId}_${count}`;
+        
+        // 1. محاولة جلب من memory cache أولاً (أسرع)
+        const memoryCached = getFromMemoryCache(cacheKey);
+        if (memoryCached) {
+            logger.debug('[QuizAPI] getQuizQuestions - Using memory cache', { 
+                categoryId,
+                count: memoryCached.length 
+            });
+            return memoryCached;
+        }
+
+        // 2. محاولة جلب من AsyncStorage cache (1 ساعة)
+        const cached = await cacheService.get<LocalQuizQuestion[]>(cacheKey);
+        if (cached) {
+            // تحديث memory cache للوصول السريع
+            setMemoryCache(cacheKey, cached);
+            logger.debug('[QuizAPI] getQuizQuestions - Using AsyncStorage cache', { 
+                categoryId,
+                count: cached.length 
+            });
+            return cached;
+        }
+
+        // 3. جلب من الباك إند (إذا لم يكن في cache)
+        logger.debug('[QuizAPI] getQuizQuestions - Fetching from API', { 
+            categoryId,
+            count 
+        });
+
+        const response = await fetchWithAuth('/quiz/questions', getToken, {
+            method: 'POST',
+            body: JSON.stringify({ categoryId, count }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to get questions: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'SUCCESS') {
+            const questions = data.data as LocalQuizQuestion[];
+            
+            // حفظ في cache (1 ساعة) - memory + AsyncStorage
+            setMemoryCache(cacheKey, questions);
+            await cacheService.set(cacheKey, questions, 60 * 60 * 1000); // 1 hour
+            
+            logger.debug('[QuizAPI] getQuizQuestions - Saved to cache', { 
+                categoryId,
+                count: questions.length 
+            });
+            
+            return questions;
+        }
+
+        throw new Error(data.message || 'Failed to get questions');
+    } catch (error: any) {
+        logger.error('[QuizAPI] Error getting quiz questions:', error);
+        throw error;
+    }
+}
+
+/**
+ * Daily Quiz API - نظام الكويز اليومي الاحترافي
+ * 20 سؤال يومياً من الأساطير، Cache 24 ساعة، Offline support
+ */
+
+// Types for Daily Quiz
+export interface DailyQuizData {
+    id: string;
+    categoryId: string;
+    questions: LocalQuizQuestion[];
+    expiresAt: string;
+    date: string;
+}
+
+export interface DailyQuizCache {
+    data: DailyQuizData;
+    answers: Record<string, string>;
+    imagesCached: boolean;
+    timestamp: number;
+    expiresAt: number;
+}
+
+// Cache keys
+const DAILY_QUIZ_CACHE_KEY = 'daily_quiz_complete';
+const DAILY_QUIZ_MEMORY_KEY = 'daily_quiz_memory';
+
+/**
+ * جلب الكويز اليومي الكامل (أسئلة + إجابات + صور)
+ * مع Cache احترافي و Offline support
+ */
+export async function getDailyQuiz(
+    getToken: GetTokenFunction,
+    forceRefresh: boolean = false
+): Promise<{
+    questions: LocalQuizQuestion[];
+    answers: Record<string, string>;
+    expiresAt: Date;
+    fromCache: boolean;
+}> {
+    try {
+        const now = Date.now();
+        
+        // 1. محاولة جلب من Memory Cache (فوري)
+        if (!forceRefresh) {
+            const memoryCached = getFromMemoryCache(DAILY_QUIZ_MEMORY_KEY) as DailyQuizCache;
+            if (memoryCached && now < memoryCached.expiresAt) {
+                logger.debug('[DailyQuiz] Using memory cache', {
+                    questionCount: memoryCached.data.questions.length,
+                    answersCount: Object.keys(memoryCached.answers).length,
+                    imagesCached: memoryCached.imagesCached,
+                });
+                
+                return {
+                    questions: memoryCached.data.questions,
+                    answers: memoryCached.answers,
+                    expiresAt: new Date(memoryCached.expiresAt),
+                    fromCache: true,
+                };
+            }
+        }
+
+        // 2. محاولة جلب من AsyncStorage Cache (24 ساعة)
+        if (!forceRefresh) {
+            const cached = await cacheService.get<DailyQuizCache>(DAILY_QUIZ_CACHE_KEY);
+            if (cached && now < cached.expiresAt) {
+                // تحديث Memory Cache
+                setMemoryCache(DAILY_QUIZ_MEMORY_KEY, cached);
+                
+                logger.debug('[DailyQuiz] Using AsyncStorage cache', {
+                    questionCount: cached.data.questions.length,
+                    answersCount: Object.keys(cached.answers).length,
+                    imagesCached: cached.imagesCached,
+                    hoursRemaining: Math.round((cached.expiresAt - now) / (1000 * 60 * 60)),
+                });
+                
+                // إذا الصور مش متحملة، حملها في الخلفية
+                if (!cached.imagesCached) {
+                    preloadDailyQuizImages(cached.data.questions).catch(error => {
+                        logger.warn('[DailyQuiz] Background image preload failed:', error);
+                    });
+                }
+                
+                return {
+                    questions: cached.data.questions,
+                    answers: cached.answers,
+                    expiresAt: new Date(cached.expiresAt),
+                    fromCache: true,
+                };
+            }
+        }
+
+        // 3. جلب من الباك إند
+        logger.debug('[DailyQuiz] Fetching from API');
+        
+        const [quizResponse, answersResponse] = await Promise.all([
+            // جلب الأسئلة
+            fetchWithAuth('/quiz/daily', getToken, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            }),
+            // جلب الإجابات (بالتوازي للسرعة)
+            null, // سنجلبها بعد الحصول على الأسئلة
+        ]);
+
+        if (!quizResponse.ok) {
+            throw new Error(`Failed to get daily quiz: ${quizResponse.statusText}`);
+        }
+
+        const quizData = await quizResponse.json();
+        if (quizData.status !== 'SUCCESS') {
+            throw new Error(quizData.message || 'Failed to get daily quiz');
+        }
+
+        const dailyQuizData: DailyQuizData = quizData.data;
+        const questionIds = dailyQuizData.questions.map(q => q.id);
+
+        // جلب الإجابات
+        const answersResponse2 = await fetchWithAuth('/quiz/daily/answers', getToken, {
+            method: 'POST',
+            body: JSON.stringify({ questionIds }),
+        });
+
+        if (!answersResponse2.ok) {
+            throw new Error(`Failed to get daily quiz answers: ${answersResponse2.statusText}`);
+        }
+
+        const answersData = await answersResponse2.json();
+        if (answersData.status !== 'SUCCESS') {
+            throw new Error(answersData.message || 'Failed to get daily quiz answers');
+        }
+
+        const answers: Record<string, string> = answersData.data;
+
+        // تحميل الصور في الخلفية
+        const imagesCached = await preloadDailyQuizImages(dailyQuizData.questions);
+
+        // إنشاء Cache object
+        const cacheData: DailyQuizCache = {
+            data: dailyQuizData,
+            answers,
+            imagesCached,
+            timestamp: now,
+            expiresAt: new Date(dailyQuizData.expiresAt).getTime(),
+        };
+
+        // حفظ في Cache (Memory + AsyncStorage)
+        setMemoryCache(DAILY_QUIZ_MEMORY_KEY, cacheData);
+        await cacheService.set(DAILY_QUIZ_CACHE_KEY, cacheData, 24 * 60 * 60 * 1000); // 24 hours
+
+        logger.debug('[DailyQuiz] Fetched and cached successfully', {
+            questionCount: dailyQuizData.questions.length,
+            answersCount: Object.keys(answers).length,
+            imagesCached,
+            expiresAt: dailyQuizData.expiresAt,
+        });
+
+        return {
+            questions: dailyQuizData.questions,
+            answers,
+            expiresAt: new Date(dailyQuizData.expiresAt),
+            fromCache: false,
+        };
+
+    } catch (error: any) {
+        logger.error('[DailyQuiz] Error getting daily quiz:', error);
+        
+        // Fallback: محاولة استخدام Cache منتهي الصلاحية
+        try {
+            const expiredCache = await cacheService.get<DailyQuizCache>(DAILY_QUIZ_CACHE_KEY);
+            if (expiredCache) {
+                logger.warn('[DailyQuiz] Using expired cache as fallback');
+                return {
+                    questions: expiredCache.data.questions,
+                    answers: expiredCache.answers,
+                    expiresAt: new Date(expiredCache.expiresAt),
+                    fromCache: true,
+                };
+            }
+        } catch (fallbackError) {
+            logger.error('[DailyQuiz] Fallback cache also failed:', fallbackError);
+        }
+        
+        throw error;
+    }
+}
+
+/**
+ * تحميل صور الكويز اليومي مع Retry Logic
+ */
+async function preloadDailyQuizImages(questions: LocalQuizQuestion[]): Promise<boolean> {
+    try {
+        const imageUrls = questions
+            .map(q => q.imageUrl)
+            .filter((url): url is string => !!url && url.trim() !== '');
+
+        if (imageUrls.length === 0) {
+            logger.debug('[DailyQuiz] No images to preload');
+            return true;
+        }
+
+        logger.debug('[DailyQuiz] Preloading images', { count: imageUrls.length });
+
+        // تحميل الصور بالتوازي مع timeout
+        const results = await Promise.allSettled(
+            imageUrls.map(url => 
+                Promise.race([
+                    Image.prefetch(url),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout')), 15000) // 15 seconds
+                    )
+                ])
+            )
+        );
+
+        const successCount = results.filter(r => r.status === 'fulfilled').length;
+        const failedCount = results.length - successCount;
+
+        logger.debug('[DailyQuiz] Image preloading completed', {
+            total: imageUrls.length,
+            success: successCount,
+            failed: failedCount,
+            successRate: `${Math.round((successCount / imageUrls.length) * 100)}%`,
+        });
+
+        // نعتبر التحميل ناجح إذا نجح 80% من الصور
+        const successRate = successCount / imageUrls.length;
+        return successRate >= 0.8;
+
+    } catch (error: any) {
+        logger.error('[DailyQuiz] Error preloading images:', error);
+        return false;
+    }
+}
+
+/**
+ * التحقق من توفر الكويز اليومي في Cache
+ */
+export async function isDailyQuizCached(): Promise<{
+    cached: boolean;
+    expiresAt?: Date;
+    questionCount?: number;
+    imagesCached?: boolean;
+}> {
+    try {
+        const now = Date.now();
+        
+        // فحص Memory Cache أولاً
+        const memoryCached = getFromMemoryCache(DAILY_QUIZ_MEMORY_KEY) as DailyQuizCache;
+        if (memoryCached && now < memoryCached.expiresAt) {
+            return {
+                cached: true,
+                expiresAt: new Date(memoryCached.expiresAt),
+                questionCount: memoryCached.data.questions.length,
+                imagesCached: memoryCached.imagesCached,
+            };
+        }
+
+        // فحص AsyncStorage Cache
+        const cached = await cacheService.get<DailyQuizCache>(DAILY_QUIZ_CACHE_KEY);
+        if (cached && now < cached.expiresAt) {
+            return {
+                cached: true,
+                expiresAt: new Date(cached.expiresAt),
+                questionCount: cached.data.questions.length,
+                imagesCached: cached.imagesCached,
+            };
+        }
+
+        return { cached: false };
+    } catch (error: any) {
+        logger.error('[DailyQuiz] Error checking cache:', error);
+        return { cached: false };
+    }
+}
+
+/**
+ * مسح Cache الكويز اليومي (للتطوير أو إعادة التحميل)
+ */
+export async function clearDailyQuizCache(): Promise<void> {
+    try {
+        memoryCache.delete(DAILY_QUIZ_MEMORY_KEY);
+        await cacheService.remove(DAILY_QUIZ_CACHE_KEY);
+        logger.debug('[DailyQuiz] Cache cleared successfully');
+    } catch (error: any) {
+        logger.error('[DailyQuiz] Error clearing cache:', error);
+    }
+}
+
+/**
+ * تحديث quizApi exports
+ */
+export const dailyQuizApi = {
+    getDailyQuiz,
+    isDailyQuizCached,
+    clearDailyQuizCache,
+};

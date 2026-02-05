@@ -50,7 +50,6 @@ export const PredictionsService = {
       const response = await fetch(`${API_URL}/api/predictions/remaining`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-clerk-user-id': token,
           'Content-Type': 'application/json',
         },
       });
@@ -94,7 +93,6 @@ export const PredictionsService = {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-clerk-user-id': token,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(matchData),
@@ -127,7 +125,6 @@ export const PredictionsService = {
       const response = await fetch(`${API_URL}/api/predictions/user`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-clerk-user-id': token,
           'Content-Type': 'application/json',
         },
       });
@@ -163,7 +160,6 @@ export const PredictionsService = {
       const response = await fetch(`${API_URL}/api/predictions/match/${matchId}/count`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-clerk-user-id': token,
           'Content-Type': 'application/json',
         },
       });

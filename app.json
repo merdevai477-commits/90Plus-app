@@ -11,12 +11,18 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mrdev187.ninetyplusapp",
+      "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
       "usesAppleSignIn": true,
+      "buildNumber": "1",
       "infoPlist": {
         "UIBackgroundModes": [
+          "remote-notification",
           "remote-notification"
-        ]
+        ],
+        "NSCameraUsageDescription": "This app uses camera to upload videos for reels",
+        "NSMicrophoneUsageDescription": "This app uses microphone to record videos for reels",
+        "NSPhotoLibraryUsageDescription": "This app uses photo library to select images and videos",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,7 +34,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.mrdev187.ninetyplusapp",
+      "package": "com.mhmdsh1892.ninetyplusapp",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
@@ -39,6 +45,8 @@
       "output": "static",
       "favicon": "./assets/images/90Plus.png"
     },
+    "supportUrl": "https://90plus-app-production.up.railway.app/support",
+    "privacyPolicyUrl": "https://90plus-app-production.up.railway.app/privacy",
     "plugins": [
       "expo-router",
       [
@@ -92,9 +100,9 @@
       "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
       "router": {},
       "eas": {
-        "projectId": "99512023-6916-4b26-be1e-8635ec3e0338"
+        "projectId": "256beea1-dc6d-465c-8f01-d948396bd6ce"
       }
     },
-    "owner": "mrdev187"
+    "owner": "mrdev_10"
   }
 }

@@ -47,7 +47,15 @@ import ApiFootballService, { Transfer, MAJOR_LEAGUES } from '../../services/apiF
 import { useTranslation } from '../../src/i18n/useTranslation';
 import { transfersCacheService } from '../../services/transfersCache.service';
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
+// Define GroupedMatches type
+type GroupedMatches = {
+  leagueId: number;
+  leagueName: string;
+  leagueLogo?: string;
+  matches: Match[];
+};
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<GroupedMatches>);
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 /**
@@ -512,8 +520,8 @@ const MatchesScreen = () => {
   }, [matches, activeTab, favoriteMatchesSet]);
 
   // Group filtered matches by league - using Set for O(1) lookup
-  const filteredGroupedMatches = useMemo(() => {
-    const groupsMap = new Map<number, typeof groupedMatches[0]>();
+  const filteredGroupedMatches = useMemo((): GroupedMatches[] => {
+    const groupsMap = new Map<number, GroupedMatches>();
 
     filteredMatches.forEach((match) => {
       const leagueId = match.league?.id || 0;
@@ -702,7 +710,7 @@ const MatchesScreen = () => {
   }, [toggleFavorite]);
 
   // Render league section
-  const renderLeagueSection = useCallback(({ item: group, index }: { item: typeof filteredGroupedMatches[0]; index: number }) => (
+  const renderLeagueSection = useCallback(({ item: group, index }: { item: GroupedMatches; index: number }) => (
     <LeagueSection
       leagueId={group.leagueId}
       leagueName={group.leagueName}
@@ -713,10 +721,10 @@ const MatchesScreen = () => {
       favoriteMatchIds={favoriteMatchIds}
       index={index}
     />
-  ), [handleMatchPress, handleFavoritePress, favoriteMatchIds, filteredGroupedMatches]);
+  ), [handleMatchPress, handleFavoritePress, favoriteMatchIds]);
 
   // Key extractor
-  const keyExtractor = useCallback((item: typeof filteredGroupedMatches[0]) => item.leagueId.toString(), []);
+  const keyExtractor = useCallback((item: GroupedMatches) => item.leagueId.toString(), []);
 
   // Loading state
   if (loading && !refreshing && matches.length === 0) {
@@ -817,7 +825,6 @@ const MatchesScreen = () => {
       <MatchTabs 
         activeTab={activeTab} 
         onTabChange={handleTabChange}
-        accessibilityLabel="Match tabs"
       />
 
       {/* Content - Using FlatList for better performance */}
@@ -831,7 +838,6 @@ const MatchesScreen = () => {
             </View>
           ) : (
             <AnimatedScrollView
-              style={styles.scrollView}
               contentContainerStyle={[
                 styles.scrollContent,
                 { paddingBottom: insets.bottom + 20 },
@@ -882,7 +888,6 @@ const MatchesScreen = () => {
         </>
       ) : activeTab === 'predictions' ? (
         <AnimatedScrollView
-          style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: insets.bottom + 20 },

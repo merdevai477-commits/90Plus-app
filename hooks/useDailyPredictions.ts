@@ -37,16 +37,24 @@ export const useDailyPredictions = (token?: string | null): UseDailyPredictionsR
     isFetchingRef.current = true;
 
     try {
-      // Check cache first
-      if (cache && Date.now() - cache.timestamp < CACHE_TTL) {
-        setData(cache.data);
+      // ✅ If no token (guest user), return default values without error
+      if (!token) {
+        setData({
+          remaining: 0,
+          total: 10,
+          used: 0,
+          coins: 0,
+          predictionCost: 5,
+        });
         setLoading(false);
+        setError(null); // ✅ Clear any previous errors
         isFetchingRef.current = false;
         return;
       }
 
-      if (!token) {
-        setData(null);
+      // Check cache first
+      if (cache && Date.now() - cache.timestamp < CACHE_TTL) {
+        setData(cache.data);
         setLoading(false);
         isFetchingRef.current = false;
         return;
@@ -65,6 +73,20 @@ export const useDailyPredictions = (token?: string | null): UseDailyPredictionsR
       });
 
       if (!response.ok) {
+        // ✅ If 401, user is not authenticated - treat as guest
+        if (response.status === 401) {
+          setData({
+            remaining: 0,
+            total: 10,
+            used: 0,
+            coins: 0,
+            predictionCost: 5,
+          });
+          setError(null); // ✅ Don't show error for guest users
+          isFetchingRef.current = false;
+          setLoading(false);
+          return;
+        }
         throw new Error(`Failed to fetch predictions: ${response.status}`);
       }
 
@@ -92,7 +114,14 @@ export const useDailyPredictions = (token?: string | null): UseDailyPredictionsR
     } catch (err: any) {
       logger.error('Error fetching daily predictions:', err);
       setError(err.message || 'Failed to load predictions');
-      setData(null);
+      // ✅ Set default data even on error
+      setData({
+        remaining: 0,
+        total: 10,
+        used: 0,
+        coins: 0,
+        predictionCost: 5,
+      });
     } finally {
       setLoading(false);
       isFetchingRef.current = false;

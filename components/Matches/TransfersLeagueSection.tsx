@@ -26,6 +26,8 @@ export interface TransfersLeagueSectionProps {
   onPlayerPress?: (transfer: Transfer) => void;
   onTeamPress?: (teamId: number) => void;
   index?: number;
+  isExpanded?: boolean; // External control
+  onToggle?: () => void; // External toggle handler
 }
 
 const TransfersLeagueSection: React.FC<TransfersLeagueSectionProps> = React.memo(({
@@ -36,10 +38,15 @@ const TransfersLeagueSection: React.FC<TransfersLeagueSectionProps> = React.memo
   onPlayerPress,
   onTeamPress,
   index = 0,
+  isExpanded: externalIsExpanded,
+  onToggle: externalOnToggle,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false); // Default: collapsed
+  const [internalIsExpanded, setInternalIsExpanded] = useState(false);
   const [shouldRenderContent, setShouldRenderContent] = useState(false);
-  const rotation = useSharedValue(0); // Start at 0 (collapsed)
+  const rotation = useSharedValue(0);
+  
+  // Use external state if provided, otherwise use internal state
+  const isExpanded = externalIsExpanded !== undefined ? externalIsExpanded : internalIsExpanded;
 
   useEffect(() => {
     rotation.value = withSpring(isExpanded ? 90 : 0, {
@@ -59,7 +66,11 @@ const TransfersLeagueSection: React.FC<TransfersLeagueSectionProps> = React.memo
 
   const toggleExpanded = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsExpanded(!isExpanded);
+    if (externalOnToggle) {
+      externalOnToggle();
+    } else {
+      setInternalIsExpanded(!internalIsExpanded);
+    }
   };
 
   // Don't render if no transfers

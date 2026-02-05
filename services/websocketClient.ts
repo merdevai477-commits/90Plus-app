@@ -171,6 +171,13 @@ class WebSocketClient {
 
     const wsUrl = getWsUrl();
     this.currentWsUrl = wsUrl;
+    
+    // ✅ Skip WebSocket connection if using localhost (development without backend)
+    if (wsUrl.includes('localhost') || wsUrl.includes('127.0.0.1')) {
+      logger.info('[WebSocket] Skipping connection - localhost detected (backend not running)');
+      return;
+    }
+    
     logger.info(`[WebSocket] Connecting to ${wsUrl}`);
 
     this.socket = io(wsUrl, {
@@ -218,8 +225,13 @@ class WebSocketClient {
     });
 
     this.socket.on('connect_error', (error) => {
-      // Log detailed error information for debugging
-      // Socket.IO error objects may have additional properties beyond standard Error
+      // ✅ Silent logging for localhost - don't spam console
+      if (this.currentWsUrl?.includes('localhost') || this.currentWsUrl?.includes('127.0.0.1')) {
+        logger.debug('[WebSocket] Connection error (localhost - backend not running)');
+        return;
+      }
+      
+      // Log detailed error information for debugging (production only)
       const errorDetails: Record<string, unknown> = {
         message: error.message,
         wsUrl: this.currentWsUrl || getWsUrl(),

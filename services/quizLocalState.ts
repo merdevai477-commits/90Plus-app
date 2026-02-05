@@ -1,287 +1,263 @@
 /**
  * Quiz Local State Service
- * إدارة حالة الكويز محلياً في الفرونت إند
- * - تتبع آخر كويز تم فتحه
- * - إدارة فتح الكويز كل 24 ساعة
- * - حفظ نتائج الحل محلياً
+ * إدارة حالة الكويز المحلية
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { QUIZ_CATEGORIES } from '../data/quizCategories';
-import { 
-  QUIZ_QUESTIONS_BY_CATEGORY, 
-  getQuestionsByCategoryId, 
-  QuizQuestion 
-} from '../data/quizQuestions/index';
+import { logger } from '../utils/logger';
 
-const STORAGE_KEY_PREFIX = '@quiz_local_state';
-const QUIZ_DURATION_MS = 24 * 60 * 60 * 1000; // 24 ساعة
-
-// Helper function: الحصول على مفتاح التخزين للمستخدم
-function getStorageKey(userId: string | null): string {
-  if (!userId) {
-    // إذا لم يكن هناك userId، نستخدم مفتاح عام (للمستخدمين غير المسجلين)
-    return `${STORAGE_KEY_PREFIX}_guest`;
-  }
-  return `${STORAGE_KEY_PREFIX}_${userId}`;
+// Types
+export interface QuizResult {
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  timeTaken: number;
+  completedAt?: string;
+  categoryId?: string;
 }
 
-// Mapping بين categoryName و categoryId
-// يتم إنشاؤه ديناميكياً من quizQuestions.ts
-function getCategoryIdFromName(categoryName: string): string | null {
-  // البحث في جميع الكاتيجوريز للعثور على categoryId
-  for (const [categoryId, questions] of Object.entries(QUIZ_QUESTIONS_BY_CATEGORY)) {
-    if (questions.length > 0) {
-      // نحتاج إلى معرفة اسم الكاتيجوري من categoryId
-      // سنستخدم أول سؤال للحصول على categoryId
-      // لكن هذا لا يعطينا الاسم مباشرة
-      // الحل: نحتاج إلى mapping من الباك إند أو نستخدم طريقة أخرى
-    }
-  }
-  return null;
+export interface QuizState {
+  currentCategoryId: string | null;
+  currentQuestionIndex: number;
+  answers: Record<string, string>;
+  startTime: number;
+  isActive: boolean;
 }
 
-// Helper function: الحصول على categoryId من categoryName
-// نبحث في جميع الأسئلة للعثور على categoryId الذي يطابق categoryName
-// لكن هذا يتطلب معرفة mapping من الباك إند
-// بدلاً من ذلك، سنستخدم أول categoryId متاح ونختار عشوائياً
-function getRandomCategoryId(): string | null {
-  const categoryIds = Object.keys(QUIZ_QUESTIONS_BY_CATEGORY);
-  if (categoryIds.length === 0) return null;
-  const randomIndex = Math.floor(Math.random() * categoryIds.length);
-  return categoryIds[randomIndex];
-}
-
-export interface QuizLocalState {
-  lastQuizOpenedAt: number; // timestamp
-  currentCategoryName: string | null; // اسم الكاتيجوري من QUIZ_CATEGORIES
-  currentCategoryId: string | null; // categoryId من quizQuestions.ts
-  currentQuestionIds: string[]; // IDs من quizQuestions.ts (UUID strings)
-  isCompleted: boolean;
-  completedAt: number | null;
-  results: {
-    score: number;
-    correctAnswers: number;
-    totalQuestions: number;
-    timeTaken: number;
-    categoryName: string;
-    categoryId: string;
-  } | null;
-  pendingSubmission: boolean; // هل تم الإرسال للباك إند
-}
-
-const defaultState: QuizLocalState = {
-  lastQuizOpenedAt: 0,
-  currentCategoryName: null,
-  currentCategoryId: null,
-  currentQuestionIds: [],
-  isCompleted: false,
-  completedAt: null,
-  results: null,
-  pendingSubmission: false,
-};
-
-/**
- * جلب حالة الكويز الحالية من AsyncStorage
- */
-export async function getCurrentQuizState(userId: string | null = null): Promise<QuizLocalState> {
-  try {
-    const storageKey = getStorageKey(userId);
-    const stored = await AsyncStorage.getItem(storageKey);
-    if (stored) {
-      const state: QuizLocalState = JSON.parse(stored);
-      return state;
-    }
-    return { ...defaultState };
-  } catch (error) {
-    console.error('[QuizLocalState] Error getting state:', error);
-    return { ...defaultState };
-  }
-}
-
-/**
- * حفظ حالة الكويز في AsyncStorage
- */
-async function saveQuizState(state: QuizLocalState, userId: string | null = null): Promise<void> {
-  try {
-    const storageKey = getStorageKey(userId);
-    await AsyncStorage.setItem(storageKey, JSON.stringify(state));
-  } catch (error) {
-    console.error('[QuizLocalState] Error saving state:', error);
-  }
-}
-
-/**
- * التحقق من الحاجة لفتح كويز جديد (مرت 24 ساعة)
- */
-export async function shouldOpenNewQuiz(userId: string | null = null): Promise<boolean> {
-  const state = await getCurrentQuizState(userId);
-  
-  if (!state.lastQuizOpenedAt || state.lastQuizOpenedAt === 0) {
-    return true; // لا يوجد كويز سابق، يجب فتح واحد جديد
-  }
-
-  const now = Date.now();
-  const timeSinceLastQuiz = now - state.lastQuizOpenedAt;
-
-  return timeSinceLastQuiz >= QUIZ_DURATION_MS;
-}
-
-/**
- * فتح كويز جديد
- * يختار كاتيجوري عشوائية و20 سؤال عشوائي
- * categoryMapping: mapping من الباك إند { categoryId: categoryName }
- */
-export async function openNewQuiz(
-  userId: string | null = null,
-  categoryMapping?: Record<string, string>
-): Promise<{
-  categoryName: string;
+export interface QuizQuestion {
+  id: string;
   categoryId: string;
-  questionIds: string[];
-}> {
-  // اختيار كويز الأساطير فقط (Legends) لجميع الحسابات
-  const LEGENDS_CATEGORY_ID = 'b2f62d8d-81b6-4e1e-a6c6-8f662ee4eb36';
-  const selectedCategoryId = LEGENDS_CATEGORY_ID;
-  
-  // التحقق من وجود الأسئلة للأساطير
-  if (!QUIZ_QUESTIONS_BY_CATEGORY[selectedCategoryId]) {
-    throw new Error('Legends quiz category not found');
-  }
-
-  // جلب الأسئلة من الكاتيجوري المختارة
-  const categoryQuestions = getQuestionsByCategoryId(selectedCategoryId);
-
-  if (categoryQuestions.length === 0) {
-    throw new Error(`No questions found for categoryId: ${selectedCategoryId}`);
-  }
-
-  // استخدام جميع الأسئلة المتاحة (حالياً سؤال واحد فقط لكل كاتيجوري)
-  // في المستقبل يمكن إضافة المزيد من الأسئلة
-  const selectedQuestions = categoryQuestions;
-  const questionIds = selectedQuestions.map((q) => q.id);
-  
-  // ملاحظة: حالياً كل كاتيجوري يحتوي على سؤال واحد فقط
-  // عند إضافة المزيد من الأسئلة، سيتم استخدامها تلقائياً
-
-  // الحصول على categoryName من mapping الباك إند
-  let selectedCategoryName = categoryMapping?.[selectedCategoryId];
-  
-  // إذا لم نجد في mapping، نستخدم اسم "Legends" مباشرة
-  if (!selectedCategoryName) {
-    selectedCategoryName = 'Legends'; // اسم كويز الأساطير
-  }
-
-  // حفظ الحالة الجديدة
-  const newState: QuizLocalState = {
-    lastQuizOpenedAt: Date.now(),
-    currentCategoryName: selectedCategoryName,
-    currentCategoryId: selectedCategoryId,
-    currentQuestionIds: questionIds,
-    isCompleted: false,
-    completedAt: null,
-    results: null,
-    pendingSubmission: false,
-  };
-
-  await saveQuizState(newState, userId);
-
-  console.log(`[QuizLocalState] Opened new quiz for user ${userId || 'guest'}: ${selectedCategoryName} (${selectedCategoryId}) with ${questionIds.length} questions`);
-
-  return {
-    categoryName: selectedCategoryName,
-    categoryId: selectedCategoryId,
-    questionIds,
-  };
+  question: string;
+  options: string[];
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  points: number;
+  imageUrl?: string | null;
+  imageType?: 'player' | 'club' | 'general' | null;
+  hint?: string | null;
+  timeLimit?: number;
+  displayMode?: 'never' | 'after-answer' | 'before-question' | 'in-question' | 'after-wrong' | 'blur-reveal';
 }
 
-/**
- * تسجيل حل الكويز
- */
-export async function markQuizCompleted(
-  results: {
-    score: number;
-    correctAnswers: number;
-    totalQuestions: number;
-    timeTaken: number;
-  },
-  userId: string | null = null
-): Promise<void> {
-  const state = await getCurrentQuizState(userId);
-
-  if (!state.currentCategoryName || !state.currentCategoryId) {
-    throw new Error('No active quiz to mark as completed');
-  }
-
-  const updatedState: QuizLocalState = {
-    ...state,
-    isCompleted: true,
-    completedAt: Date.now(),
-    results: {
-      ...results,
-      categoryName: state.currentCategoryName,
-      categoryId: state.currentCategoryId,
-    },
-    pendingSubmission: true, // يحتاج إرسال للباك إند
-  };
-
-  await saveQuizState(updatedState, userId);
-
-  console.log(`[QuizLocalState] Quiz marked as completed for user ${userId || 'guest'}:`, results);
-}
+// Storage keys
+const QUIZ_RESULTS_KEY = 'quiz_results_history';
+const QUIZ_STATE_KEY = 'quiz_current_state';
+const QUIZ_QUESTIONS_KEY = 'quiz_current_questions';
 
 /**
- * جلب النتائج المعلقة للإرسال
+ * حفظ نتيجة الكويز المكتمل
  */
-export async function getPendingSubmissions(userId: string | null = null): Promise<QuizLocalState[]> {
-  const state = await getCurrentQuizState(userId);
-  
-  if (state.pendingSubmission && state.isCompleted && state.results) {
-    return [state];
-  }
-
-  return [];
-}
-
-/**
- * تحديث حالة الإرسال بعد إرسال النتائج للباك إند
- */
-export async function markSubmissionSent(userId: string | null = null): Promise<void> {
-  const state = await getCurrentQuizState(userId);
-  
-  if (state.pendingSubmission) {
-    const updatedState: QuizLocalState = {
-      ...state,
-      pendingSubmission: false,
+export async function markQuizCompleted(result: QuizResult): Promise<void> {
+  try {
+    const completedResult: QuizResult = {
+      ...result,
+      completedAt: new Date().toISOString(),
     };
 
-    await saveQuizState(updatedState, userId);
-    console.log(`[QuizLocalState] Submission marked as sent for user ${userId || 'guest'}`);
+    // جلب النتائج السابقة
+    const existingResults = await getQuizResults();
+    
+    // إضافة النتيجة الجديدة
+    const updatedResults = [completedResult, ...existingResults];
+    
+    // الاحتفاظ بآخر 50 نتيجة فقط
+    const limitedResults = updatedResults.slice(0, 50);
+    
+    // حفظ النتائج المحدثة
+    await AsyncStorage.setItem(QUIZ_RESULTS_KEY, JSON.stringify(limitedResults));
+    
+    logger.debug('[QuizLocalState] Quiz result saved', {
+      score: result.score,
+      correctAnswers: result.correctAnswers,
+      totalQuestions: result.totalQuestions,
+      timeTaken: result.timeTaken,
+    });
+    
+    // مسح الحالة الحالية بعد الانتهاء
+    await clearCurrentQuizState();
+    
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error saving quiz result:', error);
+    throw error;
   }
 }
 
 /**
- * جلب الأسئلة الحالية بناءً على questionIds
+ * جلب حالة الكويز الحالية
  */
-export function getCurrentQuestions(questionIds: string[]): QuizQuestion[] {
-  return questionIds
-    .map((id) => {
-      // البحث في جميع الكاتيجوريز
-      for (const questions of Object.values(QUIZ_QUESTIONS_BY_CATEGORY)) {
-        const question = questions.find((q) => q.id === id);
-        if (question) return question;
-      }
+export async function getCurrentQuizState(): Promise<QuizState | null> {
+  try {
+    const stateJson = await AsyncStorage.getItem(QUIZ_STATE_KEY);
+    if (!stateJson) {
       return null;
-    })
-    .filter((q): q is QuizQuestion => q !== null);
+    }
+    
+    const state: QuizState = JSON.parse(stateJson);
+    return state;
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error getting current quiz state:', error);
+    return null;
+  }
 }
 
 /**
- * إعادة تعيين حالة الكويز (للتطوير/التجربة)
+ * حفظ حالة الكويز الحالية
  */
-export async function resetQuizState(userId: string | null = null): Promise<void> {
-  const storageKey = getStorageKey(userId);
-  await AsyncStorage.removeItem(storageKey);
-  console.log(`[QuizLocalState] Quiz state reset for user ${userId || 'guest'}`);
+export async function saveCurrentQuizState(state: QuizState): Promise<void> {
+  try {
+    await AsyncStorage.setItem(QUIZ_STATE_KEY, JSON.stringify(state));
+    logger.debug('[QuizLocalState] Quiz state saved', {
+      categoryId: state.currentCategoryId,
+      questionIndex: state.currentQuestionIndex,
+      isActive: state.isActive,
+    });
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error saving quiz state:', error);
+    throw error;
+  }
 }
 
+/**
+ * جلب الأسئلة الحالية
+ */
+export async function getCurrentQuestions(): Promise<QuizQuestion[] | null> {
+  try {
+    const questionsJson = await AsyncStorage.getItem(QUIZ_QUESTIONS_KEY);
+    if (!questionsJson) {
+      return null;
+    }
+    
+    const questions: QuizQuestion[] = JSON.parse(questionsJson);
+    return questions;
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error getting current questions:', error);
+    return null;
+  }
+}
+
+/**
+ * حفظ الأسئلة الحالية
+ */
+export async function saveCurrentQuestions(questions: QuizQuestion[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(QUIZ_QUESTIONS_KEY, JSON.stringify(questions));
+    logger.debug('[QuizLocalState] Questions saved', {
+      count: questions.length,
+    });
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error saving questions:', error);
+    throw error;
+  }
+}
+
+/**
+ * مسح حالة الكويز الحالية
+ */
+export async function clearCurrentQuizState(): Promise<void> {
+  try {
+    await Promise.all([
+      AsyncStorage.removeItem(QUIZ_STATE_KEY),
+      AsyncStorage.removeItem(QUIZ_QUESTIONS_KEY),
+    ]);
+    
+    logger.debug('[QuizLocalState] Current quiz state cleared');
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error clearing quiz state:', error);
+  }
+}
+
+/**
+ * جلب تاريخ نتائج الكويز
+ */
+export async function getQuizResults(): Promise<QuizResult[]> {
+  try {
+    const resultsJson = await AsyncStorage.getItem(QUIZ_RESULTS_KEY);
+    if (!resultsJson) {
+      return [];
+    }
+    
+    const results: QuizResult[] = JSON.parse(resultsJson);
+    return results;
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error getting quiz results:', error);
+    return [];
+  }
+}
+
+/**
+ * حساب إحصائيات الكويز
+ */
+export async function getQuizStatistics(): Promise<{
+  totalQuizzes: number;
+  totalScore: number;
+  averageScore: number;
+  totalCorrectAnswers: number;
+  totalQuestions: number;
+  accuracy: number;
+  bestScore: number;
+  averageTime: number;
+}> {
+  try {
+    const results = await getQuizResults();
+    
+    if (results.length === 0) {
+      return {
+        totalQuizzes: 0,
+        totalScore: 0,
+        averageScore: 0,
+        totalCorrectAnswers: 0,
+        totalQuestions: 0,
+        accuracy: 0,
+        bestScore: 0,
+        averageTime: 0,
+      };
+    }
+    
+    const totalQuizzes = results.length;
+    const totalScore = results.reduce((sum, r) => sum + r.score, 0);
+    const totalCorrectAnswers = results.reduce((sum, r) => sum + r.correctAnswers, 0);
+    const totalQuestions = results.reduce((sum, r) => sum + r.totalQuestions, 0);
+    const totalTime = results.reduce((sum, r) => sum + r.timeTaken, 0);
+    const bestScore = Math.max(...results.map(r => r.score));
+    
+    return {
+      totalQuizzes,
+      totalScore,
+      averageScore: Math.round(totalScore / totalQuizzes),
+      totalCorrectAnswers,
+      totalQuestions,
+      accuracy: totalQuestions > 0 ? Math.round((totalCorrectAnswers / totalQuestions) * 100) : 0,
+      bestScore,
+      averageTime: Math.round(totalTime / totalQuizzes),
+    };
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error calculating statistics:', error);
+    return {
+      totalQuizzes: 0,
+      totalScore: 0,
+      averageScore: 0,
+      totalCorrectAnswers: 0,
+      totalQuestions: 0,
+      accuracy: 0,
+      bestScore: 0,
+      averageTime: 0,
+    };
+  }
+}
+
+/**
+ * مسح جميع بيانات الكويز (للتطوير أو إعادة التعيين)
+ */
+export async function clearAllQuizData(): Promise<void> {
+  try {
+    await Promise.all([
+      AsyncStorage.removeItem(QUIZ_RESULTS_KEY),
+      AsyncStorage.removeItem(QUIZ_STATE_KEY),
+      AsyncStorage.removeItem(QUIZ_QUESTIONS_KEY),
+    ]);
+    
+    logger.debug('[QuizLocalState] All quiz data cleared');
+  } catch (error: any) {
+    logger.error('[QuizLocalState] Error clearing all quiz data:', error);
+    throw error;
+  }
+}

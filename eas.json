@@ -1,37 +1,25 @@
 {
   "cli": {
-    "version": ">= 3.0.0",
+    "version": ">= 16.28.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
+      "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
-      }
+      "distribution": "internal"
     },
     "production": {
-      "env": {
-        "NODE_ENV": "production",
-        "EXPO_PUBLIC_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://90plus-app-production.up.railway.app/api"
-      },
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
-      },
       "autoIncrement": true
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "mhmdsh1892@gmail.com"
+      }
+    }
   }
 }

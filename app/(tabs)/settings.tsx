@@ -36,6 +36,8 @@ import { useAuth } from '@clerk/clerk-expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LanguagePickerModal from '../../components/common/LanguagePickerModal';
 import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
+import AccountDeletionModal from '../../components/common/AccountDeletionModal';
+import { AccountDeletionService } from '../../services/accountDeletionService';
 
 const { width } = Dimensions.get('window');
 
@@ -101,6 +103,7 @@ export default function SettingsScreen() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [soundEffects, setSoundEffects] = useState(true);
   const [hapticFeedback, setHapticFeedback] = useState(true);
+  const [deletionModalVisible, setDeletionModalVisible] = useState(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -300,42 +303,57 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      t.settings.deleteAccount,
-      t.settings.deleteAccountDesc,
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.common.delete,
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              t.settings.confirmDelete,
-              t.settings.areYouSureDelete,
-              [
-                { text: t.common.cancel, style: 'cancel' },
-                {
-                  text: t.settings.yesDelete,
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await deleteAccount();
-                      // Clear global state
-                      globalState.setUserType('guest');
-                      globalState.setUserProfile(null as any);
-                      // Navigate to Auth screen after deletion
-                      router.replace('/auth');
-                    } catch (e) {
-                      Alert.alert(t.common.error, 'Failed to delete account');
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
+    setDeletionModalVisible(true);
+  };
+
+  const handleConfirmDeletion = async () => {
+    try {
+      // Call the deletion service
+      await AccountDeletionService.deleteAccount();
+      
+      // Clear videos data first
+      await clearVideos();
+      
+      // Sign out from Clerk first
+      await signOut();
+      
+      // Clear global state
+      await globalState.logout();
+      
+      // Clear CoinsService user context
+      const { CoinsService } = await import('../../services/coins.service');
+      CoinsService.clearCurrentUser();
+      
+      // Clear AuthService memory cache
+      const { AuthService } = await import('../../src/services/authService');
+      AuthService.clearMemoryCache();
+      
+      // Clear RankingsService memory cache
+      const { rankingsService } = await import('../../services/rankingsService');
+      rankingsService.clearMemoryCache();
+      
+      // Clear home.store user data
+      const { useHomeStore } = await import('../../src/store/home.store');
+      useHomeStore.getState().clearUserData();
+      
+      // Disconnect WebSocket
+      const { websocketClient } = await import('../../services/websocketClient');
+      websocketClient.disconnect();
+      
+      // Clear all cache (including profile, reels, notifications, etc.)
+      const { cacheService } = await import('../../services/cacheService');
+      await cacheService.clearAll();
+      
+      // Clear AsyncStorage
+      await AsyncStorage.removeItem('@username_setup_complete');
+      await AsyncStorage.removeItem('@user_profile');
+
+      // Navigate to Auth screen
+      router.replace('/auth');
+    } catch (error) {
+      console.error('Delete account error:', error);
+      Alert.alert(t.common.error, 'Failed to delete account');
+    }
   };
 
   const handleRateApp = () => {
@@ -355,11 +373,11 @@ export default function SettingsScreen() {
   };
 
   const handleContactUs = () => {
-    Linking.openURL('mailto:support@footballpredictions.com');
+    Linking.openURL('https://90plus-app-production.up.railway.app/support');
   };
 
   const handlePrivacyPolicy = () => {
-    Linking.openURL('https://footballpredictions.com/privacy');
+    Linking.openURL('https://90plus-app-production.up.railway.app/privacy');
   };
 
   const handleTerms = () => {
@@ -387,11 +405,11 @@ export default function SettingsScreen() {
   };
 
   const handleReportBug = () => {
-    Linking.openURL('mailto:support@footballpredictions.com?subject=Bug Report');
+    Linking.openURL('mailto:merdevai477@gmail.com?subject=Bug Report - 90Plus App');
   };
 
   const handleFeatureRequest = () => {
-    Linking.openURL('mailto:support@footballpredictions.com?subject=Feature Request');
+    Linking.openURL('mailto:merdevai477@gmail.com?subject=Feature Request - 90Plus App');
   };
 
   /**
@@ -643,6 +661,12 @@ export default function SettingsScreen() {
                 handleManagePermissions,
                 'settings-outline'
               )}
+              {renderActionItem(
+                isRTL ? 'المستخدمون المحظورون' : 'Blocked Users',
+                isRTL ? 'إدارة المستخدمين المحظورين' : 'Manage blocked users',
+                () => router.push('/settings/blocked-users' as any),
+                'ban-outline'
+              )}
               {renderInfoItem(
                 t.settings.notifications,
                 settings.notificationsEnabled ? t.settings.enabled : t.settings.disabled,
@@ -686,7 +710,7 @@ export default function SettingsScreen() {
               )}
               {renderActionItem(
                 t.settings.contactUs,
-                'support@footballpredictions.com',
+                'merdevai477@gmail.com',
                 handleContactUs,
                 'mail-outline'
               )}
@@ -792,6 +816,13 @@ export default function SettingsScreen() {
         visible={languageModalVisible}
         onClose={() => setLanguageModalVisible(false)}
         onLanguageChange={handleLanguageChange}
+      />
+
+      {/* Account Deletion Modal */}
+      <AccountDeletionModal
+        visible={deletionModalVisible}
+        onClose={() => setDeletionModalVisible(false)}
+        onConfirm={handleConfirmDeletion}
       />
     </View >
   );

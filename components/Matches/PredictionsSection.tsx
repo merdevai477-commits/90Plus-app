@@ -22,9 +22,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  FlatList,
-  RefreshControl,
-  ListRenderItem,
 } from 'react-native';
 import { Image } from 'expo-image'; // ✅ استبدال Image بـ expo-image للأداء الأفضل
 import { LinearGradient } from 'expo-linear-gradient';
@@ -57,7 +54,7 @@ interface CacheEntry {
   timestamp: number;
 }
 
-const PREDICTION_COST = 5; // تكلفة التوقع بالتذاكر
+const PREDICTION_COST = 5; // تكلفة التوقع بالكوبونات
 const MAX_PREDICTIONS_TO_SHOW = 10; // الحد الأقصى للمباريات المعروضة
 const CACHE_TTL = 60 * 1000; // 1 minute cache TTL
 
@@ -66,7 +63,6 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
   const { coins, subtractCoins, addCoins } = useCoins();
   const [predictions, setPredictions] = useState<PredictionState>({});
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false); // ✅ Pull-to-Refresh state
   const [error, setError] = useState<string | null>(null); // ✅ Error state للمستخدم
   const [remainingPredictions, setRemainingPredictions] = useState<number | null>(null);
 
@@ -117,6 +113,13 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
 
   // ✅ Filter and sort matches مع seeded random للثبات
   const displayedMatches = useMemo(() => {
+    // ✅ Safety check: filter out null/undefined matches
+    const validMatches = matches.filter(m => m && m.id && m.league);
+    
+    if (validMatches.length === 0) {
+      return [];
+    }
+    
     // استخدام تاريخ اليوم كـ seed للثبات
     const today = new Date().toDateString();
     
@@ -130,7 +133,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     ]);
 
     // ترتيب المباريات
-    const sortedMatches = [...matches].sort((a, b) => {
+    const sortedMatches = [...validMatches].sort((a, b) => {
       const aLeagueId = a.league?.id || 0;
       const bLeagueId = b.league?.id || 0;
       
@@ -271,14 +274,6 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     setLoading(false);
   }, [loadUserPredictions, loadRemainingPredictions]);
 
-  // ✅ Pull-to-Refresh handler
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setError(null); // إعادة تعيين الخطأ
-    await loadAllData(true); // force refresh بدون cache
-    setRefreshing(false);
-  }, [loadAllData]);
-
   // ✅ Load data on mount - مع dependencies صحيحة
   useEffect(() => {
     loadAllData();
@@ -351,8 +346,8 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
       // Check coins
       if (currentCoins < PREDICTION_COST) {
         Alert.alert(
-          'تذاكر غير كافية',
-          `تحتاج إلى ${PREDICTION_COST} تذاكر للتوقع. رصيدك الحالي: ${currentCoins}`,
+          'كوبونات غير كافية',
+          `تحتاج إلى ${PREDICTION_COST} كوبونات للتوقع. رصيدك الحالي: ${currentCoins}`,
           [{ text: 'حسناً' }]
         );
         return;
@@ -415,7 +410,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
 
         Alert.alert(
           'تم التوقع بنجاح! 🎯',
-          `تم خصم ${PREDICTION_COST} تذاكر. سيتم تحديث النتيجة بعد انتهاء المباراة.`,
+          `تم خصم ${PREDICTION_COST} كوبونات. سيتم تحديث النتيجة بعد انتهاء المباراة.`,
           [{ text: 'رائع!' }]
         );
       } catch (error) {
@@ -551,128 +546,6 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     );
   }, [predictions, handlePrediction]);
 
-  // ✅ Render match card - للاستخدام في FlatList
-  const renderMatchCard: ListRenderItem<Match> = useCallback(({ item: match }) => {
-    const matchPrediction = predictions[match.id];
-    
-    return (
-      <View style={styles.matchCard}>
-        <LinearGradient
-          colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']}
-          style={styles.cardGradient}
-        >
-          {/* Match Header */}
-          <View style={styles.matchHeader}>
-            <Text style={styles.leagueName}>{match.league?.name}</Text>
-            <Text style={styles.matchTime}>
-              {new Date(match.fixtureDate || '').toLocaleDateString('ar-EG', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </Text>
-          </View>
-
-          {/* Teams */}
-          <View style={styles.teamsContainer}>
-            <View style={styles.team}>
-              {/* ✅ استخدام expo-image بدلاً من Image */}
-              <Image
-                source={{ uri: match.homeTeam?.logo }}
-                style={styles.teamLogo}
-                contentFit="contain"
-                transition={200}
-                cachePolicy="memory-disk" // ✅ Cache في الذاكرة والقرص
-                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                priority="high"
-              />
-              <Text style={styles.teamName} numberOfLines={1}>
-                {match.homeTeam?.name}
-              </Text>
-            </View>
-
-            <Text style={styles.vs}>VS</Text>
-
-            <View style={styles.team}>
-              {/* ✅ استخدام expo-image بدلاً من Image */}
-              <Image
-                source={{ uri: match.awayTeam?.logo }}
-                style={styles.teamLogo}
-                contentFit="contain"
-                transition={200}
-                cachePolicy="memory-disk" // ✅ Cache في الذاكرة والقرص
-                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                priority="high"
-              />
-              <Text style={styles.teamName} numberOfLines={1}>
-                {match.awayTeam?.name}
-              </Text>
-            </View>
-          </View>
-
-          {/* Prediction Buttons */}
-          {renderPredictionButtons(match)}
-
-          {/* Prediction Result */}
-          {matchPrediction?.prediction && matchPrediction.isCorrect !== undefined && (
-            <View style={[
-              styles.resultBanner,
-              matchPrediction.isCorrect ? styles.resultBannerSuccess : styles.resultBannerFail,
-            ]}>
-              <Text style={styles.resultText}>
-                {matchPrediction.isCorrect ? '✅ توقع صحيح! +10 تذاكر' : '❌ توقع خاطئ'}
-              </Text>
-            </View>
-          )}
-
-          {/* Cost Info */}
-          {!matchPrediction?.prediction && (
-            <View style={styles.costInfo}>
-              <Text style={styles.costText}>
-                💎 التكلفة: {PREDICTION_COST} تذاكر
-              </Text>
-            </View>
-          )}
-        </LinearGradient>
-      </View>
-    );
-  }, [predictions, renderPredictionButtons]);
-
-  // ✅ Key extractor للـ FlatList
-  const keyExtractor = useCallback((item: Match) => item.id, []);
-
-  // ✅ Header component
-  const ListHeaderComponent = useMemo(() => (
-    <View style={styles.header}>
-      <Text style={styles.title}>🎯 توقع نتائج المباريات</Text>
-      {remainingPredictions !== null && (
-        <Text style={styles.remainingText}>
-          التوقعات المتبقية اليوم: {remainingPredictions}
-        </Text>
-      )}
-      <Text style={styles.subtitle}>
-        اختر فوز الفريق المضيف، التعادل، أو فوز الضيف
-      </Text>
-      <Text style={styles.matchCountText}>
-        📊 عرض {displayedMatches.length} مباراة من أصل {matches.length}
-      </Text>
-      
-      {/* ✅ Error message للمستخدم */}
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>⚠️ {error}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton} 
-            onPress={() => loadAllData(true)}
-          >
-            <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  ), [remainingPredictions, displayedMatches.length, matches.length, error, loadAllData]);
-
   // Loading state
   if (loading && displayedMatches.length === 0) {
     return (
@@ -696,33 +569,145 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     );
   }
 
-  // ✅ استخدام FlatList بدلاً من .map() للأداء الأفضل
+  // ✅ Safety check: ensure displayedMatches is valid
+  if (!Array.isArray(displayedMatches)) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>⚠️</Text>
+        <Text style={styles.emptyTitle}>خطأ في تحميل المباريات</Text>
+        <Text style={styles.emptyMessage}>
+          حدث خطأ أثناء تحميل المباريات. يرجى المحاولة مرة أخرى.
+        </Text>
+      </View>
+    );
+  }
+
+  // ✅ استخدام View مع .map() بدلاً من FlatList لتجنب VirtualizedList nesting warning
   return (
-    <FlatList
-      data={displayedMatches}
-      renderItem={renderMatchCard}
-      keyExtractor={keyExtractor}
-      ListHeaderComponent={ListHeaderComponent}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-      // ✅ Pull-to-Refresh
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={MATCH_DETAILS_COLORS.accent}
-          colors={[MATCH_DETAILS_COLORS.accent]}
-          title="جاري التحديث..."
-          titleColor={MATCH_DETAILS_COLORS.textSecondary}
-        />
-      }
-      // ✅ Performance optimizations
-      initialNumToRender={5}
-      maxToRenderPerBatch={3}
-      windowSize={5}
-      removeClippedSubviews={true}
-      // ✅ لا نستخدم getItemLayout لأن ارتفاعات الـ items متغيرة
-    />
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>🎯 توقع نتائج المباريات</Text>
+        {remainingPredictions !== null && (
+          <Text style={styles.remainingText}>
+            التوقعات المتبقية اليوم: {remainingPredictions}
+          </Text>
+        )}
+        <Text style={styles.subtitle}>
+          اختر فوز الفريق المضيف، التعادل، أو فوز الضيف
+        </Text>
+        <Text style={styles.matchCountText}>
+          📊 عرض {displayedMatches.length} مباراة من أصل {matches.length}
+        </Text>
+        
+        {/* ✅ Error message للمستخدم */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>⚠️ {error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton} 
+              onPress={() => loadAllData(true)}
+            >
+              <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Match Cards */}
+      {displayedMatches
+        .filter(match => match && match.id && match.homeTeam && match.awayTeam) // ✅ Filter out invalid matches
+        .map((match) => {
+        try {
+          const matchPrediction = predictions[match.id];
+        
+          return (
+            <View key={match.id} style={styles.matchCard}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']}
+              style={styles.cardGradient}
+            >
+              {/* Match Header */}
+              <View style={styles.matchHeader}>
+                <Text style={styles.leagueName}>{match.league?.name}</Text>
+                <Text style={styles.matchTime}>
+                  {new Date(match.fixtureDate || '').toLocaleDateString('ar-EG', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+              </View>
+
+              {/* Teams */}
+              <View style={styles.teamsContainer}>
+                <View style={styles.team}>
+                  <Image
+                    source={{ uri: match.homeTeam?.logo }}
+                    style={styles.teamLogo}
+                    contentFit="contain"
+                    transition={200}
+                    cachePolicy="memory-disk"
+                    placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                    priority="high"
+                  />
+                  <Text style={styles.teamName} numberOfLines={1}>
+                    {match.homeTeam?.name}
+                  </Text>
+                </View>
+
+                <Text style={styles.vs}>VS</Text>
+
+                <View style={styles.team}>
+                  <Image
+                    source={{ uri: match.awayTeam?.logo }}
+                    style={styles.teamLogo}
+                    contentFit="contain"
+                    transition={200}
+                    cachePolicy="memory-disk"
+                    placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                    priority="high"
+                  />
+                  <Text style={styles.teamName} numberOfLines={1}>
+                    {match.awayTeam?.name}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Prediction Buttons */}
+              {renderPredictionButtons(match)}
+
+              {/* Prediction Result */}
+              {matchPrediction?.prediction && matchPrediction.isCorrect !== null && matchPrediction.isCorrect !== undefined && (
+                <View style={[
+                  styles.resultBanner,
+                  matchPrediction.isCorrect ? styles.resultBannerSuccess : styles.resultBannerFail,
+                ]}>
+                  <Text style={styles.resultText}>
+                    {matchPrediction.isCorrect ? '✅ توقع صحيح! +10 كوبونات' : '❌ توقع خاطئ'}
+                  </Text>
+                </View>
+              )}
+
+              {/* Cost Info */}
+              {!matchPrediction?.prediction && (
+                <View style={styles.costInfo}>
+                  <Text style={styles.costText}>
+                    🎫 التكلفة: {PREDICTION_COST} كوبونات
+                  </Text>
+                </View>
+              )}
+            </LinearGradient>
+          </View>
+        );
+        } catch (err) {
+          // ✅ Silent error handling - skip invalid match
+          logger.error('Error rendering match:', err);
+          return null;
+        }
+      })}
+    </View>
   );
 };
 

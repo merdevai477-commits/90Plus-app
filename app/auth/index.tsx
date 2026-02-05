@@ -41,6 +41,8 @@ import * as Linking from 'expo-linking';
 import { AuthService } from '../../src/services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthLoadingScreen from '../../components/AuthLoadingScreen';
+import { TermsOfServiceModal } from '../../components/common/TermsOfServiceModal';
+import { TermsService } from '../../services/termsService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -126,6 +128,8 @@ export default function AuthScreen() {
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
+    const [termsModalVisible, setTermsModalVisible] = useState(false);
+    const [pendingSignupData, setPendingSignupData] = useState<{email: string; password: string; name: string} | null>(null);
 
     // Logo animation values
     const logoScale = useRef(new Animated.Value(1)).current;
@@ -438,54 +442,89 @@ export default function AuthScreen() {
                     Alert.alert(t.common.error, t.common.operationFailed);
                 }
             } else {
-                // Sign up with Clerk
+                // Sign up - Show terms first
                 if (!name) {
                     Alert.alert('خطأ', 'يرجى إدخال الاسم');
                     setIsLoading(false);
                     return;
                 }
 
-                if (!signUp) {
-                    Alert.alert('خطأ', 'خدمة التسجيل غير متاحة');
-                    setIsLoading(false);
-                    return;
-                }
-
-                let result;
-                try {
-                    result = await signUp.create({
-                        emailAddress: email,
-                        password: password,
-                        firstName: name.split(' ')[0],
-                        lastName: name.split(' ').slice(1).join(' ') || undefined,
-                    });
-                    console.log('📧 SignUp result status:', result.status);
-                } catch (createError: any) {
-                    console.error('SignUp create error:', createError);
-                    const errorMessage = getArabicErrorMessage(createError);
-                    Alert.alert('خطأ', errorMessage);
-                    setIsLoading(false);
-                    return;
-                }
-
-                // Send email verification
-                try {
-                    await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-                    console.log('📧 Verification email sent, showing modal...');
-                } catch (verifyError: any) {
-                    console.error('Prepare verification error:', verifyError);
-                }
-
-                // Always show verification modal after sending code
+                // Store signup data and show terms modal
+                setPendingSignupData({ email, password, name });
                 setIsLoading(false);
-                setShowVerificationModal(true);
-                console.log('📧 Modal should be visible now');
+                setTermsModalVisible(true);
             }
         } catch (error: any) {
             console.error('Auth error:', error);
             const errorMessage = getArabicErrorMessage(error);
             Alert.alert('خطأ', errorMessage);
         } finally {
+            if (isLogin) {
+                setIsLoading(false);
+            }
+        }
+    };
+
+    /**
+     * Handle terms acceptance and proceed with signup
+     */
+    const handleAcceptTerms = async () => {
+        if (!pendingSignupData) return;
+
+        setIsLoading(true);
+        setTermsModalVisible(false);
+
+        try {
+            const { email: signupEmail, password: signupPassword, name: signupName } = pendingSignupData;
+
+            if (!signUp) {
+                Alert.alert('خطأ', 'خدمة التسجيل غير متاحة');
+                setIsLoading(false);
+                return;
+            }
+
+            let result;
+            try {
+                result = await signUp.create({
+                    emailAddress: signupEmail,
+                    password: signupPassword,
+                    firstName: signupName.split(' ')[0],
+                    lastName: signupName.split(' ').slice(1).join(' ') || undefined,
+                });
+                console.log('📧 SignUp result status:', result.status);
+            } catch (createError: any) {
+                console.error('SignUp create error:', createError);
+                const errorMessage = getArabicErrorMessage(createError);
+                Alert.alert('خطأ', errorMessage);
+                setIsLoading(false);
+                return;
+            }
+
+            // Accept terms in backend (will be recorded after email verification)
+            try {
+                const terms = await TermsService.getLatestTerms();
+                // Store terms version to accept after verification
+                await AsyncStorage.setItem('@pending_terms_version', terms.version);
+            } catch (termsError) {
+                console.warn('Failed to get terms version:', termsError);
+            }
+
+            // Send email verification
+            try {
+                await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+                console.log('📧 Verification email sent, showing modal...');
+            } catch (verifyError: any) {
+                console.error('Prepare verification error:', verifyError);
+            }
+
+            // Always show verification modal after sending code
+            setIsLoading(false);
+            setShowVerificationModal(true);
+            console.log('📧 Modal should be visible now');
+        } catch (error: any) {
+            console.error('Signup error:', error);
+            const errorMessage = getArabicErrorMessage(error);
+            Alert.alert('خطأ', errorMessage);
             setIsLoading(false);
         }
     };
@@ -515,6 +554,19 @@ export default function AuthScreen() {
 
                 console.log('🔄 Syncing new user with backend...');
                 const syncResult = await syncUserWithBackend();
+
+                // Accept terms after successful signup
+                try {
+                    const termsVersion = await AsyncStorage.getItem('@pending_terms_version');
+                    if (termsVersion) {
+                        await TermsService.acceptTerms(termsVersion);
+                        await AsyncStorage.removeItem('@pending_terms_version');
+                        console.log('✅ Terms accepted');
+                    }
+                } catch (termsError) {
+                    console.warn('Failed to accept terms:', termsError);
+                    // Don't block signup if terms acceptance fails
+                }
 
                 // ✅ Start background preloading for new users too
                 if (syncResult.success) {
@@ -1030,6 +1082,17 @@ export default function AuthScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Terms of Service Modal */}
+            <TermsOfServiceModal
+                visible={termsModalVisible}
+                onAccept={handleAcceptTerms}
+                onDecline={() => {
+                    setTermsModalVisible(false);
+                    setPendingSignupData(null);
+                }}
+                required={true}
+            />
         </View>
     );
 }

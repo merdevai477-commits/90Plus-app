@@ -120,6 +120,14 @@ class CacheService {
       // Check if we need to evict old entries
       await this.evictIfNeeded();
     } catch (error: any) {
+      // ✅ FIX: Define cacheKey here for retry
+      const cacheKey = this.getCacheKey(key);
+      const entry: CacheEntry<T> = {
+        data,
+        timestamp: Date.now(),
+        ttl,
+      };
+      
       // ✅ FIX: Handle SQLITE_FULL error
       if (error?.message?.includes('SQLITE_FULL') || error?.message?.includes('database or disk is full')) {
         console.warn(`[CacheService] ⚠️ Storage full! Aggressive cleanup...`);

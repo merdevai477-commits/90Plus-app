@@ -28,6 +28,8 @@ import VideoPlayerModal from '../../components/common/VideoPlayerModal';
 import { useVideos, Comment } from '../../contexts/VideosContext';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
+import { BlockService } from '../../services/blockService';
+import { Alert } from 'react-native';
 
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
@@ -48,6 +50,10 @@ export default function UserProfileScreen() {
   // Video player modal
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<UserReel | null>(null);
+
+  // Block state
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isBlockLoading, setIsBlockLoading] = useState(false);
 
   // Animation for follow button
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -272,6 +278,71 @@ export default function UserProfileScreen() {
     setIsVideoPlayerVisible(true);
   };
 
+  // Block/Unblock user
+  const handleBlockUser = async () => {
+    if (!user) return;
+
+    Alert.alert(
+      isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم',
+      isBlocked 
+        ? `هل تريد إلغاء حظر @${user.username}؟`
+        : `هل تريد حظر @${user.username}؟ لن تتمكن من رؤية محتواه ولن يتمكن من التواصل معك.`,
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: isBlocked ? 'إلغاء الحظر' : 'حظر',
+          style: isBlocked ? 'default' : 'destructive',
+          onPress: async () => {
+            setIsBlockLoading(true);
+            try {
+              const token = await getToken();
+              if (!token) {
+                toast.showError('خطأ', 'يرجى تسجيل الدخول');
+                return;
+              }
+
+              if (isBlocked) {
+                await BlockService.unblockUser(user.id, token);
+                setIsBlocked(false);
+                toast.showSuccess('تم', 'تم إلغاء حظر المستخدم');
+              } else {
+                await BlockService.blockUser(user.id, token);
+                setIsBlocked(true);
+                // Unfollow if following
+                if (user.isFollowing) {
+                  await performUnfollow();
+                }
+                toast.showSuccess('تم', 'تم حظر المستخدم بنجاح');
+              }
+            } catch (error) {
+              console.error('Block error:', error);
+              toast.showError('خطأ', 'حدث خطأ أثناء العملية');
+            } finally {
+              setIsBlockLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Check if user is blocked on load
+  useEffect(() => {
+    const checkBlockStatus = async () => {
+      if (!user) return;
+      try {
+        const token = await getToken();
+        if (token) {
+          const blocked = await BlockService.isUserBlocked(user.id, token);
+          setIsBlocked(blocked);
+        }
+      } catch (error) {
+        console.error('Check block status error:', error);
+      }
+    };
+    checkBlockStatus();
+  }, [user?.id]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -426,9 +497,9 @@ export default function UserProfileScreen() {
           )}
         </View>
 
-        {/* Follow Button - Instead of ActionButtons */}
+        {/* Follow Button & More Options */}
         <View style={styles.followButtonContainer}>
-          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <Animated.View style={{ transform: [{ scale: scaleAnim }], flex: 1 }}>
             <TouchableOpacity
               style={[styles.followButton, user.isFollowing && styles.followingButton]}
               onPress={handleFollow}
@@ -457,6 +528,24 @@ export default function UserProfileScreen() {
               )}
             </TouchableOpacity>
           </Animated.View>
+
+          {/* Block Button */}
+          <TouchableOpacity
+            style={[styles.blockButton, isBlocked && styles.blockedButton]}
+            onPress={handleBlockUser}
+            disabled={isBlockLoading}
+            activeOpacity={0.7}
+          >
+            {isBlockLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons 
+                name={isBlocked ? "checkmark-circle" : "ban"} 
+                size={20} 
+                color={isBlocked ? ProfileTheme.colors.neonGreen : "#ef4444"} 
+              />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Stats Row - Same as profile */}
@@ -621,9 +710,12 @@ const styles = StyleSheet.create({
   followButtonContainer: {
     paddingHorizontal: 20,
     marginBottom: 24,
+    flexDirection: 'row',
+    gap: 12,
     height: 50,
   },
   followButton: {
+    flex: 1,
     borderRadius: 25,
     height: 50,
     overflow: 'hidden',
@@ -634,6 +726,20 @@ const styles = StyleSheet.create({
   followingButton: {
     borderColor: ProfileTheme.colors.neonGreen,
     backgroundColor: ProfileTheme.colors.deepBlack,
+  },
+  blockButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 2,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blockedButton: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
   },
   followGradient: {
     flexDirection: 'row',
