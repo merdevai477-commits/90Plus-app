@@ -226,8 +226,16 @@ app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use('/', supportRoutes);
 
 // Serve static files for privacy and terms (Apple compliance)
-app.use('/privacy', express.static(path.join(__dirname, '../public/privacy.html')));
-app.use('/terms', express.static(path.join(__dirname, '../public/terms.html')));
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Serve privacy and terms pages directly
+app.get('/privacy', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/privacy.html'));
+});
+
+app.get('/terms', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/terms.html'));
+});
 
 // Register quiz routes with error handling
 try {
