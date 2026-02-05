@@ -23,7 +23,7 @@ export class BlockService {
    */
   static async blockUser(userId: string, token: string): Promise<void> {
     try {
-      const response = await fetch(`${API_URL}/api/users/block/${userId}`, {
+      const response = await fetch(`${API_URL}/users/block/${userId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -48,7 +48,7 @@ export class BlockService {
    */
   static async unblockUser(userId: string, token: string): Promise<void> {
     try {
-      const response = await fetch(`${API_URL}/api/users/block/${userId}`, {
+      const response = await fetch(`${API_URL}/users/block/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -73,7 +73,7 @@ export class BlockService {
    */
   static async getBlockedUsers(token: string): Promise<BlockedUser[]> {
     try {
-      const response = await fetch(`${API_URL}/api/users/blocked`, {
+      const response = await fetch(`${API_URL}/users/blocked`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -99,7 +99,7 @@ export class BlockService {
    */
   static async isUserBlocked(userId: string, token: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_URL}/api/users/block/${userId}/status`, {
+      const response = await fetch(`${API_URL}/users/block/${userId}/status`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

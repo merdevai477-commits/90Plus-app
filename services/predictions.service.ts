@@ -6,11 +6,7 @@
 import { logger } from '../utils/logger';
 import { getApiUrl } from '../config/api.config';
 
-const getAPIUrl = () => {
-  const apiUrl = getApiUrl();
-  // Remove /api suffix if present since we'll add it in the endpoints
-  return apiUrl.replace(/\/api$/, '');
-};
+const API_URL = getApiUrl(); // Already includes /api
 
 export interface PredictionType {
   type: 'home' | 'draw' | 'away';
@@ -46,8 +42,7 @@ export const PredictionsService = {
    */
   getRemainingPredictions: async (token: string): Promise<PredictionRemaining> => {
     try {
-      const API_URL = getAPIUrl();
-      const response = await fetch(`${API_URL}/api/predictions/remaining`, {
+      const response = await fetch(`${API_URL}/predictions/remaining`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -88,8 +83,7 @@ export const PredictionsService = {
     }
   ): Promise<Prediction> => {
     try {
-      const API_URL = getAPIUrl();
-      const response = await fetch(`${API_URL}/api/predictions`, {
+      const response = await fetch(`${API_URL}/predictions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -121,8 +115,7 @@ export const PredictionsService = {
    */
   getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: { [key: string]: any } }> => {
     try {
-      const API_URL = getAPIUrl();
-      const response = await fetch(`${API_URL}/api/predictions/user`, {
+      const response = await fetch(`${API_URL}/predictions/user`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -156,8 +149,7 @@ export const PredictionsService = {
     total: number;
   }> => {
     try {
-      const API_URL = getAPIUrl();
-      const response = await fetch(`${API_URL}/api/predictions/match/${matchId}/count`, {
+      const response = await fetch(`${API_URL}/predictions/match/${matchId}/count`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
