@@ -226,15 +226,36 @@ app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use('/', supportRoutes);
 
 // Serve static files for privacy and terms (Apple compliance)
-app.use(express.static(path.join(__dirname, '../public')));
+// In production: dist/src/main.js -> dist/public
+// In development: src/main.ts -> public
+const publicPath = path.join(__dirname, '../../public');
+app.use(express.static(publicPath));
 
 // Serve privacy and terms pages directly
 app.get('/privacy', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/privacy.html'));
+    const filePath = path.join(publicPath, 'privacy.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send privacy.html:', err);
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: err.message 
+            });
+        }
+    });
 });
 
 app.get('/terms', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/terms.html'));
+    const filePath = path.join(publicPath, 'terms.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send terms.html:', err);
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: err.message 
+            });
+        }
+    });
 });
 
 // Register quiz routes with error handling
