@@ -1167,7 +1167,6 @@ export default function AuthScreen() {
                     setTermsModalVisible(false);
                     setPendingSignupData(null);
                 }}
-                required={true}
             />
         </View>
     );
