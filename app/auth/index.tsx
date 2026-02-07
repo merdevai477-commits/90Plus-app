@@ -658,20 +658,54 @@ export default function AuthScreen() {
                 }
                 const syncResult = await syncUserWithBackend();
 
+                // ✅ FIX: Check if sync was successful
+                if (!syncResult.success) {
+                    console.error('❌ Failed to sync user with backend');
+                    setShowLoadingScreen(false);
+                    Alert.alert(
+                        'خطأ في المزامنة',
+                        'فشل تحميل بيانات المستخدم. يرجى المحاولة مرة أخرى.',
+                        [
+                            {
+                                text: 'حاول مرة أخرى',
+                                onPress: () => handleGoogleSignIn(),
+                            },
+                            {
+                                text: 'إلغاء',
+                                style: 'cancel',
+                            },
+                        ]
+                    );
+                    return;
+                }
+
                 if (__DEV__) {
                     console.log('🔵 Session activated, setting user type...');
                 }
-                globalState.setUserType('diamond');
-                useHomeStore.getState().setUserMode('diamond');
+                
+                // ✅ FIX: Wrap state updates in try-catch
+                try {
+                    globalState.setUserType('diamond');
+                    useHomeStore.getState().setUserMode('diamond');
+                } catch (stateError) {
+                    console.error('❌ Failed to update state:', stateError);
+                    // Continue anyway - not critical
+                }
 
                 if (__DEV__) {
                     console.log('🔵 Navigating...');
                 }
                 // Small delay for smooth transition
                 setTimeout(() => {
-                    if (syncResult.isNewUser) {
-                        router.replace('/onboarding');
-                    } else {
+                    try {
+                        if (syncResult.isNewUser) {
+                            router.replace('/onboarding');
+                        } else {
+                            router.replace('/(tabs)/Home');
+                        }
+                    } catch (navError) {
+                        console.error('❌ Navigation error:', navError);
+                        // Fallback navigation
                         router.replace('/(tabs)/Home');
                     }
                 }, 1500);
@@ -692,8 +726,12 @@ export default function AuthScreen() {
                     message: error.message,
                     errors: error.errors,
                     code: error.code,
+                    stack: error.stack, // ✅ FIX: Add stack trace
                 });
             }
+
+            // ✅ FIX: Hide loading screen on error
+            setShowLoadingScreen(false);
 
             let errorMessage = t.common.operationFailed;
 
@@ -740,16 +778,50 @@ export default function AuthScreen() {
                 console.log('🔄 Syncing Apple user with backend...');
                 const syncResult = await syncUserWithBackend();
 
+                // ✅ FIX: Check if sync was successful
+                if (!syncResult.success) {
+                    console.error('❌ Failed to sync user with backend');
+                    setShowLoadingScreen(false);
+                    Alert.alert(
+                        'خطأ في المزامنة',
+                        'فشل تحميل بيانات المستخدم. يرجى المحاولة مرة أخرى.',
+                        [
+                            {
+                                text: 'حاول مرة أخرى',
+                                onPress: () => handleAppleSignIn(),
+                            },
+                            {
+                                text: 'إلغاء',
+                                style: 'cancel',
+                            },
+                        ]
+                    );
+                    return;
+                }
+
                 console.log('🍎 Session activated, setting user type...');
-                globalState.setUserType('diamond');
-                useHomeStore.getState().setUserMode('diamond');
+                
+                // ✅ FIX: Wrap state updates in try-catch
+                try {
+                    globalState.setUserType('diamond');
+                    useHomeStore.getState().setUserMode('diamond');
+                } catch (stateError) {
+                    console.error('❌ Failed to update state:', stateError);
+                    // Continue anyway - not critical
+                }
 
                 console.log('🍎 Navigating...');
                 // Small delay for smooth transition
                 setTimeout(() => {
-                    if (syncResult.isNewUser) {
-                        router.replace('/onboarding');
-                    } else {
+                    try {
+                        if (syncResult.isNewUser) {
+                            router.replace('/onboarding');
+                        } else {
+                            router.replace('/(tabs)/Home');
+                        }
+                    } catch (navError) {
+                        console.error('❌ Navigation error:', navError);
+                        // Fallback navigation
                         router.replace('/(tabs)/Home');
                     }
                 }, 1500);
@@ -767,7 +839,11 @@ export default function AuthScreen() {
                 message: error.message,
                 errors: error.errors,
                 code: error.code,
+                stack: error.stack, // ✅ FIX: Add stack trace
             });
+
+            // ✅ FIX: Hide loading screen on error
+            setShowLoadingScreen(false);
 
             let errorMessage = t.common.operationFailed;
 
