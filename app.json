@@ -16,14 +16,15 @@
       "buildNumber": "1",
       "infoPlist": {
         "UIBackgroundModes": [
-          "remote-notification",
           "remote-notification"
         ],
         "NSCameraUsageDescription": "This app uses camera to upload videos for reels",
         "NSMicrophoneUsageDescription": "This app uses microphone to record videos for reels",
         "NSPhotoLibraryUsageDescription": "This app uses photo library to select images and videos",
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIRequiredDeviceCapabilities": []
+      },
+      "deploymentTarget": "13.4"
     },
     "android": {
       "adaptiveIcon": {
