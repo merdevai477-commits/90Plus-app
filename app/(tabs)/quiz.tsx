@@ -70,14 +70,18 @@ export default function QuizScreen() {
 
   // بدء خدمة المزامنة والمراقبة عند تحميل الكومبوننت
   useEffect(() => {
+    let mounted = true;
+    
     const initializeServices = async () => {
-      if (isSignedIn && getToken) {
+      if (isSignedIn && getToken && mounted) {
         // بدء خدمة المزامنة
         startDailyQuizSync(getToken);
         
         // بدء جلسة مراقبة الأداء
         const newSessionId = await startQuizSession();
-        setSessionId(newSessionId);
+        if (mounted) {
+          setSessionId(newSessionId);
+        }
       }
     };
 
@@ -85,12 +89,11 @@ export default function QuizScreen() {
 
     // تنظيف عند unmount
     return () => {
+      mounted = false;
       stopDailyQuizSync();
-      if (sessionId) {
-        endQuizSession();
-      }
+      endQuizSession();
     };
-  }, [isSignedIn, getToken]);
+  }, []); // Empty deps - run only once on mount
 
   // States الأساسية - moved to top to avoid hoisting issues
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
