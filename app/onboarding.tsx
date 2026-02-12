@@ -6,6 +6,7 @@ import {
     TouchableOpacity,
     FlatList,
     Dimensions,
+    Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -53,27 +54,103 @@ export default function OnboardingScreen() {
     }, [step]);
 
     const handleNext = useCallback(async () => {
-        if (step === 'club' && selectedClub) setStep('brand');
-        else if (step === 'brand' && selectedBrand) setStep('country');
-        else if (step === 'country' && selectedCountry) setStep('leagues');
-        else if (step === 'leagues' && selectedLeagues.length >= 3) {
-            // Save preferences first, then navigate
-            try {
-                await savePreferences();
-                
-                // Save favorite leagues to local settings
-                for (const leagueId of selectedLeagues) {
-                    await addFavoriteLeague(leagueId);
+        try {
+            if (step === 'club' && selectedClub) {
+                setStep('brand');
+            } else if (step === 'brand' && selectedBrand) {
+                setStep('country');
+            } else if (step === 'country' && selectedCountry) {
+                setStep('leagues');
+            } else if (step === 'leagues' && selectedLeagues.length >= 3) {
+                // Save preferences first, then navigate
+                try {
+                    // Validate token before proceeding
+                    const token = await getToken();
+                    if (!token) {
+                        console.error('No auth token available');
+                        Alert.alert(
+                            'خطأ في المصادقة',
+                            'يرجى تسجيل الدخول مرة أخرى',
+                            [
+                                { 
+                                    text: 'حسناً', 
+                                    onPress: () => router.replace('/auth')
+                                }
+                            ]
+                        );
+                        return;
+                    }
+
+                    await savePreferences();
+                    
+                    // Save favorite leagues to local settings
+                    for (const leagueId of selectedLeagues) {
+                        await addFavoriteLeague(leagueId);
+                    }
+                    
+                    // Update global state safely
+                    try {
+                        globalState.setUserType('diamond');
+                        useHomeStore.getState().setUserMode('diamond');
+                    } catch (stateError) {
+                        console.error('Error updating global state:', stateError);
+                        // Continue anyway - state update is not critical
+                    }
+                    
+                    // Navigate safely
+                    try {
+                        router.replace('/(tabs)/Home');
+                    } catch (navError) {
+                        console.error('Navigation error:', navError);
+                        // Fallback navigation
+                        router.push('/(tabs)/Home');
+                    }
+                } catch (error) {
+                    console.error('Save preferences error:', error);
+                    Alert.alert(
+                        'خطأ',
+                        'حدث خطأ أثناء حفظ التفضيلات. هل تريد المحاولة مرة أخرى؟',
+                        [
+                            { 
+                                text: 'إعادة المحاولة', 
+                                onPress: () => handleNext()
+                            },
+                            { 
+                                text: 'تخطي', 
+                                onPress: () => {
+                                    try {
+                                        router.replace('/(tabs)/Home');
+                                    } catch (navError) {
+                                        router.push('/(tabs)/Home');
+                                    }
+                                },
+                                style: 'cancel'
+                            }
+                        ]
+                    );
                 }
-            } catch (error) {
-                console.log('Save preferences error:', error);
             }
-            
-            globalState.setUserType('diamond');
-            useHomeStore.getState().setUserMode('diamond');
-            router.replace('/(tabs)/Home');
+        } catch (error) {
+            console.error('Unexpected error in handleNext:', error);
+            Alert.alert(
+                'خطأ غير متوقع',
+                'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.',
+                [
+                    { 
+                        text: 'حسناً',
+                        onPress: () => {
+                            // Safe fallback - go to home anyway
+                            try {
+                                router.replace('/(tabs)/Home');
+                            } catch (navError) {
+                                router.push('/(tabs)/Home');
+                            }
+                        }
+                    }
+                ]
+            );
         }
-    }, [step, selectedClub, selectedBrand, selectedCountry, selectedLeagues, addFavoriteLeague]);
+    }, [step, selectedClub, selectedBrand, selectedCountry, selectedLeagues, addFavoriteLeague, getToken]);
 
     const handleBack = useCallback(() => {
         if (step === 'brand') setStep('club');
@@ -87,49 +164,85 @@ export default function OnboardingScreen() {
         );
     }, []);
 
-    // Save preferences to backend
+    // Save preferences to backend with comprehensive error handling
     const savePreferences = async () => {
-        const token = await getToken();
-        
-        // Get the full club and brand objects to send logos
-        const clubData = CLUBS.find(c => c.name === selectedClub);
-        const brandData = BRANDS.find(b => b.name === selectedBrand);
-        const countryData = COUNTRIES.find(c => c.id === selectedCountry);
-        
-        // Fetch real logos from external APIs
-        let realClubLogo: string | null = null;
-        let realBrandLogo: string | null = null;
-        
-        if (clubData?.apiId) {
-            realClubLogo = await clubLogoService.fetchClubLogo(clubData.apiId);
+        try {
+            const token = await getToken();
+            
+            if (!token) {
+                throw new Error('No authentication token available');
+            }
+            
+            // Get the full club and brand objects to send logos
+            const clubData = CLUBS.find(c => c.name === selectedClub);
+            const brandData = BRANDS.find(b => b.name === selectedBrand);
+            const countryData = COUNTRIES.find(c => c.id === selectedCountry);
+            
+            // Fetch real logos from external APIs with timeout
+            let realClubLogo: string | null = null;
+            let realBrandLogo: string | null = null;
+            
+            try {
+                if (clubData?.apiId) {
+                    realClubLogo = await Promise.race([
+                        clubLogoService.fetchClubLogo(clubData.apiId),
+                        new Promise<null>((_, reject) => 
+                            setTimeout(() => reject(new Error('Club logo fetch timeout')), 5000)
+                        )
+                    ]).catch(() => null);
+                }
+            } catch (logoError) {
+                console.warn('Failed to fetch club logo:', logoError);
+                // Continue with default logo
+            }
+            
+            try {
+                if (brandData?.apiId) {
+                    realBrandLogo = await Promise.race([
+                        brandLogoService.fetchBrandLogo(brandData.apiId),
+                        new Promise<null>((_, reject) => 
+                            setTimeout(() => reject(new Error('Brand logo fetch timeout')), 5000)
+                        )
+                    ]).catch(() => null);
+                }
+            } catch (logoError) {
+                console.warn('Failed to fetch brand logo:', logoError);
+                // Continue with default logo
+            }
+            
+            const apiUrl = getApiUrl();
+            if (!apiUrl) {
+                throw new Error('API URL not configured');
+            }
+            
+            const response = await fetch(`${apiUrl}/api/clerk/preferences`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    favoriteTeam: selectedClub,
+                    favoriteBrand: selectedBrand,
+                    country: selectedCountry,
+                    favoriteLeagues: selectedLeagues,
+                    // Send real logos for profile card (or fallback to default)
+                    clubLogo: realClubLogo || clubData?.logo || '',
+                    brandLogo: realBrandLogo || brandData?.logo || '',
+                    countryFlag: countryData?.flag,
+                }),
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                throw new Error(`Failed to save preferences: ${response.status} - ${errorText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('Error in savePreferences:', error);
+            throw error;
         }
-        if (brandData?.apiId) {
-            realBrandLogo = await brandLogoService.fetchBrandLogo(brandData.apiId);
-        }
-        
-        const response = await fetch(`${getApiUrl()}/api/clerk/preferences`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-                favoriteTeam: selectedClub,
-                favoriteBrand: selectedBrand,
-                country: selectedCountry,
-                favoriteLeagues: selectedLeagues,
-                // Send real logos for profile card (or fallback to default)
-                clubLogo: realClubLogo || clubData?.logo || '',
-                brandLogo: realBrandLogo || brandData?.logo || '',
-                countryFlag: countryData?.flag,
-            }),
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to save preferences');
-        }
-        
-        return response.json();
     };
 
     const progressStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));

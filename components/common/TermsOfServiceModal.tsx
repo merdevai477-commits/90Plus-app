@@ -1,4 +1,4 @@
-/**
+ /**
  * Terms of Service Modal
  * Apple Compliance - Guideline 1.2
  * 
@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../reels/constants';
@@ -50,18 +51,13 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
   const fetchTerms = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${getApiUrl()}/terms/latest`);
-      const data = await response.json();
-
-      if (data.status === 'SUCCESS') {
-        setTermsContent(data.data.content);
-      } else {
-        throw new Error('Failed to load terms');
-      }
+      // Fetch HTML directly from the terms endpoint
+      const termsUrl = `${getApiUrl()}/terms`;
+      setTermsContent(termsUrl);
+      setLoading(false);
     } catch (error) {
-      logger.error('Error fetching terms:', error);
-      setTermsContent('Failed to load terms of service. Please try again.');
-    } finally {
+      logger.error('Error loading terms:', error);
+      setTermsContent('');
       setLoading(false);
     }
   };
@@ -91,7 +87,7 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
       onRequestClose={onDecline}
     >
       <LinearGradient
-        colors={[COLORS.background, COLORS.cardBackground]}
+        colors={[COLORS.background, COLORS.backgroundCard]}
         style={styles.container}
       >
         {/* Header */}
@@ -106,18 +102,27 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
             <ActivityIndicator size="large" color={COLORS.primary} />
             <Text style={styles.loadingText}>Loading terms...</Text>
           </View>
-        ) : (
+        ) : termsContent ? (
           <>
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              showsVerticalScrollIndicator={true}
-            >
-              <Text style={styles.content}>{termsContent}</Text>
-            </ScrollView>
+            <WebView
+              source={{ uri: termsContent }}
+              style={styles.webView}
+              onScroll={(event) => {
+                const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+                const paddingToBottom = 20;
+                const isCloseToBottom =
+                  layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+
+                if (isCloseToBottom && !hasScrolledToBottom) {
+                  setHasScrolledToBottom(true);
+                }
+              }}
+              onLoadEnd={() => setLoading(false)}
+              onError={(error) => {
+                logger.error('WebView error:', error);
+                setTermsContent('');
+              }}
+            />
 
             {/* Scroll Indicator */}
             {!hasScrolledToBottom && (
@@ -177,7 +182,7 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
                   colors={
                     accepted && hasScrolledToBottom
                       ? [COLORS.primary, COLORS.secondary]
-                      : [COLORS.gray, COLORS.gray]
+                      : [COLORS.darkGray, COLORS.mediumGray]
                   }
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -188,6 +193,16 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
               </TouchableOpacity>
             </View>
           </>
+        ) : (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Failed to load terms. Please try again.</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={fetchTerms}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </LinearGradient>
     </Modal>
@@ -203,7 +218,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.glassBorder,
   },
   title: {
     fontSize: 28,
@@ -219,11 +234,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
   },
   scrollView: {
     flex: 1,
@@ -236,16 +265,21 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 14,
     lineHeight: 22,
-    color: COLORS.text,
+    color: COLORS.textPrimary,
+  },
+  webView: {
+    flex: 1,
+    marginTop: 20,
+    backgroundColor: 'transparent',
   },
   scrollIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    backgroundColor: COLORS.cardBackground,
+    backgroundColor: COLORS.backgroundCard,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: COLORS.glassBorder,
   },
   scrollIndicatorText: {
     marginLeft: 8,
@@ -258,14 +292,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: COLORS.cardBackground,
+    backgroundColor: COLORS.backgroundCard,
   },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: COLORS.border,
+    borderColor: COLORS.glassBorder,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -280,7 +314,7 @@ const styles = StyleSheet.create({
   checkboxText: {
     flex: 1,
     fontSize: 14,
-    color: COLORS.text,
+    color: COLORS.textPrimary,
     lineHeight: 20,
   },
   checkboxTextDisabled: {
@@ -298,13 +332,13 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.glassBorder,
     alignItems: 'center',
   },
   declineButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text,
+    color: COLORS.textPrimary,
   },
   acceptButton: {
     flex: 1,

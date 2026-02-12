@@ -41,8 +41,8 @@ import * as Linking from 'expo-linking';
 import { AuthService } from '../../src/services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthLoadingScreen from '../../components/AuthLoadingScreen';
-import { TermsOfServiceModal } from '../../components/common/TermsOfServiceModal';
 import { TermsService } from '../../services/termsService';
+import { getApiUrl } from '../../config/api.config';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -128,8 +128,7 @@ export default function AuthScreen() {
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
-    const [termsModalVisible, setTermsModalVisible] = useState(false);
-    const [pendingSignupData, setPendingSignupData] = useState<{email: string; password: string; name: string} | null>(null);
+    const [termsAccepted, setTermsAccepted] = useState(false);
 
     // Logo animation values
     const logoScale = useRef(new Animated.Value(1)).current;
@@ -442,17 +441,21 @@ export default function AuthScreen() {
                     Alert.alert(t.common.error, t.common.operationFailed);
                 }
             } else {
-                // Sign up - Show terms first
+                // Sign up - Check terms acceptance
                 if (!name) {
                     Alert.alert('خطأ', 'يرجى إدخال الاسم');
                     setIsLoading(false);
                     return;
                 }
 
-                // Store signup data and show terms modal
-                setPendingSignupData({ email, password, name });
-                setIsLoading(false);
-                setTermsModalVisible(true);
+                if (!termsAccepted) {
+                    Alert.alert('خطأ', 'يجب الموافقة على الشروط والأحكام للمتابعة');
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Proceed with signup
+                await handleSignup();
             }
         } catch (error: any) {
             console.error('Auth error:', error);
@@ -466,16 +469,15 @@ export default function AuthScreen() {
     };
 
     /**
-     * Handle terms acceptance and proceed with signup
+     * Handle signup after terms acceptance
      */
-    const handleAcceptTerms = async () => {
-        if (!pendingSignupData) return;
-
+    const handleSignup = async () => {
         setIsLoading(true);
-        setTermsModalVisible(false);
 
         try {
-            const { email: signupEmail, password: signupPassword, name: signupName } = pendingSignupData;
+            const signupEmail = email;
+            const signupPassword = password;
+            const signupName = name;
 
             if (!signUp) {
                 Alert.alert('خطأ', 'خدمة التسجيل غير متاحة');
@@ -526,6 +528,28 @@ export default function AuthScreen() {
             const errorMessage = getArabicErrorMessage(error);
             Alert.alert('خطأ', errorMessage);
             setIsLoading(false);
+        }
+    };
+
+    /**
+     * Open terms in browser
+     */
+    const handleOpenTerms = async () => {
+        try {
+            // Get base URL without /api suffix
+            const baseUrl = getApiUrl().replace('/api', '');
+            const termsUrl = `${baseUrl}/terms`;
+            
+            const supported = await Linking.canOpenURL(termsUrl);
+            
+            if (supported) {
+                await Linking.openURL(termsUrl);
+            } else {
+                Alert.alert('خطأ', 'لا يمكن فتح الرابط');
+            }
+        } catch (error) {
+            console.error('Error opening terms:', error);
+            Alert.alert('خطأ', 'فشل فتح الشروط والأحكام');
         }
     };
 
@@ -1036,6 +1060,35 @@ export default function AuthScreen() {
                             </TouchableOpacity>
                         </View>
 
+                        {/* Terms Checkbox (Sign Up only) */}
+                        {!isLogin && (
+                            <TouchableOpacity
+                                style={styles.termsContainer}
+                                onPress={() => setTermsAccepted(!termsAccepted)}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                                    {termsAccepted && (
+                                        <Text style={styles.checkmark}>✓</Text>
+                                    )}
+                                </View>
+                                <View style={styles.termsTextContainer}>
+                                    <Text style={styles.termsText}>
+                                        أوافق على{' '}
+                                        <Text
+                                            style={styles.termsLink}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenTerms();
+                                            }}
+                                        >
+                                            الشروط والأحكام
+                                        </Text>
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        )}
+
                         {/* Submit Button */}
                         <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
                             <TouchableOpacity
@@ -1159,15 +1212,6 @@ export default function AuthScreen() {
                 </View>
             </Modal>
 
-            {/* Terms of Service Modal */}
-            <TermsOfServiceModal
-                visible={termsModalVisible}
-                onAccept={handleAcceptTerms}
-                onDecline={() => {
-                    setTermsModalVisible(false);
-                    setPendingSignupData(null);
-                }}
-            />
         </View>
     );
 }
@@ -1445,5 +1489,46 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         marginTop: 16,
+    },
+    // Terms checkbox styles
+    termsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+    },
+    checkbox: {
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: 'rgba(255, 215, 0, 0.5)',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    checkboxChecked: {
+        backgroundColor: '#FFD700',
+        borderColor: '#FFD700',
+    },
+    checkmark: {
+        color: '#0A0514',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    termsTextContainer: {
+        flex: 1,
+    },
+    termsText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        textAlign: 'right',
+        lineHeight: 20,
+    },
+    termsLink: {
+        color: '#FFD700',
+        fontWeight: '600',
+        textDecorationLine: 'underline',
     },
 });

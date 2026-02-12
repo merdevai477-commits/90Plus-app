@@ -7,7 +7,8 @@ import {
     TouchableOpacity, 
     ImageBackground, 
     Dimensions, 
-    ActivityIndicator 
+    ActivityIndicator,
+    Alert 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { QUIZ_CATEGORIES, QuizCategoryLocal } from '../../data/quizCategories';
@@ -42,20 +43,51 @@ export const DailyQuizCategories: React.FC<DailyQuizCategoriesProps> = ({ onSele
         if (categoryId === 'legends') {
             setLoading(true);
             try {
+                // Validate category ID
+                if (!categoryId || typeof categoryId !== 'string') {
+                    throw new Error('Invalid category ID');
+                }
+
                 // فحص إذا كان الكويز اليومي متاح في Cache
-                const { isDailyQuizCached } = await import('../../services/quizApi');
-                const cacheStatus = await isDailyQuizCached();
-                
-                if (cacheStatus.cached) {
-                    console.log('✅ Daily quiz available in cache, loading instantly...');
-                } else {
-                    console.log('📥 Loading fresh daily quiz...');
+                try {
+                    const { isDailyQuizCached } = await import('../../services/quizApi');
+                    const cacheStatus = await isDailyQuizCached();
+                    
+                    if (cacheStatus.cached) {
+                        console.log('✅ Daily quiz available in cache, loading instantly...');
+                    } else {
+                        console.log('📥 Loading fresh daily quiz...');
+                    }
+                } catch (cacheError) {
+                    console.warn('Cache check failed, continuing anyway:', cacheError);
+                    // Continue even if cache check fails
                 }
                 
-                onSelectCategory(categoryId);
+                // Call the callback with error handling
+                try {
+                    onSelectCategory(categoryId);
+                } catch (callbackError) {
+                    console.error('Error in onSelectCategory callback:', callbackError);
+                    throw new Error('Failed to start quiz. Please try again.');
+                }
             } catch (error) {
-                console.error('Error checking daily quiz cache:', error);
-                onSelectCategory(categoryId); // المتابعة حتى لو فشل فحص الـ cache
+                console.error('Error in handleCategorySelect:', error);
+                
+                // Show user-friendly error message
+                Alert.alert(
+                    'خطأ',
+                    'حدث خطأ أثناء بدء الاختبار. هل تريد المحاولة مرة أخرى؟',
+                    [
+                        { 
+                            text: 'إعادة المحاولة', 
+                            onPress: () => handleCategorySelect(categoryId)
+                        },
+                        { 
+                            text: 'إلغاء', 
+                            style: 'cancel'
+                        }
+                    ]
+                );
             } finally {
                 setLoading(false);
             }
