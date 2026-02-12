@@ -226,9 +226,14 @@ app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use('/', supportRoutes);
 
 // Serve static files for privacy and terms (Apple compliance)
-// In production: dist/src/main.js -> dist/public
-// In development: src/main.ts -> public
-const publicPath = path.join(__dirname, '../../public');
+// Determine public path based on environment
+// In production (Railway): /app/dist/public
+// In development: Backend/public
+const publicPath = isProduction 
+    ? path.join(__dirname, '../public')  // dist/public
+    : path.join(__dirname, '../../public'); // Backend/public
+
+logger.info(`📁 Public path: ${publicPath}`);
 app.use(express.static(publicPath));
 
 // Serve privacy and terms pages directly
