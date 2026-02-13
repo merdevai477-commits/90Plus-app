@@ -27,6 +27,7 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
+            logger.warn('[/clerk/me] ⚠️ No clerkUserId in request');
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized',
@@ -34,15 +35,31 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             return;
         }
 
+        logger.info(`[/clerk/me] 🔄 Fetching user data for: ${clerkUserId}`);
+
         // Check cache first
         const cached = userCache.get(clerkUserId);
         if (cached && Date.now() - cached.timestamp < USER_CACHE_TTL) {
+            logger.info(`[/clerk/me] ⚡ Returning cached data for: ${clerkUserId}`);
             res.json({ status: 'SUCCESS', data: { user: cached.data } });
             return;
         }
 
+        logger.info(`[/clerk/me] 📡 Cache miss, fetching from database for: ${clerkUserId}`);
+
         // Find or create user in our database
         const user = await ClerkUserService.findOrCreateUser(clerkUserId);
+
+        if (!user) {
+            logger.error(`[/clerk/me] ❌ Failed to find or create user: ${clerkUserId}`);
+            res.status(500).json({
+                status: 'ERROR',
+                message: 'Failed to load user data',
+            });
+            return;
+        }
+
+        logger.info(`[/clerk/me] ✅ User data loaded: ${user.username} (${user.id})`);
 
         const userData = {
             id: user.id,
@@ -61,6 +78,7 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             favoriteTeam: user.favoriteTeam,
             position: user.position,
             countryFlag: user.countryFlag,
+            country: user.country, // ✅ Include country field
             age: user.age,
             height: user.height,
             weight: user.weight,
@@ -76,9 +94,10 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
         // Save to cache
         userCache.set(clerkUserId, { data: userData, timestamp: Date.now() });
 
+        logger.info(`[/clerk/me] ✅ Returning user data for: ${user.username}`);
         res.json({ status: 'SUCCESS', data: { user: userData } });
     } catch (error: any) {
-        logger.error('Get user error:', error);
+        logger.error('[/clerk/me] ❌ Error:', error);
         res.status(500).json({
             status: 'ERROR',
             message: error.message || 'Internal server error',

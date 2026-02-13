@@ -144,8 +144,8 @@ export const requireAuth = async (
                 duration: `${duration}ms`,
             });
 
-            // Log successful authentication
-            await AuditService.logAuth({
+            // Log successful authentication (non-blocking)
+            AuditService.logAuth({
                 action: AuditAction.LOGIN,
                 userId: verifiedToken.sub,
                 req,
@@ -154,7 +154,7 @@ export const requireAuth = async (
                     method: req.method,
                     duration: `${duration}ms`,
                 },
-            });
+            }).catch(err => logger.error('Audit log error:', err));
 
             next();
         } catch (verifyError: any) {
@@ -168,8 +168,8 @@ export const requireAuth = async (
                 duration: `${duration}ms`,
             });
             
-            // Log failed authentication attempt
-            await AuditService.logAuth({
+            // Log failed authentication attempt (non-blocking)
+            AuditService.logAuth({
                 action: AuditAction.LOGIN_FAILED,
                 req,
                 metadata: {
@@ -177,7 +177,7 @@ export const requireAuth = async (
                     path: req.path,
                     method: req.method,
                 },
-            });
+            }).catch(err => logger.error('Audit log error:', err));
             
             res.status(401).json({
                 status: 'ERROR',
