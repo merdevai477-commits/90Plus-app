@@ -17,17 +17,17 @@ export default function TabLayout() {
     const backAction = () => {
       if (pathname === "/Home") {
         backPressCount++;
-        
+
         if (backPressCount === 2) {
           // If pressed twice quickly, let the app close
           return false;
         }
-        
+
         // Reset the counter after 2 seconds
         backPressTimer = setTimeout(() => {
           backPressCount = 0;
         }, 2000);
-        
+
         return true;
       } else {
         // If not on home, navigate to home
@@ -64,8 +64,8 @@ export default function TabLayout() {
           options={{
             title: "Profile",
             tabBarIcon: ({ color, focused }) => (
-              <Animated.View 
-                style={{ 
+              <Animated.View
+                style={{
                   transform: [
                     { scale: focused ? 1.1 : 1 },
                     { translateY: focused ? -2 : 0 }
@@ -83,8 +83,8 @@ export default function TabLayout() {
           options={{
             title: "Home",
             tabBarIcon: ({ color, focused }) => (
-              <Animated.View 
-                style={{ 
+              <Animated.View
+                style={{
                   transform: [
                     { scale: focused ? 1.15 : 1 },
                     { translateY: focused ? -3 : 0 }
@@ -102,8 +102,8 @@ export default function TabLayout() {
           options={{
             title: "Rankings",
             tabBarIcon: ({ color, focused }) => (
-              <Animated.View 
-                style={{ 
+              <Animated.View
+                style={{
                   transform: [
                     { scale: focused ? 1.1 : 1 },
                     { translateY: focused ? -2 : 0 }
@@ -121,8 +121,8 @@ export default function TabLayout() {
           options={{
             title: "Quiz",
             tabBarIcon: ({ color, focused }) => (
-              <Animated.View 
-                style={{ 
+              <Animated.View
+                style={{
                   transform: [
                     { scale: focused ? 1.1 : 1 },
                     { translateY: focused ? -2 : 0 }
@@ -140,8 +140,8 @@ export default function TabLayout() {
           options={{
             title: "Highlights",
             tabBarIcon: ({ color, focused }) => (
-              <Animated.View 
-                style={{ 
+              <Animated.View
+                style={{
                   transform: [
                     { scale: focused ? 1.1 : 1 },
                     { translateY: focused ? -2 : 0 }
@@ -157,10 +157,10 @@ export default function TabLayout() {
         <Tabs.Screen
           name="reels"
           options={{
-            title: "Reels",
+            title: "Highlights",
             tabBarIcon: ({ color, focused }) => (
-              <Animated.View 
-                style={{ 
+              <Animated.View
+                style={{
                   transform: [
                     { scale: focused ? 1.1 : 1 },
                     { translateY: focused ? -2 : 0 }

@@ -79,8 +79,8 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 // Constants
 const ANIMATION_DURATION = 400;
 const HAPTIC_FEEDBACK_ENABLED = Platform.OS === 'ios';
-const DEFAULT_AVATAR = 'https://via.placeholder.com/150/22c55e/ffffff?text=User';
-const DEFAULT_TEAM_LOGO = 'https://via.placeholder.com/100/22c55e/ffffff?text=Team';
+const DEFAULT_AVATAR = '';
+const DEFAULT_TEAM_LOGO = '';
 
 // Custom Layout Animation
 const customLayoutAnimation = {
@@ -268,216 +268,24 @@ const SkeletonLoader = memo(() => {
 SkeletonLoader.displayName = 'SkeletonLoader';
 
 // Mock Data
-const topViewers: RankedUser[] = [
-  {
-    id: '1',
-    name: 'Ahmed Hassan',
-    avatar: 'https://i.pravatar.cc/150?img=1',
-    score: 245000,
-    rank: 1,
-    badge: 'gold',
-    trend: 'up',
-    stats: { views: 245000 },
-    change: 12.5,
-  },
-  {
-    id: '2',
-    name: 'Sara Mohamed',
-    avatar: 'https://i.pravatar.cc/150?img=2',
-    score: 198000,
-    rank: 2,
-    badge: 'silver',
-    trend: 'stable',
-    stats: { views: 198000 },
-    change: 0,
-  },
-  {
-    id: '3',
-    name: 'Omar Ali',
-    avatar: 'https://i.pravatar.cc/150?img=3',
-    score: 176000,
-    rank: 3,
-    badge: 'bronze',
-    trend: 'down',
-    stats: { views: 176000 },
-    change: -5.3,
-  },
-];
+const topViewers: RankedUser[] = [];
 
-const topCommenters: RankedUser[] = [
-  {
-    id: '4',
-    name: 'Youssef Ibrahim',
-    avatar: 'https://i.pravatar.cc/150?img=4',
-    score: 1520,
-    rank: 1,
-    badge: 'gold',
-    trend: 'up',
-    stats: { comments: 1520 },
-    change: 8.2,
-  },
-  {
-    id: '5',
-    name: 'Layla Ahmed',
-    avatar: 'https://i.pravatar.cc/150?img=5',
-    score: 1340,
-    rank: 2,
-    badge: 'silver',
-    trend: 'stable',
-    stats: { comments: 1340 },
-    change: 0,
-  },
-  {
-    id: '6',
-    name: 'Karim Mahmoud',
-    avatar: 'https://i.pravatar.cc/150?img=6',
-    score: 1180,
-    rank: 3,
-    badge: 'bronze',
-    trend: 'up',
-    stats: { comments: 1180 },
-    change: 3.5,
-  },
-];
+const topCommenters: RankedUser[] = [];
 
-const topSharers: RankedUser[] = [
-  {
-    id: '7',
-    name: 'Mariam Saleh',
-    avatar: 'https://i.pravatar.cc/150?img=7',
-    score: 890,
-    rank: 1,
-    badge: 'gold',
-    trend: 'up',
-    stats: { shares: 890 },
-    change: 15.3,
-  },
-  {
-    id: '8',
-    name: 'Khaled Omar',
-    avatar: 'https://i.pravatar.cc/150?img=8',
-    score: 765,
-    rank: 2,
-    badge: 'silver',
-    trend: 'down',
-    stats: { shares: 765 },
-    change: -2.1,
-  },
-  {
-    id: '9',
-    name: 'Nour Hassan',
-    avatar: 'https://i.pravatar.cc/150?img=9',
-    score: 620,
-    rank: 3,
-    badge: 'bronze',
-    trend: 'stable',
-    stats: { shares: 620 },
-    change: 0,
-  },
-];
+const topSharers: RankedUser[] = [];
 
-const topQuizMasters: RankedUser[] = [
-  {
-    id: '10',
-    name: 'Hassan Ali',
-    avatar: 'https://i.pravatar.cc/150?img=10',
-    score: 9500,
-    rank: 1,
-    badge: 'gold',
-    trend: 'up',
-    stats: { quizScore: 9500 },
-    change: 5.7,
-  },
-  {
-    id: '11',
-    name: 'Fatima Nour',
-    avatar: 'https://i.pravatar.cc/150?img=11',
-    score: 8900,
-    rank: 2,
-    badge: 'silver',
-    trend: 'up',
-    stats: { quizScore: 8900 },
-    change: 4.2,
-  },
-  {
-    id: '12',
-    name: 'Ali Mohamed',
-    avatar: 'https://i.pravatar.cc/150?img=12',
-    score: 8100,
-    rank: 3,
-    badge: 'bronze',
-    trend: 'down',
-    stats: { quizScore: 8100 },
-    change: -1.8,
-  },
-];
+const topQuizMasters: RankedUser[] = [];
 
-const players: Player[] = [
-  {
-    id: '1',
-    name: 'Mohamed Salah',
-    team: 'Liverpool',
-    position: 'RW',
-    number: 11,
-    avatar: 'https://i.pravatar.cc/150?img=11',
-    rating: 9.2,
-    stats: {
-      goals: 18,
-      assists: 8,
-      yellowCards: 2,
-      redCards: 0,
-      matches: 25,
-    },
-    performance: {
-      attack: 95,
-      defense: 45,
-      speed: 92,
-      technique: 88,
-      physical: 75,
-    },
-    votes: {
-      up: 15234,
-      down: 892,
-      userVote: null,
-    },
-  },
-  {
-    id: '2',
-    name: 'Kevin De Bruyne',
-    team: 'Manchester City',
-    position: 'CAM',
-    number: 17,
-    avatar: 'https://i.pravatar.cc/150?img=12',
-    rating: 9.0,
-    stats: {
-      goals: 8,
-      assists: 14,
-      yellowCards: 3,
-      redCards: 0,
-      matches: 22,
-    },
-    performance: {
-      attack: 88,
-      defense: 55,
-      speed: 78,
-      technique: 94,
-      physical: 72,
-    },
-    votes: {
-      up: 12567,
-      down: 1024,
-      userVote: 'up',
-    },
-  },
-];
+const players: Player[] = [];
+
 
 // Top Player Card Component - For Top 11 Players from API
-const TopPlayerCard = memo(({ 
-  player, 
-  votes, 
-  onVote, 
+const TopPlayerCard = memo(({
+  player,
+  votes,
+  onVote,
   rank,
-  t 
+  t
 }: TopPlayerCardProps) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -519,10 +327,10 @@ const TopPlayerCard = memo(({
   const approvalRate = totalVotes > 0 ? Math.round((votes.up / totalVotes) * 100) : 0;
 
   const isTopThree = rank <= 3;
-  const badgeColors: [string, string] = rank === 1 ? ['#FFD700', '#FFA500'] : 
-                      rank === 2 ? ['#C0C0C0', '#A8A8A8'] : 
-                      rank === 3 ? ['#CD7F32', '#B8860B'] : 
-                      ['#22c55e', '#16a34a'];
+  const badgeColors: [string, string] = rank === 1 ? ['#FFD700', '#FFA500'] :
+    rank === 2 ? ['#C0C0C0', '#A8A8A8'] :
+      rank === 3 ? ['#CD7F32', '#B8860B'] :
+        ['#22c55e', '#16a34a'];
 
   return (
     <Animated.View
@@ -542,8 +350,8 @@ const TopPlayerCard = memo(({
           colors={
             isTopThree
               ? rank === 1 ? ['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)']
-              : rank === 2 ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)']
-              : ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)']
+                : rank === 2 ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)']
+                  : ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)']
               : ['#1e293b', '#0f172a']
           }
           start={{ x: 0, y: 0 }}
@@ -553,17 +361,17 @@ const TopPlayerCard = memo(({
           {/* Rank Badge */}
           <View style={[styles.topPlayerRank, isTopThree && styles.topPlayerRankTop]}>
             {rank === 1 ? <Crown color="#FFD700" size={22} /> :
-             rank === 2 ? <Medal color="#C0C0C0" size={22} /> :
-             rank === 3 ? <Award color="#CD7F32" size={22} /> :
-             <Text style={styles.topPlayerRankText}>#{rank}</Text>}
+              rank === 2 ? <Medal color="#C0C0C0" size={22} /> :
+                rank === 3 ? <Award color="#CD7F32" size={22} /> :
+                  <Text style={styles.topPlayerRankText}>#{rank}</Text>}
           </View>
 
           {/* Player Avatar */}
           <View style={styles.topPlayerAvatarWrapper}>
             <LinearGradient colors={badgeColors} style={styles.topPlayerAvatarBorder}>
-              <Image 
-                source={{ uri: player.avatar || DEFAULT_AVATAR }} 
-                style={styles.topPlayerAvatar} 
+              <Image
+                source={{ uri: player.avatar || DEFAULT_AVATAR }}
+                style={styles.topPlayerAvatar}
               />
             </LinearGradient>
             {player.isVerified && (
@@ -615,8 +423,8 @@ const TopPlayerCard = memo(({
                 ]}
                 onPress={() => handleVote('up')}
               >
-                <ThumbsUp 
-                  color={votes.userVote === 'up' ? '#fff' : '#666'} 
+                <ThumbsUp
+                  color={votes.userVote === 'up' ? '#fff' : '#666'}
                   size={14}
                   fill={votes.userVote === 'up' ? '#fff' : 'transparent'}
                 />
@@ -632,8 +440,8 @@ const TopPlayerCard = memo(({
                 ]}
                 onPress={() => handleVote('down')}
               >
-                <ThumbsDown 
-                  color={votes.userVote === 'down' ? '#fff' : '#666'} 
+                <ThumbsDown
+                  color={votes.userVote === 'down' ? '#fff' : '#666'}
                   size={14}
                   fill={votes.userVote === 'down' ? '#fff' : 'transparent'}
                 />
@@ -766,11 +574,11 @@ const PlayerRatingCard = memo(({ player, onVote, t }: PlayerRatingCardProps) => 
                 <View style={styles.performanceBarBg}>
                   <LinearGradient
                     colors={
-                      value > 80 
-                        ? ['#22c55e', '#16a34a'] 
-                        : value > 60 
-                        ? ['#eab308', '#ca8a04'] 
-                        : ['#ef4444', '#dc2626']
+                      value > 80
+                        ? ['#22c55e', '#16a34a']
+                        : value > 60
+                          ? ['#eab308', '#ca8a04']
+                          : ['#ef4444', '#dc2626']
                     }
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
@@ -800,14 +608,14 @@ const PlayerRatingCard = memo(({ player, onVote, t }: PlayerRatingCardProps) => 
             >
               <LinearGradient
                 colors={
-                  player.votes.userVote === 'up' 
-                    ? ['#22c55e', '#16a34a'] 
+                  player.votes.userVote === 'up'
+                    ? ['#22c55e', '#16a34a']
                     : ['#1e293b', '#0f172a']
                 }
                 style={styles.voteButtonGradient}
               >
-                <ThumbsUp 
-                  color={player.votes.userVote === 'up' ? '#fff' : '#666'} 
+                <ThumbsUp
+                  color={player.votes.userVote === 'up' ? '#fff' : '#666'}
                   size={18}
                   fill={player.votes.userVote === 'up' ? '#fff' : 'transparent'}
                 />
@@ -828,14 +636,14 @@ const PlayerRatingCard = memo(({ player, onVote, t }: PlayerRatingCardProps) => 
             >
               <LinearGradient
                 colors={
-                  player.votes.userVote === 'down' 
-                    ? ['#ef4444', '#dc2626'] 
+                  player.votes.userVote === 'down'
+                    ? ['#ef4444', '#dc2626']
                     : ['#1e293b', '#0f172a']
                 }
                 style={styles.voteButtonGradient}
               >
-                <ThumbsDown 
-                  color={player.votes.userVote === 'down' ? '#fff' : '#666'} 
+                <ThumbsDown
+                  color={player.votes.userVote === 'down' ? '#fff' : '#666'}
                   size={18}
                   fill={player.votes.userVote === 'down' ? '#fff' : 'transparent'}
                 />
@@ -889,7 +697,7 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
       }),
     ]).start();
     hapticFeedback();
-    
+
     // ✅ Navigate to user profile by username
     if (item.username) {
       router.push({
@@ -932,8 +740,8 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
               ? item.rank === 1
                 ? ['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)']
                 : item.rank === 2
-                ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)']
-                : ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)']
+                  ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)']
+                  : ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)']
               : ['rgba(34, 197, 94, 0.08)', 'rgba(34, 197, 94, 0.02)']
           }
           start={{ x: 0, y: 0 }}
@@ -957,8 +765,8 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
                     ? item.rank === 1
                       ? ['#FFD700', '#FFA500']
                       : item.rank === 2
-                      ? ['#C0C0C0', '#A8A8A8']
-                      : ['#CD7F32', '#B8860B']
+                        ? ['#C0C0C0', '#A8A8A8']
+                        : ['#CD7F32', '#B8860B']
                     : ['#22c55e', '#16a34a']
                 }
                 style={styles.userAvatarBorder}
@@ -984,8 +792,8 @@ const UserCard = memo(({ item, index, getRankIcon, getTrendIcon, formatNumber, h
                     styles.changeIndicator,
                     item.change > 0 ? styles.changePositive : styles.changeNegative
                   ]}>
-                    <TrendingUp 
-                      color={item.change > 0 ? '#22c55e' : '#ef4444'} 
+                    <TrendingUp
+                      color={item.change > 0 ? '#22c55e' : '#ef4444'}
                       size={10}
                       style={item.change < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
                     />
@@ -1128,14 +936,14 @@ const MatchCard = memo(({ item, index, openPrediction, formatNumber, hapticFeedb
 MatchCard.displayName = 'MatchCard';
 
 // Error Display Component
-const ErrorDisplay = memo(({ 
-  error, 
-  onRetry, 
-  title 
-}: { 
-  error: string; 
-  onRetry: () => void; 
-  title: string 
+const ErrorDisplay = memo(({
+  error,
+  onRetry,
+  title
+}: {
+  error: string;
+  onRetry: () => void;
+  title: string
 }) => (
   <View style={styles.errorContainer}>
     <AlertCircle color="#ef4444" size={48} />
@@ -1157,7 +965,7 @@ const formatNumber = (num: number): string => {
 };
 
 const getBadgeStyle = (badge?: string) => {
-  switch(badge) {
+  switch (badge) {
     case 'gold':
       return styles.badgeGold;
     case 'silver':
@@ -1172,7 +980,7 @@ const getBadgeStyle = (badge?: string) => {
 export default function ProRankScreen() {
   const { t, isRTL } = useTranslation();
   const { getToken } = useAuth();
-  
+
   // Safety check for translations
   if (!t || !t.rank) {
     return (
@@ -1181,7 +989,7 @@ export default function ProRankScreen() {
       </View>
     );
   }
-  
+
   const [selectedCategory, setSelectedCategory] = useState<'views' | 'comments' | 'shares' | 'predictions'>('views');
   const [selectedTab, setSelectedTab] = useState<'rankings' | 'players'>('rankings');
   const [refreshing, setRefreshing] = useState(false);
@@ -1195,7 +1003,7 @@ export default function ProRankScreen() {
   const [playerVotes, setPlayerVotes] = useState<Record<string, { up: number; down: number; userVote: string | null }>>({});
   const [playerPeriod, setPlayerPeriod] = useState<PlayerPeriod>('weekly');
   const [showAllRankings, setShowAllRankings] = useState(false);
-  
+
   // Real data from API
   const [rankingsData, setRankingsData] = useState<AllRankingsResponse>({
     topViews: [],
@@ -1210,16 +1018,16 @@ export default function ProRankScreen() {
   const [rankingsError, setRankingsError] = useState<string | null>(null);
   const [playersError, setPlayersError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  
+
   // Network states
   const [isOffline, setIsOffline] = useState(false);
   const [isUsingCache, setIsUsingCache] = useState(false);
-  
+
   // Filter & Search states
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
-  
+
   // ✅ Removed unused pagination states - API doesn't support pagination yet
   // We can re-add later when backend supports it
 
@@ -1240,21 +1048,21 @@ export default function ProRankScreen() {
   const fetchRankings = useCallback(async (retryAttempt = 0) => {
     const MAX_RETRIES = 3;
     const RETRY_DELAYS = [1000, 2000, 4000];
-    
+
     try {
       setIsLoadingRankings(true);
       setRankingsError(null);
-      
+
       // Check network status
       const networkState = await Network.getNetworkStateAsync();
       if (!networkState.isConnected || !networkState.isInternetReachable) {
         setIsOffline(true);
-        
+
         // ✅ Try to get cached data when offline
         try {
           const cached = await cacheService.get<AllRankingsResponse>(RANKINGS_CACHE_KEYS.ALL_RANKINGS);
-          if (cached && (cached.topViews.length > 0 || cached.topShares.length > 0 || 
-                        cached.topPredictions.length > 0 || cached.topCommenters.length > 0)) {
+          if (cached && (cached.topViews.length > 0 || cached.topShares.length > 0 ||
+            cached.topPredictions.length > 0 || cached.topCommenters.length > 0)) {
             setRankingsData(cached);
             setIsUsingCache(true);
             setRankingsError(null); // Clear error if we have cache
@@ -1265,22 +1073,22 @@ export default function ProRankScreen() {
         } catch (cacheError) {
           logger.warn('Error loading cached data:', cacheError);
         }
-        
+
         setRankingsError('لا يوجد اتصال بالإنترنت');
         setIsLoadingRankings(false);
         return;
       }
-      
+
       setIsOffline(false);
       setIsUsingCache(false);
-      
+
       const token = await getTokenRef.current();
       const data = await rankingsService.getAllRankings(token, 10);
       setRankingsData(data);
       setRetryCount(0);
     } catch (error) {
       logger.error('Error fetching rankings:', error);
-      
+
       // ✅ Try to load from cache on error
       try {
         const cached = await cacheService.get<AllRankingsResponse>(RANKINGS_CACHE_KEYS.ALL_RANKINGS);
@@ -1295,7 +1103,7 @@ export default function ProRankScreen() {
       } catch (cacheError) {
         logger.warn('Error loading cached data on error:', cacheError);
       }
-      
+
       if (retryAttempt < MAX_RETRIES) {
         setTimeout(() => {
           fetchRankings(retryAttempt + 1);
@@ -1315,11 +1123,11 @@ export default function ProRankScreen() {
   const fetchTopPlayers = useCallback(async (period: PlayerPeriod = playerPeriod, retryAttempt = 0) => {
     const MAX_RETRIES = 3;
     const RETRY_DELAYS = [1000, 2000, 4000];
-    
+
     try {
       setIsLoadingPlayers(true);
       setPlayersError(null);
-      
+
       // Check network status
       const networkState = await Network.getNetworkStateAsync();
       if (!networkState.isConnected || !networkState.isInternetReachable) {
@@ -1328,15 +1136,15 @@ export default function ProRankScreen() {
         setIsLoadingPlayers(false);
         return;
       }
-      
+
       setIsOffline(false);
-      
+
       const token = await getTokenRef.current();
       const { players } = await rankingsService.getTopPlayers(token, 11, period);
       setPlayersData(players);
-      
+
       // ✅ Fetch votes for each player - PARALLEL for better performance
-      const votesPromises = players.map(player => 
+      const votesPromises = players.map(player =>
         rankingsService.getPlayerVotes(token, player.id).then(votesData => ({
           playerId: player.id,
           votes: votesData ? {
@@ -1346,7 +1154,7 @@ export default function ProRankScreen() {
           } : null
         })).catch(() => ({ playerId: player.id, votes: null }))
       );
-      
+
       const votesResults = await Promise.all(votesPromises);
       const votesMap: Record<string, { up: number; down: number; userVote: string | null }> = {};
       votesResults.forEach(({ playerId, votes }) => {
@@ -1357,7 +1165,7 @@ export default function ProRankScreen() {
       setPlayerVotes(votesMap);
     } catch (error) {
       logger.error('Error fetching top players:', error);
-      
+
       if (retryAttempt < MAX_RETRIES) {
         setTimeout(() => {
           fetchTopPlayers(period, retryAttempt + 1);
@@ -1468,14 +1276,14 @@ export default function ProRankScreen() {
 
   const handlePlayerVote = useCallback(async (playerId: string, type: 'up' | 'down') => {
     hapticFeedback();
-    
+
     // Get current state for rollback
     const currentVotes = playerVotes[playerId] || { up: 0, down: 0, userVote: null };
     const wasVoted = currentVotes.userVote === type;
     const prevUp = currentVotes.up;
     const prevDown = currentVotes.down;
     const prevUserVote = currentVotes.userVote;
-    
+
     // Optimistic update
     setPlayerVotes(prev => ({
       ...prev,
@@ -1485,11 +1293,11 @@ export default function ProRankScreen() {
         userVote: wasVoted ? null : type,
       }
     }));
-    
+
     try {
       const token = await getTokenRef.current();
       const result = await rankingsService.voteForPlayer(token, playerId, type);
-      
+
       if (result) {
         // Update with server response
         setPlayerVotes(prev => ({
@@ -1528,25 +1336,25 @@ export default function ProRankScreen() {
     // Validation
     const home = parseInt(homeScore);
     const away = parseInt(awayScore);
-    
+
     if (isNaN(home) || isNaN(away)) {
       Alert.alert('خطأ', 'يرجى إدخال أرقام صحيحة');
       return;
     }
-    
+
     if (home < 0 || away < 0 || home > 20 || away > 20) {
       Alert.alert('خطأ', 'النتيجة يجب أن تكون بين 0 و 20');
       return;
     }
-    
+
     if (!selectedMatch) {
       Alert.alert('خطأ', 'لم يتم اختيار مباراة');
       return;
     }
-    
+
     setLoading(true);
     hapticFeedback();
-    
+
     try {
       const token = await getTokenRef.current();
       const result = await rankingsService.submitPrediction(
@@ -1555,7 +1363,7 @@ export default function ProRankScreen() {
         home,
         away
       );
-      
+
       if (result.success) {
         Alert.alert(
           'نجح!',
@@ -1638,7 +1446,7 @@ export default function ProRankScreen() {
 
     // Use real data from API - return empty if no data
     let data: RankedUser[] = [];
-    switch(selectedCategory) {
+    switch (selectedCategory) {
       case 'views':
         data = rankingsData.topViews.map(transformReelToUser);
         break;
@@ -1722,9 +1530,9 @@ export default function ProRankScreen() {
                     style={styles.tabActiveGradient}
                   />
                 )}
-                <BarChart3 
-                  color={selectedTab === 'rankings' ? '#fff' : '#666'} 
-                  size={20} 
+                <BarChart3
+                  color={selectedTab === 'rankings' ? '#fff' : '#666'}
+                  size={20}
                   strokeWidth={2.5}
                 />
                 <Text style={[styles.tabText, selectedTab === 'rankings' && styles.tabTextActive]}>
@@ -1743,8 +1551,8 @@ export default function ProRankScreen() {
                     style={styles.tabActiveGradient}
                   />
                 )}
-                <UserCheck 
-                  color={selectedTab === 'players' ? '#fff' : '#666'} 
+                <UserCheck
+                  color={selectedTab === 'players' ? '#fff' : '#666'}
                   size={20}
                   strokeWidth={2.5}
                 />
@@ -1816,14 +1624,14 @@ export default function ProRankScreen() {
                       styles.categoryIconWrapper,
                       selectedCategory === category.key && { backgroundColor: 'rgba(255,255,255,0.2)' }
                     ]}>
-                      <category.icon 
-                        color={selectedCategory === category.key ? '#fff' : category.color} 
+                      <category.icon
+                        color={selectedCategory === category.key ? '#fff' : category.color}
                         size={18}
                         strokeWidth={2.5}
                       />
                     </View>
                     <Text style={[
-                      styles.categoryText, 
+                      styles.categoryText,
                       selectedCategory === category.key && styles.categoryTextActive
                     ]}>
                       {category.label}
@@ -1862,7 +1670,7 @@ export default function ProRankScreen() {
                   )}
                 </View>
                 <View style={styles.sectionHeaderActions}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => {
                       setShowFilterModal(true);
                       hapticFeedback();
@@ -1871,7 +1679,7 @@ export default function ProRankScreen() {
                   >
                     <Filter color="#22c55e" size={20} />
                   </TouchableOpacity>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => {
                       setShowSearchModal(true);
                       hapticFeedback();
@@ -1897,9 +1705,9 @@ export default function ProRankScreen() {
                   <Text style={styles.emptyText}>لا يوجد مصنفون حالياً</Text>
                   <Text style={styles.emptySubtext}>
                     {selectedCategory === 'views' ? 'ارفع فيديو وابدأ المنافسة!' :
-                     selectedCategory === 'shares' ? 'شارك فيديوهاتك لتظهر هنا!' :
-                     selectedCategory === 'comments' ? 'علق على الفيديوهات لتظهر هنا!' :
-                     'توقع نتائج المباريات لتظهر هنا!'}
+                      selectedCategory === 'shares' ? 'شارك فيديوهاتك لتظهر هنا!' :
+                        selectedCategory === 'comments' ? 'علق على الفيديوهات لتظهر هنا!' :
+                          'توقع نتائج المباريات لتظهر هنا!'}
                   </Text>
                 </View>
               ) : (
@@ -1919,8 +1727,8 @@ export default function ProRankScreen() {
                 </>
               )}
 
-              <TouchableOpacity 
-                style={styles.viewMoreButton} 
+              <TouchableOpacity
+                style={styles.viewMoreButton}
                 onPress={() => {
                   setShowAllRankings(true);
                   hapticFeedback();
@@ -2037,12 +1845,12 @@ export default function ProRankScreen() {
             </TouchableOpacity>
 
             <Text style={styles.modalTitle}>Predict Match Score</Text>
-            
+
             {selectedMatch && (
               <View style={styles.predictionForm}>
                 <View style={styles.predictionTeam}>
-                  <Image 
-                    source={{ uri: selectedMatch.homeTeam.logo }} 
+                  <Image
+                    source={{ uri: selectedMatch.homeTeam.logo }}
                     style={styles.modalTeamLogo}
                     resizeMode="contain"
                   />
@@ -2064,8 +1872,8 @@ export default function ProRankScreen() {
                 <Text style={styles.vsText}>VS</Text>
 
                 <View style={styles.predictionTeam}>
-                  <Image 
-                    source={{ uri: selectedMatch.awayTeam.logo }} 
+                  <Image
+                    source={{ uri: selectedMatch.awayTeam.logo }}
                     style={styles.modalTeamLogo}
                     resizeMode="contain"
                   />
@@ -2138,7 +1946,7 @@ export default function ProRankScreen() {
                 <X color="#fff" size={24} />
               </TouchableOpacity>
             </View>
-            
+
             {searchQuery.trim() && (
               <View style={styles.searchResultsInfo}>
                 <Text style={styles.searchResultsText}>
@@ -2168,7 +1976,7 @@ export default function ProRankScreen() {
                 <X color="#fff" size={24} />
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.filterOptions}>
               {/* Period Filter */}
               <View style={styles.filterSection}>
@@ -2281,9 +2089,9 @@ export default function ProRankScreen() {
               </TouchableOpacity>
               <Text style={styles.allRankingsTitle}>
                 {selectedCategory === 'views' ? t.rank.topViewers :
-                 selectedCategory === 'shares' ? t.rank.topShares :
-                 selectedCategory === 'comments' ? t.rank.topComments :
-                 'أفضل المتوقعين'}
+                  selectedCategory === 'shares' ? t.rank.topShares :
+                    selectedCategory === 'comments' ? t.rank.topComments :
+                      'أفضل المتوقعين'}
               </Text>
               <View style={styles.allRankingsPeriod}>
                 <Clock color="#22c55e" size={14} />
@@ -2292,7 +2100,7 @@ export default function ProRankScreen() {
             </View>
           </LinearGradient>
 
-          <ScrollView 
+          <ScrollView
             style={styles.allRankingsList}
             showsVerticalScrollIndicator={false}
           >
@@ -2301,9 +2109,9 @@ export default function ProRankScreen() {
                 <LinearGradient
                   colors={
                     index === 0 ? ['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)'] :
-                    index === 1 ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)'] :
-                    index === 2 ? ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)'] :
-                    ['rgba(34, 197, 94, 0.08)', 'rgba(34, 197, 94, 0.02)']
+                      index === 1 ? ['rgba(192, 192, 192, 0.15)', 'rgba(192, 192, 192, 0.05)'] :
+                        index === 2 ? ['rgba(205, 127, 50, 0.15)', 'rgba(205, 127, 50, 0.05)'] :
+                          ['rgba(34, 197, 94, 0.08)', 'rgba(34, 197, 94, 0.02)']
                   }
                   style={styles.allRankingsItemGradient}
                 >
@@ -2313,9 +2121,9 @@ export default function ProRankScreen() {
                     index < 3 && styles.allRankingsRankTop
                   ]}>
                     {index === 0 ? <Crown color="#FFD700" size={22} /> :
-                     index === 1 ? <Medal color="#C0C0C0" size={22} /> :
-                     index === 2 ? <Award color="#CD7F32" size={22} /> :
-                     <Text style={styles.allRankingsRankText}>#{index + 1}</Text>}
+                      index === 1 ? <Medal color="#C0C0C0" size={22} /> :
+                        index === 2 ? <Award color="#CD7F32" size={22} /> :
+                          <Text style={styles.allRankingsRankText}>#{index + 1}</Text>}
                   </View>
 
                   {/* Avatar */}
@@ -2323,15 +2131,15 @@ export default function ProRankScreen() {
                     <LinearGradient
                       colors={
                         index === 0 ? ['#FFD700', '#FFA500'] :
-                        index === 1 ? ['#C0C0C0', '#A8A8A8'] :
-                        index === 2 ? ['#CD7F32', '#B8860B'] :
-                        ['#22c55e', '#16a34a']
+                          index === 1 ? ['#C0C0C0', '#A8A8A8'] :
+                            index === 2 ? ['#CD7F32', '#B8860B'] :
+                              ['#22c55e', '#16a34a']
                       }
                       style={styles.allRankingsAvatarBorder}
                     >
-                      <Image 
-                        source={{ uri: item.avatar }} 
-                        style={styles.allRankingsAvatar} 
+                      <Image
+                        source={{ uri: item.avatar }}
+                        style={styles.allRankingsAvatar}
                       />
                     </LinearGradient>
                   </View>

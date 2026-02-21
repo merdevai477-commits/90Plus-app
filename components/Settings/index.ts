@@ -1,23 +1,22 @@
 // Advanced Settings Components
-export { 
-  AdvancedSecuritySettings, 
-  BackupRestoreSettings, 
-  PerformanceSettings, 
-  AdvancedSearchSettings 
+export {
+  AdvancedSecuritySettings,
+  BackupRestoreSettings,
+  PerformanceSettings,
+  AdvancedSearchSettings
 } from './AdvancedSettingsComponents';
 
 // Basic Settings Components
-export { 
-  NotificationSettingsComponent, 
-  ThemeSettingsComponent, 
-  LanguageSettingsComponent 
+export {
+  NotificationSettingsComponent,
+  ThemeSettingsComponent,
+  LanguageSettingsComponent
 } from './SettingsComponents';
 
 // Visual Enhancement Components
-export { 
-  PremiumFeaturesComponent, 
-  SmartNotificationsComponent, 
-  PerformanceMonitorComponent 
+export {
+  SmartNotificationsComponent,
+  PerformanceMonitorComponent
 } from './VisualEnhancements';
 
 // Re-export all components for easy importing

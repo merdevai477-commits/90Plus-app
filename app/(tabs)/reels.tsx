@@ -438,9 +438,9 @@ const ReportModal: React.FC<{
                     accessible={true}
                     accessibilityRole="radio"
                     accessibilityLabel={reason}
-                    accessibilityState={{ 
+                    accessibilityState={{
                       selected: selectedReason === reason,
-                      disabled: isSubmitting 
+                      disabled: isSubmitting
                     }}
                     accessibilityHint="اضغط للاختيار"
                   >
@@ -500,8 +500,8 @@ const ReportModal: React.FC<{
                   accessibilityRole="button"
                   accessibilityLabel="إرسال البلاغ"
                   accessibilityHint="اضغط لإرسال البلاغ عن هذا المحتوى"
-                  accessibilityState={{ 
-                    disabled: !selectedReason || isSubmitting || (selectedReason === 'أخرى' && !customReason) 
+                  accessibilityState={{
+                    disabled: !selectedReason || isSubmitting || (selectedReason === 'أخرى' && !customReason)
                   }}
                 >
                   {isSubmitting ? (
@@ -528,7 +528,7 @@ const ReelsFeed: React.FC = () => {
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
+
   // Network & Error States (Requirements: Critical Priority #1, #2, #3)
   const [networkError, setNetworkError] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -563,11 +563,11 @@ const ReelsFeed: React.FC = () => {
   const handlePauseAll = useCallback(() => {
     logger.debug('[ReelsFeed] All videos paused');
   }, []);
-  
+
   const handleResumeActive = useCallback((index: number) => {
     logger.debug(`[ReelsFeed] Resumed video at index ${index}`);
   }, []);
-  
+
   // Use Reels Audio Manager for navigation and app state audio cleanup
   // Requirements 16.1, 16.2, 16.3: Stop audio on navigation, pause on background, resume on return
   const { pauseAllVideos, markVideoLoaded, markVideoUnloaded } = useReelsAudioManager({
@@ -576,7 +576,7 @@ const ReelsFeed: React.FC = () => {
     onPauseAll: handlePauseAll,
     onResumeActive: handleResumeActive,
   });
-  
+
   // Import useReelsCache for cache-first loading (Requirements 3.1, 3.5, 3.6)
   // Note: The hook is available but we're keeping the existing implementation
   // to maintain backward compatibility. The hook can be fully integrated in a future refactor.
@@ -585,28 +585,28 @@ const ReelsFeed: React.FC = () => {
   // Requirement: Critical Priority #4 - Fix handling of reels without videoUrl
   const transformBackendReel = useCallback((reel: ReelFeedItem): ReelData | null => {
     const followState = useFollowStore.getState();
-    
+
     // Strong validation: Reject reels without valid videoUrl
     if (!reel.videoUrl || reel.videoUrl.trim() === '') {
-      logger.warn('[ReelsFeed] Skipping reel with missing videoUrl', { 
+      logger.warn('[ReelsFeed] Skipping reel with missing videoUrl', {
         reelId: reel.id,
         userId: reel.user?.id,
         caption: reel.caption?.substring(0, 50)
       });
       return null; // Return null for invalid reels
     }
-    
+
     // Validate video URL format (basic check)
     try {
       new URL(reel.videoUrl);
     } catch (e) {
-      logger.warn('[ReelsFeed] Skipping reel with invalid videoUrl format', { 
+      logger.warn('[ReelsFeed] Skipping reel with invalid videoUrl format', {
         reelId: reel.id,
         videoUrl: reel.videoUrl.substring(0, 50)
       });
       return null;
     }
-    
+
     return {
       id: reel.id,
       user: {
@@ -617,39 +617,39 @@ const ReelsFeed: React.FC = () => {
         verified: reel.user.isVerified,
         followers: 0,
         isFollowing: followState.isFollowing(reel.user.id)
-    },
-    videoUrl: reel.videoUrl, // Now guaranteed to be valid
-    thumbnail: reel.thumbnail || reel.videoUrl || '',
-    duration: 0,
-    likes: reel.likesCount,
-    views: reel.views,
-    comments: reel.commentsCount,
-    shares: reel.sharesCount || 0,
-    liked: reel.isLiked || likedReelIds.includes(reel.id),
-    saved: reel.isSaved || false,
-    muted: false, // Audio ON by default (Instagram/TikTok style)
-    description: reel.caption || '',
-    hashtags: reel.hashtags || [],
-    mentions: reel.mentions || [],
-    createdAt: new Date(reel.createdAt)
-  };
-}, [likedReelIds]);
+      },
+      videoUrl: reel.videoUrl, // Now guaranteed to be valid
+      thumbnail: reel.thumbnail || reel.videoUrl || '',
+      duration: 0,
+      likes: reel.likesCount,
+      views: reel.views,
+      comments: reel.commentsCount,
+      shares: reel.sharesCount || 0,
+      liked: reel.isLiked || likedReelIds.includes(reel.id),
+      saved: reel.isSaved || false,
+      muted: false, // Audio ON by default (Instagram/TikTok style)
+      description: reel.caption || '',
+      hashtags: reel.hashtags || [],
+      mentions: reel.mentions || [],
+      createdAt: new Date(reel.createdAt)
+    };
+  }, [likedReelIds]);
 
   // Load reels from backend with cache-first pattern and retry mechanism
   // Requirements: 3.1, 3.4, 3.5 (cache), Critical Priority #1 (retry), #2 (network check)
   const loadReelsFromBackend = useCallback(async (
-    cursor?: string, 
+    cursor?: string,
     skipCache = false,
     attemptNumber = 0
   ) => {
     const MAX_RETRIES = 3;
     const RETRY_DELAYS = [500, 1000, 2000]; // Reduced delays for faster retry
-    
+
     try {
       // Use Promise.all for parallel loading of network state and cache
       const [networkState, cachedData] = await Promise.all([
         Network.getNetworkStateAsync(),
-        !cursor && !skipCache && !selectedHashtag 
+        !cursor && !skipCache && !selectedHashtag
           ? cacheService.get<ReelsCacheData>(CACHE_KEYS.REELS_FEED)
           : Promise.resolve(null)
       ]);
@@ -659,7 +659,7 @@ const ReelsFeed: React.FC = () => {
         setIsOffline(true);
         setNetworkError(true);
         setLoadError('لا يوجد اتصال بالإنترنت');
-        
+
         // Display cached data immediately if available (offline mode)
         if (cachedData?.reels && cachedData.reels.length > 0) {
           logger.debug('[ReelsFeed] Using cached reels (offline)');
@@ -676,12 +676,12 @@ const ReelsFeed: React.FC = () => {
         }
         return;
       }
-      
+
       // Clear offline/error states if connection is good
       setIsOffline(false);
       setNetworkError(false);
       setLoadError(null);
-      
+
       const token = await getToken();
       if (!token) {
         setLoadError('فشل التحقق من الهوية');
@@ -714,22 +714,22 @@ const ReelsFeed: React.FC = () => {
 
       if (result) {
         // Transform reels in parallel
-        const transformPromises = result.reels.map(reel => 
+        const transformPromises = result.reels.map(reel =>
           Promise.resolve(transformBackendReel(reel))
         );
         const transformed = (await Promise.all(transformPromises))
           .filter((reel): reel is ReelData => reel !== null);
-        
+
         // Log filtered reels
         const filteredCount = result.reels.length - transformed.length;
         if (filteredCount > 0) {
-          logger.warn('[ReelsFeed] Filtered invalid reels', { 
+          logger.warn('[ReelsFeed] Filtered invalid reels', {
             total: result.reels.length,
             filtered: filteredCount,
             valid: transformed.length
           });
         }
-        
+
         // Update reels state
         if (cursor) {
           setBackendReels(prev => {
@@ -740,11 +740,11 @@ const ReelsFeed: React.FC = () => {
         } else {
           setBackendReels(transformed);
         }
-        
+
         setNextCursor(result.nextCursor);
         setHasMore(result.hasMore);
         setNoReelsMessage(transformed.length === 0 && !cursor);
-        
+
         // Save to cache asynchronously without waiting
         if (!cursor && !selectedHashtag) {
           const cacheData: ReelsCacheData = {
@@ -764,16 +764,16 @@ const ReelsFeed: React.FC = () => {
       }
     } catch (error) {
       logger.error('[ReelsFeed] Error loading reels:', error);
-      
+
       // Retry mechanism with faster delays (Critical Priority #1)
       if (attemptNumber < MAX_RETRIES) {
         const delay = RETRY_DELAYS[attemptNumber];
         logger.debug(`[ReelsFeed] Retrying in ${delay}ms (${attemptNumber + 1}/${MAX_RETRIES})`);
-        
+
         setTimeout(() => {
           loadReelsFromBackend(cursor, skipCache, attemptNumber + 1);
         }, delay);
-        
+
         setLoadError(`جاري إعادة المحاولة (${attemptNumber + 1}/${MAX_RETRIES})...`);
       } else {
         // Max retries reached
@@ -796,7 +796,7 @@ const ReelsFeed: React.FC = () => {
   const lastFocusRefreshRef = useRef<number>(0);
   const FOCUS_REFRESH_THROTTLE = 10000; // 10 seconds instead of 30
   const isRefreshingRef = useRef(false);
-  
+
   // Reload when screen comes into focus (e.g., after uploading a reel)
   useFocusEffect(
     useCallback(() => {
@@ -804,19 +804,19 @@ const ReelsFeed: React.FC = () => {
       if (isRefreshingRef.current) {
         return;
       }
-      
+
       // ✅ Throttle: Don't refresh if we just did recently
       const now = Date.now();
       if (now - lastFocusRefreshRef.current < FOCUS_REFRESH_THROTTLE) {
         return;
       }
-      
+
       // Only reload if we've already loaded once (to avoid double loading on initial mount)
       if (hasLoadedRef.current && backendReels.length > 0) {
         // ✅ Don't clear existing reels - just refresh in background
         lastFocusRefreshRef.current = now;
         isRefreshingRef.current = true;
-        
+
         // Small delay to ensure navigation is complete
         const timer = setTimeout(() => {
           logger.debug('[ReelsFeed] Screen focused, refreshing reels in background...');
@@ -825,7 +825,7 @@ const ReelsFeed: React.FC = () => {
             isRefreshingRef.current = false;
           });
         }, 500);
-        
+
         return () => {
           clearTimeout(timer);
           isRefreshingRef.current = false;
@@ -852,22 +852,22 @@ const ReelsFeed: React.FC = () => {
   const prevBackendReelsIdsRef = useRef<string>('');
   const prevReelCommentsCountRef = useRef<Record<string, number>>({});
   const prevLikedReelIdsRef = useRef<string>('');
-  
+
   // Update reels when data changes - ONLY use backend reels (no mock data)
   useEffect(() => {
     // ✅ Early return if no backend reels
     if (!backendReels || backendReels.length === 0) {
       return;
     }
-    
+
     // ✅ Check if backendReels IDs changed
     const currentBackendIds = backendReels.map(r => r.id).join(',');
     const backendReelsChanged = prevBackendReelsIdsRef.current !== currentBackendIds;
-    
+
     // ✅ Check if liked IDs changed (sorted for consistent comparison)
     const currentLikedIds = [...likedReelIds].sort().join(',');
     const likedChanged = prevLikedReelIdsRef.current !== currentLikedIds;
-    
+
     // ✅ Check if comment counts changed
     let commentsChanged = false;
     for (const reel of backendReels) {
@@ -878,19 +878,19 @@ const ReelsFeed: React.FC = () => {
         break;
       }
     }
-    
+
     // ✅ Only update if something actually changed
     if (!backendReelsChanged && !likedChanged && !commentsChanged) {
       return;
     }
-    
+
     // ✅ Update refs BEFORE setState to prevent loops
     prevBackendReelsIdsRef.current = currentBackendIds;
     prevLikedReelIdsRef.current = currentLikedIds;
     for (const reel of backendReels) {
       prevReelCommentsCountRef.current[reel.id] = reelComments[reel.id]?.length || 0;
     }
-    
+
     // Update backend reels liked status
     const updatedBackendReels = backendReels.map(reel => ({
       ...reel,
@@ -913,7 +913,7 @@ const ReelsFeed: React.FC = () => {
             flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
             setCurrentIndex(reelIndex);
             setSelectedReelId(params.reelId!);
-            
+
             // If commentId exists and autoOpenComments is true, open comments modal
             if (params.commentId && params.autoOpenComments === 'true') {
               setHighlightCommentId(params.commentId);
@@ -925,7 +925,7 @@ const ReelsFeed: React.FC = () => {
             flatListRef.current?.scrollToOffset({ offset: reelIndex * itemHeight, animated: true });
             setCurrentIndex(reelIndex);
             setSelectedReelId(params.reelId!);
-            
+
             if (params.commentId && params.autoOpenComments === 'true') {
               setHighlightCommentId(params.commentId);
               setShowComments(true);
@@ -956,10 +956,10 @@ const ReelsFeed: React.FC = () => {
   const recordReelView = useCallback(async (reelId: string) => {
     // Check if already viewed in memory
     if (viewedReelsRef.current.has(reelId)) return;
-    
+
     // Mark as viewed immediately to prevent duplicate API calls
     viewedReelsRef.current.add(reelId);
-    
+
     // Save to AsyncStorage
     try {
       const viewedArray = Array.from(viewedReelsRef.current);
@@ -967,7 +967,7 @@ const ReelsFeed: React.FC = () => {
     } catch (error) {
       logger.error('Error saving viewed reels:', error);
     }
-    
+
     // Call API to record view
     try {
       const token = await getToken();
@@ -984,7 +984,7 @@ const ReelsFeed: React.FC = () => {
   // Load more reels when reaching end
   const loadMoreReels = useCallback(async () => {
     if (!hasMore || isLoadingMore || !nextCursor) return;
-    
+
     setIsLoadingMore(true);
     await loadReelsFromBackend(nextCursor);
     setIsLoadingMore(false);
@@ -1025,8 +1025,8 @@ const ReelsFeed: React.FC = () => {
 
   // Like processing state to prevent multiple clicks (Critical Priority #5)
   const [likingReels, setLikingReels] = useState<Set<string>>(new Set());
-  const likeTimeoutRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  
+  const likeTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   // Handle Like with Backend sync - Ultra Fast with Rollback + Debounce
   // Requirement: Critical Priority #5 - Add debounce (300ms) to prevent multiple clicks
   const handleLike = useCallback(async (reelId: string) => {
@@ -1034,38 +1034,38 @@ const ReelsFeed: React.FC = () => {
     if (likingReels.has(reelId)) {
       return; // Already processing this reel
     }
-    
+
     haptic.trigger('medium');
-    
+
     // Mark as processing
     setLikingReels(prev => new Set(prev).add(reelId));
-    
+
     // Get current state BEFORE update for rollback
     const currentReel = reels.find(r => r.id === reelId);
     const wasLiked = currentReel?.liked ?? false;
     const prevLikes = currentReel?.likes ?? 0;
-    
+
     // Optimistic UI update - INSTANT (0ms)
     toggleReelLike(reelId);
-    
+
     const updateReelState = (liked: boolean, likes: number) => {
-      setReels(prev => prev.map(reel => 
+      setReels(prev => prev.map(reel =>
         reel.id === reelId ? { ...reel, liked, likes } : reel
       ));
-      setBackendReels(prev => prev.map(reel => 
+      setBackendReels(prev => prev.map(reel =>
         reel.id === reelId ? { ...reel, liked, likes } : reel
       ));
     };
-    
+
     // Apply optimistic update immediately
     updateReelState(!wasLiked, wasLiked ? prevLikes - 1 : prevLikes + 1);
-    
+
     // Clear previous timeout for this reel if any
     const existingTimeout = likeTimeoutRef.current.get(reelId);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
     }
-    
+
     // Set debounce timeout (300ms)
     const timeout = setTimeout(() => {
       likeTimeoutRef.current.delete(reelId);
@@ -1076,7 +1076,7 @@ const ReelsFeed: React.FC = () => {
       });
     }, 300);
     likeTimeoutRef.current.set(reelId, timeout);
-    
+
     // Sync with backend (fire and forget with rollback on error)
     try {
       const token = await getToken();
@@ -1109,11 +1109,11 @@ const ReelsFeed: React.FC = () => {
   // Handle Save - with Backend sync
   const handleSave = useCallback(async (reelId: string) => {
     haptic.trigger('light');
-    
+
     // Get current state for rollback
     const currentReel = reels.find(r => r.id === reelId);
     const wasSaved = currentReel?.saved ?? false;
-    
+
     // Optimistic UI update
     const updateSaveState = (saved: boolean) => {
       setReels(prev => prev.map(reel =>
@@ -1123,12 +1123,12 @@ const ReelsFeed: React.FC = () => {
         reel.id === reelId ? { ...reel, saved } : reel
       ));
     };
-    
+
     updateSaveState(!wasSaved);
-    
+
     // Show toast
     Alert.alert('', wasSaved ? t.reels.unsaved : t.reels.saved, [{ text: t.common.done }]);
-    
+
     // Sync with backend
     try {
       const token = await getToken();
@@ -1195,7 +1195,7 @@ const ReelsFeed: React.FC = () => {
   // Handle Share - with Backend tracking and deep links
   const handleShareReel = useCallback(async (reel: ReelData) => {
     haptic.trigger('light');
-    
+
     try {
       // Generate deep link: 90plus://reel/:reelId
       const deepLink = `90plus://reel/${reel.id}`;
@@ -1245,22 +1245,22 @@ const ReelsFeed: React.FC = () => {
   // ✅ FIX: Use refs to prevent infinite loop by avoiding dependency on object property
   const prevCommentsIdsRef = useRef<string>('');
   const prevCommentsResultRef = useRef<Comment[]>([]);
-  
+
   const commentsForModal = useMemo(() => {
     if (!selectedReelId) {
       prevCommentsIdsRef.current = '';
       prevCommentsResultRef.current = [];
       return [];
     }
-    
+
     const currentComments = reelComments[selectedReelId] || [];
     const currentIds = currentComments.map(c => c.id).join(',');
-    
+
     // ✅ Only return new array reference if IDs actually changed
     if (currentIds === prevCommentsIdsRef.current) {
       return prevCommentsResultRef.current;
     }
-    
+
     // Update refs and return new comments
     prevCommentsIdsRef.current = currentIds;
     prevCommentsResultRef.current = currentComments;
@@ -1277,7 +1277,7 @@ const ReelsFeed: React.FC = () => {
     setNextCursor(null);
     setHasMore(true);
     viewedReelsRef.current.clear();
-    
+
     // Reload from backend, skip cache for fresh data
     await loadReelsFromBackend(undefined, true);
 
@@ -1287,12 +1287,12 @@ const ReelsFeed: React.FC = () => {
   // ✅ FIX: Use refs for stable callbacks to prevent "Changing onViewableItemsChanged on the fly" warning
   const reelsRef = useRef<ReelData[]>([]);
   const recordReelViewRef = useRef(recordReelView);
-  
+
   // Keep refs updated
   useEffect(() => {
     reelsRef.current = reels;
   }, [reels]);
-  
+
   useEffect(() => {
     recordReelViewRef.current = recordReelView;
   }, [recordReelView]);
@@ -1308,13 +1308,13 @@ const ReelsFeed: React.FC = () => {
     if (viewableItems.length > 0 && viewableItems[0].index !== null) {
       const newIndex = viewableItems[0].index;
       setCurrentIndex(newIndex);
-      
+
       // Record view for the current reel (use ref for latest function)
       const currentReel = viewableItems[0].item as ReelData;
       if (currentReel?.id) {
         recordReelViewRef.current(currentReel.id);
       }
-      
+
       // Preload next 2-3 videos for smooth scrolling (Requirements 19.2, 19.3)
       // Use PreloadManager for centralized video preloading (use ref for latest reels)
       if (reelsRef.current.length > 0) {
@@ -1346,13 +1346,13 @@ const ReelsFeed: React.FC = () => {
 
   // Helper to update local reels state when follow state changes
   const updateReelsFollowState = useCallback((userId: string, isFollowing: boolean) => {
-    setReels(prev => prev.map(reel => 
-      reel.user.id === userId 
+    setReels(prev => prev.map(reel =>
+      reel.user.id === userId
         ? { ...reel, user: { ...reel.user, isFollowing } }
         : reel
     ));
-    setBackendReels(prev => prev.map(reel => 
-      reel.user.id === userId 
+    setBackendReels(prev => prev.map(reel =>
+      reel.user.id === userId
         ? { ...reel, user: { ...reel.user, isFollowing } }
         : reel
     ));
@@ -1361,11 +1361,11 @@ const ReelsFeed: React.FC = () => {
   // Handle follow from reel - Ultra Fast with Rollback (Requirements 18.3, 18.5)
   const handleFollow = useCallback(async (username: string, userId: string) => {
     haptic.trigger('medium');
-    
+
     // Optimistic UI update - INSTANT (0ms) - Requirement 18.3
     follow(userId); // Update global store
     updateReelsFollowState(userId, true); // Update local state
-    
+
     // Sync with backend in background (fire and forget with rollback) - Requirement 18.5
     try {
       const token = await getToken();
@@ -1383,11 +1383,11 @@ const ReelsFeed: React.FC = () => {
   // Handle unfollow from reel - Ultra Fast with Rollback (Requirements 18.3, 18.5)
   const handleUnfollow = useCallback(async (username: string, userId: string) => {
     haptic.trigger('medium');
-    
+
     // Optimistic UI update - INSTANT (0ms) - Requirement 18.3
     unfollow(userId); // Update global store
     updateReelsFollowState(userId, false); // Update local state
-    
+
     // Sync with backend in background (fire and forget with rollback) - Requirement 18.5
     try {
       const token = await getToken();
@@ -1455,7 +1455,7 @@ const ReelsFeed: React.FC = () => {
       {isInitialLoading && !loadError && (
         <SkeletonLoader variant="reel" />
       )}
-      
+
       {/* Error Display (Critical Priority #3) */}
       {loadError && !isInitialLoading && (
         <ErrorDisplay
@@ -1481,7 +1481,7 @@ const ReelsFeed: React.FC = () => {
           </View>
           <Text style={styles.noReelsTitle}>{t.reels.noVideosTitle || 'لا توجد فيديوهات بعد'}</Text>
           <Text style={styles.noReelsSubtitle}>{t.reels.noVideosSubtitle || 'تابع أشخاص جدد لمشاهدة فيديوهاتهم هنا'}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.noReelsButton}
             onPress={() => {
               haptic.trigger('light');

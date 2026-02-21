@@ -294,7 +294,7 @@ export const de = {
     viewAll: 'Alle anzeigen',
     predict: 'Vorhersagen',
     quiz: 'Tägliches Quiz',
-    reels: 'Reels',
+    reels: 'Highlights',
     rank: 'Rangliste',
     days: 'Tage',
     streak: 'Tägliche Serie',
@@ -307,7 +307,7 @@ export const de = {
     getStarted: 'LOSLEGEN',
     signIn: 'ANMELDEN',
     importantMatches: 'Wichtige Spiele',
-    trendingReels: 'Trendige Reels',
+    trendingReels: 'Trendige Highlights',
     playerOfWeek: 'Spieler der Woche',
     teamOfMonth: 'Team des Monats',
     // WelcomeSection slides

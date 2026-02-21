@@ -1,31 +1,17 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
 
-export default function ProfileScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>About Us</Text>
-      <Text style={styles.text}>User profile will be displayed here</Text>
-    </View>
-  );
+/**
+ * About Us - Redirects to Settings where app info is displayed.
+ * This screen is not directly accessible from the tab bar.
+ */
+export default function AboutUsScreen() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to settings which contains all about info
+    router.replace('/(tabs)/settings');
+  }, []);
+
+  return null;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: '#22c55e',
-  },
-  text: {
-    fontSize: 16,
-    textAlign: "center",
-    paddingHorizontal: 20,
-    color: '#666',
-  },
-});

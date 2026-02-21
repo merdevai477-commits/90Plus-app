@@ -22,7 +22,7 @@ const TAB_COLORS = {
   Leagues: '#22c55e',   // Green (الملعب)
   Quiz: '#3b82f6',      // Blue
   Profile: '#a855f7',   // Purple
-  Reels: '#ef4444',     // Red
+  Highlights: '#ef4444', // Red
   Rank: '#ec4899',      // Pink
 };
 
@@ -113,14 +113,14 @@ const BottomNav = () => {
   ).current;
 
   type AppRoute = '/Home' | '/matches' | '/quiz' | '/profile' | '/reels' | '/rank';
-  type TabName = 'Home' | 'Leagues' | 'Quiz' | 'Profile' | 'Reels' | 'Rank';
+  type TabName = 'Home' | 'Leagues' | 'Quiz' | 'Profile' | 'Highlights' | 'Rank';
 
   const tabs: { name: TabName; icon: typeof Home | null; customIcon?: boolean; route: AppRoute }[] = [
     { name: 'Home', icon: Home, route: '/Home' },
     { name: 'Leagues', icon: null, customIcon: true, route: '/matches' },
     { name: 'Quiz', icon: Brain, route: '/quiz' },
     { name: 'Profile', icon: User, route: '/profile' },
-    { name: 'Reels', icon: Video, route: '/reels' },
+    { name: 'Highlights', icon: Video, route: '/reels' },
     { name: 'Rank', icon: BarChart3, route: '/rank' },
   ];
 
@@ -144,14 +144,14 @@ const BottomNav = () => {
     prefetchRoute(tab.route).catch(() => {
       // Silent fail
     });
-    
+
     // Prefetch adjacent routes
     const currentIndex = tabs.findIndex(t => t.route === tab.route);
     const adjacentRoutes = [
       tabs[currentIndex - 1]?.route,
       tabs[currentIndex + 1]?.route,
     ].filter(Boolean) as string[];
-    
+
     if (adjacentRoutes.length > 0) {
       prefetchRoutes(adjacentRoutes).catch(() => {
         // Silent fail

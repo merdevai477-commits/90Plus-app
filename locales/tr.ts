@@ -293,7 +293,7 @@ export const tr = {
     viewAll: 'Tümünü gör',
     predict: 'Tahmin et',
     quiz: 'Günlük quiz',
-    reels: 'Reels',
+    reels: 'Öne Çıkanlar',
     rank: 'Sıralama',
     days: 'Gün',
     streak: 'Günlük seri',
@@ -306,7 +306,7 @@ export const tr = {
     getStarted: 'BAŞLA',
     signIn: 'GİRİŞ YAP',
     importantMatches: 'Önemli Maçlar',
-    trendingReels: 'Trend Reels',
+    trendingReels: 'Trend Öne Çıkanlar',
     playerOfWeek: 'Haftanın Oyuncusu',
     teamOfMonth: 'Ayın Takımı',
     // WelcomeSection slides

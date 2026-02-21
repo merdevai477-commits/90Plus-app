@@ -451,7 +451,7 @@ export const en = {
     viewAll: 'View All',
     predict: 'Predict',
     quiz: 'Daily Quiz',
-    reels: 'Reels',
+    reels: 'Highlights',
     rank: 'Leaderboard',
     days: 'Days',
     streak: 'Daily Streak',
@@ -464,7 +464,7 @@ export const en = {
     getStarted: 'GET STARTED',
     signIn: 'SIGN IN',
     importantMatches: 'Important Matches',
-    trendingReels: 'Trending Reels',
+    trendingReels: 'Trending Highlights',
     playerOfWeek: 'Player of the Week',
     teamOfMonth: 'Team of the Month',
     // WelcomeSection slides

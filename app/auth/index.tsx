@@ -47,57 +47,92 @@ import { getApiUrl } from '../../config/api.config';
 WebBrowser.maybeCompleteAuthSession();
 
 /**
- * Clear all previous user data before new login
+ * 🐉 DRAGON FIX: Clear all previous user data with proper coordination
+ * Prevents race conditions and ensures complete cleanup
  */
 const clearPreviousUserData = async () => {
-    console.log('🧹 Clearing previous user data...');
-    // Clear globalState
-    await globalState.logout();
+    logger.debug('🧹 Clearing previous user data...');
     
-    // Clear CoinsService user context
-    try {
-        const { CoinsService } = await import('../../services/coins.service');
-        CoinsService.clearCurrentUser();
-        console.log('✅ CoinsService cleared');
-    } catch (error) {
-        console.warn('⚠️ Failed to clear CoinsService:', error);
-    }
+    // ✅ DRAGON FIX: Use Promise.allSettled to prevent one failure from blocking others
+    const cleanupOperations = [
+        // Clear globalState
+        globalState.logout().catch(err => {
+            logger.error('Failed to clear globalState:', err);
+            return null;
+        }),
+        
+        // Clear CoinsService
+        (async () => {
+            try {
+                const { CoinsService } = await import('../../services/coins.service');
+                CoinsService.clearCurrentUser();
+                logger.debug('✅ CoinsService cleared');
+            } catch (error) {
+                logger.error('Failed to clear CoinsService:', error);
+            }
+        })(),
+        
+        // Clear AuthService cache
+        (async () => {
+            try {
+                const { AuthService } = await import('../../src/services/authService');
+                AuthService.clearMemoryCache();
+                logger.debug('✅ AuthService cache cleared');
+            } catch (error) {
+                logger.error('Failed to clear AuthService cache:', error);
+            }
+        })(),
+        
+        // Clear RankingsService cache
+        (async () => {
+            try {
+                const { rankingsService } = await import('../../services/rankingsService');
+                rankingsService.clearMemoryCache();
+                logger.debug('✅ RankingsService cache cleared');
+            } catch (error) {
+                logger.error('Failed to clear RankingsService cache:', error);
+            }
+        })(),
+        
+        // Clear home store
+        (async () => {
+            try {
+                const { useHomeStore } = await import('../../src/store/home.store');
+                useHomeStore.getState().clearUserData();
+                logger.debug('✅ Home store cleared');
+            } catch (error) {
+                logger.error('Failed to clear home store:', error);
+            }
+        })(),
+        
+        // Disconnect WebSocket
+        (async () => {
+            try {
+                const { websocketClient } = await import('../../services/websocketClient');
+                websocketClient.disconnect();
+                logger.debug('✅ WebSocket disconnected');
+            } catch (error) {
+                logger.error('Failed to disconnect WebSocket:', error);
+            }
+        })(),
+    ];
     
-    // Clear AuthService memory cache
-    try {
-        const { AuthService } = await import('../../src/services/authService');
-        AuthService.clearMemoryCache();
-        console.log('✅ AuthService cache cleared');
-    } catch (error) {
-        console.warn('⚠️ Failed to clear AuthService cache:', error);
-    }
+    // ✅ DRAGON FIX: Wait for all cleanup operations with timeout
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Cleanup timeout')), 5000)
+    );
     
-    // Clear RankingsService memory cache
     try {
-        const { rankingsService } = await import('../../services/rankingsService');
-        rankingsService.clearMemoryCache();
-        console.log('✅ RankingsService cache cleared');
+        await Promise.race([
+            Promise.allSettled(cleanupOperations),
+            timeoutPromise
+        ]);
+        logger.info('✅ User data cleanup completed');
     } catch (error) {
-        console.warn('⚠️ Failed to clear RankingsService cache:', error);
+        logger.error('⚠️ Cleanup timeout - some operations may not have completed:', error);
+        // Continue anyway - don't block login
     }
-    
-    // Clear home.store user data
-    try {
-        const { useHomeStore } = await import('../../src/store/home.store');
-        useHomeStore.getState().clearUserData();
-        console.log('✅ Home store cleared');
-    } catch (error) {
-        console.warn('⚠️ Failed to clear home store:', error);
-    }
-    
-    // Disconnect WebSocket
-    try {
-        const { websocketClient } = await import('../../services/websocketClient');
-        websocketClient.disconnect();
-        console.log('✅ WebSocket disconnected');
-    } catch (error) {
-        console.warn('⚠️ Failed to disconnect WebSocket:', error);
-    }
+}
     
     // Clear all cache (including profile, reels, notifications, etc.)
     try {

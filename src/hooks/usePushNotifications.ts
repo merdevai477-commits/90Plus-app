@@ -80,7 +80,7 @@ export function usePushNotifications() {
             const authToken = await getToken();
             if (authToken) {
                 await MatchesService.registerPushToken(authToken, pushToken);
-                console.log('✅ Push token registered with backend');
+                logger.debug('✅ Push token registered with backend');
             }
         } catch (err) {
             console.error('Failed to register push token:', err);
@@ -114,7 +114,7 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
 
     // Must be a physical device
     if (!Device.isDevice) {
-        console.log('Push notifications require a physical device');
+        logger.debug('Push notifications require a physical device');
         return null;
     }
 
@@ -128,7 +128,7 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
     }
 
     if (finalStatus !== 'granted') {
-        console.log('Push notification permission not granted');
+        logger.debug('Push notification permission not granted');
         return null;
     }
 
@@ -141,9 +141,9 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
         });
         
         token = pushTokenData.data;
-        console.log('📱 Expo Push Token:', token);
+        logger.debug('📱 Expo Push Token:', token);
     } catch (error) {
-        console.error('Error getting push token:', error);
+        logger.error('Error getting push token:', error);
     }
 
     // Android-specific channel setup

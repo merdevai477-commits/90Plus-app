@@ -212,7 +212,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       isVerified: user.isVerified || false,
       isDeveloper: user.isDeveloper || false,
       favoriteTeam: user.favoriteTeam || '',
-      location: 'مصر',
+      location: (user as any).country || 'مصر', // ✅ Use country field from backend
       lastUsernameChange: user.lastUsernameChange ? new Date(user.lastUsernameChange) : null,
       socials: { instagram: undefined, twitter: undefined, facebook: undefined },
       socialLinks: (user as any).socialLinks && Array.isArray((user as any).socialLinks) 
@@ -258,20 +258,54 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     setError(null);
     
     try {
-      const token = await getToken();
-      if (!token) {
-        setError('Authentication required');
+      console.log('[useProfileCache] 🔄 Starting to fetch fresh data...');
+      
+      // ✅ CRITICAL: Check API health first
+      const isApiHealthy = await AuthService.checkApiHealth();
+      if (!isApiHealthy) {
+        console.error('[useProfileCache] ❌ API is not reachable');
+        setError('لا يمكن الاتصال بالخادم. تحقق من اتصالك بالإنترنت');
+        setIsLoading(false);
         return;
       }
+      
+      const token = await getToken();
+      if (!token) {
+        console.error('[useProfileCache] ❌ No token available');
+        setError('Authentication required');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[useProfileCache] ✅ Token obtained, fetching data...');
 
       // FULLY PARALLEL: Fetch ALL data at once including videos
       // We get username from cache or use 'me' endpoint pattern
       const [userResult, statsResult, analyticsResult, cooldownsResult] = await Promise.all([
-        AuthService.syncUserWithBackend(token),
-        FollowService.getMyStats(token),
-        ProfileService.getAnalytics(token),
-        ProfileService.getCooldowns(token),
+        AuthService.syncUserWithBackend(token).catch(err => {
+          console.error('[useProfileCache] ❌ Error fetching user:', err);
+          return null;
+        }),
+        FollowService.getMyStats(token).catch(err => {
+          console.error('[useProfileCache] ⚠️ Error fetching stats:', err);
+          return null;
+        }),
+        ProfileService.getAnalytics(token).catch(err => {
+          console.error('[useProfileCache] ⚠️ Error fetching analytics:', err);
+          return null;
+        }),
+        ProfileService.getCooldowns(token).catch(err => {
+          console.error('[useProfileCache] ⚠️ Error fetching cooldowns:', err);
+          return null;
+        }),
       ]);
+
+      console.log('[useProfileCache] 📊 Data fetched:', {
+        hasUser: !!userResult,
+        hasStats: !!statsResult,
+        hasAnalytics: !!analyticsResult,
+        hasCooldowns: !!cooldownsResult,
+      });
 
       let newUserData: ProfileUserData | null = null;
       let newVideos: ProfileVideo[] = [];
@@ -283,10 +317,13 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         
         // Validate user data before setting
         if (!newUserData.username || !newUserData.id) {
-          console.error('[useProfileCache] Invalid user data received from backend');
+          console.error('[useProfileCache] ❌ Invalid user data received from backend');
           setError('Invalid user data received');
+          setIsLoading(false);
           return;
         }
+        
+        console.log('[useProfileCache] ✅ User data valid, updating state...');
         
         // Update state IMMEDIATELY - don't wait for videos
         setUserData(newUserData);
@@ -301,9 +338,17 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setCooldowns(cooldownsResult);
         }
         
+        // Mark as loaded IMMEDIATELY so UI shows
+        hasLoadedRef.current = true;
+        setIsLoading(false);
+        onFreshDataLoadedRef.current?.();
+        
+        console.log('[useProfileCache] ✅ State updated, fetching videos in background...');
+        
         // Fetch videos in background (non-blocking for UI)
         AuthService.getUserReels(token, userResult.username)
           .then(reels => {
+            console.log('[useProfileCache] ✅ Videos loaded:', reels.length);
             newVideos = transformReels(reels);
             setVideos(newVideos);
             
@@ -317,11 +362,13 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
             };
             saveToCache(cacheData);
           })
-          .catch(err => console.error('[useProfileCache] Error loading videos:', err));
+          .catch(err => console.error('[useProfileCache] ⚠️ Error loading videos:', err));
         
-        hasLoadedRef.current = true;
-        onFreshDataLoadedRef.current?.();
         return; // Exit early - videos loading in background
+      } else {
+        console.error('[useProfileCache] ❌ No user data received from backend');
+        setError('Failed to load user data');
+        setIsLoading(false);
       }
 
       if (statsResult) {
@@ -349,8 +396,9 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       hasLoadedRef.current = true;
       onFreshDataLoadedRef.current?.();
     } catch (err: any) {
-      console.error('[useProfileCache] Error fetching fresh data:', err);
+      console.error('[useProfileCache] ❌ Error fetching fresh data:', err);
       setError(err.message || 'Failed to load profile data');
+      setIsLoading(false);
     } finally {
       isLoadingRef.current = false;
     }
@@ -379,11 +427,35 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
       // Step 2: Fetch fresh data in background (Requirement 2.2)
       await fetchFreshData(forceRefresh);
+    } catch (err: any) {
+      console.error('[useProfileCache] ❌ Refresh error:', err);
+      setError(err.message || 'Failed to refresh profile');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   }, [loadFromCache, fetchFreshData]);
+
+  /**
+   * Retry with exponential backoff
+   */
+  const retryWithBackoff = useCallback(async (attempt = 1, maxAttempts = 3): Promise<void> => {
+    console.log(`[useProfileCache] 🔄 Retry attempt ${attempt}/${maxAttempts}`);
+    
+    try {
+      await refresh(true);
+    } catch (err) {
+      if (attempt < maxAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 5000); // Max 5 seconds
+        console.log(`[useProfileCache] ⏰ Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        await retryWithBackoff(attempt + 1, maxAttempts);
+      } else {
+        console.error('[useProfileCache] ❌ All retry attempts failed');
+        throw err;
+      }
+    }
+  }, [refresh]);
 
   /**
    * Load videos for a specific username

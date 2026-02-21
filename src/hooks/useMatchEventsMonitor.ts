@@ -68,18 +68,28 @@ export const useMatchEventsMonitor = () => {
     const startMonitoring = () => {
         if (intervalRef.current) return; // Already running
 
-        console.log('🚀 Starting match event monitoring...');
+        logger.debug('🚀 Starting match event monitoring...');
+
+        // ✅ DRAGON FIX: Wrap async function in error boundary
+        const safeMonitor = async () => {
+            try {
+                await monitorFavoritedMatches();
+            } catch (error) {
+                logger.error('❌ Match monitoring error (recovered):', error);
+                // Continue monitoring despite errors
+            }
+        };
 
         // Run immediately
-        monitorFavoritedMatches();
+        safeMonitor();
 
-        // Then run every 45 seconds
-        intervalRef.current = setInterval(monitorFavoritedMatches, POLLING_INTERVAL);
+        // Then run every 45 seconds with error protection
+        intervalRef.current = setInterval(safeMonitor, POLLING_INTERVAL);
     };
 
     const stopMonitoring = () => {
         if (intervalRef.current) {
-            console.log('🛑 Stopping match event monitoring...');
+            logger.debug('🛑 Stopping match event monitoring...');
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
@@ -90,11 +100,11 @@ export const useMatchEventsMonitor = () => {
         const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 // App came to foreground
-                console.log('📱 App became active - starting monitoring');
+                logger.debug('📱 App became active - starting monitoring');
                 startMonitoring();
             } else if (nextAppState.match(/inactive|background/)) {
                 // App went to background
-                console.log('📱 App went to background - stopping monitoring');
+                logger.debug('📱 App went to background - stopping monitoring');
                 stopMonitoring();
             }
 

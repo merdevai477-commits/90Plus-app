@@ -294,7 +294,7 @@ export const es = {
     viewAll: 'Ver todo',
     predict: 'Predecir',
     quiz: 'Quiz diario',
-    reels: 'Reels',
+    reels: 'Destacados',
     rank: 'Clasificación',
     days: 'Días',
     streak: 'Racha diaria',
@@ -307,7 +307,7 @@ export const es = {
     getStarted: 'COMENZAR',
     signIn: 'INICIAR SESIÓN',
     importantMatches: 'Partidos Importantes',
-    trendingReels: 'Reels Tendencia',
+    trendingReels: 'Destacados en Tendencia',
     playerOfWeek: 'Jugador de la Semana',
     teamOfMonth: 'Equipo del Mes',
     // WelcomeSection slides

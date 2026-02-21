@@ -51,7 +51,7 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
   const fetchTerms = async () => {
     try {
       setLoading(true);
-      // Fetch HTML directly from the terms endpoint
+      // Use /terms directly (not /api/terms)
       const termsUrl = `${getApiUrl()}/terms`;
       setTermsContent(termsUrl);
       setLoading(false);

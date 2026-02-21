@@ -100,201 +100,7 @@ import {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Premium Features Component
-export const PremiumFeaturesComponent = ({ theme, features, toggleFeature, logEvent }) => {
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (features.betaFeatures) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [features.betaFeatures]);
-
-  const premiumFeatures = [
-    {
-      icon: Crown,
-      title: 'ميزات Premium',
-      description: 'وصول حصري للميزات المتقدمة',
-      color: '#FFD700',
-      available: true,
-    },
-    {
-      icon: Sparkles,
-      title: 'تأثيرات بصرية متقدمة',
-      description: 'رسوم متحركة وتأثيرات احترافية',
-      color: '#A855F7',
-      available: features.betaFeatures,
-    },
-    {
-      icon: Zap,
-      title: 'أداء محسن',
-      description: 'سرعة فائقة وتجربة سلسة',
-      color: '#22c55e',
-      available: features.betaFeatures,
-    },
-    {
-      icon: Shield,
-      title: 'أمان متقدم',
-      description: 'حماية إضافية لبياناتك',
-      color: '#EF4444',
-      available: true,
-    },
-  ];
-
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionHeaderLeft}>
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <View style={[styles.sectionIcon, { backgroundColor: `${theme.colors.primary}20` }]}>
-              <Crown size={24} color={theme.colors.primary} />
-            </View>
-          </Animated.View>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            الميزات المميزة
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.premiumButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => setShowPremiumModal(true)}
-        >
-          <Text style={styles.premiumButtonText}>ترقية</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.sectionContent}>
-        {premiumFeatures.map((feature, index) => (
-          <View 
-            key={index}
-            style={[
-              styles.premiumFeatureItem,
-              { borderBottomColor: theme.colors.border },
-              index === premiumFeatures.length - 1 && styles.lastItem
-            ]}
-          >
-            <View style={styles.settingLeft}>
-              <View style={[styles.settingIcon, { backgroundColor: `${feature.color}20` }]}>
-                <feature.icon size={20} color={feature.color} />
-              </View>
-              <View>
-                <Text style={[styles.settingText, { color: theme.colors.text }]}>
-                  {feature.title}
-                </Text>
-                <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>
-                  {feature.description}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.premiumFeatureRight}>
-              {feature.available ? (
-                <View style={[styles.availableBadge, { backgroundColor: theme.colors.success }]}>
-                  <Check size={16} color="#fff" />
-                </View>
-              ) : (
-                <View style={[styles.lockedBadge, { backgroundColor: theme.colors.border }]}>
-                  <Lock size={16} color={theme.colors.textSecondary} />
-                </View>
-              )}
-            </View>
-          </View>
-        ))}
-      </View>
-
-      {/* Premium Modal */}
-      <Modal
-        visible={showPremiumModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPremiumModal(false)}
-      >
-        <BlurView intensity={20} style={styles.modalOverlay}>
-          <View style={[styles.premiumModal, { backgroundColor: theme.colors.surface }]}>
-            <LinearGradient
-              colors={['#FFD700', '#FFA500']}
-              style={styles.premiumHeader}
-            >
-              <Crown size={40} color="#fff" />
-              <Text style={styles.premiumModalTitle}>ترقية إلى Premium</Text>
-              <Text style={styles.premiumModalSubtitle}>
-                احصل على جميع الميزات المتقدمة
-              </Text>
-            </LinearGradient>
-
-            <ScrollView style={styles.premiumContent}>
-              <Text style={[styles.premiumSectionTitle, { color: theme.colors.text }]}>
-                الميزات المضمنة:
-              </Text>
-              
-              {[
-                'إزالة الإعلانات',
-                'ميزات Beta الحصرية',
-                'تأثيرات بصرية متقدمة',
-                'أمان إضافي',
-                'دعم أولوية',
-                'نسخ احتياطية سحابية',
-              ].map((benefit, index) => (
-                <View key={index} style={styles.premiumBenefit}>
-                  <Check size={20} color={theme.colors.success} />
-                  <Text style={[styles.premiumBenefitText, { color: theme.colors.text }]}>
-                    {benefit}
-                  </Text>
-                </View>
-              ))}
-
-              <View style={styles.premiumPricing}>
-                <Text style={[styles.premiumPrice, { color: theme.colors.text }]}>
-                  $4.99/شهر
-                </Text>
-                <Text style={[styles.premiumPriceNote, { color: theme.colors.textSecondary }]}>
-                  أو $39.99/سنة (وفر 33%)
-                </Text>
-              </View>
-            </ScrollView>
-
-            <View style={styles.premiumModalButtons}>
-              <TouchableOpacity
-                style={[styles.premiumModalButton, { backgroundColor: theme.colors.border }]}
-                onPress={() => setShowPremiumModal(false)}
-              >
-                <Text style={[styles.premiumModalButtonText, { color: theme.colors.text }]}>
-                  لاحقاً
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.premiumModalButton, { backgroundColor: '#FFD700' }]}
-                onPress={() => {
-                  logEvent('premium_upgrade_clicked');
-                  setShowPremiumModal(false);
-                }}
-              >
-                <Text style={styles.premiumModalButtonTextGold}>
-                  ترقية الآن
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </BlurView>
-      </Modal>
-    </View>
-  );
-};
+// Note: PremiumFeaturesComponent was removed for App Store compliance (no IAP implemented)
 
 // Smart Notifications Component
 export const SmartNotificationsComponent = ({ theme, notifications, logEvent }) => {
@@ -394,8 +200,8 @@ export const SmartNotificationsComponent = ({ theme, notifications, logEvent }) 
           <Text style={[styles.smartSettingsButtonText, { color: theme.colors.primary }]}>
             إعدادات ذكية متقدمة
           </Text>
-          <ChevronRight 
-            size={16} 
+          <ChevronRight
+            size={16}
             color={theme.colors.primary}
             style={{ transform: [{ rotate: showSmartSettings ? '90deg' : '0deg' }] }}
           />
@@ -532,9 +338,9 @@ export const PerformanceMonitorComponent = ({ theme, logEvent }) => {
           </View>
           <View style={styles.performanceBar}>
             <View style={[
-              styles.performanceFill, 
-              { 
-                width: `${performanceData.cpu}%`, 
+              styles.performanceFill,
+              {
+                width: `${performanceData.cpu}%`,
                 backgroundColor: getPerformanceColor(performanceData.cpu, 'cpu')
               }
             ]} />
@@ -558,9 +364,9 @@ export const PerformanceMonitorComponent = ({ theme, logEvent }) => {
           </View>
           <View style={styles.performanceBar}>
             <View style={[
-              styles.performanceFill, 
-              { 
-                width: `${performanceData.memory}%`, 
+              styles.performanceFill,
+              {
+                width: `${performanceData.memory}%`,
                 backgroundColor: getPerformanceColor(performanceData.memory, 'memory')
               }
             ]} />
@@ -584,9 +390,9 @@ export const PerformanceMonitorComponent = ({ theme, logEvent }) => {
           </View>
           <View style={styles.performanceBar}>
             <View style={[
-              styles.performanceFill, 
-              { 
-                width: `${performanceData.battery * 5}%`, 
+              styles.performanceFill,
+              {
+                width: `${performanceData.battery * 5}%`,
                 backgroundColor: getPerformanceColor(performanceData.battery, 'battery')
               }
             ]} />
@@ -610,9 +416,9 @@ export const PerformanceMonitorComponent = ({ theme, logEvent }) => {
           </View>
           <View style={styles.performanceBar}>
             <View style={[
-              styles.performanceFill, 
-              { 
-                width: `${performanceData.network * 10}%`, 
+              styles.performanceFill,
+              {
+                width: `${performanceData.network * 10}%`,
                 backgroundColor: getPerformanceColor(performanceData.network * 10, 'network')
               }
             ]} />
@@ -686,118 +492,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  premiumButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  premiumButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  premiumFeatureItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  premiumFeatureRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  availableBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  lockedBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  premiumModal: {
-    width: '90%',
-    maxHeight: '80%',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  premiumHeader: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  premiumModalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 12,
-  },
-  premiumModalSubtitle: {
-    fontSize: 16,
-    color: '#fff',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  premiumContent: {
-    padding: 20,
-  },
-  premiumSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  premiumBenefit: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  premiumBenefitText: {
-    fontSize: 16,
-    marginLeft: 12,
-  },
-  premiumPricing: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  premiumPrice: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  premiumPriceNote: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  premiumModalButtons: {
-    flexDirection: 'row',
-    padding: 20,
-    gap: 12,
-  },
-  premiumModalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  premiumModalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  premiumModalButtonTextGold: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
+  // Premium styles removed for App Store compliance
   smartToggle: {
     paddingHorizontal: 12,
     paddingVertical: 6,

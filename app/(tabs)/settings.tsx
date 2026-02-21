@@ -23,6 +23,7 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import * as Network from 'expo-network';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -72,13 +73,13 @@ export default function SettingsScreen() {
   const { signOut } = useAuth();
 
   // Use new i18n system (Requirements: 7.1, 7.4)
-  const { 
-    language: i18nLanguage, 
-    setLanguage: setI18nLanguage, 
-    t: i18nT, 
-    isRTL: i18nIsRTL 
+  const {
+    language: i18nLanguage,
+    setLanguage: setI18nLanguage,
+    t: i18nT,
+    isRTL: i18nIsRTL
   } = useTranslation();
-  
+
   // Keep old context for backward compatibility during migration
   const { language: contextLanguage, setLanguage: setAppLanguage, t, isRTL } = useLanguage();
 
@@ -90,7 +91,7 @@ export default function SettingsScreen() {
       </View>
     );
   }
-  
+
   // Use the new i18n language as the source of truth
   const currentLanguage = i18nLanguage;
 
@@ -153,9 +154,18 @@ export default function SettingsScreen() {
   };
 
   const calculateCacheSize = async () => {
-    // Calculate actual cache size here
-    // For now, using placeholder
-    setCacheSize('12.5 MB');
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      let totalSize = 0;
+      const values = await AsyncStorage.multiGet(keys);
+      values.forEach(([_, value]) => {
+        if (value) totalSize += value.length * 2; // UTF-16 chars = 2 bytes each
+      });
+      const sizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+      setCacheSize(`${sizeMB} MB`);
+    } catch {
+      setCacheSize('0 MB');
+    }
   };
 
   const updateLastSync = () => {
@@ -253,37 +263,37 @@ export default function SettingsScreen() {
             try {
               // Clear videos data first
               await clearVideos();
-              
+
               // Sign out from Clerk first
               await signOut();
-              
+
               // Clear global state
               await globalState.logout();
-              
+
               // Clear CoinsService user context
               const { CoinsService } = await import('../../services/coins.service');
               CoinsService.clearCurrentUser();
-              
+
               // Clear AuthService memory cache
               const { AuthService } = await import('../../src/services/authService');
               AuthService.clearMemoryCache();
-              
+
               // Clear RankingsService memory cache
               const { rankingsService } = await import('../../services/rankingsService');
               rankingsService.clearMemoryCache();
-              
+
               // Clear home.store user data
               const { useHomeStore } = await import('../../src/store/home.store');
               useHomeStore.getState().clearUserData();
-              
+
               // Disconnect WebSocket
               const { websocketClient } = await import('../../services/websocketClient');
               websocketClient.disconnect();
-              
+
               // Clear all cache (including profile, reels, notifications, etc.)
               const { cacheService } = await import('../../services/cacheService');
               await cacheService.clearAll();
-              
+
               // Clear AsyncStorage
               await AsyncStorage.removeItem('@username_setup_complete');
               await AsyncStorage.removeItem('@user_profile');
@@ -291,7 +301,7 @@ export default function SettingsScreen() {
               // Navigate to Auth screen
               router.replace('/auth');
 
-              Alert.alert(t.common.done, 'Logged out successfully');
+              Alert.alert(t.common.done, t.settings.logoutDesc ? (isRTL ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully') : 'Logged out successfully');
             } catch (e) {
               console.error('Logout error:', e);
               Alert.alert(t.common.error, 'Logout failed');
@@ -310,40 +320,40 @@ export default function SettingsScreen() {
     try {
       // Call the deletion service
       await AccountDeletionService.deleteAccount();
-      
+
       // Clear videos data first
       await clearVideos();
-      
+
       // Sign out from Clerk first
       await signOut();
-      
+
       // Clear global state
       await globalState.logout();
-      
+
       // Clear CoinsService user context
       const { CoinsService } = await import('../../services/coins.service');
       CoinsService.clearCurrentUser();
-      
+
       // Clear AuthService memory cache
       const { AuthService } = await import('../../src/services/authService');
       AuthService.clearMemoryCache();
-      
+
       // Clear RankingsService memory cache
       const { rankingsService } = await import('../../services/rankingsService');
       rankingsService.clearMemoryCache();
-      
+
       // Clear home.store user data
       const { useHomeStore } = await import('../../src/store/home.store');
       useHomeStore.getState().clearUserData();
-      
+
       // Disconnect WebSocket
       const { websocketClient } = await import('../../services/websocketClient');
       websocketClient.disconnect();
-      
+
       // Clear all cache (including profile, reels, notifications, etc.)
       const { cacheService } = await import('../../services/cacheService');
       await cacheService.clearAll();
-      
+
       // Clear AsyncStorage
       await AsyncStorage.removeItem('@username_setup_complete');
       await AsyncStorage.removeItem('@user_profile');
@@ -352,24 +362,36 @@ export default function SettingsScreen() {
       router.replace('/auth');
     } catch (error) {
       console.error('Delete account error:', error);
-      Alert.alert(t.common.error, 'Failed to delete account');
+      Alert.alert(t.common.error, isRTL ? 'فشل حذف الحساب' : 'Failed to delete account');
     }
   };
 
   const handleRateApp = () => {
-    // Open app store for rating
     const storeUrl = Platform.select({
-      ios: 'https://apps.apple.com/app/id123456789',
-      android: 'https://play.google.com/store/apps/details?id=com.footballpredictions',
+      ios: 'https://apps.apple.com/app/90plus/id6744076498',
+      android: 'https://play.google.com/store/apps/details?id=com.ninetyplusapp',
     });
     if (storeUrl) {
-      Linking.openURL(storeUrl);
+      Linking.openURL(storeUrl).catch(() => {
+        Alert.alert(
+          t.settings.rateApp,
+          isRTL ? 'شكراً لدعمك! يمكنك تقييم التطبيق من متجر التطبيقات.' : 'Thank you for your support! You can rate us on the App Store.'
+        );
+      });
     }
   };
 
-  const handleShareApp = () => {
-    // Share app logic
-    Alert.alert(t.settings.shareApp, t.settings.shareAppDesc);
+  const handleShareApp = async () => {
+    try {
+      await Share.share({
+        message: isRTL
+          ? '🏆 جرّب تطبيق 90Plus - أفضل تطبيق لكرة القدم! تنبؤات، اختبارات، وأهداف مباشرة! https://apps.apple.com/app/90plus/id6744076498'
+          : '🏆 Try 90Plus - The ultimate football app! Predictions, quizzes, and live highlights! https://apps.apple.com/app/90plus/id6744076498',
+        title: '90Plus Football App',
+      });
+    } catch (error) {
+      // User cancelled share - no action needed
+    }
   };
 
   const handleContactUs = () => {
@@ -381,7 +403,7 @@ export default function SettingsScreen() {
   };
 
   const handleTerms = () => {
-    Linking.openURL('https://footballpredictions.com/terms');
+    Linking.openURL('https://90plus-app-production.up.railway.app/terms');
   };
 
   const handleManagePermissions = () => {
@@ -397,8 +419,14 @@ export default function SettingsScreen() {
       t.settings.helpSupport,
       t.settings.helpPrompt,
       [
-        { text: t.settings.faq, onPress: () => { } },
-        { text: t.settings.userGuide, onPress: () => { } },
+        {
+          text: t.settings.faq,
+          onPress: () => Linking.openURL('https://90plus-app-production.up.railway.app/support'),
+        },
+        {
+          text: isRTL ? 'تواصل معنا' : 'Contact Us',
+          onPress: () => Linking.openURL('mailto:merdevai477@gmail.com?subject=Help%20-%2090Plus%20App'),
+        },
         { text: t.common.cancel, style: 'cancel' },
       ]
     );
@@ -763,13 +791,13 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* ADVANCED SECTION */}
+          {/* App Info Section */}
           <View style={styles.section}>
-            {renderSectionHeader(isRTL ? 'متقدم' : 'Advanced', 'construct')}
+            {renderSectionHeader(isRTL ? 'معلومات التطبيق' : 'App Info', 'construct')}
             <View style={styles.sectionContent}>
               {renderInfoItem(
-                isRTL ? 'عنوان IP' : 'IP Address',
-                ipAddress,
+                isRTL ? 'البيئة' : 'Environment',
+                __DEV__ ? 'Development' : 'Production',
                 'globe-outline'
               )}
             </View>

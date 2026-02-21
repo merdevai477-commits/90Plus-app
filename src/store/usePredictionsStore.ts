@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { getApiUrl } from '../../config/api.config';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 interface PredictionData {
     type: 'home' | 'draw' | 'away';
@@ -95,7 +96,8 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         try {
             set({ isLoading: true });
 
-            const response = await fetch(`${getApiUrl()}/predictions/remaining`, {
+            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/remaining`, {
+                timeout: 15000, // 15 seconds
                 headers: {
                     'Content-Type': 'application/json',
                     'x-clerk-user-id': token,
@@ -123,7 +125,8 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         if (!token) return;
 
         try {
-            const response = await fetch(`${getApiUrl()}/predictions/user`, {
+            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/user`, {
+                timeout: 15000,
                 headers: {
                     'Content-Type': 'application/json',
                     'x-clerk-user-id': token,
@@ -145,7 +148,8 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         if (!token) return;
 
         try {
-            const response = await fetch(`${getApiUrl()}/predictions/stats`, {
+            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/stats`, {
+                timeout: 15000,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
@@ -181,8 +185,9 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         try {
             set({ isSubmitting: true });
 
-            const response = await fetch(`${getApiUrl()}/predictions`, {
+            const response = await fetchWithTimeout(`${getApiUrl()}/predictions`, {
                 method: 'POST',
+                timeout: 20000, // 20 seconds for submission
                 headers: {
                     'Content-Type': 'application/json',
                     'x-clerk-user-id': token,
@@ -244,8 +249,9 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         if (matchIds.length === 0) return;
 
         try {
-            const response = await fetch(`${getApiUrl()}/predictions/matches/counts`, {
+            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/matches/counts`, {
                 method: 'POST',
+                timeout: 15000,
                 headers: {
                     'Content-Type': 'application/json',
                 },

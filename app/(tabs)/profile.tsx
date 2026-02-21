@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
-import UserInfo from '../../components/profile/UserInfo'; 
+import UserInfo from '../../components/profile/UserInfo';
 import StatsRow from '../../components/profile/StatsRow';
 import ContentTabs from '../../components/profile/ContentTabs';
 import VideoGrid from '../../components/profile/VideoGrid';
@@ -29,6 +29,7 @@ import { useTranslation } from '../../src/i18n';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
 import { logger } from '../../utils/logger';
+import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 
 const API_URL = getApiUrl();
 
@@ -64,7 +65,7 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('videos');
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
-  
+
   // ✅ PERFORMANCE: Memoize these to prevent re-creation
   const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
   const toast = useToast();
@@ -87,6 +88,7 @@ export default function ProfileScreen() {
     isLoading,
     isRefreshing,
     isCacheHit,
+    error: cacheError,
     refresh: refreshCache,
     loadVideos,
     updateUserData: updateCachedUserData,
@@ -95,6 +97,59 @@ export default function ProfileScreen() {
     getToken,
     clerkUserImageUrl: clerkUser?.imageUrl,
   });
+
+  // ✅ Log cache errors
+  useEffect(() => {
+    if (cacheError) {
+      console.error('[ProfileScreen] ❌ Cache error:', cacheError);
+      logger.error('Profile cache error:', cacheError);
+    }
+  }, [cacheError]);
+
+  // ✅ Log loading state changes
+  useEffect(() => {
+    console.log('[ProfileScreen] 📊 State:', {
+      isLoading,
+      hasUserData: !!cachedUserData,
+      isCacheHit,
+      error: cacheError,
+    });
+  }, [isLoading, cachedUserData, isCacheHit, cacheError]);
+
+  // ✅ CRITICAL FIX: Timeout fallback if loading takes too long
+  useEffect(() => {
+    if (isLoading && !cachedUserData) {
+      const timeout = setTimeout(() => {
+        console.error('[ProfileScreen] ⏰ Loading timeout - forcing refresh');
+        logger.error('Profile loading timeout - forcing refresh');
+        refreshCache(true).catch(err => {
+          console.error('[ProfileScreen] ❌ Refresh failed:', err);
+          toast.showError('خطأ', 'فشل في تحميل البروفايل. يرجى المحاولة مرة أخرى');
+        });
+      }, 15000); // 15 seconds timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading, cachedUserData, refreshCache, toast]);
+
+  // ✅ CRITICAL FIX: Clear cache and retry on mount if no data after 3 seconds
+  useEffect(() => {
+    const checkDataTimeout = setTimeout(async () => {
+      if (!cachedUserData && !isLoading) {
+        console.warn('[ProfileScreen] ⚠️ No data after 3 seconds, clearing cache and retrying...');
+        try {
+          // Clear cache first
+          await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
+          // Force refresh
+          await refreshCache(true);
+        } catch (err) {
+          console.error('[ProfileScreen] ❌ Cache clear and refresh failed:', err);
+        }
+      }
+    }, 3000); // 3 seconds
+
+    return () => clearTimeout(checkDataTimeout);
+  }, []); // Only run once on mount
 
   // Local state for UI-specific data not in cache
   const [localImage, setLocalImageState] = useState<string | null>(globalState.localAvatar || null);
@@ -128,7 +183,7 @@ export default function ProfileScreen() {
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
-  
+
   // New modals for profile features
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
@@ -143,10 +198,10 @@ export default function ProfileScreen() {
 
   // Video Management State
   const [isDeleteMode, setIsDeleteMode] = useState(false);
-  
+
   // ✅ OPTIMIZATION: Token state for BadgesDisplay
   const [authToken, setAuthToken] = useState<string | null>(null);
-  
+
   // ✅ OPTIMIZATION: Fetch token for badges (memoized)
   useEffect(() => {
     let isMounted = true;
@@ -166,8 +221,8 @@ export default function ProfileScreen() {
 
   // ✅ OPTIMIZATION: Derive state from cache with memoization
   const userData = cachedUserData;
-  const followStats = useMemo(() => 
-    cachedFollowStats || DEFAULT_FOLLOW_STATS, 
+  const followStats = useMemo(() =>
+    cachedFollowStats || DEFAULT_FOLLOW_STATS,
     [cachedFollowStats]
   );
 
@@ -235,10 +290,10 @@ export default function ProfileScreen() {
   const myVideos = React.useMemo(() => {
     const cached = cachedVideos || [];
     const uploaded = uploadedVideos || [];
-    
+
     // Combine both, prioritizing uploaded videos (they have isUploading flag)
     const allVideos = [...uploaded, ...cached];
-    
+
     // Remove duplicates by id, keeping uploaded ones first
     const uniqueVideos = allVideos.reduce((acc, video) => {
       if (!acc.find(v => v.id === video.id)) {
@@ -246,7 +301,7 @@ export default function ProfileScreen() {
       }
       return acc;
     }, [] as any[]);
-    
+
     return uniqueVideos.map(video => ({
       id: video.id,
       thumbnail: video.thumbnail || video.uri,
@@ -283,10 +338,10 @@ export default function ProfileScreen() {
   const prevUserDataRef = useRef(userData);
   useEffect(() => {
     if (!userData) return;
-    
+
     // ✅ Only update if userData actually changed (deep comparison on key fields)
     const prev = prevUserDataRef.current;
-    const hasChanged = !prev || 
+    const hasChanged = !prev ||
       prev.position !== userData.position ||
       prev.countryFlag !== userData.countryFlag ||
       prev.avatar !== userData.avatar ||
@@ -297,11 +352,11 @@ export default function ProfileScreen() {
       prev.height !== userData.height ||
       prev.weight !== userData.weight ||
       prev.preferredFoot !== userData.preferredFoot;
-    
+
     if (!hasChanged) return; // ✅ Skip if nothing changed
-    
+
     prevUserDataRef.current = userData;
-    
+
     // Batch all state updates together
     if (userData.position) setPosition(userData.position);
     if (userData.countryFlag) setCountryFlag(userData.countryFlag);
@@ -313,7 +368,7 @@ export default function ProfileScreen() {
     if (userData.coverImage) {
       setCoverImage(userData.coverImage);
     }
-    
+
     // ✅ Load club logo (optimized)
     if (userData.clubLogo) {
       setClub(userData.clubLogo);
@@ -322,8 +377,8 @@ export default function ProfileScreen() {
       const loadClubLogo = async () => {
         try {
           const { CLUBS } = await import('../../data/clubs');
-          const matchedClub = CLUBS.find(c => 
-            c.name === userData.favoriteTeam || 
+          const matchedClub = CLUBS.find(c =>
+            c.name === userData.favoriteTeam ||
             c.name.includes(userData.favoriteTeam) ||
             userData.favoriteTeam.includes(c.name)
           );
@@ -341,7 +396,7 @@ export default function ProfileScreen() {
       };
       loadClubLogo();
     }
-    
+
     if (userData.brandLogo) setBrand(userData.brandLogo);
 
     // ✅ Update stats (batch update)
@@ -484,16 +539,16 @@ export default function ProfileScreen() {
         // Update with backend URL immediately
         const newCoverUrl = uploadResult.url;
         setCoverImage(newCoverUrl);
-        
+
         // Update globalState
         globalState.setLocalCover(newCoverUrl);
-        
+
         // Update userData via cache immediately
         await updateCachedUserData({ coverImage: newCoverUrl });
-        
+
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        
+
         toast.showSuccess('تم', 'تم رفع صورة الغلاف بنجاح 🖼️');
       } else {
         // Revert on error
@@ -616,15 +671,15 @@ export default function ProfileScreen() {
       // ✅ INSTANT UPDATE: Update UI immediately (optimistic)
       setCountryFlag(country.flag);
       setLocation(country.name); // ✅ Update location state immediately
-      
+
       // Update cache immediately for instant UI
-      await updateCachedUserData({ 
+      await updateCachedUserData({
         location: country.name,
-        countryFlag: country.flag 
+        countryFlag: country.flag
       });
 
       // Save to backend in background (non-blocking)
-      const result = await CardProfileService.updateCardProfile(token, { 
+      const result = await CardProfileService.updateCardProfile(token, {
         countryFlag: country.flag,
         country: country.name
       });
@@ -637,9 +692,9 @@ export default function ProfileScreen() {
         // Rollback on error
         setCountryFlag(originalCountryFlag);
         setLocation(originalLocation);
-        await updateCachedUserData({ 
+        await updateCachedUserData({
           location: originalLocation,
-          countryFlag: originalCountryFlag 
+          countryFlag: originalCountryFlag
         });
         toast.showError('خطأ', result.error || 'فشل في حفظ البلد');
       }
@@ -648,9 +703,9 @@ export default function ProfileScreen() {
       // Rollback on error
       setCountryFlag(originalCountryFlag);
       setLocation(originalLocation);
-      await updateCachedUserData({ 
+      await updateCachedUserData({
         location: originalLocation,
-        countryFlag: originalCountryFlag 
+        countryFlag: originalCountryFlag
       });
       toast.showError('خطأ', error.message || 'فشل في حفظ البلد');
     }
@@ -731,9 +786,9 @@ export default function ProfileScreen() {
 
       // ✅ Optimistic update - update UI immediately
       setClub(clubLogo);
-      
+
       // ✅ Update cached user data immediately (for instant UI update)
-      await updateCachedUserData({ 
+      await updateCachedUserData({
         favoriteTeam: selectedClub.name,
         clubLogo: clubLogo
       });
@@ -790,15 +845,15 @@ export default function ProfileScreen() {
 
       // ✅ Optimistic update - update UI immediately
       setBrand(selectedBrand.logo);
-      
+
       // ✅ Update cached user data immediately (for instant UI update)
-      await updateCachedUserData({ 
+      await updateCachedUserData({
         brandLogo: selectedBrand.logo
       });
 
       // ✅ Save to backend (persistent storage)
-      const result = await CardProfileService.updateCardProfile(token, { 
-        brandLogo: selectedBrand.logo 
+      const result = await CardProfileService.updateCardProfile(token, {
+        brandLogo: selectedBrand.logo
       });
 
       if (result.success) {
@@ -996,7 +1051,7 @@ export default function ProfileScreen() {
           if (!uploadResult.success) {
             // Remove optimistic video on failure
             removeVideo(newVideo.id);
-            
+
             // Check if it's a cooldown error
             if (uploadResult.error?.includes('ساعة') || uploadResult.error?.includes('cooldown')) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -1008,7 +1063,7 @@ export default function ProfileScreen() {
             } else {
               toast.showError('خطأ', uploadResult.error || 'فشل في رفع الفيديو');
             }
-            
+
             // Refresh cooldowns to get latest status
             await refreshCache(true);
             return;
@@ -1017,18 +1072,18 @@ export default function ProfileScreen() {
           if (uploadResult.success) {
             // Only update to 100% if not already at 100% (avoid duplicate calls)
             updateProgress(100);
-            
+
             // Small delay to show 100% completion
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             toast.showSuccess('تم', 'تم رفع الفيديو بنجاح! 🚀');
-            
+
             // Remove optimistic video and refresh to get real video from server
             removeVideo(newVideo.id);
-            
+
             // Force refresh to get the real video data from server including cooldowns
             await refreshCache(true);
-            
+
             // Also reload videos specifically
             if (userData?.username) {
               await loadVideos(userData.username);
@@ -1047,21 +1102,6 @@ export default function ProfileScreen() {
       }
     })();
   };
-
-  // ✅ OPTIMIZATION: Memoize handlers
-  const handleVideoPress = useCallback((video: any, _index: number) => {
-    if (isDeleteMode) {
-      handleDeleteVideo(video.id);
-    } else {
-      // Open video player modal
-      setSelectedVideoUrl(video.uri);
-      setIsVideoPlayerVisible(true);
-    }
-  }, [isDeleteMode, handleDeleteVideo]);
-
-  const handleVideoLongPress = useCallback((_video: any) => {
-    setIsDeleteMode(prev => !prev);
-  }, []);
 
   // ✅ OPTIMIZATION: Memoize delete handler
   const handleDeleteVideo = useCallback((videoId: string) => {
@@ -1100,7 +1140,7 @@ export default function ProfileScreen() {
                     'Content-Type': 'application/json',
                   },
                 });
-                
+
                 if (!response.ok) {
                   const errorData = await response.json();
                   if (errorData.code === 'MAX_DELETES_REACHED') {
@@ -1117,7 +1157,7 @@ export default function ProfileScreen() {
                   await refreshCache(false);
                   return;
                 }
-                
+
                 const data = await response.json();
                 if (data.status === 'SUCCESS') {
                   const newRemainingDeletes = data.data?.remainingDeletes;
@@ -1161,6 +1201,24 @@ export default function ProfileScreen() {
   }, [cooldowns, getToken, removeVideo, refreshCache, toast]); // ✅ Proper deps
 
 
+  // ✅ OPTIMIZATION: Memoize handlers
+  const handleVideoPress = useCallback((video: any, _index: number) => {
+    if (isDeleteMode) {
+      handleDeleteVideo(video.id);
+    } else {
+      // Open video player modal
+      setSelectedVideoUrl(video.uri);
+      setIsVideoPlayerVisible(true);
+    }
+  }, [isDeleteMode, handleDeleteVideo]);
+
+  const handleVideoLongPress = useCallback((_video: any) => {
+    setIsDeleteMode(prev => !prev);
+  }, []);
+
+
+
+
 
   // Pull to refresh handler - uses cache hook's refresh with force flag
   const onRefresh = async () => {
@@ -1187,7 +1245,7 @@ export default function ProfileScreen() {
 
       // ✅ OPTIMISTIC UPDATE: Update UI immediately before backend calls
       const previousUserData = { ...userData };
-      
+
       // Update cached user data immediately (optimistic update)
       await updateCachedUserData({
         displayName: newData.name,
@@ -1227,7 +1285,7 @@ export default function ProfileScreen() {
           }
           throw error;
         }) : Promise.resolve({ success: true }),
-        
+
         // Update profile
         AuthService.updateProfile(token, {
           displayName: newData.name,
@@ -1239,21 +1297,21 @@ export default function ProfileScreen() {
           toast.showError('خطأ', error.message || 'فشل في حفظ التغييرات');
           throw error;
         }),
-        
+
         // Update social links in background
-        newData.socials && Array.isArray(newData.socials) 
+        newData.socials && Array.isArray(newData.socials)
           ? ProfileService.updateSocialLinks(token, newData.socials).catch((error) => {
-              logger.error('Error updating social links:', error);
-              // Don't revert social links on error - they're already shown
-              // Just log the error silently
-              return { success: false };
-            })
+            logger.error('Error updating social links:', error);
+            // Don't revert social links on error - they're already shown
+            // Just log the error silently
+            return { success: false };
+          })
           : Promise.resolve({ success: true })
       ]).then(async ([usernameResult, profileResult, socialLinksResult]) => {
         // All backend calls completed successfully
         // Refresh cache to get latest data from backend (including cooldowns)
         await refreshCache(true);
-        
+
         // Show success message
         toast.showSuccess('تم', 'تم حفظ التغييرات بنجاح');
       }).catch((error) => {
@@ -1276,15 +1334,15 @@ export default function ProfileScreen() {
         username: link.username,
       })).filter((link: any) => link.url && link.url.trim() !== '');
     }
-    
+
     // Fallback to old format (socials object) for backward compatibility
     if (userData?.socials && typeof userData.socials === 'object') {
       const links: Array<{ platform: string; url: string; username?: string }> = [];
       if (userData.socials.instagram) {
         links.push({
           platform: 'instagram',
-          url: userData.socials.instagram.startsWith('http') 
-            ? userData.socials.instagram 
+          url: userData.socials.instagram.startsWith('http')
+            ? userData.socials.instagram
             : `https://instagram.com/${userData.socials.instagram.replace('@', '')}`,
           username: userData.socials.instagram.replace('@', ''),
         });
@@ -1292,8 +1350,8 @@ export default function ProfileScreen() {
       if (userData.socials.twitter) {
         links.push({
           platform: 'twitter',
-          url: userData.socials.twitter.startsWith('http') 
-            ? userData.socials.twitter 
+          url: userData.socials.twitter.startsWith('http')
+            ? userData.socials.twitter
             : `https://twitter.com/${userData.socials.twitter.replace('@', '')}`,
           username: userData.socials.twitter.replace('@', ''),
         });
@@ -1301,15 +1359,15 @@ export default function ProfileScreen() {
       if (userData.socials.facebook) {
         links.push({
           platform: 'facebook',
-          url: userData.socials.facebook.startsWith('http') 
-            ? userData.socials.facebook 
+          url: userData.socials.facebook.startsWith('http')
+            ? userData.socials.facebook
             : `https://facebook.com/${userData.socials.facebook.replace('@', '')}`,
           username: userData.socials.facebook.replace('@', ''),
         });
       }
       return links;
     }
-    
+
     return [];
   }, [userData?.socialLinks, userData?.socials]);
 
@@ -1324,6 +1382,71 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
         <ProfileSkeleton />
+      </View>
+    );
+  }
+
+  // ✅ CRITICAL FIX: Show error state with retry button if data failed to load
+  if (!userData && cacheError) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
+        <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
+          {cacheError || 'فشل في تحميل البروفايل'}
+        </Text>
+        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
+          تحقق من اتصالك بالإنترنت وحاول مرة أخرى
+        </Text>
+        <View style={{ marginTop: 24, paddingHorizontal: 40, width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' }}>
+          <View style={{
+            backgroundColor: ProfileTheme.colors.neonGreen,
+            borderRadius: 12,
+            paddingVertical: 12,
+            paddingHorizontal: 24,
+            minWidth: 120,
+            alignItems: 'center'
+          }}>
+            <Text
+              style={{ color: ProfileTheme.colors.deepBlack, fontWeight: 'bold', fontSize: 16 }}
+              onPress={async () => {
+                console.log('[ProfileScreen] 🔄 Manual retry triggered');
+                try {
+                  // Clear cache first
+                  await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
+                  // Force refresh
+                  await refreshCache(true);
+                  toast.showInfo('جاري التحميل', 'يتم إعادة تحميل البيانات...');
+                } catch (err) {
+                  console.error('[ProfileScreen] ❌ Manual retry failed:', err);
+                  toast.showError('خطأ', 'فشلت إعادة المحاولة');
+                }
+              }}
+            >
+              إعادة المحاولة
+            </Text>
+          </View>
+          <View style={{
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            borderRadius: 12,
+            paddingVertical: 12,
+            paddingHorizontal: 24,
+            minWidth: 120,
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.2)'
+          }}>
+            <Text
+              style={{ color: ProfileTheme.colors.textPrimary, fontWeight: 'bold', fontSize: 16 }}
+              onPress={() => {
+                console.log('[ProfileScreen] 🚪 Navigating to auth');
+                router.replace('/auth');
+              }}
+            >
+              تسجيل الخروج
+            </Text>
+          </View>
+        </View>
       </View>
     );
   }
@@ -1382,11 +1505,11 @@ export default function ProfileScreen() {
           name: userData?.displayName || userData?.username || 'User',
           username: userData?.username || 'user',
           bio: userData?.bio || '',
-          socials: (userData?.socialLinks && Array.isArray(userData.socialLinks)) 
+          socials: (userData?.socialLinks && Array.isArray(userData.socialLinks))
             ? userData.socialLinks.map((link: any) => ({
-                platform: link.platform || 'website',
-                url: link.url || '',
-              }))
+              platform: link.platform || 'website',
+              url: link.url || '',
+            }))
             : [],
           lastUsernameChange: userData?.lastUsernameChange || undefined
         }}
@@ -1509,10 +1632,10 @@ export default function ProfileScreen() {
         {/* Badges Display - الميداليات */}
         {userData?.id && (
           <View style={styles.badgesContainer}>
-            <BadgesDisplay 
-              userId={userData.id} 
-              token={authToken} 
-              compact={true} 
+            <BadgesDisplay
+              userId={userData.id}
+              token={authToken}
+              compact={true}
             />
           </View>
         )}
@@ -1579,8 +1702,8 @@ export default function ProfileScreen() {
                 params: { reelId: video.id }
               });
             }}
-            onVideoLongPress={() => {}}
-            onDeleteVideo={() => {}}
+            onVideoLongPress={() => { }}
+            onDeleteVideo={() => { }}
             isDeleteMode={false}
           />
         )}
@@ -1738,10 +1861,10 @@ export default function ProfileScreen() {
                     <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>
                       {t.profile.netProfit}
                     </Text>
-                    <Text style={{ 
-                      color: ((predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)) >= 0 ? '#22c55e' : '#ef4444', 
-                      fontSize: 14, 
-                      fontWeight: '600' 
+                    <Text style={{
+                      color: ((predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)) >= 0 ? '#22c55e' : '#ef4444',
+                      fontSize: 14,
+                      fontWeight: '600'
                     }}>
                       {((predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)) >= 0 ? '+' : ''}
                       {(predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)}

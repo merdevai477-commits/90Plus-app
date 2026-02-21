@@ -3,8 +3,8 @@ import { requestDeduplicator } from '../../services/requestDeduplicator';
 
 const API_URL = getApiUrl();
 
-// ✅ OPTIMIZATION: Faster timeout for API calls
-const API_TIMEOUT = 10000; // 10 seconds (was default ~30s)
+// ✅ CRITICAL FIX: Increase timeout to 30 seconds (was 10s)
+const API_TIMEOUT = 30000; // 30 seconds for slow connections
 
 // ✅ SUPER SPEED: In-memory cache for instant responses
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
@@ -95,6 +95,28 @@ export interface AuthResponse {
  */
 export class AuthService {
     /**
+     * Check if API is reachable
+     */
+    static async checkApiHealth(): Promise<boolean> {
+        try {
+            console.log('🏥 Checking API health...');
+            const response = await fetchWithTimeout(`${API_URL}/health`, {
+                method: 'GET',
+            }, 5000); // 5 second timeout for health check
+
+            if (response.ok) {
+                console.log('✅ API is healthy');
+                return true;
+            }
+            console.warn('⚠️ API returned non-OK status:', response.status);
+            return false;
+        } catch (error: any) {
+            console.error('❌ API health check failed:', error.message);
+            return false;
+        }
+    }
+
+    /**
      * Sync user with backend after Clerk authentication
      * This creates the user in the database if they don't exist
      * ✅ SUPER SPEED: Uses memory cache + timeout for instant response
@@ -106,7 +128,7 @@ export class AuthService {
             const cacheKey = `user_${token.substring(0, 20)}`;
             const cached = getFromMemoryCache(cacheKey);
             if (cached) {
-                console.log('⚡ User from memory cache');
+                logger.debug('⚡ User from memory cache');
                 return cached;
             }
 
@@ -122,7 +144,7 @@ export class AuthService {
                     syncDebounceTimers.delete(cacheKey);
                     
                     try {
-                        console.log('🔄 Syncing user with backend...');
+                        logger.debug('🔄 Syncing user with backend...');
 
                         const response = await fetchWithTimeout(`${API_URL}/clerk/me`, {
                             method: 'GET',
@@ -135,7 +157,7 @@ export class AuthService {
                         const data: AuthResponse = await response.json();
 
                         if (data.status === 'SUCCESS' && data.data?.user) {
-                            console.log('✅ User synced successfully:', data.data.user.username);
+                            logger.debug('✅ User synced successfully:', data.data.user.username);
                             // ✅ Cache in memory for instant future access
                             setMemoryCache(cacheKey, data.data.user);
                             resolve(data.data.user);
@@ -166,7 +188,7 @@ export class AuthService {
         // Also clear any pending debounce timers
         syncDebounceTimers.forEach(timer => clearTimeout(timer));
         syncDebounceTimers.clear();
-        console.log('🧹 AuthService memory cache cleared');
+        logger.debug('🧹 AuthService memory cache cleared');
     }
 
     /**
@@ -182,7 +204,7 @@ export class AuthService {
         }
     ): Promise<{ user: UserProfile | null; error?: string }> {
         try {
-            console.log('🔄 Updating user profile...');
+            logger.debug('🔄 Updating user profile...');
 
             const response = await fetch(`${API_URL}/clerk/profile`, {
                 method: 'PUT',
@@ -196,7 +218,7 @@ export class AuthService {
             const data: AuthResponse = await response.json();
 
             if (data.status === 'SUCCESS' && data.data?.user) {
-                console.log('✅ Profile updated successfully');
+                logger.debug('✅ Profile updated successfully');
                 return { user: data.data.user };
             } else {
                 console.error('❌ Failed to update profile:', data.message);
@@ -217,7 +239,7 @@ export class AuthService {
         username: string
     ): Promise<{ success: boolean; username?: string; error?: string; daysRemaining?: number }> {
         try {
-            console.log('🔄 Updating username...');
+            logger.debug('🔄 Updating username...');
 
             const response = await fetch(`${API_URL}/profile/username`, {
                 method: 'PUT',
@@ -231,10 +253,10 @@ export class AuthService {
             const data = await response.json();
 
             if (data.status === 'SUCCESS') {
-                console.log('✅ Username updated successfully');
+                logger.debug('✅ Username updated successfully');
                 return { success: true, username: data.data?.username };
             } else if (data.code === 'COOLDOWN_ACTIVE') {
-                console.log('⏳ Username change on cooldown:', data.daysRemaining, 'days remaining');
+                logger.debug('⏳ Username change on cooldown:', data.daysRemaining, 'days remaining');
                 return { 
                     success: false, 
                     error: data.message || 'Username change on cooldown',
@@ -255,7 +277,7 @@ export class AuthService {
      */
     static async syncFromClerk(token: string): Promise<UserProfile | null> {
         try {
-            console.log('🔄 Syncing user data from Clerk...');
+            logger.debug('🔄 Syncing user data from Clerk...');
 
             const response = await fetch(`${API_URL}/clerk/sync`, {
                 method: 'POST',
@@ -268,7 +290,7 @@ export class AuthService {
             const data: AuthResponse = await response.json();
 
             if (data.status === 'SUCCESS' && data.data?.user) {
-                console.log('✅ User synced from Clerk successfully');
+                logger.debug('✅ User synced from Clerk successfully');
                 return data.data.user;
             } else {
                 // Silent error handling - don't log sync errors
@@ -1669,7 +1691,7 @@ export class NotificationService {
 
             // ✅ FIX: Handle 404 gracefully (no notifications to clear is OK)
             if (response.status === 404) {
-                console.log('✅ No notifications to clear (404 - this is OK)');
+                logger.debug('✅ No notifications to clear (404 - this is OK)');
                 return true; // Return success - no notifications is a valid state
             }
 

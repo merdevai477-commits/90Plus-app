@@ -150,6 +150,7 @@ class WebSocketClient {
   private userId: string | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private isDestroyed = false; // ✅ DRAGON FIX: Track destruction state
   private isManualDisconnect = false;
   private eventListeners: Map<WSEventType, Set<EventCallback>> = new Map();
   private reconnectionConfig: ReconnectionConfig = DEFAULT_RECONNECTION_CONFIG;
@@ -294,9 +295,12 @@ class WebSocketClient {
   /**
    * Attempt to reconnect with exponential backoff
    * Requirement 21.6: Automatically reconnect with exponential backoff
+   * ✅ DRAGON FIX: Check destruction state before reconnecting
    */
   private attemptReconnect(): void {
-    if (this.isManualDisconnect) {
+    // ✅ Don't reconnect if destroyed
+    if (this.isDestroyed || this.isManualDisconnect) {
+      logger.debug('[WebSocket] Skipping reconnect - client destroyed or manual disconnect');
       return;
     }
 
@@ -308,7 +312,18 @@ class WebSocketClient {
     const delay = calculateBackoffDelay(this.reconnectAttempts, this.reconnectionConfig);
     logger.debug(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.reconnectionConfig.maxAttempts})`);
 
+    // ✅ Clear any existing timer before creating new one
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
     this.reconnectTimer = setTimeout(() => {
+      // ✅ Double-check destruction state before reconnecting
+      if (this.isDestroyed || this.isManualDisconnect) {
+        logger.debug('[WebSocket] Reconnect cancelled - client destroyed');
+        return;
+      }
+
       this.reconnectAttempts++;
       
       if (this.socket) {
@@ -321,15 +336,19 @@ class WebSocketClient {
 
   /**
    * Disconnect from the WebSocket server
+   * ✅ DRAGON FIX: Proper cleanup with destruction tracking
    */
   disconnect(): void {
     this.isManualDisconnect = true;
+    this.isDestroyed = true; // ✅ Mark as destroyed to prevent reconnection
 
+    // ✅ Clear reconnection timer
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
 
+    // ✅ Disconnect socket
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -339,7 +358,7 @@ class WebSocketClient {
     this.userId = null;
     this.reconnectAttempts = 0;
     this.subscribedRooms.clear();
-    logger.info('[WebSocket] Disconnected');
+    logger.info('[WebSocket] Disconnected and destroyed');
   }
 
   /**

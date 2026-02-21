@@ -34,23 +34,23 @@ const CONFIG: Record<Environment, APIConfig> = {
   development: {
     baseUrl: 'http://localhost:3000/api',
     wsUrl: 'ws://localhost:3000',
-    timeout: 10000, // ✅ Reduced from 30s to 10s for faster failure
+    timeout: 30000, // ✅ CRITICAL: Increased to 30s for slow connections
     uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
-    retryAttempts: 2, // ✅ Reduced from 3 to 2 for faster response
+    retryAttempts: 3, // ✅ Increased back to 3 for better reliability
   },
   staging: {
     baseUrl: 'https://staging-api.90plus.app/api',
     wsUrl: 'wss://staging-api.90plus.app',
-    timeout: 15000, // ✅ Reduced from 30s to 15s
+    timeout: 30000, // ✅ CRITICAL: Increased to 30s
     uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
-    retryAttempts: 2,
+    retryAttempts: 3,
   },
   production: {
     baseUrl: 'https://90plus-app-production.up.railway.app/api',
     wsUrl: 'wss://90plus-app-production.up.railway.app',
-    timeout: 15000, // ✅ Reduced from 30s to 15s
+    timeout: 30000, // ✅ CRITICAL: Increased to 30s
     uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
-    retryAttempts: 2,
+    retryAttempts: 3,
   },
 };
 

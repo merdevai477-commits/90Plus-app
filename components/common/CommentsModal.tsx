@@ -25,6 +25,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService } from '../../src/services/authService';
 import { ActionSheetIOS } from 'react-native';
 import { router } from 'expo-router';
+import { BlockService } from '../../services/blockService';
 
 const MAX_COMMENTS_DISPLAY = 10;
 // Requirements 15.1, 15.2: Separate limits for comments and replies
@@ -94,17 +95,17 @@ export default function CommentsModal({
     const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
     const [commentsWithReplies, setCommentsWithReplies] = useState<CommentWithReplies[]>([]);
     const [longPressedCommentId, setLongPressedCommentId] = useState<string | null>(null);
-    
+
     // ✅ FIX: Use ref instead of state for loadedComments to prevent re-render loops
     const loadedCommentsRef = useRef<Comment[]>([]);
     const [loadedCommentsVersion, setLoadedCommentsVersion] = useState(0); // Only to trigger updates when needed
-    
+
     // Mention picker state
     const [showMentionPicker, setShowMentionPicker] = useState(false);
     const [mentionUsers, setMentionUsers] = useState<any[]>([]);
     const [mentionPosition, setMentionPosition] = useState({ start: 0, end: 0 });
     const mentionSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    
+
     const inputRef = useRef<TextInput>(null);
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -126,7 +127,7 @@ export default function CommentsModal({
             setMentionUsers([]);
             return;
         }
-        
+
         try {
             const token = await getToken();
             if (token) {
@@ -142,18 +143,18 @@ export default function CommentsModal({
     // Handle text change with mention detection
     const handleTextChange = useCallback((text: string) => {
         setNewComment(text);
-        
+
         // Detect @ mention
         const cursorPosition = text.length;
         const lastAtIndex = text.lastIndexOf('@', cursorPosition - 1);
-        
+
         if (lastAtIndex >= 0) {
             const textAfterAt = text.substring(lastAtIndex + 1, cursorPosition);
             // Check if there's a space or newline after @ (means mention ended)
             if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
                 setMentionPosition({ start: lastAtIndex, end: cursorPosition });
                 setShowMentionPicker(true);
-                
+
                 // Debounce search
                 if (mentionSearchTimeoutRef.current) {
                     clearTimeout(mentionSearchTimeoutRef.current);
@@ -187,7 +188,7 @@ export default function CommentsModal({
     const prevCommentIdsRef = useRef<string>('');
     const commentsWithRepliesRef = useRef<CommentWithReplies[]>([]);
     const isInitializedRef = useRef(false);
-    
+
     // ✅ Get effective comments - prioritize props, fallback to loaded
     const getEffectiveComments = useCallback((): Comment[] => {
         if (comments && comments.length > 0) {
@@ -195,7 +196,7 @@ export default function CommentsModal({
         }
         return loadedCommentsRef.current;
     }, [comments]);
-    
+
     // ✅ Get current comment IDs as string for comparison
     const getCurrentCommentIds = useCallback((): string => {
         const effective = getEffectiveComments();
@@ -232,31 +233,31 @@ export default function CommentsModal({
             // ✅ Don't call any setState here - just reset refs
             return;
         }
-        
+
         if (!reelId) {
             return;
         }
-        
+
         // If comments are provided as props, mark as loaded
         if (comments && comments.length > 0) {
             loadedReelIdRef.current = reelId;
             return;
         }
-        
+
         // Only load if we haven't loaded comments for this reel yet
         if (loadedReelIdRef.current === reelId) {
             return;
         }
-        
+
         // Load comments from backend
         const loadComments = async () => {
             try {
                 const token = await getToken();
                 if (!token) return;
-                
+
                 // Mark as loading immediately
                 loadedReelIdRef.current = reelId;
-                
+
                 const backendComments = await ReelsService.getComments(token, reelId, 50);
                 const transformedComments: Comment[] = backendComments.map((c: any) => ({
                     id: c.id,
@@ -271,7 +272,7 @@ export default function CommentsModal({
                     likes: (c as any).likes || 0,
                     liked: (c as any).liked || false
                 }));
-                
+
                 // ✅ Update ref first, then trigger minimal re-render
                 loadedCommentsRef.current = transformedComments;
                 setLoadedCommentsVersion(v => v + 1);
@@ -282,7 +283,7 @@ export default function CommentsModal({
                 }
             }
         };
-        
+
         loadComments();
     }, [visible, reelId, getToken, comments]);
 
@@ -290,7 +291,7 @@ export default function CommentsModal({
     // ✅ Use ref to avoid dependency on commentsWithReplies array (prevents infinite loop)
     const highlightCommentIdRef = useRef<string | null | undefined>(highlightCommentId);
     const hasScrolledRef = useRef(false);
-    
+
     useEffect(() => {
         highlightCommentIdRef.current = highlightCommentId;
         // Reset scroll flag when highlightCommentId changes
@@ -298,14 +299,14 @@ export default function CommentsModal({
             hasScrolledRef.current = false;
         }
     }, [highlightCommentId]);
-    
+
     // Reset scroll flag when modal closes
     useEffect(() => {
         if (!visible) {
             hasScrolledRef.current = false;
         }
     }, [visible]);
-    
+
     // ✅ CRITICAL FIX: Sync commentsWithReplies with effective comments
     // Only update when comment IDs actually change to prevent infinite loops
     useEffect(() => {
@@ -313,16 +314,16 @@ export default function CommentsModal({
         if (!visible) {
             return;
         }
-        
+
         // ✅ Get current effective comments
         const effectiveComments = getEffectiveComments();
         const currentIds = getCurrentCommentIds();
-        
+
         // ✅ Skip if IDs haven't changed
         if (prevCommentIdsRef.current === currentIds && isInitializedRef.current) {
             return;
         }
-        
+
         // ✅ Handle empty comments
         if (!effectiveComments || effectiveComments.length === 0) {
             if (commentsWithRepliesRef.current.length > 0) {
@@ -333,16 +334,16 @@ export default function CommentsModal({
             isInitializedRef.current = true;
             return;
         }
-        
+
         // ✅ Update ref BEFORE setState to prevent loops
         prevCommentIdsRef.current = currentIds;
         isInitializedRef.current = true;
-        
+
         // ✅ Transform comments and preserve existing replies
         const transformed: CommentWithReplies[] = effectiveComments.map(c => {
             const commentText = (c as any).content || c.text || '';
             const existing = commentsWithRepliesRef.current.find(ec => ec.id === c.id);
-            
+
             return {
                 ...c,
                 text: commentText,
@@ -356,45 +357,45 @@ export default function CommentsModal({
                 loadingReplies: existing?.loadingReplies ?? false
             };
         });
-        
+
         // ✅ Update ref synchronously
         commentsWithRepliesRef.current = transformed;
         setCommentsWithReplies(transformed);
-        
+
     }, [visible, comments, loadedCommentsVersion, getEffectiveComments, getCurrentCommentIds]);
-    
+
     // ✅ Separate effect to handle scroll after commentsWithReplies updates
     // Use a separate ref to track when comments are ready for scrolling
     const commentsReadyForScrollRef = useRef(false);
-    
+
     useEffect(() => {
         // Only attempt scroll when modal is visible and comments are loaded
         if (!visible || !highlightCommentIdRef.current) {
             commentsReadyForScrollRef.current = false;
             return;
         }
-        
+
         // Wait for comments to be ready
         if (commentsWithRepliesRef.current.length === 0) {
             commentsReadyForScrollRef.current = false;
             return;
         }
-        
+
         // Only scroll once per highlightCommentId change
         if (hasScrolledRef.current || commentsReadyForScrollRef.current) {
             return;
         }
-        
+
         const commentIndex = commentsWithRepliesRef.current.findIndex(c => c.id === highlightCommentIdRef.current);
         if (commentIndex >= 0 && commentsListRef.current) {
             commentsReadyForScrollRef.current = true;
             hasScrolledRef.current = true;
-            
+
             // Use setTimeout to ensure the list is fully rendered
             setTimeout(() => {
                 try {
-                    commentsListRef.current?.scrollToIndex({ 
-                        index: commentIndex, 
+                    commentsListRef.current?.scrollToIndex({
+                        index: commentIndex,
                         animated: true,
                         viewPosition: 0.5 // Center the comment
                     });
@@ -410,7 +411,7 @@ export default function CommentsModal({
     const triggerShake = () => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Vibration.vibrate([0, 50, 50, 50]);
-        
+
         Animated.sequence([
             Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
             Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
@@ -464,22 +465,22 @@ export default function CommentsModal({
 
     const handleToggleLike = useCallback(async (commentId: string) => {
         haptic.trigger('light');
-        
+
         // Find the comment to get current state
         const comment = commentsWithReplies.find(c => c.id === commentId);
         const wasLiked = comment?.liked ?? false;
         const prevLikes = comment?.likes ?? 0;
-        
+
         // Optimistic UI update
-        setCommentsWithReplies(prev => prev.map(c => 
-            c.id === commentId 
+        setCommentsWithReplies(prev => prev.map(c =>
+            c.id === commentId
                 ? { ...c, liked: !wasLiked, likes: wasLiked ? prevLikes - 1 : prevLikes + 1 }
                 : c
         ));
-        
+
         // Also call the parent handler for local state
         onToggleLike && onToggleLike(commentId);
-        
+
         // Sync with backend
         try {
             const token = await getToken();
@@ -493,8 +494,8 @@ export default function CommentsModal({
         } catch (error) {
             // Rollback on failure
             console.error('Error syncing comment like:', error);
-            setCommentsWithReplies(prev => prev.map(c => 
-                c.id === commentId 
+            setCommentsWithReplies(prev => prev.map(c =>
+                c.id === commentId
                     ? { ...c, liked: wasLiked, likes: prevLikes }
                     : c
             ));
@@ -504,27 +505,27 @@ export default function CommentsModal({
     // Handle like on reply
     const handleToggleReplyLike = useCallback(async (replyId: string, parentCommentId: string) => {
         haptic.trigger('light');
-        
+
         // Find the reply to get current state
         const parentComment = commentsWithReplies.find(c => c.id === parentCommentId);
         const reply = parentComment?.replies?.find(r => r.id === replyId);
         const wasLiked = reply?.liked ?? false;
         const prevLikes = reply?.likes ?? 0;
-        
+
         // Optimistic UI update
-        setCommentsWithReplies(prev => prev.map(c => 
-            c.id === parentCommentId 
-                ? { 
-                    ...c, 
-                    replies: c.replies?.map(r => 
-                        r.id === replyId 
+        setCommentsWithReplies(prev => prev.map(c =>
+            c.id === parentCommentId
+                ? {
+                    ...c,
+                    replies: c.replies?.map(r =>
+                        r.id === replyId
                             ? { ...r, liked: !wasLiked, likes: wasLiked ? prevLikes - 1 : prevLikes + 1 }
                             : r
                     )
                 }
                 : c
         ));
-        
+
         // Sync with backend
         try {
             const token = await getToken();
@@ -538,12 +539,12 @@ export default function CommentsModal({
         } catch (error) {
             // Rollback on failure
             console.error('Error syncing reply like:', error);
-            setCommentsWithReplies(prev => prev.map(c => 
-                c.id === parentCommentId 
-                    ? { 
-                        ...c, 
-                        replies: c.replies?.map(r => 
-                            r.id === replyId 
+            setCommentsWithReplies(prev => prev.map(c =>
+                c.id === parentCommentId
+                    ? {
+                        ...c,
+                        replies: c.replies?.map(r =>
+                            r.id === replyId
                                 ? { ...r, liked: wasLiked, likes: prevLikes }
                                 : r
                         )
@@ -569,14 +570,14 @@ export default function CommentsModal({
     // Handle delete comment (own comments only)
     const handleDeleteComment = useCallback(async (commentId: string) => {
         haptic.trigger('medium');
-        
+
         try {
             const token = await getToken();
             if (!token) return;
 
             // Optimistic UI update - remove comment immediately
             setCommentsWithReplies(prev => prev.filter(c => c.id !== commentId));
-            
+
             // Sync with backend
             const result = await ReelsService.deleteComment(token, commentId);
             if (!result.success) {
@@ -591,32 +592,89 @@ export default function CommentsModal({
         }
     }, [haptic, getToken]);
 
+
+
+    // Handle block user
+    const handleBlockUser = useCallback(async (userId: string, username: string) => {
+        // Confirmation alert
+        Alert.alert(
+            'حظر المستخدم',
+            `هل أنت متأكد من حظر ${username}؟ لن تتمكن من رؤية محتواه مرة أخرى.`,
+            [
+                { text: 'إلغاء', style: 'cancel' },
+                {
+                    text: 'حظر',
+                    style: 'destructive',
+                    onPress: async () => {
+                        haptic.trigger('medium');
+                        try {
+                            const token = await getToken();
+                            if (!token) return;
+
+                            // Optimistic UI update: Remove all comments from this user
+                            setCommentsWithReplies(prev => prev.filter(c => c.user.id !== userId));
+
+                            // Call Block Service
+                            await BlockService.blockUser(userId, token);
+
+                            Alert.alert('تم الحظر', 'تم حظر المستخدم بنجاح');
+                        } catch (error) {
+                            console.error('Error blocking user:', error);
+                            Alert.alert('خطأ', 'فشل حظر المستخدم');
+                            // We could rollback here if needed, but for blocking it's better to just show error
+                        }
+                    }
+                }
+            ]
+        );
+    }, [haptic, getToken]);
+
     // Handle report comment
-    const handleReportComment = useCallback(async (commentId: string) => {
+    const handleReportComment = useCallback(async (commentId: string, authorId?: string, authorName?: string) => {
         haptic.trigger('medium');
-        
+
+        const isOwnComment = currentUserId && authorId && String(currentUserId) === String(authorId);
+
         if (Platform.OS === 'ios') {
+            const options = [
+                'محتوى غير لائق',
+                'سبام أو إعلانات',
+                'خطاب كراهية',
+                'أخرى',
+                'إلغاء'
+            ];
+
+            // Add Block option if not own comment
+            if (!isOwnComment && authorId && authorName) {
+                options.splice(4, 0, `حظر ${authorName}`);
+            }
+
             ActionSheetIOS.showActionSheetWithOptions(
                 {
-                    options: [
+                    options,
+                    destructiveButtonIndex: !isOwnComment ? 4 : undefined, // Block button index
+                    cancelButtonIndex: options.length - 1,
+                },
+                async (buttonIndex) => {
+                    // Handle cancel
+                    if (buttonIndex === options.length - 1) return;
+
+                    // Handle Block
+                    if (!isOwnComment && buttonIndex === 4 && authorId && authorName) {
+                        handleBlockUser(authorId, authorName);
+                        return;
+                    }
+
+                    // Handle Report
+                    const reasons = [
                         'محتوى غير لائق',
                         'سبام أو إعلانات',
                         'خطاب كراهية',
-                        'أخرى',
-                        'إلغاء'
-                    ],
-                    cancelButtonIndex: 4,
-                },
-                async (buttonIndex) => {
-                    if (buttonIndex < 4) {
-                        const reasons = [
-                            'محتوى غير لائق',
-                            'سبام أو إعلانات',
-                            'خطاب كراهية',
-                            'أخرى'
-                        ];
-                        const reason = reasons[buttonIndex];
-                        
+                        'أخرى'
+                    ];
+                    const reason = reasons[buttonIndex];
+
+                    if (reason) {
                         try {
                             const token = await getToken();
                             if (!token) return;
@@ -635,53 +693,75 @@ export default function CommentsModal({
                 }
             );
         } else {
-            // Android - use Alert with input
-            Alert.prompt(
-                'Report Comment',
-                'Please provide a reason',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Report',
-                        onPress: async (reason: string | undefined) => {
-                            if (reason) {
-                                try {
-                                    const token = await getToken();
-                                    if (!token) return;
+            // Android implementation
+            const options = [
+                { text: 'إبلاغ', onPress: () => showReportDialog(commentId) }
+            ];
 
-                                    const result = await ReelsService.reportComment(token, commentId, reason);
-                                    if (result.success) {
-                                        Alert.alert('تم الإبلاغ', 'شكراً لك، سيتم مراجعة البلاغ');
-                                    } else {
-                                        Alert.alert('Error', result.message || 'Failed to report comment');
-                                    }
-                                } catch (error: any) {
-                                    console.error('Error reporting comment:', error);
-                                    Alert.alert('Error', 'Failed to report comment');
+            if (!isOwnComment && authorId && authorName) {
+                options.push({
+                    text: `حظر ${authorName}`,
+                    onPress: () => handleBlockUser(authorId, authorName)
+                });
+            }
+
+            options.push({ text: 'إلغاء', onPress: () => { } });
+
+            Alert.alert(
+                'خيارات التعليق',
+                'اختر إجراء',
+                options
+            );
+        }
+    }, [haptic, getToken, currentUserId, handleBlockUser]);
+
+    // Helper for Android report dialog
+    const showReportDialog = (commentId: string) => {
+        Alert.prompt(
+            'Report Comment',
+            'Please provide a reason',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Report',
+                    onPress: async (reason: string | undefined) => {
+                        if (reason) {
+                            try {
+                                const token = await getToken();
+                                if (!token) return;
+
+                                const result = await ReelsService.reportComment(token, commentId, reason);
+                                if (result.success) {
+                                    Alert.alert('تم الإبلاغ', 'شكراً لك، سيتم مراجعة البلاغ');
+                                } else {
+                                    Alert.alert('Error', result.message || 'Failed to report comment');
                                 }
+                            } catch (error: any) {
+                                console.error('Error reporting comment:', error);
+                                Alert.alert('Error', 'Failed to report comment');
                             }
                         }
                     }
-                ],
-                'plain-text'
-            );
-        }
-    }, [haptic, getToken]);
+                }
+            ],
+            'plain-text'
+        );
+    };
 
     // Load replies for a comment - Requirements 14.4
     const loadReplies = useCallback(async (commentId: string) => {
         const token = await getToken();
         if (!token) return;
 
-        setCommentsWithReplies(prev => prev.map(c => 
+        setCommentsWithReplies(prev => prev.map(c =>
             c.id === commentId ? { ...c, loadingReplies: true } : c
         ));
 
         try {
             const replies = await ReelsService.getReplies(token, commentId);
-            setCommentsWithReplies(prev => prev.map(c => 
-                c.id === commentId ? { 
-                    ...c, 
+            setCommentsWithReplies(prev => prev.map(c =>
+                c.id === commentId ? {
+                    ...c,
                     replies: replies.map((r: any) => ({
                         id: r.id,
                         user: {
@@ -696,12 +776,12 @@ export default function CommentsModal({
                         liked: false
                     })),
                     showReplies: true,
-                    loadingReplies: false 
+                    loadingReplies: false
                 } : c
             ));
         } catch (error) {
             console.error('Error loading replies:', error);
-            setCommentsWithReplies(prev => prev.map(c => 
+            setCommentsWithReplies(prev => prev.map(c =>
                 c.id === commentId ? { ...c, loadingReplies: false } : c
             ));
         }
@@ -712,11 +792,11 @@ export default function CommentsModal({
         haptic.trigger('light');
         const comment = commentsWithReplies.find(c => c.id === commentId);
         if (comment?.showReplies) {
-            setCommentsWithReplies(prev => prev.map(c => 
+            setCommentsWithReplies(prev => prev.map(c =>
                 c.id === commentId ? { ...c, showReplies: false } : c
             ));
         } else if (comment?.replies && comment.replies.length > 0) {
-            setCommentsWithReplies(prev => prev.map(c => 
+            setCommentsWithReplies(prev => prev.map(c =>
                 c.id === commentId ? { ...c, showReplies: true } : c
             ));
         } else {
@@ -736,7 +816,7 @@ export default function CommentsModal({
     // Requirements 15.4: Check limits before sending to backend
     const handleSend = async () => {
         if (!newComment.trim() || isSubmitting || !onAddComment) return;
-        
+
         // Check appropriate limit based on whether it's a comment or reply
         const isReplyMode = !!replyingTo;
         if (isReplyMode && !canReply) {
@@ -779,7 +859,7 @@ export default function CommentsModal({
                             likes: 0,
                             liked: false
                         };
-                        setCommentsWithReplies(prev => prev.map(c => 
+                        setCommentsWithReplies(prev => prev.map(c =>
                             c.id === replyingTo.commentId ? {
                                 ...c,
                                 replies: [...(c.replies || []), newReply],
@@ -864,13 +944,13 @@ export default function CommentsModal({
 
     // Render a single reply
     const renderReply = (reply: Reply, parentCommentId: string) => {
-        const isOwnReply = currentUserId && reply.user.id && 
+        const isOwnReply = currentUserId && reply.user.id &&
             String(currentUserId) === String(reply.user.id);
-        
+
         return (
             <View key={reply.id} style={styles.replyItem}>
                 <Image
-                    source={{ 
+                    source={{
                         uri: reply.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(reply.user.name || 'User')}&background=0D8ABC&color=fff`
                     }}
                     style={styles.replyAvatar}
@@ -887,7 +967,7 @@ export default function CommentsModal({
                             {/* Report and Delete buttons for replies */}
                             {!isOwnReply && (
                                 <TouchableOpacity
-                                    onPress={() => handleReportComment(reply.id)}
+                                    onPress={() => handleReportComment(reply.id, reply.user.id, reply.user.name)}
                                     style={styles.replyReportButton}
                                 >
                                     <Flag size={12} color={COLORS.info} />
@@ -915,8 +995,8 @@ export default function CommentsModal({
                     {renderTextWithMentions(reply.text)}
                 </View>
                 {/* Like button for reply */}
-                <TouchableOpacity 
-                    style={styles.replyLike} 
+                <TouchableOpacity
+                    style={styles.replyLike}
                     onPress={() => handleToggleReplyLike(reply.id, parentCommentId)}
                 >
                     <Heart size={12} color={reply.liked ? COLORS.error : '#666'} fill={reply.liked ? COLORS.error : 'none'} />
@@ -931,7 +1011,7 @@ export default function CommentsModal({
     };
 
     const renderItem = ({ item }: { item: CommentWithReplies }) => {
-        const isOwnComment = currentUserId && item.user.id && 
+        const isOwnComment = currentUserId && item.user.id &&
             String(currentUserId) === String(item.user.id);
         const showActionIcon = longPressedCommentId === item.id;
         const isHighlighted = highlightCommentId === item.id;
@@ -957,7 +1037,7 @@ export default function CommentsModal({
                         isHighlighted && styles.commentItemHighlighted
                     ]}>
                         <Image
-                            source={{ 
+                            source={{
                                 uri: item.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.name || 'User')}&background=0D8ABC&color=fff`
                             }}
                             style={styles.commentAvatar}
@@ -987,7 +1067,7 @@ export default function CommentsModal({
                                                         ]
                                                     );
                                                 } else {
-                                                    handleReportComment(item.id);
+                                                    handleReportComment(item.id, item.user.id, item.user.name);
                                                 }
                                             }}
                                         >
@@ -1004,14 +1084,14 @@ export default function CommentsModal({
 
                             {/* Comment Actions - Requirements 14.1 */}
                             <View style={styles.commentActions}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => handleReplyPress(item.id, item.user.name)}
                                     style={styles.replyButton}
                                 >
                                     <MessageCircle size={14} color="#888" />
                                     <Text style={styles.replyText}>رد</Text>
                                 </TouchableOpacity>
-                                
+
                                 {/* Report button - visible always */}
                                 {!isOwnComment && (
                                     <TouchableOpacity
@@ -1022,7 +1102,7 @@ export default function CommentsModal({
                                         <Text style={styles.reportButtonText}>إبلاغ</Text>
                                     </TouchableOpacity>
                                 )}
-                                
+
                                 {/* Delete button - visible always */}
                                 {isOwnComment && (
                                     <TouchableOpacity
@@ -1042,10 +1122,10 @@ export default function CommentsModal({
                                         <Text style={styles.deleteButtonText}>حذف</Text>
                                     </TouchableOpacity>
                                 )}
-                                
+
                                 {/* View Replies - Requirements 14.4 */}
                                 {(item.repliesCount || 0) > 0 && (
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={() => toggleReplies(item.id)}
                                         style={styles.viewRepliesButton}
                                     >
@@ -1122,9 +1202,9 @@ export default function CommentsModal({
                         onScrollToIndexFailed={(info) => {
                             // Fallback if scroll fails
                             setTimeout(() => {
-                                commentsListRef.current?.scrollToOffset({ 
-                                    offset: info.averageItemLength * info.index, 
-                                    animated: true 
+                                commentsListRef.current?.scrollToOffset({
+                                    offset: info.averageItemLength * info.index,
+                                    animated: true
                                 });
                             }, 100);
                         }}
@@ -1154,7 +1234,7 @@ export default function CommentsModal({
                         <Animated.View style={[styles.limitWarning, { transform: [{ translateX: shakeAnim }] }]}>
                             <AlertCircle size={16} color="#FF6B6B" />
                             <Text style={styles.limitWarningText}>
-                                {replyingTo 
+                                {replyingTo
                                     ? `لقد وصلت للحد الأقصى من الردود (${MAX_REPLIES_PER_USER} ردود)`
                                     : `لقد وصلت للحد الأقصى من التعليقات (${MAX_COMMENTS_PER_USER} تعليقات)`
                                 }
@@ -1203,10 +1283,10 @@ export default function CommentsModal({
                         </View>
                     )}
 
-                    <Animated.View 
+                    <Animated.View
                         style={[
-                            styles.inputContainer, 
-                            { 
+                            styles.inputContainer,
+                            {
                                 marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
                                 transform: [{ translateX: shakeAnim }]
                             }
@@ -1218,7 +1298,7 @@ export default function CommentsModal({
                                 ref={inputRef}
                                 style={styles.input}
                                 placeholder={
-                                    replyingTo 
+                                    replyingTo
                                         ? (canReply ? `رد على @${replyingTo.username}...` : "وصلت للحد الأقصى من الردود")
                                         : (canComment ? "أضف تعليقاً..." : "وصلت للحد الأقصى من التعليقات")
                                 }
