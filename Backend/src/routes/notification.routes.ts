@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
+import { verifyNotificationOwnership } from '../middleware/ownership.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
@@ -95,29 +96,15 @@ router.get('/unread-count', requireAuth, async (req: Request, res: Response): Pr
 /**
  * PUT /api/notifications/:id/read
  * Mark notification as read
+ * ✅ ZERO TRUST: Ownership verified by middleware
  */
-router.put('/:id/read', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/:id/read', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
     try {
-        const clerkUserId = req.auth?.userId;
         const { id } = req.params;
 
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true }
-        });
-
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        await prisma.notification.updateMany({
-            where: { id, userId: user.id },
+        // Ownership already verified by middleware
+        await prisma.notification.update({
+            where: { id },
             data: { isRead: true }
         });
 
@@ -165,37 +152,13 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
 /**
  * DELETE /api/notifications/:id
  * Delete a single notification
+ * ✅ ZERO TRUST: Ownership verified by middleware
  */
-router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
     try {
-        const clerkUserId = req.auth?.userId;
         const { id } = req.params;
 
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true }
-        });
-
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        // Verify ownership before deleting
-        const notification = await prisma.notification.findFirst({
-            where: { id, userId: user.id }
-        });
-
-        if (!notification) {
-            res.status(404).json({ status: 'ERROR', message: 'Notification not found' });
-            return;
-        }
-
+        // Ownership already verified by middleware
         await prisma.notification.delete({
             where: { id }
         });

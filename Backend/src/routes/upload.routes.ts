@@ -318,13 +318,30 @@ router.post('/reel', requireAuth, upload.fields([
         const fileSizeMB = (videoFile.buffer.length / (1024 * 1024)).toFixed(2);
         logger.info(`Starting video upload: ${videoFileName}, size: ${fileSizeMB}MB (${videoFile.buffer.length} bytes), type: ${videoFile.mimetype}`);
         
+        // ✅ DRAGON FIX: Implement proper upload cancellation with AbortController
         const uploadStartTime = Date.now();
-        const uploadPromise = r2Storage.uploadFile('reels', videoFile.buffer, videoFileName, videoFile.mimetype);
+        const abortController = new AbortController();
+        
+        const uploadPromise = r2Storage.uploadFile(
+            'reels', 
+            videoFile.buffer, 
+            videoFileName, 
+            videoFile.mimetype,
+            abortController.signal // Pass abort signal
+        );
+        
         const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
             setTimeout(() => {
                 const elapsed = Date.now() - uploadStartTime;
                 logger.error(`R2 upload timeout after ${elapsed}ms for file: ${videoFileName}`);
-                resolve({ success: false, error: 'Upload to storage timed out. File may be too large. Maximum size is 50MB.' });
+                
+                // ✅ DRAGON FIX: Actually cancel the upload
+                abortController.abort();
+                
+                resolve({ 
+                    success: false, 
+                    error: 'Upload to storage timed out. File may be too large. Maximum size is 50MB.' 
+                });
             }, 45 * 1000); // 45 seconds - leaving 15s buffer for response
         });
 

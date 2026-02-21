@@ -1,131 +1,273 @@
+/**
+ * 🔒 ZERO TRUST: Comprehensive Ownership Verification
+ * Prevents IDOR (Insecure Direct Object Reference) attacks
+ * Every resource modification must verify ownership
+ */
+
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import prisma from '../lib/prisma';
 
 /**
- * Extracts the owner ID from a file path.
- * File paths are expected to be in the format: {userId}/{filename} or {userId}/subfolder/{filename}
- * 
- * @param filePath - The file path to extract owner from
- * @returns The owner ID or null if extraction fails
+ * Get user ID from authenticated request
  */
-export function extractOwnerFromPath(filePath: string): string | null {
-    if (!filePath || typeof filePath !== 'string') {
-        return null;
-    }
+async function getUserId(req: Request): Promise<string | null> {
+  const clerkUserId = req.auth?.userId;
+  if (!clerkUserId) return null;
 
-    // Trim leading/trailing slashes and whitespace
-    const cleanPath = filePath.trim().replace(/^\/+|\/+$/g, '');
-    
-    if (cleanPath.length === 0) {
-        return null;
-    }
+  const user = await prisma.user.findUnique({
+    where: { clerkUserId },
+    select: { id: true },
+  });
 
-    // Split by '/' and get the first segment (owner ID)
-    const segments = cleanPath.split('/');
-    const ownerId = segments[0];
-
-    // Validate that owner ID is not empty
-    if (!ownerId || ownerId.length === 0) {
-        return null;
-    }
-
-    return ownerId;
+  return user?.id || null;
 }
 
 /**
- * Verifies that the requesting user owns the file they are trying to access/delete.
- * 
- * @param requestingUserId - The ID of the user making the request
- * @param filePath - The path of the file being accessed
- * @returns true if the user owns the file, false otherwise
+ * Verify ownership of a reel
  */
-export function verifyOwnership(requestingUserId: string, filePath: string): boolean {
-    if (!requestingUserId || typeof requestingUserId !== 'string') {
-        return false;
+export async function verifyReelOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
     }
 
-    const fileOwnerId = extractOwnerFromPath(filePath);
-    
-    if (!fileOwnerId) {
-        return false;
+    const reelId = req.params.id || req.params.reelId;
+    if (!reelId) {
+      res.status(400).json({ status: 'ERROR', message: 'Reel ID required' });
+      return;
     }
 
-    return requestingUserId === fileOwnerId;
+    const reel = await prisma.reel.findUnique({
+      where: { id: reelId },
+      select: { userId: true },
+    });
+
+    if (!reel) {
+      res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+      return;
+    }
+
+    if (reel.userId !== userId) {
+      logger.warn('Reel ownership verification failed', {
+        userId,
+        reelId,
+        ownerId: reel.userId,
+        ip: req.ip,
+        path: req.path,
+      });
+
+      res.status(403).json({ status: 'ERROR', message: 'Forbidden - You do not own this reel' });
+      return;
+    }
+
+    req.userId = userId;
+    next();
+  } catch (error: any) {
+    logger.error('Reel ownership verification error:', error);
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+  }
 }
 
 /**
- * Middleware to verify file ownership before allowing file operations.
- * Returns 403 Forbidden if the requesting user does not own the file.
- * 
- * Expects:
- * - req.auth.userId to be set by authentication middleware
- * - req.params.path to contain the file path
+ * Verify ownership of a comment
  */
-export const verifyFileOwnership = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-): Promise<void> => {
-    try {
-        // Get the requesting user's ID from auth middleware
-        const requestingUserId = req.auth?.userId || (req as any).user?.id;
-
-        if (!requestingUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized - User not authenticated',
-                code: 'UNAUTHORIZED',
-            });
-            return;
-        }
-
-        // Get the file path from request params
-        const filePath = req.params.path;
-
-        if (!filePath) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Bad Request - File path not provided',
-                code: 'VALIDATION_ERROR',
-            });
-            return;
-        }
-
-        // Extract owner ID from file path
-        const fileOwnerId = extractOwnerFromPath(filePath);
-
-        if (!fileOwnerId) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Bad Request - Invalid file path format',
-                code: 'VALIDATION_ERROR',
-            });
-            return;
-        }
-
-        // Verify ownership
-        if (!verifyOwnership(requestingUserId, filePath)) {
-            // Log the unauthorized attempt
-            logger.warn(
-                `Unauthorized file deletion attempt: User ${requestingUserId} tried to delete file owned by ${fileOwnerId}. Path: ${filePath}`
-            );
-
-            res.status(403).json({
-                status: 'ERROR',
-                message: 'Forbidden - You do not have permission to delete this file',
-                code: 'FORBIDDEN',
-            });
-            return;
-        }
-
-        // User owns the file, proceed to next middleware/controller
-        next();
-    } catch (error: any) {
-        logger.warn('Ownership verification error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error during ownership verification',
-            code: 'INTERNAL_ERROR',
-        });
+export async function verifyCommentOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
     }
-};
+
+    const commentId = req.params.commentId || req.params.id;
+    if (!commentId) {
+      res.status(400).json({ status: 'ERROR', message: 'Comment ID required' });
+      return;
+    }
+
+    const comment = await prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { userId: true },
+    });
+
+    if (!comment) {
+      res.status(404).json({ status: 'ERROR', message: 'Comment not found' });
+      return;
+    }
+
+    if (comment.userId !== userId) {
+      logger.warn('Comment ownership verification failed', {
+        userId,
+        commentId,
+        ownerId: comment.userId,
+        ip: req.ip,
+        path: req.path,
+      });
+
+      res.status(403).json({ status: 'ERROR', message: 'Forbidden - You do not own this comment' });
+      return;
+    }
+
+    req.userId = userId;
+    next();
+  } catch (error: any) {
+    logger.error('Comment ownership verification error:', error);
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+  }
+}
+
+/**
+ * Verify ownership of a video
+ */
+export async function verifyVideoOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    const videoId = req.params.id || req.params.videoId;
+    if (!videoId) {
+      res.status(400).json({ status: 'ERROR', message: 'Video ID required' });
+      return;
+    }
+
+    const video = await prisma.reel.findUnique({
+      where: { id: videoId },
+      select: { userId: true },
+    });
+
+    if (!video) {
+      res.status(404).json({ status: 'ERROR', message: 'Video not found' });
+      return;
+    }
+
+    if (video.userId !== userId) {
+      logger.warn('Video ownership verification failed', {
+        userId,
+        videoId,
+        ownerId: video.userId,
+        ip: req.ip,
+        path: req.path,
+      });
+
+      res.status(403).json({ status: 'ERROR', message: 'Forbidden - You do not own this video' });
+      return;
+    }
+
+    req.userId = userId;
+    next();
+  } catch (error: any) {
+    logger.error('Video ownership verification error:', error);
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+  }
+}
+
+/**
+ * Verify ownership of a notification
+ */
+export async function verifyNotificationOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    const notificationId = req.params.id || req.params.notificationId;
+    if (!notificationId) {
+      res.status(400).json({ status: 'ERROR', message: 'Notification ID required' });
+      return;
+    }
+
+    const notification = await prisma.notification.findUnique({
+      where: { id: notificationId },
+      select: { userId: true },
+    });
+
+    if (!notification) {
+      res.status(404).json({ status: 'ERROR', message: 'Notification not found' });
+      return;
+    }
+
+    if (notification.userId !== userId) {
+      logger.warn('Notification ownership verification failed', {
+        userId,
+        notificationId,
+        ownerId: notification.userId,
+        ip: req.ip,
+        path: req.path,
+      });
+
+      res.status(403).json({ status: 'ERROR', message: 'Forbidden - You do not own this notification' });
+      return;
+    }
+
+    req.userId = userId;
+    next();
+  } catch (error: any) {
+    logger.error('Notification ownership verification error:', error);
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+  }
+}
+
+/**
+ * Verify ownership of a prediction
+ */
+export async function verifyPredictionOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = await getUserId(req);
+    if (!userId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    const predictionId = req.params.id || req.params.predictionId;
+    if (!predictionId) {
+      res.status(400).json({ status: 'ERROR', message: 'Prediction ID required' });
+      return;
+    }
+
+    const prediction = await prisma.prediction.findUnique({
+      where: { id: predictionId },
+      select: { userId: true },
+    });
+
+    if (!prediction) {
+      res.status(404).json({ status: 'ERROR', message: 'Prediction not found' });
+      return;
+    }
+
+    if (prediction.userId !== userId) {
+      logger.warn('Prediction ownership verification failed', {
+        userId,
+        predictionId,
+        ownerId: prediction.userId,
+        ip: req.ip,
+        path: req.path,
+      });
+
+      res.status(403).json({ status: 'ERROR', message: 'Forbidden - You do not own this prediction' });
+      return;
+    }
+
+    req.userId = userId;
+    next();
+  } catch (error: any) {
+    logger.error('Prediction ownership verification error:', error);
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+  }
+}
+
+// Extend Express Request type
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
+}

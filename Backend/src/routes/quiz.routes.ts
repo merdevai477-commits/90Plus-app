@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
+import { validate } from '../middleware/validation.middleware';
 import {
   getRandomQuestions,
   checkAttemptCooldown,
@@ -437,8 +438,14 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
  * POST /api/quiz/answers
  * جلب الإجابات الصحيحة للأسئلة من الملفات المحلية
  * Requires authentication
+ * ✅ DRAGON FIX: Input validation added
  */
-router.post('/answers', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/answers', requireAuth, validate({
+    body: {
+        questionIds: { type: 'array', required: true, min: 1, max: 100 },
+        categoryId: { type: 'string', required: true, min: 1, max: 100 },
+    }
+}), async (req: Request, res: Response): Promise<void> => {
     logger.info(`📥 Quiz answers endpoint called - Path: ${req.path}, Method: ${req.method}`);
     try {
         const clerkUserId = req.auth?.userId;
@@ -998,10 +1005,20 @@ router.get(
 /**
  * POST /api/quiz/:categoryId/submit
  * إرسال إجابات الكويز
+ * ✅ DRAGON FIX: Input validation added
  */
 router.post(
   '/:categoryId/submit',
   requireAuth,
+  validate({
+    params: {
+      categoryId: { type: 'string', required: true, min: 1, max: 100 },
+    },
+    body: {
+      answers: { type: 'array', required: true, min: 1, max: 100 },
+      totalTime: { type: 'number', required: true, min: 0, max: 3600000 }, // Max 1 hour
+    }
+  }),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const clerkUserId = req.auth?.userId;

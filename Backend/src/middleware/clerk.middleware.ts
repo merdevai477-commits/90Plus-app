@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import { logger } from '../utils/logger';
 import { AuditService, AuditAction } from '../services/audit.service';
+import { TokenRevocationService } from '../services/token-revocation.service';
+import { AbuseDetectionService } from '../services/abuse-detection.service';
 
 // Extend Express Request to include auth
 declare global {
@@ -55,15 +57,30 @@ async function getVerifiedUser(userId: string): Promise<boolean> {
     }
 }
 
-// Clean up old cache entries periodically
-setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of userCache.entries()) {
-        if (now - value.verifiedAt > CACHE_TTL_MS * 2) {
-            userCache.delete(key);
+// ✅ DRAGON FIX: Clean up old cache entries with error protection
+const cacheCleanupInterval = setInterval(() => {
+    try {
+        const now = Date.now();
+        let deletedCount = 0;
+        for (const [key, value] of userCache.entries()) {
+            if (now - value.verifiedAt > CACHE_TTL_MS * 2) {
+                userCache.delete(key);
+                deletedCount++;
+            }
         }
+        if (deletedCount > 0) {
+            logger.debug(`🧹 Cleaned ${deletedCount} expired cache entries`);
+        }
+    } catch (error) {
+        logger.error('Cache cleanup error (recovered):', error);
     }
 }, 60 * 1000); // Clean every minute
+
+// ✅ DRAGON FIX: Cleanup on process termination
+process.on('SIGTERM', () => {
+    clearInterval(cacheCleanupInterval);
+    userCache.clear();
+});
 
 /**
  * Clerk Authentication Middleware
@@ -95,6 +112,21 @@ export const requireAuth = async (
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
+        // ✅ ENTERPRISE IMMUNITY: Check if token is revoked
+        if (TokenRevocationService.isTokenRevoked(token)) {
+            const revokedInfo = TokenRevocationService.getRevokedTokenInfo(token);
+            logger.warn('requireAuth middleware - Token revoked', {
+                path: req.path,
+                reason: revokedInfo?.reason,
+            });
+            res.status(401).json({
+                status: 'ERROR',
+                message: 'Unauthorized - Token has been revoked',
+                code: 'TOKEN_REVOKED',
+            });
+            return;
+        }
+
         try {
             // ✅ SECURE: Verify JWT signature using Clerk SDK
             // Clerk automatically verifies the token signature using JWKS
@@ -106,6 +138,10 @@ export const requireAuth = async (
                     method: req.method,
                     originalUrl: req.originalUrl,
                 });
+                
+                // ✅ ENTERPRISE IMMUNITY: Track failed auth
+                AbuseDetectionService.trackFailedAuth(null, req.ip || 'unknown');
+                
                 res.status(401).json({
                     status: 'ERROR',
                     message: 'Unauthorized - Invalid token',
@@ -118,6 +154,46 @@ export const requireAuth = async (
                 path: req.path,
                 method: req.method,
             });
+
+            // ✅ ENTERPRISE IMMUNITY: Check if user is blocked for abuse
+            if (AbuseDetectionService.isUserBlocked(verifiedToken.sub)) {
+                logger.warn('requireAuth middleware - User blocked for abuse', {
+                    userId: verifiedToken.sub,
+                    path: req.path,
+                });
+                res.status(429).json({
+                    status: 'ERROR',
+                    message: 'Too many requests - Please try again later',
+                    code: 'USER_BLOCKED',
+                });
+                return;
+            }
+
+            // ✅ ENTERPRISE IMMUNITY: Check if IP is blocked
+            const clientIP = req.ip || 'unknown';
+            if (AbuseDetectionService.isIPBlocked(clientIP)) {
+                logger.warn('requireAuth middleware - IP blocked for abuse', {
+                    ip: clientIP,
+                    path: req.path,
+                });
+                res.status(429).json({
+                    status: 'ERROR',
+                    message: 'Too many requests - Please try again later',
+                    code: 'IP_BLOCKED',
+                });
+                return;
+            }
+
+            // ✅ ENTERPRISE IMMUNITY: Track request
+            const allowed = AbuseDetectionService.trackUserRequest(verifiedToken.sub);
+            if (!allowed) {
+                res.status(429).json({
+                    status: 'ERROR',
+                    message: 'Too many requests - Please slow down',
+                    code: 'RATE_LIMIT_EXCEEDED',
+                });
+                return;
+            }
 
             // Optional: Verify user exists in Clerk (with caching) for extra security
             const userExists = await getVerifiedUser(verifiedToken.sub);
@@ -167,6 +243,9 @@ export const requireAuth = async (
                 originalUrl: req.originalUrl,
                 duration: `${duration}ms`,
             });
+            
+            // ✅ ENTERPRISE IMMUNITY: Track failed auth
+            AbuseDetectionService.trackFailedAuth(null, req.ip || 'unknown');
             
             // Log failed authentication attempt (non-blocking)
             AuditService.logAuth({

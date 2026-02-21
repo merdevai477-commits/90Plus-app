@@ -19,7 +19,7 @@ const INITIAL_COINS = 50;
 router.get('/balance', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        
+
         if (!clerkUserId) {
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
@@ -42,7 +42,7 @@ router.get('/balance', requireAuth, async (req: Request, res: Response): Promise
                 },
                 select: { id: true, coins: true }
             });
-            
+
             res.json({
                 status: 'SUCCESS',
                 data: {
@@ -96,7 +96,7 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
         }
 
         // Validate and set transaction type
-        const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'PURCHASE', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
+        const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'SPEND', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
         const transactionType = (type && validTypes.includes(type)) ? type : 'QUIZ_REWARD';
 
         // Update coins in transaction
@@ -170,8 +170,8 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
         }
 
         // Validate and set transaction type
-        const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'PURCHASE', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
-        const transactionType = (type && validTypes.includes(type)) ? type : 'PURCHASE';
+        const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'SPEND', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
+        const transactionType = (type && validTypes.includes(type)) ? type : 'SPEND';
 
         // Update coins in transaction
         const [updatedUser] = await prisma.$transaction([
@@ -210,7 +210,7 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
 router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        
+
         if (!clerkUserId) {
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;

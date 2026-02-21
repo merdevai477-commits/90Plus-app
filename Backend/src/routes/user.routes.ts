@@ -3,6 +3,7 @@ import { UserController } from '../controllers/user.controller';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { strictLimiter } from '../middleware/rateLimit.middleware';
 import { accountDeletionRateLimiter } from '../middleware/auth-rate-limit.middleware';
+import { validate } from '../middleware/validation.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
@@ -281,8 +282,21 @@ router.get('/block/:userId/status', requireAuth, async (req: Request, res: Respo
 /**
  * POST /api/users/report/:userId
  * Report a user (protected)
+ * ✅ DRAGON FIX: Input validation added
  */
-router.post('/report/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/report/:userId', requireAuth, validate({
+    params: {
+        userId: { type: 'string', required: true, min: 1, max: 100 },
+    },
+    body: {
+        reason: { 
+            type: 'string', 
+            required: true, 
+            enum: ['spam', 'harassment', 'inappropriate', 'fake', 'other'] 
+        },
+        additionalInfo: { type: 'string', required: false, max: 1000 },
+    }
+}), async (req: Request, res: Response): Promise<void> => {
     try {
         const { userId: targetUserId } = req.params;
         const { reason, additionalInfo } = req.body;

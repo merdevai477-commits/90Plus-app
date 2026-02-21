@@ -84,7 +84,10 @@ model User {
   isBanned       Boolean   @default(false)
   bannedAt       DateTime?
   banReason      String?
-  warningsCount  Int       @default(0)
+  warningsCount  Int       @default(false)
+
+  // Role-based access control
+  role UserRole @default(USER)
 
   // Account Deletion fields (Apple Compliance)
   isDeleted            Boolean   @default(false)
@@ -291,6 +294,12 @@ model Match {
   @@map("matches")
 }
 
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
 enum MatchStatus {
   SCHEDULED
   LIVE
@@ -465,7 +474,7 @@ enum CoinTransactionType {
   QUIZ_REWARD
   DAILY_LOGIN
   ACHIEVEMENT
-  PURCHASE
+  SPEND
   ADMIN_GRANT
   REEL_REWARD
   PREDICTION
@@ -923,17 +932,23 @@ enum ReportAction {
 // ============================================
 
 model AuditLog {
-  id         String          @id @default(uuid())
-  action     AuditAction
-  actorId    String? // User who performed the action (null for system actions)
-  targetId   String? // Target user/content ID
-  targetType AuditTargetType?
-  resource   String // Resource being accessed (e.g., 'AUTH', 'USER', 'REEL')
-  reason     String?         @db.Text
-  metadata   Json? // Additional context (IP, user agent, etc.)
-  ip         String? // IP address of the actor
-  userAgent  String? // User agent string
-  createdAt  DateTime        @default(now())
+  id           String          @id @default(uuid())
+  action       AuditAction
+  actorId      String? // User who performed the action (null for system actions)
+  targetId     String? // Target user/content ID
+  targetType   AuditTargetType?
+  resource     String // Resource being accessed (e.g., 'AUTH', 'USER', 'REEL')
+  reason       String?         @db.Text
+  metadata     Json? // Additional context (IP, user agent, etc.)
+  ip           String? // IP address of the actor
+  userAgent    String? // User agent string
+  
+  // 🛡️ ENTERPRISE IMMUNITY: Tamper-proof audit trail
+  hash         String? // SHA-256 hash of this log entry
+  previousHash String? // Hash of previous log entry (chain verification)
+  severity     String? @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  
+  createdAt    DateTime        @default(now())
 
   @@index([actorId])
   @@index([targetId])
@@ -941,6 +956,8 @@ model AuditLog {
   @@index([action])
   @@index([resource])
   @@index([createdAt])
+  @@index([severity])
+  @@index([hash])
   @@map("audit_logs")
 }
 
@@ -982,6 +999,23 @@ enum AuditTargetType {
   COMMENT
   REPORT
   ACCOUNT
+}
+
+// ============================================
+// REVOKED TOKENS (Token Blacklist)
+// ============================================
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  reason    String?  @db.Text
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("revoked_tokens")
 }
 
 // ============================================

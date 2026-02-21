@@ -116,9 +116,9 @@ To switch to Supabase Auth, see `HOW_TO_USE_SUPABASE_AUTH.md`
 ## 🗄️ Database Schema
 
 ### Authentication & Users
-- **Users** - User accounts with profile information
-- **OAuthAccounts** - OAuth provider connections
+- **Users** - User accounts with profile information (Clerk authentication)
 - **RefreshTokens** - Secure token management
+- **Sessions** - Lucia session management
 
 ### Football Data
 - **Leagues** - Football leagues
