@@ -20,6 +20,8 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { Match } from '../league-center/matchCardUtils';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 
 interface MatchCardProps {
   match: Match;
@@ -152,16 +154,11 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
         {/* League Header */}
         {match.league?.name && (
           <View style={styles.leagueHeader}>
-            {match.league.logo && (
-              <Image
-                source={{ uri: match.league.logo }}
-                style={styles.leagueLogo}
-                contentFit="contain"
-                transition={100}
-                cachePolicy="memory-disk"
-                recyclingKey={match.league.id.toString()}
-              />
-            )}
+            <LeagueIcon
+              name={match.league.name}
+              size={16}
+              color={MATCH_DETAILS_COLORS.textTertiary}
+            />
             <Text style={styles.leagueName} numberOfLines={1}>
               {match.league.name}
             </Text>
@@ -194,18 +191,11 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
         <View style={styles.teamsRow}>
           {/* Home Team */}
           <View style={styles.teamSection}>
-            <View style={styles.teamLogoContainer}>
-              {match.homeTeam?.logo && (
-              <Image
-                source={{ uri: match.homeTeam.logo }}
-                style={styles.teamLogo}
-                contentFit="contain"
-                transition={100}
-                cachePolicy="memory-disk"
-                recyclingKey={match.homeTeam.name}
-              />
-              )}
-            </View>
+            <TeamBadge
+              name={match.homeTeam?.name || 'TBD'}
+              color={MATCH_DETAILS_COLORS.cardSecondary}
+              size={56}
+            />
             <Text style={styles.teamName} numberOfLines={2}>
               {match.homeTeam?.name || 'TBD'}
             </Text>
@@ -230,18 +220,11 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
 
           {/* Away Team */}
           <View style={styles.teamSection}>
-            <View style={styles.teamLogoContainer}>
-              {match.awayTeam?.logo && (
-              <Image
-                source={{ uri: match.awayTeam.logo }}
-                style={styles.teamLogo}
-                contentFit="contain"
-                transition={100}
-                cachePolicy="memory-disk"
-                recyclingKey={match.awayTeam.name}
-              />
-              )}
-            </View>
+            <TeamBadge
+              name={match.awayTeam?.name || 'TBD'}
+              color={MATCH_DETAILS_COLORS.cardSecondary}
+              size={56}
+            />
             <Text style={styles.teamName} numberOfLines={2}>
               {match.awayTeam?.name || 'TBD'}
             </Text>

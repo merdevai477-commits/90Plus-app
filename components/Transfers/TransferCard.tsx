@@ -10,6 +10,9 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import PlayerAvatar from '../common/PlayerAvatar';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -217,16 +220,11 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
         {/* League Header */}
         {transfer.league?.name && (
           <View style={styles.leagueHeader}>
-            {transfer.league.logo && (
-              <Image
-                source={{ uri: transfer.league.logo }}
-                style={styles.leagueLogo}
-                contentFit="contain"
-                transition={100}
-                cachePolicy="memory-disk"
-                recyclingKey={transfer.league.id?.toString() || 'league'}
-              />
-            )}
+            <LeagueIcon 
+              name={transfer.league.name}
+              size={16}
+              color={MATCH_DETAILS_COLORS.textTertiary}
+            />
             <Text style={styles.leagueName} numberOfLines={1}>
               {transfer.league.name}
             </Text>
@@ -259,21 +257,12 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
             }}
             activeOpacity={0.8}
           >
-            {transfer.player.photo ? (
-              <Image
-                source={{ uri: transfer.player.photo }}
-                style={styles.playerPhoto}
-                contentFit="cover"
-                transition={200}
-                cachePolicy="memory-disk"
-                recyclingKey={transfer.player.id.toString()}
-                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-              />
-            ) : (
-              <View style={styles.playerPhotoPlaceholder}>
-                <Ionicons name="person" size={32} color={MATCH_DETAILS_COLORS.textTertiary} />
-              </View>
-            )}
+            <PlayerAvatar
+              name={transfer.player.name}
+              position={null}
+              size={64}
+              colors={[typeColors.border, typeColors.bg]}
+            />
           </TouchableOpacity>
           
           <View style={styles.playerInfo}>
@@ -311,23 +300,11 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
                 onPress={(e) => handleTeamPress(latestTransfer.teams?.out?.id, e)}
                 activeOpacity={0.8}
               >
-                <View style={styles.teamLogoContainer}>
-                  {latestTransfer.teams.out.logo ? (
-                    <Image
-                      source={{ uri: latestTransfer.teams.out.logo }}
-                      style={styles.teamLogo}
-                      contentFit="contain"
-                      transition={200}
-                      cachePolicy="memory-disk"
-                      recyclingKey={latestTransfer.teams.out.id.toString()}
-                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                    />
-                  ) : (
-                    <View style={styles.teamLogoPlaceholder}>
-                      <Ionicons name="shirt-outline" size={24} color={MATCH_DETAILS_COLORS.textTertiary} />
-                    </View>
-                  )}
-                </View>
+                <TeamBadge
+                  name={latestTransfer.teams.out.name}
+                  color={typeColors.border}
+                  size={56}
+                />
                 <Text style={styles.teamName} numberOfLines={2}>
                   {latestTransfer.teams.out.name}
                 </Text>
@@ -368,23 +345,11 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
                 onPress={(e) => handleTeamPress(latestTransfer.teams?.in?.id, e)}
                 activeOpacity={0.8}
               >
-                <View style={styles.teamLogoContainer}>
-                  {latestTransfer.teams.in.logo ? (
-                    <Image
-                      source={{ uri: latestTransfer.teams.in.logo }}
-                      style={styles.teamLogo}
-                      contentFit="contain"
-                      transition={200}
-                      cachePolicy="memory-disk"
-                      recyclingKey={latestTransfer.teams.in.id.toString()}
-                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                    />
-                  ) : (
-                    <View style={styles.teamLogoPlaceholder}>
-                      <Ionicons name="shirt-outline" size={24} color={MATCH_DETAILS_COLORS.textTertiary} />
-                    </View>
-                  )}
-                </View>
+                <TeamBadge
+                  name={latestTransfer.teams.in.name}
+                  color={typeColors.border}
+                  size={56}
+                />
                 <Text style={styles.teamName} numberOfLines={2}>
                   {latestTransfer.teams.in.name}
                 </Text>

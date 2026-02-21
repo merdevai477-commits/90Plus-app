@@ -1,0 +1,35 @@
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+
+interface LeagueIconProps {
+  name: string;
+  size?: number;
+  color?: string;
+}
+
+export default function LeagueIcon({ 
+  name, 
+  size = 40,
+  color = '#FFD700'
+}: LeagueIconProps) {
+  return (
+    <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}>
+      <MaterialCommunityIcons 
+        name="soccer" 
+        size={size * 0.6} 
+        color={color} 
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+});

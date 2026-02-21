@@ -20,6 +20,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiFootballService from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
 import { logger } from '../utils/logger';
+import PlayerAvatar from '../components/common/PlayerAvatar';
+import TeamBadge from '../components/common/TeamBadge';
 
 const { width, height } = Dimensions.get('window');
 
@@ -480,17 +482,12 @@ export default function PlayerProfileScreen() {
                         { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
                     ]}
                 >
-                    {player.player.photo ? (
-                        <Image
-                            source={{ uri: player.player.photo }}
-                            style={styles.playerPhoto}
-                            resizeMode="contain"
-                        />
-                    ) : (
-                        <View style={[styles.playerPhoto, styles.playerPhotoPlaceholder]}>
-                            <Ionicons name="person" size={120} color="rgba(255,255,255,0.3)" />
-                        </View>
-                    )}
+                    <PlayerAvatar
+                        name={player.player.name}
+                        position={games?.position || null}
+                        size={width * 0.5}
+                        colors={teamColors}
+                    />
                 </Animated.View>
             </LinearGradient>
 
@@ -514,8 +511,12 @@ export default function PlayerProfileScreen() {
                 >
                     {/* Player Header */}
                     <View style={styles.playerHeader}>
-                        {stats?.team?.logo && (
-                            <Image source={{ uri: stats.team.logo }} style={styles.teamLogo} />
+                        {stats?.team && (
+                            <TeamBadge
+                                name={stats.team.name}
+                                color={teamColors[0]}
+                                size={56}
+                            />
                         )}
                         <View style={styles.playerNameSection}>
                             <Text style={styles.playerName}>{player.player.name}</Text>
@@ -641,7 +642,11 @@ export default function PlayerProfileScreen() {
                         <View style={styles.infoSection}>
                             <Text style={styles.sectionTitle}>Current Team</Text>
                             <TouchableOpacity style={styles.teamCard} activeOpacity={0.7}>
-                                <Image source={{ uri: stats.team.logo }} style={styles.teamCardLogo} />
+                                <TeamBadge
+                                    name={stats.team.name}
+                                    color={teamColors[0]}
+                                    size={48}
+                                />
                                 <View style={styles.teamCardInfo}>
                                     <Text style={styles.teamCardName}>{stats.team.name}</Text>
                                     {stats.league && stats.league.name && stats.league.season != null && (
@@ -798,9 +803,10 @@ export default function PlayerProfileScreen() {
                                                             <View style={styles.transferTeams}>
                                                                 {t.teams.out && (
                                                                     <View style={styles.transferTeam}>
-                                                                        <Image 
-                                                                            source={{ uri: t.teams.out.logo || '' }} 
-                                                                            style={styles.transferTeamLogo}
+                                                                        <TeamBadge
+                                                                            name={t.teams.out.name}
+                                                                            color={teamColors[0]}
+                                                                            size={32}
                                                                         />
                                                                         <Text style={styles.transferTeamName} numberOfLines={1}>
                                                                             {t.teams.out.name}
@@ -814,9 +820,10 @@ export default function PlayerProfileScreen() {
                                                                 />
                                                                 {t.teams.in && (
                                                                     <View style={styles.transferTeam}>
-                                                                        <Image 
-                                                                            source={{ uri: t.teams.in.logo || '' }} 
-                                                                            style={styles.transferTeamLogo}
+                                                                        <TeamBadge
+                                                                            name={t.teams.in.name}
+                                                                            color={teamColors[0]}
+                                                                            size={32}
                                                                         />
                                                                         <Text style={styles.transferTeamName} numberOfLines={1}>
                                                                             {t.teams.in.name}
@@ -844,7 +851,11 @@ export default function PlayerProfileScreen() {
                             <View style={styles.teamsGrid}>
                                 {allTeams.map((team, index) => (
                                     <View key={team.id} style={styles.careerTeamCard}>
-                                        <Image source={{ uri: team.logo }} style={styles.careerTeamLogo} />
+                                        <TeamBadge
+                                            name={team.name}
+                                            color={teamColors[0]}
+                                            size={40}
+                                        />
                                         <Text style={styles.careerTeamName} numberOfLines={2}>
                                             {team.name}
                                         </Text>

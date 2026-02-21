@@ -3,6 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Transfer } from '../../services/apiFootball';
+import PlayerAvatar from '../common/PlayerAvatar';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 
 interface TopListsProps {
   transfers: Transfer[];
@@ -103,11 +106,10 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               <View style={styles.rankBadge}>
                 <Text style={styles.rankText}>{index + 1}</Text>
               </View>
-              <Image
-                source={{ uri: transfer.player.photo }}
-                style={styles.itemImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
+              <PlayerAvatar
+                name={transfer.player.name}
+                position={null}
+                size={40}
               />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>
@@ -134,14 +136,11 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               <View style={styles.rankBadge}>
                 <Text style={styles.rankText}>{index + 1}</Text>
               </View>
-              {team.logo && (
-                <Image
-                  source={{ uri: team.logo }}
-                  style={styles.itemImage}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                />
-              )}
+              <TeamBadge
+                name={team.name}
+                color="#8B5CF6"
+                size={40}
+              />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>
                   {team.name}
@@ -162,14 +161,11 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               <View style={styles.rankBadge}>
                 <Text style={styles.rankText}>{index + 1}</Text>
               </View>
-              {league.logo && (
-                <Image
-                  source={{ uri: league.logo }}
-                  style={styles.itemImage}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                />
-              )}
+              <LeagueIcon
+                name={league.name}
+                size={40}
+                color="#FFD700"
+              />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>
                   {league.name}
@@ -194,11 +190,10 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               <View style={styles.rankBadge}>
                 <Text style={styles.rankText}>{index + 1}</Text>
               </View>
-              <Image
-                source={{ uri: transfer.player.photo }}
-                style={styles.itemImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
+              <PlayerAvatar
+                name={transfer.player.name}
+                position={null}
+                size={40}
               />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>

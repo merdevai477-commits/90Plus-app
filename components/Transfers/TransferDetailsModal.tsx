@@ -11,6 +11,9 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Transfer } from '../../services/apiFootball';
+import PlayerAvatar from '../common/PlayerAvatar';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 
 interface TransferDetailsModalProps {
   visible: boolean;
@@ -100,24 +103,20 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
                 onPress={() => onPlayerPress?.(transfer)}
                 style={styles.playerCard}
               >
-                <Image
-                  source={{ uri: transfer.player.photo }}
-                  style={styles.playerPhoto}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
+                <PlayerAvatar
+                  name={transfer.player.name}
+                  position={null}
+                  size={80}
                 />
                 <View style={styles.playerInfo}>
                   <Text style={styles.playerName}>{transfer.player.name}</Text>
                   {transfer.league && (
                     <View style={styles.leagueInfo}>
-                      {transfer.league.logo && (
-                        <Image
-                          source={{ uri: transfer.league.logo }}
-                          style={styles.leagueLogo}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                        />
-                      )}
+                      <LeagueIcon
+                        name={transfer.league.name}
+                        size={24}
+                        color="#8B5CF6"
+                      />
                       <Text style={styles.leagueName}>{transfer.league.name}</Text>
                     </View>
                   )}
@@ -142,11 +141,10 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
                           style={styles.teamCard}
                           onPress={() => onTeamPress?.(t.teams.out!.id)}
                         >
-                          <Image
-                            source={{ uri: t.teams.out.logo }}
-                            style={styles.teamLogo}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
+                          <TeamBadge
+                            name={t.teams.out.name}
+                            color="#8B5CF6"
+                            size={50}
                           />
                           <Text style={styles.teamName} numberOfLines={2}>
                             {t.teams.out.name}
@@ -159,11 +157,10 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
                           style={styles.teamCard}
                           onPress={() => onTeamPress?.(t.teams.in!.id)}
                         >
-                          <Image
-                            source={{ uri: t.teams.in.logo }}
-                            style={styles.teamLogo}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
+                          <TeamBadge
+                            name={t.teams.in.name}
+                            color="#8B5CF6"
+                            size={50}
                           />
                           <Text style={styles.teamName} numberOfLines={2}>
                             {t.teams.in.name}
@@ -194,11 +191,10 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
                       // Navigate to related transfer
                     }}
                   >
-                    <Image
-                      source={{ uri: related.player.photo }}
-                      style={styles.relatedPhoto}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
+                    <PlayerAvatar
+                      name={related.player.name}
+                      position={null}
+                      size={50}
                     />
                     <View style={styles.relatedInfo}>
                       <Text style={styles.relatedName}>{related.player.name}</Text>
