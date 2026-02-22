@@ -153,33 +153,33 @@ export async function getOrCreateDailyQuiz(): Promise<{
     }
 
     // توزيع الأسئلة: 8 سهلة، 8 متوسطة، 4 صعبة
-    const easyQuestions = allQuestions.filter(q => q.difficulty === 'EASY');
-    const mediumQuestions = allQuestions.filter(q => q.difficulty === 'MEDIUM');
-    const hardQuestions = allQuestions.filter(q => q.difficulty === 'HARD');
+    const easyQuestions = allQuestions.filter((q: any) => q.difficulty === 'EASY');
+    const mediumQuestions = allQuestions.filter((q: any) => q.difficulty === 'MEDIUM');
+    const hardQuestions = allQuestions.filter((q: any) => q.difficulty === 'HARD');
 
     // خلط الأسئلة وأخذ العدد المطلوب
-    const shuffleArray = (array: any[]) => [...array].sort(() => Math.random() - 0.5);
+    const shuffleArray = <T,>(array: T[]): T[] => [...array].sort(() => Math.random() - 0.5);
     
     const selectedQuestionIds: string[] = [
-      ...shuffleArray(easyQuestions).slice(0, Math.min(8, easyQuestions.length)).map(q => q.id),
-      ...shuffleArray(mediumQuestions).slice(0, Math.min(8, mediumQuestions.length)).map(q => q.id),
-      ...shuffleArray(hardQuestions).slice(0, Math.min(4, hardQuestions.length)).map(q => q.id),
+      ...shuffleArray(easyQuestions).slice(0, Math.min(8, easyQuestions.length)).map((q: any) => q.id),
+      ...shuffleArray(mediumQuestions).slice(0, Math.min(8, mediumQuestions.length)).map((q: any) => q.id),
+      ...shuffleArray(hardQuestions).slice(0, Math.min(4, hardQuestions.length)).map((q: any) => q.id),
     ];
 
     // إذا لم نحصل على 20 سؤال، أكمل من باقي الأسئلة
     if (selectedQuestionIds.length < 20) {
       const remainingQuestions = allQuestions
-        .filter(q => !selectedQuestionIds.includes(q.id))
-        .map(q => q.id);
+        .filter((q: any) => !selectedQuestionIds.includes(q.id))
+        .map((q: any) => q.id);
       
       const additionalQuestions = shuffleArray(remainingQuestions)
-        .slice(0, 20 - selectedQuestionIds.length);
+        .slice(0, 20 - selectedQuestionIds.length) as string[];
       
       selectedQuestionIds.push(...additionalQuestions);
     }
 
     // خلط الأسئلة المختارة نهائياً
-    const finalQuestionIds = shuffleArray(selectedQuestionIds).slice(0, 20);
+    const finalQuestionIds = shuffleArray(selectedQuestionIds).slice(0, 20) as string[];
 
     // حساب وقت انتهاء الاختبار (24 ساعة من بداية اليوم)
     const expiresAt = new Date(today);
@@ -234,12 +234,13 @@ export async function getOrCreateDailyQuiz(): Promise<{
 async function createSampleLegendsQuestions(categoryId: string): Promise<void> {
   const sampleQuestions = [
     {
-      question: 'في أي عام فاز ليونيل ميسي بأول كرة ذهبية؟',
-      options: ['2009', '2010', '2008', '2011'],
+      question: 'في أي عام فاز المنتخب الأرجنتيني بأول كأس عالم؟',
+      options: ['1978', '1986', '1990', '1994'],
       correctAnswer: '0',
       difficulty: 'EASY',
       points: 10,
-      imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/27/Lionel_Messi_NE_Revolution_Inter_Miami_7.9.25-178.jpg',
+      imageUrl: 'https://media.api-sports.io/football/teams/26.png',
+      imageType: 'flag',
       displayMode: 'after-answer',
     },
     {
@@ -251,8 +252,8 @@ async function createSampleLegendsQuestions(categoryId: string): Promise<void> {
       displayMode: 'never',
     },
     {
-      question: 'من هو أفضل هداف في تاريخ كأس العالم؟',
-      options: ['ميروسلاف كلوزه', 'رونالدو', 'بيليه', 'جيرد مولر'],
+      question: 'من أي دولة كان أفضل هداف في تاريخ كأس العالم؟',
+      options: ['ألمانيا', 'البرازيل', 'الأرجنتين', 'فرنسا'],
       correctAnswer: '0',
       difficulty: 'HARD',
       points: 20,
@@ -561,7 +562,7 @@ export async function createNewDailyQuizFromNow(): Promise<{
     // حذف محاولات من الكاتيجوريز القديمة للكويزات اليومية السابقة
     let additionalDeleted = 0;
     if (oldDailyQuizzes.length > 0) {
-      const oldCategoryIds = oldDailyQuizzes.map(q => q.categoryId);
+      const oldCategoryIds = oldDailyQuizzes.map((q: any) => q.categoryId);
       const additionalResult = await prisma.quizAttempt.deleteMany({
         where: {
           categoryId: {

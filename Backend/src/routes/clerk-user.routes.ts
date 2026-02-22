@@ -8,6 +8,12 @@ import { userSyncLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
+// Helper function to ensure string from params (handles string | string[])
+function ensureString(param: string | string[] | undefined): string {
+  if (Array.isArray(param)) return param[0] || '';
+  return param || '';
+}
+
 // Simple in-memory cache for user profiles (5 minutes TTL - increased for better performance)
 const userCache = new Map<string, { data: any; timestamp: number }>();
 const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -399,7 +405,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
         // Priority: exact username match > exact displayName match > partial match
         const searchQueryLower = searchQuery.toLowerCase();
         const rankedUsers = users
-            .map(user => {
+            .map((user: any) => {
                 const usernameLower = (user.username || '').toLowerCase();
                 const displayNameLower = (user.displayName || '').toLowerCase();
                 
@@ -441,7 +447,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
                 
                 return { ...user, _relevanceScore: score };
             })
-            .sort((a, b) => {
+            .sort((a: any, b: any) => {
                 // Sort by relevance score first, then by verified status, then by level
                 if (b._relevanceScore !== a._relevanceScore) {
                     return b._relevanceScore - a._relevanceScore;
@@ -452,7 +458,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
                 return (b.level || 0) - (a.level || 0);
             })
             .slice(0, searchLimit) // Take top results
-            .map(({ _relevanceScore, ...user }) => user); // Remove score from response
+            .map(({ _relevanceScore, ...user }: any) => user); // Remove score from response
 
         const responseData = {
             status: 'SUCCESS',
@@ -478,7 +484,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
  */
 router.get('/user/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { username } = req.params;
+        const username = ensureString(req.params.username);
         const currentClerkUserId = req.auth?.userId;
 
         if (!username) {
@@ -594,7 +600,7 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
  */
 router.post('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { username } = req.params;
+        const username = ensureString(req.params.username);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -707,7 +713,7 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
  */
 router.delete('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { username } = req.params;
+        const username = ensureString(req.params.username);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -792,7 +798,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
  */
 router.get('/user/:username/reels', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { username } = req.params;
+        const username = ensureString(req.params.username);
         const { limit = '20', offset = '0' } = req.query;
 
         if (!username) {
@@ -840,7 +846,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
         });
 
         // Format response
-        const formattedReels = reels.map(reel => ({
+        const formattedReels = reels.map((reel: any) => ({
             id: reel.id,
             uri: reel.videoUrl,
             thumbnail: reel.thumbnail,
@@ -918,7 +924,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
  */
 router.get('/followers/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId } = req.params;
+        const userId = ensureString(req.params.userId);
         const clerkUserId = req.auth?.userId;
 
         if (!userId) {
@@ -955,7 +961,7 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
         });
 
         // Check if current user is following each follower
-        const followerIds = followers.map(f => f.follower.id);
+        const followerIds = followers.map((f: any) => f.follower.id);
         const myFollows = currentUser ? await prisma.follow.findMany({
             where: {
                 followerId: currentUser.id,
@@ -963,9 +969,9 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
             },
             select: { followingId: true },
         }) : [];
-        const myFollowingSet = new Set(myFollows.map(f => f.followingId));
+        const myFollowingSet = new Set(myFollows.map((f: any) => f.followingId));
 
-        const formattedFollowers = followers.map(f => ({
+        const formattedFollowers = followers.map((f: any) => ({
             id: f.follower.id,
             username: f.follower.username,
             displayName: f.follower.displayName,
@@ -997,7 +1003,7 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
  */
 router.get('/following/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId } = req.params;
+        const userId = ensureString(req.params.userId);
         const clerkUserId = req.auth?.userId;
 
         if (!userId) {
@@ -1034,7 +1040,7 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
         });
 
         // Check if current user is following each user
-        const followingIds = following.map(f => f.following.id);
+        const followingIds = following.map((f: any) => f.following.id);
         const myFollows = currentUser ? await prisma.follow.findMany({
             where: {
                 followerId: currentUser.id,
@@ -1042,9 +1048,9 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
             },
             select: { followingId: true },
         }) : [];
-        const myFollowingSet = new Set(myFollows.map(f => f.followingId));
+        const myFollowingSet = new Set(myFollows.map((f: any) => f.followingId));
 
-        const formattedFollowing = following.map(f => ({
+        const formattedFollowing = following.map((f: any) => ({
             id: f.following.id,
             username: f.following.username,
             displayName: f.following.displayName,
@@ -1076,7 +1082,7 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
  */
 router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId: targetUserId } = req.params;
+        const targetUserId = ensureString(req.params.userId);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -1167,7 +1173,7 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
  */
 router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId: targetUserId } = req.params;
+        const targetUserId = ensureString(req.params.userId);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {

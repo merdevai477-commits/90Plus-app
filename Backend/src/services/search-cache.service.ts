@@ -181,7 +181,7 @@ class SearchCacheService {
             });
 
             if (dbTeams.length > 0) {
-                return dbTeams.map(t => ({
+                return dbTeams.map((t: any) => ({
                     id: t.teamId,
                     name: t.name,
                     logo: t.logo,
@@ -234,7 +234,7 @@ class SearchCacheService {
                 take: 10,
             });
 
-            return dbPlayers.map(p => ({
+            return dbPlayers.map((p: any) => ({
                 id: p.playerId,
                 name: p.name,
                 photo: p.photo,
@@ -264,7 +264,7 @@ class SearchCacheService {
                 take: 10,
             });
 
-            return dbLeagues.map(l => ({
+            return dbLeagues.map((l: any) => ({
                 id: l.leagueId,
                 name: l.name,
                 logo: l.logo,
@@ -294,7 +294,7 @@ class SearchCacheService {
                 take: 10,
             });
 
-            return matches.map(m => matchCacheService.convertDbMatchToApiFormat(m));
+            return matches.map((m: any) => matchCacheService.convertDbMatchToApiFormat(m));
         } catch (error) {
             logger.error('Error searching matches in DB:', error);
             return [];
@@ -319,9 +319,9 @@ class SearchCacheService {
             });
 
             const finished = dbMatches
-                .filter(m => ['FT', 'AET', 'PEN'].includes(m.status))
+                .filter((m: any) => ['FT', 'AET', 'PEN'].includes(m.status))
                 .slice(0, 5)
-                .map(m => matchCacheService.convertDbMatchToApiFormat(m));
+                .map((m: any) => matchCacheService.convertDbMatchToApiFormat(m));
 
             // Try to get live and upcoming from API (non-blocking)
             let live: any[] = [];
@@ -447,7 +447,7 @@ class SearchCacheService {
                 take: limit,
                 select: { query: true },
             });
-            return popular.map(p => p.query);
+            return popular.map((p: any) => p.query);
         } catch (error) {
             logger.error('Error getting popular searches:', error);
             return [];

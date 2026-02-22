@@ -51,25 +51,25 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   {
     id: "legends-003",
     question: "من هو أفضل هداف في تاريخ كأس العالم؟",
-    options: ["ميروسلاف كلوزه", "رونالدو", "بيليه", "جيرد مولر"],
-    correctAnswer: "0", // ميروسلاف كلوزه
+    options: ["لاعب ألماني", "لاعب برازيلي", "أسطورة برازيلية", "لاعب ألماني آخر"],
+    correctAnswer: "0", // لاعب ألماني
     difficulty: "HARD",
     points: 20,
-    imageUrl: "https://media.api-sports.io/football/players/1100.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "لاعب ألماني سجل 16 هدف في كؤوس العالم",
+    hint: "لاعب من ألمانيا سجل 16 هدف في كؤوس العالم",
     timeLimit: 25
   },
   {
     id: "legends-004",
-    question: "في أي عام فاز ليونيل ميسي بأول كأس عالم؟",
+    question: "في أي عام فاز المنتخب الأرجنتيني بآخر كأس عالم؟",
     options: ["2018", "2022", "2014", "2026"],
     correctAnswer: "1", // 2022
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/players/154.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/teams/26.png",
+    imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "كان في قطر",
     timeLimit: 15
@@ -77,51 +77,51 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   {
     id: "legends-005",
     question: "من هو اللاعب الملقب بـ 'الملك'؟",
-    options: ["بيليه", "مارادونا", "كريستيانو رونالدو", "ليونيل ميسي"],
-    correctAnswer: "0", // بيليه
+    options: ["أسطورة برازيلية", "أسطورة أرجنتينية", "لاعب برتغالي", "لاعب أرجنتيني"],
+    correctAnswer: "0", // أسطورة برازيلية
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/teams/6.png",
+    imageType: "flag",
     displayMode: "AFTER_ANSWER",
-    hint: "لاعب برازيلي أسطوري",
+    hint: "لاعب برازيلي أسطوري من الستينات",
     timeLimit: 20
   },
   {
     id: "legends-007",
-    question: "في أي نادي لعب زين الدين زيدان؟",
-    options: ["ريال مدريد", "برشلونة", "يوفنتوس", "مارسيليا"],
-    correctAnswer: "0", // ريال مدريد
+    question: "أي نادي إسباني فاز بأكثر ألقاب دوري الأبطال؟",
+    options: ["نادي من مدريد", "نادي من برشلونة", "نادي من إشبيلية", "نادي من فالنسيا"],
+    correctAnswer: "0", // نادي من مدريد
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/players/1100.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/2.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "النادي الملكي الإسباني",
     timeLimit: 15
   },
   {
     id: "legends-008",
-    question: "من هو أفضل حارس مرمى في التاريخ؟",
-    options: ["جيانلويجي بوفون", "إيكر كاسياس", "مانويل نوير", "لف ياشين"],
-    correctAnswer: "3", // لف ياشين
+    question: "من أي دولة كان أفضل حارس مرمى في التاريخ؟",
+    options: ["إيطاليا", "إسبانيا", "ألمانيا", "الاتحاد السوفيتي"],
+    correctAnswer: "3", // الاتحاد السوفيتي
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "حارس مرمى سوفيتي أسطوري",
+    hint: "حارس مرمى أسطوري من أوروبا الشرقية",
     timeLimit: 25
   },
   {
     id: "legends-009",
-    question: "كم هدف سجل بيليه في مسيرته؟",
+    question: "كم هدف تقريباً سجل أفضل هداف برازيلي في التاريخ؟",
     options: ["1000+", "800+", "1200+", "900+"],
     correctAnswer: "0", // 1000+
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/teams/6.png",
+    imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "رقم تاريخي يزيد عن الألف",
     timeLimit: 20
@@ -129,14 +129,14 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   {
     id: "legends-010",
     question: "من فاز بالكرة الذهبية 2021؟",
-    options: ["ليونيل ميسي", "روبرت ليفاندوفسكي", "كريم بنزيما", "محمد صلاح"],
-    correctAnswer: "0", // ليونيل ميسي
+    options: ["لاعب أرجنتيني", "لاعب بولندي", "لاعب فرنسي", "لاعب مصري"],
+    correctAnswer: "0", // لاعب أرجنتيني
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/players/154.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/2.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "لاعب برشلونة السابق",
+    hint: "لاعب من أمريكا الجنوبية",
     timeLimit: 15
   },
   {
@@ -154,28 +154,28 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   },
   {
     id: "legends-012",
-    question: "من هو أكثر لاعب فوزاً بدوري أبطال أوروبا؟",
-    options: ["كريستيانو رونالدو", "ليونيل ميسي", "فرانسيسكو جينتو", "باولو مالديني"],
-    correctAnswer: "2", // فرانسيسكو جينتو
+    question: "في أي عقد فاز نادي إسباني بأكثر ألقاب دوري الأبطال؟",
+    options: ["الثمانينات", "التسعينات", "الستينات", "الألفينات"],
+    correctAnswer: "2", // الستينات
     difficulty: "HARD",
     points: 25,
     imageUrl: "https://media.api-sports.io/football/leagues/2.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "لاعب ريال مدريد في الستينات",
+    hint: "العصر الذهبي للنادي الملكي",
     timeLimit: 30
   },
   {
     id: "legends-013",
-    question: "من سجل هدف 'يد الله' الشهير؟",
-    options: ["دييغو مارادونا", "بيليه", "يوهان كرويف", "ميشيل بلاتيني"],
-    correctAnswer: "0", // دييغو مارادونا
+    question: "في أي كأس عالم حدث هدف 'يد الله' الشهير؟",
+    options: ["1986", "1982", "1990", "1978"],
+    correctAnswer: "0", // 1986
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "في كأس العالم 1986 ضد إنجلترا",
+    hint: "في المكسيك ضد إنجلترا",
     timeLimit: 15
   },
   {
@@ -193,15 +193,15 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   },
   {
     id: "legends-015",
-    question: "من هو أصغر لاعب سجل في كأس العالم؟",
-    options: ["بيليه", "مايكل أوين", "كيليان مبابي", "ليونيل ميسي"],
-    correctAnswer: "0", // بيليه
+    question: "في أي عام سجل أصغر لاعب في تاريخ كأس العالم؟",
+    options: ["1958", "1966", "1970", "1962"],
+    correctAnswer: "0", // 1958
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "كان عمره 17 سنة في كأس العالم 1958",
+    hint: "كان عمره 17 سنة وكان من البرازيل",
     timeLimit: 20
   },
   {
@@ -219,15 +219,15 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   },
   {
     id: "legends-017",
-    question: "من هو أكثر لاعب تسجيلاً للأهداف في تاريخ كرة القدم؟",
-    options: ["كريستيانو رونالدو", "ليونيل ميسي", "بيليه", "جوزيف بيكان"],
-    correctAnswer: "3", // جوزيف بيكان
+    question: "من أي دولة كان أكثر لاعب تسجيلاً للأهداف في التاريخ؟",
+    options: ["البرتغال", "الأرجنتين", "البرازيل", "تشيكوسلوفاكيا"],
+    correctAnswer: "3", // تشيكوسلوفاكيا
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "لاعب تشيكوسلوفاكي سجل أكثر من 5000 هدف",
+    hint: "لاعب من أوروبا الشرقية سجل أكثر من 5000 هدف",
     timeLimit: 30
   },
   {
@@ -245,15 +245,15 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
   },
   {
     id: "legends-019",
-    question: "من هو أكثر لاعب مشاركة في كؤوس العالم؟",
-    options: ["لوثار ماتيوس", "ميروسلاف كلوزه", "كافو", "جيانلويجي بوفون"],
-    correctAnswer: "0", // لوثار ماتيوس
+    question: "كم عدد كؤوس العالم التي شارك فيها أكثر لاعب مشاركة؟",
+    options: ["5", "4", "6", "3"],
+    correctAnswer: "0", // 5
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/players/276.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
+    imageType: "trophy",
     displayMode: "AFTER_ANSWER",
-    hint: "لاعب ألماني شارك في 5 كؤوس عالم",
+    hint: "لاعب ألماني حقق هذا الرقم",
     timeLimit: 30
   },
   {
@@ -266,21 +266,21 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     imageUrl: "https://media.api-sports.io/football/teams/26.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
-    hint: "أول لقب لميسي مع المنتخب",
+    hint: "منتخب من أمريكا الجنوبية",
     timeLimit: 15
   },
   // يمكنك إضافة المزيد من الأسئلة هنا...
   {
     id: "legends-006",
-    question: "من هو أفضل لاعب في العالم 2023؟",
-    options: ["ليونيل ميسي", "كريستيانو رونالدو", "كيليان مبابي", "إرلينغ هالاند"],
-    correctAnswer: "0", // ليونيل ميسي
+    question: "من أي دولة كان أفضل لاعب في العالم 2023؟",
+    options: ["الأرجنتين", "البرتغال", "فرنسا", "النرويج"],
+    correctAnswer: "0", // الأرجنتين
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/players/154.png",
-    imageType: "player",
+    imageUrl: "https://media.api-sports.io/football/teams/26.png",
+    imageType: "flag",
     displayMode: "AFTER_ANSWER",
-    hint: "فاز بكأس العالم 2022",
+    hint: "فاز منتخبه بكأس العالم 2022",
     timeLimit: 20
   },
 ];

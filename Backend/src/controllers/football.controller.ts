@@ -8,6 +8,13 @@ import { logger } from '../utils/logger';
  * Football API Proxy Controller
  * Proxies requests to API-Football v3 while keeping API key secure on backend
  */
+
+// Helper function to ensure string from params (handles string | string[])
+function ensureString(param: string | string[] | undefined): string {
+  if (Array.isArray(param)) return param[0] || '';
+  return param || '';
+}
+
 // Helper function to format transfer date
 function formatTransferDate(dateStr: string): string {
   if (!dateStr) return 'Unknown';
@@ -342,7 +349,7 @@ export class FootballController {
         return;
       }
 
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({
@@ -479,7 +486,7 @@ export class FootballController {
         return;
       }
 
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({
@@ -515,7 +522,7 @@ export class FootballController {
         return;
       }
 
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({
@@ -550,7 +557,7 @@ export class FootballController {
         return;
       }
 
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({
@@ -607,7 +614,7 @@ export class FootballController {
         return;
       }
 
-      const playerId = parseInt(req.params.id);
+      const playerId = parseInt(ensureString(req.params.id));
       // ✅ Get current season if not provided (real-time data)
       const season = req.query.season ? parseInt(req.query.season as string) : (() => {
         const now = new Date();
@@ -655,7 +662,7 @@ export class FootballController {
         return;
       }
 
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
 
       if (isNaN(teamId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
@@ -693,7 +700,7 @@ export class FootballController {
         return;
       }
 
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
 
       if (isNaN(teamId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
@@ -952,7 +959,7 @@ export class FootballController {
         return;
       }
 
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
       const league = req.query.league ? parseInt(req.query.league as string) : undefined;
       const season = req.query.season ? parseInt(req.query.season as string) : 2024;
 
@@ -988,7 +995,7 @@ export class FootballController {
         return;
       }
 
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
 
       if (isNaN(teamId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
@@ -1017,7 +1024,7 @@ export class FootballController {
         return;
       }
 
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
 
       if (isNaN(teamId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
@@ -1046,7 +1053,7 @@ export class FootballController {
         return;
       }
 
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
 
       if (isNaN(teamId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
@@ -1717,7 +1724,7 @@ export class FootballController {
         return;
       }
 
-      const venueId = parseInt(req.params.id);
+      const venueId = parseInt(ensureString(req.params.id));
 
       if (isNaN(venueId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid venue ID' });
@@ -1818,7 +1825,7 @@ export class FootballController {
    */
   static async getCachedMatchesByDate(req: Request, res: Response): Promise<void> {
     try {
-      const dateString = req.params.date;
+      const dateString = ensureString(req.params.date);
 
       // Validate date format
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
@@ -1850,7 +1857,7 @@ export class FootballController {
    */
   static async getCachedPlayer(req: Request, res: Response): Promise<void> {
     try {
-      const playerId = parseInt(req.params.id);
+      const playerId = parseInt(ensureString(req.params.id));
       const season = req.query.season ? parseInt(req.query.season as string) : 2024;
 
       if (isNaN(playerId)) {
@@ -1880,7 +1887,7 @@ export class FootballController {
    */
   static async getCachedTeam(req: Request, res: Response): Promise<void> {
     try {
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
 
       if (isNaN(teamId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid team ID' });
@@ -1950,7 +1957,7 @@ export class FootballController {
    */
   static async getCachedStandings(req: Request, res: Response): Promise<void> {
     try {
-      const leagueId = parseInt(req.params.leagueId);
+      const leagueId = parseInt(ensureString(req.params.leagueId));
       const season = req.query.season ? parseInt(req.query.season as string) : 2024;
 
       if (isNaN(leagueId)) {
@@ -2002,7 +2009,7 @@ export class FootballController {
    */
   static async getCachedLineups(req: Request, res: Response): Promise<void> {
     try {
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
@@ -2026,7 +2033,7 @@ export class FootballController {
    */
   static async getCachedStatistics(req: Request, res: Response): Promise<void> {
     try {
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
@@ -2050,7 +2057,7 @@ export class FootballController {
    */
   static async getCachedEvents(req: Request, res: Response): Promise<void> {
     try {
-      const fixtureId = parseInt(req.params.id);
+      const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
@@ -2110,7 +2117,7 @@ export class FootballController {
    */
   static async getCachedTeamMatches(req: Request, res: Response): Promise<void> {
     try {
-      const teamId = parseInt(req.params.id);
+      const teamId = parseInt(ensureString(req.params.id));
       const count = req.query.count ? parseInt(req.query.count as string) : 10;
 
       if (isNaN(teamId)) {

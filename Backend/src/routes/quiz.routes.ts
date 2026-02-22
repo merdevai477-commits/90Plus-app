@@ -233,7 +233,7 @@ router.get('/categories', requireAuth, async (req: Request, res: Response): Prom
         const responseData = {
             status: 'SUCCESS',
             data: {
-                categories: categories.map((cat) => ({
+                categories: categories.map((cat: any) => ({
                     id: cat.id,
                     name: cat.name,
                     icon: cat.icon,
@@ -500,7 +500,7 @@ router.post('/answers', requireAuth, validate({
                 },
             });
 
-            questions.forEach((q) => {
+            questions.forEach((q: any) => {
                 answersMap[q.id] = q.correctAnswer;
             });
         }
@@ -569,7 +569,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
 
         // تحويل إلى map للوصول السريع
         const displayModeMap = new Map(
-            displayModeResults.map(item => [
+            displayModeResults.map((item: any) => [
                 item.id, 
                 item.displayMode.toLowerCase().replace('_', '-')
             ])
@@ -577,7 +577,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
 
         // ترتيب الأسئلة حسب questionIds في dailyQuiz (للحفاظ على الترتيب العشوائي)
         const orderedQuestions = dailyQuiz.questionIds.map(id => {
-            const question = questions.find(q => q.id === id);
+            const question = questions.find((q: any) => q.id === id);
             if (!question) return null;
             
             return {
@@ -670,7 +670,7 @@ router.post('/daily/answers', requireAuth, async (req: Request, res: Response): 
         });
 
         const answersMap: Record<string, string> = {};
-        questions.forEach((q) => {
+        questions.forEach((q: any) => {
             answersMap[q.id] = q.correctAnswer;
         });
 
@@ -880,11 +880,14 @@ router.get(
         return;
       }
 
+      // Ensure categoryId is a string
+      const categoryIdStr = Array.isArray(categoryId) ? categoryId[0] : categoryId;
+
       // جلب الاختبار اليومي الموحد
       const dailyQuiz = await getCurrentDailyQuiz();
 
       // إذا كان categoryId هو نفس الاختبار اليومي، استخدم الأسئلة من الاختبار اليومي
-      if (dailyQuiz && dailyQuiz.categoryId === categoryId) {
+      if (dailyQuiz && dailyQuiz.categoryId === categoryIdStr) {
         // التحقق من أن المستخدم يمكنه أخذ الاختبار
         const canTakeInfo = await canUserTakeDailyQuiz(user.id);
         
@@ -912,7 +915,7 @@ router.get(
 
       // إذا لم يكن الاختبار اليومي، استخدم النظام القديم
       // Check cooldown
-      const cooldown = await checkAttemptCooldown(user.id, categoryId);
+      const cooldown = await checkAttemptCooldown(user.id, categoryIdStr);
       if (!cooldown.canStart) {
         res.status(429).json({
           status: 'ERROR',
@@ -925,7 +928,7 @@ router.get(
 
       // Verify category exists
       const category = await prisma.quizCategory.findUnique({
-        where: { id: categoryId },
+        where: { id: categoryIdStr },
       });
 
       if (!category) {
@@ -937,7 +940,7 @@ router.get(
       }
 
       // التحقق من أن النوع مفتوح للمستخدم
-      const isOpen = await isCategoryOpenForUser(user.id, categoryId);
+      const isOpen = await isCategoryOpenForUser(user.id, categoryIdStr);
       if (!isOpen) {
         res.status(403).json({
           status: 'ERROR',
@@ -952,7 +955,7 @@ router.get(
         where: {
           userId: user.id,
           question: {
-            categoryId,
+            categoryId: categoryIdStr,
           },
         },
         select: {
@@ -961,22 +964,22 @@ router.get(
         distinct: ['questionId'],
       });
 
-      const usedQuestionIds = usedAnswers.map((a) => a.questionId);
+      const usedQuestionIds = usedAnswers.map((a: any) => a.questionId);
 
       // جلب كل questionIds للفئة
       const allQuestions = await prisma.quizQuestion.findMany({
-        where: { categoryId },
+        where: { categoryId: categoryIdStr },
         select: { id: true },
       });
 
       // استبعاد الأسئلة المستخدمة
       let availableQuestionIds = allQuestions
-        .map((q) => q.id)
-        .filter((id) => !usedQuestionIds.includes(id));
+        .map((q: any) => q.id)
+        .filter((id: any) => !usedQuestionIds.includes(id));
 
       // إذا لم يبقَ أسئلة كافية، إعادة استخدام كل الأسئلة
       if (availableQuestionIds.length < 20) {
-        availableQuestionIds = allQuestions.map((q) => q.id);
+        availableQuestionIds = allQuestions.map((q: any) => q.id);
       }
 
       // اختيار 20 سؤال عشوائي
@@ -1030,6 +1033,9 @@ router.post(
       const { categoryId } = req.params;
       const { answers, totalTime } = req.body;
 
+      // Ensure categoryId is a string
+      const categoryIdStr = Array.isArray(categoryId) ? categoryId[0] : categoryId;
+
       if (!answers || !Array.isArray(answers) || answers.length === 0) {
         res.status(400).json({
           status: 'ERROR',
@@ -1058,7 +1064,7 @@ router.post(
 
       const result = await submitQuizAttempt({
         userId: user.id,
-        categoryId,
+        categoryId: categoryIdStr,
         answers,
         totalTime,
       });
@@ -1094,6 +1100,9 @@ router.get(
 
       const { categoryId } = req.params;
 
+      // Ensure categoryId is a string
+      const categoryIdStr = Array.isArray(categoryId) ? categoryId[0] : categoryId;
+
       const user = await prisma.user.findUnique({
         where: { clerkUserId },
         select: { id: true },
@@ -1104,7 +1113,7 @@ router.get(
         return;
       }
 
-      const cooldown = await checkAttemptCooldown(user.id, categoryId);
+      const cooldown = await checkAttemptCooldown(user.id, categoryIdStr);
 
       res.json({
         status: 'SUCCESS',

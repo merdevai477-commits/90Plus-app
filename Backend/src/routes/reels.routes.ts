@@ -9,6 +9,12 @@ import { redisCacheService } from '../services/redis-cache.service';
 
 const router = Router();
 
+// Helper function to ensure param is string
+const ensureString = (param: string | string[] | undefined): string => {
+    if (Array.isArray(param)) return param[0];
+    return param || '';
+};
+
 // Constants
 const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 const REELS_PER_PAGE = 5;
@@ -129,7 +135,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         const nextCursor = hasMore ? data[data.length - 1]?.id : null;
 
         // Format response
-        const formattedReels = data.map(reel => {
+        const formattedReels = data.map((reel: any) => {
             // Log videoUrl for debugging
             if (!reel.videoUrl || reel.videoUrl.trim() === '') {
                 logger.warn(`[ReelsFeed] Reel ${reel.id} has empty or missing videoUrl`);
@@ -146,8 +152,8 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             sharesCount: reel.sharesCount || 0,
             isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
             isSaved: Array.isArray(reel.savedBy) && reel.savedBy.length > 0,
-            hashtags: reel.hashtags.map(h => h.hashtag.name),
-            mentions: reel.mentions.map(m => m.mentionedUserId),
+            hashtags: reel.hashtags.map((h: any) => h.hashtag.name),
+            mentions: reel.mentions.map((m: any) => m.mentionedUserId),
             previewComments: reel.comments,
             user: reel.user,
             createdAt: reel.createdAt,
@@ -184,7 +190,7 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
         const take = Math.min(parseInt(limit as string) || REELS_PER_PAGE, 10);
 
         const hashtag = await prisma.hashtag.findUnique({
-            where: { name: tag.toLowerCase() },
+            where: { name: (tag as string).toLowerCase() },
             select: { id: true, name: true, reelCount: true }
         });
 
@@ -234,7 +240,7 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
             status: 'SUCCESS',
             data: {
                 hashtag: { name: hashtag.name, reelCount: hashtag.reelCount },
-                reels: data.map(rh => ({
+                reels: data.map((rh: any) => ({
                     ...rh.reel,
                     likesCount: rh.reel._count.likes,
                     commentsCount: rh.reel._count.comments,
@@ -388,6 +394,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = Array.isArray(id) ? id[0] : id;
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -408,7 +415,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
 
         // Check if reel exists and get owner
         const reel = await prisma.reel.findUnique({
-            where: { id },
+            where: { id: idStr },
             select: { id: true, userId: true }
         });
 
@@ -428,7 +435,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
         const existingView = await prisma.reelView.findUnique({
             where: {
                 reelId_userId: {
-                    reelId: id,
+                    reelId: idStr,
                     userId: user.id
                 }
             }
@@ -444,12 +451,12 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
         await prisma.$transaction([
             prisma.reelView.create({
                 data: {
-                    reelId: id,
+                    reelId: idStr,
                     userId: user.id
                 }
             }),
             prisma.reel.update({
-                where: { id },
+                where: { id: idStr },
                 data: { views: { increment: 1 } }
             })
         ]);
@@ -476,6 +483,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
 router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -490,7 +498,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
 
         // Check if reel exists
         const reel = await prisma.reel.findUnique({
-            where: { id },
+            where: { id: idStr },
             select: { id: true, userId: true }
         });
 
@@ -502,20 +510,20 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
 
         // Check if already liked
         const existingLike = await prisma.like.findUnique({
-            where: { userId_reelId: { userId: user.id, reelId: id } }
+            where: { userId_reelId: { userId: user.id, reelId: idStr } }
         });
 
         if (existingLike) {
-            const likesCount = await prisma.like.count({ where: { reelId: id } });
+            const likesCount = await prisma.like.count({ where: { reelId: idStr } });
             res.json({ status: 'SUCCESS', data: { likesCount }, message: 'Already liked' });
             return;
         }
 
         await prisma.like.create({
-            data: { userId: user.id, reelId: id }
+            data: { userId: user.id, reelId: idStr }
         });
 
-        const likesCount = await prisma.like.count({ where: { reelId: id } });
+        const likesCount = await prisma.like.count({ where: { reelId: idStr } });
 
         // Notify reel owner
         if (reel.userId !== user.id) {
@@ -541,7 +549,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
 
         // Send WebSocket like update (Requirements: 21.8)
         WebSocketService.sendLikeUpdate(reel.userId, {
-            reelId: id,
+            reelId: idStr,
             likesCount,
             userId: user.id,
             action: 'like',
@@ -550,7 +558,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
         // Invalidate cache for feed and this reel
         await clearResponseCache('/reels/feed');
         await redisCacheService.delPattern('reels:feed:*');
-        await redisCacheService.del(`reel:${id}`);
+        await redisCacheService.del(`reel:${idStr}`);
 
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
@@ -566,6 +574,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
 router.delete('/:id/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -580,7 +589,7 @@ router.delete('/:id/like', requireAuth, async (req: Request, res: Response): Pro
 
         // Check if reel exists
         const reel = await prisma.reel.findUnique({
-            where: { id },
+            where: { id: idStr },
             select: { id: true, userId: true }
         });
 
@@ -591,14 +600,14 @@ router.delete('/:id/like', requireAuth, async (req: Request, res: Response): Pro
         }
 
         await prisma.like.deleteMany({
-            where: { userId: user.id, reelId: id }
+            where: { userId: user.id, reelId: idStr }
         });
 
-        const likesCount = await prisma.like.count({ where: { reelId: id } });
+        const likesCount = await prisma.like.count({ where: { reelId: idStr } });
 
         // Send WebSocket like update (Requirements: 21.8)
         WebSocketService.sendLikeUpdate(reel.userId, {
-            reelId: id,
+            reelId: idStr,
             likesCount,
             userId: user.id,
             action: 'unlike',
@@ -618,11 +627,12 @@ router.delete('/:id/like', requireAuth, async (req: Request, res: Response): Pro
 router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const { limit = '20' } = req.query;
 
         // Get top-level comments (no parentId, not deleted)
         const comments = await prisma.comment.findMany({
-            where: { reelId: id, parentId: null, isDeleted: false },
+            where: { reelId: idStr, parentId: null, isDeleted: false },
             take: Math.min(parseInt(limit as string), 50),
             orderBy: { createdAt: 'desc' },
             select: {
@@ -663,10 +673,10 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
             }
         });
 
-        const totalCount = await prisma.comment.count({ where: { reelId: id, parentId: null, isDeleted: false } });
+        const totalCount = await prisma.comment.count({ where: { reelId: idStr, parentId: null, isDeleted: false } });
 
         // Format response
-        const formattedComments = comments.map(c => ({
+        const formattedComments = comments.map((c: any) => ({
             ...c,
             repliesCount: c._count.replies,
             _count: undefined
@@ -692,6 +702,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
     // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const { content, parentId, mentions } = req.body;
         const clerkUserId = req.auth?.userId;
 
@@ -718,7 +729,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
             // Count user's replies on this reel
             const userRepliesCount = await prisma.comment.count({
                 where: {
-                    reelId: id,
+                    reelId: idStr,
                     userId: user.id,
                     parentId: { not: null }, // Only count replies
                 }
@@ -740,7 +751,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
             // Count user's top-level comments on this reel
             const userCommentsCount = await prisma.comment.count({
                 where: {
-                    reelId: id,
+                    reelId: idStr,
                     userId: user.id,
                     parentId: null, // Only count top-level comments
                 }
@@ -776,7 +787,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
         const comment = await prisma.comment.create({
             data: {
                 userId: user.id,
-                reelId: id,
+                reelId: idStr,
                 parentId: parentId || null,
                 content: content.trim()
             },
@@ -802,7 +813,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
             const mentionRegex = /@(\w+)/g;
             const matches = content.match(mentionRegex);
             if (matches) {
-                parsedMentions = matches.map(m => m.replace('@', ''));
+                parsedMentions = matches.map((m: any) => m.replace('@', ''));
             }
         }
 
@@ -833,7 +844,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
                         message: `قام ${user.displayName || user.username} بالإشارة إليك في تعليق`,
                         type: 'MENTION',
                         data: {
-                            reelId: id,
+                            reelId: idStr,
                             commentId: comment.id,
                             parentCommentId: parentId || null,
                         },
@@ -844,7 +855,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
 
         // Get reel info
         const reel = await prisma.reel.findUnique({
-            where: { id },
+            where: { id: idStr },
             select: { userId: true }
         });
 
@@ -858,7 +869,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
                 message: `رد ${user.displayName || user.username} على تعليقك`,
                 type: 'REPLY',
                 data: { 
-                    reelId: id, 
+                    reelId: idStr, 
                     commentId: comment.id,
                     parentCommentId: parentId,
                 },
@@ -866,7 +877,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
 
             // Send WebSocket reply event (Requirements: 21.3)
             WebSocketService.sendReply(parentComment.userId, {
-                reelId: id,
+                reelId: idStr,
                 parentCommentId: parentId,
                 reply: {
                     id: comment.id,
@@ -889,14 +900,14 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
                 message: `علق ${user.displayName || user.username} على فيديوك`,
                 type: 'COMMENT',
                 data: { 
-                    reelId: id, 
+                    reelId: idStr, 
                     commentId: comment.id,
                 },
             });
 
             // Send WebSocket comment event (Requirements: 21.3, 21.9)
             WebSocketService.sendComment(reel.userId, {
-                reelId: id,
+                reelId: idStr,
                 comment: {
                     id: comment.id,
                     content: comment.content,
@@ -913,8 +924,8 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
         // Invalidate cache for feed, this reel, and comments
         await clearResponseCache('/reels/feed');
         await redisCacheService.delPattern('reels:feed:*');
-        await redisCacheService.del(`reel:${id}`);
-        await redisCacheService.del(`reel:${id}:comments`);
+        await redisCacheService.del(`reel:${idStr}`);
+        await redisCacheService.del(`reel:${idStr}:comments`);
 
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
@@ -929,10 +940,11 @@ router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res
 router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
+        const commentIdStr = ensureString(commentId);
         const { limit = '20' } = req.query;
 
         const replies = await prisma.comment.findMany({
-            where: { parentId: commentId },
+            where: { parentId: commentIdStr },
             take: Math.min(parseInt(limit as string), 50),
             orderBy: { createdAt: 'asc' },
             select: {
@@ -1094,7 +1106,7 @@ router.get('/search', requireAuth, lenientLimiter, async (req: Request, res: Res
                 }
             });
 
-            results.reels = reels.map(reel => ({
+            results.reels = reels.map((reel: any) => ({
                 id: reel.id,
                 videoUrl: reel.videoUrl,
                 thumbnail: reel.thumbnail,
@@ -1104,7 +1116,7 @@ router.get('/search', requireAuth, lenientLimiter, async (req: Request, res: Res
                 commentsCount: reel._count.comments,
                 sharesCount: reel.sharesCount || 0,
                 isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
-                hashtags: reel.hashtags.map(h => h.hashtag.name),
+                hashtags: reel.hashtags.map((h: any) => h.hashtag.name),
                 user: reel.user,
                 createdAt: reel.createdAt,
             }));
@@ -1168,6 +1180,7 @@ router.get('/trending-hashtags', async (req: Request, res: Response): Promise<vo
 router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
+        const commentIdStr = ensureString(commentId);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -1182,7 +1195,7 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
 
         // Check if comment exists
         const comment = await prisma.comment.findUnique({
-            where: { id: commentId },
+            where: { id: commentIdStr },
             select: { id: true, userId: true, reelId: true }
         });
 
@@ -1193,20 +1206,20 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
 
         // Check if already liked
         const existingLike = await prisma.commentLike.findUnique({
-            where: { userId_commentId: { userId: user.id, commentId } }
+            where: { userId_commentId: { userId: user.id, commentId: commentIdStr } }
         });
 
         if (existingLike) {
-            const likesCount = await prisma.commentLike.count({ where: { commentId } });
+            const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
             res.json({ status: 'SUCCESS', data: { likesCount }, message: 'Already liked' });
             return;
         }
 
         await prisma.commentLike.create({
-            data: { userId: user.id, commentId }
+            data: { userId: user.id, commentId: commentIdStr }
         });
 
-        const likesCount = await prisma.commentLike.count({ where: { commentId } });
+        const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
 
         // Notify comment owner (if not self) using NotificationService
         if (comment.userId !== user.id) {
@@ -1218,7 +1231,7 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
                 message: `أعجب ${user.displayName || user.username} بتعليقك`,
                 type: 'LIKE',
                 data: {
-                    commentId,
+                    commentId: commentIdStr,
                     reelId: comment.reelId,
                 },
             });
@@ -1238,6 +1251,7 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
 router.delete('/comments/:commentId/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
+        const commentIdStr = ensureString(commentId);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -1251,10 +1265,10 @@ router.delete('/comments/:commentId/like', requireAuth, async (req: Request, res
         }
 
         await prisma.commentLike.deleteMany({
-            where: { userId: user.id, commentId }
+            where: { userId: user.id, commentId: commentIdStr }
         });
 
-        const likesCount = await prisma.commentLike.count({ where: { commentId } });
+        const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
 
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
@@ -1270,6 +1284,7 @@ router.delete('/comments/:commentId/like', requireAuth, async (req: Request, res
 router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
+        const commentIdStr = ensureString(commentId);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -1284,7 +1299,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
 
         // Check if comment exists and belongs to user
         const comment = await prisma.comment.findUnique({
-            where: { id: commentId },
+            where: { id: commentIdStr },
             select: { id: true, userId: true, reelId: true }
         });
 
@@ -1326,6 +1341,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
 router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
+        const commentIdStr = ensureString(commentId);
         const { reason } = req.body;
         const clerkUserId = req.auth?.userId;
 
@@ -1346,7 +1362,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
 
         // Check if comment exists and is not deleted
         const comment = await prisma.comment.findFirst({
-            where: { id: commentId, isDeleted: false },
+            where: { id: commentIdStr, isDeleted: false },
             select: { id: true, userId: true, reelId: true }
         });
 
@@ -1365,7 +1381,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         const { checkDuplicateReport, calculateReportPriority } = await import('../services/moderation.service');
         const isDuplicate = await checkDuplicateReport({
             reporterId: user.id,
-            reportedCommentId: commentId,
+            reportedCommentId: commentIdStr,
         });
 
         if (isDuplicate) {
@@ -1386,7 +1402,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         // Calculate priority
         const priority = await calculateReportPriority({
             reportType,
-            reportedCommentId: commentId,
+            reportedCommentId: commentIdStr,
             reportedUserId: comment.userId,
         });
 
@@ -1394,7 +1410,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         const report = await prisma.report.create({
             data: {
                 reporterId: user.id,
-                reportedCommentId: commentId,
+                reportedCommentId: commentIdStr,
                 reportedUserId: comment.userId,
                 reportedReelId: comment.reelId,
                 type: reportType as any,
@@ -1417,7 +1433,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
 
         // Log audit
         const { AuditService } = await import('../services/audit.service');
-        await AuditService.logReportCreated(report.id, user.id, commentId, 'COMMENT');
+        await AuditService.logReportCreated(report.id, user.id, commentIdStr, 'COMMENT' as any);
 
         res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
     } catch (error: any) {
@@ -1437,6 +1453,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
 router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -1451,7 +1468,7 @@ router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promi
 
         // Check if reel exists
         const reel = await prisma.reel.findUnique({
-            where: { id },
+            where: { id: idStr },
             select: { id: true }
         });
 
@@ -1462,7 +1479,7 @@ router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promi
 
         // Check if already saved
         const existingSave = await prisma.savedReel.findUnique({
-            where: { userId_reelId: { userId: user.id, reelId: id } }
+            where: { userId_reelId: { userId: user.id, reelId: idStr } }
         });
 
         if (existingSave) {
@@ -1471,7 +1488,7 @@ router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promi
         }
 
         await prisma.savedReel.create({
-            data: { userId: user.id, reelId: id }
+            data: { userId: user.id, reelId: idStr }
         });
 
         res.json({ status: 'SUCCESS', data: { saved: true } });
@@ -1488,6 +1505,7 @@ router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promi
 router.delete('/:id/save', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const clerkUserId = req.auth?.userId;
 
         const user = await prisma.user.findUnique({
@@ -1501,7 +1519,7 @@ router.delete('/:id/save', requireAuth, async (req: Request, res: Response): Pro
         }
 
         await prisma.savedReel.deleteMany({
-            where: { userId: user.id, reelId: id }
+            where: { userId: user.id, reelId: idStr }
         });
 
         res.json({ status: 'SUCCESS', data: { saved: false } });
@@ -1570,7 +1588,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
         res.json({
             status: 'SUCCESS',
             data: {
-                savedReels: data.map(sr => ({
+                savedReels: data.map((sr: any) => ({
                     ...sr.reel,
                     savedAt: sr.createdAt,
                     likesCount: sr.reel._count.likes,
@@ -1597,6 +1615,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
 router.post('/:id/share', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const { platform } = req.body; // whatsapp, facebook, twitter, copy_link, etc.
         const clerkUserId = req.auth?.userId;
 
@@ -1612,7 +1631,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
 
         // Check if reel exists
         const reel = await prisma.reel.findUnique({
-            where: { id },
+            where: { id: idStr },
             select: { id: true, sharesCount: true }
         });
 
@@ -1625,14 +1644,14 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
         await prisma.reelShare.create({
             data: { 
                 userId: user.id, 
-                reelId: id,
+                reelId: idStr,
                 platform: platform || 'unknown'
             }
         });
 
         // Update shares count
         const updatedReel = await prisma.reel.update({
-            where: { id },
+            where: { id: idStr },
             data: { sharesCount: { increment: 1 } },
             select: { sharesCount: true }
         });
@@ -1655,6 +1674,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
 router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const idStr = ensureString(id);
         const { reason, type = 'INAPPROPRIATE' } = req.body;
         const clerkUserId = req.auth?.userId;
 
@@ -1675,7 +1695,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
 
         // Check if reel exists and is not deleted
         const reel = await prisma.reel.findFirst({
-            where: { id, isDeleted: false },
+            where: { id: idStr, isDeleted: false },
             select: { id: true, userId: true }
         });
 
@@ -1688,7 +1708,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         const { checkDuplicateReport, calculateReportPriority } = await import('../services/moderation.service');
         const isDuplicate = await checkDuplicateReport({
             reporterId: user.id,
-            reportedReelId: id,
+            reportedReelId: idStr,
         });
 
         if (isDuplicate) {
@@ -1713,7 +1733,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         // Calculate priority
         const priority = await calculateReportPriority({
             reportType,
-            reportedReelId: id,
+            reportedReelId: idStr,
             reportedUserId: reel.userId,
         });
 
@@ -1721,7 +1741,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         const report = await prisma.report.create({
             data: {
                 reporterId: user.id,
-                reportedReelId: id,
+                reportedReelId: idStr,
                 reportedUserId: reel.userId,
                 type: reportType as any,
                 reason: reason.trim(),
@@ -1744,19 +1764,19 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         // Check report count for admin alert
         const reportCount = await prisma.report.count({
             where: {
-                reportedReelId: id,
+                reportedReelId: idStr,
                 status: { not: 'REJECTED' },
             },
         });
 
         if (reportCount >= 3) {
             const { AdminNotificationService } = await import('../services/admin-notification.service');
-            await AdminNotificationService.alertContentThreshold(id, 'reel', reportCount);
+            await AdminNotificationService.alertContentThreshold(idStr, 'reel', reportCount);
         }
 
         // Log audit
         const { AuditService, AuditTargetType } = await import('../services/audit.service');
-        await AuditService.logReportCreated(report.id, user.id, id, AuditTargetType.REEL);
+        await AuditService.logReportCreated(report.id, user.id, idStr, AuditTargetType.REEL);
 
         res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
     } catch (error: any) {
@@ -1818,7 +1838,7 @@ router.get('/rankings/top-views', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }
         });
 
         // Format response with rank
-        const rankedReels = topReels.map((reel, index) => ({
+        const rankedReels = topReels.map((reel: any, index: any) => ({
             rank: index + 1,
             id: reel.id,
             videoUrl: reel.videoUrl,
@@ -1899,7 +1919,7 @@ router.get('/rankings/top-shares', responseCacheMiddleware({ ttl: 5 * 60 * 1000 
         });
 
         // Format response with rank
-        const rankedReels = topReels.map((reel, index) => ({
+        const rankedReels = topReels.map((reel: any, index: any) => ({
             rank: index + 1,
             id: reel.id,
             videoUrl: reel.videoUrl,
@@ -1959,7 +1979,7 @@ router.get('/rankings/top-predictions', responseCacheMiddleware({ ttl: 5 * 60 * 
         });
 
         // Get user details for each top user
-        const userIds = topPredictors.map(u => u.userId);
+        const userIds = topPredictors.map((u: any) => u.userId);
         const users = await prisma.user.findMany({
             where: { id: { in: userIds } },
             select: {
@@ -1984,14 +2004,14 @@ router.get('/rankings/top-predictions', responseCacheMiddleware({ ttl: 5 * 60 * 
         });
 
         // Create maps for quick lookup
-        const userMap = new Map(users.map(u => [u.id, u]));
-        const totalMap = new Map(totalPredictions.map(p => [p.userId, p._count.id]));
+        const userMap = new Map(users.map((u: any) => [u.id, u]));
+        const totalMap = new Map(totalPredictions.map((p: any) => [p.userId, p._count?.id || 0]));
 
         // Format response with rank
-        const rankedUsers = topPredictors.map((predictor, index) => {
+        const rankedUsers = topPredictors.map((predictor: any, index: any) => {
             const user = userMap.get(predictor.userId);
-            const total = totalMap.get(predictor.userId) || 0;
-            const correctCount = predictor._count.id;
+            const total = (totalMap.get(predictor.userId) as number) || 0;
+            const correctCount = (predictor._count?.id as number) || 0;
             const accuracy = total > 0 ? Math.round((correctCount / total) * 100) : 0;
             
             return {
@@ -2053,7 +2073,7 @@ router.get('/rankings/top-commenters', responseCacheMiddleware({ ttl: 5 * 60 * 1
         });
 
         // Get user details
-        const userIds = topCommenters.map(c => c.userId);
+        const userIds = topCommenters.map((c: any) => c.userId);
         const users = await prisma.user.findMany({
             where: { id: { in: userIds } },
             select: {
@@ -2066,16 +2086,16 @@ router.get('/rankings/top-commenters', responseCacheMiddleware({ ttl: 5 * 60 * 1
             }
         });
 
-        const userMap = new Map(users.map(u => [u.id, u]));
+        const userMap = new Map(users.map((u: any) => [u.id, u]));
 
         // Format response with rank
-        const rankedUsers = topCommenters.map((commenter, index) => {
+        const rankedUsers = topCommenters.map((commenter: any, index: any) => {
             const user = userMap.get(commenter.userId);
             return {
                 rank: index + 1,
                 userId: commenter.userId,
                 user: user || null,
-                commentsCount: commenter._count.id,
+                commentsCount: (commenter._count?.id as number) || 0,
                 badge: index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : null,
             };
         });
@@ -2181,8 +2201,8 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
         ]);
 
         // Get user details for predictions and commenters rankings
-        const predictorUserIds = topPredictors.map(u => u.userId);
-        const commenterUserIds = topCommentersData.map(c => c.userId);
+        const predictorUserIds = topPredictors.map((u: any) => u.userId);
+        const commenterUserIds = topCommentersData.map((c: any) => c.userId);
         const allUserIds = [...new Set([...predictorUserIds, ...commenterUserIds])];
         
         const allUsers = await prisma.user.findMany({
@@ -2196,7 +2216,7 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
                 level: true,
             }
         });
-        const userMap = new Map(allUsers.map(u => [u.id, u]));
+        const userMap = new Map(allUsers.map((u: any) => [u.id, u]));
 
         // Get total predictions for accuracy calculation
         const totalPredictions = await prisma.prediction.groupBy({
@@ -2204,7 +2224,7 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
             where: { userId: { in: predictorUserIds } },
             _count: { id: true }
         });
-        const totalMap = new Map(totalPredictions.map(p => [p.userId, p._count.id]));
+        const totalMap = new Map(totalPredictions.map((p: any) => [p.userId, (p._count?.id as number) || 0]));
 
         // Format all rankings
         const formatReel = (reel: any, index: number) => ({
@@ -2226,9 +2246,9 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
             data: {
                 topViews: topViewsReels.map(formatReel),
                 topShares: topSharesReels.map(formatReel),
-                topPredictions: topPredictors.map((predictor, index) => {
-                    const total = totalMap.get(predictor.userId) || 0;
-                    const correctCount = predictor._count.id;
+                topPredictions: topPredictors.map((predictor: any, index: any) => {
+                    const total = (totalMap.get(predictor.userId) as number) || 0;
+                    const correctCount = (predictor._count?.id as number) || 0;
                     const accuracy = total > 0 ? Math.round((correctCount / total) * 100) : 0;
                     return {
                         rank: index + 1,
@@ -2241,7 +2261,7 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
                         badge: index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : null,
                     };
                 }),
-                topCommenters: topCommentersData.map((commenter, index) => ({
+                topCommenters: topCommentersData.map((commenter: any, index: any) => ({
                     rank: index + 1,
                     userId: commenter.userId,
                     user: userMap.get(commenter.userId) || null,
@@ -2325,9 +2345,9 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
         });
 
         // Calculate score for each user
-        const scoredUsers = usersWithStats.map(user => {
-            const totalViews = user.reels.reduce((sum, reel) => sum + reel.views, 0);
-            const totalLikes = user.reels.reduce((sum, reel) => sum + reel._count.likes, 0);
+        const scoredUsers = usersWithStats.map((user: any) => {
+            const totalViews = user.reels.reduce((sum: any, reel: any) => sum + reel.views, 0);
+            const totalLikes = user.reels.reduce((sum: any, reel: any) => sum + reel._count.likes, 0);
             const profileViews = user.profileViews || 0;
             
             // Weighted score calculation
@@ -2356,9 +2376,9 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
 
         // Sort by score and take top players
         const topPlayers = scoredUsers
-            .sort((a, b) => b.score - a.score)
+            .sort((a: any, b: any) => b.score - a.score)
             .slice(0, take)
-            .map((player, index) => ({
+            .map((player: any, index: any) => ({
                 ...player,
                 rank: index + 1,
                 badge: index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : null,
@@ -2386,6 +2406,7 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
 router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { userId } = req.params;
+        const userIdStr = ensureString(userId);
         const { voteType } = req.body; // 'up' or 'down'
         const clerkUserId = req.auth?.userId;
 
@@ -2406,7 +2427,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
 
         // Check if target user exists
         const targetUser = await prisma.user.findUnique({
-            where: { id: userId },
+            where: { id: userIdStr },
             select: { id: true }
         });
 
@@ -2416,7 +2437,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
         }
 
         // Can't vote for yourself
-        if (voter.id === userId) {
+        if (voter.id === userIdStr) {
             res.status(400).json({ status: 'ERROR', message: 'Cannot vote for yourself' });
             return;
         }
@@ -2426,7 +2447,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
             where: {
                 voterId_playerId: {
                     voterId: voter.id,
-                    playerId: userId,
+                    playerId: userIdStr,
                 }
             }
         });
@@ -2452,7 +2473,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
             await prisma.playerVote.create({
                 data: {
                     voterId: voter.id,
-                    playerId: userId,
+                    playerId: userIdStr,
                     voteType,
                 }
             });
@@ -2461,8 +2482,8 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
 
         // Get updated vote counts
         const [upVotes, downVotes] = await Promise.all([
-            prisma.playerVote.count({ where: { playerId: userId, voteType: 'up' } }),
-            prisma.playerVote.count({ where: { playerId: userId, voteType: 'down' } }),
+            prisma.playerVote.count({ where: { playerId: userIdStr, voteType: 'up' } }),
+            prisma.playerVote.count({ where: { playerId: userIdStr, voteType: 'down' } }),
         ]);
 
         res.json({
@@ -2488,6 +2509,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
 router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { userId } = req.params;
+        const userIdStr = ensureString(userId);
         const clerkUserId = req.auth?.userId;
 
         const voter = await prisma.user.findUnique({
@@ -2497,8 +2519,8 @@ router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, 
 
         // Get vote counts
         const [upVotes, downVotes] = await Promise.all([
-            prisma.playerVote.count({ where: { playerId: userId, voteType: 'up' } }),
-            prisma.playerVote.count({ where: { playerId: userId, voteType: 'down' } }),
+            prisma.playerVote.count({ where: { playerId: userIdStr, voteType: 'up' } }),
+            prisma.playerVote.count({ where: { playerId: userIdStr, voteType: 'down' } }),
         ]);
 
         // Get user's vote if logged in
@@ -2508,7 +2530,7 @@ router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, 
                 where: {
                     voterId_playerId: {
                         voterId: voter.id,
-                        playerId: userId,
+                        playerId: userIdStr,
                     }
                 }
             });
@@ -2558,7 +2580,7 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
                 orderBy: { views: 'desc' },
                 select: { userId: true }
             });
-            rankedUsers = topReels.map((r, i) => ({ rank: i + 1, userId: r.userId }));
+            rankedUsers = topReels.map((r: any, i: any) => ({ rank: i + 1, userId: r.userId }));
         } else if (category === 'shares') {
             const topReels = await prisma.reel.findMany({
                 where: { createdAt: { gte: threeDaysAgo }, sharesCount: { gt: 0 } },
@@ -2566,7 +2588,7 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
                 orderBy: { sharesCount: 'desc' },
                 select: { userId: true }
             });
-            rankedUsers = topReels.map((r, i) => ({ rank: i + 1, userId: r.userId }));
+            rankedUsers = topReels.map((r: any, i: any) => ({ rank: i + 1, userId: r.userId }));
         } else if (category === 'comments') {
             const topCommenters = await prisma.comment.groupBy({
                 by: ['userId'],
@@ -2575,7 +2597,7 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
                 orderBy: { _count: { id: 'desc' } },
                 take: 100,
             });
-            rankedUsers = topCommenters.map((c, i) => ({ rank: i + 1, userId: c.userId }));
+            rankedUsers = topCommenters.map((c: any, i: any) => ({ rank: i + 1, userId: c.userId }));
         } else if (category === 'predictions') {
             const topPredictors = await prisma.prediction.groupBy({
                 by: ['userId'],
@@ -2584,7 +2606,7 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
                 orderBy: { _count: { id: 'desc' } },
                 take: 100,
             });
-            rankedUsers = topPredictors.map((p, i) => ({ rank: i + 1, userId: p.userId }));
+            rankedUsers = topPredictors.map((p: any, i: any) => ({ rank: i + 1, userId: p.userId }));
         }
 
         // Award badges
@@ -2666,12 +2688,12 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
         });
 
         // Calculate scores and get top 11
-        const scoredUsers = usersWithStats.map(user => {
-            const totalViews = user.reels.reduce((sum, reel) => sum + reel.views, 0);
-            const totalLikes = user.reels.reduce((sum, reel) => sum + reel._count.likes, 0);
+        const scoredUsers = usersWithStats.map((user: any) => {
+            const totalViews = user.reels.reduce((sum: any, reel: any) => sum + reel.views, 0);
+            const totalLikes = user.reels.reduce((sum: any, reel: any) => sum + reel._count.likes, 0);
             const score = (totalViews * 1) + ((user.profileViews || 0) * 2) + (totalLikes * 3);
             return { userId: user.id, score };
-        }).sort((a, b) => b.score - a.score).slice(0, 11);
+        }).sort((a: any, b: any) => b.score - a.score).slice(0, 11);
 
         const diamondAwards = [];
         const badges = [];
@@ -2854,9 +2876,9 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
                     orderBy: { views: 'desc' },
                     select: { userId: true, views: true }
                 });
-                const userReel = reels.find(r => r.userId === user.id);
+                const userReel = reels.find((r: any) => r.userId === user.id);
                 if (!userReel) return null;
-                const rank = reels.findIndex(r => r.userId === user.id) + 1;
+                const rank = reels.findIndex((r: any) => r.userId === user.id) + 1;
                 return rank <= 10 ? rank : null;
             })(),
             // Shares rank
@@ -2866,9 +2888,9 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
                     orderBy: { sharesCount: 'desc' },
                     select: { userId: true, sharesCount: true }
                 });
-                const userReel = reels.find(r => r.userId === user.id);
+                const userReel = reels.find((r: any) => r.userId === user.id);
                 if (!userReel) return null;
-                const rank = reels.findIndex(r => r.userId === user.id) + 1;
+                const rank = reels.findIndex((r: any) => r.userId === user.id) + 1;
                 return rank <= 10 ? rank : null;
             })(),
             // Predictions rank
@@ -2880,7 +2902,7 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
                     orderBy: { _count: { id: 'desc' } },
                     take: 10
                 });
-                const userIndex = topPredictors.findIndex(p => p.userId === user.id);
+                const userIndex = topPredictors.findIndex((p: any) => p.userId === user.id);
                 return userIndex >= 0 ? userIndex + 1 : null;
             })(),
             // Commenters rank
@@ -2892,7 +2914,7 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
                     orderBy: { _count: { id: 'desc' } },
                     take: 10
                 });
-                const userIndex = topCommenters.findIndex(c => c.userId === user.id);
+                const userIndex = topCommenters.findIndex((c: any) => c.userId === user.id);
                 return userIndex >= 0 ? userIndex + 1 : null;
             })()
         ]);
@@ -2921,15 +2943,16 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
 router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { userId } = req.params;
+        const userIdStr = ensureString(userId);
 
         const badges = await prisma.rankingBadge.findMany({
-            where: { userId },
+            where: { userId: userIdStr },
             orderBy: { earnedAt: 'desc' },
         });
 
         // Get diamond streak info
         const streak = await prisma.teamOfMonthStreak.findUnique({
-            where: { userId }
+            where: { userId: userIdStr }
         });
 
         // Group badges by type

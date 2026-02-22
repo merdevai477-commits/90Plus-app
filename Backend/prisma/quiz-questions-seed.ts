@@ -2,9 +2,22 @@
  * Quiz Questions Seed
  * 800 سؤال موزعة على 8 فئات (100 سؤال مختلف لكل فئة)
  * كل سؤال فريد مع صور للأسئلة التي تحتاجها
+ * 
+ * ⚠️ WARNING: This file is for database seeding only and contains example data.
+ * The actual quiz questions served to users come from:
+ * - Backend/src/data/quiz-questions/legends-complete.ts (production questions)
+ * 
+ * This seed file should NOT be used in production to avoid copyright issues.
  */
 
-import { PrismaClient, Difficulty } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+
+// Define enums locally (fallback if Prisma client not regenerated)
+enum Difficulty {
+    EASY = 'EASY',
+    MEDIUM = 'MEDIUM',
+    HARD = 'HARD'
+}
 
 // Define DisplayMode enum locally until Prisma client is updated
 enum DisplayMode {

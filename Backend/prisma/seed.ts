@@ -1,6 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
+/**
+ * ⚠️ IMPORTANT COPYRIGHT WARNING ⚠️
+ * 
+ * This seed file is for DEVELOPMENT ONLY and should NEVER be used in production.
+ * The quiz-questions-seed.ts file contains copyrighted player names and content
+ * that violates Apple's Guideline 4.1 - Design - Copycats.
+ * 
+ * For production, the app uses:
+ * - Backend/src/data/quiz-questions/legends-complete.ts (generic descriptions only)
+ * 
+ * DO NOT run this seed in production environments!
+ */
+
 const prisma = new PrismaClient();
 
 async function main() {
