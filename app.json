@@ -14,6 +14,7 @@
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
       "usesAppleSignIn": true,
       "buildNumber": "2",
+      "requireFullScreen": false,
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -22,9 +23,10 @@
         "NSMicrophoneUsageDescription": "This app uses microphone to record videos for reels",
         "NSPhotoLibraryUsageDescription": "This app uses photo library to select images and videos",
         "ITSAppUsesNonExemptEncryption": false,
-        "UIRequiredDeviceCapabilities": []
+        "UIRequiredDeviceCapabilities": [],
+        "UIDeviceFamily": [1, 2]
       },
-      "deploymentTarget": "13.4"
+      "deploymentTarget": "15.1"
     },
     "android": {
       "adaptiveIcon": {
@@ -69,12 +71,14 @@
           "color": "#22c55e"
         }
       ],
-      "expo-video",
-      "expo-web-browser",
+
       "expo-apple-authentication",
       [
         "expo-build-properties",
         {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
           "android": {
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
@@ -82,7 +86,10 @@
             "minSdkVersion": 24
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-localization",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

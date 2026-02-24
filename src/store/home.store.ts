@@ -268,7 +268,7 @@ const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Matc
     };
 };
 
-export const useHomeStore = create<HomeState>((set, get) => ({
+export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> | ((state: HomeState) => Partial<HomeState>)) => void, get: () => HomeState) => ({
     userMode: 'guest',
     matches: [],
     favoritedMatches: [],
@@ -278,7 +278,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
     players: [],  // أهم 5 لاعبين أسبوعياً
     teamOfMonth: [],  // تشكيلة الشهر (11 لاعب)
     notifications: [],
-    setUserMode: (mode) => set({ userMode: mode }),
+    setUserMode: (mode: 'guest' | 'user' | 'diamond' | 'admin') => set({ userMode: mode }),
 
     // Fetch rankings data (videos, players, teamOfMonth)
     fetchRankingsData: async (token?: string | null) => {
@@ -531,7 +531,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
         }
     },
 
-    addMatchNotification: (notification) => {
+    addMatchNotification: (notification: Omit<Notification, 'id' | 'time' | 'read'>) => {
         const { notifications } = get();
         const newNotification: Notification = {
             ...notification,

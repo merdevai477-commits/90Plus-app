@@ -108,7 +108,7 @@ import { sendGoalNotification } from '../contexts/SettingsContext';
 
 await sendGoalNotification(
   'Real Madrid',
-  'Cristiano Ronaldo',
+  'لاعب البرتغال',
   45
 );
 ```

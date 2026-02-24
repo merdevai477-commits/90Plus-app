@@ -72,7 +72,7 @@ export const mockPlayers: Player[] = [
     position: 'Forward',
     image: 'https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=150&h=150&fit=crop&crop=face',
     rating: 9.2,
-    team: 'FC Barcelona',
+    team: 'Spanish Club A',
   },
   {
     id: '2',
@@ -80,7 +80,7 @@ export const mockPlayers: Player[] = [
     position: 'Midfielder',
     image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
     rating: 8.8,
-    team: 'Real Madrid',
+    team: 'Spanish Club B',
   },
   {
     id: '3',
@@ -88,7 +88,7 @@ export const mockPlayers: Player[] = [
     position: 'Defender',
     image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
     rating: 8.5,
-    team: 'Manchester City',
+    team: 'English Club A',
   },
   {
     id: '4',
@@ -96,7 +96,7 @@ export const mockPlayers: Player[] = [
     position: 'Goalkeeper',
     image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
     rating: 9.0,
-    team: 'PSG',
+    team: 'French Club A',
   },
   {
     id: '5',
@@ -104,7 +104,7 @@ export const mockPlayers: Player[] = [
     position: 'Winger',
     image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop&crop=face',
     rating: 8.7,
-    team: 'Liverpool',
+    team: 'English Club B',
   },
   {
     id: '6',
@@ -112,7 +112,7 @@ export const mockPlayers: Player[] = [
     position: 'Striker',
     image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&h=150&fit=crop&crop=face',
     rating: 8.9,
-    team: 'Chelsea',
+    team: 'English Club C',
   },
 ];
 

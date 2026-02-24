@@ -43,6 +43,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthLoadingScreen from '../../components/AuthLoadingScreen';
 import { TermsService } from '../../services/termsService';
 import { getApiUrl } from '../../config/api.config';
+import { logger } from '../../utils/logger';
+import { CoinsService } from '../../services/coins.service';
+import { rankingsService } from '../../services/rankingsService';
+import { websocketClient } from '../../services/websocketClient';
+import { cacheService } from '../../services/cacheService';
+import { preloadManager } from '../../services/preloadManager';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -53,18 +59,14 @@ WebBrowser.maybeCompleteAuthSession();
 const clearPreviousUserData = async () => {
     logger.debug('🧹 Clearing previous user data...');
     
-    // ✅ DRAGON FIX: Use Promise.allSettled to prevent one failure from blocking others
     const cleanupOperations = [
-        // Clear globalState
         globalState.logout().catch(err => {
             logger.error('Failed to clear globalState:', err);
             return null;
         }),
         
-        // Clear CoinsService
         (async () => {
             try {
-                const { CoinsService } = await import('../../services/coins.service');
                 CoinsService.clearCurrentUser();
                 logger.debug('✅ CoinsService cleared');
             } catch (error) {
@@ -72,10 +74,8 @@ const clearPreviousUserData = async () => {
             }
         })(),
         
-        // Clear AuthService cache
         (async () => {
             try {
-                const { AuthService } = await import('../../src/services/authService');
                 AuthService.clearMemoryCache();
                 logger.debug('✅ AuthService cache cleared');
             } catch (error) {
@@ -83,10 +83,8 @@ const clearPreviousUserData = async () => {
             }
         })(),
         
-        // Clear RankingsService cache
         (async () => {
             try {
-                const { rankingsService } = await import('../../services/rankingsService');
                 rankingsService.clearMemoryCache();
                 logger.debug('✅ RankingsService cache cleared');
             } catch (error) {
@@ -94,10 +92,8 @@ const clearPreviousUserData = async () => {
             }
         })(),
         
-        // Clear home store
         (async () => {
             try {
-                const { useHomeStore } = await import('../../src/store/home.store');
                 useHomeStore.getState().clearUserData();
                 logger.debug('✅ Home store cleared');
             } catch (error) {
@@ -105,10 +101,8 @@ const clearPreviousUserData = async () => {
             }
         })(),
         
-        // Disconnect WebSocket
         (async () => {
             try {
-                const { websocketClient } = await import('../../services/websocketClient');
                 websocketClient.disconnect();
                 logger.debug('✅ WebSocket disconnected');
             } catch (error) {
@@ -117,7 +111,6 @@ const clearPreviousUserData = async () => {
         })(),
     ];
     
-    // ✅ DRAGON FIX: Wait for all cleanup operations with timeout
     const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Cleanup timeout')), 5000)
     );
@@ -130,22 +123,16 @@ const clearPreviousUserData = async () => {
         logger.info('✅ User data cleanup completed');
     } catch (error) {
         logger.error('⚠️ Cleanup timeout - some operations may not have completed:', error);
-        // Continue anyway - don't block login
     }
-}
     
-    // Clear all cache (including profile, reels, notifications, etc.)
     try {
-        const { cacheService } = await import('../../services/cacheService');
         await cacheService.clearAll();
         console.log('✅ Cache service cleared');
     } catch (error) {
         console.warn('⚠️ Failed to clear cache service:', error);
     }
     
-    // Clear username setup flag
     await AsyncStorage.removeItem('@username_setup_complete');
-    // Clear any cached user data
     await AsyncStorage.removeItem('@user_profile');
     console.log('✅ Previous user data cleared');
 };
@@ -445,9 +432,6 @@ export default function AuthScreen() {
                     // ✅ Start background preloading immediately after login
                     if (syncResult.success) {
                         try {
-                            const { preloadManager } = await import('../../services/preloadManager');
-                            const { getToken } = useAuth();
-                            
                             preloadManager.initialize(getToken).catch(err => {
                                 console.warn('[Auth] Preload initialization failed (non-critical):', err);
                             });
@@ -455,7 +439,6 @@ export default function AuthScreen() {
                             console.log('✅ Background preloading started');
                         } catch (error) {
                             console.warn('[Auth] Failed to start preloading:', error);
-                            // Don't block login if preloading fails
                         }
                     }
 
@@ -630,14 +613,11 @@ export default function AuthScreen() {
                 // ✅ Start background preloading for new users too
                 if (syncResult.success) {
                     try {
-                        const { preloadManager } = await import('../../services/preloadManager');
-                        const { getToken } = useAuth();
-                        
                         preloadManager.initialize(getToken).catch(err => {
                             console.warn('[Auth] Preload initialization failed:', err);
                         });
                     } catch (error) {
-                        // Silent fail - don't block signup
+                        // Silent fail
                     }
                 }
 
@@ -1356,7 +1336,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 215, 0, 0.08)',
         borderRadius: 16,
         paddingHorizontal: 16,
-        height: 54,
+        minHeight: Platform.OS === 'ios' ? 54 : 58,
         borderWidth: 1,
         borderColor: 'rgba(255, 215, 0, 0.2)',
     },
@@ -1383,7 +1363,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 14,
+        paddingVertical: Platform.OS === 'ios' ? 14 : 16,
         gap: 8,
         backgroundColor: '#FFD700',
     },
@@ -1439,9 +1419,9 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     oauthButton: {
-        width: 54,
-        height: 54,
-        borderRadius: 27,
+        width: Platform.OS === 'ios' ? 54 : 58,
+        height: Platform.OS === 'ios' ? 54 : 58,
+        borderRadius: Platform.OS === 'ios' ? 27 : 29,
         backgroundColor: 'rgba(255,255,255,0.05)',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
@@ -1533,9 +1513,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
     },
     checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 6,
+        width: 28,
+        height: 28,
+        borderRadius: 8,
         borderWidth: 2,
         borderColor: 'rgba(255, 215, 0, 0.5)',
         backgroundColor: 'rgba(255, 215, 0, 0.1)',

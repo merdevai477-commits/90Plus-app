@@ -23,14 +23,14 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Image } from 'expo-image'; // ✅ استبدال Image بـ expo-image للأداء الأفضل
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from '@react-navigation/native'; // ✅ للتحديث عند العودة للصفحة
+import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@clerk/clerk-expo';
 import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 import { Match } from '../league-center/matchCardUtils';
-import { PredictionsService, Prediction } from '../../services/predictions.service';
+import { PredictionsService } from '../../services/predictions.service';
 import { useCoins } from '../../contexts/CoinsContext';
 import { logger } from '../../utils/logger';
 import { MAJOR_LEAGUES } from '../../services/apiFootball';
@@ -60,7 +60,7 @@ const CACHE_TTL = 60 * 1000; // 1 minute cache TTL
 
 const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatchPress }) => {
   const { getToken } = useAuth();
-  const { coins, subtractCoins, addCoins } = useCoins();
+  const { coins, subtractCoins } = useCoins();
   const [predictions, setPredictions] = useState<PredictionState>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null); // ✅ Error state للمستخدم

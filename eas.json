@@ -6,19 +6,28 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "preview"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production",
+      "ios": {
+        "image": "latest"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "mhmdsh1892@gmail.com"
+        "appleId": "mhmdsh1892@gmail.com",
+        "ascAppId": "6738943088",
+        "appleTeamId": "BNVH5YFQXZ",
+        "sku": "90plus-ios-app"
       }
     }
   }

@@ -1,3 +1,9 @@
+/**
+ * ⚠️ TEST FILE - DEVELOPMENT ONLY
+ * This file contains mock data for testing purposes only.
+ * Team names and logos in this file are NOT used in production.
+ */
+
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SearchBar, MatchCard, PredictionSystem, useHapticFeedback } from '../index';

@@ -487,14 +487,6 @@ export default function TransfersScreen() {
           return a.player.name.localeCompare(b.player.name);
         case 'name-desc':
           return b.player.name.localeCompare(a.player.name);
-        case 'value-desc':
-          const valueA = a.transfers[0]?.value || 0;
-          const valueB = b.transfers[0]?.value || 0;
-          return valueB - valueA;
-        case 'value-asc':
-          const valueA2 = a.transfers[0]?.value || 0;
-          const valueB2 = b.transfers[0]?.value || 0;
-          return valueA2 - valueB2;
         default:
           return 0;
       }
@@ -635,13 +627,14 @@ export default function TransfersScreen() {
     const loan = filteredTransfers.filter(t => 
       t.transfers.some(tr => tr.type?.toLowerCase().includes('loan'))
     ).length;
-    const totalValue = filteredTransfers.reduce((sum, t) => {
-      const value = t.transfers[0]?.value || 0;
-      return sum + (typeof value === 'number' ? value : 0);
-    }, 0);
-    const avgValue = total > 0 ? totalValue / total : 0;
+    const permanent = filteredTransfers.filter(t =>
+      t.transfers.some(tr => {
+        const typeLower = tr.type?.toLowerCase() || '';
+        return !typeLower.includes('loan') && !typeLower.includes('free');
+      })
+    ).length;
 
-    return { total, free, loan, totalValue, avgValue };
+    return { total, free, loan, permanent };
   }, [filteredTransfers]);
 
   const renderHeader = () => (
@@ -661,8 +654,8 @@ export default function TransfersScreen() {
           <Text style={styles.statLabel}>Loan</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>€{(statistics.avgValue / 1000000).toFixed(1)}M</Text>
-          <Text style={styles.statLabel}>Avg Value</Text>
+          <Text style={styles.statValue}>{statistics.permanent}</Text>
+          <Text style={styles.statLabel}>Permanent</Text>
         </View>
       </View>
 
@@ -874,8 +867,6 @@ export default function TransfersScreen() {
             { value: 'date-asc', label: 'Oldest' },
             { value: 'name-asc', label: 'Name A-Z' },
             { value: 'name-desc', label: 'Name Z-A' },
-            { value: 'value-desc', label: 'Value High' },
-            { value: 'value-asc', label: 'Value Low' },
           ].map(option => (
             <TouchableOpacity
               key={option.value}

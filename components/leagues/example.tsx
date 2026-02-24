@@ -1,5 +1,11 @@
+/**
+ * ⚠️ EXAMPLE FILE - DEVELOPMENT ONLY
+ * This file contains example/demo data for development purposes only.
+ * Team names and logos in this file are NOT used in production.
+ */
+
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import {
   SearchBar,
   MatchCard,
@@ -48,6 +54,7 @@ const LeaguesExample = () => {
     accuracy: 83,
     totalPoints: 1250,
     streak: 7,
+    bestStreak: 12,
     rank: 15,
     level: 8
   };

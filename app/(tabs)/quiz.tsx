@@ -37,7 +37,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { markQuizCompleted, getCurrentQuizState, getCurrentQuestions } from '../../services/quizLocalState';
 import { getQuestionsByIds, getQuestionsByCategoryId, getQuestionsByCategoryIdWithDifficulty, QuizQuestion, DisplayMode } from '../../data/quizQuestions/index';
-import { getQuizAnswers } from '../../services/quizApi';
+import { getQuizAnswers, getDailyQuiz } from '../../services/quizApi';
 import { prefetchQuizImages, extractImageUrlsFromQuestions } from '../../services/imageCache';
 import { startDailyQuizSync, stopDailyQuizSync } from '../../services/dailyQuizSync';
 import { 
@@ -211,9 +211,6 @@ export default function QuizScreen() {
         if (currentGetToken) {
           try {
             const loadStartTime = Date.now();
-            
-            // استيراد Daily Quiz API
-            const { getDailyQuiz } = await import('../../services/quizApi');
             
             // جلب الكويز اليومي (أسئلة + إجابات + صور)
             const dailyQuizResult = await getDailyQuiz(currentGetToken);
@@ -1163,8 +1160,8 @@ export default function QuizScreen() {
                 <Animated.View
                   style={[
                     styles.questionTextWrapper,
-                    currentQuestion?.imageUrl && showImage && styles.questionTextWithImage,
-                    !currentQuestion?.imageUrl && { marginTop: 0 },
+                    (currentQuestion?.imageUrl && showImage) ? styles.questionTextWithImage : null,
+                    !currentQuestion?.imageUrl ? { marginTop: 0 } : null,
                     {
                       opacity: questionTextAnim,
                       transform: [

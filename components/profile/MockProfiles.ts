@@ -51,8 +51,8 @@ export const allProfiles: Profile[] = [
     username: 'omar_hassan',
     avatar: 'https://i.pravatar.cc/150?img=3',
     favoriteClub: {
-      name: 'ريال مدريد',
-      logo: 'https://upload.wikimedia.org/wikipedia/en/5/56/Real_Madrid_CF.svg'
+      name: 'نادي إسباني',
+      logo: ''
     },
     stats: {
       followers: 2100,
@@ -66,8 +66,8 @@ export const allProfiles: Profile[] = [
     username: 'youssef_mahmoud',
     avatar: 'https://i.pravatar.cc/150?img=4',
     favoriteClub: {
-      name: 'برشلونة',
-      logo: 'https://upload.wikimedia.org/wikipedia/en/4/47/FC_Barcelona_%28crest%29.svg'
+      name: 'نادي إسباني آخر',
+      logo: ''
     },
     stats: {
       followers: 1560,
@@ -81,8 +81,8 @@ export const allProfiles: Profile[] = [
     username: 'karim_said',
     avatar: 'https://i.pravatar.cc/150?img=5',
     favoriteClub: {
-      name: 'ليفربول',
-      logo: 'https://upload.wikimedia.org/wikipedia/en/0/0c/Liverpool_FC.svg'
+      name: 'نادي إنجليزي',
+      logo: ''
     },
     stats: {
       followers: 980,

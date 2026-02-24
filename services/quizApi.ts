@@ -1220,7 +1220,7 @@ export async function isDailyQuizCached(): Promise<{
 export async function clearDailyQuizCache(): Promise<void> {
     try {
         memoryCache.delete(DAILY_QUIZ_MEMORY_KEY);
-        await cacheService.remove(DAILY_QUIZ_CACHE_KEY);
+        await cacheService.invalidate(DAILY_QUIZ_CACHE_KEY);
         logger.debug('[DailyQuiz] Cache cleared successfully');
     } catch (error: any) {
         logger.error('[DailyQuiz] Error clearing cache:', error);

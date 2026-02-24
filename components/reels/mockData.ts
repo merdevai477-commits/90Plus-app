@@ -5,8 +5,8 @@ export const MOCK_REELS: ReelData[] = [
         id: '1',
         user: {
             id: '1',
-            username: 'mosalah',
-            name: 'محمد صلاح',
+            username: 'player1',
+            name: 'لاعب مصري',
             avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop',
             verified: true,
             followers: 125000,
@@ -31,8 +31,8 @@ export const MOCK_REELS: ReelData[] = [
         id: '2',
         user: {
             id: '2',
-            username: 'cristiano',
-            name: 'كريستيانو رونالدو',
+            username: 'player2',
+            name: 'لاعب برتغالي',
             avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop',
             verified: false,
             followers: 85000,
@@ -57,8 +57,8 @@ export const MOCK_REELS: ReelData[] = [
         id: '3',
         user: {
             id: '3',
-            username: 'leomessi',
-            name: 'ليونيل ميسي',
+            username: 'player3',
+            name: 'لاعب أرجنتيني',
             avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop',
             verified: false,
             followers: 92000,

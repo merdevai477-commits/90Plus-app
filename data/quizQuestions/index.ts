@@ -51,8 +51,8 @@ const MOCK_QUESTIONS: QuizQuestion[] = [
   {
     id: 'mock-3',
     categoryId: 'legends',
-    question: 'من هو أفضل هداف في تاريخ كأس العالم؟',
-    options: ['ميروسلاف كلوزه', 'رونالدو', 'بيليه', 'جيرد مولر'],
+    question: 'من أي دولة كان أفضل هداف في تاريخ كأس العالم؟',
+    options: ['ألمانيا', 'البرازيل', 'البرازيل', 'ألمانيا'],
     difficulty: 'HARD',
     points: 20,
     displayMode: 'never',

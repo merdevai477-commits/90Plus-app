@@ -657,7 +657,7 @@ const LeaguesScreen = () => {
         {topScorers.map((scorer, index) => {
           const stats = scorer.statistics?.[0];
           return (
-            <View key={scorer.player.id} style={styles.scorerCard}>
+            <View key={`scorer-${scorer.player.id}`} style={styles.scorerCard}>
               <View style={styles.scorerRank}>
                 <Text style={styles.scorerRankText}>{index + 1}</Text>
               </View>
@@ -704,7 +704,7 @@ const LeaguesScreen = () => {
         {topAssists.map((assist, index) => {
           const stats = assist.statistics?.[0];
           return (
-            <View key={assist.player.id} style={styles.scorerCard}>
+            <View key={`assist-${assist.player.id}`} style={styles.scorerCard}>
               <View style={styles.scorerRank}>
                 <Text style={styles.scorerRankText}>{index + 1}</Text>
               </View>
@@ -749,7 +749,7 @@ const LeaguesScreen = () => {
       <View style={styles.featuresContainer}>
         <Text style={styles.featuresTitle}>League Rounds</Text>
         {rounds.map((round, index) => (
-          <View key={index} style={styles.roundCard}>
+          <View key={`round-${index}`} style={styles.roundCard}>
             <Text style={styles.roundText}>{round}</Text>
           </View>
         ))}

@@ -10,7 +10,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/clerk-expo';
-import Constants from 'expo-constants';
 
 import {
   HomeHeader,
@@ -22,15 +21,12 @@ import {
 } from '../../components/Home';
 import AdvancedSearchBar, { SearchResult } from '../../components/Home/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
-// Username is now auto-set from email, no modal needed
 import { useHomeStore } from '../../src/store/home.store';
-import { COLORS } from '../../components/reels/constants';
 import { Colors as DesignColors, Spacing } from '../../src/designSystem/designSystem';
 import { useHapticFeedback } from '../../components/leagues/HapticFeedback';
 import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
-import { useTranslation } from '../../src/i18n';
 import { getApiUrl } from '../../config/api.config';
 import { getDailyQuizStatus, DailyQuizStatus } from '../../services/quizApi';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
@@ -41,7 +37,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const haptic = useHapticFeedback();
-  const { t } = useTranslation();
   const [searchVisible, setSearchVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUsername, setCurrentUsername] = useState('');
@@ -181,7 +176,6 @@ export default function HomeScreen() {
     fetchRankingsData,
     setUserMode,
     toggleFavorite,
-    loadingMatches,
     loadingRankings,
   } = useHomeStore();
 
@@ -306,11 +300,11 @@ export default function HomeScreen() {
           // ✅ Load critical data first (user profile, home data)
           // Then load secondary data in parallel
           const criticalPromises = [
-            fetchHomeDataRef.current(token).catch(err => {
+            fetchHomeDataRef.current(token).catch((err: any) => {
               logger.error('Error fetching home data:', err);
               return null;
             }),
-            fetchUserProfileRef.current().catch(err => {
+            fetchUserProfileRef.current().catch((err: any) => {
               logger.error('Error fetching user profile:', err);
               return null;
             }),
@@ -318,23 +312,23 @@ export default function HomeScreen() {
           
           // ✅ Load secondary data in parallel (non-blocking)
           const secondaryPromises = [
-            fetchRankingsDataRef.current(token).catch(err => {
+            fetchRankingsDataRef.current(token).catch((err: any) => {
               logger.error('Error fetching rankings:', err);
               return null;
             }),
-            fetchSpinWheelStatusRef.current().catch(err => {
+            fetchSpinWheelStatusRef.current().catch((err: any) => {
               logger.error('Error fetching spin status:', err);
               return null;
             }),
-            fetchDailyQuizStatusRef.current().catch(err => {
+            fetchDailyQuizStatusRef.current().catch((err: any) => {
               logger.error('Error fetching quiz status:', err);
               return null;
             }),
-            fetchPredictionsDataRef.current(token).catch(err => {
+            fetchPredictionsDataRef.current(token).catch((err: any) => {
               logger.error('Error fetching predictions:', err);
               return null;
             }),
-            fetchUserRankRef.current().catch(err => {
+            fetchUserRankRef.current().catch((err: any) => {
               logger.error('Error fetching user rank:', err);
               return null;
             }),
@@ -373,15 +367,15 @@ export default function HomeScreen() {
     const token = await getToken();
       // ✅ Refresh critical data only for pull-to-refresh (faster)
     await Promise.all([
-        fetchHomeDataRef.current(token).catch(err => {
+        fetchHomeDataRef.current(token).catch((err: any) => {
           logger.error('Refresh error:', err);
           return null;
         }),
-        fetchRankingsDataRef.current(token).catch(err => {
+        fetchRankingsDataRef.current(token).catch((err: any) => {
           logger.error('Refresh error:', err);
           return null;
         }),
-        fetchUserProfileRef.current().catch(err => {
+        fetchUserProfileRef.current().catch((err: any) => {
           logger.error('Refresh error:', err);
           return null;
         }),
@@ -408,9 +402,8 @@ export default function HomeScreen() {
     router.push('/notifications');
   }, [router, haptic]);
 
-  const handleSearchResult = (result: SearchResult) => {
+  const handleSearchResult = (_result: SearchResult) => {
     setSearchVisible(false);
-    logger.log('Search result:', result);
   };
 
   const handleViewAllMatches = () => {
@@ -419,7 +412,7 @@ export default function HomeScreen() {
 
   const handleMatchPress = (matchId: string) => {
     haptic.selection();
-    const match = matches.find(m => m.id === matchId);
+    const match = matches.find((m: any) => m.id === matchId);
     if (!match) return;
 
     router.push({
@@ -513,15 +506,14 @@ export default function HomeScreen() {
 
         <VideoList
           videos={videos}
-          onVideoPress={(id) => router.push('/reels')}
+          onVideoPress={() => router.push('/reels')}
           onViewAllPress={() => router.push('/reels')}
-          isLoading={loadingRankings} // Use loading state from store
+          isLoading={loadingRankings}
         />
 
         <PlayerList
           players={players}
           onPlayerPress={(player) => {
-            // ✅ Navigate to user profile by username
             if (player.username) {
               router.push({
                 pathname: '/user/[username]',
@@ -535,7 +527,6 @@ export default function HomeScreen() {
         <TeamPitch
           players={teamOfMonth}
           onPlayerPress={(player) => {
-            // ✅ Navigate to user profile by username
             if (player.username) {
               router.push({
                 pathname: '/user/[username]',

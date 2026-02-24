@@ -21,7 +21,7 @@ interface HeroItem {
 const HERO_ITEMS: HeroItem[] = [
     {
         id: '1',
-        title: 'El Clásico: Real Madrid vs Barcelona',
+        title: 'Big Match: Top Teams Clash',
         subtitle: 'Match of the Week • Sat 21:00',
         image: 'https://images.unsplash.com/photo-1504454133178-d4888688edee?w=800&h=600&fit=crop',
         tag: 'Featured',
