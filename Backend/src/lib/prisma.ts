@@ -43,7 +43,7 @@ const createPrismaClient = () => {
   const client = prismaClientSingleton();
   
   // ✅ Add middleware to handle connection errors with retry
-  client.$use(async (params, next) => {
+  client.$use(async (params: any, next: any) => {
     const maxRetries = 3;
     let retries = 0;
     

@@ -29,7 +29,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // الأرجنتين
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "كانت النهائية بين الأرجنتين وفرنسا",
@@ -42,7 +41,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "1", // 5
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/teams/6.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "البرازيل هي الأكثر فوزاً بكأس العالم",
@@ -55,7 +53,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // لاعب ألماني
     difficulty: "HARD",
     points: 20,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "لاعب من ألمانيا سجل 16 هدف في كؤوس العالم",
@@ -68,7 +65,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "1", // 2022
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/teams/26.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "كان في قطر",
@@ -81,7 +77,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // أسطورة برازيلية
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/teams/6.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "لاعب برازيلي أسطوري من الستينات",
@@ -94,7 +89,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // نادي من مدريد
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/leagues/2.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "النادي الملكي الإسباني",
@@ -107,7 +101,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "3", // الاتحاد السوفيتي
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "حارس مرمى أسطوري من أوروبا الشرقية",
@@ -120,7 +113,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // 1000+
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/teams/6.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "رقم تاريخي يزيد عن الألف",
@@ -133,7 +125,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // لاعب أرجنتيني
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/leagues/2.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "لاعب من أمريكا الجنوبية",
@@ -146,7 +137,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "1", // 2002
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/teams/6.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "في اليابان وكوريا الجنوبية",
@@ -159,7 +149,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "2", // الستينات
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/leagues/2.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "العصر الذهبي للنادي الملكي",
@@ -172,7 +161,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // 1986
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "في المكسيك ضد إنجلترا",
@@ -185,7 +173,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // ريال مدريد
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/teams/541.png",
     imageType: "club",
     displayMode: "AFTER_ANSWER",
     hint: "النادي الملكي الإسباني",
@@ -198,7 +185,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // 1958
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "كان عمره 17 سنة وكان من البرازيل",
@@ -211,7 +197,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // إيطاليا
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/teams/768.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "فازت في النهائي بركلات الترجيح",
@@ -224,7 +209,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "3", // تشيكوسلوفاكيا
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "لاعب من أوروبا الشرقية سجل أكثر من 5000 هدف",
@@ -237,7 +221,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // 1930
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "في الأوروغواي",
@@ -250,7 +233,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // 5
     difficulty: "HARD",
     points: 25,
-    imageUrl: "https://media.api-sports.io/football/leagues/1.png",
     imageType: "trophy",
     displayMode: "AFTER_ANSWER",
     hint: "لاعب ألماني حقق هذا الرقم",
@@ -263,7 +245,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // الأرجنتين
     difficulty: "EASY",
     points: 10,
-    imageUrl: "https://media.api-sports.io/football/teams/26.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "منتخب من أمريكا الجنوبية",
@@ -277,7 +258,6 @@ export const LEGENDS_COMPLETE_QUESTIONS: CompleteQuizQuestion[] = [
     correctAnswer: "0", // الأرجنتين
     difficulty: "MEDIUM",
     points: 15,
-    imageUrl: "https://media.api-sports.io/football/teams/26.png",
     imageType: "flag",
     displayMode: "AFTER_ANSWER",
     hint: "فاز منتخبه بكأس العالم 2022",

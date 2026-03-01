@@ -47,101 +47,101 @@ async function main() {
 
     // Create Leagues
     console.log('🏆 Creating leagues...');
-    const premierLeague = await prisma.league.create({
+    const englishLeague = await prisma.league.create({
         data: {
-            name: 'Premier League',
+            name: 'English League 1',
             country: 'England',
-            logo: 'https://example.com/premier-league.png',
+            logo: null,
             season: '2024/25',
         },
     });
 
-    const laLiga = await prisma.league.create({
+    const spanishLeague = await prisma.league.create({
         data: {
-            name: 'La Liga',
+            name: 'Spanish League 1',
             country: 'Spain',
-            logo: 'https://example.com/la-liga.png',
+            logo: null,
             season: '2024/25',
         },
     });
 
-    const bundesliga = await prisma.league.create({
+    const germanLeague = await prisma.league.create({
         data: {
-            name: 'Bundesliga',
+            name: 'German League 1',
             country: 'Germany',
-            logo: 'https://example.com/bundesliga.png',
+            logo: null,
             season: '2024/25',
         },
     });
 
     // Create Teams
     console.log('⚽ Creating teams...');
-    const manUnited = await prisma.team.create({
+    const englishTeam1 = await prisma.team.create({
         data: {
-            name: 'Manchester United',
-            logo: 'https://example.com/man-utd.png',
+            name: 'English Team 1',
+            logo: null,
             country: 'England',
-            stadium: 'Old Trafford',
+            stadium: 'Stadium A',
             founded: 1878,
-            leagueId: premierLeague.id,
+            leagueId: englishLeague.id,
         },
     });
 
-    const liverpool = await prisma.team.create({
+    const englishTeam2 = await prisma.team.create({
         data: {
-            name: 'Liverpool',
-            logo: 'https://example.com/liverpool.png',
+            name: 'English Team 2',
+            logo: null,
             country: 'England',
-            stadium: 'Anfield',
+            stadium: 'Stadium B',
             founded: 1892,
-            leagueId: premierLeague.id,
+            leagueId: englishLeague.id,
         },
     });
 
-    const realMadrid = await prisma.team.create({
+    const spanishTeam1 = await prisma.team.create({
         data: {
-            name: 'Real Madrid',
-            logo: 'https://example.com/real-madrid.png',
+            name: 'Spanish Team 1',
+            logo: null,
             country: 'Spain',
-            stadium: 'Santiago Bernabéu',
+            stadium: 'Stadium C',
             founded: 1902,
-            leagueId: laLiga.id,
+            leagueId: spanishLeague.id,
         },
     });
 
-    const barcelona = await prisma.team.create({
+    const spanishTeam2 = await prisma.team.create({
         data: {
-            name: 'FC Barcelona',
-            logo: 'https://example.com/barcelona.png',
+            name: 'Spanish Team 2',
+            logo: null,
             country: 'Spain',
-            stadium: 'Camp Nou',
+            stadium: 'Stadium D',
             founded: 1899,
-            leagueId: laLiga.id,
+            leagueId: spanishLeague.id,
         },
     });
 
-    const bayernMunich = await prisma.team.create({
+    const germanTeam1 = await prisma.team.create({
         data: {
-            name: 'Bayern Munich',
-            logo: 'https://example.com/bayern.png',
+            name: 'German Team 1',
+            logo: null,
             country: 'Germany',
-            stadium: 'Allianz Arena',
+            stadium: 'Stadium E',
             founded: 1900,
-            leagueId: bundesliga.id,
+            leagueId: germanLeague.id,
         },
     });
 
     // Create Players
     console.log('🏃 Creating players...');
-    const salah = await prisma.player.create({
+    const player1 = await prisma.player.create({
         data: {
-            name: 'Mohamed Salah',
-            photo: 'https://example.com/salah.png',
+            name: 'Player One',
+            photo: null,
             position: 'FW',
             number: 11,
             nationality: 'Egypt',
             age: 31,
-            teamId: liverpool.id,
+            teamId: englishTeam2.id,
             stats: {
                 create: {
                     pace: 91,
@@ -156,15 +156,15 @@ async function main() {
         },
     });
 
-    const mbappe = await prisma.player.create({
+    const player2 = await prisma.player.create({
         data: {
-            name: 'Kylian Mbappé',
-            photo: 'https://example.com/mbappe.png',
+            name: 'Player Two',
+            photo: null,
             position: 'FW',
             number: 9,
             nationality: 'France',
             age: 25,
-            teamId: realMadrid.id,
+            teamId: spanishTeam1.id,
             stats: {
                 create: {
                     pace: 97,
@@ -179,15 +179,15 @@ async function main() {
         },
     });
 
-    const lewandowski = await prisma.player.create({
+    const player3 = await prisma.player.create({
         data: {
-            name: 'Robert Lewandowski',
-            photo: 'https://example.com/lewandowski.png',
+            name: 'Player Three',
+            photo: null,
             position: 'FW',
             number: 9,
             nationality: 'Poland',
             age: 35,
-            teamId: barcelona.id,
+            teamId: spanishTeam2.id,
             stats: {
                 create: {
                     pace: 78,
@@ -202,15 +202,15 @@ async function main() {
         },
     });
 
-    const neuer = await prisma.player.create({
+    const player4 = await prisma.player.create({
         data: {
-            name: 'Manuel Neuer',
-            photo: 'https://example.com/neuer.png',
+            name: 'Player Four',
+            photo: null,
             position: 'GK',
             number: 1,
             nationality: 'Germany',
             age: 37,
-            teamId: bayernMunich.id,
+            teamId: germanTeam1.id,
             stats: {
                 create: {
                     pace: 58,
@@ -229,27 +229,27 @@ async function main() {
     console.log('📅 Creating matches...');
     await prisma.match.create({
         data: {
-            homeTeamId: manUnited.id,
-            awayTeamId: liverpool.id,
+            homeTeamId: englishTeam1.id,
+            awayTeamId: englishTeam2.id,
             homeScore: 2,
             awayScore: 1,
             status: 'FINISHED',
-            leagueId: premierLeague.id,
+            leagueId: englishLeague.id,
             matchDate: new Date('2024-11-25'),
-            venue: 'Old Trafford',
+            venue: 'Stadium A',
         },
     });
 
     await prisma.match.create({
         data: {
-            homeTeamId: realMadrid.id,
-            awayTeamId: barcelona.id,
+            homeTeamId: spanishTeam1.id,
+            awayTeamId: spanishTeam2.id,
             homeScore: null,
             awayScore: null,
             status: 'SCHEDULED',
-            leagueId: laLiga.id,
+            leagueId: spanishLeague.id,
             matchDate: new Date('2024-12-05'),
-            venue: 'Santiago Bernabéu',
+            venue: 'Stadium C',
         },
     });
 
@@ -356,12 +356,12 @@ async function main() {
             data: [
                 {
                     categoryId: inCommon.id,
-                    question: 'What do Cristiano Ronaldo and Lionel Messi have in common?',
+                    question: 'What do Player A and Player B have in common?',
                     options: [
-                        'Both won World Cup',
-                        'Both won Ballon d\'Or',
-                        'Both played for Barcelona',
-                        'Both are from Brazil',
+                        'Both won international tournament',
+                        'Both won individual award',
+                        'Both played for same team',
+                        'Both are from same country',
                     ],
                     correctAnswer: '1',
                     difficulty: 'EASY',
@@ -369,8 +369,8 @@ async function main() {
                 },
                 {
                     categoryId: flash.id,
-                    question: 'Which country won the 2018 FIFA World Cup?',
-                    options: ['Brazil', 'Germany', 'France', 'Argentina'],
+                    question: 'Which country won the 2018 international tournament?',
+                    options: ['Country A', 'Country B', 'Country C', 'Country D'],
                     correctAnswer: '2',
                     difficulty: 'EASY',
                     points: 10,

@@ -1,0 +1,146 @@
+# Implementation Plan
+
+- [ ] 1. Write bug condition exploration test
+  - **Property 1: Fault Condition** - Demo Account Authentication Failure
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Scope the property to the concrete failing case: email="aibuilder80@gmail.com"
+  - Test that authentication with aibuilder80@gmail.com either fails OR succeeds but account has moderation restrictions (from Fault Condition in design)
+  - The test assertions should verify: account exists in both Clerk and database, has no moderation flags (strikes, suspensions, bans, deletion), has `isDemoAccount=true`, and authenticates successfully
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found: authentication failure, missing account, deleted account, or moderation restrictions
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6_
+
+- [ ] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Regular User Behavior Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-demo accounts (email != "aibuilder80@gmail.com")
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements:
+    - Regular user authentication succeeds for valid credentials
+    - Moderation actions (strikes, suspensions, bans) apply to regular users
+    - Account deletion with 30-day grace period works for regular users
+    - User registration creates accounts with `isDemoAccount=false`
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+
+- [ ] 3. Fix for demo account authentication and protection
+
+  - [ ] 3.1 Add isDemoAccount field to database schema
+    - Add `isDemoAccount Boolean @default(false)` to User model in `Backend/prisma/schema.prisma`
+    - Add index: `@@index([isDemoAccount])` for efficient queries
+    - Generate migration: `npm run prisma:migrate dev --name add_demo_account_flag`
+    - Run migration to apply changes
+    - _Bug_Condition: isBugCondition(input) where input.email == "aibuilder80@gmail.com" AND (account missing OR has moderation restrictions)_
+    - _Expected_Behavior: Account exists with isDemoAccount=true, no moderation flags, full access_
+    - _Preservation: Regular users unaffected, isDemoAccount defaults to false_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+
+  - [ ] 3.2 Create DemoAccountService
+    - Create `Backend/src/services/demo-account.service.ts`
+    - Implement `ensureDemoAccountExists()`: Create/verify demo account in Clerk and database
+    - Implement `isDemoAccount(userId: string)`: Check if user is demo account
+    - Implement `isDemoAccountByEmail(email: string)`: Check by email
+    - Implement `populateSampleData(userId: string)`: Create sample reels, quiz attempts, follows
+    - Implement `verifyDemoAccountIntegrity()`: Health check for demo account
+    - Use `@clerk/clerk-sdk-node` for Clerk integration
+    - Sync Clerk user ID to database with `isDemoAccount=true`
+    - Clear any moderation flags on demo account
+    - _Bug_Condition: isBugCondition(input) where demo account missing or misconfigured_
+    - _Expected_Behavior: Demo account exists in both Clerk and database, properly configured_
+    - _Preservation: Service only affects demo account, regular users unaffected_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 2.8_
+
+  - [ ] 3.3 Create demo protection middleware
+    - Create `Backend/src/middleware/demo-protection.middleware.ts`
+    - Implement `checkDemoAccountProtection` middleware
+    - Extract target user ID from request (params, body, query)
+    - Check if target user has `isDemoAccount=true`
+    - If protected, return 403 error: "Cannot modify demo account"
+    - Log attempt to audit log for security monitoring
+    - _Bug_Condition: isBugCondition(input) where demo account can be modified by moderation actions_
+    - _Expected_Behavior: Moderation actions blocked on demo account_
+    - _Preservation: Middleware only blocks actions on demo accounts, regular users unaffected_
+    - _Requirements: 2.5, 2.7, 3.2, 3.3_
+
+  - [ ] 3.4 Add demo protection to account deletion service
+    - Update `Backend/src/services/account-deletion.service.ts`
+    - In `initiateAccountDeletion()`, add demo account check before processing
+    - Query user with `select: { isDemoAccount: true }`
+    - If `isDemoAccount=true`, throw error: "Cannot delete demo account"
+    - Add audit logging for deletion attempts on demo accounts
+    - _Bug_Condition: isBugCondition(input) where demo account can be deleted_
+    - _Expected_Behavior: Deletion blocked for demo account_
+    - _Preservation: Regular user deletion flow unchanged_
+    - _Requirements: 2.5, 2.7, 3.3_
+
+  - [ ] 3.5 Add demo protection to moderation controller
+    - Update `Backend/src/controllers/moderation.controller.ts`
+    - Add demo account check to all moderation functions:
+      - `createStrike()`
+      - `suspendUser()`
+      - `banUser()`
+      - `issueWarning()`
+    - Before applying action, query target user: `select: { isDemoAccount: true }`
+    - If `isDemoAccount=true`, return 403 with code 'DEMO_ACCOUNT_PROTECTED'
+    - _Bug_Condition: isBugCondition(input) where demo account can receive moderation actions_
+    - _Expected_Behavior: All moderation actions blocked on demo account_
+    - _Preservation: Moderation actions work normally for regular users_
+    - _Requirements: 2.5, 2.7, 3.2_
+
+  - [ ] 3.6 Add demo account initialization to server startup
+    - Update `Backend/src/main.ts`
+    - After database connection, before server start, add demo account initialization
+    - Only run in production: `if (process.env.NODE_ENV === 'production')`
+    - Call `await DemoAccountService.ensureDemoAccountExists()`
+    - Log success: "✅ Demo account verified and ready"
+    - Add error handling that logs but doesn't block server startup
+    - _Bug_Condition: isBugCondition(input) where demo account not initialized on server start_
+    - _Expected_Behavior: Demo account exists and ready when server starts_
+    - _Preservation: Server startup unchanged for development environment_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 2.8_
+
+  - [ ] 3.7 Update seed script to preserve demo account
+    - Update `Backend/prisma/seed.ts`
+    - Add environment check for production
+    - In development: `await prisma.user.deleteMany()` (clear all)
+    - In production: `await prisma.user.deleteMany({ where: { isDemoAccount: false } })` (preserve demo)
+    - Ensure seed script doesn't interfere with demo account data
+    - _Bug_Condition: isBugCondition(input) where seed script deletes demo account_
+    - _Expected_Behavior: Seed script preserves demo account in production_
+    - _Preservation: Seed script works normally in development_
+    - _Requirements: 2.1, 2.2, 3.6_
+
+  - [ ] 3.8 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Demo Account Authentication Success
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify: Demo account authenticates successfully, has `isDemoAccount=true`, no moderation flags, full access
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6_
+
+  - [ ] 3.9 Verify preservation tests still pass
+    - **Property 2: Preservation** - Regular User Behavior Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Verify: Regular user authentication, moderation, deletion, and registration work identically
+    - Confirm all tests still pass after fix (no regressions)
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+
+- [ ] 4. Checkpoint - Ensure all tests pass
+  - Run all property-based tests (exploration + preservation)
+  - Run unit tests for DemoAccountService and middleware
+  - Run integration tests for authentication and moderation flows
+  - Verify demo account can authenticate and access all features
+  - Verify regular users unaffected by demo protection
+  - Test server startup initializes demo account correctly
+  - Ensure all tests pass, ask the user if questions arise
