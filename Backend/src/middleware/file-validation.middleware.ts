@@ -1,9 +1,15 @@
 /**
  * File Validation Middleware
- * Validates file size and MIME type using magic bytes detection
+ * Validates file size, MIME type using magic bytes detection, and video duration
  */
 
+import { Request, Response, NextFunction } from 'express';
 import { FILE_SIZE_LIMITS } from '../config/supabase.config';
+import { getVideoDurationInSeconds } from 'get-video-duration';
+import { logger } from '../utils/logger';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 export interface ValidationResult {
     valid: boolean;
@@ -153,3 +159,125 @@ export function validateVideoFile(
     // Then check MIME type
     return validateMimeType(buffer, declaredMimeType);
 }
+
+/**
+ * Validates video duration from uploaded file buffer
+ * Rejects videos less than 5 seconds or more than 60 seconds
+ * @param req - Express request object with file
+ * @param res - Express response object
+ * @param next - Express next function
+ */
+export const validateVideoDuration = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        // Get video file from multer - handle both single file and fields
+        let videoFile = req.file;
+        
+        // If using upload.fields(), get the video from req.files
+        if (!videoFile && req.files) {
+            const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+            videoFile = files['video']?.[0];
+        }
+        
+        if (!videoFile) {
+            res.status(400).json({
+                error: 'E007',
+                message: 'No video file provided',
+                timestamp: new Date().toISOString(),
+                path: req.path
+            });
+            return;
+        }
+
+        // Create temporary file to extract duration
+        // get-video-duration requires a file path, not a buffer
+        const tempDir = os.tmpdir();
+        const tempFilePath = path.join(tempDir, `temp_video_${Date.now()}_${videoFile.originalname}`);
+        
+        try {
+            // Write buffer to temporary file
+            fs.writeFileSync(tempFilePath, videoFile.buffer);
+            
+            // Extract video duration
+            const duration = await getVideoDurationInSeconds(tempFilePath);
+            
+            // Clean up temporary file
+            fs.unlinkSync(tempFilePath);
+            
+            // Validate duration
+            if (duration < 5) {
+                logger.warn(`Video duration too short: ${duration}s (min: 5s)`, {
+                    userId: req.auth?.userId,
+                    fileName: videoFile.originalname,
+                    duration
+                });
+                
+                res.status(400).json({
+                    error: 'E007',
+                    message: 'Video duration must be at least 5 seconds',
+                    details: { 
+                        duration: Math.round(duration * 10) / 10, 
+                        minDuration: 5 
+                    },
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                });
+                return;
+            }
+            
+            if (duration > 60) {
+                logger.warn(`Video duration too long: ${duration}s (max: 60s)`, {
+                    userId: req.auth?.userId,
+                    fileName: videoFile.originalname,
+                    duration
+                });
+                
+                res.status(400).json({
+                    error: 'E007',
+                    message: 'Video duration must not exceed 60 seconds',
+                    details: { 
+                        duration: Math.round(duration * 10) / 10, 
+                        maxDuration: 60 
+                    },
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                });
+                return;
+            }
+            
+            // Add duration to request for use in controller
+            (req as any).videoDuration = duration;
+            
+            logger.info(`Video duration validated: ${duration}s`, {
+                userId: req.auth?.userId,
+                fileName: videoFile.originalname,
+                duration
+            });
+            
+            next();
+        } catch (fileError: any) {
+            // Clean up temporary file if it exists
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+            }
+            throw fileError;
+        }
+    } catch (error: any) {
+        logger.error('Error validating video duration:', {
+            error: error.message,
+            stack: error.stack,
+            userId: req.auth?.userId,
+            fileName: req.file?.originalname
+        });
+        
+        res.status(500).json({
+            error: 'E010',
+            message: 'Failed to validate video duration',
+            timestamp: new Date().toISOString(),
+            path: req.path
+        });
+    }
+};

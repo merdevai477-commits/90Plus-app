@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
+import { validateVideoDuration } from '../middleware/file-validation.middleware';
 import { r2Storage } from '../services/r2-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
@@ -246,10 +247,15 @@ router.post('/cover', requireAuth, upload.single('file'), async (req: Request, r
  * POST /api/upload/reel
  * Upload reel video to R2 Storage
  */
-router.post('/reel', requireAuth, upload.fields([
-    { name: 'video', maxCount: 1 },
-    { name: 'thumbnail', maxCount: 1 }
-]), async (req: Request, res: Response): Promise<void> => {
+router.post(
+    '/reel', 
+    requireAuth, 
+    upload.fields([
+        { name: 'video', maxCount: 1 },
+        { name: 'thumbnail', maxCount: 1 }
+    ]), 
+    validateVideoDuration, 
+    async (req: Request, res: Response): Promise<void> => {
     const startTime = Date.now();
     let videoUploaded = false;
     let thumbnailUploaded = false;
