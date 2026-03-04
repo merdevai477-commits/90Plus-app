@@ -37,6 +37,7 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized',
+                code: 'E002',
             });
             return;
         }
@@ -53,14 +54,26 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
 
         logger.info(`[/clerk/me] 📡 Cache miss, fetching from database for: ${clerkUserId}`);
 
-        // Find or create user in our database
-        const user = await ClerkUserService.findOrCreateUser(clerkUserId);
+        // Find or create user in our database with better error handling
+        let user;
+        try {
+            user = await ClerkUserService.findOrCreateUser(clerkUserId);
+        } catch (dbError: any) {
+            logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId}:`, dbError);
+            res.status(500).json({
+                status: 'ERROR',
+                message: 'Database error while loading user',
+                code: 'E009',
+            });
+            return;
+        }
 
         if (!user) {
             logger.error(`[/clerk/me] ❌ Failed to find or create user: ${clerkUserId}`);
-            res.status(500).json({
+            res.status(404).json({
                 status: 'ERROR',
-                message: 'Failed to load user data',
+                message: 'User not found',
+                code: 'E004',
             });
             return;
         }
@@ -84,7 +97,7 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             favoriteTeam: user.favoriteTeam,
             position: user.position,
             countryFlag: user.countryFlag,
-            country: user.country, // ✅ Include country field
+            country: user.country,
             age: user.age,
             height: user.height,
             weight: user.weight,
@@ -103,10 +116,11 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
         logger.info(`[/clerk/me] ✅ Returning user data for: ${user.username}`);
         res.json({ status: 'SUCCESS', data: { user: userData } });
     } catch (error: any) {
-        logger.error('[/clerk/me] ❌ Error:', error);
+        logger.error('[/clerk/me] ❌ Unexpected error:', error);
         res.status(500).json({
             status: 'ERROR',
-            message: error.message || 'Internal server error',
+            message: 'Internal server error',
+            code: 'E010',
         });
     }
 });
@@ -487,10 +501,14 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
         const username = ensureString(req.params.username);
         const currentClerkUserId = req.auth?.userId;
 
+        logger.info(`[/clerk/user/:username] 🔍 Fetching profile for: ${username}`);
+
         if (!username) {
+            logger.warn('[/clerk/user/:username] ⚠️ No username provided');
             res.status(400).json({
                 status: 'ERROR',
                 message: 'Username is required',
+                code: 'E001',
             });
             return;
         }
@@ -508,17 +526,16 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
                 level: true,
                 favoriteTeam: true,
                 createdAt: true,
-                // FIFA Card fields
                 position: true,
                 countryFlag: true,
-                country: true, // ✅ NEW
+                country: true,
                 age: true,
                 height: true,
                 weight: true,
                 preferredFoot: true,
                 clubLogo: true,
                 brandLogo: true,
-                socialLinks: true, // ✅ NEW
+                socialLinks: true,
                 _count: {
                     select: {
                         followers: true,
@@ -530,12 +547,16 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
         });
 
         if (!user) {
+            logger.warn(`[/clerk/user/:username] ⚠️ User not found: ${username}`);
             res.status(404).json({
                 status: 'ERROR',
                 message: 'User not found',
+                code: 'E004',
             });
             return;
         }
+
+        logger.info(`[/clerk/user/:username] ✅ User found: ${user.username} (${user.id})`);
 
         // Check if current user is following this user AND if this user is following current user
         let isFollowing = false;
@@ -570,12 +591,13 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
             }
         }
 
+        logger.info(`[/clerk/user/:username] ✅ Returning profile data for: ${username}`);
         res.json({
             status: 'SUCCESS',
             data: {
                 user: {
                     ...user,
-                    socialLinks: (user.socialLinks as any) || [], // ✅ Ensure array format
+                    socialLinks: (user.socialLinks as any) || [],
                     country: user.country || null,
                     followersCount: user._count.followers,
                     followingCount: user._count.following,
@@ -586,10 +608,11 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
             },
         });
     } catch (error: any) {
-        logger.error('Get user profile error:', error);
+        logger.error('[/clerk/user/:username] ❌ Error:', error);
         res.status(500).json({
             status: 'ERROR',
-            message: error.message || 'Internal server error',
+            message: 'Internal server error',
+            code: 'E010',
         });
     }
 });

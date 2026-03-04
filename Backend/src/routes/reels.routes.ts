@@ -1315,7 +1315,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
 
         // Soft delete comment
         await prisma.comment.update({
-            where: { id: commentId },
+            where: { id: commentIdStr },
             data: {
                 isDeleted: true,
                 deletedAt: new Date(),

@@ -5,8 +5,13 @@
  * Copy this function and replace the existing one in front/app/auth/index.tsx
  * 
  * Location: front/app/auth/index.tsx (around line 270-320)
+ * 
+ * NOTE: This is a PATCH FILE, not a standalone module.
+ * The function references (getToken, globalState, etc.) exist in the target file.
+ * TypeScript errors here are expected and can be ignored.
  */
 
+// @ts-nocheck - This is a patch file, not a standalone module
 /**
  * Sync user with backend database
  * This loads the user's saved data from the database

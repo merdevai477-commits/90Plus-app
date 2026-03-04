@@ -9,6 +9,12 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+// Helper function to ensure param is string
+const ensureString = (param: string | string[] | undefined): string => {
+    if (Array.isArray(param)) return param[0];
+    return param || '';
+};
+
 // Settings Routes (Protected)
 router.get('/settings', requireAuth, UserController.getSettings);
 router.patch('/settings', requireAuth, UserController.updateSettings);
@@ -23,7 +29,8 @@ router.delete('/me', requireAuth, accountDeletionRateLimiter, UserController.del
  */
 router.post('/block/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId: targetUserId } = req.params;
+        const { userId } = req.params;
+        const targetUserId = ensureString(userId);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -109,7 +116,8 @@ router.post('/block/:userId', requireAuth, async (req: Request, res: Response): 
  */
 router.delete('/block/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId: targetUserId } = req.params;
+        const { userId } = req.params;
+        const targetUserId = ensureString(userId);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -227,7 +235,8 @@ router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise
  */
 router.get('/block/:userId/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId: targetUserId } = req.params;
+        const { userId } = req.params;
+        const targetUserId = ensureString(userId);
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
@@ -298,7 +307,8 @@ router.post('/report/:userId', requireAuth, validate({
     }
 }), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userId: targetUserId } = req.params;
+        const { userId } = req.params;
+        const targetUserId = ensureString(userId);
         const { reason, additionalInfo } = req.body;
         const clerkUserId = req.auth?.userId;
 

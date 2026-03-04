@@ -5,10 +5,17 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+// Helper function to ensure param is string
+const ensureString = (param: string | string[] | undefined): string => {
+    if (Array.isArray(param)) return param[0];
+    return param || '';
+};
+
 // POST /api/reports/reel/:reelId
 router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { reelId } = req.params;
+    const reelIdStr = ensureString(reelId);
     const { reason, additionalInfo } = req.body;
     const clerkUserId = req.auth?.userId;
 
@@ -29,7 +36,7 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
 
     // Get reel owner
     const reel = await prisma.reel.findUnique({
-      where: { id: reelId },
+      where: { id: reelIdStr },
       select: { userId: true },
     });
 
@@ -55,7 +62,7 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
     await prisma.report.create({
       data: {
         reporterId: user.id,
-        reportedReelId: reelId,
+        reportedReelId: reelIdStr,
         reportedUserId: reel.userId,
         type: reportType as any,
         reason: additionalInfo || reason,
@@ -63,7 +70,7 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
       },
     });
 
-    logger.info(`User ${user.id} reported reel ${reelId} for: ${reason}`);
+    logger.info(`User ${user.id} reported reel ${reelIdStr} for: ${reason}`);
 
     res.json({
       status: 'SUCCESS',
@@ -82,6 +89,7 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
 router.post('/comment/:commentId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { commentId } = req.params;
+    const commentIdStr = ensureString(commentId);
     const { reason, additionalInfo } = req.body;
     const clerkUserId = req.auth?.userId;
 
@@ -102,7 +110,7 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
 
     // Get comment owner
     const comment = await prisma.comment.findUnique({
-      where: { id: commentId },
+      where: { id: commentIdStr },
       select: { userId: true },
     });
 
@@ -126,7 +134,7 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
     await prisma.report.create({
       data: {
         reporterId: user.id,
-        reportedCommentId: commentId,
+        reportedCommentId: commentIdStr,
         reportedUserId: comment.userId,
         type: reportType as any,
         reason: additionalInfo || reason,
@@ -134,7 +142,7 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
       },
     });
 
-    logger.info(`User ${user.id} reported comment ${commentId} for: ${reason}`);
+    logger.info(`User ${user.id} reported comment ${commentIdStr} for: ${reason}`);
 
     res.json({
       status: 'SUCCESS',

@@ -271,16 +271,17 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
  */
 router.get('/match/:matchId/count', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { matchId } = req.params;
+        // Ensure matchId is a string (handle array case)
+        const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
 
         const count = await (prisma as any).prediction.count({
-            where: { apiMatchId: parseInt(matchId) }
+            where: { apiMatchId: parseInt(matchIdParam) }
         });
 
         // Get breakdown by type
         const breakdown = await (prisma as any).prediction.groupBy({
             by: ['predictionType'],
-            where: { apiMatchId: parseInt(matchId) },
+            where: { apiMatchId: parseInt(matchIdParam) },
             _count: true
         });
 
@@ -426,13 +427,14 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
  */
 router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { matchId } = req.params;
-        
+        // Ensure matchId is a string (handle array case)
+        const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
+
         // Import the service dynamically to avoid circular dependency
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');
-        
-        const result = await PredictionWatcherService.manualResolve(parseInt(matchId));
-        
+
+        const result = await PredictionWatcherService.manualResolve(parseInt(matchIdParam));
+
         if (result.success) {
             res.json({ success: true, message: result.message });
         } else {
@@ -452,24 +454,24 @@ router.post('/resolve-all', async (req: Request, res: Response): Promise<void> =
     try {
         // Import the service dynamically to avoid circular dependency
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');
-        
+
         // Get count of unresolved predictions before
         const unresolvedBefore = await (prisma as any).prediction.count({
             where: { isCorrect: null }
         });
-        
+
         // Trigger the check
         await PredictionWatcherService.checkPredictions();
-        
+
         // Get count after
         const unresolvedAfter = await (prisma as any).prediction.count({
             where: { isCorrect: null }
         });
-        
+
         const resolved = unresolvedBefore - unresolvedAfter;
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             message: `Checked ${unresolvedBefore} unresolved predictions, resolved ${resolved}`,
             data: {
                 unresolvedBefore,
@@ -533,10 +535,10 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ 
+            res.status(401).json({
                 success: false,
                 error: 'Unauthorized',
-                message: 'يجب تسجيل الدخول لإرسال التوقعات' 
+                message: 'يجب تسجيل الدخول لإرسال التوقعات'
             });
             return;
         }
@@ -545,10 +547,10 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
 
         // Validation
         if (!matchId || homeScore === undefined || awayScore === undefined) {
-            res.status(400).json({ 
+            res.status(400).json({
                 success: false,
                 error: 'Missing required fields',
-                message: 'يرجى إدخال جميع البيانات المطلوبة' 
+                message: 'يرجى إدخال جميع البيانات المطلوبة'
             });
             return;
         }
@@ -558,20 +560,20 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         const away = parseInt(awayScore);
 
         if (isNaN(home) || isNaN(away)) {
-            res.status(400).json({ 
+            res.status(400).json({
                 success: false,
                 error: 'Invalid scores',
-                message: 'يرجى إدخال أرقام صحيحة' 
+                message: 'يرجى إدخال أرقام صحيحة'
             });
             return;
         }
 
         // Validate score range (0-20)
         if (home < 0 || away < 0 || home > 20 || away > 20) {
-            res.status(400).json({ 
+            res.status(400).json({
                 success: false,
                 error: 'Invalid score range',
-                message: 'النتيجة يجب أن تكون بين 0 و 20' 
+                message: 'النتيجة يجب أن تكون بين 0 و 20'
             });
             return;
         }
@@ -582,10 +584,10 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (!user) {
-            res.status(404).json({ 
+            res.status(404).json({
                 success: false,
                 error: 'User not found',
-                message: 'المستخدم غير موجود' 
+                message: 'المستخدم غير موجود'
             });
             return;
         }
@@ -639,10 +641,10 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (existingPrediction) {
-            res.status(400).json({ 
+            res.status(400).json({
                 success: false,
                 error: 'Already predicted',
-                message: 'لقد أرسلت توقعاً لهذه المباراة بالفعل' 
+                message: 'لقد أرسلت توقعاً لهذه المباراة بالفعل'
             });
             return;
         }
@@ -706,10 +708,10 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         });
     } catch (error) {
         logger.error('Error submitting score prediction:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             error: 'Internal server error',
-            message: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.' 
+            message: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.'
         });
     }
 });

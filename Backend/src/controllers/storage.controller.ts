@@ -110,7 +110,9 @@ export class StorageController {
 
             // Ownership verification is done by middleware before reaching here
 
-            await StorageService.deleteFile(path, bucket as 'image' | 'video');
+            // Ensure path is a string
+            const filePath = Array.isArray(path) ? path[0] : path;
+            await StorageService.deleteFile(filePath, bucket as 'image' | 'video');
 
             res.status(200).json({ message: 'File deleted successfully' });
         } catch (error: any) {

@@ -303,7 +303,8 @@ router.put('/username', requireAuth, async (req: Request, res: Response): Promis
  */
 router.post('/:username/view', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { username } = req.params;
+        // Ensure username is a string (handle array case)
+        const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
         const clerkUserId = req.auth?.userId;
 
         // Don't count self views

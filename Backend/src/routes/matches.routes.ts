@@ -12,7 +12,9 @@ const router = Router();
 router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        const apiMatchId = parseInt(req.params.matchId);
+        // Ensure matchId is a string (handle array case)
+        const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
+        const apiMatchId = parseInt(matchIdParam);
         const { homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, matchDate, leagueName } = req.body;
 
         if (!clerkUserId) {
@@ -83,7 +85,9 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
 router.delete('/favorite/:matchId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        const apiMatchId = parseInt(req.params.matchId);
+        // Ensure matchId is a string (handle array case)
+        const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
+        const apiMatchId = parseInt(matchIdParam);
 
         if (!clerkUserId) {
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
@@ -182,7 +186,9 @@ router.get('/favorites', requireAuth, async (req: Request, res: Response): Promi
 router.get('/favorite/:matchId/check', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        const apiMatchId = parseInt(req.params.matchId);
+        // Ensure matchId is a string (handle array case)
+        const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
+        const apiMatchId = parseInt(matchIdParam);
 
         if (!clerkUserId) {
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });

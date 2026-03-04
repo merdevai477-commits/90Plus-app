@@ -465,7 +465,8 @@ class FootballService {
 
     const response = await this.fetchFromApi<any[]>('/teams', params);
     
-    const teams = Array.isArray(response) ? response : response.response || [];
+    // Response is already the teams array from fetchFromApi
+    const teams = Array.isArray(response) ? response : [];
     
     // API-Football doesn't always return pagination for teams
     // Return all teams found (usually limited by country)

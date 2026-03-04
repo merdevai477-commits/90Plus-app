@@ -7,6 +7,12 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 
+// Helper function to ensure param is string
+const ensureString = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
 /**
  * Ownership verification middleware
  * Ensures user can only access their own resources
@@ -37,8 +43,10 @@ export function verifyOwnership(resourceType: 'reel' | 'comment' | 'user' | 'pre
         return;
       }
 
-      // Extract resource ID from params
-      const resourceId = req.params.id || req.params.reelId || req.params.commentId || req.params.userId;
+      // Extract resource ID from params and ensure it's a string
+      const resourceId = ensureString(
+        req.params.id || req.params.reelId || req.params.commentId || req.params.userId
+      );
 
       if (!resourceId) {
         res.status(400).json({

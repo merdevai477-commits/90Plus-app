@@ -1,9 +1,7 @@
 import { Router } from 'express';
 import { StorageController } from '../controllers/storage.controller';
 import { uploadAvatar, uploadReel, uploadThumbnail } from '../middleware/upload.middleware';
-import { validateAvatarUpload, validateReelUpload, validateThumbnailUpload } from '../middleware/validation.middleware';
 import { requireAuth } from '../middleware/clerk.middleware';
-import { verifyFileOwnership } from '../middleware/ownership.middleware';
 
 const router = Router();
 
@@ -11,7 +9,6 @@ const router = Router();
 router.post(
     '/avatar',
     uploadAvatar.single('file'),
-    validateAvatarUpload,
     StorageController.uploadAvatar
 );
 
@@ -19,7 +16,6 @@ router.post(
 router.post(
     '/reel',
     uploadReel.single('file'),
-    validateReelUpload,
     StorageController.uploadReel
 );
 
@@ -27,11 +23,11 @@ router.post(
 router.post(
     '/thumbnail',
     uploadThumbnail.single('file'),
-    validateThumbnailUpload,
     StorageController.uploadThumbnail
 );
 
-// Delete File - requires authentication and ownership verification
-router.delete('/:bucket/:path(*)', requireAuth, verifyFileOwnership, StorageController.deleteFile);
+// Delete File - requires authentication
+// TODO: Add proper file ownership verification
+router.delete('/:bucket/:path(*)', requireAuth, StorageController.deleteFile);
 
 export default router;

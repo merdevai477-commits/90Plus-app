@@ -97,7 +97,7 @@ export async function autoDeleteContent(
         if (contentType === 'reel') {
             const reel = await prisma.reel.findUnique({
                 where: { id: contentId },
-                select: { id: true, userId: true },
+                select: { id: true, userId: true, isDeleted: true },
             });
 
             if (!reel || reel.isDeleted) {
@@ -129,7 +129,7 @@ export async function autoDeleteContent(
         } else {
             const comment = await prisma.comment.findUnique({
                 where: { id: contentId },
-                select: { id: true, userId: true },
+                select: { id: true, userId: true, isDeleted: true },
             });
 
             if (!comment || comment.isDeleted) {

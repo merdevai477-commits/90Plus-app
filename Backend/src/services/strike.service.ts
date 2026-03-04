@@ -182,7 +182,7 @@ export class StrikeService {
             ]);
 
             const contentThresholdReached =
-                contentId && contentStrikeCount >= thresholds.contentAutoDelete;
+                !!(contentId && contentStrikeCount >= thresholds.contentAutoDelete);
             const userThresholdReached = userStrikeCount >= thresholds.userSuspension;
 
             return {

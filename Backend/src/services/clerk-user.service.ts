@@ -9,19 +9,31 @@ export class ClerkUserService {
      */
     static async findOrCreateUser(clerkUserId: string) {
         try {
+            logger.info(`[findOrCreateUser] 🔍 Looking for user: ${clerkUserId}`);
+            
             // Check if user exists by clerkUserId
             let user = await prisma.user.findUnique({
                 where: { clerkUserId },
             });
 
             if (user) {
+                logger.info(`[findOrCreateUser] ✅ User found: ${user.username} (${user.id})`);
                 // Update login streak for existing user
                 await this.updateLoginStreak(user.id);
                 return user;
             }
 
+            logger.info(`[findOrCreateUser] 📡 User not found, fetching from Clerk...`);
+
             // User doesn't exist, fetch from Clerk and create
-            const clerkUser = await clerkClient.users.getUser(clerkUserId);
+            let clerkUser;
+            try {
+                clerkUser = await clerkClient.users.getUser(clerkUserId);
+                logger.info(`[findOrCreateUser] ✅ Clerk user fetched: ${clerkUser.id}`);
+            } catch (clerkError: any) {
+                logger.error(`[findOrCreateUser] ❌ Failed to fetch from Clerk:`, clerkError);
+                throw new Error(`Failed to fetch user from Clerk: ${clerkError.message}`);
+            }
 
             // Get primary email
             const primaryEmail = clerkUser.emailAddresses.find(
@@ -29,8 +41,11 @@ export class ClerkUserService {
             );
 
             if (!primaryEmail) {
+                logger.error(`[findOrCreateUser] ❌ No email found for user ${clerkUserId}`);
                 throw new Error('No email found for user');
             }
+
+            logger.info(`[findOrCreateUser] 📧 Primary email: ${primaryEmail.emailAddress}`);
 
             // Generate unique email - always add clerkUserId to ensure uniqueness
             const emailParts = primaryEmail.emailAddress.split('@');
@@ -48,7 +63,7 @@ export class ClerkUserService {
                 finalEmail = `${emailParts[0]}+${Date.now()}@${emailParts[1]}`;
             }
 
-            logger.info(`📧 Using email: ${finalEmail}`);
+            logger.info(`[findOrCreateUser] 📧 Using email: ${finalEmail}`);
 
             // Generate username with unique suffix - use short suffix for better UX
             const baseUsername = clerkUser.username || 
@@ -75,31 +90,42 @@ export class ClerkUserService {
                 }
             }
 
-            logger.info(`👤 Using username: ${username}`);
+            logger.info(`[findOrCreateUser] 👤 Using username: ${username}`);
 
             // Create new user
-            user = await prisma.user.create({
-                data: {
-                    clerkUserId,
-                    email: finalEmail,
-                    username,
-                    displayName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || username,
-                    avatar: clerkUser.imageUrl || undefined,
-                    emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
-                    coins: 50,
-                    level: 1,
-                    xp: 0,
-                },
-            });
+            try {
+                user = await prisma.user.create({
+                    data: {
+                        clerkUserId,
+                        email: finalEmail,
+                        username,
+                        displayName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || username,
+                        avatar: clerkUser.imageUrl || undefined,
+                        emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
+                        coins: 50,
+                        level: 1,
+                        xp: 0,
+                    },
+                });
 
-            logger.info('✅ User synced from Clerk:', user.id);
+                logger.info(`[findOrCreateUser] ✅ User created: ${user.username} (${user.id})`);
+            } catch (createError: any) {
+                logger.error(`[findOrCreateUser] ❌ Failed to create user:`, createError);
+                throw new Error(`Failed to create user in database: ${createError.message}`);
+            }
             
             // Update login streak for new user (first login)
-            await this.updateLoginStreak(user.id);
+            try {
+                await this.updateLoginStreak(user.id);
+            } catch (streakError) {
+                // Non-critical error, just log it
+                logger.warn(`[findOrCreateUser] ⚠️ Failed to update login streak:`, streakError);
+            }
             
             return user;
-        } catch (error) {
-            logger.error('Error in findOrCreateUser:', error);
+        } catch (error: any) {
+            logger.error('[findOrCreateUser] ❌ Unexpected error:', error);
+            logger.error('[findOrCreateUser] Error stack:', error.stack);
             throw error;
         }
     }

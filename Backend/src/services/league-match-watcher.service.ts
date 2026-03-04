@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma';
-import { NotificationService } from './notification.service';
+import { NotificationService, NotificationType } from './notification.service';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 
@@ -279,7 +279,7 @@ export class LeagueMatchWatcherService {
                 pushToken,
                 title,
                 message,
-                type: NotificationService.NotificationType.MATCH_START,
+                type: NotificationType.MATCH_START,
                 data: {
                     type: 'LEAGUE_MATCH_START',
                     matchId,

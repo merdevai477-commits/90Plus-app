@@ -453,37 +453,36 @@ class TransfersSyncService {
             
             // Return stats without API call
             const transfers: any[] = [];
-                // Filter to only new transfers (if we have a latest date)
-                let newTransfers = transfers;
-                
-                if (latestTransfer) {
-                    newTransfers = transfers.filter((t: any) => {
-                        const updateDate = t.update;
-                        if (!updateDate) return true; // Include if no date
-                        
-                        // Parse the date (format: YYMMDD or YYYY-MM-DD)
-                        let transferDate: Date;
-                        if (updateDate.includes('-')) {
-                            transferDate = new Date(updateDate);
-                        } else {
-                            // YYMMDD format
-                            const year = parseInt(updateDate.substring(0, 2)) + 2000;
-                            const month = parseInt(updateDate.substring(2, 4)) - 1;
-                            const day = parseInt(updateDate.substring(4, 6));
-                            transferDate = new Date(year, month, day);
-                        }
-                        
-                        return transferDate >= latestTransfer;
-                    });
-                }
+            // Filter to only new transfers (if we have a latest date)
+            let newTransfers = transfers;
+            
+            if (latestTransfer) {
+                newTransfers = transfers.filter((t: any) => {
+                    const updateDate = t.update;
+                    if (!updateDate) return true; // Include if no date
+                    
+                    // Parse the date (format: YYMMDD or YYYY-MM-DD)
+                    let transferDate: Date;
+                    if (updateDate.includes('-')) {
+                        transferDate = new Date(updateDate);
+                    } else {
+                        // YYMMDD format
+                        const year = parseInt(updateDate.substring(0, 2)) + 2000;
+                        const month = parseInt(updateDate.substring(2, 4)) - 1;
+                        const day = parseInt(updateDate.substring(4, 6));
+                        transferDate = new Date(year, month, day);
+                    }
+                    
+                    return transferDate >= latestTransfer;
+                });
+            }
 
-                if (newTransfers.length > 0) {
-                    logger.info(`[TransfersSync] 📥 Found ${newTransfers.length} potentially new transfers`);
-                    newTransfersFound = await footballDataCacheService.syncTransfersToDatabase(newTransfers);
-                    logger.info(`[TransfersSync] 💾 Saved ${newTransfersFound} new transfers`);
-                } else {
-                    logger.info('[TransfersSync] ℹ️ No new transfers found');
-                }
+            if (newTransfers.length > 0) {
+                logger.info(`[TransfersSync] 📥 Found ${newTransfers.length} potentially new transfers`);
+                newTransfersFound = await footballDataCacheService.syncTransfersToDatabase(newTransfers);
+                logger.info(`[TransfersSync] 💾 Saved ${newTransfersFound} new transfers`);
+            } else {
+                logger.info('[TransfersSync] ℹ️ No new transfers found');
             }
 
             const afterCount = await this.getTransfersCount();

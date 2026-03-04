@@ -68,7 +68,7 @@ export class AuditService {
                     targetType: params.targetType as any || null,
                     resource: params.resource,
                     reason: params.reason || null,
-                    metadata: params.metadata || null,
+                    metadata: params.metadata || undefined,
                     ip: params.ip || null,
                     userAgent: params.userAgent || null,
                 },

@@ -8,6 +8,12 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 
+// Helper function to ensure param is string
+const ensureString = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
 /**
  * Get user ID from authenticated request
  */
@@ -34,7 +40,7 @@ export async function verifyReelOwnership(req: Request, res: Response, next: Nex
       return;
     }
 
-    const reelId = req.params.id || req.params.reelId;
+    const reelId = ensureString(req.params.id || req.params.reelId);
     if (!reelId) {
       res.status(400).json({ status: 'ERROR', message: 'Reel ID required' });
       return;
@@ -82,7 +88,7 @@ export async function verifyCommentOwnership(req: Request, res: Response, next: 
       return;
     }
 
-    const commentId = req.params.commentId || req.params.id;
+    const commentId = ensureString(req.params.commentId || req.params.id);
     if (!commentId) {
       res.status(400).json({ status: 'ERROR', message: 'Comment ID required' });
       return;
@@ -130,7 +136,7 @@ export async function verifyVideoOwnership(req: Request, res: Response, next: Ne
       return;
     }
 
-    const videoId = req.params.id || req.params.videoId;
+    const videoId = ensureString(req.params.id || req.params.videoId);
     if (!videoId) {
       res.status(400).json({ status: 'ERROR', message: 'Video ID required' });
       return;
@@ -178,7 +184,7 @@ export async function verifyNotificationOwnership(req: Request, res: Response, n
       return;
     }
 
-    const notificationId = req.params.id || req.params.notificationId;
+    const notificationId = ensureString(req.params.id || req.params.notificationId);
     if (!notificationId) {
       res.status(400).json({ status: 'ERROR', message: 'Notification ID required' });
       return;
@@ -226,7 +232,7 @@ export async function verifyPredictionOwnership(req: Request, res: Response, nex
       return;
     }
 
-    const predictionId = req.params.id || req.params.predictionId;
+    const predictionId = ensureString(req.params.id || req.params.predictionId);
     if (!predictionId) {
       res.status(400).json({ status: 'ERROR', message: 'Prediction ID required' });
       return;

@@ -324,25 +324,19 @@ router.post(
         const fileSizeMB = (videoFile.buffer.length / (1024 * 1024)).toFixed(2);
         logger.info(`Starting video upload: ${videoFileName}, size: ${fileSizeMB}MB (${videoFile.buffer.length} bytes), type: ${videoFile.mimetype}`);
         
-        // ✅ DRAGON FIX: Implement proper upload cancellation with AbortController
         const uploadStartTime = Date.now();
-        const abortController = new AbortController();
         
         const uploadPromise = r2Storage.uploadFile(
             'reels', 
             videoFile.buffer, 
             videoFileName, 
-            videoFile.mimetype,
-            abortController.signal // Pass abort signal
+            videoFile.mimetype
         );
         
         const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
             setTimeout(() => {
                 const elapsed = Date.now() - uploadStartTime;
                 logger.error(`R2 upload timeout after ${elapsed}ms for file: ${videoFileName}`);
-                
-                // ✅ DRAGON FIX: Actually cancel the upload
-                abortController.abort();
                 
                 resolve({ 
                     success: false, 

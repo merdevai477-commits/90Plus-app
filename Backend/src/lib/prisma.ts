@@ -19,16 +19,11 @@ const prismaClientSingleton = () => {
     log: process.env.NODE_ENV === 'development' 
       ? ['error', 'warn'] 
       : ['error'],
-    // ✅ Connection pool configuration
+    // ✅ Connection pool configuration via DATABASE_URL
+    // Add ?connection_limit=5 to your DATABASE_URL to set pool size
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
-      },
-    },
-    // ✅ Add connection limits
-    __internal: {
-      engine: {
-        connection_limit: CONNECTION_POOL_SIZE,
       },
     },
   });

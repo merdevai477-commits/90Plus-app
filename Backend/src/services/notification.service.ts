@@ -280,10 +280,10 @@ export class NotificationService {
             // Get user's push token
             const user = await prisma.user.findUnique({
                 where: { id: userId },
-                select: { pushToken: true },
+                select: { expoPushToken: true },
             });
 
-            if (!user || !user.pushToken) {
+            if (!user || !user.expoPushToken) {
                 logger.debug(`No push token for user ${userId}, skipping notification`);
                 return null;
             }
@@ -295,7 +295,7 @@ export class NotificationService {
 
             return this.createNotification({
                 userId,
-                pushToken: user.pushToken,
+                pushToken: user.expoPushToken,
                 title,
                 message,
                 type: NotificationType.PREDICTION_RESULT,

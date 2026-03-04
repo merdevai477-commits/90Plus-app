@@ -11,13 +11,21 @@
 
 import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
-import ApiFootballService, { MAJOR_LEAGUES } from '../services/apiFootball';
+import { footballService } from '../services/football.service';
 import prisma from '../lib/prisma';
 
 // Load environment variables
 dotenv.config();
 
-// Configuration
+// Configuration - Major League IDs
+const MAJOR_LEAGUES = {
+  PREMIER_LEAGUE: 39,
+  LA_LIGA: 140,
+  BUNDESLIGA: 78,
+  SERIE_A: 135,
+  LIGUE_1: 61,
+};
+
 const DEFAULT_LEAGUES = [
   MAJOR_LEAGUES.PREMIER_LEAGUE,    // 39 - Premier League
   MAJOR_LEAGUES.LA_LIGA,           // 140 - La Liga
@@ -73,29 +81,28 @@ async function checkExistingTransfers(leagueId: number, year: number): Promise<n
 
 /**
  * Seed transfers for a specific league and year
+ * Note: The current football.service.ts doesn't support league/year filtering for transfers
+ * This would need to be enhanced or use a different approach
  */
 async function seedLeagueTransfers(leagueId: number, year: number): Promise<number> {
   try {
     logger.info(`📥 Fetching transfers for league ${leagueId}, year ${year}...`);
     
-    // Fetch transfers from API-Football
-    const transfers = await ApiFootballService.getTransfers(leagueId, year);
+    // Note: The Backend's footballService.getTransfers() doesn't support league/year parameters
+    // It only supports team and player parameters
+    // You would need to either:
+    // 1. Enhance the football.service.ts to support league/year filtering
+    // 2. Fetch all transfers and filter client-side (expensive)
+    // 3. Use a different approach like fetching teams first, then their transfers
     
-    if (!transfers || transfers.length === 0) {
-      logger.warn(`⚠️ No transfers found for league ${leagueId}, year ${year}`);
-      return 0;
-    }
-
-    logger.info(`✅ Fetched ${transfers.length} transfers for league ${leagueId}`);
+    logger.warn(`⚠️ Transfer seeding by league/year is not yet implemented in football.service.ts`);
+    logger.info(`💡 The service currently supports filtering by team or player only`);
     
-    // Note: Since we don't have a transfers table in the schema,
-    // the data is already cached by ApiFootballService
-    // If you want to persist to database, you'll need to:
-    // 1. Add a Transfers model to schema.prisma
-    // 2. Run prisma migrate
-    // 3. Save the data here
+    return 0;
     
-    return transfers.length;
+    // Example of how it could work if enhanced:
+    // const transfers = await footballService.getTransfers({ team: teamId });
+    
   } catch (error: any) {
     logger.error(`❌ Error seeding transfers for league ${leagueId}:`, error.message);
     return 0;

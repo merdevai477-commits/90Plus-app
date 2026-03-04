@@ -100,7 +100,8 @@ router.get('/unread-count', requireAuth, async (req: Request, res: Response): Pr
  */
 router.put('/:id/read', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
         // Ownership already verified by middleware
         await prisma.notification.update({
@@ -156,7 +157,8 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
  */
 router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
         // Ownership already verified by middleware
         await prisma.notification.delete({

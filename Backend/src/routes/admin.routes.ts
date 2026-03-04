@@ -95,7 +95,8 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response): Promis
  */
 router.get('/reports/:id', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
         const report = await prisma.report.findUnique({
             where: { id },
@@ -173,7 +174,8 @@ router.get('/reports/:id', requireAdmin, async (req: Request, res: Response): Pr
  */
 router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { action, reason } = req.body;
         const adminUser = (req as any).adminUser;
 
@@ -243,11 +245,12 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
         }
 
         // Create audit log
-        await AuditService.createAuditLog({
+        await AuditService.log({
             action: AuditAction.ADMIN_REVIEW,
             actorId: adminUser.id,
             targetId: report.id,
             targetType: AuditTargetType.REPORT,
+            resource: 'MODERATION',
             reason: reason || report.reason,
             metadata: { action, reportId: report.id },
         });
@@ -315,7 +318,8 @@ router.get('/strikes', requireAdmin, async (req: Request, res: Response): Promis
  */
 router.get('/users/:id/strikes', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
         const strikes = await StrikeService.getUserStrikes(id);
         const strikeCount = await StrikeService.getUserStrikeCount(id);
@@ -339,7 +343,8 @@ router.get('/users/:id/strikes', requireAdmin, async (req: Request, res: Respons
  */
 router.post('/users/:id/suspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { reason, durationDays } = req.body;
         const adminUser = (req as any).adminUser;
 
@@ -368,7 +373,8 @@ router.post('/users/:id/suspend', requireAdmin, async (req: Request, res: Respon
  */
 router.post('/users/:id/unsuspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const adminUser = (req as any).adminUser;
 
         await prisma.user.update({
@@ -389,11 +395,12 @@ router.post('/users/:id/unsuspend', requireAdmin, async (req: Request, res: Resp
             },
         });
 
-        await AuditService.createAuditLog({
+        await AuditService.log({
             action: AuditAction.USER_UNSUSPENDED,
             actorId: adminUser.id,
             targetId: id,
             targetType: AuditTargetType.USER,
+            resource: 'MODERATION',
         });
 
         res.json({
@@ -412,7 +419,8 @@ router.post('/users/:id/unsuspend', requireAdmin, async (req: Request, res: Resp
  */
 router.post('/users/:username/verify', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { username } = req.params;
+        // Ensure username is a string (handle array case)
+        const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
         const adminUser = (req as any).adminUser;
 
         // Find user by username (case-insensitive)
@@ -465,11 +473,12 @@ router.post('/users/:username/verify', requireAdmin, async (req: Request, res: R
 
         // Audit log (using existing action or create new one)
         try {
-            await AuditService.createAuditLog({
+            await AuditService.log({
                 action: AuditAction.USER_SUSPENDED, // Using existing action for now
                 actorId: adminUser.id,
                 targetId: user.id,
                 targetType: AuditTargetType.USER,
+                resource: 'MODERATION',
                 metadata: {
                     username: user.username,
                     isDeveloper: true,

@@ -119,7 +119,7 @@ export class VideoController {
    */
   static async getVideosByUsername(req: Request, res: Response): Promise<void> {
     try {
-      const { username } = req.params;
+      const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
 
       const user = await prisma.user.findUnique({
         where: { username },
@@ -349,7 +349,8 @@ export class VideoController {
     
     try {
       const clerkUserId = req.auth?.userId;
-      const { id } = req.params;
+      // Ensure id is a string (handle array case)
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
       if (!clerkUserId) {
         res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
@@ -474,7 +475,8 @@ export class VideoController {
    */
   static async recordView(req: Request, res: Response): Promise<void> {
     try {
-      const { id } = req.params;
+      // Ensure id is a string (handle array case)
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
       await prisma.reel.update({
         where: { id },
