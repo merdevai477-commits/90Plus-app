@@ -61,7 +61,7 @@ type SlideType = 'welcome' | 'spinWheel' | 'predictions' | 'quiz' | 'rank';
 
 interface SlideData {
   type: SlideType;
-  gradient: string[];
+  gradient: readonly [string, string, ...string[]];
   accentColor: string;
   icon: string;
   title: string;
@@ -281,7 +281,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   const slides: SlideData[] = [
     {
       type: 'welcome',
-      gradient: ['#0f0c29', '#302b63', '#24243e'],
+      gradient: ['#0f0c29', '#302b63', '#24243e'] as const,
       accentColor: '#a855f7',
       icon: 'person',
       title: `${t.home.hello} ${username}!`,
@@ -295,8 +295,8 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     {
       type: 'spinWheel',
       gradient: spinWheelAvailable 
-        ? ['#f12711', '#f5af19', '#f37335'] 
-        : ['#2c3e50', '#34495e', '#2c3e50'],
+        ? (['#f12711', '#f5af19', '#f37335'] as const)
+        : (['#2c3e50', '#34495e', '#2c3e50'] as const),
       accentColor: spinWheelAvailable ? '#f5af19' : '#7f8c8d',
       icon: 'gift',
       title: spinWheelAvailable ? t.home.luckyWheel : t.home.wheelLocked,
@@ -306,7 +306,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     },
     {
       type: 'predictions',
-      gradient: ['#11998e', '#38ef7d', '#0f9b0f'],
+      gradient: ['#11998e', '#38ef7d', '#0f9b0f'] as const,
       accentColor: '#38ef7d',
       icon: 'football',
       title: t.home.predictions,
@@ -320,8 +320,8 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     {
       type: 'quiz',
       gradient: dailyQuizStatus?.canTake 
-        ? ['#4776E6', '#8E54E9', '#667eea']
-        : ['#2c3e50', '#34495e', '#2c3e50'],
+        ? (['#4776E6', '#8E54E9', '#667eea'] as const)
+        : (['#2c3e50', '#34495e', '#2c3e50'] as const),
       accentColor: dailyQuizStatus?.canTake ? '#8E54E9' : '#7f8c8d',
       icon: 'bulb',
       title: dailyQuizStatus?.categoryName || 'الأسئلة اليومية',
@@ -338,8 +338,8 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     {
       type: 'rank',
       gradient: userRank > 0 
-        ? ['#f093fb', '#f5576c', '#eb3349']
-        : ['#2c3e50', '#34495e', '#2c3e50'],
+        ? (['#f093fb', '#f5576c', '#eb3349'] as const)
+        : (['#2c3e50', '#34495e', '#2c3e50'] as const),
       accentColor: userRank > 0 ? '#f5576c' : '#7f8c8d',
       icon: 'trophy',
       title: userRank > 0 ? `${t.home.rankPosition} #${userRank}` : t.home.ranking,

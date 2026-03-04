@@ -302,34 +302,6 @@ export class HapticManager {
   public async anticipation() {
     await this.custom([100, 100, 100, 100]);
   }
-
-  public async disappointment() {
-    await this.custom([300, 100, 300]);
-  }
-
-  public async relief() {
-    await this.custom([200, 100, 200]);
-  }
-
-  public async surprise() {
-    await this.custom([50, 100, 50, 100, 50]);
-  }
-
-  public async excitement() {
-    await this.custom([25, 25, 25, 25, 25, 25, 25, 25]);
-  }
-
-  public async frustration() {
-    await this.custom([100, 50, 100, 50, 100]);
-  }
-
-  public async satisfaction() {
-    await this.custom([150, 75, 150]);
-  }
-
-  public async anticipation() {
-    await this.custom([100, 100, 100, 100]);
-  }
 }
 
 // Hook for easy use in components

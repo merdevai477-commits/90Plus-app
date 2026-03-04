@@ -13,6 +13,7 @@ import Animated, {
   withRepeat,
   withTiming,
   withDelay,
+  withSpring,
 } from 'react-native-reanimated';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 
@@ -46,7 +47,7 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({
     );
     scale.value = withDelay(
       100,
-      withTiming(1, ANIMATION_CONFIG.spring)
+      withSpring(1, ANIMATION_CONFIG.spring)
     );
 
     // Pulse animation for icon

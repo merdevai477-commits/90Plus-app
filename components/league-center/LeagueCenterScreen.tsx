@@ -285,14 +285,14 @@ const LeagueCenterScreen: React.FC<LeagueCenterScreenProps> = ({
         }
 
         if (error && matches.length === 0) {
-            return <ErrorState message={error} onRetry={handleRetry} />;
+            return <ErrorState error={error} onRetry={handleRetry} />;
         }
 
         if (!loading && sortedAndFilteredMatches.length === 0) {
             return (
                 <EmptyState
-                    message={activeTab === 'predictions' ? "No Matches to Predict" : "لا توجد مباريات"}
-                    suggestion={activeTab === 'predictions' ? "Try selecting a future date" : "جرب اختيار تاريخ أو دوري مختلف"}
+                    title={activeTab === 'predictions' ? "No Matches to Predict" : "لا توجد مباريات"}
+                    subtitle={activeTab === 'predictions' ? "Try selecting a future date" : "جرب اختيار تاريخ أو دوري مختلف"}
                 />
             );
         }

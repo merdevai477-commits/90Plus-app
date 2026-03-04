@@ -38,7 +38,7 @@ interface ReelData {
 interface VideoPlayerProps {
   reel: ReelData;
   isActive: boolean;
-  onVideoRef: (ref: Video | null, id: string) => void;
+  onVideoRef: (ref: any, id: string) => void;
   /** Optional: Disable replay limit (for testing or special cases) */
   disableReplayLimit?: boolean;
   /** Optional: Show progress bar */
@@ -75,7 +75,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [error, setError] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<any>(null);
   const { t } = useLanguage();
   
   // Replay limit tracking (Requirements 17.1, 17.2, 17.3, 17.4)
@@ -111,11 +111,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   useEffect(() => {
     if (videoRef.current) {
       if (isActive && !isPausedByLimit) {
-        videoRef.current.playAsync().catch(e => {
+        videoRef.current.playAsync().catch((e: any) => {
           console.warn('Error playing video:', e);
         });
       } else {
-        videoRef.current.pauseAsync().catch(e => {
+        videoRef.current.pauseAsync().catch((e: any) => {
           console.warn('Error pausing video:', e);
         });
       }
@@ -142,7 +142,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       try {
         await videoRef.current.setPositionAsync(0);
         await videoRef.current.playAsync();
-      } catch (e) {
+      } catch (e: any) {
         console.warn('Error restarting video:', e);
       }
     }
@@ -152,7 +152,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
    * Handle playback status updates to detect video end
    * Requirements 17.1, 17.2: Auto-replay up to 2 times, then pause
    */
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+  const handlePlaybackStatusUpdate = useCallback((status: any) => {
     if ('isBuffering' in status) {
       setIsBuffering(status.isBuffering || false);
     }
@@ -177,7 +177,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         
         if (!shouldContinue && videoRef.current) {
           // Pause the video - replay limit reached
-          videoRef.current.pauseAsync().catch(e => {
+          videoRef.current.pauseAsync().catch((e: any) => {
             console.warn('Error pausing video after replay limit:', e);
           });
         }
@@ -241,14 +241,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           style={styles.replayOverlay}
           onPress={handleManualReplay}
           activeOpacity={0.8}
-          accessibilityLabel={t.reels?.replay || 'Replay video'}
+          accessibilityLabel="Replay video"
           accessibilityRole="button"
         >
           <View style={styles.replayButton}>
             <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
           </View>
           <Text style={styles.replayText}>
-            {t.reels?.tapToReplay || 'Tap to replay'}
+            Tap to replay
           </Text>
         </TouchableOpacity>
       )}

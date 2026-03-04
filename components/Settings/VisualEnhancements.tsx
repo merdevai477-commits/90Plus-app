@@ -13,7 +13,6 @@ import {
   ScrollView,
   Switch,
   ActivityIndicator,
-  Slider,
   Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -102,8 +101,34 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Note: PremiumFeaturesComponent was removed for App Store compliance (no IAP implemented)
 
+// Type definitions
+interface Theme {
+  colors: {
+    primary: string;
+    secondary?: string;
+    text: string;
+    textSecondary: string;
+    border: string;
+    warning: string;
+    success: string;
+    error: string;
+    info: string;
+  };
+}
+
+interface SmartNotificationsProps {
+  theme: Theme;
+  notifications?: any;
+  logEvent: (event: string, data?: any) => void;
+}
+
+interface PerformanceMonitorProps {
+  theme: Theme;
+  logEvent: (event: string, data?: any) => void;
+}
+
 // Smart Notifications Component
-export const SmartNotificationsComponent = ({ theme, notifications, logEvent }) => {
+export const SmartNotificationsComponent: React.FC<SmartNotificationsProps> = ({ theme, notifications, logEvent }) => {
   const [showSmartSettings, setShowSmartSettings] = useState(false);
   const [smartSettings, setSmartSettings] = useState({
     quietHours: {
@@ -116,11 +141,22 @@ export const SmartNotificationsComponent = ({ theme, notifications, logEvent }) 
     learningMode: true,
   });
 
-  const handleSmartToggle = (setting: string) => {
-    setSmartSettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
+  const handleSmartToggle = (setting: keyof typeof smartSettings) => {
+    setSmartSettings(prev => {
+      if (setting === 'quietHours') {
+        return {
+          ...prev,
+          quietHours: {
+            ...prev.quietHours,
+            enabled: !prev.quietHours.enabled,
+          },
+        };
+      }
+      return {
+        ...prev,
+        [setting]: !prev[setting],
+      };
+    });
     logEvent('smart_notification_toggled', { setting });
   };
 
@@ -264,7 +300,7 @@ export const SmartNotificationsComponent = ({ theme, notifications, logEvent }) 
 };
 
 // Performance Monitor Component
-export const PerformanceMonitorComponent = ({ theme, logEvent }) => {
+export const PerformanceMonitorComponent: React.FC<PerformanceMonitorProps> = ({ theme, logEvent }) => {
   const [performanceData, setPerformanceData] = useState({
     cpu: 15,
     memory: 45,

@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, Image, Animated } from 'react-native';
 import { Play, Eye, Heart } from 'lucide-react-native';
 import { Video } from './types';
-import { styles } from './homeStyles';
+import { styles } from './homeStyles'; // Updated with video styles
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
 
 interface VideoCardProps {

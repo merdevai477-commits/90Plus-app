@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { TeamFormation } from './TeamFormation';
 import { Team } from './types';
-import { styles } from './homeStyles';
+import { styles } from './homeStyles'; // Updated with team styles
 
 interface TeamSectionProps {
   team: Team;

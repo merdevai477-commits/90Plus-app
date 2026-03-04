@@ -1,4 +1,5 @@
 // Modern Sports App Color Palette 🎨
+// Updated with gold trophy colors
 export const COLORS = {
     // Primary Colors (matching app screenshot)
     neonGreen: '#32CD32',         // Primary neon green
@@ -41,6 +42,10 @@ export const COLORS = {
 
     // Glassmorphism
     glassBorder: 'rgba(255, 255, 255, 0.15)',
+    
+    // Trophy/Gold Colors
+    goldenTrophy: '#FFD700',      // Gold color for trophy
+    pureWhite: '#FFFFFF',         // Pure white
 };
 
 // Premium Gradients
@@ -74,5 +79,10 @@ export const EFFECTS = {
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 4,
+    },
+    goldGlow: {
+        textShadowColor: 'rgba(255, 215, 0, 0.8)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 10,
     },
 };

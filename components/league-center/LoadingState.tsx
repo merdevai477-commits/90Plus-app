@@ -23,7 +23,7 @@ const LoadingState: React.FC<LoadingStateProps> = ({ skeletonCount = 3 }) => {
       {/* Skeleton Cards */}
       <View style={styles.skeletonList}>
         {Array.from({ length: skeletonCount }).map((_, index) => (
-          <MatchCardSkeleton key={index} gradientIndex={index} />
+          <MatchCardSkeleton key={index} index={index} />
         ))}
       </View>
     </View>

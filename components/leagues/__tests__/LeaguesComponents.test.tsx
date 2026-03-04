@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+// @ts-ignore - @testing-library/react-native may not be installed
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SearchBar, MatchCard, PredictionSystem, useHapticFeedback } from '../index';
 import { Match, UserStats, Prediction } from '../types';
@@ -141,6 +142,7 @@ describe('Leagues Components', () => {
       accuracy: 83,
       totalPoints: 1250,
       streak: 7,
+      bestStreak: 12,
       rank: 15,
       level: 8
     };
@@ -197,15 +199,23 @@ describe('Leagues Components', () => {
 
   describe('useHapticFeedback', () => {
     it('provides haptic feedback methods', () => {
+      const { View, TouchableOpacity, Text } = require('react-native');
+      
       const TestComponent = () => {
         const haptic = useHapticFeedback();
         
         return (
-          <div>
-            <button onPress={haptic.light}>Light</button>
-            <button onPress={haptic.medium}>Medium</button>
-            <button onPress={haptic.heavy}>Heavy</button>
-          </div>
+          <View>
+            <TouchableOpacity onPress={haptic.light}>
+              <Text>Light</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={haptic.medium}>
+              <Text>Medium</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={haptic.heavy}>
+              <Text>Heavy</Text>
+            </TouchableOpacity>
+          </View>
         );
       };
       

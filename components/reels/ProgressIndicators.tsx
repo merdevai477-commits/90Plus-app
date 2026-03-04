@@ -20,7 +20,7 @@ export const ProgressIndicators: React.FC<ProgressIndicatorsProps> = ({
                 <View key={index} style={styles.indicatorWrapper}>
                     {index === currentIndex ? (
                         <LinearGradient
-                            colors={[COLORS.goldenTrophy, COLORS.neonLime]}
+                            colors={[COLORS.goldenTrophy, COLORS.electricGreen]}
                             style={styles.activeIndicator}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 0 }}

@@ -235,7 +235,7 @@ export const LegendsCompleteQuiz: React.FC<LegendsCompleteQuizProps> = ({
       </View>
 
       {/* الصورة (إذا كانت موجودة وتظهر قبل السؤال) */}
-      {currentQuestion.imageUrl && currentQuestion.displayMode === 'before-question' && (
+      {currentQuestion.imageUrl && currentQuestion.displayMode === 'BEFORE_QUESTION' && (
         <View style={{ alignItems: 'center', marginBottom: 20 }}>
           <Image
             source={{ uri: currentQuestion.imageUrl }}
@@ -258,7 +258,7 @@ export const LegendsCompleteQuiz: React.FC<LegendsCompleteQuizProps> = ({
       </View>
 
       {/* الصورة (إذا كانت تظهر مع السؤال) */}
-      {currentQuestion.imageUrl && currentQuestion.displayMode === 'in-question' && (
+      {currentQuestion.imageUrl && currentQuestion.displayMode === 'IN_QUESTION' && (
         <View style={{ alignItems: 'center', marginBottom: 20 }}>
           <Image
             source={{ uri: currentQuestion.imageUrl }}

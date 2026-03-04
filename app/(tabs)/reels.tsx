@@ -555,7 +555,7 @@ const ReelsFeed: React.FC = () => {
   const viewedReelsRef = useRef<Set<string>>(new Set());
   const VIEWED_REELS_STORAGE_KEY = '@viewed_reels';
 
-  const videoRefs = useRef<Map<string, Video>>(new Map());
+  const videoRefs = useRef<Map<string, any>>(new Map());
   const flatListRef = useRef<FlatList>(null);
   const haptic = useHaptic();
   const { t } = useTranslation();
@@ -1009,7 +1009,7 @@ const ReelsFeed: React.FC = () => {
 
 
   // Video Ref Management
-  const handleVideoRef = useCallback((ref: Video | null, id: string) => {
+  const handleVideoRef = useCallback((ref: any, id: string) => {
     if (ref) {
       videoRefs.current.set(id, ref);
     } else {

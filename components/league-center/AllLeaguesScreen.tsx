@@ -18,7 +18,7 @@ import TeamBadge from '../common/TeamBadge';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useHaptic } from '../../hooks/useHaptic';
-import ApiFootballService from '../../services/apiFootball';
+import ApiFootballService, { apiFootballService } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { cacheService } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
@@ -110,8 +110,8 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
 
         // 2. Search API for players and teams
         const [players, teams] = await Promise.all([
-          ApiFootballService.searchPlayers(normalizedQuery),
-          ApiFootballService.searchTeams(normalizedQuery)
+          apiFootballService.searchPlayers(normalizedQuery),
+          apiFootballService.searchTeams(normalizedQuery)
         ]);
 
         // 3. Search matches (offline or cache first)

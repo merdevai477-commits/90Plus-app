@@ -6,14 +6,14 @@ interface PlayerAvatarProps {
   name: string;
   position?: string | null;
   size?: number;
-  colors?: string[];
+  colors?: readonly [string, string, ...string[]];
 }
 
 export default function PlayerAvatar({ 
   name, 
   position = 'ST', 
   size = 60,
-  colors = ['#1a1a2e', '#16213e']
+  colors = ['#1a1a2e', '#16213e'] as const
 }: PlayerAvatarProps) {
   const initials = name
     .split(' ')

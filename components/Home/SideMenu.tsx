@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, Animated, Dimensions } from 'react-native';
 import { X, Info, Settings, Shield, Mail, LogOut } from 'lucide-react-native';
-import { router } from 'expo-router'; // استيراد router من expo-router
-import { styles } from './homeStyles';
+import { router } from 'expo-router';
+import { styles } from './homeStyles'; // Updated with side menu styles
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -28,16 +28,16 @@ export const SideMenu: React.FC<SideMenuProps> = ({
     switch(item) {
       case 'settings':
         // التنقل لصفحة Settings
-        router.push('/(tabs)/settings'); // أو router.push('/(tabs)/settings') حسب هيكل مجلداتك
+        router.push('/(tabs)/settings' as any);
         break;
       case 'about':
-        router.push('/about');
+        router.push('/about' as any);
         break;
       case 'privacy':
-        router.push('/privacy');
+        router.push('/privacy' as any);
         break;
       case 'contact':
-        router.push('/contact');
+        router.push('/contact' as any);
         break;
       default:
         onMenuItemPress?.(item);

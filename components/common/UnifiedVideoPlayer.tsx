@@ -41,7 +41,7 @@ export interface UnifiedReelData {
 export interface UnifiedVideoPlayerProps {
   reel: UnifiedReelData;
   isActive: boolean;
-  onVideoRef: (ref: Video | null, id: string) => void;
+  onVideoRef: (ref: any, id: string) => void;
   /** Optional: Disable replay limit (for testing or special cases) */
   disableReplayLimit?: boolean;
   /** Optional: Show progress bar */
@@ -90,7 +90,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<any>(null);
   const { t } = useLanguage();
   
   // Determine muted state: override > prop > default
@@ -243,7 +243,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   /**
    * Handle playback status updates to detect video end and sync playback state
    */
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+  const handlePlaybackStatusUpdate = useCallback((status: any) => {
     if ('isBuffering' in status) {
       setIsBuffering(status.isBuffering || false);
     }
@@ -278,7 +278,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         
         if (!shouldContinue && videoRef.current) {
           // Pause the video - replay limit reached
-          videoRef.current.pauseAsync().catch(e => {
+          videoRef.current.pauseAsync().catch((e: any) => {
             console.warn('Error pausing video after replay limit:', e);
           });
         }
@@ -344,7 +344,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
           style={styles.replayOverlay}
           onPress={handleManualReplay}
           activeOpacity={0.8}
-          accessibilityLabel={t.reels?.replay || 'Replay video'}
+          accessibilityLabel={t.reels?.tapToReplay || 'Replay video'}
           accessibilityRole="button"
         >
           <View style={styles.replayButton}>

@@ -217,9 +217,9 @@ describe('Follow Optimistic Update Property Tests', () => {
       liked: fc.boolean(),
       saved: fc.boolean(),
       muted: fc.boolean(),
-      description: fc.option(fc.string({ maxLength: 200 })),
-      hashtags: fc.option(fc.array(fc.string({ minLength: 1, maxLength: 20 }), { maxLength: 5 })),
-      location: fc.option(fc.string({ maxLength: 50 })),
+      description: fc.option(fc.string({ maxLength: 200 }), { nil: undefined }),
+      hashtags: fc.option(fc.array(fc.string({ minLength: 1, maxLength: 20 }), { maxLength: 5 }), { nil: undefined }),
+      location: fc.option(fc.string({ maxLength: 50 }), { nil: undefined }),
       createdAt: fc.date(),
     });
 

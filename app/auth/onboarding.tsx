@@ -11,15 +11,14 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { Check, ChevronRight, ChevronLeft, Trophy, Shirt, Flag, Star } from 'lucide-react-native';
-import { COLORS } from '../../components/reels/constants';
+import { Check, ChevronRight, ChevronLeft } from 'lucide-react-native';
 import { CLUBS } from '../../data/clubs';
 import { BRANDS } from '../../data/brands';
 import { COUNTRIES } from '../../data/countries';
 import { LEAGUES } from '../../data/leagues';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../../config/api.config';
-import { clubLogoService } from '../../services/clubLogoService';
+import { getClubLogo } from '../../services/clubLogoService';
 import { brandLogoService } from '../../services/brandLogoService';
 import Animated, {
     useSharedValue,
@@ -30,7 +29,6 @@ import Animated, {
 import { globalState } from '../../globalState';
 import { useHomeStore } from '../../src/store/home.store';
 import { useSettings } from '../../contexts/SettingsContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 3;
@@ -106,7 +104,7 @@ export default function OnboardingScreen() {
         let realBrandLogo: string | null = null;
         
         if (clubData?.apiId) {
-            realClubLogo = await clubLogoService.fetchClubLogo(clubData.apiId);
+            realClubLogo = await getClubLogo(clubData.apiId);
         }
         if (brandData?.apiId) {
             realBrandLogo = await brandLogoService.fetchBrandLogo(brandData.apiId);

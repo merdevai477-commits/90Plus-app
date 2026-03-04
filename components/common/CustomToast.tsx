@@ -67,9 +67,9 @@ export default function CustomToast({
     useEffect(() => {
         if (visible) {
             // Animate in
-            translateY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.back) });
+            translateY.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.back(1.5)) });
             opacity.value = withTiming(1, { duration: 200 });
-            scale.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.back) });
+            scale.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.back(1.5)) });
 
             // Auto hide after duration
             translateY.value = withDelay(

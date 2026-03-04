@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Team } from './types';
-import { styles } from './homeStyles';
+import { styles } from './homeStyles'; // Updated with team formation styles
 
 interface TeamFormationProps {
   team: Team;

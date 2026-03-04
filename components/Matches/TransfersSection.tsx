@@ -156,7 +156,7 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
       filtered = filtered.filter(transfer => 
         transfer.player.name.toLowerCase().includes(query) ||
         transfer.transfers.some(t => 
-          t.teams.in.name.toLowerCase().includes(query) ||
+          t.teams.in?.name.toLowerCase().includes(query) ||
           t.teams.out?.name.toLowerCase().includes(query)
         )
       );
@@ -193,11 +193,12 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
         );
         break;
       case 'value':
-        // افتراض أن القيمة موجودة في transfer.transfers[0].teams.in.value
+        // Transfer values are not available in the current data structure
+        // Fallback to date sorting
         sorted.sort((a, b) => {
-          const valueA = parseFloat(a.transfers[0]?.teams?.in?.value || '0');
-          const valueB = parseFloat(b.transfers[0]?.teams?.in?.value || '0');
-          return valueB - valueA; // الأعلى قيمة أولاً
+          const dateA = a.transfers[0]?.date || '';
+          const dateB = b.transfers[0]?.date || '';
+          return dateB.localeCompare(dateA);
         });
         break;
     }
@@ -288,15 +289,14 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
     }
   }, [hasMore, loading]);
 
-  // ✅ تحسين handleLeagueToggle بـ functional update
+  // ✅ تحسين handleLeagueToggle
   const handleLeagueToggle = useCallback((leagueId: number) => {
-    onSelectedLeaguesChange((prevLeagues: number[]) => {
-      const isSelected = prevLeagues.includes(leagueId);
-      return isSelected
-        ? prevLeagues.filter(id => id !== leagueId)
-        : [...prevLeagues, leagueId];
-    });
-  }, [onSelectedLeaguesChange]);
+    const isSelected = selectedLeagues.includes(leagueId);
+    const newLeagues = isSelected
+      ? selectedLeagues.filter(id => id !== leagueId)
+      : [...selectedLeagues, leagueId];
+    onSelectedLeaguesChange(newLeagues);
+  }, [selectedLeagues, onSelectedLeaguesChange]);
 
   // ✅ Stats calculation
   const transfersStats = useMemo(() => {

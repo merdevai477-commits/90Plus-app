@@ -7,7 +7,7 @@ export { default as DatePickerStrip } from './DatePickerStrip';
 export { default as LeagueFilterChips, DEFAULT_LEAGUES } from './LeagueFilterChips';
 export { default as LiveGamesSection } from './LiveGamesSection';
 export { default as GradientMatchCard } from './GradientMatchCard';
-export { default as AllLeaguesScreen, ALL_LEAGUES } from './AllLeaguesScreen';
+export { default as AllLeaguesScreen } from './AllLeaguesScreen';
 
 // State Components
 export { default as LoadingState } from './LoadingState';

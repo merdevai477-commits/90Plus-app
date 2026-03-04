@@ -3,6 +3,7 @@ import { COLORS, EFFECTS } from '../reels/constants';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Updated: Added skeletonContainer and horizontalList styles
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -261,6 +262,194 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  skeletonContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+  },
+  horizontalList: {
+    paddingHorizontal: 20,
+  },
+
+  // ====================
+  // VIDEO CARD STYLES
+  // ====================
+  videoCard: {
+    width: 160,
+    marginRight: 12,
+    backgroundColor: COLORS.mediumGray,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  videoThumbnailContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 120,
+  },
+  videoThumbnail: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  playButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -16 }, { translateY: -16 }],
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoDuration: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontSize: 10,
+    color: COLORS.white,
+    fontWeight: '600',
+  },
+  videoTitle: {
+    padding: 10,
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  videoStats: {
+    flexDirection: 'row',
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statText: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  // ====================
+  // TEAM OF THE MONTH STYLES
+  // ====================
+  teamOfMonthContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  fullWidthTeamCard: {
+    backgroundColor: COLORS.mediumGray,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  teamHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  teamInfo: {
+    flex: 1,
+  },
+  teamName: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  teamFormation: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  largeFootballField: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#1a4d2e',
+    borderRadius: 16,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  fieldBackground: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  centerCircle: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+    transform: [{ translateX: -40 }, { translateY: -40 }],
+  },
+  centerLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  goalArea: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    width: 40,
+    height: '20%',
+    borderRightWidth: 2,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  penaltyArea: {
+    position: 'absolute',
+    top: '30%',
+    left: 0,
+    width: 80,
+    height: '40%',
+    borderRightWidth: 2,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  playerDot: {
+    position: 'absolute',
+    alignItems: 'center',
+    transform: [{ translateX: -20 }, { translateY: -20 }],
+  },
+  playerDotImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: COLORS.neonGreen,
+    backgroundColor: COLORS.mediumGray,
+  },
+  playerDotName: {
+    marginTop: 4,
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
 
   // ====================
   // PLAYER CARD STYLES
@@ -321,5 +510,79 @@ export const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
   overlayIconWrap: { width: 160, height: 160, borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#3a2a0a', backgroundColor: 'rgba(0,0,0,0.6)' },
-  sideMenu: { position: 'absolute', right: 0, top: 0, bottom: 0, width: SCREEN_WIDTH * 0.75, backgroundColor: '#0a0a0a', borderLeftWidth: 1, borderLeftColor: 'rgba(34, 197, 94, 0.3)', shadowColor: '#22c55e', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 20 },
+  
+  // ====================
+  // SIDE MENU STYLES
+  // ====================
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+  },
+  sideMenu: { 
+    position: 'absolute', 
+    right: 0, 
+    top: 0, 
+    bottom: 0, 
+    width: SCREEN_WIDTH * 0.75, 
+    backgroundColor: '#0a0a0a', 
+    borderLeftWidth: 1, 
+    borderLeftColor: 'rgba(34, 197, 94, 0.3)', 
+    shadowColor: '#22c55e', 
+    shadowOffset: { width: -4, height: 0 }, 
+    shadowOpacity: 0.4, 
+    shadowRadius: 12, 
+    elevation: 20,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+  },
+  sideMenuHeader: {
+    marginBottom: 32,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  sideMenuTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  sideMenuItems: {
+    flex: 1,
+  },
+  sideMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    gap: 16,
+  },
+  sideMenuItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  logoutButton: {
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+    marginTop: 'auto',
+    marginBottom: 16,
+  },
+  logoutText: {
+    color: '#ff3b30',
+  },
+  sideMenuFooter: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  versionText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
 });

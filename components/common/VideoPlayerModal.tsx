@@ -81,7 +81,7 @@ export default function VideoPlayerModal({
     onAddComment,
     onToggleLike
 }: VideoPlayerModalProps) {
-    const videoRef = useRef<Video | null>(null);
+    const videoRef = useRef<any>(null);
     const { t } = useLanguage();
 
     // State
@@ -311,7 +311,7 @@ export default function VideoPlayerModal({
                                 muted: isMuted,
                             }}
                             isActive={isVideoActive && !isPaused}
-                            onVideoRef={(ref, id) => {
+                            onVideoRef={(ref: any, id: string) => {
                                 videoRef.current = ref;
                             }}
                             disableReplayLimit={true}

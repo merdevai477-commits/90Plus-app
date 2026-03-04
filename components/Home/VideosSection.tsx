@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, FlatList } from 'react-native';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from './SkeletonLoader';
 import { Video } from './types';
-import { styles } from './homeStyles';
+import { styles } from './homeStyles'; // Updated styles import
 
 interface VideosSectionProps {
   videos: Video[];

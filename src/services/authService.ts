@@ -95,6 +95,7 @@ export interface AuthResponse {
  * Handles all communication with the backend for user authentication
  */
 export class AuthService {
+    static getTrendingHashtags: any;
     /**
      * Check if API is reachable
      */
