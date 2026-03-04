@@ -4,9 +4,6 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
 export class ProfileController {
-  /**
-   * GET /api/profile/me - جلب بيانات البروفايل الحالي
-   */
   static async getMyProfile(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
@@ -34,7 +31,6 @@ export class ProfileController {
           settings: true,
           createdAt: true,
           lastUsernameChange: true,
-          // FIFA Card Profile Fields
           position: true,
           countryFlag: true,
           age: true,
@@ -76,9 +72,6 @@ export class ProfileController {
     }
   }
 
-  /**
-   * PATCH /api/profile/me - تحديث البروفايل
-   */
   static async updateMyProfile(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
@@ -90,7 +83,6 @@ export class ProfileController {
 
       const { displayName, bio, favoriteTeam, socials, location } = req.body;
 
-      // Get current user settings
       const currentUser = await prisma.user.findUnique({
         where: { clerkUserId },
         select: { settings: true },
@@ -131,9 +123,6 @@ export class ProfileController {
     }
   }
 
-  /**
-   * POST /api/profile/me/avatar - رفع صورة البروفايل
-   */
   static async uploadAvatar(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
@@ -148,7 +137,6 @@ export class ProfileController {
         return;
       }
 
-      // Get user to find old avatar path
       const user = await prisma.user.findUnique({
         where: { clerkUserId },
         select: { id: true, avatarStoragePath: true },
@@ -159,12 +147,10 @@ export class ProfileController {
         return;
       }
 
-      // Delete old avatar if exists
       if (user.avatarStoragePath) {
         await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
       }
 
-      // Upload new avatar
       const result = await supabaseStorage.uploadFile(
         'avatars',
         req.file.buffer,
@@ -177,7 +163,6 @@ export class ProfileController {
         return;
       }
 
-      // Update user with new avatar URL
       await prisma.user.update({
         where: { clerkUserId },
         data: {
@@ -197,9 +182,6 @@ export class ProfileController {
     }
   }
 
-  /**
-   * POST /api/profile/me/cover - رفع صورة الغلاف
-   */
   static async uploadCover(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
@@ -226,12 +208,10 @@ export class ProfileController {
 
       const currentSettings = (user.settings as Record<string, any>) || {};
 
-      // Delete old cover if exists
       if (currentSettings.coverStoragePath) {
         await supabaseStorage.deleteFile('covers', currentSettings.coverStoragePath);
       }
 
-      // Upload new cover
       const result = await supabaseStorage.uploadFile(
         'covers',
         req.file.buffer,
@@ -244,7 +224,6 @@ export class ProfileController {
         return;
       }
 
-      // Update user settings with cover URL
       await prisma.user.update({
         where: { clerkUserId },
         data: {
@@ -267,9 +246,6 @@ export class ProfileController {
     }
   }
 
-  /**
-   * PATCH /api/profile/me/stats - تحديث إحصائيات اللاعب
-   */
   static async updateStats(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
@@ -314,33 +290,14 @@ export class ProfileController {
    */
   static async getProfileByUsername(req: Request, res: Response): Promise<void> {
     try {
-      const { username } = req.params;
+      // ✅ Fix 1: cast username to string
+      const username = req.params.username as string;
       const clerkUserId = req.auth?.userId;
 
+      // ✅ Fix 2: use include instead of select to get _count
       const user = await prisma.user.findUnique({
         where: { username },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          avatar: true,
-          bio: true,
-          level: true,
-          isVerified: true,
-          isDeveloper: true,
-          favoriteTeam: true,
-          settings: true,
-          createdAt: true,
-          // FIFA Card Profile Fields
-          position: true,
-          countryFlag: true,
-          age: true,
-          height: true,
-          weight: true,
-          preferredFoot: true,
-          clubLogo: true,
-          brandLogo: true,
-          coverImage: true,
+        include: {
           _count: {
             select: {
               followers: true,
@@ -356,7 +313,6 @@ export class ProfileController {
         return;
       }
 
-      // Check if current user follows this user
       let isFollowing = false;
       if (clerkUserId) {
         const currentUser = await prisma.user.findUnique({
@@ -377,10 +333,13 @@ export class ProfileController {
         }
       }
 
+      // ✅ استبعاد الحقول الحساسة قبل الإرسال
+      const { email, clerkUserId: _, avatarStoragePath, ...publicData } = user as any;
+
       res.json({
         status: 'SUCCESS',
         data: {
-          ...user,
+          ...publicData,
           followersCount: user._count.followers,
           followingCount: user._count.following,
           videosCount: user._count.reels,

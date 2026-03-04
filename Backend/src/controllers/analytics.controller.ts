@@ -146,10 +146,10 @@ export class AnalyticsController {
   /**
    * GET /api/analytics/video/:id - تحليلات فيديو معين
    */
-  static async getVideoAnalytics(req: Request, res: Response): Promise<void> {
+static async getVideoAnalytics(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
-      const { id } = req.params;
+      const id = req.params.id as string;
 
       if (!clerkUserId) {
         res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
@@ -246,5 +246,4 @@ export class AnalyticsController {
       logger.error('Get video analytics error:', error);
       res.status(500).json({ status: 'ERROR', message: 'Failed to get video analytics' });
     }
-  }
-}
+  }}
