@@ -1,12 +1,12 @@
 /**
  * Video Preloader Utility
  * Preloads video URLs for smooth playback in the reels feed.
- * 
+ *
  * Requirement 3.7: Preload next 2 videos when viewing current reel
- * ✅ OPTIMIZED: Increased preload count and parallel loading
+ * ✅ SDK 52: Replaced Video.createAsync (removed in expo-av 15) with
+ *    a lightweight fetch range-request to warm the CDN connection.
  */
 
-import { Video, AVPlaybackSource } from 'expo-av';
 import { logger } from '../services/logger';
 
 // Track preloaded video URLs
@@ -20,8 +20,9 @@ const MAX_PRELOADED_VIDEOS = 10;
 const preloadQueue: string[] = [];
 
 /**
- * Preload a video URL for faster playback
- * Uses expo-av's Video.createAsync to preload the video
+ * Preload a video URL for faster playback.
+ * Uses a fetch HEAD / range request to warm the CDN connection.
+ * (Video.createAsync was removed in expo-av 15 / Expo SDK 52)
  */
 export async function preloadVideo(videoUrl: string): Promise<boolean> {
   // Skip if already preloaded or currently preloading
@@ -37,25 +38,23 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
   preloadingUrls.add(videoUrl);
 
   try {
-    // Create a video object to preload the URL
-    const source: AVPlaybackSource = { uri: videoUrl };
-    const { sound, status } = await Video.createAsync(
-      source,
-      { shouldPlay: false, isMuted: true },
-      undefined,
-      false // Don't download to cache
-    );
+    // Warm the CDN connection with a range request (first 1 KB only).
+    // This primes the TCP connection and CDN cache without downloading the whole video.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000); // 4s timeout
 
-    // Unload immediately - we just wanted to trigger the network request
-    if (sound) {
-      await sound.unloadAsync();
-    }
+    await fetch(videoUrl, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-1023' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
 
     // Mark as preloaded
     preloadedUrls.add(videoUrl);
     preloadQueue.push(videoUrl);
 
-    // Evict oldest if we exceed max
+    // Evict oldest if we exceed max (LRU)
     if (preloadQueue.length > MAX_PRELOADED_VIDEOS) {
       const oldestUrl = preloadQueue.shift();
       if (oldestUrl) {
@@ -63,10 +62,10 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
       }
     }
 
-    logger.debug(`[VideoPreloader] Preloaded: ${videoUrl.substring(0, 50)}...`);
+    logger.debug(`[VideoPreloader] Warmed: ${videoUrl.substring(0, 50)}...`);
     return true;
-  } catch (error) {
-    logger.warn(`[VideoPreloader] Failed to preload: ${videoUrl}`, error);
+  } catch {
+    // Silent fail — preloading is best-effort and must never crash the app
     return false;
   } finally {
     preloadingUrls.delete(videoUrl);
@@ -78,7 +77,6 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
  * ✅ OPTIMIZED: Changed from sequential to parallel
  */
 export async function preloadVideos(videoUrls: string[]): Promise<void> {
-  // ✅ OPTIMIZATION: Parallel preloading instead of sequential
   await Promise.allSettled(videoUrls.map(url => preloadVideo(url)));
 }
 
@@ -107,9 +105,9 @@ export function getPreloadedCount(): number {
 }
 
 /**
- * Preload next N videos from a list starting at a given index
- * This is the main function to call when the viewing index changes
- * 
+ * Preload next N videos from a list starting at a given index.
+ * This is the main function to call when the viewing index changes.
+ *
  * @param videos - Array of video objects with videoUrl property
  * @param currentIndex - Current viewing index
  * @param count - Number of videos to preload (default: 3)
@@ -118,7 +116,7 @@ export function getPreloadedCount(): number {
 export async function preloadNextVideos<T extends { videoUrl: string }>(
   videos: T[],
   currentIndex: number,
-  count: number = 3 // ✅ Increased from 2 to 3
+  count: number = 3
 ): Promise<void> {
   const urlsToPreload: string[] = [];
 

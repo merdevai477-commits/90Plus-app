@@ -20,6 +20,8 @@ import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { FootballField } from '../../components/match-details/FootballField';
 import { matchArchiveService } from '../../services/matchArchiveService';
+import TeamBadge from '../../components/common/TeamBadge';
+import LeagueIcon from '../../components/common/LeagueIcon';
 
 const { width, height } = Dimensions.get('window');
 
@@ -287,31 +289,16 @@ const MatchDetailsScreen = () => {
 
   // Player Card Component with image error handling
   const PlayerCard = ({ player, number, position }: { player: any; number: number; position: string | null }) => {
-    const [imageError, setImageError] = useState(false);
-
     return (
       <View style={styles.playerCard}>
         <View style={styles.playerNumber}>
           <Text style={styles.playerNumberText}>{number}</Text>
         </View>
-        {player.photo && !imageError ? (
-          <Image
-            source={{ uri: player.photo }}
-            style={styles.playerPhoto}
-            onError={() => {
-              console.log('Failed to load image for:', player.name);
-              setImageError(true);
-            }}
-          />
-        ) : (
-          <View style={[styles.playerPhoto, styles.playerPhotoPlaceholder]}>
-            <Ionicons name="person" size={24} color="#666" />
-          </View>
-        )}
-        <Text style={styles.playerName} numberOfLines={2}>
-          {player.name}
-        </Text>
-        <Text style={styles.playerPosition}>{getPositionName(position)}</Text>
+        <TeamBadge name={player.name} logo={player.photo} size={40} color="transparent" />
+        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={styles.playerName} numberOfLines={2}>{player.name}</Text>
+          <Text style={styles.playerPosition}>{getPositionName(position)}</Text>
+        </View>
       </View>
     );
   };
@@ -400,7 +387,7 @@ const MatchDetailsScreen = () => {
                   )}
                 </View>
 
-                <Image source={{ uri: event.team.logo }} style={styles.eventTeamLogo} />
+                <TeamBadge name={event.team.name} logo={event.team.logo} size={30} color="transparent" />
               </View>
             );
           })}
@@ -464,7 +451,7 @@ const MatchDetailsScreen = () => {
             return (
               <View key={index} style={styles.teamLineupContainer}>
                 <View style={styles.teamHeader}>
-                  <Image source={{ uri: lineup.team.logo }} style={styles.teamLogo} />
+                  <TeamBadge name={lineup.team.name} logo={lineup.team.logo} size={60} color="transparent" />
                   <View style={styles.teamInfo}>
                     <Text style={styles.teamName}>{lineup.team.name}</Text>
                     <Text style={styles.formationText}>
@@ -626,7 +613,7 @@ const MatchDetailsScreen = () => {
         {/* Home Team Last 5 Matches */}
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
-            <Image source={{ uri: params.homeLogo }} style={styles.formTeamLogo} />
+            <TeamBadge name={params.homeTeam} logo={params.homeLogo} size={50} color="transparent" />
             <Text style={styles.formTeamName}>{params.homeTeam}</Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>
@@ -642,7 +629,7 @@ const MatchDetailsScreen = () => {
 
                 return (
                   <View key={index} style={styles.fixtureCard}>
-                    <Image source={{ uri: opponent.logo }} style={styles.fixtureTeamLogo} />
+                    <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
                     <View style={styles.fixtureInfo}>
                       <Text style={styles.fixtureOpponent}>{opponent.name}</Text>
                       <Text style={styles.fixtureLeague}>{fixture.league.name}</Text>
@@ -666,7 +653,7 @@ const MatchDetailsScreen = () => {
         {/* Away Team Last 5 Matches */}
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
-            <Image source={{ uri: params.awayLogo }} style={styles.formTeamLogo} />
+            <TeamBadge name={params.awayTeam} logo={params.awayLogo} size={50} color="transparent" />
             <Text style={styles.formTeamName}>{params.awayTeam}</Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>

@@ -96,19 +96,16 @@ export async function fetchLegendsCompleteAnswers(questionIds: string[]): Promis
 /**
  * تحويل displayMode من الباك إند للفرونت إند
  */
-export function convertDisplayMode(backendMode?: string): string {
-  if (!backendMode) return 'never';
+export function convertDisplayMode(backendMode?: string): 'NEVER' | 'AFTER_ANSWER' | 'BEFORE_QUESTION' | 'IN_QUESTION' | 'AFTER_WRONG' | 'BLUR_REVEAL' {
+  if (!backendMode) return 'NEVER';
   
-  const modeMap: Record<string, string> = {
-    'NEVER': 'never',
-    'AFTER_ANSWER': 'after-answer',
-    'BEFORE_QUESTION': 'before-question',
-    'IN_QUESTION': 'in-question',
-    'AFTER_WRONG': 'after-wrong',
-    'BLUR_REVEAL': 'blur-reveal',
-  };
+  const validModes = ['NEVER', 'AFTER_ANSWER', 'BEFORE_QUESTION', 'IN_QUESTION', 'AFTER_WRONG', 'BLUR_REVEAL'];
   
-  return modeMap[backendMode] || 'never';
+  if (validModes.includes(backendMode)) {
+    return backendMode as 'NEVER' | 'AFTER_ANSWER' | 'BEFORE_QUESTION' | 'IN_QUESTION' | 'AFTER_WRONG' | 'BLUR_REVEAL';
+  }
+  
+  return 'NEVER';
 }
 
 /**

@@ -224,9 +224,9 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       height: user.height || undefined,
       weight: user.weight || undefined,
       preferredFoot: user.preferredFoot || undefined,
-      clubLogo: user.clubLogo || undefined,
-      brandLogo: user.brandLogo || undefined,
-      coverImage: user.coverImage || undefined,
+      clubLogo: (user as any).clubLogo || undefined,
+      brandLogo: (user as any).brandLogo || undefined,
+      coverImage: (user as any).coverImage || undefined,
       consecutiveLoginDays: (user as any).consecutiveLoginDays || 0,
     };
   }, []);

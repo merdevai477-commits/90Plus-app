@@ -12,7 +12,16 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Video, Audio } from 'expo-av';
+// Safe import for expo-av
+let Video: any = null;
+let Audio: any = null;
+try {
+  const ExpoAV = require('expo-av');
+  Video = ExpoAV.Video;
+  Audio = ExpoAV.Audio;
+} catch (e) {
+  console.warn('[useReelsAudioManager] expo-av not available');
+}
 
 // Track which videos are loaded and ready for playback control
 const loadedVideosSet = new Set<string>();
@@ -24,7 +33,7 @@ export interface AudioManagerState {
 }
 
 export interface UseReelsAudioManagerOptions {
-  videoRefs: React.MutableRefObject<Map<string, Video>>;
+  videoRefs: React.MutableRefObject<Map<string, any>>;
   currentIndex: number;
   onPauseAll?: () => void;
   onResumeActive?: (index: number) => void;
@@ -99,7 +108,7 @@ export const useReelsAudioManager = ({
             .then(() => {
               // Successfully paused
             })
-            .catch((error) => {
+            .catch((error: any) => {
               errorCount++;
               // Only log significant errors
               const errorMessage = error?.message || 'unknown';

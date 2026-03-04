@@ -70,6 +70,61 @@ export const MAJOR_LEAGUES = {
   ISRAEL_PREMIER_LEAGUE: 383,
 };
 
+// Singleton instance
+export const apiFootballService = {
+  /**
+   * Search for teams
+   */
+  async searchTeams(query: string): Promise<any[]> {
+    try {
+      const response = await fetch(`${getApiUrl()}/football/teams?search=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      return data.response || [];
+    } catch (error) {
+      logger.error('Failed to search teams:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Search for players
+   */
+  async searchPlayers(query: string): Promise<any[]> {
+    try {
+      const response = await fetch(`${getApiUrl()}/football/players?search=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      return data.response || [];
+    } catch (error) {
+      logger.error('Failed to search players:', error);
+      return [];
+    }
+  },
+
+  // Add other existing methods here...
+  async getAllLeagues() {
+    try {
+      const response = await fetch(`${getApiUrl()}/football/leagues/all`);
+      const data = await response.json();
+      return data.response || [];
+    } catch (error) {
+      logger.error('Failed to get all leagues:', error);
+      return [];
+    }
+  },
+
+  async unifiedSearch(query: string) {
+    // Basic unified search implementation
+    const [teams, players] = await Promise.all([
+      this.searchTeams(query),
+      this.searchPlayers(query)
+    ]);
+    return { teams, players, leagues: [], matches: { live: [], upcoming: [], finished: [] } };
+  }
+};
+
+// Note: apiFootballService is exported as named export, not default
+// The main ApiFootballService object is the default export at the end of the file
+
 class ApiFootballError extends Error {
   constructor(message: string, public statusCode?: number) {
     super(message);
@@ -138,7 +193,6 @@ export interface League {
     current: boolean;
   }>;
 }
-
 
 export interface Fixture {
   fixture: {
@@ -694,7 +748,7 @@ interface ProxyResponse<T> {
  * The backend handles API key management and rate limiting
  * Includes automatic retry on timeout
  */
-const fetchFromProxy = async <T>(
+const fetchFromProxy = async <T,>(
   endpoint: string,
   params: Record<string, any> = {},
   options: { method?: 'GET' | 'POST' | 'DELETE'; body?: any; headers?: Record<string, string>; retries?: number } = {}
@@ -756,110 +810,110 @@ const fetchFromProxy = async <T>(
       );
 
       if (!response.ok) {
-        let errorMessage = response.statusText;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch (e) {
-          // Not JSON
+          let errorMessage = response.statusText;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch (e) {
+            // Not JSON
+          }
+          
+          // Special handling for rate limit errors (429)
+          if (response.status === 429) {
+            // Calculate retry delay from Retry-After header if available
+            const retryAfterHeader = response.headers.get('Retry-After');
+            const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : Math.min(60 * Math.pow(2, attempt), 300); // Max 5 minutes
+            const retryDelay = retryAfterSeconds * 1000;
+            
+            // Cache this rate limit error
+            cacheRateLimitError(endpoint, retryDelay);
+            
+            // If we have retries left, wait and retry (silent)
+            if (attempt < retries) {
+              // Silent retry - don't log to avoid spamming console
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              continue; // Retry the request
+            } else {
+              // All retries exhausted - return empty array instead of throwing
+              // This prevents error spam in console
+              return [] as T;
+            }
+          }
+          
+          throw new ApiFootballError(
+            `API request failed: ${response.status} ${errorMessage}`,
+            response.status
+          );
         }
-        
-        // Special handling for rate limit errors (429)
-        if (response.status === 429) {
-          // Calculate retry delay from Retry-After header if available
-          const retryAfterHeader = response.headers.get('Retry-After');
-          const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : Math.min(60 * Math.pow(2, attempt), 300); // Max 5 minutes
-          const retryDelay = retryAfterSeconds * 1000;
-          
-          // Cache this rate limit error
-          cacheRateLimitError(endpoint, retryDelay);
-          
-          // If we have retries left, wait and retry (silent)
-          if (attempt < retries) {
-            // Silent retry - don't log to avoid spamming console
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            continue; // Retry the request
-          } else {
-            // All retries exhausted - return empty array instead of throwing
-            // This prevents error spam in console
+
+        const data: ProxyResponse<T> = await response.json();
+
+        if (data.status === 'ERROR') {
+          const errorMessage = data.message || 'API returned errors';
+          // Check if error message indicates rate limit
+          if (errorMessage.toLowerCase().includes('rate limit') || 
+              errorMessage.toLowerCase().includes('rate_limit') ||
+              errorMessage.toLowerCase().includes('429') ||
+              errorMessage.toLowerCase().includes('تم تجاوز الحد الأقصى')) {
+            // Cache this rate limit error
+            const retryDelay = 60 * 1000; // Default 1 minute
+            cacheRateLimitError(endpoint, retryDelay);
+            // Return empty array instead of throwing
+            if (__DEV__) {
+              logger.debug('⏸️ Rate limit error from backend, returning empty result');
+            }
             return [] as T;
           }
+          throw new ApiFootballError(errorMessage);
+        }
+
+        if (__DEV__) {
+          console.log(`✅ Football API Proxy Response: ${data.results} results`);
+        }
+
+        return data.response as T;
+      } catch (error) {
+        lastError = error as Error;
+        
+        // Handle rate limit errors - return empty array instead of throwing
+        if (isRateLimitError(error)) {
+          if (attempt === retries) {
+            // All retries exhausted - return empty array gracefully
+            if (__DEV__) {
+              logger.debug('⏸️ Rate limit encountered, returning empty result');
+            }
+            // Return empty array since we don't have context to fetch cached matches
+            return [] as T;
+          }
+          // Continue to retry logic below for rate limit errors
         }
         
-        throw new ApiFootballError(
-          `API request failed: ${response.status} ${errorMessage}`,
-          response.status
-        );
-      }
-
-      const data: ProxyResponse<T> = await response.json();
-
-      if (data.status === 'ERROR') {
-        const errorMessage = data.message || 'API returned errors';
-        // Check if error message indicates rate limit
-        if (errorMessage.toLowerCase().includes('rate limit') || 
-            errorMessage.toLowerCase().includes('rate_limit') ||
-            errorMessage.toLowerCase().includes('429') ||
-            errorMessage.toLowerCase().includes('تم تجاوز الحد الأقصى')) {
-          // Cache this rate limit error
-          const retryDelay = 60 * 1000; // Default 1 minute
-          cacheRateLimitError(endpoint, retryDelay);
-          // Return empty array instead of throwing
-          if (__DEV__) {
-            logger.debug('⏸️ Rate limit error from backend, returning empty result');
-          }
-          return [] as T;
+        // Don't retry on non-timeout/rate-limit errors (like 4xx responses except 429)
+        if (error instanceof ApiFootballError && error.statusCode && error.statusCode < 500 && error.statusCode !== 429) {
+          throw error;
         }
-        throw new ApiFootballError(errorMessage);
-      }
-
-      if (__DEV__) {
-        console.log(`✅ Football API Proxy Response: ${data.results} results`);
-      }
-
-      return data.response as T;
-    } catch (error) {
-      lastError = error as Error;
-      
-      // Handle rate limit errors - return empty array instead of throwing
-      if (isRateLimitError(error)) {
+        
+        // Only retry on timeout, network errors, or rate limit errors (429)
         if (attempt === retries) {
-          // All retries exhausted - return empty array gracefully
-          if (__DEV__) {
-            logger.debug('⏸️ Rate limit encountered, returning empty result');
+          // Only log actual errors (not rate limits) as errors
+          if (!isRateLimitError(error)) {
+            logger.error('❌ Football API Proxy Error (all retries failed):', error);
           }
-          // Return empty array since we don't have context to fetch cached matches
-          return [] as T;
+          // For rate limit errors, return empty array instead of throwing
+          if (isRateLimitError(error)) {
+            return [] as T;
+          }
+          throw error;
         }
-        // Continue to retry logic below for rate limit errors
-      }
-      
-      // Don't retry on non-timeout/rate-limit errors (like 4xx responses except 429)
-      if (error instanceof ApiFootballError && error.statusCode && error.statusCode < 500 && error.statusCode !== 429) {
-        throw error;
-      }
-      
-      // Only retry on timeout, network errors, or rate limit errors (429)
-      if (attempt === retries) {
-        // Only log actual errors (not rate limits) as errors
-        if (!isRateLimitError(error)) {
-          logger.error('❌ Football API Proxy Error (all retries failed):', error);
-        }
-        // For rate limit errors, return empty array instead of throwing
-        if (isRateLimitError(error)) {
-          return [] as T;
-        }
-        throw error;
+        
+        // Wait before retry (exponential backoff)
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
-  }
   
-  // This should not be reached, but if it is, check if lastError is rate limit related
-  if (lastError && isRateLimitError(lastError)) {
-    return [] as T;
-  }
-  
-  throw lastError || new ApiFootballError('Unknown error occurred');
+  // If we exit the loop without returning, throw the last error
+  throw lastError || new Error('Request failed');
 };
 
 export const ApiFootballService = {

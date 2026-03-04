@@ -2,13 +2,13 @@
   "expo": {
     "name": "90Plus",
     "slug": "90plus",
-    "version": "1.0.0",
-    "runtimeVersion": "1.0.0",
+    "version": "1.0.1",
+    "runtimeVersion": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
@@ -25,8 +25,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "UIRequiredDeviceCapabilities": [],
         "UIDeviceFamily": [1, 2]
-      },
-      "deploymentTarget": "15.1"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -35,8 +34,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/90Plus.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
       "package": "com.mhmdsh1892.ninetyplusapp",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
@@ -48,8 +45,6 @@
       "output": "static",
       "favicon": "./assets/images/90Plus.png"
     },
-    "supportUrl": "https://90plus-app-production.up.railway.app/support",
-    "privacyPolicyUrl": "https://90plus-app-production.up.railway.app/privacy",
     "plugins": [
       "expo-router",
       [
@@ -92,8 +87,7 @@
       "expo-secure-store"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "jsEngine": "hermes",
     "updates": {

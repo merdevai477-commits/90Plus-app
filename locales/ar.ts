@@ -181,12 +181,12 @@ export const ar = {
     saudi: 'السعودية',
 
     // Leagues
-    premierLeague: 'الدوري الإنجليزي',
-    laLiga: 'الدوري الإسباني',
-    bundesliga: 'الدوري الألماني',
-    serieA: 'الدوري الإيطالي',
-    ligue1: 'الدوري الفرنسي',
-    championsLeague: 'دوري الأبطال',
+    premierLeague: 'الدوري الإنجليزي 1',
+    laLiga: 'الدوري الإسباني 1',
+    bundesliga: 'الدوري الألماني 1',
+    serieA: 'الدوري الإيطالي 1',
+    ligue1: 'الدوري الفرنسي 1',
+    championsLeague: 'الكأس الأوروبية',
     live: 'مباشر',
     upcoming: 'قادم',
     finished: 'انتهى',

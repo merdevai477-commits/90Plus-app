@@ -32,24 +32,29 @@ export const globalState = {
   isLoaded: false,
 
   // Load state from AsyncStorage
-  loadState: async () => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const data: StoredState = JSON.parse(stored);
-        globalState.userType = data.userType || 'guest';
-        globalState.username = data.username || '';
-        globalState.userProfile = data.userProfile;
-        globalState.isLoggedIn = data.isLoggedIn || false;
-        globalState.localAvatar = data.localAvatar;
-        globalState.localCover = data.localCover;
+  // Load state from AsyncStorage
+    loadState: async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const data: StoredState = JSON.parse(stored);
+          globalState.userType = data.userType || 'guest';
+          globalState.username = data.username || '';
+          globalState.userProfile = data.userProfile;
+          // NOTE: isLoggedIn state is restored but actual authentication
+          // is managed by Clerk. The app should verify Clerk session validity
+          // before trusting this state. This prevents unauthorized access
+          // even if local storage contains stale login data.
+          globalState.isLoggedIn = data.isLoggedIn || false;
+          globalState.localAvatar = data.localAvatar;
+          globalState.localCover = data.localCover;
+        }
+      } catch (error) {
+        console.error('Error loading global state:', error);
+      } finally {
+        globalState.isLoaded = true;
       }
-    } catch (error) {
-      console.error('Error loading global state:', error);
-    } finally {
-      globalState.isLoaded = true;
-    }
-  },
+    },
 
   // Save state to AsyncStorage
   saveState: async () => {
@@ -69,16 +74,9 @@ export const globalState = {
   },
 
   setUserType: (type: 'guest' | 'admin' | 'diamond') => {
-    globalState.userType = type;
-    if (type === 'admin' || type === 'diamond') {
-      globalState.username = 'mahmoud_essam';
-      globalState.isLoggedIn = true;
-    } else {
-      globalState.username = '';
-      globalState.isLoggedIn = false;
-    }
-    globalState.saveState();
-  },
+      globalState.userType = type;
+      globalState.saveState();
+    },
 
   setUserProfile: (profile: DiamondProfile | null) => {
     globalState.userProfile = profile;
@@ -105,18 +103,6 @@ export const globalState = {
 
   setEmailVerified: (verified: boolean) => {
     globalState.emailVerified = verified;
-  },
-
-  login: (username: string, password: string) => {
-    // Mock login logic
-    if (username === 'mahmoud_essam' && password === 'password') {
-      globalState.userType = 'diamond';
-      globalState.username = username;
-      globalState.isLoggedIn = true;
-      globalState.saveState();
-      return true;
-    }
-    return false;
   },
 
   logout: async () => {

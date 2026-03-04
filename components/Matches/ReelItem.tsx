@@ -20,7 +20,7 @@ import {
   CheckCircle 
 } from 'lucide-react-native';
 
-import { UnifiedVideoPlayer } from '../common/UnifiedVideoPlayer';
+import { SafeVideoPlayer as UnifiedVideoPlayer } from '../common/SafeVideoPlayer';
 import { ActionButton } from './ActionButton';
 import { DoubleTapLikeAnimation } from './DoubleTapAnimation';
 import { useHaptics } from '../Home/useHaptics';

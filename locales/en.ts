@@ -140,12 +140,12 @@ export const en = {
     saudi: 'Saudi Arabia',
 
     // Leagues
-    premierLeague: 'Premier League',
-    laLiga: 'La Liga',
-    bundesliga: 'Bundesliga',
-    serieA: 'Serie A',
-    ligue1: 'Ligue 1',
-    championsLeague: 'Champions League',
+    premierLeague: 'English League 1',
+    laLiga: 'Spanish League 1',
+    bundesliga: 'German League 1',
+    serieA: 'Italian League 1',
+    ligue1: 'French League 1',
+    championsLeague: 'European Cup',
 
     // Match Status
     live: 'Live',

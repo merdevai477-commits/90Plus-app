@@ -168,11 +168,6 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
                         </TouchableOpacity>
                       )}
                     </View>
-                    {t.value && (
-                      <Text style={styles.transferValue}>
-                        Transfer Value: €{typeof t.value === 'number' ? (t.value / 1000000).toFixed(1) + 'M' : t.value}
-                      </Text>
-                    )}
                   </View>
                 </View>
               ))}

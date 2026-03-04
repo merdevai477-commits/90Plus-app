@@ -6,6 +6,8 @@ import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { Match } from './matchCardUtils';
 import { ApiFootballService, TeamStatistics } from '../../services/apiFootball';
 import { useRouter } from 'expo-router';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 
 interface LiveScoreMatchCardProps {
   match: Match;
@@ -187,13 +189,7 @@ const LiveScoreMatchCard: React.FC<LiveScoreMatchCardProps> = ({
             {/* League Header */}
             {match.league?.name && (
               <View style={styles.leagueHeader}>
-                {match.league.logo && (
-                  <Image
-                    source={{ uri: match.league.logo }}
-                    style={styles.leagueLogo}
-                    resizeMode="contain"
-                  />
-                )}
+                <LeagueIcon name={match.league.name} size={16} color="#ffffff" />
                 <Text style={styles.leagueName} numberOfLines={1}>
                   {match.league.name}
                 </Text>
@@ -210,10 +206,10 @@ const LiveScoreMatchCard: React.FC<LiveScoreMatchCardProps> = ({
               {/* Home Team */}
               <View style={styles.teamSection}>
                 <View style={styles.teamLogoContainer}>
-                  <Image
-                    source={{ uri: match.homeTeam.logo }}
-                    style={styles.teamLogo}
-                    resizeMode="contain"
+                  <TeamBadge 
+                    name={match.homeTeam.name} 
+                    size={56} 
+                    color="transparent" 
                   />
                 </View>
                 <Text style={styles.teamName} numberOfLines={2}>
@@ -241,10 +237,10 @@ const LiveScoreMatchCard: React.FC<LiveScoreMatchCardProps> = ({
               {/* Away Team */}
               <View style={styles.teamSection}>
                 <View style={styles.teamLogoContainer}>
-                  <Image
-                    source={{ uri: match.awayTeam.logo }}
-                    style={styles.teamLogo}
-                    resizeMode="contain"
+                  <TeamBadge 
+                    name={match.awayTeam.name} 
+                    size={56} 
+                    color="transparent" 
                   />
                 </View>
                 <Text style={styles.teamName} numberOfLines={2}>

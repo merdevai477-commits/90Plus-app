@@ -9,7 +9,7 @@
 #define GrContext_Base_DEFINED
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/private/base/SkAPI.h"
 
 #include <cstdint>
@@ -67,7 +67,7 @@ public:
 protected:
     friend class GrBaseContextPriv; // for hidden functions
 
-    GrContext_Base(sk_sp<GrContextThreadSafeProxy>);
+    explicit GrContext_Base(sk_sp<GrContextThreadSafeProxy>);
 
     virtual bool init();
 

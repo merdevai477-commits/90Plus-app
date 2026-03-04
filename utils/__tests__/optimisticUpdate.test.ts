@@ -185,7 +185,7 @@ describe('Optimistic Update Property Tests', () => {
           fc.string({ minLength: 1, maxLength: 100 }),
           async (errorMessage) => {
             let errorCallbackCalled = false;
-            let receivedError: Error | null = null;
+            let receivedError: Error | undefined;
 
             const options: OptimisticUpdateOptions<boolean> = {
               optimisticAction: () => {},

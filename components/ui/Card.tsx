@@ -22,7 +22,7 @@ export interface CardProps extends Omit<TouchableOpacityProps, 'style'> {
   elevation?: keyof typeof Elevation;
   borderRadius?: number;
   style?: ViewStyle;
-  gradient?: string[];
+  gradient?: readonly [string, string, ...string[]];
   glass?: boolean;
   onPress?: () => void;
   haptic?: boolean;

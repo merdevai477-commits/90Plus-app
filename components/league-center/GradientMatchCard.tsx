@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Zap } from 'lucide-react-native';
 import { useHaptic } from '../../hooks/useHaptic';
 import { LiveTimer } from '../common/LiveTimer';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 import {
   Match,
   getGradientColors,
@@ -225,13 +227,11 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                 {/* Home Team */}
                 <View style={styles.team}>
                   <View style={styles.logoWrapper}>
-                    {match.homeTeam?.logo && (
-                      <Image
-                        source={{ uri: match.homeTeam.logo }}
-                        style={styles.teamLogo}
-                        resizeMode="contain"
-                      />
-                    )}
+                    <TeamBadge 
+                      name={match.homeTeam?.name || 'TBD'} 
+                      size={60} 
+                      color="transparent" 
+                    />
                   </View>
                   <Text style={styles.teamName} numberOfLines={2}>
                     {match.homeTeam?.name || 'TBD'}
@@ -287,13 +287,11 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                 {/* Away Team */}
                 <View style={styles.team}>
                   <View style={styles.logoWrapper}>
-                    {match.awayTeam?.logo && (
-                      <Image
-                        source={{ uri: match.awayTeam.logo }}
-                        style={styles.teamLogo}
-                        resizeMode="contain"
-                      />
-                    )}
+                    <TeamBadge 
+                      name={match.awayTeam?.name || 'TBD'} 
+                      size={60} 
+                      color="transparent" 
+                    />
                   </View>
                   <Text style={styles.teamName} numberOfLines={2}>
                     {match.awayTeam?.name || 'TBD'}
@@ -304,13 +302,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
               {/* Bottom Row - League Info */}
               <View style={styles.bottomRow}>
                 <View style={styles.leagueBadgeBottom}>
-                  {match.league?.logo && (
-                    <Image
-                      source={{ uri: match.league.logo }}
-                      style={styles.leagueLogoSmall}
-                      resizeMode="contain"
-                    />
-                  )}
+                  <LeagueIcon name={match.league?.name || 'League'} size={16} color="#ffffff" />
                   <Text style={styles.leagueNameBottom} numberOfLines={1}>
                     {match.league?.name || 'League'}
                   </Text>

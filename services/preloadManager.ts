@@ -113,11 +113,19 @@ class PreloadManagerClass {
    * 
    * Requirement 8.1: Preload data on app start
    * ✅ OPTIMIZED: Start preloading immediately without waiting
+   * ✅ FIX: Allow re-initialization for new sessions
    */
   async initialize(getToken: () => Promise<string | null>): Promise<void> {
-    if (this.isInitialized) {
-      logger.debug('[PreloadManager] Already initialized');
+    // ✅ FIX: Allow re-initialization if token getter changed (new session)
+    if (this.isInitialized && this.tokenGetter === getToken) {
+      logger.debug('[PreloadManager] Already initialized with same token getter');
       return;
+    }
+
+    // Stop previous refresh if re-initializing
+    if (this.isInitialized) {
+      logger.debug('[PreloadManager] Re-initializing with new session');
+      this.stopPeriodicRefresh();
     }
 
     this.tokenGetter = getToken;

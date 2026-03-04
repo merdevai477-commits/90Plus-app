@@ -2,7 +2,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/services', '<rootDir>/hooks', '<rootDir>/utils', '<rootDir>/src', '<rootDir>/config', '<rootDir>/components'],
+  roots: ['<rootDir>/services', '<rootDir>/hooks', '<rootDir>/utils', '<rootDir>/src', '<rootDir>/config', '<rootDir>/components', '<rootDir>'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   transform: {
@@ -25,6 +25,9 @@ module.exports = {
     '^react-native$': '<rootDir>/__mocks__/react-native.ts',
     '^@react-native-async-storage/async-storage$': '<rootDir>/__mocks__/asyncStorage.ts',
     '^expo-constants$': '<rootDir>/__mocks__/expo-constants.ts',
+    '^expo-file-system$': '<rootDir>/__mocks__/expo-file-system.ts',
+    '^expo-video-thumbnails$': '<rootDir>/__mocks__/expo-video-thumbnails.ts',
+    '^expo-image-manipulator$': '<rootDir>/__mocks__/expo-image-manipulator.ts',
   },
   collectCoverageFrom: [
     'services/**/*.ts',

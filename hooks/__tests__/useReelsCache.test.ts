@@ -54,7 +54,7 @@ const reelsCacheDataArb = fc.record({
   reels: fc.array(reelDataArb, { minLength: 0, maxLength: 20 }),
   nextCursor: fc.option(fc.string({ minLength: 10, maxLength: 50 }), { nil: null }),
   hasMore: fc.boolean(),
-  cachedAt: fc.nat({ min: Date.now() - 86400000, max: Date.now() }),
+  cachedAt: fc.integer({ min: Date.now() - 86400000, max: Date.now() }),
 });
 
 describe('useReelsCache Property Tests', () => {

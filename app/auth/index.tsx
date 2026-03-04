@@ -55,6 +55,7 @@ WebBrowser.maybeCompleteAuthSession();
 /**
  * 🐉 DRAGON FIX: Clear all previous user data with proper coordination
  * Prevents race conditions and ensures complete cleanup
+ * ✅ OPTIMIZED: Reduced timeout from 5s to 2s for faster logout
  */
 const clearPreviousUserData = async () => {
     logger.debug('🧹 Clearing previous user data...');
@@ -111,8 +112,9 @@ const clearPreviousUserData = async () => {
         })(),
     ];
     
+    // ✅ OPTIMIZATION: Reduced timeout from 5000ms to 2000ms
     const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Cleanup timeout')), 5000)
+        setTimeout(() => reject(new Error('Cleanup timeout')), 2000)
     );
     
     try {
@@ -272,8 +274,8 @@ export default function AuthScreen() {
      */
     const syncUserWithBackend = async (): Promise<{ success: boolean; isNewUser: boolean }> => {
         try {
-            // Wait a bit for the session to be fully active
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // ✅ OPTIMIZATION: Reduced wait time from 500ms to 200ms
+            await new Promise(resolve => setTimeout(resolve, 200));
             
             const token = await getToken();
             if (!token) {
@@ -281,7 +283,23 @@ export default function AuthScreen() {
                 return { success: false, isNewUser: false };
             }
 
-            const user = await AuthService.syncUserWithBackend(token);
+            // ✅ FIX: Add retry logic for sync failures (3 attempts)
+            let user = null;
+            let retries = 3;
+            
+            while (retries > 0 && !user) {
+                try {
+                    user = await AuthService.syncUserWithBackend(token);
+                    if (user) break;
+                } catch (syncError) {
+                    console.warn(`⚠️ Sync attempt failed, ${retries - 1} retries left`, syncError);
+                    retries--;
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+            
             if (user) {
                 // User successfully synced with backend database
                 console.log('✅ User synced with backend:', user.username);
@@ -316,6 +334,8 @@ export default function AuthScreen() {
                 
                 return { success: true, isNewUser };
             }
+            
+            console.error('❌ Failed to sync user after all retries');
             return { success: false, isNewUser: false };
         } catch (error) {
             console.error('❌ Failed to sync with backend:', error);
@@ -420,42 +440,76 @@ export default function AuthScreen() {
                     setShowLoadingScreen(true);
                     setIsLoading(false);
 
-                    // Clear previous user data before setting new session
-                    await clearPreviousUserData();
-                    
-                    await setActiveSignIn({ session: result.createdSessionId });
+                    try {
+                        // ✅ OPTIMIZATION: Run operations in parallel
+                        const [, syncResult] = await Promise.all([
+                            clearPreviousUserData(),
+                            setActiveSignIn({ session: result.createdSessionId }).then(() => {
+                                console.log('🔄 Syncing user with backend...');
+                                return syncUserWithBackend();
+                            })
+                        ]);
 
-                    // Sync user with backend database
-                    console.log('🔄 Syncing user with backend...');
-                    const syncResult = await syncUserWithBackend();
-
-                    // ✅ Start background preloading immediately after login
-                    if (syncResult.success) {
-                        try {
-                            preloadManager.initialize(getToken).catch(err => {
-                                console.warn('[Auth] Preload initialization failed (non-critical):', err);
-                            });
-                            
-                            console.log('✅ Background preloading started');
-                        } catch (error) {
-                            console.warn('[Auth] Failed to start preloading:', error);
+                        // ✅ FIX: Check if sync was successful
+                        if (!syncResult.success) {
+                            console.error('❌ Sync failed, but continuing...');
+                            setShowLoadingScreen(false);
+                            Alert.alert(
+                                'تحذير',
+                                'تم تسجيل الدخول لكن فشل تحميل بعض البيانات. يمكنك المتابعة.',
+                                [
+                                    {
+                                        text: 'متابعة',
+                                        onPress: () => {
+                                            globalState.setUserType('diamond');
+                                            useHomeStore.getState().setUserMode('diamond');
+                                            router.replace('/(tabs)/Home');
+                                        }
+                                    }
+                                ]
+                            );
+                            return;
                         }
+
+                        // ✅ Start background preloading immediately after login (non-blocking)
+                        preloadManager.initialize(getToken).catch(err => {
+                            console.warn('[Auth] Preload initialization failed (non-critical):', err);
+                        });
+                        console.log('✅ Background preloading started');
+
+                        // Set user as authenticated
+                        globalState.setUserType('diamond');
+                        useHomeStore.getState().setUserMode('diamond');
+
+                        // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
+                        setTimeout(() => {
+                            // If new user, go to onboarding, otherwise go to home
+                            if (syncResult.isNewUser) {
+                                router.replace('/onboarding');
+                            } else {
+                                router.replace('/(tabs)/Home');
+                            }
+                        }, 800);
+                    } catch (syncError) {
+                        console.error('❌ Login sync error:', syncError);
+                        setShowLoadingScreen(false);
+                        Alert.alert(
+                            'خطأ',
+                            'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.',
+                            [
+                                {
+                                    text: 'حاول مرة أخرى',
+                                    onPress: () => {
+                                        // Reset form
+                                        setEmail('');
+                                        setPassword('');
+                                    }
+                                }
+                            ]
+                        );
                     }
-
-                    // Set user as authenticated
-                    globalState.setUserType('diamond');
-                    useHomeStore.getState().setUserMode('diamond');
-
-                    // Small delay for smooth transition
-                    setTimeout(() => {
-                        // If new user, go to onboarding, otherwise go to home
-                        if (syncResult.isNewUser) {
-                            router.replace('/onboarding');
-                        } else {
-                            router.replace('/(tabs)/Home');
-                        }
-                    }, 1500);
                 } else {
+                    setShowLoadingScreen(false);
                     Alert.alert(t.common.error, t.common.operationFailed);
                 }
             } else {
@@ -477,11 +531,13 @@ export default function AuthScreen() {
             }
         } catch (error: any) {
             console.error('Auth error:', error);
+            setShowLoadingScreen(false); // ✅ FIX: Always hide loading screen on error
             const errorMessage = getArabicErrorMessage(error);
             Alert.alert('خطأ', errorMessage);
         } finally {
             if (isLogin) {
                 setIsLoading(false);
+                setShowLoadingScreen(false); // ✅ FIX: Ensure loading screen is hidden
             }
         }
     };
@@ -591,43 +647,43 @@ export default function AuthScreen() {
                 setLoadingMessage('جاري إنشاء الحساب...');
                 setShowLoadingScreen(true);
 
-                await clearPreviousUserData();
-                await setActiveSignUp({ session: result.createdSessionId });
+                // ✅ OPTIMIZATION: Run operations in parallel
+                const [, syncResult] = await Promise.all([
+                    clearPreviousUserData(),
+                    setActiveSignUp({ session: result.createdSessionId }).then(() => {
+                        console.log('🔄 Syncing new user with backend...');
+                        return syncUserWithBackend();
+                    })
+                ]);
 
-                console.log('🔄 Syncing new user with backend...');
-                const syncResult = await syncUserWithBackend();
-
-                // Accept terms after successful signup
-                try {
-                    const termsVersion = await AsyncStorage.getItem('@pending_terms_version');
-                    if (termsVersion) {
-                        await TermsService.acceptTerms(termsVersion);
-                        await AsyncStorage.removeItem('@pending_terms_version');
-                        console.log('✅ Terms accepted');
-                    }
-                } catch (termsError) {
-                    console.warn('Failed to accept terms:', termsError);
-                    // Don't block signup if terms acceptance fails
-                }
-
-                // ✅ Start background preloading for new users too
-                if (syncResult.success) {
+                // ✅ OPTIMIZATION: Accept terms in background (non-blocking)
+                (async () => {
                     try {
-                        preloadManager.initialize(getToken).catch(err => {
-                            console.warn('[Auth] Preload initialization failed:', err);
-                        });
-                    } catch (error) {
-                        // Silent fail
+                        const termsVersion = await AsyncStorage.getItem('@pending_terms_version');
+                        if (termsVersion) {
+                            await TermsService.acceptTerms(termsVersion);
+                            await AsyncStorage.removeItem('@pending_terms_version');
+                            console.log('✅ Terms accepted');
+                        }
+                    } catch (termsError) {
+                        console.warn('Failed to accept terms:', termsError);
                     }
+                })();
+
+                // ✅ Start background preloading for new users (non-blocking)
+                if (syncResult.success) {
+                    preloadManager.initialize(getToken).catch(err => {
+                        console.warn('[Auth] Preload initialization failed:', err);
+                    });
                 }
 
                 globalState.setUserType('diamond');
                 useHomeStore.getState().setUserMode('diamond');
 
-                // New user from signup always goes to onboarding
+                // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
                 setTimeout(() => {
                     router.replace('/onboarding');
-                }, 1500);
+                }, 800);
             }
         } catch (error: any) {
             console.error('Verification error:', error);

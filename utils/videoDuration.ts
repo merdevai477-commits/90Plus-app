@@ -121,44 +121,81 @@ export function shouldShowDuration(duration: FormattedDuration | DurationResult)
  * @returns Duration in seconds or null if extraction fails
  * 
  * Requirements: 9.2
+ * 
+ * SDK 52 Implementation:
+ * - Uses Audio.Sound.createAsync() to load video and extract duration
+ * - Works with video files because they contain audio tracks
+ * - Properly releases resources with unloadAsync() to prevent memory leaks
  */
 export async function extractDurationFromUrl(videoUrl: string): Promise<DurationResult> {
   if (!videoUrl) {
     return null;
   }
 
+  let sound: any = null;
+
   try {
-    // Dynamically import expo-av to avoid issues in test environment
-    const { Video } = await import('expo-av');
-    const { logger } = await import('../services/logger');
-    
-    // Create a temporary video reference to get metadata
-    const { sound, status } = await Video.createAsync(
+    // Import Audio from expo-av
+    const { Audio } = await import('expo-av');
+
+    // Use Audio.Sound to load the video and extract duration
+    // This works with video files because they contain audio tracks
+    const { sound: loadedSound, status } = await Audio.Sound.createAsync(
       { uri: videoUrl },
-      { shouldPlay: false },
-      undefined,
-      false
+      { shouldPlay: false }, // Don't play the video
+      null, // No status update callback
+      false // Don't download to cache
     );
 
-    // Clean up the video reference
-    if (sound) {
+    sound = loadedSound;
+
+    // Check if status contains duration information
+    if (status.isLoaded && status.durationMillis) {
+      const durationSeconds = status.durationMillis / 1000;
+
+      // Release resources before returning
+      // Don't let unload errors prevent returning the duration
+      try {
+        await sound.unloadAsync();
+      } catch (unloadError) {
+        // Log but ignore unload errors - we still have the duration
+        try {
+          const { logger } = await import('../services/logger');
+          logger.warn('[videoDuration] Failed to unload sound, but duration extracted:', unloadError);
+        } catch {
+          // Ignore logging errors
+        }
+      }
+
+      return durationSeconds;
+    }
+
+    // If we didn't get duration, release resources and return null
+    try {
       await sound.unloadAsync();
+    } catch (unloadError) {
+      // Ignore unload errors when we don't have duration anyway
     }
-
-    // Extract duration from status
-    if (status && 'durationMillis' in status && status.durationMillis) {
-      return status.durationMillis / 1000;
-    }
-
     return null;
+
   } catch (error) {
+    // Release resources in case of error
+    if (sound) {
+      try {
+        await sound.unloadAsync();
+      } catch (unloadError) {
+        // Ignore unload errors
+      }
+    }
+
     // Log error if logger is available
     try {
       const { logger } = await import('../services/logger');
-      logger.warn('Failed to extract video duration:', error);
+      logger.warn('[videoDuration] Failed to extract video duration:', error);
     } catch {
       // Ignore logging errors in test environment
     }
+
     return null;
   }
 }

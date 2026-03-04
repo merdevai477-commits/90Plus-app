@@ -8,6 +8,27 @@
 #ifndef SkSpan_DEFINED
 #define SkSpan_DEFINED
 
+/*
+ *  Define this to keep the bespoke SkSpan implementation, until clients are ready.
+ *  When this is not defined, SkSpan becomes just an alias for std::span
+ */
+#define SK_USE_LEGACY_SKSPAN
+
+/*
+ *  SkSpan handles single POD initialization differently from std::span
+ *  This macro allows clients to initialize a span with a single POD that will work with
+ *  either implementation of SkSpan.
+ *
+ *  When we switch to std::span entirely, callsites can remove this macro, and juse type {{a}}
+ */
+#ifdef SK_USE_LEGACY_SKSPAN
+    #define SKSPAN_INIT_ONE(elem)   {elem}
+#else
+    #define SKSPAN_INIT_ONE(elem)   {{elem}}
+#endif
+
+#ifdef SK_USE_LEGACY_SKSPAN
+
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTo.h"
@@ -69,7 +90,7 @@ public:
     template <typename Integer, std::enable_if_t<std::is_integral_v<Integer>, bool> = true>
     constexpr SkSpan(T* ptr, Integer size) : fPtr{ptr}, fSize{SkToSizeT(size)} {
         SkASSERT(ptr || fSize == 0);  // disallow nullptr + a nonzero size
-        SkASSERT(fSize < kMaxSize);
+        SkASSERT(fSize < (std::numeric_limits<size_t>::max() / sizeof(T)));
     }
     template <typename U, typename = std::enable_if_t<std::is_same_v<const U, T>>>
     constexpr SkSpan(const SkSpan<U>& that) : fPtr(std::data(that)), fSize(std::size(that)) {}
@@ -118,8 +139,6 @@ public:
     }
 
 private:
-    static constexpr size_t kMaxSize = std::numeric_limits<size_t>::max() / sizeof(T);
-
     T* fPtr;
     size_t fSize;
 };
@@ -127,5 +146,13 @@ private:
 template <typename Container>
 SkSpan(Container&&) ->
         SkSpan<std::remove_pointer_t<decltype(std::data(std::declval<Container>()))>>;
+
+#else
+
+#include <span>
+
+template <typename T> using SkSpan = std::span<T>;
+
+#endif  // legacy
 
 #endif  // SkSpan_DEFINED

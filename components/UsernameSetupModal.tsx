@@ -91,15 +91,16 @@ export default function UsernameSetupModal({
                 username: finalUsername,
             });
 
-            if (result) {
+            if (result.user) {
                 // Update globalState with new user data
-                globalState.username = result.username;
+                globalState.username = result.user.username;
+                globalState.isLoggedIn = true;
                 globalState.setUserProfile({
-                    id: result.id,
-                    username: result.username,
-                    displayName: result.displayName || result.username,
-                    avatar: result.avatar || undefined,
-                    bio: result.bio || undefined,
+                    id: result.user.id,
+                    username: result.user.username,
+                    displayName: result.user.displayName || result.user.username,
+                    avatar: result.user.avatar || undefined,
+                    bio: result.user.bio || undefined,
                     stats: {
                         views: 0,
                         likes: 0,
@@ -108,7 +109,7 @@ export default function UsernameSetupModal({
                         posts: 0,
                         predictions: 0,
                         interactions: 0,
-                        level: result.level || 1,
+                        level: result.user.level || 1,
                         followers: 0,
                         following: 0,
                         monthlyViews: 0,
@@ -122,15 +123,16 @@ export default function UsernameSetupModal({
                     socialStats: { followers: [], following: [] },
                     notifications: [],
                     isOwner: true,
-                    isVerified: result.isVerified || false,
-                    isAppOwner: result.isDeveloper || false,
+                    isVerified: result.user.isVerified || false,
+                    isAppOwner: result.user.isDeveloper || false,
                 });
+                await globalState.saveState();
 
                 // Mark setup as complete
                 await AsyncStorage.setItem(USERNAME_SETUP_KEY, 'true');
                 onComplete(finalUsername);
             } else {
-                Alert.alert('Error', 'Username might be taken. Try another one.');
+                Alert.alert('Error', result.error || 'Username might be taken. Try another one.');
             }
         } catch (err: any) {
             console.error('Error setting username:', err);

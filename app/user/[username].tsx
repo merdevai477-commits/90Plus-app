@@ -84,15 +84,20 @@ export default function UserProfileScreen() {
         return;
       }
 
+      console.log('🔍 Loading user profile for:', username);
       const userData = await AuthService.getUserByUsername(token, username);
+      console.log('✅ User data loaded:', userData);
+      
       if (userData) {
         setUser(userData);
         setError(null);
       } else {
+        console.warn('⚠️ No user data returned');
         setError('المستخدم غير موجود');
       }
-    } catch (err) {
-      console.error('Error loading user profile:', err);
+    } catch (err: any) {
+      console.error('❌ Error loading user profile:', err);
+      console.error('Error details:', err.message, err.stack);
       setError('حدث خطأ أثناء تحميل البروفايل');
     } finally {
       setIsLoading(false);
@@ -369,13 +374,14 @@ export default function UserProfileScreen() {
   }
 
   // Format videos for VideoGrid component
-  const formattedVideos = userVideos.map(v => ({
-    id: v.id,
-    uri: v.uri,
-    thumbnail: v.thumbnail,
-    views: v.views,
-    likes: v.likes,
-  }));
+const formattedVideos = userVideos.map(v => ({
+  id: v.id,
+  uri: v.uri,
+  thumbnail: v.thumbnail,
+  views: v.views,
+  likes: v.likes,
+  duration: (v as any).duration ?? 0,
+}));
 
   return (
     <View style={styles.container}>

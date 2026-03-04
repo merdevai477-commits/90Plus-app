@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image, Animated } from 'react-native';
 import { Play, Eye, Heart } from 'lucide-react-native';
 import { Video } from './types';
 import { styles } from './homeStyles';
+import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
 
 interface VideoCardProps {
   item: Video;
@@ -49,9 +50,10 @@ export const VideoCard = React.memo<VideoCardProps>(({
         activeOpacity={0.9}
       >
         <View style={styles.videoThumbnailContainer}>
-          {imageError ? (
-            <View style={[styles.videoThumbnail, styles.errorPlaceholder]}>
+          {imageError || !isValidThumbnail(item.thumbnail) ? (
+            <View style={[styles.videoThumbnail, styles.errorPlaceholder, { backgroundColor: VIDEO_THUMBNAIL_PLACEHOLDER.backgroundColor }]}>
               <Play color="#666" size={24} />
+              <Text style={{ color: '#999', fontSize: 10, marginTop: 4 }}>No Preview</Text>
             </View>
           ) : (
             <Image

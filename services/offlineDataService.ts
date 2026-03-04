@@ -90,6 +90,23 @@ class OfflineDataService {
   }
 
   /**
+   * Search matches offline
+   */
+  async searchMatches(query: string): Promise<{ live: any[]; upcoming: any[]; finished: any[] }> {
+    try {
+      const normalizedQuery = query.toLowerCase().trim();
+      const results = { live: [], upcoming: [], finished: [] };
+      
+      // TODO: Implement actual offline search logic here if needed
+      // For now, return empty as we rely on API search
+      
+      return results;
+    } catch (error) {
+      logger.error('Failed to search matches offline:', error);
+      return { live: [], upcoming: [], finished: [] };
+    }
+  }
+  /**
    * Get player data from offline storage
    */
   async getPlayerData(playerId: number): Promise<any | null> {

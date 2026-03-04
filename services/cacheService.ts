@@ -434,7 +434,7 @@ class CacheService {
     
     // Validate the cache format - matches should be an object with live/upcoming/finished
     // If it's an array (old format), clear the cache and return null
-    if (cached.matches && Array.isArray(cached.matches)) {
+    if (typeof cached === 'object' && cached !== null && 'matches' in cached && Array.isArray(cached.matches)) {
       console.log(`🗑️ Clearing old search cache format for "${query}"`);
       await this.invalidate(key);
       return null;
@@ -543,17 +543,17 @@ class CacheService {
    * More efficient than caching one by one.
    */
   async batchCache(items: Array<{ key: string; data: any; ttl?: number }>): Promise<void> {
-    try {
-      const entries: [string, string][] = items.map(item => {
-        const cacheKey = this.getCacheKey(item.key);
-        const entry: CacheEntry<any> = {
-          data: item.data,
-          timestamp: Date.now(),
-          ttl: item.ttl || DEFAULT_TTL,
-        };
-        return [cacheKey, JSON.stringify(entry)];
-      });
+    const entries: [string, string][] = items.map(item => {
+      const cacheKey = this.getCacheKey(item.key);
+      const entry: CacheEntry<any> = {
+        data: item.data,
+        timestamp: Date.now(),
+        ttl: item.ttl || DEFAULT_TTL,
+      };
+      return [cacheKey, JSON.stringify(entry)];
+    });
 
+    try {
       await AsyncStorage.multiSet(entries);
       await this.evictIfNeeded();
     } catch (error: any) {

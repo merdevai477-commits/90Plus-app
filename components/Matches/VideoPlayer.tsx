@@ -7,7 +7,18 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+// Safe import for expo-av
+let Video: any = null;
+let ResizeMode: any = null;
+let AVPlaybackStatus: any = null;
+try {
+  const ExpoAV = require('expo-av');
+  Video = ExpoAV.Video;
+  ResizeMode = ExpoAV.ResizeMode;
+  AVPlaybackStatus = ExpoAV.AVPlaybackStatus;
+} catch (e) {
+  console.warn('[VideoPlayer] expo-av not available');
+}
 import { Play } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';

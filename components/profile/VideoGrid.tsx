@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { shouldShowDuration } from '../../utils/videoDuration';
+import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
 import Animated, { useAnimatedStyle, withRepeat, withTiming } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -42,11 +43,18 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
             }}
             onLongPress={() => onVideoLongPress(item)}
         >
-            <Image
-                source={typeof item.thumbnail === 'string' ? { uri: item.thumbnail } : item.thumbnail}
-                style={styles.thumbnail}
-                resizeMode="cover"
-            />
+            {isValidThumbnail(typeof item.thumbnail === 'string' ? item.thumbnail : null) ? (
+                <Image
+                    source={typeof item.thumbnail === 'string' ? { uri: item.thumbnail } : item.thumbnail}
+                    style={styles.thumbnail}
+                    resizeMode="cover"
+                />
+            ) : (
+                <View style={[styles.thumbnail, styles.placeholderContainer]}>
+                    <Ionicons name="videocam-outline" size={32} color="#666" />
+                    <Text style={styles.placeholderText}>No Preview</Text>
+                </View>
+            )}
 
             {/* Overlay */}
             <LinearGradient
@@ -200,7 +208,18 @@ const styles = StyleSheet.create({
     progressBar: {
         height: '100%',
         backgroundColor: ProfileTheme.colors.neonGreen,
-    }
+    },
+    placeholderContainer: {
+        backgroundColor: VIDEO_THUMBNAIL_PLACEHOLDER.backgroundColor,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    placeholderText: {
+        color: '#999',
+        fontSize: 10,
+        marginTop: 4,
+        fontWeight: '500',
+    },
 });
 
 export default VideoGrid;

@@ -8,6 +8,7 @@ import { useTranslation } from '../../src/i18n';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Skeleton } from '../ui/Skeleton';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/designSystem/designSystem';
+import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
 
 interface VideoListProps {
     videos: Video[];
@@ -47,14 +48,28 @@ const EmptyVideoCard = React.memo(({ index, onPress, t }: { index: number; onPre
 
 const VideoCard = React.memo(({ video, onPress }: { video: Video; onPress: () => void }) => (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress} style={styles.cardContainer}>
-        <ImageBackground
-            source={{ uri: video.thumbnail }}
-            style={styles.thumbnail}
-            imageStyle={{ borderRadius: 12 }}
-        >
-            <View style={styles.overlay}>
-                <View style={styles.playButton}>
-                    <Play size={20} color={COLORS.white} fill={COLORS.white} />
+        {isValidThumbnail(video.thumbnail) ? (
+            <ImageBackground
+                source={{ uri: video.thumbnail }}
+                style={styles.thumbnail}
+                imageStyle={{ borderRadius: 12 }}
+            >
+                <View style={styles.overlay}>
+                    <View style={styles.playButton}>
+                        <Play size={20} color={COLORS.white} fill={COLORS.white} />
+                    </View>
+                    <View style={styles.statsContainer}>
+                        <Text style={styles.statsText}>{video.views} views</Text>
+                        <Text style={styles.statsText}>•</Text>
+                        <Text style={styles.statsText}>{video.likes} likes</Text>
+                    </View>
+                </View>
+            </ImageBackground>
+        ) : (
+            <View style={[styles.thumbnail, styles.placeholderThumbnail]}>
+                <View style={styles.placeholderContent}>
+                    <Play size={32} color="#666" />
+                    <Text style={styles.placeholderText}>No Preview</Text>
                 </View>
                 <View style={styles.statsContainer}>
                     <Text style={styles.statsText}>{video.views} views</Text>
@@ -62,7 +77,7 @@ const VideoCard = React.memo(({ video, onPress }: { video: Video; onPress: () =>
                     <Text style={styles.statsText}>{video.likes} likes</Text>
                 </View>
             </View>
-        </ImageBackground>
+        )}
         <Text style={styles.videoTitle} numberOfLines={2}>{video.title}</Text>
     </TouchableOpacity>
 ));
@@ -308,5 +323,21 @@ const styles = StyleSheet.create({
         color: Colors.onSurface.primary,
         fontWeight: Typography.body.small.fontWeight,
         marginBottom: Spacing.xs,
+    },
+    placeholderThumbnail: {
+        backgroundColor: VIDEO_THUMBNAIL_PLACEHOLDER.backgroundColor,
+        justifyContent: 'space-between',
+        padding: 8,
+    },
+    placeholderContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    placeholderText: {
+        color: '#999',
+        fontSize: 11,
+        marginTop: 6,
+        fontWeight: '500',
     },
 });

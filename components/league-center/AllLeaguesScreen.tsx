@@ -9,9 +9,12 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import LeagueIcon from '../common/LeagueIcon';
+import TeamBadge from '../common/TeamBadge';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useHaptic } from '../../hooks/useHaptic';
@@ -98,82 +101,44 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
     const delayDebounceFn = setTimeout(async () => {
       try {
         const normalizedQuery = searchQuery.toLowerCase().trim();
-        
-        // ✅ 1. Check offline storage first (permanent, fastest)
-        const offlineResults = await offlineDataService.getSearchResults(normalizedQuery);
-        if (offlineResults) {
-          setSearchResults(offlineResults);
-          setIsSearching(false);
-          return;
-        }
-        
-        // ✅ 2. Check temporary cache (fast)
-        const cacheKey = `search_${normalizedQuery}`;
-        const cached = await cacheService.get(cacheKey);
-        if (cached) {
-          setSearchResults(cached);
-          setIsSearching(false);
-          // Store in offline storage for future use (background)
-          offlineDataService.storeSearchResults(normalizedQuery, cached).catch(err => {
-            logger.warn('Failed to store search results in offline storage:', err);
-          });
-          return;
-        }
-        
-        // ✅ 3. Fetch from API (only if not cached)
-        const results = await ApiFootballService.unifiedSearch(searchQuery);
-        
-        // Ensure matches has the correct structure - DEFENSIVE CODING
-        const rawMatches = results?.matches;
-        let safeMatches: { live: any[]; upcoming: any[]; finished: any[] };
-        
-        if (!rawMatches) {
-          safeMatches = { live: [], upcoming: [], finished: [] };
-        } else if (Array.isArray(rawMatches)) {
-          // Old format - convert to new format
-          safeMatches = { live: [], upcoming: [], finished: rawMatches };
-        } else {
-          safeMatches = {
-            live: Array.isArray(rawMatches.live) ? rawMatches.live : [],
-            upcoming: Array.isArray(rawMatches.upcoming) ? rawMatches.upcoming : [],
-            finished: Array.isArray(rawMatches.finished) ? rawMatches.finished : [],
-          };
-        }
-        
-        const safeResults = {
-          players: Array.isArray(results?.players) ? results.players : [],
-          teams: Array.isArray(results?.teams) ? results.teams : [],
-          leagues: Array.isArray(results?.leagues) ? results.leagues : [],
-          matches: safeMatches,
-        };
-        
-        // ✅ 4. Save to both temporary cache and permanent offline storage
-        await Promise.all([
-          cacheService.set(cacheKey, safeResults, 5 * 60 * 1000), // 5 minutes temporary cache
-          offlineDataService.storeSearchResults(normalizedQuery, safeResults), // Permanent storage
+
+        // 1. Search local leagues first (fastest)
+        const matchedLeagues = leagues.filter(l => 
+          l.name.toLowerCase().includes(normalizedQuery) || 
+          l.country.toLowerCase().includes(normalizedQuery)
+        ).slice(0, 5);
+
+        // 2. Search API for players and teams
+        const [players, teams] = await Promise.all([
+          ApiFootballService.searchPlayers(normalizedQuery),
+          ApiFootballService.searchTeams(normalizedQuery)
         ]);
+
+        // 3. Search matches (offline or cache first)
+        const matches = await offlineDataService.searchMatches(normalizedQuery);
         
-        setSearchResults(safeResults);
-        
-        // Auto-switch to matches tab if we have any matches
-        const hasMatches = safeResults.matches.live.length > 0 || 
-                          safeResults.matches.upcoming.length > 0 || 
-                          safeResults.matches.finished.length > 0;
-        if (hasMatches && activeTab === 'leagues') {
-          setActiveTab('matches');
-        }
+        // Ensure matches structure is correct
+        const safeMatches = {
+          live: matches?.live || [],
+          upcoming: matches?.upcoming || [],
+          finished: matches?.finished || []
+        };
+
+        setSearchResults({
+          players: players || [],
+          teams: teams || [],
+          leagues: matchedLeagues,
+          matches: safeMatches
+        });
       } catch (error) {
-        logger.error('Search failed:', error);
-        setSearchResults(emptyResults);
+        logger.error('Search error:', error);
       } finally {
         setIsSearching(false);
       }
-    }, 200); // ✅ Reduced to 200ms for faster response
+    }, 500);
 
-    return () => {
-      clearTimeout(delayDebounceFn);
-    };
-  }, [searchQuery]);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, leagues]);
 
   // Filter leagues based on search (local filtering for performance when in leagues tab)
   const filteredLeagues = useMemo(() => {
@@ -245,7 +210,7 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
       onPress={() => handleLeaguePress(item.id)}
       activeOpacity={0.7}
     >
-      <Image source={{ uri: item.logo }} style={styles.leagueLogo} />
+      <LeagueIcon name={item.name} size={40} color="#ffffff" />
       <View style={styles.leagueInfo}>
         <Text style={styles.leagueName}>{item.name}</Text>
         <Text style={styles.leagueCountry}>{item.country}</Text>
@@ -305,14 +270,14 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
     const matchStatus = getMatchStatus(status);
 
     if (matchStatus === 'live') {
-      if (status === 'HT') return t.matches?.halftime || 'استراحة';
+      if (status === 'HT') return 'HT';
       return `${elapsed}'`;
     }
-    if (matchStatus === 'finished') return t.matches?.finished || 'انتهت';
+    if (matchStatus === 'finished') return 'FT';
 
     // Upcoming - show time
     const date = new Date(fixture.fixture?.date || fixture.date);
-    return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   const renderMatchItem = ({ item }: { item: any }) => {
@@ -321,6 +286,8 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
     const goals = item.goals || {};
     const status = item.fixture?.status?.short || 'NS';
     const matchStatus = getMatchStatus(status);
+    const homeGoals = goals.home ?? 0;
+    const awayGoals = goals.away ?? 0;
 
     return (
       <TouchableOpacity
@@ -339,20 +306,20 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
         {/* Teams */}
         <View style={styles.matchTeams}>
           <View style={styles.teamRow}>
-            <Image source={{ uri: homeTeam.logo }} style={styles.teamLogo} />
+            <TeamBadge name={homeTeam.name} size={24} color="transparent" />
             <Text style={styles.teamName} numberOfLines={1}>{homeTeam.name}</Text>
             {matchStatus !== 'upcoming' && (
               <Text style={[styles.score, homeTeam.winner && styles.winnerScore]}>
-                {goals.home ?? '-'}
+                {homeGoals}
               </Text>
             )}
           </View>
           <View style={styles.teamRow}>
-            <Image source={{ uri: awayTeam.logo }} style={styles.teamLogo} />
+            <TeamBadge name={awayTeam.name} size={24} color="transparent" />
             <Text style={styles.teamName} numberOfLines={1}>{awayTeam.name}</Text>
             {matchStatus !== 'upcoming' && (
               <Text style={[styles.score, awayTeam.winner && styles.winnerScore]}>
-                {goals.away ?? '-'}
+                {awayGoals}
               </Text>
             )}
           </View>
@@ -360,7 +327,7 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
 
         {/* League */}
         <View style={styles.matchLeague}>
-          <Image source={{ uri: item.league?.logo }} style={styles.leagueSmallLogo} />
+          <LeagueIcon name={item.league?.name} size={16} color="#ffffff" />
           <Text style={styles.leagueSmallName} numberOfLines={1}>{item.league?.name}</Text>
         </View>
       </TouchableOpacity>
@@ -511,16 +478,16 @@ const AllLeaguesScreen: React.FC<AllLeaguesScreenProps> = ({
             const finished = Array.isArray(matches.finished) ? matches.finished : [];
             
             return [
-              ...(live.length > 0 ? [{ type: 'header', title: t.matches?.live || '🔴 مباريات مباشرة' }] : []),
+              ...(live.length > 0 ? [{ type: 'header', title: '🔴 Live Matches' }] : []),
               ...live.map(m => ({ type: 'match', data: m })),
-              ...(upcoming.length > 0 ? [{ type: 'header', title: t.matches?.upcoming || '📅 مباريات قادمة' }] : []),
+              ...(upcoming.length > 0 ? [{ type: 'header', title: '📅 Upcoming Matches' }] : []),
               ...upcoming.map(m => ({ type: 'match', data: m })),
-              ...(finished.length > 0 ? [{ type: 'header', title: t.matches?.finished || '✅ مباريات منتهية' }] : []),
+              ...(finished.length > 0 ? [{ type: 'header', title: '✅ Finished Matches' }] : []),
               ...finished.map(m => ({ type: 'match', data: m })),
             ];
           })()}
-          keyExtractor={(item, index) => item.type === 'header' ? `header-${index}` : (item.data?.fixture?.id || item.data?.id || index).toString()}
-          renderItem={({ item }) => {
+          keyExtractor={(item: any, index) => item.type === 'header' ? `header-${index}` : (item.data?.fixture?.id || item.data?.id || index).toString()}
+          renderItem={({ item }: { item: any }) => {
             if (item.type === 'header') {
               return (
                 <View style={styles.matchSectionHeader}>

@@ -9,12 +9,13 @@ import React from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
 import { Calendar, MapPin, Trophy } from 'lucide-react-native';
 import { MatchArchive } from '../../services/matchArchiveService';
+import TeamBadge from '../common/TeamBadge';
+import LeagueIcon from '../common/LeagueIcon';
 
 interface MatchHistoryCardProps {
   match: MatchArchive;
@@ -56,9 +57,7 @@ const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) =
       {/* Header with league info */}
       <View style={styles.header}>
         <View style={styles.leagueInfo}>
-          {match.league.logo && (
-            <Image source={{ uri: match.league.logo }} style={styles.leagueLogo} />
-          )}
+          <LeagueIcon name={match.league.name} size={16} color="#ffffff" />
           <Text style={styles.leagueName} numberOfLines={1}>
             {match.league.name}
           </Text>
@@ -72,7 +71,7 @@ const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) =
       <View style={styles.matchContent}>
         {/* Home Team */}
         <View style={styles.team}>
-          <Image source={{ uri: match.homeTeam.logo }} style={styles.teamLogo} />
+          <TeamBadge name={match.homeTeam.name} size={40} color="transparent" />
           <Text style={styles.teamName} numberOfLines={2}>
             {match.homeTeam.name}
           </Text>
@@ -87,7 +86,7 @@ const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) =
 
         {/* Away Team */}
         <View style={styles.team}>
-          <Image source={{ uri: match.awayTeam.logo }} style={styles.teamLogo} />
+          <TeamBadge name={match.awayTeam.name} size={40} color="transparent" />
           <Text style={styles.teamName} numberOfLines={2}>
             {match.awayTeam.name}
           </Text>

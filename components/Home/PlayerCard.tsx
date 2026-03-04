@@ -7,9 +7,11 @@ import { styles } from './homeStyles';
 interface PlayerCardProps {
   item: Player;
   onPress: () => void;
-  imageError: boolean;
-  onImageError: () => void;
+  imageError?: boolean;
+  onImageError?: () => void;
 }
+
+import TeamBadge from '../common/TeamBadge';
 
 export const PlayerCard = React.memo<PlayerCardProps>(({ 
   item, 
@@ -42,17 +44,9 @@ export const PlayerCard = React.memo<PlayerCardProps>(({
         onPress={onPress}
         activeOpacity={0.9}
       >
-        {imageError ? (
-          <View style={[styles.playerImage, styles.errorPlaceholder]}>
-            <Users color="#666" size={24} />
-          </View>
-        ) : (
-          <Image
-            source={{ uri: item.image }}
-            style={styles.playerImage}
-            onError={onImageError}
-          />
-        )}
+        <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%', height: 120 }}>
+          <TeamBadge name={item.name} logo={item.image} size={80} color="transparent" />
+        </View>
         <View style={styles.playerInfo}>
           <Text style={styles.playerName} numberOfLines={1}>
             {item.name}

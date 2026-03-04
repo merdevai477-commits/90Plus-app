@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { useAuth } from '@clerk/clerk-expo';
 import { MatchesService } from '../services/authService';
+import { logger } from '../services/logger';
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -12,6 +13,8 @@ Notifications.setNotificationHandler({
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
     }),
 });
 
@@ -26,10 +29,11 @@ export function usePushNotifications() {
     const [notification, setNotification] = useState<Notifications.Notification | null>(null);
     const [error, setError] = useState<string | null>(null);
     
-    const notificationListener = useRef<Notifications.Subscription>();
-    const responseListener = useRef<Notifications.Subscription>();
+    const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
+    const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
     
-    const { getToken, isSignedIn } = useAuth();
+    const auth = useAuth({} as any);
+    const { getToken, isSignedIn } = auth;
 
     useEffect(() => {
         // Register for push notifications
@@ -60,10 +64,10 @@ export function usePushNotifications() {
 
         return () => {
             if (notificationListener.current) {
-                Notifications.removeNotificationSubscription(notificationListener.current);
+                notificationListener.current.remove();
             }
             if (responseListener.current) {
-                Notifications.removeNotificationSubscription(responseListener.current);
+                responseListener.current.remove();
             }
         };
     }, []);
@@ -77,7 +81,7 @@ export function usePushNotifications() {
 
     const sendTokenToBackend = async (pushToken: string) => {
         try {
-            const authToken = await getToken();
+            const authToken = await getToken({ template: undefined });
             if (authToken) {
                 await MatchesService.registerPushToken(authToken, pushToken);
                 logger.debug('✅ Push token registered with backend');

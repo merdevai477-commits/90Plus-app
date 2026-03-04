@@ -12,7 +12,14 @@ import {
   RefreshControl,
 } from 'react-native';
 import { ChevronUp } from 'lucide-react-native';
-import { Video } from 'expo-av';
+// Safe import for expo-av
+let Video: any = null;
+try {
+  const ExpoAV = require('expo-av');
+  Video = ExpoAV.Video;
+} catch (e) {
+  console.warn('[ReelsFeed] expo-av not available');
+}
 
 import { ReelItem } from './ReelItem';
 import { CommentsModal } from './CommentsModal';

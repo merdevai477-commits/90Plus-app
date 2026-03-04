@@ -61,7 +61,7 @@ export default function AuthLoadingScreen({ message = 'جاري تسجيل ال�
     useEffect(() => {
         // Logo entrance animation
         logoScale.value = withSequence(
-            withTiming(1.2, { duration: 400, easing: Easing.out(Easing.back) }),
+            withTiming(1.2, { duration: 400, easing: Easing.out(Easing.back(1.5)) }),
             withTiming(1, { duration: 200 })
         );
 

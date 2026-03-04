@@ -24,7 +24,8 @@ import {
     Play,
 } from 'lucide-react-native';
 
-import { UnifiedVideoPlayer, UnifiedReelData } from '../common/UnifiedVideoPlayer';
+import { SafeVideoPlayer as UnifiedVideoPlayer } from '../common/SafeVideoPlayer';
+import type { UnifiedReelData } from '../common/UnifiedVideoPlayer';
 import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { ReelData } from './types';
 import { COLORS, GRADIENTS, EFFECTS } from './constants';

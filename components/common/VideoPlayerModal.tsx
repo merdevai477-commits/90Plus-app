@@ -13,8 +13,17 @@ import {
     StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { UnifiedVideoPlayer } from './UnifiedVideoPlayer';
+// Video rendering is handled by UnifiedVideoPlayer (expo-av Video used internally)
+// Type-only import - safe even if expo-av not available
+let Video: any = null;
+try {
+  const ExpoAV = require('expo-av');
+  Video = ExpoAV.Video;
+} catch (e) {
+  // expo-av not available
+}
+
+import { SafeVideoPlayer as UnifiedVideoPlayer } from './SafeVideoPlayer';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     Heart,
@@ -494,8 +503,7 @@ const styles = StyleSheet.create({
         bottom: 0,
     },
     video: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
+        flex: 1, // ✅ SDK 52 / iPad fix: use flex instead of hardcoded SCREEN_WIDTH/SCREEN_HEIGHT
     },
     pauseOverlay: {
         position: 'absolute',

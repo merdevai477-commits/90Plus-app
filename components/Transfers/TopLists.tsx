@@ -14,18 +14,9 @@ interface TopListsProps {
 
 export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }) => {
   const topLists = useMemo(() => {
-    // Top 10 Biggest Transfers (by value)
-    const biggestTransfers = [...transfers]
-      .filter(t => {
-        const value = t.transfers[0]?.value;
-        return value && typeof value === 'number' && value > 0;
-      })
-      .sort((a, b) => {
-        const valueA = a.transfers[0]?.value || 0;
-        const valueB = b.transfers[0]?.value || 0;
-        return (valueB as number) - (valueA as number);
-      })
-      .slice(0, 10);
+    // Note: Transfer values are not available in the current data structure
+    // Biggest transfers list is disabled until value data is available
+    const biggestTransfers: Transfer[] = [];
 
     // Top 10 Most Active Teams
     const teamCounts = new Map<number, { name: string; logo?: string; count: number }>();
@@ -93,39 +84,39 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.container}>
-      {/* Biggest Transfers */}
-      <View style={styles.listCard}>
-        <Text style={styles.listTitle}>💰 Biggest Transfers</Text>
-        <ScrollView style={styles.listContent} nestedScrollEnabled>
-          {topLists.biggestTransfers.map((transfer, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.listItem}
-              onPress={() => onTransferPress?.(transfer)}
-            >
-              <View style={styles.rankBadge}>
-                <Text style={styles.rankText}>{index + 1}</Text>
-              </View>
-              <PlayerAvatar
-                name={transfer.player.name}
-                position={null}
-                size={40}
-              />
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName} numberOfLines={1}>
-                  {transfer.player.name}
-                </Text>
-                <Text style={styles.itemSubtext} numberOfLines={1}>
-                  {transfer.transfers[0]?.teams.out?.name} → {transfer.transfers[0]?.teams.in?.name}
-                </Text>
-              </View>
-              <Text style={styles.itemValue}>
-                {formatValue(transfer.transfers[0]?.value)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Biggest Transfers - Hidden until value data is available */}
+      {topLists.biggestTransfers.length > 0 && (
+        <View style={styles.listCard}>
+          <Text style={styles.listTitle}>💰 Biggest Transfers</Text>
+          <ScrollView style={styles.listContent} nestedScrollEnabled>
+            {topLists.biggestTransfers.map((transfer, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.listItem}
+                onPress={() => onTransferPress?.(transfer)}
+              >
+                <View style={styles.rankBadge}>
+                  <Text style={styles.rankText}>{index + 1}</Text>
+                </View>
+                <PlayerAvatar
+                  name={transfer.player.name}
+                  position={null}
+                  size={40}
+                />
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName} numberOfLines={1}>
+                    {transfer.player.name}
+                  </Text>
+                  <Text style={styles.itemSubtext} numberOfLines={1}>
+                    {transfer.transfers[0]?.teams.out?.name} → {transfer.transfers[0]?.teams.in?.name}
+                  </Text>
+                </View>
+                <Text style={styles.itemValue}>N/A</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Most Active Teams */}
       <View style={styles.listCard}>

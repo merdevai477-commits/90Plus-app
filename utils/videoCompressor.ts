@@ -3,11 +3,12 @@
  * Compresses videos before upload to reduce upload time significantly
  * 
  * A 3MB video can be compressed to ~500KB-1MB without visible quality loss
+ * 
+ * ✅ SDK 52: expo-video-thumbnails re-enabled (installed for thumbnail generation)
  */
 
-import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as FileSystem from 'expo-file-system';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { logger } from '../services/logger';
 
 export interface CompressionResult {
@@ -37,39 +38,76 @@ export async function getFileSize(uri: string): Promise<number> {
 
 /**
  * Generate thumbnail from video
+ * ✅ SDK 52: Re-enabled with expo-video-thumbnails
+ * 
+ * @param videoUri - URI of the video file
+ * @param time - Time in milliseconds to capture thumbnail (default: 1000ms)
+ * @returns URI of the generated thumbnail, or null if generation fails
  */
 export async function generateThumbnail(
   videoUri: string,
   time: number = 1000
 ): Promise<string | null> {
   try {
+    logger.info('[videoCompressor] Generating thumbnail', { videoUri, time });
+    
     const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
       time,
-      quality: 0.7,
+      quality: 0.8, // 0-1, higher is better quality
     });
+    
+    logger.info('[videoCompressor] Thumbnail generated successfully', { thumbnailUri: uri });
     return uri;
   } catch (error) {
-    logger.error('Error generating thumbnail:', error);
+    logger.error('[videoCompressor] Failed to generate thumbnail', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      videoUri,
+      time,
+    });
     return null;
   }
 }
 
 /**
  * Compress thumbnail image
+ * ✅ SDK 52: Re-enabled with expo-image-manipulator
+ * 
+ * @param thumbnailUri - URI of the thumbnail image
+ * @param maxWidth - Maximum width in pixels (default: 720px)
+ * @returns URI of the compressed thumbnail, or original URI if compression fails
  */
 export async function compressThumbnail(
   thumbnailUri: string,
   maxWidth: number = 720
 ): Promise<string> {
   try {
-    const result = await manipulateAsync(
+    const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+    
+    logger.info('[videoCompressor] Compressing thumbnail', { thumbnailUri, maxWidth });
+    
+    const manipResult = await manipulateAsync(
       thumbnailUri,
-      [{ resize: { width: maxWidth } }],
-      { compress: 0.7, format: SaveFormat.JPEG }
+      [
+        { resize: { width: maxWidth } } // Maintains aspect ratio
+      ],
+      {
+        compress: 0.8, // 0-1, higher is better quality
+        format: SaveFormat.JPEG,
+      }
     );
-    return result.uri;
+    
+    logger.info('[videoCompressor] Thumbnail compressed successfully', { 
+      originalUri: thumbnailUri,
+      compressedUri: manipResult.uri 
+    });
+    
+    return manipResult.uri;
   } catch (error) {
-    logger.error('Error compressing thumbnail:', error);
+    logger.error('[videoCompressor] Failed to compress thumbnail', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      thumbnailUri,
+    });
+    // Return original image on compression failure
     return thumbnailUri;
   }
 }

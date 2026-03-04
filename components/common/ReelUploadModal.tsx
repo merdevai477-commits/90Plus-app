@@ -4,12 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import * as VideoThumbnails from 'expo-video-thumbnails';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import { extractDurationFromUrl } from '../../utils/videoDuration';
 
 interface ReelUploadModalProps {
     visible: boolean;
@@ -52,16 +52,33 @@ export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUplo
         if (!result.canceled) {
             const asset = result.assets[0];
 
-            // Validation Logic
-            if (asset.duration) {
-                if (asset.duration < 10000) { // < 10 seconds
-                    Alert.alert('فيديو قصير جداً', 'يجب أن تكون مدة الفيديو 10 ثوانٍ على الأقل.');
-                    return;
-                }
-                if (asset.duration > 60000) { // > 30 seconds
-                    Alert.alert('فيديو طويل', 'يجب أن لا تتجاوز مدة الفيديو 60 ثانية.');
-                    return;
-                }
+            // Extract duration using expo-av for accurate validation
+            // This is required because ImagePicker.duration may not be reliable
+            const duration = await extractDurationFromUrl(asset.uri);
+
+            // Validation Logic - Requirements 2.6, 2.7, 2.8
+            if (duration === null) {
+                Alert.alert(
+                    'خطأ في الفيديو',
+                    'لا يمكن تحديد مدة الفيديو. الرجاء اختيار فيديو آخر.'
+                );
+                return;
+            }
+
+            if (duration < 5) {
+                Alert.alert(
+                    'فيديو قصير جداً',
+                    'يجب أن تكون مدة الفيديو 5 ثوانٍ على الأقل.'
+                );
+                return;
+            }
+
+            if (duration > 60) {
+                Alert.alert(
+                    'فيديو طويل جداً',
+                    'يجب أن لا تتجاوز مدة الفيديو 60 ثانية.'
+                );
+                return;
             }
 
             // Resolution check (Soft check, just warn or accept)
@@ -81,14 +98,9 @@ export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUplo
         uploadProgress.value = withTiming(10, { duration: 300 });
 
         try {
-            // Generate thumbnail from video first frame
-            const { uri: thumbnailUri } = await VideoThumbnails.getThumbnailAsync(
-                videoAsset.uri,
-                {
-                    time: 1000, // 1 second in
-                    quality: 0.7,
-                }
-            );
+            // ✅ SDK 52: Thumbnail generation disabled (expo-video-thumbnails deprecated)
+            // Use a placeholder or skip thumbnail for now
+            const thumbnailUri = null; // TODO: Re-enable with expo-video later
 
             uploadProgress.value = withTiming(30, { duration: 300 });
             setUploadStage('uploading');
@@ -190,7 +202,7 @@ export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUplo
                             <View style={styles.placeholderContainer}>
                                 <Ionicons name="cloud-upload-outline" size={48} color={ProfileTheme.colors.neonGreen} />
                                 <Text style={styles.uploadText}>اختر فيديو من الاستوديو</Text>
-                                <Text style={styles.uploadSubText}>(10-60 ثانية)</Text>
+                                <Text style={styles.uploadSubText}>(5-60 ثانية)</Text>
                             </View>
                         )}
                     </TouchableOpacity>

@@ -8,11 +8,13 @@ interface TeamFormationProps {
   onPlayerPress: () => void;
 }
 
+import TeamBadge from '../common/TeamBadge';
+
 export const TeamFormation: React.FC<TeamFormationProps> = ({ team, onPlayerPress }) => {
   return (
     <View style={styles.fullWidthTeamCard}>
       <View style={styles.teamHeader}>
-        <Image source={{ uri: team.logo }} style={styles.teamLogo} />
+        <TeamBadge name={team.name} size={50} color="transparent" />
         <View style={styles.teamInfo}>
           <Text style={styles.teamName}>{team.name}</Text>
           <Text style={styles.teamFormation}>Formation: {team.formation}</Text>

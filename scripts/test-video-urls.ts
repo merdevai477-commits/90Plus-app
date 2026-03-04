@@ -30,7 +30,7 @@ export const testVideoUrl = async (url: string): Promise<boolean> => {
     console.log(`Status: ${response.status}`);
     console.log(`Content-Type: ${contentType}`);
     
-    return response.ok && contentType?.includes('video');
+    return response.ok && (contentType?.includes('video') ?? false);
   } catch (error) {
     console.error(`Failed to test ${url}:`, error);
     return false;

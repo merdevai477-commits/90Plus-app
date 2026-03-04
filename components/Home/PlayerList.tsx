@@ -55,13 +55,17 @@ const EmptyPlayerCard = React.memo(({ index, onPress, t }: { index: number; onPr
     );
 });
 
+import TeamBadge from '../common/TeamBadge';
+
 const PlayerCard = React.memo(({ player, onPress }: { player: Player; onPress: () => void }) => (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
         <LinearGradient
-            colors={['#2a2a2a', '#1a1a1a']}
+            colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
             style={styles.cardContainer}
         >
-            <Image source={{ uri: player.image }} style={styles.playerImage} />
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%', height: 100 }}>
+                <TeamBadge name={player.name} logo={player.image} size={80} color="transparent" />
+            </View>
             <View style={styles.ratingBadge}>
                 <Text style={styles.ratingText}>{player.rating}</Text>
             </View>

@@ -320,7 +320,7 @@ describe('Reel Preloading Property Tests', () => {
 
             // Should not throw with empty list
             await expect(
-              preloadManager.preloadInitialReelVideos(emptyReels)
+              preloadManager.preloadInitialReelVideos(emptyReels as unknown as any[])
             ).resolves.not.toThrow();
           }
         ),

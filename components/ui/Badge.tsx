@@ -19,7 +19,7 @@ export interface BadgeProps {
   gradient?: boolean;
 }
 
-const variantColors: Record<BadgeVariant, { bg: string; text: string; gradient?: string[] }> = {
+const variantColors: Record<BadgeVariant, { bg: string; text: string; gradient?: readonly [string, string, ...string[]] }> = {
   primary: {
     bg: Colors.primary[500],
     text: Colors.onPrimary,

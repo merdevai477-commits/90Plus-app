@@ -261,50 +261,67 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('🔄 Starting logout process...');
+
               // Clear videos data first
               await clearVideos();
-
-              // Sign out from Clerk first
-              await signOut();
+              console.log('✅ Videos cleared');
 
               // Clear global state
               await globalState.logout();
+              console.log('✅ Global state cleared');
 
               // Clear CoinsService user context
               const { CoinsService } = await import('../../services/coins.service');
               CoinsService.clearCurrentUser();
+              console.log('✅ Coins service cleared');
 
               // Clear AuthService memory cache
               const { AuthService } = await import('../../src/services/authService');
               AuthService.clearMemoryCache();
+              console.log('✅ Auth service cache cleared');
 
               // Clear RankingsService memory cache
               const { rankingsService } = await import('../../services/rankingsService');
               rankingsService.clearMemoryCache();
+              console.log('✅ Rankings service cache cleared');
 
               // Clear home.store user data
               const { useHomeStore } = await import('../../src/store/home.store');
               useHomeStore.getState().clearUserData();
+              console.log('✅ Home store cleared');
 
               // Disconnect WebSocket
               const { websocketClient } = await import('../../services/websocketClient');
               websocketClient.disconnect();
+              console.log('✅ WebSocket disconnected');
 
               // Clear all cache (including profile, reels, notifications, etc.)
               const { cacheService } = await import('../../services/cacheService');
               await cacheService.clearAll();
+              console.log('✅ Cache service cleared');
 
               // Clear AsyncStorage
               await AsyncStorage.removeItem('@username_setup_complete');
               await AsyncStorage.removeItem('@user_profile');
+              console.log('✅ AsyncStorage cleared');
+
+              // Sign out from Clerk LAST (after all cleanup)
+              await signOut();
+              console.log('✅ Clerk sign out complete');
 
               // Navigate to Auth screen
               router.replace('/auth');
+              console.log('✅ Navigated to auth screen');
 
-              Alert.alert(t.common.done, t.settings.logoutDesc ? (isRTL ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully') : 'Logged out successfully');
-            } catch (e) {
-              console.error('Logout error:', e);
-              Alert.alert(t.common.error, 'Logout failed');
+              // Show success message
+              setTimeout(() => {
+                Alert.alert(t.common.done, isRTL ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully');
+              }, 500);
+            } catch (e: any) {
+              console.error('❌ Logout error:', e);
+              console.error('Error details:', e.message, e.stack);
+              Alert.alert(t.common.error, isRTL ? 'فشل تسجيل الخروج. حاول مرة أخرى.' : 'Logout failed. Please try again.');
             }
           },
         },

@@ -19,6 +19,7 @@ const mockStorage = AsyncStorage as typeof AsyncStorage & {
 
 // Generator for ProfileUserData
 const profileUserDataArb = fc.record({
+  id: fc.uuid(),
   displayName: fc.string({ minLength: 1, maxLength: 50 }),
   username: fc.string({ minLength: 3, maxLength: 30 }).filter(s => /^[a-zA-Z0-9_]+$/.test(s)),
   bio: fc.string({ maxLength: 200 }),

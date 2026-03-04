@@ -181,8 +181,8 @@ describe('API Configuration Property Tests', () => {
 
     it('should return development when __DEV__ is true', () => {
       (global as any).__DEV__ = true;
-      delete process.env.EXPO_PUBLIC_ENV;
-      delete process.env.NODE_ENV;
+      const { EXPO_PUBLIC_ENV, NODE_ENV, ...restEnv } = process.env;
+      process.env = restEnv;
 
       // Re-import to get fresh module
       jest.resetModules();

@@ -42,8 +42,14 @@ import {
   Play,
 } from 'lucide-react-native';
 
-// للفيديو
-import { Video } from 'expo-av';
+// للفيديو - safe import
+let Video: any = null;
+try {
+  const ExpoAV = require('expo-av');
+  Video = ExpoAV.Video;
+} catch (e) {
+  console.warn('[reels] expo-av not available');
+}
 
 // للـ Gradient
 import { LinearGradient } from 'expo-linear-gradient';

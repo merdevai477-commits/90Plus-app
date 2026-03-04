@@ -6,8 +6,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth } from '@clerk/clerk-expo';
 import { requestDeduplicator } from '../services/requestDeduplicator';
-import { getToken } from '../utils/auth';
 
 interface UseRequestCacheOptions<T> {
   endpoint: string;
@@ -35,6 +35,7 @@ export function useRequestCache<T>({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const isMountedRef = useRef(true);
+  const { getToken } = useAuth();
 
   const fetchData = useCallback(async () => {
     if (!enabled) return;
@@ -43,7 +44,7 @@ export function useRequestCache<T>({
     setError(null);
 
     try {
-      const token = await getToken();
+      const token = await getToken({ template: undefined });
       
       // Use deduplicator to prevent duplicate requests
       const result = await requestDeduplicator.execute(
@@ -67,7 +68,7 @@ export function useRequestCache<T>({
         setLoading(false);
       }
     }
-  }, [endpoint, fetchFn, params, enabled, userId]);
+  }, [endpoint, fetchFn, params, enabled, userId, getToken]);
 
   useEffect(() => {
     isMountedRef.current = true;

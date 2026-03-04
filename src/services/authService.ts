@@ -1,5 +1,6 @@
 import { getApiUrl } from '../../config/api.config';
 import { requestDeduplicator } from '../../services/requestDeduplicator';
+import { logger } from './logger';
 
 const API_URL = getApiUrl();
 

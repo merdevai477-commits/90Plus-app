@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 // ✅ استبدال Network polling بـ NetInfo event listeners
 import NetInfo from '@react-native-community/netinfo';
 
@@ -751,15 +752,45 @@ const MatchesScreen = () => {
 
   // Error state with retry
   if (error && matches.length === 0) {
-    const getErrorMessage = (errorMsg: string): string => {
-      if (errorMsg.toLowerCase().includes('network') || errorMsg.toLowerCase().includes('fetch')) {
-        return 'NETWORK_ERROR: Unable to load matches. Please check your internet connection.';
+    const getErrorMessage = (errorMsg: string): { title: string; message: string; icon: keyof typeof Ionicons.glyphMap } => {
+      const lowerError = errorMsg.toLowerCase();
+      
+      if (lowerError.includes('network') || lowerError.includes('fetch')) {
+        return {
+          title: t.matches.empty.errorLoadingMatches || 'Connection Error',
+          message: 'Unable to connect to the server. Please check your internet connection.',
+          icon: 'cloud-offline-outline'
+        };
       }
-      if (errorMsg.toLowerCase().includes('timeout')) {
-        return 'TIMEOUT_ERROR: Request timed out. Please try again.';
+      if (lowerError.includes('timeout')) {
+        return {
+          title: 'Request Timed Out',
+          message: 'The server took too long to respond. Please try again.',
+          icon: 'time-outline'
+        };
       }
-      return `API_ERROR: ${errorMsg}`;
+      if (lowerError.includes('500') || lowerError.includes('server')) {
+        return {
+          title: 'Service Unavailable',
+          message: 'Our servers are currently experiencing high traffic. Please try again in a few moments.',
+          icon: 'server-outline'
+        };
+      }
+      if (lowerError.includes('api returned errors')) {
+        return {
+          title: 'Data Unavailable',
+          message: 'Match data is currently unavailable. Please check back later.',
+          icon: 'alert-circle-outline'
+        };
+      }
+      return {
+        title: t.matches.empty.errorLoadingMatches || 'Error Loading Matches',
+        message: 'Something went wrong while loading matches.',
+        icon: 'alert-circle-outline'
+      };
     };
+
+    const errorInfo = getErrorMessage(error);
 
     return (
       <View style={styles.container} accessibilityLabel="Matches screen error state">
@@ -774,9 +805,9 @@ const MatchesScreen = () => {
           scrollY={scrollY}
         />
         <EmptyState
-          icon="alert-circle-outline"
-          title={t.matches.empty.errorLoadingMatches}
-          message={getErrorMessage(error)}
+          icon={errorInfo.icon}
+          title={errorInfo.title}
+          message={errorInfo.message}
           iconColor={MATCH_DETAILS_COLORS.error}
           onRetry={refetch}
           retryLabel={t.matches.empty.retry || 'Retry'}

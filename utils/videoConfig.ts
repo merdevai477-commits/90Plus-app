@@ -1,4 +1,16 @@
-import { Audio, ResizeMode } from 'expo-av';
+// Try to import expo-av, fallback if not available
+let Audio: any = null;
+let hasExpoAV = false;
+
+try {
+  const ExpoAV = require('expo-av');
+  Audio = ExpoAV.Audio;
+  hasExpoAV = true;
+} catch (error) {
+  console.warn('[videoConfig] expo-av not available');
+  hasExpoAV = false;
+}
+
 import { logger } from '../services/logger';
 
 /**
@@ -11,7 +23,7 @@ export const VIDEO_DEFAULTS = {
   looping: false, // Use replay limit instead of native looping
   muted: false, // Audio ON by default (Instagram/TikTok style)
   shouldPlay: true,
-  resizeMode: ResizeMode.COVER,
+  resizeMode: 'cover' as const, // ✅ SDK 52: ResizeMode enum removed from expo-av 15
   progressUpdateIntervalMillis: 500,
 };
 
@@ -20,6 +32,11 @@ export const VIDEO_DEFAULTS = {
  * يجب استدعاء هذه الدالة عند بدء التطبيق
  */
 export const configureAudioVideo = async () => {
+  if (!hasExpoAV || !Audio) {
+    logger.warn('⚠️ expo-av not available, skipping audio configuration');
+    return;
+  }
+
   try {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
@@ -48,10 +65,10 @@ export const FALLBACK_VIDEOS = [
  */
 export const isValidVideoUrl = (url: string): boolean => {
   if (!url) return false;
-  
+
   const validExtensions = ['.mp4', '.mov', '.m4v', '.3gp'];
   const lowerUrl = url.toLowerCase();
-  
+
   return validExtensions.some(ext => lowerUrl.includes(ext));
 };
 
