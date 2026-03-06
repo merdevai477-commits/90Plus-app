@@ -55,6 +55,8 @@
     "@clerk/clerk-sdk-node": "^5.1.6",
     "@lucia-auth/adapter-prisma": "^4.0.1",
     "@prisma/client": "^5.22.0",
+    "@sentry/node": "^10.42.0",
+    "@sentry/profiling-node": "^10.42.0",
     "@supabase/supabase-js": "^2.87.1",
     "@types/bull": "^3.15.9",
     "@types/node-cron": "^3.0.11",

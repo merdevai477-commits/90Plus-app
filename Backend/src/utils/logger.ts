@@ -1,9 +1,12 @@
 /**
  * Centralized Logger Service
  * Provides environment-aware logging with consistent formatting
+ * Integrates with Sentry for error tracking in production
  * 
- * Requirements: 4.1, 4.2, 4.3
+ * Requirements: 4.1, 4.2, 4.3, 6.14
  */
+
+import * as Sentry from '@sentry/node';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -26,6 +29,48 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   warn: 2,
   error: 3,
 };
+
+/**
+ * Custom Sentry Transport for Winston-style logging
+ * Forwards error and warn level logs to Sentry for centralized error tracking
+ * 
+ * Requirements: 6.14
+ */
+class SentryTransport {
+  /**
+   * Logs a message and forwards to Sentry if appropriate
+   * @param level - Log level
+   * @param message - Log message
+   * @param metadata - Additional metadata
+   */
+  log(level: LogLevel, message: string, metadata?: Record<string, unknown>): void {
+    // Only send to Sentry in production with valid DSN
+    if (!isProduction() || !process.env.SENTRY_DSN) {
+      return;
+    }
+
+    try {
+      if (level === 'error') {
+        // For error level, capture as exception
+        // Create an Error object from the message string
+        const error = new Error(String(message));
+        Sentry.captureException(error, {
+          level: 'error',
+          extra: metadata || {},
+        });
+      } else if (level === 'warn') {
+        // For warn level, capture as message
+        Sentry.captureMessage(String(message), {
+          level: 'warning',
+          extra: metadata || {},
+        });
+      }
+    } catch (error) {
+      // Silently fail if Sentry capture fails - don't break logging
+      console.error('Failed to send log to Sentry:', error);
+    }
+  }
+}
 
 /**
  * Determines if the current environment is production
@@ -62,6 +107,7 @@ export function shouldLog(
 
 /**
  * Creates a logger instance with the specified configuration
+ * Automatically integrates with Sentry in production
  */
 export function createLogger(config?: Partial<LoggerConfig>): Logger {
   const defaultConfig: LoggerConfig = {
@@ -72,6 +118,9 @@ export function createLogger(config?: Partial<LoggerConfig>): Logger {
 
   const finalConfig = { ...defaultConfig, ...config };
   const productionEnv = isProduction();
+  
+  // Create Sentry transport for production error tracking
+  const sentryTransport = new SentryTransport();
 
   const log = (level: LogLevel, message: string, ...args: unknown[]): void => {
     if (!shouldLog(level, finalConfig.level, productionEnv)) {
@@ -82,6 +131,7 @@ export function createLogger(config?: Partial<LoggerConfig>): Logger {
       ? formatLogMessage(level, message)
       : `[${level.toUpperCase()}] ${message}`;
 
+    // Console logging
     switch (level) {
       case 'debug':
         console.debug(formattedMessage, ...args);
@@ -95,6 +145,16 @@ export function createLogger(config?: Partial<LoggerConfig>): Logger {
       case 'error':
         console.error(formattedMessage, ...args);
         break;
+    }
+    
+    // Forward to Sentry transport (only in production with valid DSN)
+    if (level === 'error' || level === 'warn') {
+      // Extract metadata from args if present
+      const metadata = args.length > 0 && typeof args[0] === 'object' 
+        ? args[0] as Record<string, unknown>
+        : undefined;
+      
+      sentryTransport.log(level, message, metadata);
     }
   };
 
