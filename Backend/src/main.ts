@@ -115,8 +115,16 @@ app.use(
     })
 );
 
-// Morgan logging - use 'combined' in production, 'dev' in development
-app.use(morgan(isProduction ? 'combined' : 'dev'));
+// Morgan logging - custom format with proper spacing for readability
+// Format: METHOD /path STATUS RESPONSE_TIME
+app.use(morgan((tokens, req, res) => {
+    return [
+        tokens.method(req, res),
+        tokens.url(req, res),
+        tokens.status(req, res),
+        tokens['response-time'](req, res), 'ms'
+    ].join(' ');
+}));
 
 // Performance monitoring
 app.use(performanceMiddleware());
