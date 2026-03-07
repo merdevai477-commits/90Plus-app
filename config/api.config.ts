@@ -61,7 +61,8 @@ function isProductionDomain(url: string): boolean {
   return url.includes('railway.app') || 
          url.includes('90plus.app') || 
          url.includes('.up.railway.app') ||
-         url.includes('railway.railway.app');
+         url.includes('railway.railway.app') ||
+         url.includes('fly.dev');
 }
 
 /**
