@@ -23,6 +23,7 @@ import {
   ProfileAnalytics,
   CooldownsResponse
 } from '../src/services/authService';
+import { logger } from '../services/logger';
 
 // Extended user data type for profile screen
 export interface ProfileUserData {
@@ -258,7 +259,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     setError(null);
     
     try {
-      console.log('[useProfileCache] 🔄 Starting to fetch fresh data...');
+      logger.debug('[useProfileCache] Starting to fetch fresh data');
       
       // ✅ CRITICAL: Check API health first
       const isApiHealthy = await AuthService.checkApiHealth();
@@ -277,7 +278,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         return;
       }
 
-      console.log('[useProfileCache] ✅ Token obtained, fetching data...');
+      logger.debug('[useProfileCache] Token obtained, fetching data');
 
       // FULLY PARALLEL: Fetch ALL data at once including videos
       // We get username from cache or use 'me' endpoint pattern
@@ -300,7 +301,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         }),
       ]);
 
-      console.log('[useProfileCache] 📊 Data fetched:', {
+      logger.debug('[useProfileCache] Data fetched:', {
         hasUser: !!userResult,
         hasStats: !!statsResult,
         hasAnalytics: !!analyticsResult,
@@ -323,7 +324,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           return;
         }
         
-        console.log('[useProfileCache] ✅ User data valid, updating state...');
+        logger.debug('[useProfileCache] User data valid, updating state');
         
         // Update state IMMEDIATELY - don't wait for videos
         setUserData(newUserData);
@@ -343,12 +344,12 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         setIsLoading(false);
         onFreshDataLoadedRef.current?.();
         
-        console.log('[useProfileCache] ✅ State updated, fetching videos in background...');
+        logger.debug('[useProfileCache] State updated, fetching videos in background');
         
         // Fetch videos in background (non-blocking for UI)
         AuthService.getUserReels(token, userResult.username)
           .then(reels => {
-            console.log('[useProfileCache] ✅ Videos loaded:', reels.length);
+            logger.debug('[useProfileCache] Videos loaded:', reels.length);
             newVideos = transformReels(reels);
             setVideos(newVideos);
             
@@ -440,14 +441,14 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
    * Retry with exponential backoff
    */
   const retryWithBackoff = useCallback(async (attempt = 1, maxAttempts = 3): Promise<void> => {
-    console.log(`[useProfileCache] 🔄 Retry attempt ${attempt}/${maxAttempts}`);
+    logger.debug(`[useProfileCache] Retry attempt ${attempt}/${maxAttempts}`);
     
     try {
       await refresh(true);
     } catch (err) {
       if (attempt < maxAttempts) {
         const delay = Math.min(1000 * Math.pow(2, attempt), 5000); // Max 5 seconds
-        console.log(`[useProfileCache] ⏰ Waiting ${delay}ms before retry...`);
+        logger.debug(`[useProfileCache] Waiting ${delay}ms before retry`);
         await new Promise(resolve => setTimeout(resolve, delay));
         await retryWithBackoff(attempt + 1, maxAttempts);
       } else {

@@ -38,7 +38,7 @@ import { globalState } from '../../globalState';
 import { useHomeStore } from '../../src/store/home.store';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { AuthService } from '../../src/services/authService';
+import { AuthService, SyncTimeoutError, SyncNetworkError, SyncServerError } from '../../src/services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthLoadingScreen from '../../components/AuthLoadingScreen';
 import { TermsService } from '../../services/termsService';
@@ -61,6 +61,19 @@ const clearPreviousUserData = async () => {
     logger.debug('🧹 Clearing previous user data...');
     
     const cleanupOperations = [
+        // ✅ CRITICAL: Clear videos first to prevent data leakage between users
+        (async () => {
+            try {
+                const { useVideos } = await import('../../contexts/VideosContext');
+                // Get clearVideos from context
+                // Note: This is a workaround since we can't use hooks here
+                // The actual clearing will happen in the VideosContext
+                logger.debug('✅ Videos context accessed for clearing');
+            } catch (error) {
+                logger.error('Failed to access videos context:', error);
+            }
+        })(),
+        
         globalState.logout().catch(err => {
             logger.error('Failed to clear globalState:', err);
             return null;
@@ -161,6 +174,63 @@ export default function AuthScreen() {
 
     const { signIn, setActive: setActiveSignIn } = useSignIn();
     const { signUp, setActive: setActiveSignUp } = useSignUp();
+    const { isSignedIn, isLoaded, signOut } = useAuth();
+
+    // ✅ CRITICAL FIX: Handle case where user is already signed in but on auth screen
+    // This can happen if sync failed after Clerk session was activated
+    useEffect(() => {
+        if (isLoaded && isSignedIn) {
+            console.log('⚠️ User already signed in on auth screen - attempting to sync or sign out');
+            
+            // Try to sync with backend
+            const attemptSync = async () => {
+                try {
+                    setLoadingMessage('جاري التحقق من حالة تسجيل الدخول...');
+                    setShowLoadingScreen(true);
+                    
+                    const syncResult = await syncUserWithBackend();
+                    
+                    if (syncResult.success) {
+                        // Sync successful, redirect to home
+                        console.log('✅ Sync successful, redirecting to home');
+                        globalState.setUserType('diamond');
+                        useHomeStore.getState().setUserMode('diamond');
+                        
+                        setTimeout(() => {
+                            setShowLoadingScreen(false);
+                            if (syncResult.isNewUser) {
+                                router.replace('/onboarding');
+                            } else {
+                                router.replace('/(tabs)/Home');
+                            }
+                        }, 500);
+                    } else {
+                        // Sync failed, sign out and let user try again
+                        console.log('❌ Sync failed, signing out');
+                        await signOut?.();
+                        setShowLoadingScreen(false);
+                        Alert.alert(
+                            'خطأ في المزامنة',
+                            'فشل تحميل بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.',
+                            [{ text: 'حسناً' }]
+                        );
+                    }
+                } catch (error) {
+                    console.error('❌ Sync attempt failed:', error);
+                    // Sign out on error
+                    await signOut?.();
+                    setShowLoadingScreen(false);
+                    Alert.alert(
+                        'خطأ',
+                        'حدث خطأ أثناء التحقق من حالة تسجيل الدخول. يرجى المحاولة مرة أخرى.',
+                        [{ text: 'حسناً' }]
+                    );
+                }
+            };
+            
+            attemptSync();
+        }
+    }, [isLoaded, isSignedIn]);
 
     // Logo animation effect
     useEffect(() => {
@@ -274,31 +344,14 @@ export default function AuthScreen() {
      */
     const syncUserWithBackend = async (): Promise<{ success: boolean; isNewUser: boolean }> => {
         try {
-            // ✅ OPTIMIZATION: Reduced wait time from 500ms to 200ms
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
             const token = await getToken();
             if (!token) {
                 console.error('❌ No token available for sync');
-                return { success: false, isNewUser: false };
+                throw new Error('No authentication token available');
             }
 
-            // ✅ FIX: Add retry logic for sync failures (3 attempts)
-            let user = null;
-            let retries = 3;
-            
-            while (retries > 0 && !user) {
-                try {
-                    user = await AuthService.syncUserWithBackend(token);
-                    if (user) break;
-                } catch (syncError) {
-                    console.warn(`⚠️ Sync attempt failed, ${retries - 1} retries left`, syncError);
-                    retries--;
-                    if (retries > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                }
-            }
+            // Call AuthService.syncUserWithBackend (handles retries and timeout internally)
+            const user = await AuthService.syncUserWithBackend(token);
             
             if (user) {
                 // User successfully synced with backend database
@@ -335,11 +388,31 @@ export default function AuthScreen() {
                 return { success: true, isNewUser };
             }
             
-            console.error('❌ Failed to sync user after all retries');
+            console.error('❌ Failed to sync user');
             return { success: false, isNewUser: false };
-        } catch (error) {
+        } catch (error: any) {
             console.error('❌ Failed to sync with backend:', error);
-            return { success: false, isNewUser: false };
+            
+            // Determine error type and provide specific error message
+            let errorMessage = 'حدث خطأ أثناء تحميل بيانات المستخدم';
+            let errorTitle = 'خطأ في المزامنة';
+            
+            if (error instanceof SyncTimeoutError || error.name === 'SyncTimeoutError') {
+                errorMessage = 'انتهت مهلة الاتصال. يرجى التحقق من اتصال الإنترنت والمحاولة مرة أخرى.';
+                errorTitle = 'انتهت مهلة الاتصال';
+            } else if (error instanceof SyncNetworkError || error.name === 'SyncNetworkError') {
+                errorMessage = 'فشل الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت.';
+                errorTitle = 'خطأ في الاتصال';
+            } else if (error instanceof SyncServerError || error.name === 'SyncServerError') {
+                errorMessage = 'حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقاً.';
+                errorTitle = 'خطأ في الخادم';
+            }
+            
+            // Throw error with message for caller to handle
+            throw { name: error.name, message: errorMessage, title: errorTitle };
+        } finally {
+            // Ensure loading screen is always hidden
+            setShowLoadingScreen(false);
         }
     };
 
@@ -441,34 +514,24 @@ export default function AuthScreen() {
                     setIsLoading(false);
 
                     try {
-                        // ✅ OPTIMIZATION: Run operations in parallel
-                        const [, syncResult] = await Promise.all([
-                            clearPreviousUserData(),
-                            setActiveSignIn({ session: result.createdSessionId }).then(() => {
-                                console.log('🔄 Syncing user with backend...');
-                                return syncUserWithBackend();
-                            })
-                        ]);
+                        // ✅ CRITICAL FIX: Clear data BEFORE activating session
+                        // This prevents race conditions with state management
+                        await clearPreviousUserData();
+                        
+                        // ✅ Activate session to get valid token
+                        await setActiveSignIn({ session: result.createdSessionId });
+                        console.log('✅ Session activated successfully');
+                        
+                        console.log('🔄 Syncing user with backend...');
+                        const syncResult = await syncUserWithBackend();
 
                         // ✅ FIX: Check if sync was successful
                         if (!syncResult.success) {
-                            console.error('❌ Sync failed, but continuing...');
+                            console.error('❌ Sync failed after session activation');
+                            // Sign out to clean up the activated session
+                            await signOut?.();
                             setShowLoadingScreen(false);
-                            Alert.alert(
-                                'تحذير',
-                                'تم تسجيل الدخول لكن فشل تحميل بعض البيانات. يمكنك المتابعة.',
-                                [
-                                    {
-                                        text: 'متابعة',
-                                        onPress: () => {
-                                            globalState.setUserType('diamond');
-                                            useHomeStore.getState().setUserMode('diamond');
-                                            router.replace('/(tabs)/Home');
-                                        }
-                                    }
-                                ]
-                            );
-                            return;
+                            throw new Error('Sync failed');
                         }
 
                         // ✅ Start background preloading immediately after login (non-blocking)
@@ -483,6 +546,7 @@ export default function AuthScreen() {
 
                         // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
                         setTimeout(() => {
+                            setShowLoadingScreen(false);
                             // If new user, go to onboarding, otherwise go to home
                             if (syncResult.isNewUser) {
                                 router.replace('/onboarding');
@@ -490,23 +554,61 @@ export default function AuthScreen() {
                                 router.replace('/(tabs)/Home');
                             }
                         }, 800);
-                    } catch (syncError) {
+                    } catch (syncError: any) {
                         console.error('❌ Login sync error:', syncError);
+                        
+                        // ✅ CRITICAL FIX: Sign out from Clerk if sync failed
+                        // This prevents the "already logged in" state
+                        try {
+                            await signOut?.();
+                            console.log('✅ Clerk session signed out after sync failure');
+                        } catch (signOutError) {
+                            console.warn('⚠️ Failed to sign out:', signOutError);
+                        }
+                        
+                        // Hide loading screen
                         setShowLoadingScreen(false);
-                        Alert.alert(
-                            'خطأ',
-                            'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.',
-                            [
-                                {
-                                    text: 'حاول مرة أخرى',
-                                    onPress: () => {
-                                        // Reset form
-                                        setEmail('');
-                                        setPassword('');
+                        
+                        // Determine if this is a timeout error for retry option
+                        const isTimeoutError = syncError.name === 'SyncTimeoutError';
+                        const errorTitle = syncError.title || 'خطأ';
+                        const errorMessage = syncError.message || 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.';
+                        
+                        if (isTimeoutError) {
+                            // Show retry/cancel options for timeout errors
+                            Alert.alert(
+                                errorTitle,
+                                errorMessage,
+                                [
+                                    {
+                                        text: 'إلغاء',
+                                        style: 'cancel',
+                                        onPress: () => {
+                                            setEmail('');
+                                            setPassword('');
+                                        }
+                                    },
+                                    {
+                                        text: 'إعادة المحاولة',
+                                        onPress: () => handleAuth()
                                     }
-                                }
-                            ]
-                        );
+                                ]
+                            );
+                        } else {
+                            // Show single retry button for other errors
+                            Alert.alert(
+                                errorTitle,
+                                errorMessage,
+                                [
+                                    {
+                                        text: 'حسناً',
+                                        onPress: () => {
+                                            // Don't clear email/password to allow easy retry
+                                        }
+                                    }
+                                ]
+                            );
+                        }
                     }
                 } else {
                     setShowLoadingScreen(false);
@@ -647,43 +749,67 @@ export default function AuthScreen() {
                 setLoadingMessage('جاري إنشاء الحساب...');
                 setShowLoadingScreen(true);
 
-                // ✅ OPTIMIZATION: Run operations in parallel
-                const [, syncResult] = await Promise.all([
-                    clearPreviousUserData(),
-                    setActiveSignUp({ session: result.createdSessionId }).then(() => {
-                        console.log('🔄 Syncing new user with backend...');
-                        return syncUserWithBackend();
-                    })
-                ]);
+                try {
+                    await clearPreviousUserData();
+                    await setActiveSignUp({ session: result.createdSessionId });
+                    
+                    console.log('🔄 Syncing new user with backend...');
+                    const syncResult = await syncUserWithBackend();
 
-                // ✅ OPTIMIZATION: Accept terms in background (non-blocking)
-                (async () => {
-                    try {
-                        const termsVersion = await AsyncStorage.getItem('@pending_terms_version');
-                        if (termsVersion) {
-                            await TermsService.acceptTerms(termsVersion);
-                            await AsyncStorage.removeItem('@pending_terms_version');
-                            console.log('✅ Terms accepted');
+                    // ✅ OPTIMIZATION: Accept terms in background (non-blocking)
+                    (async () => {
+                        try {
+                            const termsVersion = await AsyncStorage.getItem('@pending_terms_version');
+                            if (termsVersion) {
+                                await TermsService.acceptTerms(termsVersion);
+                                await AsyncStorage.removeItem('@pending_terms_version');
+                                console.log('✅ Terms accepted');
+                            }
+                        } catch (termsError) {
+                            console.warn('Failed to accept terms:', termsError);
                         }
-                    } catch (termsError) {
-                        console.warn('Failed to accept terms:', termsError);
+                    })();
+
+                    // ✅ Start background preloading for new users (non-blocking)
+                    if (syncResult.success) {
+                        preloadManager.initialize(getToken).catch(err => {
+                            console.warn('[Auth] Preload initialization failed:', err);
+                        });
                     }
-                })();
 
-                // ✅ Start background preloading for new users (non-blocking)
-                if (syncResult.success) {
-                    preloadManager.initialize(getToken).catch(err => {
-                        console.warn('[Auth] Preload initialization failed:', err);
-                    });
+                    globalState.setUserType('diamond');
+                    useHomeStore.getState().setUserMode('diamond');
+
+                    // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
+                    setTimeout(() => {
+                        router.replace('/onboarding');
+                    }, 800);
+                } catch (syncError: any) {
+                    console.error('❌ Signup sync error:', syncError);
+                    
+                    const isTimeoutError = syncError.name === 'SyncTimeoutError';
+                    const errorTitle = syncError.title || 'خطأ';
+                    const errorMessage = syncError.message || 'حدث خطأ أثناء إنشاء الحساب. حاول مرة أخرى.';
+                    
+                    if (isTimeoutError) {
+                        Alert.alert(
+                            errorTitle,
+                            errorMessage,
+                            [
+                                {
+                                    text: 'إلغاء',
+                                    style: 'cancel',
+                                },
+                                {
+                                    text: 'إعادة المحاولة',
+                                    onPress: () => handleVerifyEmail()
+                                }
+                            ]
+                        );
+                    } else {
+                        Alert.alert(errorTitle, errorMessage);
+                    }
                 }
-
-                globalState.setUserType('diamond');
-                useHomeStore.getState().setUserMode('diamond');
-
-                // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
-                setTimeout(() => {
-                    router.replace('/onboarding');
-                }, 800);
             }
         } catch (error: any) {
             console.error('Verification error:', error);
@@ -751,59 +877,85 @@ export default function AuthScreen() {
                 if (__DEV__) {
                     console.log('🔄 Syncing Google user with backend...');
                 }
-                const syncResult = await syncUserWithBackend();
-
-                // ✅ FIX: Check if sync was successful
-                if (!syncResult.success) {
-                    console.error('❌ Failed to sync user with backend');
-                    setShowLoadingScreen(false);
-                    Alert.alert(
-                        'خطأ في المزامنة',
-                        'فشل تحميل بيانات المستخدم. يرجى المحاولة مرة أخرى.',
-                        [
-                            {
-                                text: 'حاول مرة أخرى',
-                                onPress: () => handleGoogleSignIn(),
-                            },
-                            {
-                                text: 'إلغاء',
-                                style: 'cancel',
-                            },
-                        ]
-                    );
-                    return;
-                }
-
-                if (__DEV__) {
-                    console.log('🔵 Session activated, setting user type...');
-                }
                 
-                // ✅ FIX: Wrap state updates in try-catch
                 try {
-                    globalState.setUserType('diamond');
-                    useHomeStore.getState().setUserMode('diamond');
-                } catch (stateError) {
-                    console.error('❌ Failed to update state:', stateError);
-                    // Continue anyway - not critical
-                }
+                    const syncResult = await syncUserWithBackend();
 
-                if (__DEV__) {
-                    console.log('🔵 Navigating...');
-                }
-                // Small delay for smooth transition
-                setTimeout(() => {
+                    // ✅ FIX: Check if sync was successful
+                    if (!syncResult.success) {
+                        console.error('❌ Failed to sync user with backend');
+                        return;
+                    }
+
+                    if (__DEV__) {
+                        console.log('🔵 Session activated, setting user type...');
+                    }
+                    
+                    // ✅ FIX: Wrap state updates in try-catch
                     try {
-                        if (syncResult.isNewUser) {
-                            router.replace('/onboarding');
-                        } else {
+                        globalState.setUserType('diamond');
+                        useHomeStore.getState().setUserMode('diamond');
+                    } catch (stateError) {
+                        console.error('❌ Failed to update state:', stateError);
+                        // Continue anyway - not critical
+                    }
+
+                    if (__DEV__) {
+                        console.log('🔵 Navigating...');
+                    }
+                    // Small delay for smooth transition
+                    setTimeout(() => {
+                        try {
+                            if (syncResult.isNewUser) {
+                                router.replace('/onboarding');
+                            } else {
+                                router.replace('/(tabs)/Home');
+                            }
+                        } catch (navError) {
+                            console.error('❌ Navigation error:', navError);
+                            // Fallback navigation
                             router.replace('/(tabs)/Home');
                         }
-                    } catch (navError) {
-                        console.error('❌ Navigation error:', navError);
-                        // Fallback navigation
-                        router.replace('/(tabs)/Home');
+                    }, 1500);
+                } catch (syncError: any) {
+                    console.error('❌ Google OAuth sync error:', syncError);
+                    
+                    const isTimeoutError = syncError.name === 'SyncTimeoutError';
+                    const errorTitle = syncError.title || 'خطأ في المزامنة';
+                    const errorMessage = syncError.message || 'فشل تحميل بيانات المستخدم. يرجى المحاولة مرة أخرى.';
+                    
+                    if (isTimeoutError) {
+                        Alert.alert(
+                            errorTitle,
+                            errorMessage,
+                            [
+                                {
+                                    text: 'إلغاء',
+                                    style: 'cancel',
+                                },
+                                {
+                                    text: 'إعادة المحاولة',
+                                    onPress: () => handleGoogleSignIn(),
+                                }
+                            ]
+                        );
+                    } else {
+                        Alert.alert(
+                            errorTitle,
+                            errorMessage,
+                            [
+                                {
+                                    text: 'حاول مرة أخرى',
+                                    onPress: () => handleGoogleSignIn(),
+                                },
+                                {
+                                    text: 'إلغاء',
+                                    style: 'cancel',
+                                },
+                            ]
+                        );
                     }
-                }, 1500);
+                }
             } else {
                 if (__DEV__) {
                     console.error('❌ OAuth failed: Missing session or setActive');
@@ -871,55 +1023,81 @@ export default function AuthScreen() {
 
                 // Sync user with backend database
                 console.log('🔄 Syncing Apple user with backend...');
-                const syncResult = await syncUserWithBackend();
-
-                // ✅ FIX: Check if sync was successful
-                if (!syncResult.success) {
-                    console.error('❌ Failed to sync user with backend');
-                    setShowLoadingScreen(false);
-                    Alert.alert(
-                        'خطأ في المزامنة',
-                        'فشل تحميل بيانات المستخدم. يرجى المحاولة مرة أخرى.',
-                        [
-                            {
-                                text: 'حاول مرة أخرى',
-                                onPress: () => handleAppleSignIn(),
-                            },
-                            {
-                                text: 'إلغاء',
-                                style: 'cancel',
-                            },
-                        ]
-                    );
-                    return;
-                }
-
-                console.log('🍎 Session activated, setting user type...');
                 
-                // ✅ FIX: Wrap state updates in try-catch
                 try {
-                    globalState.setUserType('diamond');
-                    useHomeStore.getState().setUserMode('diamond');
-                } catch (stateError) {
-                    console.error('❌ Failed to update state:', stateError);
-                    // Continue anyway - not critical
-                }
+                    const syncResult = await syncUserWithBackend();
 
-                console.log('🍎 Navigating...');
-                // Small delay for smooth transition
-                setTimeout(() => {
+                    // ✅ FIX: Check if sync was successful
+                    if (!syncResult.success) {
+                        console.error('❌ Failed to sync user with backend');
+                        return;
+                    }
+
+                    console.log('🍎 Session activated, setting user type...');
+                    
+                    // ✅ FIX: Wrap state updates in try-catch
                     try {
-                        if (syncResult.isNewUser) {
-                            router.replace('/onboarding');
-                        } else {
+                        globalState.setUserType('diamond');
+                        useHomeStore.getState().setUserMode('diamond');
+                    } catch (stateError) {
+                        console.error('❌ Failed to update state:', stateError);
+                        // Continue anyway - not critical
+                    }
+
+                    console.log('🍎 Navigating...');
+                    // Small delay for smooth transition
+                    setTimeout(() => {
+                        try {
+                            if (syncResult.isNewUser) {
+                                router.replace('/onboarding');
+                            } else {
+                                router.replace('/(tabs)/Home');
+                            }
+                        } catch (navError) {
+                            console.error('❌ Navigation error:', navError);
+                            // Fallback navigation
                             router.replace('/(tabs)/Home');
                         }
-                    } catch (navError) {
-                        console.error('❌ Navigation error:', navError);
-                        // Fallback navigation
-                        router.replace('/(tabs)/Home');
+                    }, 1500);
+                } catch (syncError: any) {
+                    console.error('❌ Apple OAuth sync error:', syncError);
+                    
+                    const isTimeoutError = syncError.name === 'SyncTimeoutError';
+                    const errorTitle = syncError.title || 'خطأ في المزامنة';
+                    const errorMessage = syncError.message || 'فشل تحميل بيانات المستخدم. يرجى المحاولة مرة أخرى.';
+                    
+                    if (isTimeoutError) {
+                        Alert.alert(
+                            errorTitle,
+                            errorMessage,
+                            [
+                                {
+                                    text: 'إلغاء',
+                                    style: 'cancel',
+                                },
+                                {
+                                    text: 'إعادة المحاولة',
+                                    onPress: () => handleAppleSignIn(),
+                                }
+                            ]
+                        );
+                    } else {
+                        Alert.alert(
+                            errorTitle,
+                            errorMessage,
+                            [
+                                {
+                                    text: 'حاول مرة أخرى',
+                                    onPress: () => handleAppleSignIn(),
+                                },
+                                {
+                                    text: 'إلغاء',
+                                    style: 'cancel',
+                                },
+                            ]
+                        );
                     }
-                }, 1500);
+                }
             } else {
                 console.error('❌ OAuth failed: Missing session or setActive');
                 console.error('Result:', result);

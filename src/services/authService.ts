@@ -4,8 +4,44 @@ import { logger } from './logger';
 
 const API_URL = getApiUrl();
 
+// Custom error classes for sync operations
+export class SyncTimeoutError extends Error {
+    constructor(message: string = 'Sync operation timeout after 15 seconds') {
+        super(message);
+        this.name = 'SyncTimeoutError';
+    }
+}
+
+export class SyncNetworkError extends Error {
+    constructor(message: string = 'Network error during sync operation') {
+        super(message);
+        this.name = 'SyncNetworkError';
+    }
+}
+
+export class SyncServerError extends Error {
+    constructor(message: string = 'Server error during sync operation', public statusCode?: number) {
+        super(message);
+        this.name = 'SyncServerError';
+    }
+}
+
+export class SyncValidationError extends Error {
+    constructor(message: string = 'Invalid response data from server') {
+        super(message);
+        this.name = 'SyncValidationError';
+    }
+}
+
 // ✅ CRITICAL FIX: Increase timeout to 30 seconds (was 10s)
 const API_TIMEOUT = 30000; // 30 seconds for slow connections
+
+// Overall sync operation timeout (15 seconds)
+const SYNC_OPERATION_TIMEOUT = 15000; // 15 seconds total for sync operation
+
+// Retry configuration
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 500; // Reduced from 1000ms to 500ms
 
 // ✅ SUPER SPEED: In-memory cache for instant responses
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
@@ -95,8 +131,13 @@ export interface AuthResponse {
  * Handles all communication with the backend for user authentication
  */
 export class AuthService {
-    static getTrendingHashtags: any;
-    /**
+  /**
+   * Get trending hashtags
+   * @returns Promise<string[]> Array of trending hashtag strings
+   */
+  static getTrendingHashtags: () => Promise<string[]>;
+  
+  /**
      * Check if API is reachable
      */
     static async checkApiHealth(): Promise<boolean> {
@@ -123,61 +164,151 @@ export class AuthService {
      * This creates the user in the database if they don't exist
      * ✅ SUPER SPEED: Uses memory cache + timeout for instant response
      * ✅ DEBOUNCING: Prevents multiple simultaneous calls
+     * ✅ TIMEOUT: 15-second overall timeout with proper error handling
+     * ✅ VALIDATION: Validates response data for required fields
      */
     static async syncUserWithBackend(token: string): Promise<UserProfile | null> {
-        try {
-            // ✅ SUPER SPEED: Check memory cache first
-            const cacheKey = `user_${token.substring(0, 20)}`;
-            const cached = getFromMemoryCache(cacheKey);
-            if (cached) {
-                logger.debug('⚡ User from memory cache');
-                return cached;
-            }
+        const startTime = Date.now();
+        
+        // ✅ SUPER SPEED: Check memory cache first
+        const cacheKey = `user_${token.substring(0, 20)}`;
+        const cached = getFromMemoryCache(cacheKey);
+        if (cached) {
+            logger.debug('⚡ User from memory cache');
+            return cached;
+        }
 
-            // ✅ DEBOUNCING: Cancel previous call if new one comes within 500ms
-            const existingTimer = syncDebounceTimers.get(cacheKey);
-            if (existingTimer) {
-                clearTimeout(existingTimer);
-            }
+        // ✅ DEBOUNCING: Cancel previous call if new one comes within 500ms
+        const existingTimer = syncDebounceTimers.get(cacheKey);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
 
-            // Return a promise that will resolve after debounce period
-            return new Promise((resolve) => {
-                const timer = setTimeout(async () => {
+        // Check if we're already close to timeout threshold - skip debounce if so
+        const shouldSkipDebounce = false; // Always apply debounce for first call
+
+        // Wait for debounce if needed (but don't count it against timeout)
+        if (!shouldSkipDebounce) {
+            await new Promise<void>((resolve) => {
+                const timer = setTimeout(() => {
                     syncDebounceTimers.delete(cacheKey);
-                    
-                    try {
-                        logger.debug('🔄 Syncing user with backend...');
-
-                        const response = await fetchWithTimeout(`${API_URL}/clerk/me`, {
-                            method: 'GET',
-                            headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json',
-                            },
-                        });
-
-                        const data: AuthResponse = await response.json();
-
-                        if (data.status === 'SUCCESS' && data.data?.user) {
-                            logger.debug('✅ User synced successfully:', data.data.user.username);
-                            // ✅ Cache in memory for instant future access
-                            setMemoryCache(cacheKey, data.data.user);
-                            resolve(data.data.user);
-                        } else {
-                            // Silent error handling - don't log sync errors
-                            resolve(null);
-                        }
-                    } catch (error: any) {
-                        // Silent error handling - don't log sync errors (including rate limits)
-                        resolve(null);
-                    }
+                    resolve();
                 }, SYNC_DEBOUNCE_MS);
-
                 syncDebounceTimers.set(cacheKey, timer);
             });
+        }
+
+        // NOW start the timeout - after debounce completes
+        const syncStartTime = Date.now();
+        
+        // Create timeout promise that rejects after 15 seconds FROM NOW
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+                reject(new SyncTimeoutError('Sync operation timeout after 15 seconds'));
+            }, SYNC_OPERATION_TIMEOUT);
+        });
+
+        // Create the actual sync operation promise
+        const syncPromise = new Promise<UserProfile>(async (resolve, reject) => {
+            let lastError: Error | null = null;
+            
+            // Retry logic with reduced delays
+            for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+                try {
+                    logger.debug(`🔄 Syncing user with backend (attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...`);
+
+                    const response = await fetchWithTimeout(`${API_URL}/clerk/me`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                        },
+                    });
+
+                    // Handle non-OK responses
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new SyncServerError(
+                            `Server returned ${response.status}: ${errorText}`,
+                            response.status
+                        );
+                    }
+
+                    const data: AuthResponse = await response.json();
+
+                    // Validate response structure
+                    if (data.status !== 'SUCCESS' || !data.data?.user) {
+                        throw new SyncServerError('Invalid response structure from server');
+                    }
+
+                    const user = data.data.user;
+
+                    // Validate required fields
+                    if (!user.id || !user.username) {
+                        throw new SyncValidationError('Response missing required fields (id, username)');
+                    }
+
+                    logger.debug('✅ User synced successfully:', user.username);
+                    
+                    // ✅ Cache in memory for instant future access
+                    setMemoryCache(cacheKey, user);
+                    
+                    resolve(user);
+                    return;
+                } catch (error: any) {
+                    lastError = error;
+                    
+                    // Determine if error is retryable
+                    const isRetryable = 
+                        error.name === 'SyncNetworkError' ||
+                        (error.name === 'SyncServerError' && error.statusCode && error.statusCode >= 500) ||
+                        error.message?.includes('timeout') ||
+                        error.message?.includes('network');
+
+                    // If not retryable or last attempt, reject immediately
+                    if (!isRetryable || attempt === MAX_RETRY_ATTEMPTS) {
+                        // Convert generic errors to specific error types
+                        if (error.name === 'SyncTimeoutError' || error.name === 'SyncNetworkError' || 
+                            error.name === 'SyncServerError' || error.name === 'SyncValidationError') {
+                            reject(error);
+                        } else if (error.message?.includes('timeout') || error.message?.includes('Request timeout')) {
+                            reject(new SyncNetworkError('Network timeout during sync operation'));
+                        } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+                            reject(new SyncNetworkError(error.message));
+                        } else {
+                            reject(new SyncServerError(error.message || 'Unknown error during sync'));
+                        }
+                        return;
+                    }
+
+                    // Wait before retry (reduced to 500ms)
+                    logger.debug(`⚠️ Sync attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+                }
+            }
+
+            // If we get here, all retries failed
+            if (lastError) {
+                reject(lastError);
+            } else {
+                reject(new SyncServerError('All sync attempts failed'));
+            }
+        });
+
+        // Race between timeout and sync operation
+        try {
+            const result = await Promise.race([syncPromise, timeoutPromise]);
+            return result;
         } catch (error: any) {
-            console.error('❌ Error syncing user with backend:', error);
-            return null;
+            // Clean up debounce timer on error
+            const timer = syncDebounceTimers.get(cacheKey);
+            if (timer) {
+                clearTimeout(timer);
+                syncDebounceTimers.delete(cacheKey);
+            }
+            
+            // Re-throw the error for UI layer to handle
+            throw error;
         }
     }
 
