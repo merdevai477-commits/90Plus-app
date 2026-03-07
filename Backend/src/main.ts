@@ -53,6 +53,7 @@ const corsOrigins = isProduction
           process.env.CORS_ORIGIN || 'https://api.90plus.app',
           'https://90plus.app',
           /^https:\/\/.*\.90plus\.app$/, // Production domains
+          /^footballproapp:\/\//, // Mobile app deep links
       ]
     : [
           process.env.CORS_ORIGIN || 'http://localhost:8081',
