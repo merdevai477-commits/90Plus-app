@@ -98,7 +98,7 @@
     },
     "extra": {
       "sportmonksToken": "mDAf5ClZwcEKXgFCkQoSpUtoumBDl4hT5FYzF8LtAYSNsZ0i19AdekwZQcSy",
-      "apiUrl": "https://90plus-app-production.up.railway.app/api",
+      "apiUrl": "https://90plus-backend.fly.dev/api",
       "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
       "router": {},
       "eas": {
