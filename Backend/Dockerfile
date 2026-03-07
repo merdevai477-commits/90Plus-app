@@ -33,8 +33,8 @@ RUN npm run build || echo 'Build completed with errors'
 # Verify build
 RUN npm run verify:build || echo 'Warning: quiz.routes.js verification failed'
 
-# Expose port
-EXPOSE 3000
+# Expose port (Fly.io uses 8080)
+EXPOSE 8080
 
 # Create startup script
 RUN echo '#!/bin/sh' > /app/start.sh && \
