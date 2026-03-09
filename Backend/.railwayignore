@@ -1,47 +1,13 @@
 # Railway ignore file
-# Files and directories to exclude from deployment
-
-# Dependencies
 node_modules/
-
-# Build artifacts
 dist/
-*.tsbuildinfo
-
-# Development files
-.env
 .env.local
-.env.*.local
-
-# Test files
-**/__tests__/
-**/*.test.ts
-**/*.spec.ts
+.env.development
+*.log
+.DS_Store
 coverage/
-
-# Documentation
-*.md
-docs/
-
-# Scripts
-*.ps1
-*.sh
-
-# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-tmp/
-temp/
-.cache/
-
-# Nixpacks generated files
-.nixpacks/
-
+*.test.ts
+*.spec.ts
+__tests__/
