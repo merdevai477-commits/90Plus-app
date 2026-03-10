@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npx prisma generate && npm run build"
+nixpacksConfigPath = "nixpacks.toml"
 
 [deploy]
 startCommand = "npm run start:prod"
