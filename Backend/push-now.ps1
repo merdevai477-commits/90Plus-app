@@ -15,7 +15,7 @@ if (-not (Test-Path ".git")) {
 $remote = git remote get-url origin 2>$null
 if (-not $remote) {
     Write-Host "❌ Error: No remote 'origin' configured" -ForegroundColor Red
-    Write-Host "Run: git remote add origin https://github.com/mrdev7479-sys/90-plus.git" -ForegroundColor Yellow
+    Write-Host "Run: git remote add origin https://github.com/merdevai477-commits/90-plus.git" -ForegroundColor Yellow
     exit 1
 }
 
