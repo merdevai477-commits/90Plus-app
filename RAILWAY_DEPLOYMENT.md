@@ -1,33 +1,50 @@
 # 🚂 Railway Deployment Guide
 
+## ⚠️ IMPORTANT: Fix Railpack Detection Issue
+
+If Railway uses "Railpack" instead of "Nixpacks", follow these steps:
+
+1. **Delete `railway.json`** (already done in this repo)
+2. **Verify `railway.toml` exists** with `builder = "NIXPACKS"`
+3. **In Railway Dashboard → Settings:**
+   - Builder: Select "NIXPACKS" (not Railpack or Dockerfile)
+   - Build Command: `npm install && npx prisma generate && npm run build`
+   - Start Command: `npm run start:prod`
+4. **Redeploy** the service
+
+---
+
 ## خطوات النشر على Railway
 
 ### 1. إنشاء مشروع جديد
 1. افتح [Railway Dashboard](https://railway.app/dashboard)
 2. اضغط على "New Project"
 3. اختر "Deploy from GitHub repo"
-4. اختار الـ repo بتاعك
-5. اختار الـ `Backend` folder
+4. اختار الـ repo بتاعك: `https://github.com/mrdev7479-sys/90-plus.git`
+5. اختار الـ `Backend` folder (Root Directory: `/Backend`)
 
 ### 2. إضافة PostgreSQL Database
 1. في الـ project، اضغط على "+ New"
 2. اختر "Database" → "Add PostgreSQL"
 3. انتظر لحد ما الـ database يتنشئ
+4. **أو استخدم Neon PostgreSQL** (الموجود بالفعل):
+   - اضغط على Backend service → Variables
+   - أضف `DATABASE_URL` بقيمة Neon connection string
 
 ### 3. إضافة Environment Variables
 
 اضغط على الـ Backend service → Variables → Raw Editor والصق الآتي:
 
 ```env
-# Database (سيتم ملؤها تلقائياً من PostgreSQL)
-DATABASE_URL=${{Postgres.DATABASE_URL}}
+# Database (استخدم Neon PostgreSQL الموجود)
+DATABASE_URL=postgresql://neondb_owner:your_password@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 
 # Clerk Authentication
 CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
 CLERK_SECRET_KEY=your_clerk_secret_key
 CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
 
-# Redis (Upstash)
+# Redis (Upstash - موجود بالفعل)
 REDIS_URL=your_upstash_redis_url
 
 # API Keys
