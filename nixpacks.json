@@ -1,14 +1,11 @@
 {
-  "variables": {
-    "NODE_VERSION": "20"
-  },
   "phases": {
     "setup": {
-      "nixPkgs": ["nodejs_20", "openssl"]
+      "nixPkgs": ["nodejs_20", "npm-9_x", "openssl"]
     },
     "install": {
       "cmds": [
-        "npm install",
+        "npm ci --prefer-offline --no-audit",
         "npx prisma generate"
       ]
     },
