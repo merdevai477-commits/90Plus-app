@@ -2,14 +2,32 @@ import { clerkClient } from '@clerk/clerk-sdk-node';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
+// ✅ Cache for Clerk API responses (5 minutes TTL)
+const clerkUserCache = new Map<string, { data: any; timestamp: number }>();
+const CLERK_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// ✅ Timeout wrapper for Clerk API calls
+const clerkApiWithTimeout = async <T>(
+    apiCall: () => Promise<T>,
+    timeoutMs: number = 10000 // 10 seconds timeout
+): Promise<T> => {
+    return Promise.race([
+        apiCall(),
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error('Clerk API timeout')), timeoutMs)
+        ),
+    ]);
+};
+
 export class ClerkUserService {
     /**
      * Find or create user from Clerk ID
      * This syncs Clerk user data with our database
+     * ✅ OPTIMIZED: Added caching and timeout for Clerk API
      */
     static async findOrCreateUser(clerkUserId: string) {
         try {
-            logger.info(`[findOrCreateUser] 🔍 Looking for user: ${clerkUserId}`);
+            logger.info(`[findOrCreateUser] � Looking for user: ${clerkUserId}`);
             
             // Check if user exists by clerkUserId
             let user = await prisma.user.findUnique({
@@ -18,26 +36,71 @@ export class ClerkUserService {
 
             if (user) {
                 logger.info(`[findOrCreateUser] ✅ User found: ${user.username} (${user.id})`);
-                // Update login streak for existing user
-                await this.updateLoginStreak(user.id);
+                // Update login streak for existing user (non-blocking)
+                this.updateLoginStreak(user.id).catch(err => 
+                    logger.warn(`[findOrCreateUser] ⚠️ Failed to update login streak:`, err)
+                );
                 return user;
             }
 
-            logger.info(`[findOrCreateUser] 📡 User not found, fetching from Clerk...`);
+            logger.info(`[findOrCreateUser] � User not found, fetching from Clerk...`);
 
-            // User doesn't exist, fetch from Clerk and create
+            // ✅ Check Clerk cache first
+            const cached = clerkUserCache.get(clerkUserId);
             let clerkUser;
-            try {
-                clerkUser = await clerkClient.users.getUser(clerkUserId);
-                logger.info(`[findOrCreateUser] ✅ Clerk user fetched: ${clerkUser.id}`);
-            } catch (clerkError: any) {
-                logger.error(`[findOrCreateUser] ❌ Failed to fetch from Clerk:`, clerkError);
-                throw new Error(`Failed to fetch user from Clerk: ${clerkError.message}`);
+            
+            if (cached && Date.now() - cached.timestamp < CLERK_CACHE_TTL) {
+                logger.info(`[findOrCreateUser] ⚡ Using cached Clerk data`);
+                clerkUser = cached.data;
+            } else {
+                // User doesn't exist, fetch from Clerk with timeout
+                try {
+                    clerkUser = await clerkApiWithTimeout(
+                        () => clerkClient.users.getUser(clerkUserId),
+                        10000 // 10 seconds timeout
+                    );
+                    logger.info(`[findOrCreateUser] ✅ Clerk user fetched: ${clerkUser.id}`);
+                    
+                    // ✅ Cache the Clerk response
+                    clerkUserCache.set(clerkUserId, {
+                        data: clerkUser,
+                        timestamp: Date.now(),
+                    });
+                } catch (clerkError: any) {
+                    logger.error(`[findOrCreateUser] ❌ Failed to fetch from Clerk:`, clerkError);
+                    
+                    // ✅ If Clerk API fails, create user with minimal data
+                    if (clerkError.message === 'Clerk API timeout') {
+                        logger.warn(`[findOrCreateUser] ⚠️ Clerk API timeout, creating user with minimal data`);
+                        
+                        // Create user with clerkUserId only
+                        const minimalUsername = `user_${clerkUserId.slice(-8)}`;
+                        const minimalEmail = `${clerkUserId}@clerk.temp`;
+                        
+                        user = await prisma.user.create({
+                            data: {
+                                clerkUserId,
+                                email: minimalEmail,
+                                username: minimalUsername,
+                                displayName: minimalUsername,
+                                emailVerified: false,
+                                coins: 50,
+                                level: 1,
+                                xp: 0,
+                            },
+                        });
+                        
+                        logger.info(`[findOrCreateUser] ✅ Minimal user created: ${user.username}`);
+                        return user;
+                    }
+                    
+                    throw new Error(`Failed to fetch user from Clerk: ${clerkError.message}`);
+                }
             }
 
             // Get primary email
             const primaryEmail = clerkUser.emailAddresses.find(
-                (email) => email.id === clerkUser.primaryEmailAddressId
+                (email: any) => email.id === clerkUser.primaryEmailAddressId
             );
 
             if (!primaryEmail) {
@@ -47,48 +110,18 @@ export class ClerkUserService {
 
             logger.info(`[findOrCreateUser] 📧 Primary email: ${primaryEmail.emailAddress}`);
 
-            // Generate unique email - always add clerkUserId to ensure uniqueness
+            // ✅ OPTIMIZED: Simplified email generation
             const emailParts = primaryEmail.emailAddress.split('@');
-            let finalEmail = `${emailParts[0]}+${clerkUserId.slice(-8)}@${emailParts[1]}`;
-            
-            // Check if this modified email exists, if so use full clerkUserId
-            let existingEmail = await prisma.user.findUnique({ where: { email: finalEmail } });
-            if (existingEmail) {
-                finalEmail = `${emailParts[0]}+${clerkUserId}@${emailParts[1]}`;
-            }
-            
-            // Final check - if still exists, use timestamp
-            existingEmail = await prisma.user.findUnique({ where: { email: finalEmail } });
-            if (existingEmail) {
-                finalEmail = `${emailParts[0]}+${Date.now()}@${emailParts[1]}`;
-            }
+            const shortId = clerkUserId.replace('user_', '').slice(-8);
+            const finalEmail = `${emailParts[0]}+${shortId}@${emailParts[1]}`;
 
             logger.info(`[findOrCreateUser] 📧 Using email: ${finalEmail}`);
 
-            // Generate username with unique suffix - use short suffix for better UX
+            // ✅ OPTIMIZED: Simplified username generation
             const baseUsername = clerkUser.username || 
                 primaryEmail.emailAddress.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
             
-            // Use last 8 characters of clerkUserId for shorter, cleaner usernames
-            // Remove 'user_' prefix if present, then take last 8 chars
-            const cleanId = clerkUserId.replace('user_', '');
-            const shortSuffix = cleanId.slice(-8); // Last 8 characters
-            
-            let username = `${baseUsername}_${shortSuffix}`;
-            
-            // Check username uniqueness and add random suffix if needed
-            let existingUsername = await prisma.user.findUnique({ where: { username } });
-            if (existingUsername) {
-                // If conflict, use random 4-digit number instead
-                const randomNum = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
-                username = `${baseUsername}_${randomNum}`;
-                // Double check
-                existingUsername = await prisma.user.findUnique({ where: { username } });
-                if (existingUsername) {
-                    // Final fallback: timestamp + random
-                    username = `${baseUsername}_${Date.now().toString().slice(-6)}_${Math.random().toString(36).slice(2, 5)}`;
-                }
-            }
+            const username = `${baseUsername}_${shortId}`;
 
             logger.info(`[findOrCreateUser] 👤 Using username: ${username}`);
 
@@ -111,16 +144,23 @@ export class ClerkUserService {
                 logger.info(`[findOrCreateUser] ✅ User created: ${user.username} (${user.id})`);
             } catch (createError: any) {
                 logger.error(`[findOrCreateUser] ❌ Failed to create user:`, createError);
+                
+                // ✅ If unique constraint fails, try to find existing user
+                if (createError.code === 'P2002') {
+                    logger.warn(`[findOrCreateUser] ⚠️ User already exists, fetching...`);
+                    user = await prisma.user.findUnique({
+                        where: { clerkUserId },
+                    });
+                    if (user) return user;
+                }
+                
                 throw new Error(`Failed to create user in database: ${createError.message}`);
             }
             
-            // Update login streak for new user (first login)
-            try {
-                await this.updateLoginStreak(user.id);
-            } catch (streakError) {
-                // Non-critical error, just log it
-                logger.warn(`[findOrCreateUser] ⚠️ Failed to update login streak:`, streakError);
-            }
+            // Update login streak for new user (non-blocking)
+            this.updateLoginStreak(user.id).catch(err => 
+                logger.warn(`[findOrCreateUser] ⚠️ Failed to update login streak:`, err)
+            );
             
             return user;
         } catch (error: any) {
