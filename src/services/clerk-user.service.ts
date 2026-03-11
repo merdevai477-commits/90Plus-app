@@ -100,7 +100,7 @@ export class ClerkUserService {
 
             // Get primary email
             const primaryEmail = clerkUser.emailAddresses.find(
-                (email) => email.id === clerkUser.primaryEmailAddressId
+                (email: any) => email.id === clerkUser.primaryEmailAddressId
             );
 
             if (!primaryEmail) {
