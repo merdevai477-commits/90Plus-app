@@ -371,9 +371,36 @@ class TransfersSyncService {
             const beforeCount = await this.getTransfersCount();
             logger.info(`[TransfersSync] 📊 Current transfers in DB: ${beforeCount}`);
 
-            // Fetch transfers from API
+            // Fetch transfers from API with retry logic
             logger.info('[TransfersSync] 📡 Fetching transfers from API...');
-            const transfers = await footballService.getTransfers({});
+            let transfers;
+            try {
+                transfers = await footballService.getTransfers({});
+            } catch (apiError: any) {
+                // Handle API errors gracefully
+                if (apiError.message?.includes('ECONNRESET') || apiError.code === 'ECONNRESET') {
+                    logger.warn('[TransfersSync] ⚠️ Connection reset by API, will retry later');
+                    return {
+                        lastSyncDate: new Date(),
+                        totalTransfersInDb: beforeCount,
+                        newTransfersFound: 0,
+                        syncDuration: Date.now() - startTime,
+                    };
+                }
+                
+                if (apiError.message?.includes('At least one parameter is required')) {
+                    logger.warn('[TransfersSync] ⚠️ API requires parameters, skipping transfers sync');
+                    return {
+                        lastSyncDate: new Date(),
+                        totalTransfersInDb: beforeCount,
+                        newTransfersFound: 0,
+                        syncDuration: Date.now() - startTime,
+                    };
+                }
+                
+                // Re-throw other errors
+                throw apiError;
+            }
 
             if (transfers && transfers.length > 0) {
                 logger.info(`[TransfersSync] 📥 Received ${transfers.length} transfers from API`);

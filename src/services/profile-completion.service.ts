@@ -42,11 +42,13 @@ export class ProfileCompletionService {
   /**
    * Calculate profile completion status for a user
    */
-  static async getCompletionStatus(userId: string): Promise<ProfileCompletionStatus> {
+  static async getCompletionStatus(clerkUserId: string): Promise<ProfileCompletionStatus> {
     try {
+      // Find user by clerkUserId instead of id
       const user = await prisma.user.findUnique({
-        where: { id: userId },
+        where: { clerkUserId: clerkUserId },
         select: {
+          id: true, // We need the internal ID for updates
           avatar: true,
           countryFlag: true,
           country: true,
@@ -237,9 +239,9 @@ export class ProfileCompletionService {
       const requiredStepsCompleted = steps.filter(s => s.required && s.completed).length;
       const canUploadVideo = requiredStepsCompleted >= 3;
 
-      // Update user's completion percentage in database
+      // Update user's completion percentage in database using internal ID
       await prisma.user.update({
-        where: { id: userId },
+        where: { id: user.id },
         data: {
           profileCompletionPercentage: Math.round(totalPercentage),
           profileCompletionSteps: steps.reduce((acc, step) => {
@@ -266,11 +268,15 @@ export class ProfileCompletionService {
   /**
    * Mark a step as completed
    */
-  static async markStepCompleted(userId: string, stepId: string): Promise<void> {
+  static async markStepCompleted(clerkUserId: string, stepId: string): Promise<void> {
     try {
+      // Find user by clerkUserId and get internal ID
       const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { profileCompletionSteps: true },
+        where: { clerkUserId: clerkUserId },
+        select: { 
+          id: true,
+          profileCompletionSteps: true 
+        },
       });
 
       if (!user) {
@@ -281,12 +287,12 @@ export class ProfileCompletionService {
       steps[stepId] = true;
 
       await prisma.user.update({
-        where: { id: userId },
+        where: { id: user.id },
         data: { profileCompletionSteps: steps },
       });
 
       // Recalculate completion percentage
-      await this.getCompletionStatus(userId);
+      await this.getCompletionStatus(clerkUserId);
     } catch (error) {
       logger.error('Error marking step completed:', error);
       throw error;
