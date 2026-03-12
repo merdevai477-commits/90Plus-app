@@ -14,8 +14,8 @@ export class ProfileCompletionController {
    */
   static async getCompletionStatus(req: Request, res: Response) {
     try {
-      const userId = req.userId;
-      if (!userId) {
+      const clerkUserId = req.auth?.userId;
+      if (!clerkUserId) {
         return res.status(401).json({
           status: 'ERROR',
           code: 'E002',
@@ -23,7 +23,7 @@ export class ProfileCompletionController {
         });
       }
 
-      const status = await ProfileCompletionService.getCompletionStatus(userId);
+      const status = await ProfileCompletionService.getCompletionStatus(clerkUserId);
 
       return res.status(200).json({
         status: 'SUCCESS',
@@ -45,8 +45,8 @@ export class ProfileCompletionController {
    */
   static async markStepCompleted(req: Request, res: Response) {
     try {
-      const userId = req.userId;
-      if (!userId) {
+      const clerkUserId = req.auth?.userId;
+      if (!clerkUserId) {
         return res.status(401).json({
           status: 'ERROR',
           code: 'E002',
@@ -63,10 +63,10 @@ export class ProfileCompletionController {
         });
       }
 
-      await ProfileCompletionService.markStepCompleted(userId, stepId);
+      await ProfileCompletionService.markStepCompleted(clerkUserId, stepId);
 
       // Get updated status
-      const status = await ProfileCompletionService.getCompletionStatus(userId);
+      const status = await ProfileCompletionService.getCompletionStatus(clerkUserId);
 
       return res.status(200).json({
         status: 'SUCCESS',
