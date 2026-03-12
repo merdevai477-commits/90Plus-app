@@ -22,11 +22,11 @@ const mapStoreMatchToGradientMatch = (storeMatch: Match): GradientMatch => ({
     id: storeMatch.id,
     homeTeam: {
         name: storeMatch.homeTeam,
-        logo: storeMatch.homeLogo // Use actual logo or undefined for initials fallback
+        logo: storeMatch.homeLogo || '' // Use actual logo or empty string for initials fallback
     },
     awayTeam: {
         name: storeMatch.awayTeam,
-        logo: storeMatch.awayLogo // Use actual logo or undefined for initials fallback
+        logo: storeMatch.awayLogo || '' // Use actual logo or empty string for initials fallback
     },
     score: {
         home: storeMatch.homeScore || 0,
@@ -40,7 +40,7 @@ const mapStoreMatchToGradientMatch = (storeMatch: Match): GradientMatch => ({
     league: {
         id: storeMatch.leagueId,
         name: storeMatch.league,
-        logo: undefined // League logo not in home store match yet
+        logo: '' // League logo not in home store match yet
     },
     fixtureDate: storeMatch.date,
     isFavorited: storeMatch.isFavorited

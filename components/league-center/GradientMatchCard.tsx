@@ -229,6 +229,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                   <View style={styles.logoWrapper}>
                     <TeamBadge 
                       name={match.homeTeam?.name || 'TBD'} 
+                      logo={match.homeTeam?.logo}
                       size={60} 
                       color="transparent" 
                     />
@@ -289,6 +290,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                   <View style={styles.logoWrapper}>
                     <TeamBadge 
                       name={match.awayTeam?.name || 'TBD'} 
+                      logo={match.awayTeam?.logo}
                       size={60} 
                       color="transparent" 
                     />
@@ -302,7 +304,12 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
               {/* Bottom Row - League Info */}
               <View style={styles.bottomRow}>
                 <View style={styles.leagueBadgeBottom}>
-                  <LeagueIcon name={match.league?.name || 'League'} size={16} color="#ffffff" />
+                  <LeagueIcon 
+                    name={match.league?.name || 'League'} 
+                    logo={match.league?.logo}
+                    size={16} 
+                    color="#ffffff" 
+                  />
                   <Text style={styles.leagueNameBottom} numberOfLines={1}>
                     {match.league?.name || 'League'}
                   </Text>

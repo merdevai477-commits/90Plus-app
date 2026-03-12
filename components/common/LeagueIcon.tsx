@@ -28,7 +28,12 @@ export default function LeagueIcon({
           style={{ width: size * 0.7, height: size * 0.7 }}
           contentFit="contain"
           transition={200}
-          onError={() => setImageError(true)}
+          cachePolicy="memory-disk"
+          priority="high"
+          onError={() => {
+            console.log('Failed to load league logo:', logo);
+            setImageError(true);
+          }}
         />
       ) : (
         <MaterialCommunityIcons 

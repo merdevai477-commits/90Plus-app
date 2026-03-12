@@ -43,7 +43,12 @@ export default function TeamBadge({
           style={[styles.logo, { width: size * 0.7, height: size * 0.7 }]}
           contentFit="contain"
           transition={200}
-          onError={() => setImageError(true)}
+          cachePolicy="memory-disk"
+          priority="high"
+          onError={() => {
+            console.log('Failed to load logo:', logo);
+            setImageError(true);
+          }}
         />
       ) : (
         <Text style={[styles.initials, { fontSize: size * 0.3 }]}>
