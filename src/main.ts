@@ -689,6 +689,11 @@ async function startServer() {
                     PredictionWatcherService.start(); // ✅ Start prediction watcher
                     LeagueMatchWatcherService.start(); // ✅ Start league match watcher
                     
+                    // ✅ Start football background service for API optimization
+                    const { footballBackgroundService } = await import('./services/football-background.service');
+                    footballBackgroundService.start();
+                    logger.info('✅ Football Background Service started (API optimization)');
+                    
                     // ✅ Setup Cron Job for Prediction Watcher (every 5 minutes)
                     cron.schedule('*/5 * * * *', () => {
                         logger.info('⏰ Cron: Running prediction check...');
