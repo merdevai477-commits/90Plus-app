@@ -49,7 +49,7 @@ export class ProfileCompletionService {
         select: {
           avatar: true,
           countryFlag: true,
-          location: true,
+          country: true,
           clubLogo: true,
           bio: true,
           position: true,
@@ -90,7 +90,7 @@ export class ProfileCompletionService {
       }
 
       // Country
-      const countryCompleted = !!user.countryFlag && !!user.location;
+      const countryCompleted = !!user.countryFlag && !!user.country;
       steps.push({
         id: 'country',
         label: PROFILE_STEPS.country.label,
