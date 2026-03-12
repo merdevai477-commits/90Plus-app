@@ -200,6 +200,7 @@ import userRoutes from './routes/user.routes';
 import clerkUserRoutes from './routes/clerk-user.routes';
 import webhookRoutes from './routes/webhook.routes';
 import profileRoutes from './routes/profile.routes';
+import profileCompletionRoutes from './routes/profile-completion.routes';
 import videoRoutes from './routes/video.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import reelsRoutes from './routes/reels.routes';
@@ -239,6 +240,7 @@ app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/clerk`, clerkUserRoutes);
 app.use(`${API_PREFIX}/webhooks/clerk`, webhookLimiter, webhookRoutes);
 app.use(`${API_PREFIX}/profile`, profileRoutes);
+app.use(`${API_PREFIX}/profile`, profileCompletionRoutes); // Profile completion routes
 app.use(`${API_PREFIX}/videos`, videoRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
 app.use(`${API_PREFIX}/reels`, reelsRoutes);
