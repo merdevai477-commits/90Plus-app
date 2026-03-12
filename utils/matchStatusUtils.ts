@@ -38,8 +38,12 @@ export const getMatchStatus = (
   
   // Regular time (1H or 2H)
   if ((status === '1H' || status === '2H') && elapsed !== null && elapsed !== undefined) {
-    // Never show > 90 minutes directly
-    if (elapsed > 90) {
+    // First half: show 45+X after 45 minutes
+    if (status === '1H' && elapsed > 45) {
+      return `45+${elapsed - 45}'`;
+    }
+    // Second half: show 90+X after 90 minutes
+    if (status === '2H' && elapsed > 90) {
       return `90+${elapsed - 90}'`;
     }
     return `${elapsed}'`;

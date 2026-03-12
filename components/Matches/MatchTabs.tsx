@@ -15,7 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 import { useTranslation } from '../../src/i18n/useTranslation';
 
-export type MatchTabType = 'all' | 'live' | 'upcoming' | 'finished' | 'favorites' | 'predictions' | 'transfers';
+export type MatchTabType = 'all' | 'live' | 'upcoming' | 'finished' | 'favorites' | 'predictions';
 
 interface MatchTabsProps {
   activeTab: MatchTabType;
@@ -36,7 +36,6 @@ const MatchTabs: React.FC<MatchTabsProps> = React.memo(({ activeTab, onTabChange
     { id: 'finished', label: t.matches.tabs.finished },
     { id: 'favorites', label: t.matches.tabs.favorites, icon: '⭐' },
     { id: 'predictions', label: t.matches.tabs.predictions || 'التوقعات', icon: '🎯' },
-    { id: 'transfers', label: t.matches.tabs.transfers, icon: '🔄' },
   ], [t]);
 
   useEffect(() => {

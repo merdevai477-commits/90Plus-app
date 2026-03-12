@@ -230,7 +230,12 @@ const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Matc
                 minute = `${elapsed}' (ET)`;
             }
         } else if ((status === '1H' || status === '2H') && elapsed !== null && elapsed !== undefined) {
-            if (elapsed > 90) {
+            // First half: show 45+X after 45 minutes
+            if (status === '1H' && elapsed > 45) {
+                minute = `45+${elapsed - 45}'`;
+            }
+            // Second half: show 90+X after 90 minutes
+            else if (status === '2H' && elapsed > 90) {
                 minute = `90+${elapsed - 90}'`;
             } else {
                 minute = `${elapsed}'`;
