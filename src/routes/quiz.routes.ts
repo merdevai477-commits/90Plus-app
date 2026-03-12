@@ -324,14 +324,34 @@ router.get('/daily-status', requireAuth, async (req: Request, res: Response): Pr
             let newDailyQuiz;
             try {
                 newDailyQuiz = await getOrCreateDailyQuiz();
+                
+                // ✅ If creation failed, return unavailable status
+                if (!newDailyQuiz) {
+                    logger.warn('Daily quiz creation returned null, quiz unavailable');
+                    res.json({
+                        status: 'SUCCESS',
+                        data: {
+                            canTake: false,
+                            reason: 'Quiz temporarily unavailable',
+                            nextAvailableAt: null,
+                        },
+                    });
+                    return;
+                }
             } catch (error: any) {
                 logger.error('Error creating daily quiz in daily-status endpoint', {
                     error: error.message,
                     stack: error.stack,
                 });
-                res.status(500).json({
-                    status: 'ERROR',
-                    message: 'Failed to create daily quiz',
+                
+                // ✅ Return unavailable instead of 500 error
+                res.json({
+                    status: 'SUCCESS',
+                    data: {
+                        canTake: false,
+                        reason: 'Quiz temporarily unavailable',
+                        nextAvailableAt: null,
+                    },
                 });
                 return;
             }
