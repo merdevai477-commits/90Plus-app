@@ -168,24 +168,28 @@ const refreshMatchesInBackground = async (
         if (favoriteIds.length > 0) {
             const allCached = await matchesBatchService.getAllCachedMatches();
             favoritedFixtures = allCached.filter(f =>
-                f?.fixture?.id && favoriteIds.includes(String(f.fixture.id))
+                f?.fixture?.id && 
+                f?.teams?.home?.name && 
+                f?.teams?.away?.name &&
+                f?.league?.name &&
+                favoriteIds.includes(String(f.fixture.id))
             );
         }
 
         // Combine all fixtures
         const uniqueFixturesMap = new Map<number, Fixture>();
         favoritedFixtures.forEach(f => {
-            if (f?.fixture?.id) {
+            if (f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name) {
                 uniqueFixturesMap.set(f.fixture.id, f);
             }
         });
         liveFixtures.forEach(f => {
-            if (f?.fixture?.id) {
+            if (f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name) {
                 uniqueFixturesMap.set(f.fixture.id, f);
             }
         });
         batchedFixtures.forEach(f => {
-            if (f?.fixture?.id && !uniqueFixturesMap.has(f.fixture.id)) {
+            if (f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name && !uniqueFixturesMap.has(f.fixture.id)) {
                 uniqueFixturesMap.set(f.fixture.id, f);
             }
         });
@@ -369,8 +373,20 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
             if (cachedMatches && cachedMatches.length > 0) {
                 logger.debug(`📦 Cache hit: ${cachedMatches.length} matches from cache`);
 
+                // Filter out invalid fixtures before mapping
+                const validCachedMatches = cachedMatches.filter(fixture => 
+                    fixture?.fixture?.id && 
+                    fixture?.teams?.home?.name && 
+                    fixture?.teams?.away?.name &&
+                    fixture?.league?.name
+                );
+
+                if (validCachedMatches.length < cachedMatches.length) {
+                    logger.warn(`⚠️ Filtered out ${cachedMatches.length - validCachedMatches.length} invalid fixtures`);
+                }
+
                 // Map cached matches to UI format
-                const mappedCached = cachedMatches.map(fixture =>
+                const mappedCached = validCachedMatches.map(fixture =>
                     mapFixtureToMatch(fixture, favoriteIds.includes(String(fixture.fixture.id)))
                 );
 
@@ -415,7 +431,11 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
                 // Get all cached matches to find favorites
                 const allCached = await matchesBatchService.getAllCachedMatches();
                 favoritedFixtures = allCached.filter(f =>
-                    f?.fixture?.id && favoriteIds.includes(String(f.fixture.id))
+                    f?.fixture?.id && 
+                    f?.teams?.home?.name && 
+                    f?.teams?.away?.name &&
+                    f?.league?.name &&
+                    favoriteIds.includes(String(f.fixture.id))
                 );
                 logger.debug(`⭐ Found ${favoritedFixtures.length} favorited matches`);
             }
@@ -425,21 +445,21 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
 
             // Add favorited matches first (higher priority)
             favoritedFixtures.forEach(f => {
-                if (f?.fixture?.id) {
+                if (f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name) {
                     uniqueFixturesMap.set(f.fixture.id, f);
                 }
             });
 
             // Add live matches
             liveFixtures.forEach(f => {
-                if (f?.fixture?.id) {
+                if (f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name) {
                     uniqueFixturesMap.set(f.fixture.id, f);
                 }
             });
 
             // Add batched matches
             batchedFixtures.forEach(f => {
-                if (f?.fixture?.id && !uniqueFixturesMap.has(f.fixture.id)) {
+                if (f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name && !uniqueFixturesMap.has(f.fixture.id)) {
                     uniqueFixturesMap.set(f.fixture.id, f);
                 }
             });
