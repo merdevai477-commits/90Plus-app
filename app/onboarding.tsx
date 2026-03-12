@@ -185,7 +185,7 @@ export default function OnboardingScreen() {
             try {
                 if (clubData?.apiId) {
                     realClubLogo = await Promise.race([
-                        clubLogoService.fetchClubLogo(clubData.apiId),
+                        clubLogoService.getClubLogo(clubData.apiId),
                         new Promise<null>((_, reject) => 
                             setTimeout(() => reject(new Error('Club logo fetch timeout')), 5000)
                         )

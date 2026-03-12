@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '../config/api.config';
+import { safeJsonParse } from '../utils/safeJsonParse';
 
 const COINS_STORAGE_KEY_PREFIX = '@user_coins_';
 const INITIAL_COINS = 50;
@@ -65,8 +66,8 @@ export const CoinsService = {
                     });
 
                     if (response.ok) {
-                        const data = await response.json();
-                        if (data.status === 'SUCCESS' && data.data?.coins !== undefined) {
+                        const data = await safeJsonParse<any>(response, { status: 'ERROR', data: null });
+                        if (data && data.status === 'SUCCESS' && data.data?.coins !== undefined) {
                             const backendCoins = data.data.coins;
                             
                             // ✅ Update cache

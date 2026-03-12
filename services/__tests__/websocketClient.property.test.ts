@@ -233,9 +233,9 @@ describe('WebSocket Client Property Tests', () => {
           wsEventTypeArb,
           fc.jsonValue(),
           (eventType: WSEventType, payload: unknown) => {
-            const message: WSMessage = {
+            const message: WSMessage<any> = {
               type: eventType,
-              payload,
+              payload: payload as any,
               timestamp: Date.now(),
             };
 

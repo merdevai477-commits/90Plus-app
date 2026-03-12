@@ -96,6 +96,7 @@ export default function ProfileScreen() {
   } = useProfileCache({
     getToken,
     clerkUserImageUrl: clerkUser?.imageUrl,
+    clerkUserId: clerkUser?.id,
   });
 
   // ✅ Log cache errors
@@ -116,6 +117,21 @@ export default function ProfileScreen() {
     });
   }, [isLoading, cachedUserData, isCacheHit, cacheError]);
 
+  // ✅ CRITICAL FIX: Auto-retry when backend is down (502 error)
+  useEffect(() => {
+    if (cacheError && cacheError.includes('المحفوظة') && !isLoading) {
+      // Backend is down (502), retry after 8 seconds (give server time to wake up)
+      const retryTimeout = setTimeout(() => {
+        console.log('[ProfileScreen] 🔄 Auto-retry after backend cold start (8s delay)');
+        refreshCache(true).catch(err => {
+          console.error('[ProfileScreen] ❌ Auto-retry failed:', err);
+        });
+      }, 8000); // 8 seconds - enough time for Railway to wake up
+
+      return () => clearTimeout(retryTimeout);
+    }
+  }, [cacheError, isLoading, refreshCache]);
+
   // ✅ CRITICAL FIX: Timeout fallback if loading takes too long
   useEffect(() => {
     if (isLoading && !cachedUserData) {
@@ -131,25 +147,6 @@ export default function ProfileScreen() {
       return () => clearTimeout(timeout);
     }
   }, [isLoading, cachedUserData, refreshCache, toast]);
-
-  // ✅ CRITICAL FIX: Clear cache and retry on mount if no data after 3 seconds
-  useEffect(() => {
-    const checkDataTimeout = setTimeout(async () => {
-      if (!cachedUserData && !isLoading) {
-        console.warn('[ProfileScreen] ⚠️ No data after 3 seconds, clearing cache and retrying...');
-        try {
-          // Clear cache first
-          await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
-          // Force refresh
-          await refreshCache(true);
-        } catch (err) {
-          console.error('[ProfileScreen] ❌ Cache clear and refresh failed:', err);
-        }
-      }
-    }, 3000); // 3 seconds
-
-    return () => clearTimeout(checkDataTimeout);
-  }, []); // Only run once on mount
 
   // Local state for UI-specific data not in cache
   const [localImage, setLocalImageState] = useState<string | null>(globalState.localAvatar || null);
@@ -1387,7 +1384,7 @@ export default function ProfileScreen() {
   }
 
   // ✅ CRITICAL FIX: Show error state with retry button if data failed to load
-  if (!userData && cacheError) {
+  if (!userData && (cacheError || !isLoading)) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
@@ -1396,7 +1393,7 @@ export default function ProfileScreen() {
           {cacheError || 'فشل في تحميل البروفايل'}
         </Text>
         <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
-          تحقق من اتصالك بالإنترنت وحاول مرة أخرى
+          {cacheError?.includes('المحفوظة') ? 'الخادم متوقف حالياً. جاري المحاولة...' : 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى'}
         </Text>
         <View style={{ marginTop: 24, paddingHorizontal: 40, width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' }}>
           <View style={{
@@ -1412,9 +1409,7 @@ export default function ProfileScreen() {
               onPress={async () => {
                 console.log('[ProfileScreen] 🔄 Manual retry triggered');
                 try {
-                  // Clear cache first
-                  await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
-                  // Force refresh
+                  // Force refresh without clearing cache
                   await refreshCache(true);
                   toast.showInfo('جاري التحميل', 'يتم إعادة تحميل البيانات...');
                 } catch (err) {

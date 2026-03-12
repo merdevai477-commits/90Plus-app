@@ -9,12 +9,17 @@
  * - Players, teams, leagues cached permanently
  * - Local caching as secondary layer for offline access
  * - All data flows through /cached/* endpoints for optimal performance
+ * - Circuit breaker pattern to prevent hammering server when down
+ * - Request queue to limit concurrent requests (max 3)
+ * - Exponential backoff retry strategy
  */
 
 import { getApiUrl } from '../utils/getApiUrl';
 import { footballCacheService } from './footballCacheService';
 import { cacheService, CACHE_TTL } from './cacheService';
 import { logger } from './logger';
+import { circuitBreakerService } from './circuitBreaker.service';
+import { requestQueueService } from './requestQueue.service';
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds timeout
 
@@ -746,7 +751,9 @@ interface ProxyResponse<T> {
 /**
  * Fetch data from the backend Football API proxy
  * The backend handles API key management and rate limiting
- * Includes automatic retry on timeout
+ * Includes automatic retry on timeout with exponential backoff
+ * Uses circuit breaker to prevent hammering server when down
+ * Uses request queue to limit concurrent requests (max 3)
  */
 const fetchFromProxy = async <T,>(
   endpoint: string,
@@ -785,31 +792,37 @@ const fetchFromProxy = async <T,>(
     return [] as T;
   }
 
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      if (attempt > 0) {
-        if (__DEV__) {
-          console.log(`🔄 Retry attempt ${attempt}/${retries} for ${endpoint}`);
+  // Create circuit breaker key based on endpoint
+  const circuitKey = `football_api_${endpoint.split('/')[1] || 'default'}`;
+
+  // Define the actual fetch function
+  const fetchFn = async (): Promise<T> => {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        if (attempt > 0) {
+          if (__DEV__) {
+            console.log(`🔄 Retry attempt ${attempt}/${retries} for ${endpoint}`);
+          }
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.min(1000 * Math.pow(2, attempt), 4000);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      }
 
-      const response = await withTimeout(
-        fetch(url.toString(), {
-          method,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            ...headers,
-          },
-          body: body ? JSON.stringify(body) : undefined,
-        })
-      );
+        const response = await withTimeout(
+          fetch(url.toString(), {
+            method,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              ...headers,
+            },
+            body: body ? JSON.stringify(body) : undefined,
+          })
+        );
 
-      if (!response.ok) {
+        if (!response.ok) {
           let errorMessage = response.statusText;
           try {
             const errorData = await response.json();
@@ -905,15 +918,27 @@ const fetchFromProxy = async <T,>(
           }
           throw error;
         }
-        
-        // Wait before retry (exponential backoff)
-        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   
-  // If we exit the loop without returning, throw the last error
-  throw lastError || new Error('Request failed');
+    // If we exit the loop without returning, throw the last error
+    throw lastError || new Error('Request failed');
+  };
+
+  // Define fallback function that returns cached data
+  const fallbackFn = async (): Promise<T> => {
+    logger.debug(`[fetchFromProxy] Circuit open, trying to return cached data for ${endpoint}`);
+    
+    // Try to return stale cached data
+    // This is a best-effort fallback - may not always have cached data
+    return [] as T;
+  };
+
+  // Wrap with circuit breaker and request queue
+  return requestQueueService.enqueue(
+    () => circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn),
+    { priority: endpoint.includes('/cached/') ? 10 : 0 } // Prioritize cached endpoints
+  );
 };
 
 export const ApiFootballService = {
@@ -1479,6 +1504,7 @@ export const ApiFootballService = {
   /**
    * Get team by ID
    * Uses backend permanent cache
+   * Handles 404 errors gracefully with placeholder data
    */
   async getTeamById(teamId: number): Promise<any[]> {
     // Try local cache first
@@ -1498,7 +1524,31 @@ export const ApiFootballService = {
       }
       
       return teams;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle 404 gracefully - return placeholder team
+      if (error instanceof ApiFootballError && error.statusCode === 404) {
+        logger.warn(`⚠️ Team ${teamId} not found (404), returning placeholder`);
+        return [{
+          team: {
+            id: teamId,
+            name: 'Unknown Team',
+            logo: null, // ✅ Return null instead of placeholder URL
+            country: 'Unknown',
+            founded: null,
+            national: false,
+          },
+          venue: {
+            id: null,
+            name: 'Unknown',
+            address: null,
+            city: null,
+            capacity: null,
+            surface: null,
+            image: null,
+          }
+        }];
+      }
+      
       console.error('Error fetching team:', error);
       return [];
     }

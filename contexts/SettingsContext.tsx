@@ -17,6 +17,7 @@ import Constants from 'expo-constants';
 import { useLanguageStore, Language } from '../src/i18n';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
+import { logger } from '../services/logger';
 
 // Conditionally import notifications only if not in Expo Go
 let Notifications: any = null;
@@ -26,7 +27,7 @@ if (!isExpoGo) {
   try {
     Notifications = require('expo-notifications');
   } catch (error) {
-    console.log('expo-notifications not available');
+    logger.debug('expo-notifications not available');
   }
 }
 
@@ -163,7 +164,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         body: JSON.stringify(currentSettings)
       });
     } catch (e) {
-      console.log('Failed to sync settings', e);
+      logger.warn('Failed to sync settings', e);
     }
   };
 
@@ -183,7 +184,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         return json.data;
       }
     } catch (e) {
-      console.log('Failed to load settings from backend', e);
+      logger.warn('Failed to load settings from backend', e);
     }
     return null;
   };
@@ -226,7 +227,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const configureNotifications = async () => {
     // Skip notifications in Expo Go
     if (isExpoGo || !Notifications) {
-      console.log('📱 Running in Expo Go - Notifications disabled. Use development build for full functionality.');
+      logger.info('Running in Expo Go - Notifications disabled. Use development build for full functionality.');
       return;
     }
 
@@ -251,11 +252,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
 
         if (finalStatus !== 'granted') {
-          console.log('Notification permissions not granted');
+          logger.warn('Notification permissions not granted');
         }
       }
     } catch (error) {
-      console.log('Error configuring notifications:', error);
+      logger.error('Error configuring notifications:', error);
     }
   };
 
@@ -295,7 +296,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
           await Notifications.cancelAllScheduledNotificationsAsync();
         }
       } catch (error) {
-        console.log('Notification operation failed:', error);
+        logger.error('Notification operation failed:', error);
       }
     }
 
@@ -506,7 +507,7 @@ export const scheduleMatchNotification = async (
       trigger,
     });
   } catch (error) {
-    console.log('Error scheduling notification:', error);
+    logger.error('Error scheduling notification:', error);
   }
 };
 

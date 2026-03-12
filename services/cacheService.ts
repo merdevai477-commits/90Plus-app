@@ -15,8 +15,8 @@ const CACHE_PREFIX = '@cache_';
 const DEFAULT_TTL = 5 * 60 * 1000;
 
 // Maximum number of cache entries (for LRU eviction)
-// ✅ INCREASED: Was 100, now 50 to prevent SQLITE_FULL errors
-const MAX_CACHE_ENTRIES = 50;
+// ✅ INCREASED: Was 50, now 100 to reduce eviction frequency
+const MAX_CACHE_ENTRIES = 100;
 
 /**
  * Cache entry structure with timestamp and TTL support
@@ -25,6 +25,7 @@ export interface CacheEntry<T> {
   data: T;
   timestamp: number;
   ttl: number;
+  lastUpdated?: number; // Track when data was last successfully updated
 }
 
 /**
@@ -47,13 +48,14 @@ export const CACHE_TTL = {
 
 /**
  * Predefined cache keys for consistency
+ * NOTE: For user-specific data, append user ID to the key
  */
 export const CACHE_KEYS = {
-  PROFILE_DATA: 'profile_data',
-  PROFILE_STATS: 'profile_stats',
-  PROFILE_VIDEOS: 'profile_videos',
+  PROFILE_DATA: 'profile_data', // Append user ID: profile_data_<userId>
+  PROFILE_STATS: 'profile_stats', // Append user ID: profile_stats_<userId>
+  PROFILE_VIDEOS: 'profile_videos', // Append user ID: profile_videos_<userId>
   REELS_FEED: 'reels_feed',
-  NOTIFICATIONS: 'notifications',
+  NOTIFICATIONS: 'notifications', // Append user ID: notifications_<userId>
   MATCHES: 'matches',
   MATCHES_BY_DATE: 'matches_by_date', // New: cache matches by date
   // Football data keys
@@ -65,6 +67,16 @@ export const CACHE_KEYS = {
   H2H: 'h2h',
 } as const;
 
+/**
+ * Helper function to create user-specific cache key
+ * @param baseKey - Base cache key from CACHE_KEYS
+ * @param userId - User ID to append
+ * @returns User-specific cache key
+ */
+export function getUserCacheKey(baseKey: string, userId: string): string {
+  return `${baseKey}_${userId}`;
+}
+
 class CacheService {
   /**
    * Get cached data by key.
@@ -72,8 +84,10 @@ class CacheService {
    * 
    * Requirement 4.2: Return data if it exists and is not expired
    * Requirement 4.3: Return null if data has expired
+   * 
+   * @param allowStale - If true, return stale data even if expired
    */
-  async get<T>(key: string): Promise<T | null> {
+  async get<T>(key: string, allowStale: boolean = false): Promise<T | null> {
     try {
       const cacheKey = this.getCacheKey(key);
       const raw = await AsyncStorage.getItem(cacheKey);
@@ -88,6 +102,10 @@ class CacheService {
 
       // Check if cache has expired
       if (age > entry.ttl) {
+        // If allowStale is true, return stale data
+        if (allowStale) {
+          return entry.data;
+        }
         // Cache expired, return null (don't delete here to allow background refresh)
         return null;
       }
@@ -109,10 +127,12 @@ class CacheService {
   async set<T>(key: string, data: T, ttl: number = DEFAULT_TTL): Promise<void> {
     try {
       const cacheKey = this.getCacheKey(key);
+      const now = Date.now();
       const entry: CacheEntry<T> = {
         data,
-        timestamp: Date.now(),
+        timestamp: now,
         ttl,
+        lastUpdated: now, // Track when data was last updated
       };
 
       await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
@@ -122,10 +142,12 @@ class CacheService {
     } catch (error: any) {
       // ✅ FIX: Define cacheKey here for retry
       const cacheKey = this.getCacheKey(key);
+      const now = Date.now();
       const entry: CacheEntry<T> = {
         data,
-        timestamp: Date.now(),
+        timestamp: now,
         ttl,
+        lastUpdated: now,
       };
       
       // ✅ FIX: Handle SQLITE_FULL error
@@ -229,9 +251,10 @@ class CacheService {
   }
 
   /**
-   * Get cache entry metadata (timestamp, ttl) without the data.
+   * Get cache entry metadata (timestamp, ttl, lastUpdated) without the data.
+   * Useful for showing "last updated" indicators in UI.
    */
-  async getMetadata(key: string): Promise<{ timestamp: number; ttl: number } | null> {
+  async getMetadata(key: string): Promise<{ timestamp: number; ttl: number; lastUpdated?: number; isStale: boolean } | null> {
     try {
       const cacheKey = this.getCacheKey(key);
       const raw = await AsyncStorage.getItem(cacheKey);
@@ -241,9 +264,15 @@ class CacheService {
       }
 
       const entry: CacheEntry<unknown> = JSON.parse(raw);
+      const now = Date.now();
+      const age = now - entry.timestamp;
+      const isStale = age > entry.ttl;
+      
       return {
         timestamp: entry.timestamp,
         ttl: entry.ttl,
+        lastUpdated: entry.lastUpdated,
+        isStale,
       };
     } catch (error) {
       console.error(`[CacheService] Error getting metadata for key "${key}":`, error);

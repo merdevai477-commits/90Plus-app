@@ -46,8 +46,8 @@ const CONFIG: Record<Environment, APIConfig> = {
     retryAttempts: 3,
   },
   production: {
-    baseUrl: 'https://90plus-backend.fly.dev/api',
-    wsUrl: 'wss://90plus-backend.fly.dev',
+    baseUrl: 'https://90plus-app-production-26e9.up.railway.app/api',
+    wsUrl: 'wss://90plus-app-production-26e9.up.railway.app',
     timeout: 30000, // ✅ CRITICAL: Increased to 30s
     uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
     retryAttempts: 3,

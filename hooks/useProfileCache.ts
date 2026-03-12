@@ -11,8 +11,8 @@
  * - 2.6: Load user info, follow stats, and videos in parallel
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { cacheService, CACHE_KEYS, CACHE_TTL } from '../services/cacheService';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { cacheService, CACHE_KEYS, CACHE_TTL, getUserCacheKey } from '../services/cacheService';
 import { 
   AuthService, 
   FollowService, 
@@ -85,6 +85,7 @@ export interface ProfileCacheData {
 export interface UseProfileCacheOptions {
   getToken: () => Promise<string | null>;
   clerkUserImageUrl?: string;
+  clerkUserId?: string; // Add user ID for cache key
   onCacheHit?: () => void;
   onFreshDataLoaded?: () => void;
 }
@@ -118,7 +119,15 @@ export interface UseProfileCacheResult {
  *   in cache with a valid timestamp for future retrieval.
  */
 export function useProfileCache(options: UseProfileCacheOptions): UseProfileCacheResult {
-  const { getToken, clerkUserImageUrl, onCacheHit, onFreshDataLoaded } = options;
+  const { getToken, clerkUserImageUrl, clerkUserId, onCacheHit, onFreshDataLoaded } = options;
+  
+  // Generate user-specific cache key
+  const cacheKey = useMemo(() => {
+    if (clerkUserId) {
+      return getUserCacheKey(CACHE_KEYS.PROFILE_DATA, clerkUserId);
+    }
+    return CACHE_KEYS.PROFILE_DATA; // Fallback to base key if no user ID
+  }, [clerkUserId]);
   
   // State
   const [userData, setUserData] = useState<ProfileUserData | null>(null);
@@ -147,14 +156,14 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
    */
   const loadFromCache = useCallback(async (): Promise<boolean> => {
     try {
-      const cachedData = await cacheService.get<ProfileCacheData>(CACHE_KEYS.PROFILE_DATA);
+      const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
       
       if (cachedData) {
         // Validate cached data - ensure userData exists and has required fields
         // This prevents showing stale data from a different user after logout/login
         if (!cachedData.userData || !cachedData.userData.username || !cachedData.userData.id) {
           console.warn('[useProfileCache] Invalid cached data detected (missing user info), clearing cache');
-          await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
+          await cacheService.invalidate(cacheKey);
           return false;
         }
         
@@ -186,18 +195,18 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       console.error('[useProfileCache] Error loading from cache:', err);
       return false;
     }
-  }, []); // No dependencies - uses refs
+  }, [cacheKey]); // Added cacheKey dependency
 
   /**
    * Save data to cache (Requirement 2.5)
    */
   const saveToCache = useCallback(async (data: ProfileCacheData): Promise<void> => {
     try {
-      await cacheService.set(CACHE_KEYS.PROFILE_DATA, data, CACHE_TTL.PROFILE);
+      await cacheService.set(cacheKey, data, CACHE_TTL.PROFILE);
     } catch (err) {
       console.error('[useProfileCache] Error saving to cache:', err);
     }
-  }, []);
+  }, [cacheKey]);
 
   /**
    * Transform backend user profile to ProfileUserData
@@ -251,6 +260,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   /**
    * Fetch fresh data from backend (Requirement 2.2, 2.6)
    * Loads user info, follow stats, and videos in FULLY parallel
+   * ✅ FIX: Health check runs in background (non-blocking)
    */
   const fetchFreshData = useCallback(async (forceRefresh = false): Promise<void> => {
     if (isLoadingRef.current && !forceRefresh) return;
@@ -261,14 +271,15 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     try {
       logger.debug('[useProfileCache] Starting to fetch fresh data');
       
-      // ✅ CRITICAL: Check API health first
-      const isApiHealthy = await AuthService.checkApiHealth();
-      if (!isApiHealthy) {
-        console.error('[useProfileCache] ❌ API is not reachable');
-        setError('لا يمكن الاتصال بالخادم. تحقق من اتصالك بالإنترنت');
-        setIsLoading(false);
-        return;
-      }
+      // ✅ FIX: Run health check in background (non-blocking)
+      // Don't wait for it - let it run async
+      AuthService.checkApiHealth().then(isHealthy => {
+        if (!isHealthy) {
+          logger.warn('[useProfileCache] ⚠️ API health check failed (background check)');
+        }
+      }).catch(err => {
+        logger.warn('[useProfileCache] ⚠️ API health check error (background check):', err);
+      });
       
       const token = await getToken();
       if (!token) {
@@ -368,8 +379,24 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         return; // Exit early - videos loading in background
       } else {
         console.error('[useProfileCache] ❌ No user data received from backend');
-        setError('Failed to load user data');
+        
+        // ✅ FIX: Check if we have cached data to show
+        const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+        if (cachedData && cachedData.userData) {
+          logger.info('[useProfileCache] ✅ Using cached data as fallback');
+          setUserData(cachedData.userData);
+          setFollowStats(cachedData.followStats);
+          setVideos(cachedData.videos || []);
+          setAnalytics(cachedData.analytics);
+          setCooldowns(cachedData.cooldowns);
+          hasLoadedRef.current = true;
+          setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+        } else {
+          setError('Failed to load user data');
+        }
+        
         setIsLoading(false);
+        return;
       }
 
       if (statsResult) {
@@ -398,7 +425,26 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       onFreshDataLoadedRef.current?.();
     } catch (err: any) {
       console.error('[useProfileCache] ❌ Error fetching fresh data:', err);
-      setError(err.message || 'Failed to load profile data');
+      
+      // ✅ FIX: Try to show cached data if available
+      try {
+        const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+        if (cachedData && cachedData.userData) {
+          logger.info('[useProfileCache] ✅ Using cached data after error');
+          setUserData(cachedData.userData);
+          setFollowStats(cachedData.followStats);
+          setVideos(cachedData.videos || []);
+          setAnalytics(cachedData.analytics);
+          setCooldowns(cachedData.cooldowns);
+          hasLoadedRef.current = true;
+          setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+        } else {
+          setError(err.message || 'Failed to load profile data');
+        }
+      } catch (cacheErr) {
+        setError(err.message || 'Failed to load profile data');
+      }
+      
       setIsLoading(false);
     } finally {
       isLoadingRef.current = false;
@@ -423,6 +469,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         if (hasCachedData) {
           // Show cached data immediately, then fetch fresh in background
           setIsLoading(false);
+          hasLoadedRef.current = true; // Mark as loaded so we don't show loading again
         }
       }
 
@@ -430,12 +477,35 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       await fetchFreshData(forceRefresh);
     } catch (err: any) {
       console.error('[useProfileCache] ❌ Refresh error:', err);
-      setError(err.message || 'Failed to refresh profile');
+      
+      // ✅ CRITICAL FIX: If fetch fails, try to show cached data
+      if (!userData) {
+        try {
+          const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+          if (cachedData && cachedData.userData) {
+            logger.info('[useProfileCache] ✅ Showing cached data after fetch error');
+            setUserData(cachedData.userData);
+            setFollowStats(cachedData.followStats);
+            setVideos(cachedData.videos || []);
+            setAnalytics(cachedData.analytics);
+            setCooldowns(cachedData.cooldowns);
+            hasLoadedRef.current = true;
+            setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+          } else {
+            setError(err.message || 'Failed to refresh profile');
+          }
+        } catch (cacheErr) {
+          logger.error('[useProfileCache] Failed to load cached data:', cacheErr);
+          setError(err.message || 'Failed to refresh profile');
+        }
+      } else {
+        setError(err.message || 'Failed to refresh profile');
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [loadFromCache, fetchFreshData]);
+  }, [loadFromCache, fetchFreshData, userData, cacheKey]);
 
   /**
    * Retry with exponential backoff
@@ -471,7 +541,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       setVideos(transformedVideos);
 
       // Update cache with new videos
-      const currentCache = await cacheService.get<ProfileCacheData>(CACHE_KEYS.PROFILE_DATA);
+      const currentCache = await cacheService.get<ProfileCacheData>(cacheKey);
       if (currentCache) {
         await saveToCache({
           ...currentCache,
@@ -491,7 +561,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     setUserData(prev => prev ? { ...prev, ...updates } : null);
     
     // Update cache immediately with new data
-    const currentCache = await cacheService.get<ProfileCacheData>(CACHE_KEYS.PROFILE_DATA);
+    const currentCache = await cacheService.get<ProfileCacheData>(cacheKey);
     if (currentCache && currentCache.userData) {
       await saveToCache({
         ...currentCache,
@@ -511,10 +581,10 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
    * Invalidate cache
    */
   const invalidateCache = useCallback(async (): Promise<void> => {
-    await cacheService.invalidate(CACHE_KEYS.PROFILE_DATA);
+    await cacheService.invalidate(cacheKey);
     hasLoadedRef.current = false;
     setIsCacheHit(false);
-  }, []);
+  }, [cacheKey]);
 
   // Initial load on mount
   useEffect(() => {

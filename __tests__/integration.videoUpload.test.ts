@@ -118,10 +118,10 @@ describe('Integration: Complete Video Upload Flow', () => {
     );
 
     // Step 4: Compress thumbnail
-    const compressedThumbnail = await compressThumbnail(thumbnail);
+    const compressedThumbnail = await compressThumbnail(thumbnail!);
     expect(compressedThumbnail).toBe(compressedThumbnailUri);
     expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
-      thumbnail,
+      thumbnail!,
       [{ resize: { width: 720 } }],
       expect.objectContaining({
         compress: expect.any(Number),
@@ -179,7 +179,7 @@ describe('Integration: Complete Video Upload Flow', () => {
     expect(thumbnail).not.toBeNull();
 
     // Compress thumbnail
-    const compressedThumbnail = await compressThumbnail(thumbnail);
+    const compressedThumbnail = await compressThumbnail(thumbnail!);
     expect(compressedThumbnail).toBeDefined();
   });
 
@@ -220,7 +220,7 @@ describe('Integration: Complete Video Upload Flow', () => {
     expect(thumbnail).not.toBeNull();
 
     // Compress thumbnail
-    const compressedThumbnail = await compressThumbnail(thumbnail);
+    const compressedThumbnail = await compressThumbnail(thumbnail!);
     expect(compressedThumbnail).toBeDefined();
   });
 
@@ -296,7 +296,7 @@ describe('Integration: Complete Video Upload Flow', () => {
     expect(thumbnail).toBe(thumbnailUri);
 
     // Compression should return original thumbnail on failure
-    const compressedThumbnail = await compressThumbnail(thumbnail);
+    const compressedThumbnail = await compressThumbnail(thumbnail!);
     expect(compressedThumbnail).toBe(thumbnailUri); // Falls back to original
   });
 
@@ -336,7 +336,7 @@ describe('Integration: Complete Video Upload Flow', () => {
     const thumbnail = await generateThumbnail(videoUri);
     expect(thumbnail).not.toBeNull();
 
-    const compressedThumbnail = await compressThumbnail(thumbnail);
+    const compressedThumbnail = await compressThumbnail(thumbnail!);
     expect(compressedThumbnail).toBeDefined();
 
     // Verify cleanup

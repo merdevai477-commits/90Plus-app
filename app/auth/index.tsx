@@ -32,7 +32,7 @@ import {
     KeyRound,
 } from 'lucide-react-native';
 import { COLORS, GRADIENTS, EFFECTS } from '../../components/reels/constants';
-import { useSignIn, useSignUp, useOAuth, useAuth } from '@clerk/clerk-expo';
+import { useSignIn, useSignUp, useOAuth, useAuth, useUser } from '@clerk/clerk-expo';
 import { useTranslation } from '../../src/i18n';
 import { globalState } from '../../globalState';
 import { useHomeStore } from '../../src/store/home.store';
@@ -175,6 +175,7 @@ export default function AuthScreen() {
     const { signIn, setActive: setActiveSignIn } = useSignIn();
     const { signUp, setActive: setActiveSignUp } = useSignUp();
     const { isSignedIn, isLoaded, signOut } = useAuth();
+    const { user } = useUser(); // ✅ Get user from useUser hook
 
     // ✅ CRITICAL FIX: Handle case where user is already signed in but on auth screen
     // This can happen if sync failed after Clerk session was activated
@@ -196,13 +197,10 @@ export default function AuthScreen() {
                         globalState.setUserType('diamond');
                         useHomeStore.getState().setUserMode('diamond');
                         
+                        // ✅ Skip onboarding, go directly to Home
                         setTimeout(() => {
                             setShowLoadingScreen(false);
-                            if (syncResult.isNewUser) {
-                                router.replace('/onboarding');
-                            } else {
-                                router.replace('/(tabs)/Home');
-                            }
+                            router.replace('/(tabs)/Home');
                         }, 500);
                     } else {
                         // Sync failed, sign out and let user try again
@@ -393,6 +391,48 @@ export default function AuthScreen() {
         } catch (error: any) {
             console.error('❌ Failed to sync with backend:', error);
             
+            // ✅ FALLBACK: If sync fails with 502, continue with Clerk data
+            if (error instanceof SyncServerError && error.statusCode === 502) {
+                console.warn('⚠️ Server unavailable (502), continuing with Clerk data...');
+                
+                // Use Clerk user data as fallback
+                try {
+                    // Get user from useUser hook (already defined at top of component)
+                    if (user) {
+                        const username = user.username || user.emailAddresses[0]?.emailAddress?.split('@')[0] || 'user';
+                        
+                        globalState.username = username;
+                        globalState.setUserProfile({
+                            id: user.id,
+                            username: username,
+                            displayName: user.fullName || username,
+                            avatar: user.imageUrl || undefined,
+                            bio: undefined,
+                            stats: {
+                                views: 0, likes: 0, questionsSolved: 0, rating: 0, posts: 0,
+                                predictions: 0, interactions: 0, level: 1, followers: 0, following: 0,
+                                monthlyViews: 0, yearlyViews: 0, engagementRate: 0, contentQuality: 0,
+                            },
+                            videos: [], badges: [], achievements: [],
+                            socialStats: { followers: [], following: [] },
+                            notifications: [],
+                            isOwner: true, 
+                            isVerified: false, 
+                            isAppOwner: false,
+                        });
+                        
+                        await AsyncStorage.setItem('@username_setup_complete', 'true');
+                        
+                        console.log('✅ Using Clerk fallback data, continuing...');
+                        return { success: true, isNewUser: true };
+                    } else {
+                        console.error('❌ No Clerk user data available for fallback');
+                    }
+                } catch (fallbackError) {
+                    console.error('❌ Fallback also failed:', fallbackError);
+                }
+            }
+            
             // Determine error type and provide specific error message
             let errorMessage = 'حدث خطأ أثناء تحميل بيانات المستخدم';
             let errorTitle = 'خطأ في المزامنة';
@@ -544,16 +584,12 @@ export default function AuthScreen() {
                         globalState.setUserType('diamond');
                         useHomeStore.getState().setUserMode('diamond');
 
-                        // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
+                        // ✅ OPTIMIZATION: Skip onboarding, go directly to Home
                         setTimeout(() => {
                             setShowLoadingScreen(false);
-                            // If new user, go to onboarding, otherwise go to home
-                            if (syncResult.isNewUser) {
-                                router.replace('/onboarding');
-                            } else {
-                                router.replace('/(tabs)/Home');
-                            }
-                        }, 800);
+                            // Always go to Home (onboarding disabled)
+                            router.replace('/(tabs)/Home');
+                        }, 500); // ✅ Reduced to 500ms for faster navigation
                     } catch (syncError: any) {
                         console.error('❌ Login sync error:', syncError);
                         
@@ -780,10 +816,10 @@ export default function AuthScreen() {
                     globalState.setUserType('diamond');
                     useHomeStore.getState().setUserMode('diamond');
 
-                    // ✅ OPTIMIZATION: Reduced delay from 1500ms to 800ms
+                    // ✅ Skip onboarding, go directly to Home
                     setTimeout(() => {
-                        router.replace('/onboarding');
-                    }, 800);
+                        router.replace('/(tabs)/Home');
+                    }, 500); // ✅ Reduced delay
                 } catch (syncError: any) {
                     console.error('❌ Signup sync error:', syncError);
                     
@@ -903,20 +939,16 @@ export default function AuthScreen() {
                     if (__DEV__) {
                         console.log('🔵 Navigating...');
                     }
-                    // Small delay for smooth transition
+                    // ✅ Skip onboarding, go directly to Home
                     setTimeout(() => {
                         try {
-                            if (syncResult.isNewUser) {
-                                router.replace('/onboarding');
-                            } else {
-                                router.replace('/(tabs)/Home');
-                            }
+                            router.replace('/(tabs)/Home');
                         } catch (navError) {
                             console.error('❌ Navigation error:', navError);
                             // Fallback navigation
                             router.replace('/(tabs)/Home');
                         }
-                    }, 1500);
+                    }, 500); // ✅ Reduced delay
                 } catch (syncError: any) {
                     console.error('❌ Google OAuth sync error:', syncError);
                     
@@ -1045,20 +1077,16 @@ export default function AuthScreen() {
                     }
 
                     console.log('🍎 Navigating...');
-                    // Small delay for smooth transition
+                    // ✅ Skip onboarding, go directly to Home
                     setTimeout(() => {
                         try {
-                            if (syncResult.isNewUser) {
-                                router.replace('/onboarding');
-                            } else {
-                                router.replace('/(tabs)/Home');
-                            }
+                            router.replace('/(tabs)/Home');
                         } catch (navError) {
                             console.error('❌ Navigation error:', navError);
                             // Fallback navigation
                             router.replace('/(tabs)/Home');
                         }
-                    }, 1500);
+                    }, 500); // ✅ Reduced delay
                 } catch (syncError: any) {
                     console.error('❌ Apple OAuth sync error:', syncError);
                     

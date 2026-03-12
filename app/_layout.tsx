@@ -20,6 +20,9 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { logger } from "../services/logger";
 import { preloadManager } from "../services/preloadManager";
 import { useAuth, useUser } from "@clerk/clerk-expo";
+import { initSentry, captureException } from "../services/sentry.service";
+import { SentryUserTracker } from "../components/SentryUserTracker";
+import { useNavigationTracking } from "../hooks/useNavigationTracking";
 
 // Lazy load websocket client to avoid bundling issues with socket.io-client
 let websocketClient: any = null;
@@ -59,6 +62,9 @@ const tokenCache = {
 
 function RootLayoutNav() {
   const { isLoaded } = useAuth();
+  
+  // Track navigation changes for Sentry breadcrumbs
+  useNavigationTracking();
 
   if (!isLoaded) {
     return (
@@ -150,6 +156,43 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
 
+    // Wake up server on app start (Railway cold start fix)
+    const wakeupServer = async () => {
+      try {
+        const { serverWakeupService } = await import('../services/serverWakeup.service');
+        await serverWakeupService.ensureServerAwake();
+        logger.debug('[PreloadInitializer] Server wakeup complete');
+      } catch (err) {
+        logger.warn('[PreloadInitializer] Server wakeup failed (non-critical):', err);
+      }
+    };
+
+    wakeupServer();
+
+    // One-time profile cache clear to fix shared data bug
+    const clearOldProfileCache = async () => {
+      try {
+        const CACHE_CLEAR_FLAG = 'profile_cache_cleared_v1';
+        const alreadyCleared = await cacheService.get(CACHE_CLEAR_FLAG);
+        
+        if (!alreadyCleared) {
+          logger.info('[PreloadInitializer] Clearing old profile cache (one-time fix)');
+          
+          // Clear old shared profile cache
+          await cacheService.invalidate('PROFILE_DATA');
+          
+          // Mark as cleared
+          await cacheService.set(CACHE_CLEAR_FLAG, true, 365 * 24 * 60 * 60); // 1 year
+          
+          logger.info('[PreloadInitializer] ✅ Old profile cache cleared');
+        }
+      } catch (err) {
+        logger.warn('[PreloadInitializer] Failed to clear old profile cache (non-critical):', err);
+      }
+    };
+
+    clearOldProfileCache();
+
     cacheService.cleanup().catch(err => {
       logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
     });
@@ -200,6 +243,17 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  // Initialize Sentry before app rendering
+  useEffect(() => {
+    try {
+      initSentry();
+      logger.info('[RootLayout] Sentry initialized successfully');
+    } catch (error) {
+      // Handle initialization failures gracefully - log warning but continue startup
+      logger.warn('[RootLayout] Sentry initialization failed (non-critical):', error);
+    }
+  }, []);
+
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
@@ -302,6 +356,23 @@ export default function RootLayout() {
   const handleError = (error: Error, errorInfo: ErrorInfo) => {
     logger.error('App Error:', error.message);
     logger.error('Component Stack:', errorInfo.componentStack);
+    
+    // Send error to Sentry with React error boundary context
+    try {
+      captureException(error, {
+        tags: {
+          errorBoundary: 'RootLayout',
+          platform: 'mobile',
+        },
+        extra: {
+          componentStack: errorInfo.componentStack,
+        },
+        level: 'error',
+      });
+    } catch (sentryError) {
+      // If Sentry fails, just log it - don't break the app
+      logger.warn('[RootLayout] Failed to send error to Sentry:', sentryError);
+    }
   };
 
   const handleGoHome = () => {
@@ -318,6 +389,7 @@ export default function RootLayout() {
         publishableKey={clerkPublishableKey}
         tokenCache={tokenCache}
       >
+        <SentryUserTracker />
         <QueryClientProvider client={queryClient}>
           <WebSocketInitializer>
             <PreloadInitializer>

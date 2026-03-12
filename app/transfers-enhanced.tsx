@@ -371,10 +371,10 @@ export default function TransfersEnhancedScreen() {
     ).length;
     
     const totalValue = filteredTransfers.reduce((sum, t) => {
-      const value = t.transfers[0]?.value || 0;
-      return sum + (typeof value === 'number' ? value : 0);
+      // Note: Transfer API doesn't provide value, so we skip this calculation
+      return sum;
     }, 0);
-    const avgValue = total > 0 ? totalValue / total : 0;
+    const avgValue = 0; // Not available from API
 
     return {
       totalTransfers: total,

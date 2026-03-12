@@ -26,6 +26,8 @@ import { FiltersModal, TransferFilters } from '../components/Transfers/FiltersMo
 import { TransfersCharts } from '../components/Transfers/TransfersCharts';
 import { TopLists } from '../components/Transfers/TopLists';
 import { TransferDetailsModal } from '../components/Transfers/TransferDetailsModal';
+// Example: Import user action tracker for Sentry breadcrumbs
+// import { useUserActionTracker } from '../utils/userActionTracker';
 
 const TRANSFERS_STORAGE_KEY = 'cached_transfers';
 const TRANSFERS_TIMESTAMP_KEY = 'cached_transfers_timestamp';

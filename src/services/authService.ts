@@ -1,6 +1,7 @@
 import { getApiUrl } from '../../config/api.config';
 import { requestDeduplicator } from '../../services/requestDeduplicator';
 import { logger } from './logger';
+import { safeJsonParse } from '../../utils/safeJsonParse';
 
 const API_URL = getApiUrl();
 
@@ -33,15 +34,15 @@ export class SyncValidationError extends Error {
     }
 }
 
-// ✅ CRITICAL FIX: Increase timeout to 30 seconds (was 10s)
-const API_TIMEOUT = 30000; // 30 seconds for slow connections
+// ✅ OPTIMIZED: Balanced timeout for Railway cold starts
+const API_TIMEOUT = 30000; // ✅ Increased to 30 seconds for Railway cold start
 
-// Overall sync operation timeout (15 seconds)
-const SYNC_OPERATION_TIMEOUT = 15000; // 15 seconds total for sync operation
+// Overall sync operation timeout (25 seconds)
+const SYNC_OPERATION_TIMEOUT = 25000; // ✅ Increased to 25 seconds for cold start
 
 // Retry configuration
-const MAX_RETRY_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 500; // Reduced from 1000ms to 500ms
+const MAX_RETRY_ATTEMPTS = 3; // ✅ Increased to 3 for Railway cold start
+const RETRY_DELAY_MS = 1000; // ✅ Increased to 1 second between retries
 
 // ✅ SUPER SPEED: In-memory cache for instant responses
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
@@ -222,8 +223,10 @@ export class AuthService {
                         headers: {
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json',
+                            'X-Request-Priority': 'high', // ✅ Signal priority to backend
+                            'X-Retry-Attempt': `${attempt}`, // ✅ Track retry attempts
                         },
-                    });
+                    }, 30000); // ✅ 30 seconds timeout for Railway cold start
 
                     // Handle non-OK responses
                     if (!response.ok) {
@@ -261,9 +264,11 @@ export class AuthService {
                     // Determine if error is retryable
                     const isRetryable = 
                         error.name === 'SyncNetworkError' ||
-                        (error.name === 'SyncServerError' && error.statusCode && error.statusCode >= 500) ||
+                        (error.name === 'SyncServerError' && error.statusCode && (error.statusCode >= 500 || error.statusCode === 502)) ||
                         error.message?.includes('timeout') ||
-                        error.message?.includes('network');
+                        error.message?.includes('network') ||
+                        error.message?.includes('fetch') ||
+                        error.message?.includes('ECONNREFUSED');
 
                     // If not retryable or last attempt, reject immediately
                     if (!isRetryable || attempt === MAX_RETRY_ATTEMPTS) {
@@ -281,9 +286,10 @@ export class AuthService {
                         return;
                     }
 
-                    // Wait before retry (reduced to 500ms)
-                    logger.debug(`⚠️ Sync attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+                    // Wait before retry with exponential backoff
+                    const delay = RETRY_DELAY_MS * Math.pow(1.5, attempt - 1); // ✅ Exponential backoff
+                    logger.debug(`⚠️ Sync attempt ${attempt} failed, retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
 
@@ -732,8 +738,8 @@ export class FollowService {
                 },
             });
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            const data = await safeJsonParse<any>(response, null);
+            if (data && data.status === 'SUCCESS') {
                 return data.data;
             }
             return null;
@@ -1607,8 +1613,8 @@ export class ProfileService {
                 },
             });
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            const data = await safeJsonParse<any>(response, null);
+            if (data && data.status === 'SUCCESS') {
                 return data.data;
             }
             return null;
@@ -1631,8 +1637,8 @@ export class ProfileService {
                 },
             });
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            const data = await safeJsonParse<any>(response, null);
+            if (data && data.status === 'SUCCESS') {
                 return data.data;
             }
             return null;

@@ -13,9 +13,13 @@
     "build:ios": "eas build --platform ios --profile production",
     "build:prod": "NODE_ENV=production eas build --profile production",
     "lint": "expo lint",
+    "lint:fix": "eslint --fix .",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "check:console": "node scripts/check-console-logs.js",
+    "check:types": "tsc --noEmit",
+    "check:all": "npm run check:console && npm run check:types && npm run lint && npm test"
   },
   "dependencies": {
     "@clerk/clerk-expo": "2.19.26",
@@ -27,6 +31,7 @@
     "@react-native-community/netinfo": "11.5.2",
     "@react-native-community/slider": "5.1.2",
     "@react-native-masked-view/masked-view": "0.3.2",
+    "@sentry/react-native": "^8.3.0",
     "@shopify/react-native-skia": "2.4.18",
     "@supabase/supabase-js": "^2.86.0",
     "@tanstack/react-query": "^5.90.2",
@@ -87,6 +92,7 @@
   },
   "devDependencies": {
     "@react-native-community/cli": "^13.6.9",
+    "@types/glob": "^8.1.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^24.5.2",
     "@types/react": "^19.2.14",

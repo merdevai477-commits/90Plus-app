@@ -188,7 +188,7 @@ describe('Reply Optimistic Update Property Tests', () => {
       timestamp: fc.constant('منذ 5 دقائق'),
       likes: fc.nat({ max: 1000 }),
       liked: fc.boolean(),
-      replies: fc.constant([]),
+      replies: fc.constant([] as Reply[]),
       repliesCount: fc.nat({ max: 100 }),
       showReplies: fc.boolean(),
     });

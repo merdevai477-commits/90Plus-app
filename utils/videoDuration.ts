@@ -126,6 +126,11 @@ export function shouldShowDuration(duration: FormattedDuration | DurationResult)
  * - Uses Audio.Sound.createAsync() to load video and extract duration
  * - Works with video files because they contain audio tracks
  * - Properly releases resources with unloadAsync() to prevent memory leaks
+ * 
+ * EXPO GO FALLBACK:
+ * - In Expo Go, expo-av native module is not available
+ * - Returns null to skip duration validation
+ * - Allows video upload without duration check
  */
 export async function extractDurationFromUrl(videoUrl: string): Promise<DurationResult> {
   if (!videoUrl) {
@@ -135,8 +140,10 @@ export async function extractDurationFromUrl(videoUrl: string): Promise<Duration
   let sound: any = null;
 
   try {
-    // Import Audio from expo-av
-    const { Audio } = await import('expo-av');
+    // Try to import Audio from expo-av
+    // This will fail in Expo Go SDK 52
+    const ExpoAV = await import('expo-av');
+    const { Audio } = ExpoAV;
 
     // Use Audio.Sound to load the video and extract duration
     // This works with video files because they contain audio tracks
@@ -178,7 +185,7 @@ export async function extractDurationFromUrl(videoUrl: string): Promise<Duration
     }
     return null;
 
-  } catch (error) {
+  } catch (error: any) {
     // Release resources in case of error
     if (sound) {
       try {
@@ -188,7 +195,19 @@ export async function extractDurationFromUrl(videoUrl: string): Promise<Duration
       }
     }
 
-    // Log error if logger is available
+    // Check if this is an Expo Go / native module error
+    if (error?.message?.includes('ExponentAV') || error?.message?.includes('native module')) {
+      // Expo Go doesn't support expo-av - return null to skip validation
+      try {
+        const { logger } = await import('../services/logger');
+        logger.warn('[videoDuration] expo-av not available (Expo Go), skipping duration check');
+      } catch {
+        // Ignore logging errors
+      }
+      return null;
+    }
+
+    // Log other errors if logger is available
     try {
       const { logger } = await import('../services/logger');
       logger.warn('[videoDuration] Failed to extract video duration:', error);

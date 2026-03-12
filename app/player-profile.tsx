@@ -105,7 +105,7 @@ interface Transfer {
 }
 
 // Team colors mapping (common teams) - using app theme colors
-const TEAM_COLORS: { [key: string]: string[] } = {
+const TEAM_COLORS: { [key: string]: readonly [string, string, ...string[]] } = {
     'Liverpool': ['#C8102E', '#8B0000'],
     'Manchester City': ['#6CABDD', '#1C2C5B'],
     'Manchester United': ['#DA291C', '#8B0000'],
@@ -121,7 +121,7 @@ const TEAM_COLORS: { [key: string]: string[] } = {
     'default': [ProfileTheme.colors.neonBlue, ProfileTheme.colors.neonPurple],
 };
 
-const getTeamColors = (teamName: string): string[] => {
+const getTeamColors = (teamName: string): readonly [string, string, ...string[]] => {
     for (const [team, colors] of Object.entries(TEAM_COLORS)) {
         if (teamName.toLowerCase().includes(team.toLowerCase())) {
             return colors;

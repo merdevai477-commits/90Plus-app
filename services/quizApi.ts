@@ -26,7 +26,7 @@ export interface LocalQuizQuestion {
 }
 
 const API_URL = getApiUrl();
-const API_TIMEOUT = 10000; // 10 seconds
+const API_TIMEOUT = 20000; // 20 seconds (increased for Railway cold starts)
 
 // Cache keys and TTL
 const QUIZ_CATEGORIES_CACHE_KEY = 'quiz_categories';
@@ -99,8 +99,12 @@ const fetchWithAuth = async (
         const duration = Date.now() - startTime;
         
         // Log response status for debugging
+        // ✅ FIX: Clone response before reading body to avoid "body already read" error
+        const responseClone = response.clone();
+        
         if (!response.ok) {
-            const errorText = await response.text().catch(() => 'Unable to read error response');
+            // Read error from clone to preserve original response
+            const errorText = await responseClone.text().catch(() => 'Unable to read error response');
             console.error(`[QuizAPI] Request failed`, {
                 status: response.status,
                 statusText: response.statusText,
@@ -120,6 +124,7 @@ const fetchWithAuth = async (
             });
         }
         
+        // Return original response (not clone) so caller can read body
         return response;
     } catch (error: any) {
         clearTimeout(timeoutId);
@@ -250,6 +255,7 @@ export interface QuizHistoryItem {
 /**
  * Get daily quiz status (can take, cooldown, etc.)
  * جلب حالة الكويز اليومي
+ * ✅ FIX: Graceful handling of 500 errors - show UI fallback instead of crashing
  */
 export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<DailyQuizStatus> {
     const startTime = Date.now();
@@ -260,7 +266,14 @@ export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<Da
                 endpoint: '/quiz/daily-status',
                 fullUrl: `${API_URL}/quiz/daily-status`,
             });
-            throw new Error('Authentication token function is not available');
+            // ✅ Return default instead of throwing
+            return {
+                canTake: false,
+                categoryId: null,
+                categoryName: null,
+                canRetryAt: null,
+                timeRemaining: null,
+            };
         }
 
         logger.debug('[QuizAPI] getDailyQuizStatus - Starting request', {
@@ -274,6 +287,18 @@ export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<Da
         });
 
         if (!response.ok) {
+            // ✅ FIX: Handle 500 errors gracefully - don't crash the app
+            if (response.status === 500) {
+                logger.warn('[QuizAPI] getDailyQuizStatus - Server error (500), returning default state');
+                return {
+                    canTake: false,
+                    categoryId: null,
+                    categoryName: null,
+                    canRetryAt: null,
+                    timeRemaining: null,
+                };
+            }
+            
             const errorText = await response.text();
             let errorMessage = `Failed to fetch daily quiz status: ${response.status} ${response.statusText}`;
             let errorData: any = null;
@@ -298,12 +323,19 @@ export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<Da
                 duration: `${Date.now() - startTime}ms`,
             });
             
-            // If 404, provide helpful error message
+            // If 404, provide helpful error message but don't crash
             if (response.status === 404) {
-                throw new Error(`Endpoint not found. Please check if the server is running and the route is registered. URL: ${API_URL}/quiz/daily-status`);
+                logger.warn('[QuizAPI] getDailyQuizStatus - Endpoint not found (404)');
             }
             
-            throw new Error(errorMessage);
+            // ✅ Return default instead of throwing
+            return {
+                canTake: false,
+                categoryId: null,
+                categoryName: null,
+                canRetryAt: null,
+                timeRemaining: null,
+            };
         }
 
         const data = await response.json();
@@ -325,7 +357,15 @@ export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<Da
             };
         }
 
-        throw new Error(data.message || 'Failed to fetch daily quiz status');
+        // ✅ Return default instead of throwing
+        logger.warn('[QuizAPI] getDailyQuizStatus - Unexpected response status:', data.status);
+        return {
+            canTake: false,
+            categoryId: null,
+            categoryName: null,
+            canRetryAt: null,
+            timeRemaining: null,
+        };
     } catch (error: any) {
         const duration = Date.now() - startTime;
         console.error('[QuizAPI] getDailyQuizStatus - Error', {
@@ -337,7 +377,7 @@ export async function getDailyQuizStatus(getToken: GetTokenFunction): Promise<Da
             duration: `${duration}ms`,
         });
         
-        // Return default on error
+        // ✅ FIX: Always return default on error - never crash the UI
         return {
             canTake: false,
             categoryId: null,

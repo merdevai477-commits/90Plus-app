@@ -12,6 +12,10 @@
 import { io, Socket } from 'socket.io-client';
 import { getWsUrl } from '../config/api.config';
 import { logger } from './logger';
+import { WSPayload } from '@/types/websocket';
+
+// Re-export WSPayload for convenience
+export type { WSPayload } from '@/types/websocket';
 
 /**
  * WebSocket Event Types (matching backend)
@@ -28,7 +32,7 @@ export type WSEventType =
 /**
  * WebSocket Message structure (matching backend)
  */
-export interface WSMessage<T = unknown> {
+export interface WSMessage<T extends WSPayload = WSPayload> {
   type: WSEventType;
   payload: T;
   timestamp: number;
@@ -127,7 +131,7 @@ const DEFAULT_RECONNECTION_CONFIG: ReconnectionConfig = {
 /**
  * Event callback type
  */
-type EventCallback<T = unknown> = (data: WSMessage<T>) => void;
+type EventCallback<T extends WSPayload = WSPayload> = (data: WSMessage<T>) => void;
 
 /**
  * Calculate delay with exponential backoff
@@ -229,6 +233,19 @@ class WebSocketClient {
       // ✅ Silent logging for localhost - don't spam console
       if (this.currentWsUrl?.includes('localhost') || this.currentWsUrl?.includes('127.0.0.1')) {
         logger.debug('[WebSocket] Connection error (localhost - backend not running)');
+        return;
+      }
+      
+      // ✅ Check if it's a 502 error (cold start) - reduce noise
+      const is502Error = error.message?.includes('502') || 
+                         (error as any).description === 502 ||
+                         (error as any).context?.status === 502;
+      
+      if (is502Error) {
+        logger.debug('[WebSocket] Server cold start detected (502) - will retry automatically');
+        if (!this.isManualDisconnect) {
+          this.attemptReconnect();
+        }
         return;
       }
       
@@ -377,7 +394,7 @@ class WebSocketClient {
    * Subscribe to an event type
    * Returns an unsubscribe function
    */
-  subscribe<T = unknown>(
+  subscribe<T extends WSPayload = WSPayload>(
     eventType: WSEventType,
     callback: EventCallback<T>
   ): () => void {

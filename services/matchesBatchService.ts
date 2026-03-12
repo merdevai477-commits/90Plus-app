@@ -14,8 +14,8 @@ import { ApiFootballService, Fixture } from './apiFootball';
  * Configuration for matches batch fetching
  */
 export const MATCHES_CONFIG = {
-  /** Number of days to fetch in a single batch */
-  BATCH_DAYS: 7,
+  /** Number of days to fetch in a single batch - Reduced from 7 to 3 for faster loading */
+  BATCH_DAYS: 3, // Yesterday + Today + Tomorrow
   /** Cache TTL: 30 minutes minimum as per Requirements 5.2 */
   CACHE_TTL: CACHE_TTL.MATCHES, // 30 * 60 * 1000
   /** Maximum matches per API call */

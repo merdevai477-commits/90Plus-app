@@ -7,6 +7,7 @@ import Constants from 'expo-constants';
 import * as Application from 'expo-application';
 import { Platform, Linking, Alert } from 'react-native';
 import { getApiUrl } from '../config/api.config';
+import { safeJsonParse } from '../utils/safeJsonParse';
 
 const API_URL = getApiUrl();
 
@@ -55,7 +56,7 @@ export async function checkAppVersion(): Promise<AppVersionInfo | null> {
 
         if (response.status === 503) {
             // Maintenance mode
-            const data = await response.json();
+            const data = await safeJsonParse<any>(response, { status: 'MAINTENANCE', maintenanceMessage: null });
             return {
                 currentVersion: '0.0.0',
                 minimumVersion: '0.0.0',
@@ -65,28 +66,34 @@ export async function checkAppVersion(): Promise<AppVersionInfo | null> {
                 updateMessage: null,
                 updateUrl: '',
                 maintenance: true,
-                maintenanceMessage: data.maintenanceMessage || 'التطبيق تحت الصيانة. يرجى المحاولة لاحقاً.',
+                maintenanceMessage: data?.maintenanceMessage || 'التطبيق تحت الصيانة. يرجى المحاولة لاحقاً.',
             };
         }
 
         if (response.status === 426) {
             // Update required
-            const data = await response.json();
+            const data = await safeJsonParse<any>(response, { 
+                currentVersion: '1.0.0', 
+                minimumVersion: '1.0.0',
+                forceUpdate: false,
+                message: null,
+                updateUrl: ''
+            });
             return {
-                currentVersion: data.currentVersion || '1.0.0',
-                minimumVersion: data.minimumVersion || '1.0.0',
+                currentVersion: data?.currentVersion || '1.0.0',
+                minimumVersion: data?.minimumVersion || '1.0.0',
                 clientVersion: currentVersion,
                 needsUpdate: true,
-                forceUpdate: data.forceUpdate || false,
-                updateMessage: data.message || 'يجب تحديث التطبيق لاستمرار الاستخدام.',
-                updateUrl: data.updateUrl || '',
+                forceUpdate: data?.forceUpdate || false,
+                updateMessage: data?.message || 'يجب تحديث التطبيق لاستمرار الاستخدام.',
+                updateUrl: data?.updateUrl || '',
                 maintenance: false,
             };
         }
 
-        const data = await response.json();
+        const data = await safeJsonParse<any>(response, { status: 'ERROR', data: null });
         
-        if (data.status === 'SUCCESS' && data.data) {
+        if (data && data.status === 'SUCCESS' && data.data) {
             return data.data;
         }
 

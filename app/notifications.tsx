@@ -844,7 +844,7 @@ export default function NotificationsScreen() {
                             </View>
                             <TextInput
                                 style={styles.searchInput}
-                                placeholder={t.notifications?.search?.placeholder || 'Search notifications...'}
+                                placeholder={t.notifications?.searchPlaceholder || 'Search notifications...'}
                                 placeholderTextColor="rgba(255,255,255,0.5)"
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}

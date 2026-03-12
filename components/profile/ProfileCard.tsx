@@ -266,7 +266,7 @@ const ProfileCard = memo(function ProfileCard({
 
                 <TouchableOpacity onPress={onCountryPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Text style={{ fontSize: 40 * scale }}>
-                        {countryFlag || '🇪🇬'}
+                        {countryFlag || '🌍'}
                     </Text>
                 </TouchableOpacity>
 
@@ -282,7 +282,9 @@ const ProfileCard = memo(function ProfileCard({
                                 transition={200}
                             />
                         ) : (
-                            <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale }]} />
+                            <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale, backgroundColor: '#000' }]}>
+                                <Text style={{ fontSize: 16 * scale, color: '#FFD700' }}>⚽</Text>
+                            </View>
                         )}
                     </TouchableOpacity>
 
@@ -297,7 +299,9 @@ const ProfileCard = memo(function ProfileCard({
                                 transition={200}
                             />
                         ) : (
-                            <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale }]} />
+                            <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale, backgroundColor: '#000' }]}>
+                                <Text style={{ fontSize: 16 * scale, color: '#FFD700' }}>👟</Text>
+                            </View>
                         )}
                     </TouchableOpacity>
                 </View>
@@ -332,12 +336,12 @@ const ProfileCard = memo(function ProfileCard({
                     <View style={styles.statsRow}>
                         <View style={[styles.statItem, { paddingTop: 79 }]}>
                             <Text style={styles.statLabel}>AGE</Text>
-                            <Text style={styles.statValue}>{age || '22'}</Text>
+                            <Text style={styles.statValue}>{age || '--'}</Text>
                         </View>
                         <View style={styles.statDivider} />
                         <View style={[styles.statItem, { paddingTop: 79 }]}>
                             <Text style={styles.statLabel}>HGT</Text>
-                            <Text style={styles.statValue}>{height || '180'}</Text>
+                            <Text style={styles.statValue}>{height || '--'}</Text>
                         </View>
                     </View>
 
@@ -348,12 +352,12 @@ const ProfileCard = memo(function ProfileCard({
                     <View style={styles.statsRow}>
                         <View style={[styles.statItem, { paddingTop: 0 }]}>
                             <Text style={styles.statLabel}>WGT</Text>
-                            <Text style={styles.statValue}>{weight || '70'}</Text>
+                            <Text style={styles.statValue}>{weight || '--'}</Text>
                         </View>
                         <View style={styles.statDivider} />
                         <View style={[styles.statItem, { paddingTop: 0 }]}>
                             <Text style={styles.statLabel}>FOOT</Text>
-                            <Text style={styles.statValue}>{foot || 'R'}</Text>
+                            <Text style={styles.statValue}>{foot || '--'}</Text>
                         </View>
                     </View>
                 </TouchableOpacity>

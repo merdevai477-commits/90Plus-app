@@ -42,6 +42,20 @@ export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUplo
     }));
 
     const pickVideo = async () => {
+        // Request media library permissions (required for iOS App Store)
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        
+        if (status !== 'granted') {
+            Alert.alert(
+                'صلاحية مطلوبة',
+                'نحتاج إلى صلاحية الوصول للمعرض لرفع الفيديوهات.',
+                [
+                    { text: 'حسناً', style: 'default' }
+                ]
+            );
+            return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Videos,
             allowsEditing: true, // Allows trimming in some OS
@@ -57,10 +71,21 @@ export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUplo
             const duration = await extractDurationFromUrl(asset.uri);
 
             // Validation Logic - Requirements 2.6, 2.7, 2.8
+            // Skip validation if duration is null (Expo Go / expo-av not available)
             if (duration === null) {
+                // In Expo Go, we can't extract duration - allow upload anyway
+                // Show warning but don't block
                 Alert.alert(
-                    'خطأ في الفيديو',
-                    'لا يمكن تحديد مدة الفيديو. الرجاء اختيار فيديو آخر.'
+                    'تنبيه',
+                    'لا يمكن التحقق من مدة الفيديو في Expo Go. تأكد أن الفيديو بين 5-60 ثانية.',
+                    [
+                        { text: 'إلغاء', style: 'cancel' },
+                        { 
+                            text: 'متابعة', 
+                            onPress: () => setVideoAsset(asset),
+                            style: 'default'
+                        }
+                    ]
                 );
                 return;
             }

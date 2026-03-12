@@ -14,6 +14,7 @@ import {
   websocketClient,
   WSEventType,
   WSMessage,
+  WSPayload,
   NotificationPayload,
   CommentPayload,
   ReplyPayload,
@@ -44,7 +45,7 @@ export function useWebSocketStatus(): boolean {
  * Hook to subscribe to a specific WebSocket event
  * Automatically handles cleanup on unmount
  */
-export function useWebSocketEvent<T = unknown>(
+export function useWebSocketEvent<T extends WSPayload = WSPayload>(
   eventType: WSEventType,
   callback: (data: WSMessage<T>) => void
 ): void {

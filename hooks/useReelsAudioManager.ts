@@ -12,6 +12,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { logger } from '../services/logger';
 // Safe import for expo-av
 let Video: any = null;
 let Audio: any = null;
@@ -124,7 +125,7 @@ export const useReelsAudioManager = ({
     
     // Log summary if there were errors
     if (errorCount > 0) {
-      console.log(`[AudioManager] Paused videos with ${errorCount} errors (may be expected)`);
+      logger.debug(`[AudioManager] Paused videos with ${errorCount} errors (may be expected)`);
     }
     
     onPauseAll?.();
@@ -168,7 +169,7 @@ export const useReelsAudioManager = ({
           
           // ✅ Retry on AudioFocusNotAcquiredException
           if (errorMessage.includes('AudioFocusNotAcquiredException') && retryCount < MAX_RETRIES) {
-            console.log(`[AudioManager] Audio focus not acquired, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+            logger.debug(`[AudioManager] Audio focus not acquired, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
             setTimeout(() => {
               resumeActiveVideo(retryCount + 1);
             }, RETRY_DELAY);
@@ -187,7 +188,7 @@ export const useReelsAudioManager = ({
               console.error(`[AudioManager] Fallback muted playback also failed for ${id}`);
             }
           } else {
-            console.log(`[AudioManager] Could not resume video ${id}:`, errorMessage);
+            logger.warn(`[AudioManager] Could not resume video ${id}:`, errorMessage);
           }
         }
       }
@@ -264,7 +265,7 @@ export const useReelsAudioManager = ({
     useCallback(() => {
       // Screen is focused
       isPageFocused.current = true;
-      console.log('[AudioManager] Reels page focused');
+      logger.debug('[AudioManager] Reels page focused');
       
       // ✅ FIX: Don't call playAsync here - let UnifiedVideoPlayer's shouldPlay handle it
       // This prevents AudioFocusNotAcquiredException from multiple play attempts
@@ -273,7 +274,7 @@ export const useReelsAudioManager = ({
       // Cleanup when screen loses focus
       return () => {
         isPageFocused.current = false;
-        console.log('[AudioManager] Reels page unfocused - pausing all videos');
+        logger.debug('[AudioManager] Reels page unfocused - pausing all videos');
         // ✅ FIX: Only pause, don't stop - stopping unloads the video
         // This allows quick resume when returning to the page
         pauseAllVideosRef.current();

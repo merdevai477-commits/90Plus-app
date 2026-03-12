@@ -49,15 +49,18 @@ export async function getClubLogo(apiId: number): Promise<string | null> {
             const logo = teamData?.logo;
             const teamName = teamData?.name;
             
-            // ✅ Validate logo exists and is a valid URL
-            if (logo && typeof logo === 'string' && logo.length > 0 && logo.startsWith('http')) {
+            // ✅ Validate logo exists and is a valid URL (not placeholder)
+            if (logo && typeof logo === 'string' && logo.length > 0 && 
+                logo.startsWith('http') && 
+                !logo.includes('placeholder') && // ✅ Reject placeholder URLs
+                !logo.includes('via.placeholder')) {
                 // ✅ Store in both cache and offline storage (permanent)
                 await cacheService.set(cacheKey, logo, LOGO_CACHE_TTL);
                 await offlineDataService.storeClubLogo(apiId, logo);
                 logger.debug(`💾 Stored club logo ${apiId} (${teamName || 'unknown'}) permanently`);
                 return logo;
             } else {
-                logger.warn(`⚠️ Invalid logo for team ${apiId} (${teamName || 'unknown'}): ${logo}`);
+                logger.warn(`⚠️ Invalid or placeholder logo for team ${apiId} (${teamName || 'unknown'}): ${logo}`);
             }
         }
     } catch (error) {
@@ -164,3 +167,15 @@ export async function refreshClubLogo(apiId: number): Promise<string | null> {
     return await getClubLogo(apiId);
 }
 
+
+// Default export for convenience
+export const clubLogoService = {
+  getClubLogo,
+  getClubLogos,
+  preloadClubLogos,
+  clearClubLogoCache,
+  clearAllClubLogoCache,
+  refreshClubLogo,
+};
+
+export default clubLogoService;
