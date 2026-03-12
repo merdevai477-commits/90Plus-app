@@ -4,12 +4,12 @@
 
 import { Router } from 'express';
 import { ProfileCompletionController } from '../controllers/profile-completion.controller';
-import { clerkAuthMiddleware } from '../middleware/clerk.middleware';
+import { requireAuth } from '../middleware/clerk.middleware';
 
 const router = Router();
 
 // All routes require authentication
-router.use(clerkAuthMiddleware);
+router.use(requireAuth);
 
 // Get profile completion status
 router.get('/completion', ProfileCompletionController.getCompletionStatus);
