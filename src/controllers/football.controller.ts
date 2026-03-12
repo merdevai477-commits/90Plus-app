@@ -3,6 +3,7 @@ import { footballService, FootballApiError } from '../services/football.service'
 import { matchCacheService, FixtureFromAPI } from '../services/match-cache.service';
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { logger } from '../utils/logger';
+import prisma from '../lib/prisma';
 
 /**
  * Football API Proxy Controller
@@ -1908,6 +1909,56 @@ export class FootballController {
       });
     } catch (error) {
       FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/teams/all - Get all cached teams from database
+   */
+  static async getAllCachedTeams(req: Request, res: Response): Promise<void> {
+    try {
+      const { limit = '500', offset = '0', country } = req.query;
+      
+      const where: any = {};
+      if (country) {
+        where.country = country as string;
+      }
+      
+      const teams = await prisma.cachedTeam.findMany({
+        where,
+        select: {
+          teamId: true,
+          name: true,
+          logo: true,
+          country: true,
+          code: true,
+        },
+        orderBy: [
+          { country: 'asc' },
+          { name: 'asc' },
+        ],
+        take: parseInt(limit as string),
+        skip: parseInt(offset as string),
+      });
+      
+      const total = await prisma.cachedTeam.count({ where });
+      
+      logger.info(`✅ Returned ${teams.length} cached teams (total: ${total})`);
+      
+      res.json({
+        status: 'SUCCESS',
+        response: teams,
+        teams,
+        total,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+      });
+    } catch (error: any) {
+      logger.error('Error getting all cached teams:', error);
+      res.status(500).json({
+        status: 'ERROR',
+        message: 'Failed to get cached teams',
+      });
     }
   }
 
