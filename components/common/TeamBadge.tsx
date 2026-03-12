@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 
 interface TeamBadgeProps {
   name: string;
@@ -14,10 +15,7 @@ export default function TeamBadge({
   size = 50,
   logo
 }: TeamBadgeProps) {
-  // If we have a logo and we're not in strict safe mode, we could show it
-  // BUT for now, to be 100% safe for Apple, we will IGNORE the logo prop
-  // and always show initials.
-  // Later we can add a flag to enable logos if needed.
+  const [imageError, setImageError] = useState(false);
   
   const initials = name
     .split(' ')
@@ -26,6 +24,9 @@ export default function TeamBadge({
     .substring(0, 3)
     .toUpperCase();
 
+  // Show logo if available and no error
+  const shouldShowLogo = logo && !imageError && logo.trim() !== '';
+
   return (
     <View style={[
       styles.container, 
@@ -33,12 +34,22 @@ export default function TeamBadge({
         width: size, 
         height: size,
         borderRadius: size / 2,
-        backgroundColor: color 
+        backgroundColor: shouldShowLogo ? 'rgba(255,255,255,0.05)' : color 
       }
     ]}>
-      <Text style={[styles.initials, { fontSize: size * 0.3 }]}>
-        {initials}
-      </Text>
+      {shouldShowLogo ? (
+        <Image
+          source={{ uri: logo }}
+          style={[styles.logo, { width: size * 0.7, height: size * 0.7 }]}
+          contentFit="contain"
+          transition={200}
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <Text style={[styles.initials, { fontSize: size * 0.3 }]}>
+          {initials}
+        </Text>
+      )}
     </View>
   );
 }
@@ -50,8 +61,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.1)',
   },
+  logo: {
+    borderRadius: 0,
+  },
   initials: {
     color: '#fff',
     fontWeight: 'bold',
   },
 });
+

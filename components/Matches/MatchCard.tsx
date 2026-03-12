@@ -156,6 +156,7 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
           <View style={styles.leagueHeader}>
             <LeagueIcon
               name={match.league.name}
+              logo={match.league.logo}
               size={16}
               color={MATCH_DETAILS_COLORS.textTertiary}
             />
@@ -193,6 +194,7 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
           <View style={styles.teamSection}>
             <TeamBadge
               name={match.homeTeam?.name || 'TBD'}
+              logo={match.homeTeam?.logo}
               color={MATCH_DETAILS_COLORS.cardSecondary}
               size={56}
             />
@@ -222,6 +224,7 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
           <View style={styles.teamSection}>
             <TeamBadge
               name={match.awayTeam?.name || 'TBD'}
+              logo={match.awayTeam?.logo}
               color={MATCH_DETAILS_COLORS.cardSecondary}
               size={56}
             />
