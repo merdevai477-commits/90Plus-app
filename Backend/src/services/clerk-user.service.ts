@@ -6,17 +6,32 @@ import { logger } from '../utils/logger';
 const clerkUserCache = new Map<string, { data: any; timestamp: number }>();
 const CLERK_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// ✅ Timeout wrapper for Clerk API calls
+// ✅ OPTIMIZED: Timeout wrapper with retry for Clerk API calls
 const clerkApiWithTimeout = async <T>(
     apiCall: () => Promise<T>,
-    timeoutMs: number = 10000 // 10 seconds timeout
+    timeoutMs: number = 8000, // ✅ Reduced to 8 seconds
+    retries: number = 2 // ✅ Added retry logic
 ): Promise<T> => {
-    return Promise.race([
-        apiCall(),
-        new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error('Clerk API timeout')), timeoutMs)
-        ),
-    ]);
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            return await Promise.race([
+                apiCall(),
+                new Promise<T>((_, reject) =>
+                    setTimeout(() => reject(new Error('Clerk API timeout')), timeoutMs)
+                ),
+            ]);
+        } catch (error: any) {
+            lastError = error;
+            if (attempt < retries - 1) {
+                logger.warn(`[Clerk API] Retry ${attempt + 1}/${retries - 1}...`);
+                await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+            }
+        }
+    }
+    
+    throw lastError || new Error('Clerk API failed after retries');
 };
 
 export class ClerkUserService {
@@ -53,11 +68,12 @@ export class ClerkUserService {
                 logger.info(`[findOrCreateUser] ⚡ Using cached Clerk data`);
                 clerkUser = cached.data;
             } else {
-                // User doesn't exist, fetch from Clerk with timeout
+                // User doesn't exist, fetch from Clerk with timeout and retry
                 try {
                     clerkUser = await clerkApiWithTimeout(
                         () => clerkClient.users.getUser(clerkUserId),
-                        10000 // 10 seconds timeout
+                        8000, // ✅ 8 seconds timeout
+                        2 // ✅ 2 retries
                     );
                     logger.info(`[findOrCreateUser] ✅ Clerk user fetched: ${clerkUser.id}`);
                     
@@ -67,16 +83,16 @@ export class ClerkUserService {
                         timestamp: Date.now(),
                     });
                 } catch (clerkError: any) {
-                    logger.error(`[findOrCreateUser] ❌ Failed to fetch from Clerk:`, clerkError);
+                    logger.error(`[findOrCreateUser] ❌ Failed to fetch from Clerk after retries:`, clerkError);
                     
                     // ✅ If Clerk API fails, create user with minimal data
-                    if (clerkError.message === 'Clerk API timeout') {
-                        logger.warn(`[findOrCreateUser] ⚠️ Clerk API timeout, creating user with minimal data`);
-                        
-                        // Create user with clerkUserId only
-                        const minimalUsername = `user_${clerkUserId.slice(-8)}`;
-                        const minimalEmail = `${clerkUserId}@clerk.temp`;
-                        
+                    logger.warn(`[findOrCreateUser] ⚠️ Creating user with minimal data (Clerk unavailable)`);
+                    
+                    // Create user with clerkUserId only
+                    const minimalUsername = `user_${clerkUserId.slice(-8)}`;
+                    const minimalEmail = `${clerkUserId}@clerk.temp`;
+                    
+                    try {
                         user = await prisma.user.create({
                             data: {
                                 clerkUserId,
@@ -92,9 +108,14 @@ export class ClerkUserService {
                         
                         logger.info(`[findOrCreateUser] ✅ Minimal user created: ${user.username}`);
                         return user;
+                    } catch (createError: any) {
+                        // If user already exists, fetch it
+                        if (createError.code === 'P2002') {
+                            user = await prisma.user.findUnique({ where: { clerkUserId } });
+                            if (user) return user;
+                        }
+                        throw createError;
                     }
-                    
-                    throw new Error(`Failed to fetch user from Clerk: ${clerkError.message}`);
                 }
             }
 

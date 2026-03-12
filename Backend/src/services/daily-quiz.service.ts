@@ -223,8 +223,14 @@ export async function getOrCreateDailyQuiz(): Promise<{
       expiresAt: newDailyQuiz.expiresAt,
     };
   } catch (error: any) {
-    logger.error('Error getting or creating daily quiz:', error);
-    throw error;
+    logger.error('Error getting or creating daily quiz:', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
+    
+    // ✅ Return null instead of throwing to allow graceful degradation
+    return null as any;
   }
 }
 

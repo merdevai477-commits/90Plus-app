@@ -64,6 +64,9 @@ router.get('/cached/matches/:date', FootballController.getCachedMatchesByDate);
 // GET /api/football/cached/player/:id - Get player (permanent cache)
 router.get('/cached/player/:id', FootballController.getCachedPlayer);
 
+// GET /api/football/cached/teams/all - Get all cached teams
+router.get('/cached/teams/all', FootballController.getAllCachedTeams);
+
 // ✅ OPTIMIZATION 2: GET /api/football/cached/teams/batch - Get multiple teams in one request
 // Query param: ?ids=1020,1021,1022 (comma-separated team IDs)
 // Must be before /cached/team/:id to avoid route conflicts
