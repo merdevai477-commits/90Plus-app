@@ -454,14 +454,17 @@ export default function ProfileScreen() {
   const refreshCacheRef = useRef(refreshCache);
   refreshCacheRef.current = refreshCache;
 
+  const fetchCompletionStatusRef = useRef(fetchCompletionStatus);
+  fetchCompletionStatusRef.current = fetchCompletionStatus;
+
   // Refresh on focus - use cache hook's refresh
   useFocusEffect(
     useCallback(() => {
       // Background refresh when screen is focused (won't show loading if cache exists)
       refreshCacheRef.current(false);
       // Also refresh profile completion status so tasks badge stays visible
-      fetchCompletionStatus().catch(err => logger.error('Error refreshing completion status:', err));
-    }, [fetchCompletionStatus]) // fetchCompletionStatus is stable from useCallback
+      fetchCompletionStatusRef.current().catch(err => logger.error('Error refreshing completion status:', err));
+    }, []) // Empty deps ensures this only runs when screen is actually focused
   );
 
   // Auto-refresh when app returns from background
@@ -1748,7 +1751,7 @@ export default function ProfileScreen() {
           username={userData?.username || 'user'}
           bio={userData?.bio}
           location={location} // ✅ Use local state for instant updates
-          team={userData?.favoriteTeam || t.profile.chooseClub}
+          team={userData?.favoriteTeam || ''} // ✅ Let UserInfo handle empty state 'اختر ناديك'
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
           onBioLongPress={() => setIsEditProfileModalVisible(true)}
