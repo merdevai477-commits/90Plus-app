@@ -139,6 +139,15 @@ router.post('/avatar', requireAuth, upload.single('file'), async (req: Request, 
 
         // Invalidate cache so /me returns fresh data
         invalidateUserCache(clerkUserId);
+        
+        // ✅ CRITICAL: Recalculate profile completion after avatar upload
+        try {
+          const { ProfileCompletionService } = await import('../services/profile-completion.service');
+          await ProfileCompletionService.getCompletionStatus(clerkUserId);
+          logger.info('✅ Profile completion recalculated after avatar upload');
+        } catch (err) {
+          logger.error('Failed to recalculate profile completion:', err);
+        }
 
         res.json({
             status: 'SUCCESS',

@@ -100,8 +100,12 @@ export class ProfileCompletionService {
       let totalPercentage = 0;
       const missingRequired: string[] = [];
 
-      // Avatar
-      const avatarCompleted = !!user.avatar && user.avatar.trim() !== '';
+      // Avatar - Check if avatar exists and is not empty/default
+      const avatarCompleted = !!user.avatar && 
+        user.avatar.trim() !== '' && 
+        !user.avatar.includes('default') && 
+        !user.avatar.includes('placeholder');
+      logger.info(`Checking avatar completion for user ${clerkUserId}: avatar="${user.avatar}", completed=${avatarCompleted}`);
       steps.push({
         id: 'avatar',
         label: PROFILE_STEPS.avatar.label,
@@ -116,8 +120,10 @@ export class ProfileCompletionService {
         missingRequired.push(PROFILE_STEPS.avatar.label);
       }
 
-      // Country
-      const countryCompleted = !!user.countryFlag && !!user.country;
+      // Country - Check if EITHER countryFlag OR country exists (more flexible)
+      const countryCompleted = (!!user.countryFlag && user.countryFlag.trim() !== '') || 
+        (!!user.country && user.country.trim() !== '');
+      logger.info(`Checking country completion for user ${clerkUserId}: countryFlag="${user.countryFlag}", country="${user.country}", completed=${countryCompleted}`);
       steps.push({
         id: 'country',
         label: PROFILE_STEPS.country.label,
