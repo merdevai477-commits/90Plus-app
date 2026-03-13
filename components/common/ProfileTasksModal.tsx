@@ -51,7 +51,7 @@ export const ProfileTasksModal: React.FC<ProfileTasksModalProps> = ({
   onStepPress,
 }) => {
   // Get color based on percentage
-  const getProgressColor = () => {
+  const getProgressColor = (): [string, string] => {
     if (percentage >= 80) return ['#22c55e', '#16a34a']; // Green
     if (percentage >= 50) return ['#eab308', '#ca8a04']; // Yellow
     if (percentage >= 30) return ['#f97316', '#ea580c']; // Orange

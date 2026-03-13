@@ -54,6 +54,7 @@ export const CACHE_KEYS = {
   PROFILE_DATA: 'profile_data', // Append user ID: profile_data_<userId>
   PROFILE_STATS: 'profile_stats', // Append user ID: profile_stats_<userId>
   PROFILE_VIDEOS: 'profile_videos', // Append user ID: profile_videos_<userId>
+  PROFILE_COMPLETION: 'profile_completion', // Append user ID: profile_completion_<userId>
   REELS_FEED: 'reels_feed',
   NOTIFICATIONS: 'notifications', // Append user ID: notifications_<userId>
   MATCHES: 'matches',

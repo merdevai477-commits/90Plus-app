@@ -27,35 +27,41 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
     const [uploadStage, setUploadStage] = useState<'idle' | 'preparing' | 'uploading' | 'done'>('idle');
     const uploadProgress = useSharedValue(0);
 
-    // Prevent guest access
-    if (!isSignedIn) {
-        if (visible) {
+    const progressStyle = useAnimatedStyle(() => ({
+        width: `${uploadProgress.value}%`,
+    }));
+
+    // Check authentication and profile completion
+    React.useEffect(() => {
+        if (!visible) return;
+
+        // Prevent guest access
+        if (!isSignedIn) {
             onClose();
             Alert.alert('تسجيل الدخول مطلوب', 'يجب تسجيل الدخول لرفع فيديو', [
                 { text: 'تسجيل الدخول', onPress: () => router.replace('/auth') },
                 { text: 'إلغاء', style: 'cancel' }
             ]);
+            return;
         }
-        return null;
-    }
 
-    // Check profile completion before allowing upload
-    if (!canUploadVideo && visible) {
-        setTimeout(() => {
+        // Check profile completion before allowing upload
+        if (!canUploadVideo) {
+            onClose();
             Alert.alert(
                 'أكمل بروفايلك أولاً',
-                `يجب إكمال 3 خطوات على الأقل لرفع الفيديوهات:\n\n${missingRequiredSteps.join('\n• ')}`,
+                `يجب إكمال 3 خطوات على الأقل لرفع الفيديوهات:\n\n• ${missingRequiredSteps.join('\n• ')}`,
                 [
-                    { text: 'حسناً', onPress: onClose }
+                    { text: 'حسناً' }
                 ]
             );
-        }, 100); // Small delay to ensure modal is fully rendered
+        }
+    }, [visible, isSignedIn, canUploadVideo, missingRequiredSteps, onClose]);
+
+    // Don't render if not signed in or can't upload
+    if (!isSignedIn || !canUploadVideo) {
         return null;
     }
-
-    const progressStyle = useAnimatedStyle(() => ({
-        width: `${uploadProgress.value}%`,
-    }));
 
     const pickVideo = async () => {
         // Request media library permissions (required for iOS App Store)

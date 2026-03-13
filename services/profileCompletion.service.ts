@@ -40,7 +40,7 @@ export class ProfileCompletionService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
         
         // Handle specific error cases
         if (response.status === 401) {
@@ -51,8 +51,11 @@ export class ProfileCompletionService {
           throw new Error('Too many requests - Please try again later');
         }
         
-        if (response.status === 500) {
-          throw new Error('Failed to get profile');
+        // If user not found (500 error), silently return default incomplete profile
+        // This is expected on first login before user is fully created
+        if (response.status === 500 && errorData.message?.includes('User not found')) {
+          logger.info('User not yet created in database, returning default profile (expected on first login)');
+          return this.getDefaultIncompleteProfile();
         }
         
         throw new Error(errorData.message || 'Failed to get profile completion status');
@@ -65,9 +68,41 @@ export class ProfileCompletionService {
 
       return null;
     } catch (error: any) {
-      logger.error('Error getting profile completion status:', error);
-      throw error;
+      // Check if it's a "User not found" error (expected on first login)
+      if (error.message?.includes('User not found')) {
+        logger.info('User not yet created, returning default profile (expected on first login)');
+        return this.getDefaultIncompleteProfile();
+      }
+      
+      // Log other errors as warnings (not errors) to avoid noise
+      logger.warn('Profile completion status unavailable, using default:', error.message);
+      
+      // Return default incomplete profile on any error (fallback)
+      return this.getDefaultIncompleteProfile();
     }
+  }
+
+  /**
+   * Get default incomplete profile (used when user is not yet created)
+   */
+  private static getDefaultIncompleteProfile(): ProfileCompletionStatus {
+    return {
+      percentage: 0,
+      completedSteps: 0,
+      totalSteps: 8,
+      steps: [
+        { id: 'avatar', label: 'صورة البروفايل', completed: false, required: true, weight: 20 },
+        { id: 'country', label: 'البلد', completed: false, required: true, weight: 15 },
+        { id: 'club', label: 'النادي المفضل', completed: false, required: true, weight: 15 },
+        { id: 'bio', label: 'النبذة التعريفية', completed: false, required: false, weight: 10 },
+        { id: 'position', label: 'المركز', completed: false, required: false, weight: 10 },
+        { id: 'cardData', label: 'بيانات الكارت', completed: false, required: false, weight: 20 },
+        { id: 'brand', label: 'البراند المفضل', completed: false, required: false, weight: 5 },
+        { id: 'socialLinks', label: 'روابط السوشيال ميديا', completed: false, required: false, weight: 5 },
+      ],
+      canUploadVideo: false,
+      missingRequiredSteps: ['صورة البروفايل', 'البلد', 'النادي المفضل'],
+    };
   }
 
   /**

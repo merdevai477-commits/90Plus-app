@@ -109,9 +109,9 @@ const UserInfo = memo(function UserInfo({
             {/* 2. Location & Favorite Team Row (Merged) */}
             <View style={styles.detailsRow}>
                 <TouchableOpacity style={styles.detailItem} onPress={onEditPress} activeOpacity={0.7}>
-                    <Ionicons name="location-outline" size={16} color={location && location !== 'مصر' ? ProfileTheme.colors.neonGreen : ProfileTheme.colors.textSecondary} />
-                    <Text style={[styles.detailText, (!location || location === 'مصر') && styles.detailTextEmpty]}>
-                        {location && location !== 'مصر' ? location : 'أضف مدينتك'}
+                    <Ionicons name="location-outline" size={16} color={location && location.trim() !== '' ? ProfileTheme.colors.neonGreen : ProfileTheme.colors.textSecondary} />
+                    <Text style={[styles.detailText, (!location || location.trim() === '') && styles.detailTextEmpty]}>
+                        {location && location.trim() !== '' ? location : 'اختر بلدك'}
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.detailItem} onPress={onEditPress} activeOpacity={0.7}>

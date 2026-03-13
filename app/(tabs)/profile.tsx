@@ -73,10 +73,7 @@ const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
     case 'club': return 'football-outline';
     case 'bio': return 'document-text-outline';
     case 'position': return 'location-outline';
-    case 'age': return 'calendar-outline';
-    case 'height': return 'resize-outline';
-    case 'weight': return 'fitness-outline';
-    case 'foot': return 'footsteps-outline';
+    case 'cardData': return 'card-outline'; // Combined: age, height, weight, foot
     case 'brand': return 'shirt-outline';
     case 'socialLinks': return 'link-outline';
     default: return 'checkmark-circle-outline';
@@ -129,6 +126,16 @@ export default function ProfileScreen() {
     fetchCompletionStatus,
     markStepCompleted,
   } = useProfileCompletion(getToken);
+
+  // Debug: Log when completionStatus changes
+  useEffect(() => {
+    if (completionStatus) {
+      console.log('✅ Profile completion loaded:', {
+        percentage: completionStatus.percentage,
+        remaining: completionStatus.totalSteps - completionStatus.completedSteps,
+      });
+    }
+  }, [completionStatus]);
 
   // ✅ Log cache errors
   useEffect(() => {
@@ -686,8 +693,37 @@ export default function ProfileScreen() {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
 
-        // Mark profile completion step as completed
-        markStepCompleted('avatar').catch(err => logger.error('Error marking avatar step completed:', err));
+  // Mark profile completion step as completed and refresh with retry
+        try {
+          // ✅ Clear frontend cache first to force fresh data
+          await cacheService.invalidate(CACHE_KEYS.PROFILE_COMPLETION);
+          
+          // ✅ Wait a bit for database to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Force immediate refresh of completion status (with retry)
+          let retries = 3;
+          while (retries > 0) {
+            await fetchCompletionStatus();
+            
+            // Check if avatar step is now completed
+            const status = completionStatus;
+            const avatarStep = status?.steps.find(s => s.id === 'avatar');
+            
+            if (avatarStep?.completed) {
+              logger.info('✅ Avatar step marked as completed');
+              break;
+            }
+            
+            retries--;
+            if (retries > 0) {
+              logger.warn(`Avatar step not completed yet, retrying... (${retries} attempts left)`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        } catch (err) {
+          logger.error('Error refreshing completion status:', err);
+        }
 
         toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح 📸');
       } else {
@@ -742,8 +778,37 @@ export default function ProfileScreen() {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         
-        // Mark profile completion step as completed
-        markStepCompleted('country').catch(err => logger.error('Error marking country step completed:', err));
+        // Mark profile completion step as completed and refresh with retry
+        try {
+          // ✅ Clear frontend cache first to force fresh data
+          await cacheService.invalidate(CACHE_KEYS.PROFILE_COMPLETION);
+          
+          // ✅ Wait a bit for database to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Force immediate refresh of completion status (with retry)
+          let retries = 3;
+          while (retries > 0) {
+            await fetchCompletionStatus();
+            
+            // Check if country step is now completed
+            const status = completionStatus;
+            const countryStep = status?.steps.find(s => s.id === 'country');
+            
+            if (countryStep?.completed) {
+              logger.info('✅ Country step marked as completed');
+              break;
+            }
+            
+            retries--;
+            if (retries > 0) {
+              logger.warn(`Country step not completed yet, retrying... (${retries} attempts left)`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        } catch (err) {
+          logger.error('Error refreshing completion status:', err);
+        }
         
         toast.showSuccess('تم', 'تم تحديث البلد بنجاح ✅');
       } else {
@@ -866,8 +931,34 @@ export default function ProfileScreen() {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         
-        // Mark profile completion step as completed
-        markStepCompleted('club').catch(err => logger.error('Error marking club step completed:', err));
+        // Mark profile completion step as completed and refresh with retry
+        try {
+          // ✅ Wait a bit for database to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Force immediate refresh of completion status (with retry)
+          let retries = 3;
+          while (retries > 0) {
+            await fetchCompletionStatus();
+            
+            // Check if club step is now completed
+            const status = completionStatus;
+            const clubStep = status?.steps.find(s => s.id === 'club');
+            
+            if (clubStep?.completed) {
+              logger.info('✅ Club step marked as completed');
+              break;
+            }
+            
+            retries--;
+            if (retries > 0) {
+              logger.warn(`Club step not completed yet, retrying... (${retries} attempts left)`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        } catch (err) {
+          logger.error('Error refreshing completion status:', err);
+        }
         
         toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح ⚽`);
       } else {
@@ -1322,17 +1413,17 @@ export default function ProfileScreen() {
       case 'club':
         setIsClubModalVisible(true);
         break;
-      case 'bio':
       case 'position':
-      case 'age':
-      case 'height':
-      case 'weight':
-      case 'foot':
-        setIsEditProfileModalVisible(true);
+        setIsPositionModalVisible(true);
         break;
       case 'brand':
         setIsBrandModalVisible(true);
         break;
+      case 'cardData':
+        // Open stats modal for card data (age, height, weight, foot)
+        setIsStatsModalVisible(true);
+        break;
+      case 'bio':
       case 'socialLinks':
         setIsEditProfileModalVisible(true);
         break;
@@ -1724,7 +1815,7 @@ export default function ProfileScreen() {
             cardType="gold"
             scale={0.60}
             onImageUpload={handleImageUpload}
-            uploadedImage={localImage}
+            uploadedImage={localImage || userData?.avatar || null}
             countryFlag={countryFlag}
             onCountryPress={() => setIsCountryModalVisible(true)}
             position={position}
