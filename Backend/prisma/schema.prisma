@@ -36,12 +36,13 @@ model User {
   settings          Json?   @default("{}") // Stores preferences like biometricEnabled, language
 
   // FIFA Card Profile Fields
-  position      String? @default("RW") // Player position (RW, LW, ST, etc.)
-  countryFlag   String? @default("🇪🇬") // Country flag emoji
-  age           Int?    @default(22) // Player age
-  height        Int?    @default(180) // Height in cm
-  weight        Int?    @default(70) // Weight in kg
-  preferredFoot String? @default("R") // R = Right, L = Left, B = Both
+  position      String? // Player position (RW, LW, ST, etc.) - no default
+  countryFlag   String? // Country flag emoji - no default
+  location      String? // Country name - no default
+  age           Int? // Player age - no default
+  height        Int? // Height in cm - no default
+  weight        Int? // Weight in kg - no default
+  preferredFoot String? // R = Right, L = Left, B = Both - no default
   clubLogo      String? // شعار النادي المفضل (URL or path)
   brandLogo     String? // شعار البراند المفضل (URL or path)
 
@@ -56,6 +57,11 @@ model User {
   lastCoverChange  DateTime?
   coverImage       String?
   coverStoragePath String?
+  
+  // Profile completion tracking
+  profileCompletionSteps Json? @default("{}") // Tracks completed steps: {avatar: true, country: true, club: true, etc.}
+  profileCompletionPercentage Int? @default(0) // 0-100%
+  firstVideoUploaded Boolean @default(false) // Track if user uploaded first video
 
   // Profile analytics
   profileViews    Int       @default(0)

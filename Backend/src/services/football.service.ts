@@ -5,6 +5,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { getRedisClient } from '../lib/redis';
 
 interface ApiResponse<T> {
   get: string;
@@ -24,10 +25,13 @@ interface CacheEntry {
 }
 
 // Cache TTL values in milliseconds
+// ✅ OPTIMIZED: Increased TTL to reduce API calls while maintaining data freshness
 const CACHE_TTL = {
-  LIVE: 30 * 1000,        // 30 seconds for live data
-  SHORT: 2 * 60 * 1000,   // 2 minutes for volatile data
-  LONG: 60 * 60 * 1000,   // 1 hour for static data
+  LIVE: 30 * 1000,                    // 30 seconds for live matches
+  SHORT: 5 * 60 * 1000,               // 5 minutes for upcoming matches
+  MEDIUM: 30 * 60 * 1000,             // 30 minutes for standings, stats
+  LONG: 24 * 60 * 60 * 1000,          // 24 hours for teams, leagues, players
+  PERMANENT: 7 * 24 * 60 * 60 * 1000, // 7 days for finished matches, logos
 };
 
 class FootballApiError extends Error {
@@ -42,8 +46,10 @@ class FootballService {
   private readonly baseUrl = 'https://v3.football.api-sports.io';
   private readonly timeout = 15000;
 
-  // In-memory cache
-  private cache = new Map<string, CacheEntry>();
+  // ✅ OPTIMIZED: Use Redis for persistent caching across server restarts
+  // Fallback to in-memory cache if Redis is unavailable
+  private memoryCache = new Map<string, CacheEntry>();
+  private useRedis = true; // Flag to disable Redis if connection fails
 
   // Rate limiting: 300 requests per minute for Pro plan
   private requestCount = 0;
@@ -145,20 +151,124 @@ class FootballService {
     }
   }
 
+  /**
+   * Get data from cache (Redis first, then memory fallback)
+   * ✅ OPTIMIZED: Persistent caching with Redis
+   */
+  private async getCachedData(key: string): Promise<any | null> {
+    try {
+      // Try Redis first
+      if (this.useRedis) {
+        const redis = getRedisClient();
+        if (redis) {
+          const cached = await redis.get(`football:${key}`);
+          if (cached) {
+            logger.debug('📦 Redis cache hit:', key);
+            return JSON.parse(cached);
+          }
+        } else {
+          this.useRedis = false;
+        }
+      }
+    } catch (error) {
+      logger.warn('Redis cache read failed, using memory cache:', error);
+      this.useRedis = false; // Disable Redis temporarily
+    }
+
+    // Fallback to memory cache
+    const memoryCached = this.memoryCache.get(key);
+    if (memoryCached) {
+      const now = Date.now();
+      if (now - memoryCached.timestamp < 60000) { // 1 minute memory cache
+        logger.debug('📦 Memory cache hit:', key);
+        return memoryCached.data;
+      }
+      this.memoryCache.delete(key);
+    }
+
+    return null;
+  }
+
+  /**
+   * Set data in cache (Redis + memory)
+   * ✅ OPTIMIZED: Dual-layer caching
+   */
+  private async setCachedData(key: string, data: any, ttl: number): Promise<void> {
+    try {
+      // Save to Redis with TTL
+      if (this.useRedis) {
+        const redis = getRedisClient();
+        if (redis) {
+          await redis.setex(
+            `football:${key}`,
+            Math.floor(ttl / 1000), // Convert to seconds
+            JSON.stringify(data)
+          );
+          logger.debug('💾 Saved to Redis cache:', key);
+        } else {
+          this.useRedis = false;
+        }
+      }
+    } catch (error) {
+      logger.warn('Redis cache write failed:', error);
+      this.useRedis = false;
+    }
+
+    // Also save to memory cache as backup (with shorter TTL)
+    this.memoryCache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+  }
+
+  /**
+   * Check if data exists in cache
+   */
+  private async hasCachedData(key: string): Promise<boolean> {
+    const data = await this.getCachedData(key);
+    return data !== null;
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
-   * Determine cache TTL based on endpoint
+   * Determine cache TTL based on endpoint and match status
+   * ✅ OPTIMIZED: Smart TTL based on data type
    */
   private getCacheTTL(endpoint: string, params: Record<string, any>): number {
-    if (params.live || endpoint.includes('/fixtures/events') || endpoint.includes('/fixtures/statistics')) {
+    // Live data: 30 seconds
+    if (params.live || endpoint.includes('/fixtures/events')) {
       return CACHE_TTL.LIVE;
     }
-    if (endpoint.includes('/leagues') || endpoint.includes('/standings')) {
+    
+    // Match statistics during live matches: 30 seconds
+    if (endpoint.includes('/fixtures/statistics') && params.fixture) {
+      return CACHE_TTL.LIVE;
+    }
+    
+    // Finished matches: 7 days (never change)
+    if (params.status && ['FT', 'AET', 'PEN'].includes(params.status)) {
+      return CACHE_TTL.PERMANENT;
+    }
+    
+    // Upcoming matches: 5 minutes
+    if (endpoint.includes('/fixtures')) {
+      return CACHE_TTL.SHORT;
+    }
+    
+    // Standings: 30 minutes (update after matches)
+    if (endpoint.includes('/standings')) {
+      return CACHE_TTL.MEDIUM;
+    }
+    
+    // Teams, leagues, players: 24 hours (rarely change)
+    if (endpoint.includes('/teams') || endpoint.includes('/leagues') || endpoint.includes('/players')) {
       return CACHE_TTL.LONG;
     }
+    
+    // Default: 5 minutes
     return CACHE_TTL.SHORT;
   }
 
@@ -177,7 +287,8 @@ class FootballService {
   }
 
   /**
-   * Fetch data from API-Football with caching and rate limiting
+   * Fetch data from API-Football with Redis caching and rate limiting
+   * ✅ OPTIMIZED: Redis-backed caching for better performance
    */
   async fetchFromApi<T>(endpoint: string, params: Record<string, any> = {}): Promise<T> {
     if (!this.isConfigured()) {
@@ -194,14 +305,12 @@ class FootballService {
     });
 
     const cacheKey = url.pathname + url.search;
-    const now = Date.now();
     const ttl = this.getCacheTTL(endpoint, params);
 
-    // Check cache
-    const cached = this.cache.get(cacheKey);
-    if (cached && now - cached.timestamp < ttl) {
-      logger.debug('📦 Football API cache hit:', cacheKey);
-      return cached.data;
+    // ✅ Check Redis cache first
+    const cached = await this.getCachedData(cacheKey);
+    if (cached) {
+      return cached;
     }
 
     // Rate limit check
@@ -241,7 +350,7 @@ class FootballService {
         if (typeof errorMessage === 'string' && errorMessage.includes('Free plans do not have access')) {
           logger.debug('📅 Free Plan date restriction:', errorMessage);
           // Return empty array for date restrictions instead of throwing error
-          this.cache.set(cacheKey, { data: [], timestamp: now });
+          await this.setCachedData(cacheKey, [], ttl);
           return [] as T;
         }
 
@@ -256,8 +365,8 @@ class FootballService {
 
       logger.debug(`✅ Football API Response: ${data.results} results`);
 
-      // Save to cache
-      this.cache.set(cacheKey, { data: data.response, timestamp: now });
+      // ✅ Save to Redis cache
+      await this.setCachedData(cacheKey, data.response, ttl);
 
       return data.response;
     } catch (error: any) {
@@ -379,9 +488,28 @@ class FootballService {
 
   /**
    * Clear cache (useful for testing)
+   * ✅ OPTIMIZED: Clear both Redis and memory cache
    */
-  clearCache(): void {
-    this.cache.clear();
+  async clearCache(): Promise<void> {
+    try {
+      // Clear Redis cache (all football keys)
+      if (this.useRedis) {
+        const redis = getRedisClient();
+        if (redis) {
+          const keys = await redis.keys('football:*');
+          if (keys.length > 0) {
+            await redis.del(...keys);
+            logger.info(`🗑️ Cleared ${keys.length} Redis cache entries`);
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to clear Redis cache:', error);
+    }
+
+    // Clear memory cache
+    this.memoryCache.clear();
+    logger.info('🗑️ Cleared memory cache');
   }
 
   /**

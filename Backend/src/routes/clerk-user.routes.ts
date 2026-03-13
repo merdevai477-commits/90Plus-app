@@ -54,26 +54,52 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
 
         logger.info(`[/clerk/me] 📡 Cache miss, fetching from database for: ${clerkUserId}`);
 
-        // Find or create user in our database with better error handling
+        // Find or create user in our database with better error handling and retry logic
         let user;
-        try {
-            user = await ClerkUserService.findOrCreateUser(clerkUserId);
-        } catch (dbError: any) {
-            logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId}:`, dbError);
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'Database error while loading user',
-                code: 'E009',
-            });
-            return;
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+            try {
+                user = await ClerkUserService.findOrCreateUser(clerkUserId);
+                if (user) break; // Success, exit retry loop
+                
+                // If user is null but no error thrown, retry
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    logger.warn(`[/clerk/me] ⚠️ User creation returned null, retrying (${retryCount}/${maxRetries})...`);
+                    await new Promise(resolve => setTimeout(resolve, 500 * retryCount)); // Exponential backoff
+                }
+            } catch (dbError: any) {
+                retryCount++;
+                logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId} (attempt ${retryCount}/${maxRetries}):`, {
+                    error: dbError.message,
+                    code: dbError.code,
+                    stack: dbError.stack?.split('\n').slice(0, 3).join('\n'), // First 3 lines of stack
+                });
+                
+                // If last retry, return error
+                if (retryCount >= maxRetries) {
+                    res.status(500).json({
+                        status: 'ERROR',
+                        message: 'Database error while loading user. Please try again.',
+                        code: 'E009',
+                        details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+                    });
+                    return;
+                }
+                
+                // Wait before retry with exponential backoff
+                await new Promise(resolve => setTimeout(resolve, 500 * retryCount));
+            }
         }
 
         if (!user) {
-            logger.error(`[/clerk/me] ❌ Failed to find or create user: ${clerkUserId}`);
-            res.status(404).json({
+            logger.error(`[/clerk/me] ❌ Failed to find or create user after ${maxRetries} attempts: ${clerkUserId}`);
+            res.status(500).json({
                 status: 'ERROR',
-                message: 'User not found',
-                code: 'E004',
+                message: 'Failed to load user profile. Please try logging out and back in.',
+                code: 'E009',
             });
             return;
         }

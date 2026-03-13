@@ -42,12 +42,27 @@ export class ClerkUserService {
      */
     static async findOrCreateUser(clerkUserId: string) {
         try {
-            logger.info(`[findOrCreateUser] � Looking for user: ${clerkUserId}`);
+            logger.info(`[findOrCreateUser] 🔍 Looking for user: ${clerkUserId}`);
             
-            // Check if user exists by clerkUserId
-            let user = await prisma.user.findUnique({
-                where: { clerkUserId },
-            });
+            // Check if user exists by clerkUserId with timeout protection
+            let user;
+            try {
+                user = await Promise.race([
+                    prisma.user.findUnique({
+                        where: { clerkUserId },
+                    }),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Database query timeout')), 10000)
+                    )
+                ]) as any;
+            } catch (dbError: any) {
+                logger.error(`[findOrCreateUser] ❌ Database query failed:`, {
+                    error: dbError.message,
+                    code: dbError.code,
+                    clerkUserId,
+                });
+                throw new Error(`Database connection failed: ${dbError.message}`);
+            }
 
             if (user) {
                 logger.info(`[findOrCreateUser] ✅ User found: ${user.username} (${user.id})`);
@@ -146,33 +161,52 @@ export class ClerkUserService {
 
             logger.info(`[findOrCreateUser] 👤 Using username: ${username}`);
 
-            // Create new user
+            // Create new user with timeout
             try {
-                user = await prisma.user.create({
-                    data: {
-                        clerkUserId,
-                        email: finalEmail,
-                        username,
-                        displayName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || username,
-                        avatar: clerkUser.imageUrl || undefined,
-                        emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
-                        coins: 50,
-                        level: 1,
-                        xp: 0,
-                    },
-                });
+                user = await Promise.race([
+                    prisma.user.create({
+                        data: {
+                            clerkUserId,
+                            email: finalEmail,
+                            username,
+                            displayName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || username,
+                            avatar: clerkUser.imageUrl || undefined,
+                            emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
+                            coins: 50,
+                            level: 1,
+                            xp: 0,
+                        },
+                    }),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Database create timeout')), 10000)
+                    )
+                ]) as any;
 
                 logger.info(`[findOrCreateUser] ✅ User created: ${user.username} (${user.id})`);
             } catch (createError: any) {
-                logger.error(`[findOrCreateUser] ❌ Failed to create user:`, createError);
+                logger.error(`[findOrCreateUser] ❌ Failed to create user:`, {
+                    error: createError.message,
+                    code: createError.code,
+                    clerkUserId,
+                });
                 
                 // ✅ If unique constraint fails, try to find existing user
                 if (createError.code === 'P2002') {
                     logger.warn(`[findOrCreateUser] ⚠️ User already exists, fetching...`);
-                    user = await prisma.user.findUnique({
-                        where: { clerkUserId },
-                    });
-                    if (user) return user;
+                    try {
+                        user = await Promise.race([
+                            prisma.user.findUnique({
+                                where: { clerkUserId },
+                            }),
+                            new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('Database query timeout')), 10000)
+                            )
+                        ]) as any;
+                        if (user) return user;
+                    } catch (findError: any) {
+                        logger.error(`[findOrCreateUser] ❌ Failed to find existing user:`, findError);
+                        throw new Error(`Database connection failed: ${findError.message}`);
+                    }
                 }
                 
                 throw new Error(`Failed to create user in database: ${createError.message}`);
@@ -310,6 +344,11 @@ export class ClerkUserService {
         if (!user) {
             logger.info('⚠️ User not found, creating first...');
             user = await this.findOrCreateUser(clerkUserId);
+        }
+
+        // Ensure user exists after findOrCreateUser
+        if (!user) {
+            throw new Error('Failed to find or create user');
         }
 
         // Check if username is being changed
