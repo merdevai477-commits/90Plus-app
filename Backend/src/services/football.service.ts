@@ -25,13 +25,13 @@ interface CacheEntry {
 }
 
 // Cache TTL values in milliseconds
-// ✅ OPTIMIZED: Increased TTL to reduce API calls while maintaining data freshness
+// ✅ OPTIMIZED for Free Plan (100 requests/day): Aggressive caching
 const CACHE_TTL = {
-  LIVE: 30 * 1000,                    // 30 seconds for live matches
-  SHORT: 5 * 60 * 1000,               // 5 minutes for upcoming matches
-  MEDIUM: 30 * 60 * 1000,             // 30 minutes for standings, stats
-  LONG: 24 * 60 * 60 * 1000,          // 24 hours for teams, leagues, players
-  PERMANENT: 7 * 24 * 60 * 60 * 1000, // 7 days for finished matches, logos
+  LIVE: 2 * 60 * 1000,                // 2 minutes for live matches (reduced API calls)
+  SHORT: 30 * 60 * 1000,              // 30 minutes for upcoming matches
+  MEDIUM: 2 * 60 * 60 * 1000,         // 2 hours for standings, stats
+  LONG: 7 * 24 * 60 * 60 * 1000,      // 7 days for teams, leagues, players
+  PERMANENT: 30 * 24 * 60 * 60 * 1000, // 30 days for finished matches, logos
 };
 
 class FootballApiError extends Error {
@@ -235,40 +235,40 @@ class FootballService {
 
   /**
    * Determine cache TTL based on endpoint and match status
-   * ✅ OPTIMIZED: Smart TTL based on data type
+   * ✅ OPTIMIZED for Free Plan: Aggressive caching to minimize API calls
    */
   private getCacheTTL(endpoint: string, params: Record<string, any>): number {
-    // Live data: 30 seconds
+    // Live data: 2 minutes (reduced from 30s to save quota)
     if (params.live || endpoint.includes('/fixtures/events')) {
       return CACHE_TTL.LIVE;
     }
     
-    // Match statistics during live matches: 30 seconds
+    // Match statistics during live matches: 2 minutes
     if (endpoint.includes('/fixtures/statistics') && params.fixture) {
       return CACHE_TTL.LIVE;
     }
     
-    // Finished matches: 7 days (never change)
+    // Finished matches: 30 days (never change)
     if (params.status && ['FT', 'AET', 'PEN'].includes(params.status)) {
       return CACHE_TTL.PERMANENT;
     }
     
-    // Upcoming matches: 5 minutes
+    // Upcoming matches: 30 minutes (increased from 5 minutes)
     if (endpoint.includes('/fixtures')) {
       return CACHE_TTL.SHORT;
     }
     
-    // Standings: 30 minutes (update after matches)
+    // Standings: 2 hours (increased from 30 minutes)
     if (endpoint.includes('/standings')) {
       return CACHE_TTL.MEDIUM;
     }
     
-    // Teams, leagues, players: 24 hours (rarely change)
+    // Teams, leagues, players: 7 days (increased from 24 hours)
     if (endpoint.includes('/teams') || endpoint.includes('/leagues') || endpoint.includes('/players')) {
       return CACHE_TTL.LONG;
     }
     
-    // Default: 5 minutes
+    // Default: 30 minutes (increased from 5 minutes)
     return CACHE_TTL.SHORT;
   }
 

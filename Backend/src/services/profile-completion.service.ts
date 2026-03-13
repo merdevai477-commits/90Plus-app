@@ -30,10 +30,7 @@ const PROFILE_STEPS = {
   club: { label: 'النادي المفضل', required: true, weight: 15 },
   bio: { label: 'النبذة التعريفية', required: false, weight: 10 },
   position: { label: 'المركز', required: false, weight: 10 },
-  age: { label: 'العمر', required: false, weight: 5 },
-  height: { label: 'الطول', required: false, weight: 5 },
-  weight: { label: 'الوزن', required: false, weight: 5 },
-  foot: { label: 'القدم المفضلة', required: false, weight: 5 },
+  cardData: { label: 'بيانات الكارت', required: false, weight: 20 }, // Combined: age, height, weight, foot
   brand: { label: 'البراند المفضل', required: false, weight: 5 },
   socialLinks: { label: 'روابط السوشيال ميديا', required: false, weight: 5 },
 };
@@ -45,7 +42,7 @@ export class ProfileCompletionService {
   static async getCompletionStatus(clerkUserId: string): Promise<ProfileCompletionStatus> {
     try {
       // Find user by clerkUserId instead of id
-      const user = await prisma.user.findUnique({
+      let user = await prisma.user.findUnique({
         where: { clerkUserId: clerkUserId },
         select: {
           id: true, // We need the internal ID for updates
@@ -65,8 +62,36 @@ export class ProfileCompletionService {
         },
       });
 
+      // If user doesn't exist, create a basic profile
       if (!user) {
-        throw new Error('User not found');
+        logger.warn(`User not found for clerkUserId: ${clerkUserId}, creating basic profile`);
+        
+        // Create user with minimal data
+        user = await prisma.user.create({
+          data: {
+            clerkUserId: clerkUserId,
+            username: `user_${clerkUserId.slice(0, 8)}`, // Temporary username
+            email: '', // Will be updated by webhook
+            profileCompletionSteps: {},
+            profileCompletionPercentage: 0,
+          },
+          select: {
+            id: true,
+            avatar: true,
+            countryFlag: true,
+            country: true,
+            clubLogo: true,
+            bio: true,
+            position: true,
+            age: true,
+            height: true,
+            weight: true,
+            preferredFoot: true,
+            brandLogo: true,
+            socialLinks: true,
+            profileCompletionSteps: true,
+          },
+        });
       }
 
       // Check each step
@@ -151,60 +176,25 @@ export class ProfileCompletionService {
         totalPercentage += PROFILE_STEPS.position.weight;
       }
 
-      // Age
+      // Card Data (Age, Height, Weight, Foot) - Combined into one step
       const ageCompleted = !!user.age && user.age > 0;
-      steps.push({
-        id: 'age',
-        label: PROFILE_STEPS.age.label,
-        completed: ageCompleted,
-        required: PROFILE_STEPS.age.required,
-        weight: PROFILE_STEPS.age.weight,
-      });
-      if (ageCompleted) {
-        completedCount++;
-        totalPercentage += PROFILE_STEPS.age.weight;
-      }
-
-      // Height
       const heightCompleted = !!user.height && user.height > 0;
-      steps.push({
-        id: 'height',
-        label: PROFILE_STEPS.height.label,
-        completed: heightCompleted,
-        required: PROFILE_STEPS.height.required,
-        weight: PROFILE_STEPS.height.weight,
-      });
-      if (heightCompleted) {
-        completedCount++;
-        totalPercentage += PROFILE_STEPS.height.weight;
-      }
-
-      // Weight
       const weightCompleted = !!user.weight && user.weight > 0;
-      steps.push({
-        id: 'weight',
-        label: PROFILE_STEPS.weight.label,
-        completed: weightCompleted,
-        required: PROFILE_STEPS.weight.required,
-        weight: PROFILE_STEPS.weight.weight,
-      });
-      if (weightCompleted) {
-        completedCount++;
-        totalPercentage += PROFILE_STEPS.weight.weight;
-      }
-
-      // Foot
       const footCompleted = !!user.preferredFoot && ['R', 'L', 'B'].includes(user.preferredFoot);
+      
+      // Card data is complete if ALL fields are filled
+      const cardDataCompleted = ageCompleted && heightCompleted && weightCompleted && footCompleted;
+      
       steps.push({
-        id: 'foot',
-        label: PROFILE_STEPS.foot.label,
-        completed: footCompleted,
-        required: PROFILE_STEPS.foot.required,
-        weight: PROFILE_STEPS.foot.weight,
+        id: 'cardData',
+        label: PROFILE_STEPS.cardData.label,
+        completed: cardDataCompleted,
+        required: PROFILE_STEPS.cardData.required,
+        weight: PROFILE_STEPS.cardData.weight,
       });
-      if (footCompleted) {
+      if (cardDataCompleted) {
         completedCount++;
-        totalPercentage += PROFILE_STEPS.foot.weight;
+        totalPercentage += PROFILE_STEPS.cardData.weight;
       }
 
       // Brand
@@ -239,16 +229,25 @@ export class ProfileCompletionService {
       const requiredStepsCompleted = steps.filter(s => s.required && s.completed).length;
       const canUploadVideo = requiredStepsCompleted >= 3;
 
+      // Prepare completion steps object
+      const completionStepsObj = steps.reduce((acc, step) => {
+        acc[step.id] = step.completed;
+        return acc;
+      }, {} as Record<string, boolean>);
+
       // Update user's completion percentage in database using internal ID
       await prisma.user.update({
         where: { id: user.id },
         data: {
           profileCompletionPercentage: Math.round(totalPercentage),
-          profileCompletionSteps: steps.reduce((acc, step) => {
-            acc[step.id] = step.completed;
-            return acc;
-          }, {} as Record<string, boolean>),
+          profileCompletionSteps: completionStepsObj,
         },
+      });
+
+      logger.info(`Profile completion updated for user ${clerkUserId}:`, {
+        percentage: Math.round(totalPercentage),
+        completedSteps: completedCount,
+        totalSteps: steps.length,
       });
 
       return {
@@ -271,7 +270,7 @@ export class ProfileCompletionService {
   static async markStepCompleted(clerkUserId: string, stepId: string): Promise<void> {
     try {
       // Find user by clerkUserId and get internal ID
-      const user = await prisma.user.findUnique({
+      let user = await prisma.user.findUnique({
         where: { clerkUserId: clerkUserId },
         select: { 
           id: true,
@@ -279,17 +278,33 @@ export class ProfileCompletionService {
         },
       });
 
+      // If user doesn't exist, create basic profile first
       if (!user) {
-        throw new Error('User not found');
+        logger.warn(`User not found for clerkUserId: ${clerkUserId}, creating basic profile`);
+        
+        user = await prisma.user.create({
+          data: {
+            clerkUserId: clerkUserId,
+            username: `user_${clerkUserId.slice(0, 8)}`,
+            email: '',
+            profileCompletionSteps: { [stepId]: true },
+            profileCompletionPercentage: 0,
+          },
+          select: { 
+            id: true,
+            profileCompletionSteps: true 
+          },
+        });
+      } else {
+        // Update existing user
+        const steps = (user.profileCompletionSteps as Record<string, boolean>) || {};
+        steps[stepId] = true;
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { profileCompletionSteps: steps },
+        });
       }
-
-      const steps = (user.profileCompletionSteps as Record<string, boolean>) || {};
-      steps[stepId] = true;
-
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { profileCompletionSteps: steps },
-      });
 
       // Recalculate completion percentage
       await this.getCompletionStatus(clerkUserId);

@@ -28,8 +28,18 @@ class FootballBackgroundService {
   /**
    * Start background updates
    * Updates standings and live matches periodically
+   * ⚠️ DISABLED for Free Plan (100 requests/day limit)
+   * Enable only if you have Pro Plan (300 requests/minute)
    */
   start(): void {
+    const isFreePlan = process.env.FOOTBALL_API_PLAN === 'free' || !process.env.FOOTBALL_API_PLAN;
+    
+    if (isFreePlan) {
+      logger.warn('⚠️ Background service DISABLED - Free Plan detected (100 req/day limit)');
+      logger.info('💡 Upgrade to Pro Plan or set FOOTBALL_API_PLAN=pro to enable background updates');
+      return;
+    }
+
     if (this.isRunning) {
       logger.warn('⚠️ Background service already running');
       return;
@@ -41,10 +51,10 @@ class FootballBackgroundService {
     // Update immediately on start
     this.updateAll().catch(err => logger.error('Initial update failed:', err));
 
-    // Then update every 5 minutes
+    // Then update every 30 minutes (reduced from 5 minutes)
     this.updateInterval = setInterval(() => {
       this.updateAll().catch(err => logger.error('Background update failed:', err));
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 30 * 60 * 1000); // 30 minutes
   }
 
   /**
@@ -107,23 +117,30 @@ class FootballBackgroundService {
 
   /**
    * Update standings for major leagues
-   * Runs every 5 minutes
+   * Runs every 30 minutes (reduced for Free Plan)
+   * Only updates 3 most popular leagues to save API quota
    */
   private async updateStandings(): Promise<void> {
     const currentSeason = new Date().getFullYear();
-    const leagueIds = Object.values(MAJOR_LEAGUES);
+    
+    // ⚠️ Free Plan: Only update top 3 leagues to save quota
+    const priorityLeagues = [
+      MAJOR_LEAGUES.PREMIER_LEAGUE,
+      MAJOR_LEAGUES.CHAMPIONS_LEAGUE,
+      MAJOR_LEAGUES.EGYPTIAN_LEAGUE,
+    ];
 
-    for (const leagueId of leagueIds) {
+    for (const leagueId of priorityLeagues) {
       try {
         const standings = await footballService.getStandings(leagueId, currentSeason);
         
         if (standings.length > 0) {
           const redis = getRedisClient();
           if (redis) {
-            // Cache standings with 30 minute TTL
+            // Cache standings with 2 hour TTL (increased to reduce API calls)
             await redis.setex(
               `football:standings:${leagueId}:${currentSeason}`,
-              30 * 60, // 30 minutes
+              2 * 60 * 60, // 2 hours
               JSON.stringify(standings)
             );
             
@@ -131,8 +148,8 @@ class FootballBackgroundService {
           }
         }
 
-        // Small delay between requests to avoid rate limiting
-        await this.sleep(300);
+        // Longer delay between requests (1 second)
+        await this.sleep(1000);
       } catch (error) {
         logger.warn(`Failed to update standings for league ${leagueId}:`, error);
       }
@@ -141,7 +158,7 @@ class FootballBackgroundService {
 
   /**
    * Update today's matches
-   * Runs every 5 minutes
+   * Runs every 30 minutes (reduced for Free Plan)
    */
   private async updateTodayMatches(): Promise<void> {
     try {
@@ -151,10 +168,10 @@ class FootballBackgroundService {
       if (matches.length > 0) {
         const redis = getRedisClient();
         if (redis) {
-          // Cache today's matches with 5 minute TTL
+          // Cache today's matches with 30 minute TTL (increased to reduce API calls)
           await redis.setex(
             `football:matches:${today}`,
-            5 * 60, // 5 minutes
+            30 * 60, // 30 minutes
             JSON.stringify(matches)
           );
           
