@@ -15,9 +15,11 @@ interface ReelUploadModalProps {
     visible: boolean;
     onClose: () => void;
     onUpload: (video: any) => void;
+    canUploadVideo?: boolean;
+    missingRequiredSteps?: string[];
 }
 
-export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUploadModalProps) {
+export default function ReelUploadModal({ visible, onClose, onUpload, canUploadVideo = true, missingRequiredSteps = [] }: ReelUploadModalProps) {
     const { isSignedIn } = useAuth();
     const [videoAsset, setVideoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [caption, setCaption] = useState('');
@@ -34,6 +36,20 @@ export default function ReelUploadModal({ visible, onClose, onUpload }: ReelUplo
                 { text: 'إلغاء', style: 'cancel' }
             ]);
         }
+        return null;
+    }
+
+    // Check profile completion before allowing upload
+    if (!canUploadVideo && visible) {
+        setTimeout(() => {
+            Alert.alert(
+                'أكمل بروفايلك أولاً',
+                `يجب إكمال 3 خطوات على الأقل لرفع الفيديوهات:\n\n${missingRequiredSteps.join('\n• ')}`,
+                [
+                    { text: 'حسناً', onPress: onClose }
+                ]
+            );
+        }, 100); // Small delay to ensure modal is fully rendered
         return null;
     }
 

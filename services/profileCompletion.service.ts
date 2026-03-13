@@ -41,6 +41,20 @@ export class ProfileCompletionService {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle specific error cases
+        if (response.status === 401) {
+          throw new Error('Authentication required');
+        }
+        
+        if (response.status === 429) {
+          throw new Error('Too many requests - Please try again later');
+        }
+        
+        if (response.status === 500) {
+          throw new Error('Failed to get profile');
+        }
+        
         throw new Error(errorData.message || 'Failed to get profile completion status');
       }
 

@@ -23,6 +23,12 @@ interface ProfileCardProps {
     onClubPress?: () => void;
     brandLogo?: string;
     onBrandPress?: () => void;
+    // Loading states
+    isAvatarUploading?: boolean;
+    isCountryUpdating?: boolean;
+    isClubUpdating?: boolean;
+    isBrandUpdating?: boolean;
+    isStatsUpdating?: boolean;
 }
 
 const WIDTH = 300;
@@ -48,7 +54,12 @@ const ProfileCard = memo(function ProfileCard({
     clubLogo,
     onClubPress,
     brandLogo,
-    onBrandPress
+    onBrandPress,
+    isAvatarUploading = false,
+    isCountryUpdating = false,
+    isClubUpdating = false,
+    isBrandUpdating = false,
+    isStatsUpdating = false,
 }: ProfileCardProps) {
     const shimmerAnim = useRef(new Animated.Value(0)).current;
     const holoAnim = useRef(new Animated.Value(0)).current;
@@ -252,7 +263,7 @@ const ProfileCard = memo(function ProfileCard({
                 justifyContent: 'center',
                 alignItems: 'center',
             }]}>
-                <TouchableOpacity onPress={onPositionPress}>
+                <TouchableOpacity onPress={onPositionPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Text style={{
                         fontSize: 28 * scale,
                         fontWeight: '900',
@@ -260,14 +271,48 @@ const ProfileCard = memo(function ProfileCard({
                         marginBottom: 10 * scale,
                         textAlign: 'center'
                     }}>
-                        {position || 'LM'}
+                        {position || '--'}
                     </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={onCountryPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Text style={{ fontSize: 40 * scale }}>
-                        {countryFlag || '🌍'}
-                    </Text>
+                    {(() => {
+                        // Try to get country code from emoji or use as-is
+                        const code = countryFlag ? (
+                            // Check if it's an emoji flag
+                            countryFlag.length <= 4 && countryFlag.codePointAt(0)! >= 0x1F1E6
+                                ? (() => {
+                                    const codePoints = [...countryFlag];
+                                    if (codePoints.length === 2) {
+                                        const first = codePoints[0].codePointAt(0)!;
+                                        const second = codePoints[1].codePointAt(0)!;
+                                        if (first >= 0x1F1E6 && first <= 0x1F1FF && second >= 0x1F1E6 && second <= 0x1F1FF) {
+                                            return String.fromCharCode(first - 0x1F1E6 + 65, second - 0x1F1E6 + 65).toLowerCase();
+                                        }
+                                    }
+                                    return null;
+                                })()
+                                : countryFlag.toLowerCase()
+                        ) : null;
+
+                        if (code && code.length === 2) {
+                            return (
+                                <Image
+                                    source={{ uri: `https://flagcdn.com/w80/${code}.png` }}
+                                    style={{ width: 36 * scale, height: 25 * scale, borderRadius: 3 * scale }}
+                                    contentFit="cover"
+                                    cachePolicy="memory-disk"
+                                    priority="high"
+                                    transition={200}
+                                />
+                            );
+                        }
+                        return (
+                            <Text style={{ fontSize: 40 * scale, color: '#000', fontWeight: 'bold' }}>
+                                {countryFlag || '--'}
+                            </Text>
+                        );
+                    })()}
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', marginTop: 5 * scale, gap: 5 * scale }}>

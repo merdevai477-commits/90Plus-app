@@ -391,45 +391,59 @@ export default function AuthScreen() {
         } catch (error: any) {
             console.error('❌ Failed to sync with backend:', error);
             
-            // ✅ FALLBACK: If sync fails with 502, continue with Clerk data
-            if (error instanceof SyncServerError && error.statusCode === 502) {
-                console.warn('⚠️ Server unavailable (502), continuing with Clerk data...');
+            // ✅ IMPROVED: Better error handling for database errors
+            if (error instanceof SyncServerError) {
+                // Check for database error (E009)
+                if (error.message.includes('E009') || error.message.includes('Database error')) {
+                    console.error('❌ Database connection error - server may be starting up');
+                    Alert.alert(
+                        'خطأ في الاتصال',
+                        'حدث خطأ في الاتصال بقاعدة البيانات. يرجى المحاولة مرة أخرى بعد قليل.',
+                        [{ text: 'حسناً' }]
+                    );
+                    return { success: false, isNewUser: false };
+                }
                 
-                // Use Clerk user data as fallback
-                try {
-                    // Get user from useUser hook (already defined at top of component)
-                    if (user) {
-                        const username = user.username || user.emailAddresses[0]?.emailAddress?.split('@')[0] || 'user';
-                        
-                        globalState.username = username;
-                        globalState.setUserProfile({
-                            id: user.id,
-                            username: username,
-                            displayName: user.fullName || username,
-                            avatar: user.imageUrl || undefined,
-                            bio: undefined,
-                            stats: {
-                                views: 0, likes: 0, questionsSolved: 0, rating: 0, posts: 0,
-                                predictions: 0, interactions: 0, level: 1, followers: 0, following: 0,
-                                monthlyViews: 0, yearlyViews: 0, engagementRate: 0, contentQuality: 0,
-                            },
-                            videos: [], badges: [], achievements: [],
-                            socialStats: { followers: [], following: [] },
-                            notifications: [],
-                            isOwner: true, 
-                            isVerified: false, 
-                            isAppOwner: false,
-                        });
-                        
-                        await AsyncStorage.setItem('@username_setup_complete', 'true');
-                        
-                        console.log('✅ Using Clerk fallback data, continuing...');
-                        return { success: true, isNewUser: true };
-                    } else {
-                        console.error('❌ No Clerk user data available for fallback');
+                // Handle 502 errors (server unavailable)
+                if (error.statusCode === 502) {
+                    console.warn('⚠️ Server unavailable (502), continuing with Clerk data...');
+                    
+                    // Use Clerk user data as fallback
+                    try {
+                        // Get user from useUser hook (already defined at top of component)
+                        if (user) {
+                            const username = user.username || user.emailAddresses[0]?.emailAddress?.split('@')[0] || 'user';
+                            
+                            globalState.username = username;
+                            globalState.setUserProfile({
+                                id: user.id,
+                                username: username,
+                                displayName: user.fullName || username,
+                                avatar: user.imageUrl || undefined,
+                                bio: undefined,
+                                stats: {
+                                    views: 0, likes: 0, questionsSolved: 0, rating: 0, posts: 0,
+                                    predictions: 0, interactions: 0, level: 1, followers: 0, following: 0,
+                                    monthlyViews: 0, yearlyViews: 0, engagementRate: 0, contentQuality: 0,
+                                },
+                                videos: [], badges: [], achievements: [],
+                                socialStats: { followers: [], following: [] },
+                                notifications: [],
+                                isOwner: true, 
+                                isVerified: false, 
+                                isAppOwner: false,
+                            });
+                            
+                            await AsyncStorage.setItem('@username_setup_complete', 'true');
+                            
+                            console.log('✅ Using Clerk fallback data, continuing...');
+                            return { success: true, isNewUser: true };
+                        } else {
+                            console.error('❌ No Clerk user data available for fallback');
+                        }
+                    } catch (fallbackError) {
+                        console.error('❌ Fallback also failed:', fallbackError);
                     }
-                } catch (fallbackError) {
-                    console.error('❌ Fallback also failed:', fallbackError);
                 }
             }
             

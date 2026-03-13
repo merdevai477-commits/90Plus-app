@@ -88,7 +88,7 @@ export default function SocialLinksSection({
                     })}
                     {isOwnProfile && links.length < 5 && (
                         <TouchableOpacity
-                            style={styles.addButton}
+                            style={[styles.addButton, { backgroundColor: 'transparent' }]}
                             onPress={onEditPress}
                             activeOpacity={0.7}
                         >
@@ -97,12 +97,13 @@ export default function SocialLinksSection({
                     )}
                 </View>
             ) : isOwnProfile ? (
-                <TouchableOpacity
-                    style={styles.emptyContainer}
+                 <TouchableOpacity
+                    style={styles.emptyDashedButton}
                     onPress={onEditPress}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                 >
-                    <Text style={styles.emptyText}>{t.profile.addSocialLinks}</Text>
+                    <Ionicons name="add-circle-outline" size={20} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.emptyDashedText}>أضف حساباتك 📱</Text>
                 </TouchableOpacity>
             ) : null}
         </View>
@@ -114,6 +115,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         marginTop: 4,
         marginBottom: 12,
+        alignItems: 'center',
     },
     linksRow: {
         flexDirection: 'row',
@@ -126,7 +128,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255,255,255,0.06)', // Glassmorphism
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1.5,
@@ -135,23 +137,32 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.05)',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
+        borderColor: 'rgba(255,255,255,0.3)',
         borderStyle: 'dashed',
     },
     addIcon: {
         fontSize: 24,
-        color: 'rgba(255,255,255,0.4)',
+        color: 'rgba(255,255,255,0.6)',
     },
-    emptyContainer: {
+    emptyDashedButton: {
+        flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 24,
+        borderRadius: 20, // Modern pill shape
+        backgroundColor: 'rgba(255,255,255,0.04)', // Very subtle glass
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderStyle: 'dashed',
     },
-    emptyText: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 13,
+    emptyDashedText: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });

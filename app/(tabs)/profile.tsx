@@ -44,6 +44,10 @@ import FollowersListModal from '../../components/profile/FollowersListModal';
 import QRCodeModal from '../../components/profile/QRCodeModal';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { Club } from '../../data/clubs'; // ✅ Import Club type with apiId
+import { ProfileCompletionCard } from '../../components/profile/ProfileCompletionCard';
+import { useProfileCompletion } from '../../hooks/useProfileCompletion';
+import { ProfileTasksBadge } from '../../components/common/ProfileTasksBadge';
+import { ProfileTasksModal, ProfileTaskStep } from '../../components/common/ProfileTasksModal';
 
 // Types for profile handlers
 interface Country {
@@ -60,6 +64,24 @@ interface Brand {
 
 // ✅ PERFORMANCE: Memoize expensive calculations outside component
 const DEFAULT_FOLLOW_STATS = { followersCount: 0, followingCount: 0, reelsCount: 0 };
+
+// Helper function to get step icons
+const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
+  switch (stepId) {
+    case 'avatar': return 'person-circle-outline';
+    case 'country': return 'globe-outline';
+    case 'club': return 'football-outline';
+    case 'bio': return 'document-text-outline';
+    case 'position': return 'location-outline';
+    case 'age': return 'calendar-outline';
+    case 'height': return 'resize-outline';
+    case 'weight': return 'fitness-outline';
+    case 'foot': return 'footsteps-outline';
+    case 'brand': return 'shirt-outline';
+    case 'socialLinks': return 'link-outline';
+    default: return 'checkmark-circle-outline';
+  }
+};
 
 export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('videos');
@@ -98,6 +120,15 @@ export default function ProfileScreen() {
     clerkUserImageUrl: clerkUser?.imageUrl,
     clerkUserId: clerkUser?.id,
   });
+
+  // Profile completion hook
+  const {
+    completionStatus,
+    isLoading: isCompletionLoading,
+    error: completionError,
+    fetchCompletionStatus,
+    markStepCompleted,
+  } = useProfileCompletion(getToken);
 
   // ✅ Log cache errors
   useEffect(() => {
@@ -156,7 +187,7 @@ export default function ProfileScreen() {
   };
 
   const [countryFlag, setCountryFlag] = useState<string>(DEFAULT_COUNTRY_FLAG);
-  const [location, setLocation] = useState<string>('مصر'); // ✅ NEW: Local state for immediate update
+  const [location, setLocation] = useState<string>(''); // removed 'مصر' fallback
   const [position, setPosition] = useState<string>(DEFAULT_POSITION);
   const [club, setClub] = useState<string | undefined>(undefined);
   const [brand, setBrand] = useState<string | undefined>(undefined);
@@ -181,10 +212,19 @@ export default function ProfileScreen() {
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
 
+  // Loading states for profile operations
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const [isCountryUpdating, setIsCountryUpdating] = useState(false);
+  const [isClubUpdating, setIsClubUpdating] = useState(false);
+  const [isBrandUpdating, setIsBrandUpdating] = useState(false);
+  const [isStatsUpdating, setIsStatsUpdating] = useState(false);
+
   // New modals for profile features
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
+  const [isTasksModalVisible, setIsTasksModalVisible] = useState(false);
 
   // Cover image state
   const [coverImage, setCoverImageState] = useState<string | null>(globalState.localCover || null);
@@ -419,7 +459,9 @@ export default function ProfileScreen() {
     useCallback(() => {
       // Background refresh when screen is focused (won't show loading if cache exists)
       refreshCacheRef.current(false);
-    }, []) // Empty deps - uses ref
+      // Also refresh profile completion status so tasks badge stays visible
+      fetchCompletionStatus().catch(err => logger.error('Error refreshing completion status:', err));
+    }, [fetchCompletionStatus]) // fetchCompletionStatus is stable from useCallback
   );
 
   // Auto-refresh when app returns from background
@@ -605,6 +647,9 @@ export default function ProfileScreen() {
       // Store original avatar for revert
       const originalAvatar = userData.avatar;
 
+      // Start loading
+      setIsAvatarUploading(true);
+
       // Optimistic UI - show immediately
       setLocalImage(imageUri);
 
@@ -613,6 +658,7 @@ export default function ProfileScreen() {
       if (!token) {
         // Revert on no token
         setLocalImage(originalAvatar || null);
+        setIsAvatarUploading(false);
         toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
         return;
       }
@@ -637,6 +683,9 @@ export default function ProfileScreen() {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
 
+        // Mark profile completion step as completed
+        markStepCompleted('avatar').catch(err => logger.error('Error marking avatar step completed:', err));
+
         toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح 📸');
       } else {
         // Revert local image on error
@@ -648,6 +697,8 @@ export default function ProfileScreen() {
       // Revert to original avatar
       setLocalImage(userData?.avatar || null);
       toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
+    } finally {
+      setIsAvatarUploading(false);
     }
   };
 
@@ -665,6 +716,9 @@ export default function ProfileScreen() {
     const originalLocation = userData?.location || location;
 
     try {
+      // Start loading
+      setIsCountryUpdating(true);
+
       // ✅ INSTANT UPDATE: Update UI immediately (optimistic)
       setCountryFlag(country.flag);
       setLocation(country.name); // ✅ Update location state immediately
@@ -684,6 +738,10 @@ export default function ProfileScreen() {
       if (result.success) {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        
+        // Mark profile completion step as completed
+        markStepCompleted('country').catch(err => logger.error('Error marking country step completed:', err));
+        
         toast.showSuccess('تم', 'تم تحديث البلد بنجاح ✅');
       } else {
         // Rollback on error
@@ -705,6 +763,8 @@ export default function ProfileScreen() {
         countryFlag: originalCountryFlag
       });
       toast.showError('خطأ', error.message || 'فشل في حفظ البلد');
+    } finally {
+      setIsCountryUpdating(false);
     }
   };
 
@@ -760,6 +820,9 @@ export default function ProfileScreen() {
     const originalFavoriteTeam = userData?.favoriteTeam;
 
     try {
+      // Start loading
+      setIsClubUpdating(true);
+
       // ✅ Always fetch fresh logo from API to ensure it's real and up-to-date
       let clubLogo = selectedClub.logo;
       if (selectedClub.apiId) {
@@ -799,6 +862,10 @@ export default function ProfileScreen() {
       if (result.success) {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        
+        // Mark profile completion step as completed
+        markStepCompleted('club').catch(err => logger.error('Error marking club step completed:', err));
+        
         toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح ⚽`);
       } else {
         // Rollback on error
@@ -818,6 +885,8 @@ export default function ProfileScreen() {
         clubLogo: originalClub,
       });
       toast.showError('خطأ', error.message || 'فشل في حفظ النادي');
+    } finally {
+      setIsClubUpdating(false);
     }
   };
 
@@ -877,27 +946,27 @@ export default function ProfileScreen() {
   };
 
   const handleStatsSave = async (newStats: Stats) => {
-    // Validate stats
-    const age = parseInt(newStats.age);
-    const height = parseInt(newStats.height);
-    const weight = parseInt(newStats.weight);
+    // Validate stats but allow empty strings (represented as null/undefined backend side)
+    const age = newStats.age ? parseInt(newStats.age) : null;
+    const height = newStats.height ? parseInt(newStats.height) : null;
+    const weight = newStats.weight ? parseInt(newStats.weight) : null;
 
-    if (isNaN(age) || age < 15 || age > 60) {
+    if (age !== null && (isNaN(age) || age < 15 || age > 60)) {
       toast.showError('خطأ', 'العمر يجب أن يكون بين 15 و 60 سنة');
       return;
     }
 
-    if (isNaN(height) || height < 120 || height > 250) {
+    if (height !== null && (isNaN(height) || height < 120 || height > 250)) {
       toast.showError('خطأ', 'الطول يجب أن يكون بين 120 و 250 سم');
       return;
     }
 
-    if (isNaN(weight) || weight < 40 || weight > 150) {
+    if (weight !== null && (isNaN(weight) || weight < 40 || weight > 150)) {
       toast.showError('خطأ', 'الوزن يجب أن يكون بين 40 و 150 كجم');
       return;
     }
 
-    if (!['R', 'L', 'B'].includes(newStats.foot)) {
+    if (newStats.foot && !['R', 'L', 'B'].includes(newStats.foot)) {
       toast.showError('خطأ', 'القدم المفضلة غير صحيحة');
       return;
     }
@@ -910,26 +979,26 @@ export default function ProfileScreen() {
       age: userData?.age?.toString() || DEFAULT_STATS.age,
       height: userData?.height?.toString() || DEFAULT_STATS.height,
       weight: userData?.weight?.toString() || DEFAULT_STATS.weight,
-      foot: (userData?.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
+      foot: (userData?.preferredFoot as '' | 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
     };
 
     try {
       // Optimistic update
       setStats(newStats);
-      await updateCachedUserData({ // ✅ إضافة هذا
-        age,
-        height,
-        weight,
-        preferredFoot: newStats.foot,
-      });
+      await updateCachedUserData({
+        age: age ?? undefined,
+        height: height ?? undefined,
+        weight: weight ?? undefined,
+        preferredFoot: newStats.foot || undefined,
+      } as any);
 
       // Save to backend
       const result = await CardProfileService.updateCardProfile(token, {
-        age,
-        height,
-        weight,
-        preferredFoot: newStats.foot,
-      });
+        age: age ?? undefined,
+        height: height ?? undefined,
+        weight: weight ?? undefined,
+        preferredFoot: newStats.foot || undefined,
+      } as any);
 
       if (result.success) {
         // ✅ OPTIMIZATION: Refresh in background without blocking UI
@@ -939,11 +1008,11 @@ export default function ProfileScreen() {
         // Rollback on error
         setStats(originalStats);
         await updateCachedUserData({
-          age: parseInt(originalStats.age),
-          height: parseInt(originalStats.height),
-          weight: parseInt(originalStats.weight),
-          preferredFoot: originalStats.foot,
-        });
+          age: originalStats.age ? parseInt(originalStats.age) : undefined,
+          height: originalStats.height ? parseInt(originalStats.height) : undefined,
+          weight: originalStats.weight ? parseInt(originalStats.weight) : undefined,
+          preferredFoot: originalStats.foot || undefined,
+        } as any);
         toast.showError('خطأ', result.error || 'فشل في حفظ البيانات');
       }
     } catch (error: any) {
@@ -951,11 +1020,11 @@ export default function ProfileScreen() {
       // Rollback on error
       setStats(originalStats);
       await updateCachedUserData({
-        age: parseInt(originalStats.age),
-        height: parseInt(originalStats.height),
-        weight: parseInt(originalStats.weight),
-        preferredFoot: originalStats.foot,
-      });
+        age: originalStats.age ? parseInt(originalStats.age) : undefined,
+        height: originalStats.height ? parseInt(originalStats.height) : undefined,
+        weight: originalStats.weight ? parseInt(originalStats.weight) : undefined,
+        preferredFoot: originalStats.foot || undefined,
+      } as any);
       toast.showError('خطأ', error.message || 'فشل في حفظ البيانات');
     }
   };
@@ -1231,6 +1300,43 @@ export default function ProfileScreen() {
   const handleEditProfile = useCallback(() => {
     setIsEditProfileModalVisible(true);
   }, []);
+
+  // Profile completion step handler with error handling
+  const handleProfileStepPress = useCallback((stepId: string) => {
+    // Don't allow step actions if there are completion errors
+    if (completionError) {
+      toast.showError('خطأ', 'يرجى إعادة تحميل الصفحة أولاً');
+      return;
+    }
+
+    switch (stepId) {
+      case 'avatar':
+        handleImageUpload();
+        break;
+      case 'country':
+        setIsCountryModalVisible(true);
+        break;
+      case 'club':
+        setIsClubModalVisible(true);
+        break;
+      case 'bio':
+      case 'position':
+      case 'age':
+      case 'height':
+      case 'weight':
+      case 'foot':
+        setIsEditProfileModalVisible(true);
+        break;
+      case 'brand':
+        setIsBrandModalVisible(true);
+        break;
+      case 'socialLinks':
+        setIsEditProfileModalVisible(true);
+        break;
+      default:
+        console.log('Unknown step:', stepId);
+    }
+  }, [handleImageUpload, completionError, toast]);
 
   const handleSaveProfile = async (newData: any) => {
     try {
@@ -1516,6 +1622,8 @@ export default function ProfileScreen() {
         visible={isUploadModalVisible}
         onClose={() => setIsUploadModalVisible(false)}
         onUpload={handleUploadVideo}
+        canUploadVideo={completionStatus?.canUploadVideo ?? true}
+        missingRequiredSteps={completionStatus?.missingRequiredSteps ?? []}
       />
 
       <VideoPlayerModal
@@ -1554,10 +1662,39 @@ export default function ProfileScreen() {
         avatar={localImage || userData?.avatar}
       />
 
+      {/* Profile Tasks Modal */}
+      {completionStatus && (
+        <ProfileTasksModal
+          visible={isTasksModalVisible}
+          onClose={() => setIsTasksModalVisible(false)}
+          percentage={completionStatus.percentage}
+          completedSteps={completionStatus.completedSteps}
+          totalSteps={completionStatus.totalSteps}
+          steps={completionStatus.steps.map(step => ({
+            ...step,
+            icon: getStepIcon(step.id),
+          }))}
+          canUploadVideo={completionStatus.canUploadVideo}
+          onStepPress={handleProfileStepPress}
+        />
+      )}
+
       {/* Coins Badge */}
       <View style={styles.coinsBadgeContainer}>
         <CoinsBadge />
       </View>
+
+      {/* Profile Tasks Badge - Only show if incomplete */}
+      {completionStatus && completionStatus.percentage < 100 && (
+        <View style={styles.tasksBadgeContainer}>
+          <ProfileTasksBadge
+            remainingTasks={completionStatus.totalSteps - completionStatus.completedSteps}
+            totalTasks={completionStatus.totalSteps}
+            percentage={completionStatus.percentage}
+            onPress={() => setIsTasksModalVisible(true)}
+          />
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1598,6 +1735,11 @@ export default function ProfileScreen() {
             onClubPress={() => setIsClubModalVisible(true)}
             brandLogo={brand}
             onBrandPress={() => setIsBrandModalVisible(true)}
+            isAvatarUploading={isAvatarUploading}
+            isCountryUpdating={isCountryUpdating}
+            isClubUpdating={isClubUpdating}
+            isBrandUpdating={isBrandUpdating}
+            isStatsUpdating={isStatsUpdating}
           />
         </View>
 
@@ -1616,6 +1758,21 @@ export default function ProfileScreen() {
           socials={userData?.socials}
           consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
         />
+
+        {/* Profile Completion Card - Only show if user data exists and no completion errors */}
+        {completionStatus && userData && !completionError && (
+          <ProfileCompletionCard
+            percentage={completionStatus.percentage}
+            completedSteps={completionStatus.completedSteps}
+            totalSteps={completionStatus.totalSteps}
+            steps={completionStatus.steps.map(step => ({
+              ...step,
+              icon: getStepIcon(step.id),
+            }))}
+            canUploadVideo={completionStatus.canUploadVideo}
+            onStepPress={handleProfileStepPress}
+          />
+        )}
 
         {/* Social Links Section */}
         <SocialLinksSection
@@ -1901,6 +2058,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 20,
+    zIndex: 1000,
+  },
+  tasksBadgeContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 90, // Position it next to coins badge (20 + 50 badge width + 20 gap)
     zIndex: 1000,
   },
   settingsButton: {

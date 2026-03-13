@@ -32,7 +32,7 @@ interface UserInfoProps {
 const UserInfo = memo(function UserInfo({
     name,
     username,
-    bio = 'عاشق لكره القدم', // Default fallback
+    bio,
     location,
     team,
     isVerified = false,
@@ -98,7 +98,7 @@ const UserInfo = memo(function UserInfo({
                         style={styles.editButton}
                         activeOpacity={0.7}
                     >
-                        <Ionicons name="pencil" size={18} color={ProfileTheme.colors.neonBlue} />
+                        <Ionicons name="pencil" size={16} color="rgba(255,255,255,0.7)" />
                     </TouchableOpacity>
                 </View>
             </TouchableOpacity>
@@ -108,11 +108,13 @@ const UserInfo = memo(function UserInfo({
 
             {/* 2. Location & Favorite Team Row (Merged) */}
             <View style={styles.detailsRow}>
-                <View style={styles.detailItem}>
-                    <Ionicons name="location-outline" size={16} color={ProfileTheme.colors.textSecondary} />
-                    <Text style={styles.detailText}>{location || 'مصر'}</Text>
-                </View>
-                <View style={styles.detailItem}>
+                <TouchableOpacity style={styles.detailItem} onPress={onEditPress} activeOpacity={0.7}>
+                    <Ionicons name="location-outline" size={16} color={location && location !== 'مصر' ? ProfileTheme.colors.neonGreen : ProfileTheme.colors.textSecondary} />
+                    <Text style={[styles.detailText, (!location || location === 'مصر') && styles.detailTextEmpty]}>
+                        {location && location !== 'مصر' ? location : 'أضف مدينتك'}
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.detailItem} onPress={onEditPress} activeOpacity={0.7}>
                     {clubLogo ? (
                         <Image
                             source={{ uri: clubLogo }}
@@ -121,10 +123,10 @@ const UserInfo = memo(function UserInfo({
                             cachePolicy="memory-disk"
                         />
                     ) : (
-                        <Ionicons name="football-outline" size={16} color={ProfileTheme.colors.neonGreen} />
+                        <Ionicons name="football-outline" size={16} color={ProfileTheme.colors.textSecondary} />
                     )}
-                    <Text style={styles.detailText}>{team || 'اختر ناديك'}</Text>
-                </View>
+                    <Text style={[styles.detailText, !team && styles.detailTextEmpty]}>{team || 'اختر ناديك'}</Text>
+                </TouchableOpacity>
             </View>
 
             {/* 3. Bio with Social Links (Combined) */}
@@ -136,10 +138,13 @@ const UserInfo = memo(function UserInfo({
                             onBioLongPress();
                         }
                     }}
+                    onPress={onEditPress}
                     activeOpacity={0.7}
                     style={styles.bioContainer}
                 >
-                    <Text style={styles.bio}>{bio || 'عاشق لكره القدم'}</Text>
+                    <Text style={[styles.bio, !bio && styles.bioEmpty]}>
+                        {bio || 'أضف نبذة عنك...'}
+                    </Text>
                 </TouchableOpacity>
 
                 {/* Social Links - تظهر بجانب البايو */}
@@ -194,23 +199,24 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     name: {
-        fontSize: 28,
-        fontWeight: 'bold',
+        fontSize: 26,
+        fontWeight: '800', // Used 800 instead of bold
         color: ProfileTheme.colors.textPrimary,
-        textShadowColor: ProfileTheme.colors.neonBlue,
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 10,
+        textShadowColor: 'rgba(255,255,255,0.2)', // Much softer glow
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 8,
+        letterSpacing: 0.5,
     },
     badgeContainer: {
         justifyContent: 'center',
         alignItems: 'center',
     },
     username: {
-        fontSize: 16,
+        fontSize: 15,
         color: ProfileTheme.colors.textSecondary,
         marginBottom: 16,
         textAlign: 'center',
-        letterSpacing: 1,
+        letterSpacing: 0.5,
     },
     detailsRow: {
         flexDirection: 'row',
@@ -222,42 +228,49 @@ const styles = StyleSheet.create({
     detailItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
+        gap: 8,
+        backgroundColor: 'rgba(255,255,255,0.06)', // Glassmorphism base
+        paddingHorizontal: 16, // Increased padding
+        paddingVertical: 10,  // Increased padding
+        borderRadius: 20, // More rounded pills
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(255,255,255,0.12)', // Subtle border
     },
     detailText: {
-        color: ProfileTheme.colors.textSecondary,
+        color: ProfileTheme.colors.textPrimary,
         fontSize: 14,
+        fontWeight: '600',
+    },
+    detailTextEmpty: {
+        color: 'rgba(255,255,255,0.4)',
         fontWeight: '500',
     },
     clubLogo: {
-        width: 16,
-        height: 16,
+        width: 18,
+        height: 18,
     },
     bioSection: {
         width: '100%',
         alignItems: 'center',
-        marginTop: 8,
+        marginTop: 4,
     },
     bioContainer: {
         alignItems: 'center',
-        padding: 5,
+        padding: 8,
         marginBottom: 12,
+        backgroundColor: 'transparent',
+        borderRadius: 12,
     },
     bio: {
-        fontSize: 16,
-        color: '#DDD',
+        fontSize: 15,
+        color: 'rgba(255,255,255,0.9)',
         lineHeight: 24,
         textAlign: 'center',
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 2,
         maxWidth: '90%',
+    },
+    bioEmpty: {
+        color: 'rgba(255,255,255,0.3)',
+        fontStyle: 'italic',
     },
     bioHint: {
         fontSize: 10,

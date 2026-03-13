@@ -7,7 +7,7 @@ export interface Stats {
     age: string;
     height: string;
     weight: string;
-    foot: 'R' | 'L' | 'B';
+    foot: '' | 'R' | 'L' | 'B';
 }
 
 interface StatsEditModalProps {
@@ -24,15 +24,15 @@ export default function StatsEditModal({ visible, onClose, onSave, initialStats 
         setStats(initialStats);
     }, [initialStats, visible]);
 
-    const handleChange = (key: keyof Stats, value: string | 'R' | 'L' | 'B') => {
+    const handleChange = (key: keyof Stats, value: string | 'R' | 'L' | 'B' | '') => {
         setStats(prev => ({ ...prev, [key]: value as any }));
     };
 
     const handleSave = () => {
-        // Ensure foot is one of the valid values
-        const validFoot: 'R' | 'L' | 'B' = (stats.foot === 'R' || stats.foot === 'L' || stats.foot === 'B') 
+        // Ensure foot is one of the valid values or empty string
+        const validFoot: '' | 'R' | 'L' | 'B' = (stats.foot === 'R' || stats.foot === 'L' || stats.foot === 'B') 
             ? stats.foot 
-            : 'R'; // Default to 'R' if invalid
+            : ''; // Default to '' if invalid or not selected
         onSave({ ...stats, foot: validFoot });
         onClose();
     };
