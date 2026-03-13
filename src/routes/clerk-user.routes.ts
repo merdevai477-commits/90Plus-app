@@ -207,6 +207,14 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
 
         // Invalidate cache so /me returns fresh data
         invalidateUserCache(clerkUserId);
+        
+        // ✅ CRITICAL: Recalculate profile completion after profile update
+        try {
+          await ProfileCompletionService.getCompletionStatus(clerkUserId);
+          logger.info('✅ Profile completion recalculated after profile update');
+        } catch (err) {
+          logger.error('Failed to recalculate profile completion:', err);
+        }
 
         res.json({
             status: 'SUCCESS',
@@ -257,6 +265,14 @@ router.post('/preferences', requireAuth, async (req: Request, res: Response): Pr
 
         // Invalidate cache
         invalidateUserCache(clerkUserId);
+        
+        // ✅ CRITICAL: Recalculate profile completion after preferences update
+        try {
+          await ProfileCompletionService.getCompletionStatus(clerkUserId);
+          logger.info('✅ Profile completion recalculated after preferences update');
+        } catch (err) {
+          logger.error('Failed to recalculate profile completion:', err);
+        }
 
         logger.info('✅ User preferences saved:', clerkUserId);
 
@@ -1343,6 +1359,14 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
 
         // Invalidate cache
         invalidateUserCache(clerkUserId);
+        
+        // ✅ CRITICAL: Recalculate profile completion after social links update
+        try {
+          await ProfileCompletionService.getCompletionStatus(clerkUserId);
+          logger.info('✅ Profile completion recalculated after social links update');
+        } catch (err) {
+          logger.error('Failed to recalculate profile completion:', err);
+        }
 
         res.json({
             status: 'SUCCESS',
