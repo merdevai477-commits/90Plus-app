@@ -1,13 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
-// ✅ Connection pool configuration
+// ✅ OPTIMIZED: Connection pool configuration for Railway PostgreSQL
 const CONNECTION_POOL_SIZE = process.env.DATABASE_CONNECTION_POOL_SIZE 
   ? parseInt(process.env.DATABASE_CONNECTION_POOL_SIZE, 10) 
-  : 5; // Default to 5 connections (Railway/Neon free tier limit)
+  : 10; // Increased to 10 for Railway PostgreSQL
 
-const CONNECTION_TIMEOUT = 20000; // 20 seconds
-const POOL_TIMEOUT = 10000; // 10 seconds
+const CONNECTION_TIMEOUT = 10000; // Reduced to 10 seconds
+const POOL_TIMEOUT = 5000; // Reduced to 5 seconds
+const QUERY_TIMEOUT = 5000; // Added query timeout
 
 // Singleton pattern for Prisma Client
 const globalForPrisma = globalThis as unknown as {
@@ -19,13 +20,13 @@ const prismaClientSingleton = () => {
     log: process.env.NODE_ENV === 'development' 
       ? ['error', 'warn'] 
       : ['error'],
-    // ✅ Connection pool configuration via DATABASE_URL
-    // Add ?connection_limit=5 to your DATABASE_URL to set pool size
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
       },
     },
+    // ✅ PERFORMANCE: Query optimization
+    errorFormat: 'minimal',
   });
 };
 
@@ -37,22 +38,49 @@ const createPrismaClient = () => {
   
   const client = prismaClientSingleton();
   
+  // ✅ PERFORMANCE: Add query performance monitoring
+  client.$use(async (params: any, next: any) => {
+    const before = Date.now();
+    
+    try {
+      const result = await next(params);
+      const after = Date.now();
+      const duration = after - before;
+      
+      // Log slow queries (> 100ms)
+      if (duration > 100) {
+        logger.warn(`⚠️ Slow query detected: ${params.model}.${params.action} took ${duration}ms`);
+      }
+      
+      return result;
+    } catch (error: any) {
+      const after = Date.now();
+      const duration = after - before;
+      
+      logger.error(`❌ Query failed: ${params.model}.${params.action} after ${duration}ms`, {
+        error: error.message,
+        code: error.code,
+      });
+      
+      throw error;
+    }
+  });
+  
   // ✅ Add middleware to handle connection errors with retry
   client.$use(async (params: any, next: any) => {
-    const maxRetries = 3;
+    const maxRetries = 2; // Reduced retries for faster failure
     let retries = 0;
     
     while (retries < maxRetries) {
       try {
         return await next(params);
       } catch (error: any) {
-        // ✅ Check for connection pool exhaustion
         const isConnectionError = 
           error.code === 'P1001' ||
           error.code === 'P1002' ||
           error.code === 'P1008' ||
           error.code === 'P1017' ||
-          error.code === 'P2037' || // ✅ Too many connections
+          error.code === 'P2037' ||
           error.message?.includes('Closed') ||
           error.message?.includes('Connection') ||
           error.message?.includes('ECONNREFUSED') ||
@@ -60,11 +88,9 @@ const createPrismaClient = () => {
           error.message?.includes('too many clients');
         
         if (!isConnectionError || retries >= maxRetries - 1) {
-          // Log detailed error for debugging
           if (error.code === 'P2037' || error.message?.includes('too many clients')) {
-            logger.error('❌ DATABASE CONNECTION POOL EXHAUSTED - Too many connections');
+            logger.error('❌ DATABASE CONNECTION POOL EXHAUSTED');
             logger.error(`   Current pool size: ${CONNECTION_POOL_SIZE}`);
-            logger.error(`   Consider increasing DATABASE_CONNECTION_POOL_SIZE env var`);
           }
           throw error;
         }
@@ -72,8 +98,8 @@ const createPrismaClient = () => {
         retries++;
         logger.warn(`⚠️ DB connection error, retry ${retries}/${maxRetries}...`);
         
-        // ✅ Exponential backoff
-        await new Promise(r => setTimeout(r, 500 * Math.pow(2, retries)));
+        // ✅ Shorter backoff for faster recovery
+        await new Promise(r => setTimeout(r, 200 * retries));
       }
     }
     
@@ -87,7 +113,6 @@ const createPrismaClient = () => {
     logger.info('✅ Prisma client disconnected');
   };
 
-  // Register cleanup handlers
   process.on('beforeExit', cleanup);
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
@@ -98,30 +123,23 @@ const createPrismaClient = () => {
 
 export const prisma = createPrismaClient();
 
-// ✅ IMPROVED: Keep-alive with connection pool awareness
+// ✅ OPTIMIZED: Shorter keep-alive interval for Railway
 let keepAliveInterval: NodeJS.Timeout | null = null;
 let isKeepAliveRunning = false;
 
 export function startKeepAlive() {
-  // ✅ Don't run keep-alive in production (Railway/Neon handles this)
   if (process.env.NODE_ENV === 'production' && process.env.DISABLE_KEEPALIVE === 'true') {
-    logger.info('⏭️  Keep-alive disabled in production (managed by platform)');
+    logger.info('⏭️  Keep-alive disabled in production');
     return;
   }
 
   if (keepAliveInterval) {
-    logger.info('⏭️  Keep-alive already running');
     return;
   }
   
-  // ✅ Ping database every 4 minutes (Neon closes after 5 min idle)
-  // Using longer interval to reduce connection churn
+  // ✅ Ping every 2 minutes (Railway PostgreSQL doesn't close connections)
   keepAliveInterval = setInterval(async () => {
-    // Skip if already running
-    if (isKeepAliveRunning) {
-      logger.debug('⏭️  Keep-alive ping skipped (already running)');
-      return;
-    }
+    if (isKeepAliveRunning) return;
 
     isKeepAliveRunning = true;
     try {
@@ -129,13 +147,12 @@ export function startKeepAlive() {
       logger.debug('✅ Keep-alive ping successful');
     } catch (error: any) {
       logger.warn('⚠️ Keep-alive ping failed:', error.message);
-      // ✅ Don't try to reconnect here - let middleware handle it
     } finally {
       isKeepAliveRunning = false;
     }
-  }, 4 * 60 * 1000); // 4 minutes (increased from 2)
+  }, 2 * 60 * 1000); // 2 minutes
   
-  logger.info('✅ Keep-alive started (every 4 minutes)');
+  logger.info('✅ Keep-alive started (every 2 minutes)');
 }
 
 export function stopKeepAlive() {
@@ -147,11 +164,11 @@ export function stopKeepAlive() {
   }
 }
 
-// ✅ Retry wrapper for database operations (for manual use)
+// ✅ PERFORMANCE: Optimized retry wrapper
 export async function withRetry<T>(
   operation: () => Promise<T>,
-  maxRetries: number = 3,
-  delayMs: number = 500
+  maxRetries: number = 2,
+  delayMs: number = 200
 ): Promise<T> {
   let lastError: Error | null = null;
   
@@ -164,7 +181,7 @@ export async function withRetry<T>(
       const isConnectionError = 
         error.code === 'P1001' ||
         error.code === 'P1002' ||
-        error.code === 'P2037' || // Too many connections
+        error.code === 'P2037' ||
         error.message?.includes("Can't reach database") ||
         error.message?.includes('ECONNREFUSED') ||
         error.message?.includes('timeout') ||
@@ -176,10 +193,8 @@ export async function withRetry<T>(
       }
       
       logger.warn(`⚠️ Retry ${attempt}/${maxRetries} in ${delayMs}ms...`);
-      
-      // ✅ Exponential backoff
       await new Promise(resolve => setTimeout(resolve, delayMs));
-      delayMs *= 2;
+      delayMs *= 1.5; // Gentler exponential backoff
     }
   }
   
@@ -197,7 +212,7 @@ export async function checkDatabaseConnection(): Promise<boolean> {
   }
 }
 
-// ✅ Helper to get connection pool status (for monitoring)
+// ✅ Helper to get connection pool status
 export async function getConnectionPoolStatus() {
   try {
     const result = await prisma.$queryRaw<Array<{ count: number }>>`
