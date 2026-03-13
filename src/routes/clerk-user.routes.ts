@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { ClerkUserService } from '../services/clerk-user.service';
+import { ProfileCompletionService } from '../services/profile-completion.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
@@ -341,6 +342,14 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
 
         // ✅ Invalidate Backend Cache to force refresh on next request
         invalidateUserCache(clerkUserId);
+        
+        // ✅ CRITICAL: Invalidate profile completion cache to force recalculation
+        try {
+          await ProfileCompletionService.getCompletionStatus(clerkUserId);
+          logger.info('✅ Profile completion recalculated after card profile update');
+        } catch (err) {
+          logger.error('Failed to recalculate profile completion:', err);
+        }
 
         res.json({
             status: 'SUCCESS',

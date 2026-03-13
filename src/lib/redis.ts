@@ -41,7 +41,9 @@ export function initializeRedis(): Redis | null {
         return false;
       },
       enableReadyCheck: true,
-      enableOfflineQueue: false, // Don't queue commands when offline
+      enableOfflineQueue: true, // Queue commands when offline (better for production)
+      lazyConnect: false, // Connect immediately
+      connectTimeout: 10000, // 10 seconds
     });
 
     redisClient.on('connect', () => {
