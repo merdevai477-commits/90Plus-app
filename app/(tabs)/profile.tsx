@@ -793,6 +793,89 @@ export default function ProfileScreen() {
     }
   };
 
+  // Handle upload video function
+  const handleUploadVideo = async (newVideo: any) => {
+    if (!cooldowns) {
+      await refreshCache(false);
+      toast.showError('خطأ', 'جاري تحميل معلومات الرفع، يرجى المحاولة مرة أخرى');
+      return;
+    }
+
+    if (!cooldowns.reelUpload.canChange) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+      const days = cooldowns.reelUpload.daysRemaining;
+      const hours = cooldowns.reelUpload.hoursRemaining;
+      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
+
+      Alert.alert(
+        '⏳ انتظر قليلاً',
+        `يمكنك رفع فيديو جديد بعد ${timeText}`,
+        [{ text: 'حسناً', style: 'default' }]
+      );
+      return;
+    }
+
+    setUserVideoData({
+      username: userData?.username || 'user',
+      avatar: localImage || userData?.avatar || null,
+      displayName: userData?.displayName || userData?.username || 'User',
+    });
+
+    setActiveTab('videos');
+
+    const tempVideo = {
+      id: newVideo.id,
+      uri: newVideo.uri,
+      thumbnail: newVideo.thumbnail,
+      createdAt: new Date(),
+      isUploading: true,
+      uploadProgress: 0,
+    };
+    addVideo(tempVideo);
+
+    toast.showInfo('جاري الرفع', 'يتم رفع الفيديو في الخلفية...');
+
+    try {
+      const token = await getToken();
+      if (token) {
+        const caption = newVideo.caption || '';
+        const hashtags = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
+        const mentions = caption.match(/@[\w]+/g) || [];
+
+        const uploadResult = await StorageService.uploadReel(
+          token,
+          newVideo.uri,
+          newVideo.thumbnail,
+          caption,
+          hashtags.map((h: string) => h.replace('#', '')),
+          mentions.map((m: string) => m.replace('@', '')),
+          (progress: number) => {
+            const updatedVideo = { ...tempVideo, uploadProgress: progress };
+            removeVideo(tempVideo.id);
+            addVideo(updatedVideo);
+          }
+        );
+
+        if (uploadResult.success) {
+          toast.showSuccess('تم', 'تم رفع الفيديو بنجاح! 🚀');
+          removeVideo(newVideo.id);
+          await refreshCache(true);
+          if (userData?.username) {
+            await loadVideos(userData.username);
+          }
+        } else {
+          removeVideo(newVideo.id);
+          toast.showError('خطأ', uploadResult.error || 'فشل في رفع الفيديو');
+        }
+      }
+    } catch (error: any) {
+      logger.error('Video upload error:', error);
+      removeVideo(newVideo.id);
+      toast.showError('خطأ', error.message || 'حدث خطأ أثناء رفع الفيديو');
+    }
+  };
+
   // Pull to refresh handler
   const onRefresh = async () => {
     await refreshCache(true);
@@ -1009,7 +1092,288 @@ export default function ProfileScreen() {
           socials={userData?.socials}
           consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
         />
+
+        {/* Social Links Section */}
+        <SocialLinksSection
+          links={socialLinks}
+          isOwnProfile={true}
+          onEditPress={handleEditProfile}
+        />
+
+        {/* Badges Display - الميداليات */}
+        {userData?.id && (
+          <View style={styles.badgesContainer}>
+            <BadgesDisplay
+              userId={userData.id}
+              token={authToken}
+              compact={true}
+            />
+          </View>
+        )}
+
+        <ActionButtons
+          onEditPress={() => setIsUploadModalVisible(true)}
+          onSharePress={async () => {
+            try {
+              await Share.share({
+                message: `${t.profile.checkMyProfile} @${userData?.username}\nhttps://90plus.app/@${userData?.username}`,
+              });
+            } catch (error) {
+              logger.warn('Share error:', error);
+            }
+          }}
+          onQRPress={() => setIsQRModalVisible(true)}
+          uploadCooldown={cooldowns?.reelUpload}
+        />
+
+        <StatsRow
+          followers={followStats.followersCount.toString()}
+          following={followStats.followingCount.toString()}
+          videos={(followStats.reelsCount || myVideos.length).toString()}
+          onFollowersPress={() => {
+            setFollowersModalTab('followers');
+            setIsFollowersModalVisible(true);
+          }}
+          onFollowingPress={() => {
+            setFollowersModalTab('following');
+            setIsFollowersModalVisible(true);
+          }}
+        />
+
+        <ContentTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          videoCount={myVideos.length}
+          savedCount={savedVideos.length}
+          isOwnProfile={true}
+        />
+
+        {activeTab === 'videos' && (
+          <VideoGrid
+            videos={myVideos}
+            onVideoPress={(video, index) => {
+              setSelectedVideoUrl(video.thumbnail);
+              setIsVideoPlayerVisible(true);
+            }}
+            onVideoLongPress={() => setIsDeleteMode(prev => !prev)}
+            onDeleteVideo={(videoId) => {
+              Alert.alert(
+                'حذف الفيديو',
+                'هل أنت متأكد من حذف هذا الفيديو؟',
+                [
+                  { text: 'إلغاء', style: 'cancel' },
+                  {
+                    text: 'حذف',
+                    style: 'destructive',
+                    onPress: () => removeVideo(videoId)
+                  }
+                ]
+              );
+            }}
+            isDeleteMode={isDeleteMode}
+          />
+        )}
+
+        {activeTab === 'saved' && (
+          <VideoGrid
+            videos={savedVideos.map(video => ({
+              id: video.id,
+              thumbnail: video.thumbnail || video.videoUrl,
+              views: video.views?.toString() || '0',
+              duration: '',
+            }))}
+            onVideoPress={(video, index) => {
+              router.push({
+                pathname: '/(tabs)/reels',
+                params: { reelId: video.id }
+              });
+            }}
+            onVideoLongPress={() => {}}
+            onDeleteVideo={() => {}}
+            isDeleteMode={false}
+          />
+        )}
+
+        {activeTab === 'analytics' && (
+          <View style={styles.analyticsContainer}>
+            <Text style={styles.analyticsTitle}>{t.profile.videoAnalytics}</Text>
+
+            <View style={styles.analyticsGrid}>
+              <View style={styles.analyticsCard}>
+                <Ionicons name="eye-outline" size={28} color={ProfileTheme.colors.neonBlue} />
+                <Text style={styles.analyticsValue}>{analytics?.totalViews || 0}</Text>
+                <Text style={styles.analyticsLabel}>{t.profile.views}</Text>
+              </View>
+
+              <View style={styles.analyticsCard}>
+                <Ionicons name="heart-outline" size={28} color="#FF6B6B" />
+                <Text style={styles.analyticsValue}>{analytics?.totalLikes || 0}</Text>
+                <Text style={styles.analyticsLabel}>{t.profile.likes}</Text>
+              </View>
+
+              <View style={styles.analyticsCard}>
+                <Ionicons name="chatbubble-outline" size={28} color={ProfileTheme.colors.neonGreen} />
+                <Text style={styles.analyticsValue}>{analytics?.totalComments || 0}</Text>
+                <Text style={styles.analyticsLabel}>{t.profile.comments}</Text>
+              </View>
+
+              <View style={styles.analyticsCard}>
+                <Ionicons name="person-add-outline" size={28} color="#9B59B6" />
+                <Text style={styles.analyticsValue}>{analytics?.recentFollowers || 0}</Text>
+                <Text style={styles.analyticsLabel}>{t.profile.newFollowers}</Text>
+              </View>
+            </View>
+
+            {/* Prediction Statistics Section */}
+            <View style={styles.analyticsSection}>
+              <Text style={styles.analyticsSectionTitle}>📊 {t.profile.predictionStats}</Text>
+              <View style={styles.analyticsGrid}>
+                <View style={[styles.analyticsCard, { borderColor: '#22c55e', borderWidth: 1 }]}>
+                  <Ionicons name="checkmark-circle" size={28} color="#22c55e" />
+                  <Text style={[styles.analyticsValue, { color: '#22c55e' }]}>{predictionStats?.correct || 0}</Text>
+                  <Text style={styles.analyticsLabel}>{t.profile.correctPredictions}</Text>
+                </View>
+
+                <View style={[styles.analyticsCard, { borderColor: '#ef4444', borderWidth: 1 }]}>
+                  <Ionicons name="close-circle" size={28} color="#ef4444" />
+                  <Text style={[styles.analyticsValue, { color: '#ef4444' }]}>{predictionStats?.incorrect || 0}</Text>
+                  <Text style={styles.analyticsLabel}>{t.profile.wrongPredictions}</Text>
+                </View>
+
+                <View style={[styles.analyticsCard, { borderColor: '#f59e0b', borderWidth: 1 }]}>
+                  <Ionicons name="time" size={28} color="#f59e0b" />
+                  <Text style={[styles.analyticsValue, { color: '#f59e0b' }]}>{predictionStats?.pending || 0}</Text>
+                  <Text style={styles.analyticsLabel}>{t.profile.pendingPredictions}</Text>
+                </View>
+
+                <View style={[styles.analyticsCard, { borderColor: '#3b82f6', borderWidth: 1 }]}>
+                  <Ionicons name="analytics" size={28} color="#3b82f6" />
+                  <Text style={[styles.analyticsValue, { color: '#3b82f6' }]}>{predictionStats?.accuracy || 0}%</Text>
+                  <Text style={styles.analyticsLabel}>{t.profile.successRate}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Modals */}
+      <CountryPickerModal
+        visible={isCountryModalVisible}
+        onClose={() => setIsCountryModalVisible(false)}
+        onSelect={(country) => {
+          setCountryFlag(country.flag);
+          setLocation(country.name);
+          setIsCountryModalVisible(false);
+        }}
+        selectedCountryCode={countryFlag}
+      />
+
+      <PositionPickerModal
+        visible={isPositionModalVisible}
+        onClose={() => setIsPositionModalVisible(false)}
+        onSelect={(pos) => {
+          setPosition(pos);
+          setIsPositionModalVisible(false);
+        }}
+        selectedPosition={position}
+      />
+
+      <ClubPickerModal
+        visible={isClubModalVisible}
+        onClose={() => setIsClubModalVisible(false)}
+        onSelect={(selectedClub) => {
+          setClub(selectedClub.logo);
+          setIsClubModalVisible(false);
+        }}
+      />
+
+      <BrandPickerModal
+        visible={isBrandModalVisible}
+        onClose={() => setIsBrandModalVisible(false)}
+        onSelect={(selectedBrand) => {
+          setBrand(selectedBrand.logo);
+          setIsBrandModalVisible(false);
+        }}
+      />
+
+      <StatsEditModal
+        visible={isStatsModalVisible}
+        onClose={() => setIsStatsModalVisible(false)}
+        onSave={(newStats) => {
+          setStats(newStats);
+          setIsStatsModalVisible(false);
+        }}
+        initialStats={stats}
+      />
+
+      <ProfileEditModal
+        visible={isEditProfileModalVisible}
+        onClose={() => setIsEditProfileModalVisible(false)}
+        initialData={{
+          name: userData?.displayName || userData?.username || 'User',
+          username: userData?.username || 'user',
+          bio: userData?.bio || '',
+          socials: [],
+          lastUsernameChange: userData?.lastUsernameChange || undefined
+        }}
+        onSave={(newData) => {
+          // Handle save
+          setIsEditProfileModalVisible(false);
+        }}
+        usernameCooldown={cooldowns?.username}
+      />
+
+      <ReelUploadModal
+        visible={isUploadModalVisible}
+        onClose={() => setIsUploadModalVisible(false)}
+        onUpload={(newVideo) => {
+          addVideo(newVideo);
+          setIsUploadModalVisible(false);
+        }}
+        canUploadVideo={true}
+        missingRequiredSteps={[]}
+      />
+
+      <VideoPlayerModal
+        visible={isVideoPlayerVisible}
+        videoUrl={selectedVideoUrl}
+        onClose={() => setIsVideoPlayerVisible(false)}
+        userImage={localImage}
+        username={userData?.username || 'user'}
+        reelId={selectedVideoUrl}
+        comments={reelComments[selectedVideoUrl || ''] || []}
+        onAddComment={(comment: Comment) => { 
+          if (selectedVideoUrl) addComment(selectedVideoUrl, comment); 
+        }}
+        onToggleLike={(commentId: string) => { 
+          if (selectedVideoUrl) toggleCommentLike(selectedVideoUrl, commentId); 
+        }}
+      />
+
+      <ImageViewerModal
+        visible={isImageViewerVisible}
+        imageUrl={coverImage || 'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop'}
+        onClose={() => setIsImageViewerVisible(false)}
+      />
+
+      <FollowersListModal
+        visible={isFollowersModalVisible}
+        onClose={() => setIsFollowersModalVisible(false)}
+        userId={userData?.id || ''}
+        initialTab={followersModalTab}
+        username={userData?.username}
+      />
+
+      <QRCodeModal
+        visible={isQRModalVisible}
+        onClose={() => setIsQRModalVisible(false)}
+        username={userData?.username || 'user'}
+        displayName={userData?.displayName || undefined}
+        avatar={localImage || userData?.avatar || undefined}
+      />
     </View>
   );
 }
