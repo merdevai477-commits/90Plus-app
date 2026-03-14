@@ -16,7 +16,8 @@ import { cacheService, CACHE_KEYS, CACHE_TTL, getUserCacheKey } from '../service
 import { 
   AuthService, 
   FollowService, 
-  ProfileService,
+  // TEMPORARILY DISABLED: ProfileService causing infinite loop
+  // ProfileService,
   UserProfile,
   FollowStats,
   UserReel,
@@ -293,7 +294,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
       // FULLY PARALLEL: Fetch ALL data at once including videos
       // We get username from cache or use 'me' endpoint pattern
-      const [userResult, statsResult, analyticsResult, cooldownsResult] = await Promise.all([
+      const [userResult, statsResult] = await Promise.all([
         AuthService.syncUserWithBackend(token).catch(err => {
           console.error('[useProfileCache] ❌ Error fetching user:', err);
           return null;
@@ -302,21 +303,23 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           console.error('[useProfileCache] ⚠️ Error fetching stats:', err);
           return null;
         }),
-        ProfileService.getAnalytics(token).catch(err => {
-          console.error('[useProfileCache] ⚠️ Error fetching analytics:', err);
-          return null;
-        }),
-        ProfileService.getCooldowns(token).catch(err => {
-          console.error('[useProfileCache] ⚠️ Error fetching cooldowns:', err);
-          return null;
-        }),
+        // TEMPORARILY DISABLED: ProfileService causing infinite loop
+        // ProfileService.getAnalytics(token).catch(err => {
+        //   console.error('[useProfileCache] ⚠️ Error fetching analytics:', err);
+        //   return null;
+        // }),
+        // ProfileService.getCooldowns(token).catch(err => {
+        //   console.error('[useProfileCache] ⚠️ Error fetching cooldowns:', err);
+        //   return null;
+        // }),
       ]);
 
       logger.debug('[useProfileCache] Data fetched:', {
         hasUser: !!userResult,
         hasStats: !!statsResult,
-        hasAnalytics: !!analyticsResult,
-        hasCooldowns: !!cooldownsResult,
+        // TEMPORARILY DISABLED: Analytics and cooldowns
+        // hasAnalytics: !!analyticsResult,
+        // hasCooldowns: !!cooldownsResult,
       });
 
       let newUserData: ProfileUserData | null = null;
@@ -343,12 +346,13 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         if (statsResult) {
           setFollowStats(statsResult);
         }
-        if (analyticsResult) {
-          setAnalytics(analyticsResult);
-        }
-        if (cooldownsResult) {
-          setCooldowns(cooldownsResult);
-        }
+        // TEMPORARILY DISABLED: Analytics and cooldowns
+        // if (analyticsResult) {
+        //   setAnalytics(analyticsResult);
+        // }
+        // if (cooldownsResult) {
+        //   setCooldowns(cooldownsResult);
+        // }
         
         // Mark as loaded IMMEDIATELY so UI shows
         hasLoadedRef.current = true;
@@ -369,8 +373,8 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
               userData: newUserData,
               followStats: statsResult,
               videos: newVideos,
-              analytics: analyticsResult,
-              cooldowns: cooldownsResult,
+              analytics: null, // TEMPORARILY DISABLED
+              cooldowns: null, // TEMPORARILY DISABLED
             };
             saveToCache(cacheData);
           })
@@ -403,21 +407,21 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         setFollowStats(statsResult);
       }
 
-      if (analyticsResult) {
-        setAnalytics(analyticsResult);
-      }
-
-      if (cooldownsResult) {
-        setCooldowns(cooldownsResult);
-      }
+      // TEMPORARILY DISABLED: Analytics and cooldowns
+      // if (analyticsResult) {
+      //   setAnalytics(analyticsResult);
+      // }
+      // if (cooldownsResult) {
+      //   setCooldowns(cooldownsResult);
+      // }
 
       // Save to cache (Requirement 2.5)
       const cacheData: ProfileCacheData = {
         userData: newUserData,
         followStats: statsResult,
         videos: newVideos,
-        analytics: analyticsResult,
-        cooldowns: cooldownsResult,
+        analytics: null, // TEMPORARILY DISABLED
+        cooldowns: null, // TEMPORARILY DISABLED
       };
       await saveToCache(cacheData);
       

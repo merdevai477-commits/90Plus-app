@@ -2,6 +2,7 @@ import { getApiUrl } from '../../config/api.config';
 import { requestDeduplicator } from '../../services/requestDeduplicator';
 import { logger } from './logger';
 import { safeJsonParse } from '../../utils/safeJsonParse';
+import { EnhancedApiClient } from '../../utils/enhancedNetworkService';
 
 const API_URL = getApiUrl();
 
@@ -1522,10 +1523,10 @@ export class ReelsService {
 
 export interface ProfileCompletionStep {
     id: string;
-    name: string;
-    description: string;
-    isCompleted: boolean;
-    completedAt?: string;
+    label: string; // Backend uses 'label' not 'name'
+    completed: boolean; // Backend uses 'completed' not 'isCompleted'
+    required: boolean;
+    weight: number;
 }
 
 export interface ProfileCompletionStatus {
@@ -1533,6 +1534,8 @@ export interface ProfileCompletionStatus {
     completedSteps: number;
     totalSteps: number;
     steps: ProfileCompletionStep[];
+    canUploadVideo: boolean;
+    missingRequiredSteps: string[];
 }
 
 export class ProfileService {
@@ -1541,26 +1544,30 @@ export class ProfileService {
      */
     static async getCompletionStatus(token: string): Promise<ProfileCompletionStatus | null> {
         try {
-            const response = await fetch(`${API_URL}/profile/completion`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+            logger.debug('[ProfileService] Fetching completion status...');
+            
+            const apiClient = new EnhancedApiClient(token);
+            const response = await apiClient.get('/profile/completion', {
+                priority: 'high',
+                timeout: 20000, // 20 seconds for this critical operation
+                retries: 3,
             });
 
-            if (!response.ok) {
-                console.error('Failed to get profile completion:', response.status);
-                return null;
+            if (response.status === 'SUCCESS' && response.data) {
+                logger.debug('[ProfileService] Completion status loaded successfully:', {
+                    percentage: response.data.percentage,
+                    completedSteps: response.data.completedSteps,
+                });
+                return response.data;
             }
-
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return data.data;
-            }
+            
+            logger.warn('[ProfileService] Invalid response format:', response);
             return null;
-        } catch (error) {
-            console.error('Error getting profile completion:', error);
+        } catch (error: any) {
+            logger.error('[ProfileService] Error getting profile completion:', {
+                error: error.message,
+                name: error.name,
+            });
             return null;
         }
     }
@@ -1570,22 +1577,34 @@ export class ProfileService {
      */
     static async markStepCompleted(token: string, stepId: string): Promise<{ success: boolean; data?: ProfileCompletionStatus }> {
         try {
-            const response = await fetch(`${API_URL}/profile/completion/step`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ stepId }),
+            logger.debug('[ProfileService] Marking step as completed:', stepId);
+            
+            const apiClient = new EnhancedApiClient(token);
+            const response = await apiClient.post('/profile/completion/step', { stepId }, {
+                priority: 'high',
+                timeout: 15000,
+                retries: 2,
             });
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return { success: true, data: data.data };
+            if (response.status === 'SUCCESS' && response.data) {
+                logger.debug('[ProfileService] Step marked as completed successfully:', {
+                    stepId,
+                    newPercentage: response.data.percentage,
+                });
+                return { success: true, data: response.data };
             }
+            
+            logger.warn('[ProfileService] Failed to mark step as completed:', {
+                stepId,
+                response,
+            });
             return { success: false };
-        } catch (error) {
-            console.error('Error marking step completed:', error);
+        } catch (error: any) {
+            logger.error('[ProfileService] Error marking step completed:', {
+                stepId,
+                error: error.message,
+                name: error.name,
+            });
             return { success: false };
         }
     }

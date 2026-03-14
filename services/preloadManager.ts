@@ -22,7 +22,8 @@ import { cacheService, CACHE_KEYS, CACHE_TTL } from './cacheService';
 import { 
   AuthService, 
   FollowService, 
-  ProfileService,
+  // TEMPORARILY DISABLED: ProfileService causing infinite loop
+  // ProfileService,
   ReelsService,
   NotificationService,
 } from '../src/services/authService';
@@ -269,11 +270,12 @@ class PreloadManagerClass {
    */
   private async preloadProfile(token: string): Promise<void> {
     // Fetch user data, follow stats, and analytics in parallel
-    const [userResult, statsResult, analyticsResult, cooldownsResult] = await Promise.all([
+    const [userResult, statsResult] = await Promise.all([
       AuthService.syncUserWithBackend(token),
       FollowService.getMyStats(token),
-      ProfileService.getAnalytics(token),
-      ProfileService.getCooldowns(token),
+      // TEMPORARILY DISABLED: ProfileService causing infinite loop
+      // ProfileService.getAnalytics(token),
+      // ProfileService.getCooldowns(token),
     ]);
 
     if (userResult) {

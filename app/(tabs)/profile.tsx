@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity } from 'react-native';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import ReelUploadModal from '../../components/common/ReelUploadModal';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
@@ -31,9 +31,6 @@ import { getApiUrl } from '../../config/api.config';
 import { compressImage } from '@/utils/imageCompressor';
 import { logger } from '../../utils/logger';
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
-
-const API_URL = getApiUrl();
-
 import CountryPickerModal from '../../components/common/CountryPickerModal';
 import PositionPickerModal from '../../components/common/PositionPickerModal';
 import ClubPickerModal from '../../components/common/ClubPickerModal';
@@ -44,11 +41,9 @@ import { usePredictionsStore } from '../../src/store/usePredictionsStore';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import QRCodeModal from '../../components/profile/QRCodeModal';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
-import { Club } from '../../data/clubs'; // ✅ Import Club type with apiId
-import { ProfileCompletionCard } from '../../components/profile/ProfileCompletionCard';
-import { useProfileCompletion } from '../../hooks/useProfileCompletion';
-import { ProfileTasksBadge } from '../../components/common/ProfileTasksBadge';
-import { ProfileTasksModal, ProfileTaskStep } from '../../components/common/ProfileTasksModal';
+import { Club } from '../../data/clubs';
+
+const API_URL = getApiUrl();
 
 // Types for profile handlers
 interface Country {
@@ -63,9 +58,8 @@ interface Brand {
   logo: string;
 }
 
-// ✅ PERFORMANCE: Memoize expensive calculations outside component
+// Performance: Memoize expensive calculations outside component
 const DEFAULT_FOLLOW_STATS = { followersCount: 0, followingCount: 0, reelsCount: 0 };
-
 // Helper function to get step icons
 const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
   switch (stepId) {
@@ -74,2096 +68,14 @@ const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
     case 'club': return 'football-outline';
     case 'bio': return 'document-text-outline';
     case 'position': return 'location-outline';
-    case 'cardData': return 'card-outline'; // Combined: age, height, weight, foot
+    case 'cardData': return 'card-outline';
     case 'brand': return 'shirt-outline';
     case 'socialLinks': return 'link-outline';
     default: return 'checkmark-circle-outline';
   }
 };
 
-export default function ProfileScreen() {
-  const [activeTab, setActiveTab] = useState('videos');
-  const { isSignedIn, getToken } = useAuth();
-  const { user: clerkUser } = useUser();
-
-  // ✅ PERFORMANCE: Memoize these to prevent re-creation
-  const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
-  const toast = useToast();
-  const { t } = useTranslation();
-
-  // ✅ OPTIMIZATION: Prevent guest access - redirect to auth (memoized check)
-  useEffect(() => {
-    if (!isSignedIn) {
-      router.replace('/auth');
-    }
-  }, [isSignedIn]);
-
-  // Use the profile cache hook for cache-first loading (Requirements 2.1, 2.2, 2.3, 2.5, 2.6)
-  const {
-    userData: cachedUserData,
-    followStats: cachedFollowStats,
-    videos: cachedVideos,
-    analytics: cachedAnalytics,
-    cooldowns: cachedCooldowns,
-    isLoading,
-    isRefreshing,
-    isCacheHit,
-    error: cacheError,
-    refresh: refreshCache,
-    loadVideos,
-    updateUserData: updateCachedUserData,
-    updateFollowStats: updateCachedFollowStats,
-  } = useProfileCache({
-    getToken,
-    clerkUserImageUrl: clerkUser?.imageUrl,
-    clerkUserId: clerkUser?.id,
-  });
-
-  // Profile completion hook
-  const {
-    completionStatus,
-    isLoading: isCompletionLoading,
-    error: completionError,
-    fetchCompletionStatus,
-    markStepCompleted,
-  } = useProfileCompletion(getToken);
-
-  // Debug: Log when completionStatus changes
-  useEffect(() => {
-    if (completionStatus) {
-      console.log('✅ Profile completion loaded:', {
-        percentage: completionStatus.percentage,
-        remaining: completionStatus.totalSteps - completionStatus.completedSteps,
-      });
-    }
-  }, [completionStatus]);
-
-  // ✅ Log cache errors
-  useEffect(() => {
-    if (cacheError) {
-      console.error('[ProfileScreen] ❌ Cache error:', cacheError);
-      logger.error('Profile cache error:', cacheError);
-    }
-  }, [cacheError]);
-
-  // ✅ Log loading state changes
-  useEffect(() => {
-    console.log('[ProfileScreen] 📊 State:', {
-      isLoading,
-      hasUserData: !!cachedUserData,
-      isCacheHit,
-      error: cacheError,
-    });
-  }, [isLoading, cachedUserData, isCacheHit, cacheError]);
-
-  // ✅ CRITICAL FIX: Auto-retry when backend is down (502 error)
-  useEffect(() => {
-    if (cacheError && cacheError.includes('المحفوظة') && !isLoading) {
-      // Backend is down (502), retry after 8 seconds (give server time to wake up)
-      const retryTimeout = setTimeout(() => {
-        console.log('[ProfileScreen] 🔄 Auto-retry after backend cold start (8s delay)');
-        refreshCache(true).catch(err => {
-          console.error('[ProfileScreen] ❌ Auto-retry failed:', err);
-        });
-      }, 8000); // 8 seconds - enough time for Railway to wake up
-
-      return () => clearTimeout(retryTimeout);
-    }
-  }, [cacheError, isLoading, refreshCache]);
-
-  // ✅ CRITICAL FIX: Timeout fallback if loading takes too long
-  useEffect(() => {
-    if (isLoading && !cachedUserData) {
-      const timeout = setTimeout(() => {
-        console.error('[ProfileScreen] ⏰ Loading timeout - forcing refresh');
-        logger.error('Profile loading timeout - forcing refresh');
-        refreshCache(true).catch(err => {
-          console.error('[ProfileScreen] ❌ Refresh failed:', err);
-          toast.showError('خطأ', 'فشل في تحميل البروفايل. يرجى المحاولة مرة أخرى');
-        });
-      }, 15000); // 15 seconds timeout
-
-      return () => clearTimeout(timeout);
-    }
-  }, [isLoading, cachedUserData, refreshCache, toast]);
-
-  // Local state for UI-specific data not in cache
-  const [localImage, setLocalImageState] = useState<string | null>(globalState.localAvatar || null);
-  const setLocalImage = (image: string | null) => {
-    setLocalImageState(image);
-    globalState.setLocalAvatar(image || undefined);
-  };
-
-  const [countryFlag, setCountryFlag] = useState<string>(DEFAULT_COUNTRY_FLAG);
-  const [location, setLocation] = useState<string>(''); // removed 'مصر' fallback
-  const [position, setPosition] = useState<string>(DEFAULT_POSITION);
-  const [club, setClub] = useState<string | undefined>(undefined);
-  const [brand, setBrand] = useState<string | undefined>(undefined);
-
-  // Stats State - MUST be defined before useEffect that uses it
-  const [stats, setStats] = useState({
-    age: DEFAULT_STATS.age,
-    height: DEFAULT_STATS.height,
-    weight: DEFAULT_STATS.weight,
-    foot: DEFAULT_STATS.foot
-  });
-
-  // Modal visibility states
-  const [isCountryModalVisible, setIsCountryModalVisible] = useState(false);
-  const [isPositionModalVisible, setIsPositionModalVisible] = useState(false);
-  const [isClubModalVisible, setIsClubModalVisible] = useState(false);
-  const [isBrandModalVisible, setIsBrandModalVisible] = useState(false);
-  const [isStatsModalVisible, setIsStatsModalVisible] = useState(false);
-  const [isEditProfileModalVisible, setIsEditProfileModalVisible] = useState(false);
-  const [isUploadModalVisible, setIsUploadModalVisible] = useState(false);
-  const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
-  const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
-  const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
-
-  // Loading states for profile operations
-  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
-  const [isCoverUploading, setIsCoverUploading] = useState(false);
-  const [isCountryUpdating, setIsCountryUpdating] = useState(false);
-  const [isClubUpdating, setIsClubUpdating] = useState(false);
-  const [isBrandUpdating, setIsBrandUpdating] = useState(false);
-  const [isStatsUpdating, setIsStatsUpdating] = useState(false);
-
-  // New modals for profile features
-  const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
-  const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
-  const [isQRModalVisible, setIsQRModalVisible] = useState(false);
-  const [isTasksModalVisible, setIsTasksModalVisible] = useState(false);
-
-  // Cover image state
-  const [coverImage, setCoverImageState] = useState<string | null>(globalState.localCover || null);
-  const setCoverImage = (image: string | null) => {
-    setCoverImageState(image);
-    globalState.setLocalCover(image || undefined);
-  };
-
-  // Video Management State
-  const [isDeleteMode, setIsDeleteMode] = useState(false);
-
-  // ✅ OPTIMIZATION: Token state for BadgesDisplay
-  const [authToken, setAuthToken] = useState<string | null>(null);
-
-  // ✅ OPTIMIZATION: Fetch token for badges (memoized)
-  useEffect(() => {
-    let isMounted = true;
-    const fetchToken = async () => {
-      try {
-        const token = await getToken();
-        if (isMounted && token) {
-          setAuthToken(token);
-        }
-      } catch (error) {
-        // Silent fail - badges will handle missing token
-      }
-    };
-    fetchToken();
-    return () => { isMounted = false; }; // ✅ Cleanup to prevent state updates on unmounted component
-  }, []); // ✅ Only run once on mount
-
-  // ✅ OPTIMIZATION: Derive state from cache with memoization
-  const userData = cachedUserData;
-  const followStats = useMemo(() =>
-    cachedFollowStats || DEFAULT_FOLLOW_STATS,
-    [cachedFollowStats]
-  );
-
-  // Helper function to validate and get token
-  const getValidatedToken = async (): Promise<string | null> => {
-    if (!userData) {
-      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
-      return null;
-    }
-    const token = await getToken();
-    if (!token) {
-      toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
-      return null;
-    }
-    return token;
-  };
-
-  // Merge cached videos with uploaded videos from context (for optimistic updates)
-  // Saved videos state
-  const [savedVideos, setSavedVideos] = useState<any[]>([]);
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
-  const [savedVideosCursor, setSavedVideosCursor] = useState<string | null>(null);
-  const [hasMoreSaved, setHasMoreSaved] = useState(true);
-
-  // ✅ OPTIMIZATION: Load saved videos (with cancellation support)
-  const loadSavedVideos = useCallback(async (cursor?: string) => {
-    setIsLoadingSaved(true);
-    try {
-      const token = await getToken();
-      if (!token) {
-        setIsLoadingSaved(false);
-        return;
-      }
-
-      const result = await ReelsService.getSavedReels(token, cursor);
-      if (result) {
-        if (cursor) {
-          // Append to existing (batch update)
-          setSavedVideos(prev => [...prev, ...result.savedReels]);
-        } else {
-          // Replace
-          setSavedVideos(result.savedReels);
-        }
-        // Batch these state updates
-        setSavedVideosCursor(result.nextCursor);
-        setHasMoreSaved(result.hasMore);
-      }
-    } catch (error) {
-      logger.error('Error loading saved videos:', error);
-      // Don't show toast on error - fail silently
-    } finally {
-      setIsLoadingSaved(false);
-    }
-  }, []); // ✅ Remove getToken from deps - it's stable from useAuth
-
-  // ✅ OPTIMIZATION: Load saved videos when saved tab is active
-  const hasLoadedSavedRef = useRef(false); // ✅ Track if we've loaded saved videos
-  useEffect(() => {
-    if (activeTab === 'saved' && !hasLoadedSavedRef.current && !isLoadingSaved) {
-      hasLoadedSavedRef.current = true;
-      loadSavedVideos();
-    }
-  }, [activeTab, isLoadingSaved, loadSavedVideos]); // ✅ Remove savedVideos.length from deps
-
-  const myVideos = React.useMemo(() => {
-    const cached = cachedVideos || [];
-    const uploaded = uploadedVideos || [];
-
-    // Combine both, prioritizing uploaded videos (they have isUploading flag)
-    const allVideos = [...uploaded, ...cached];
-
-    // Remove duplicates by id, keeping uploaded ones first
-    const uniqueVideos = allVideos.reduce((acc, video) => {
-      if (!acc.find(v => v.id === video.id)) {
-        acc.push(video);
-      }
-      return acc;
-    }, [] as any[]);
-
-    return uniqueVideos.map(video => ({
-      id: video.id,
-      thumbnail: video.thumbnail || video.uri,
-      views: video.views || '0',
-      duration: video.duration || '',
-      isUploading: video.isUploading || false,
-      uploadProgress: video.uploadProgress,
-    }));
-  }, [cachedVideos, uploadedVideos]);
-  const analytics = cachedAnalytics;
-  const cooldowns = cachedCooldowns;
-
-  // Predictions store for prediction stats
-  const { stats: predictionStats, fetchPredictionStats } = usePredictionsStore();
-
-  // ✅ OPTIMIZATION: Fetch prediction stats when authenticated (with cleanup)
-  useEffect(() => {
-    let isMounted = true;
-    const loadPredictionStats = async () => {
-      try {
-        const token = await getToken();
-        if (isMounted && token) {
-          await fetchPredictionStats(token);
-        }
-      } catch (error) {
-        logger.error('Error loading prediction stats:', error);
-      }
-    };
-    loadPredictionStats();
-    return () => { isMounted = false; }; // ✅ Cleanup
-  }, []); // ✅ Only run once
-
-  // ✅ OPTIMIZATION: Sync local state with cached data (reduced re-renders)
-  const prevUserDataRef = useRef(userData);
-  useEffect(() => {
-    if (!userData) return;
-
-    // ✅ Only update if userData actually changed (deep comparison on key fields)
-    const prev = prevUserDataRef.current;
-    const hasChanged = !prev ||
-      prev.position !== userData.position ||
-      prev.countryFlag !== userData.countryFlag ||
-      prev.avatar !== userData.avatar ||
-      prev.coverImage !== userData.coverImage ||
-      prev.clubLogo !== userData.clubLogo ||
-      prev.brandLogo !== userData.brandLogo ||
-      prev.age !== userData.age ||
-      prev.height !== userData.height ||
-      prev.weight !== userData.weight ||
-      prev.preferredFoot !== userData.preferredFoot;
-
-    if (!hasChanged) return; // ✅ Skip if nothing changed
-
-    prevUserDataRef.current = userData;
-
-    // Batch all state updates together
-    if (userData.position) setPosition(userData.position);
-    if (userData.countryFlag) setCountryFlag(userData.countryFlag);
-    if (userData.location) setLocation(userData.location); // ✅ Sync location
-    if (userData.avatar) {
-      setLocalImage(userData.avatar);
-      globalState.setLocalAvatar(userData.avatar);
-    }
-    if (userData.coverImage) {
-      setCoverImage(userData.coverImage);
-    }
-
-    // ✅ Load club logo (optimized)
-    if (userData.clubLogo) {
-      setClub(userData.clubLogo);
-    } else if (userData.favoriteTeam && !prev?.favoriteTeam) {
-      // Only fetch if favoriteTeam is new
-      const loadClubLogo = async () => {
-        try {
-          const { CLUBS } = await import('../../data/clubs');
-          const matchedClub = CLUBS.find(c =>
-            c.name === userData.favoriteTeam ||
-            c.name.includes(userData.favoriteTeam) ||
-            userData.favoriteTeam.includes(c.name)
-          );
-          if (matchedClub?.apiId) {
-            const { getClubLogo } = await import('../../services/clubLogoService');
-            const logo = await getClubLogo(matchedClub.apiId);
-            if (logo) {
-              setClub(logo);
-              await updateCachedUserData({ clubLogo: logo });
-            }
-          }
-        } catch (error) {
-          logger.error('Error loading club logo:', error);
-        }
-      };
-      loadClubLogo();
-    }
-
-    if (userData.brandLogo) setBrand(userData.brandLogo);
-
-    // ✅ Update stats (batch update)
-    if (userData.age || userData.height || userData.weight || userData.preferredFoot) {
-      setStats({
-        age: userData.age?.toString() || DEFAULT_STATS.age,
-        height: userData.height?.toString() || DEFAULT_STATS.height,
-        weight: userData.weight?.toString() || DEFAULT_STATS.weight,
-        foot: (userData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
-      });
-    }
-
-    // Update globalState
-    globalState.username = userData.username;
-  }, [userData, updateCachedUserData]); // ✅ Proper deps
-
-  // Ref to store refreshCache to avoid dependency issues
-  const refreshCacheRef = useRef(refreshCache);
-  refreshCacheRef.current = refreshCache;
-
-  const fetchCompletionStatusRef = useRef(fetchCompletionStatus);
-  fetchCompletionStatusRef.current = fetchCompletionStatus;
-
-  // Refresh on focus - use cache hook's refresh
-  useFocusEffect(
-    useCallback(() => {
-      // Background refresh when screen is focused (won't show loading if cache exists)
-      refreshCacheRef.current(false);
-      // Also refresh profile completion status so tasks badge stays visible
-      fetchCompletionStatusRef.current().catch(err => logger.error('Error refreshing completion status:', err));
-    }, []) // Empty deps ensures this only runs when screen is actually focused
-  );
-
-  // Auto-refresh when app returns from background
-  const appStateRef = useRef(AppState.currentState);
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      // App came to foreground from background
-      if (
-        appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        // Refresh profile data silently
-        refreshCacheRef.current(false);
-      }
-      appStateRef.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, []); // Empty deps - uses ref
-
-  // ✅ OPTIMIZATION: Memoize cover press handler
-  const handleCoverPress = useCallback(() => {
-    const options = ['عرض الصورة', 'تغيير الصورة', 'إلغاء'];
-    const cancelButtonIndex = 2;
-
-    const handlePress = (buttonIndex: number) => {
-      if (buttonIndex === 0) {
-        setIsImageViewerVisible(true);
-      } else if (buttonIndex === 1) {
-        handleCoverUpload();
-      }
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex },
-        handlePress
-      );
-    } else {
-      Alert.alert(
-        'صورة الغلاف',
-        'ماذا تريد أن تفعل؟',
-        [
-          { text: 'عرض الصورة', onPress: () => handlePress(0) },
-          { text: 'تغيير الصورة', onPress: () => handlePress(1) },
-          { text: 'إلغاء', style: 'cancel' },
-        ]
-      );
-    }
-  }, []); // ✅ No deps needed - functions are defined inside
-
-  const handleCoverUpload = async () => {
-    // Validate userData exists
-    if (!userData) {
-      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
-      return;
-    }
-
-    // Check cooldown first
-    if (cooldowns && !cooldowns.cover.canChange) {
-      // Haptic feedback for warning
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      const days = cooldowns.cover.daysRemaining;
-      const hours = cooldowns.cover.hoursRemaining;
-      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
-
-      Alert.alert(
-        '⏳ انتظر قليلاً',
-        `يمكنك تغيير صورة الغلاف بعد ${timeText}`,
-        [{ text: 'حسناً', style: 'default' }]
-      );
-      return;
-    }
-
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const imageUri = result.assets[0]?.uri;
-      if (!imageUri) {
-        toast.showError('خطأ', 'لم يتم اختيار صورة صحيحة');
-        return;
-      }
-
-      // Compress image before upload
-      let finalUri = imageUri;
-      try {
-        const compressed = await compressImage(imageUri, {
-          maxWidth: 1920,
-          maxHeight: 1080,
-          quality: 0.8,
-        });
-        finalUri = compressed.uri;
-        console.log(`Cover compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
-      } catch (error) {
-        console.warn('Cover compression failed, using original:', error);
-        finalUri = imageUri; // Fallback to original
-      }
-
-      // Store original cover for revert
-      const originalCover = userData.coverImage;
-
-      // Optimistic UI - show immediately
-      setCoverImage(finalUri);
-
-      // Get token
-      const token = await getToken();
-      if (!token) {
-        // Revert on no token
-        setCoverImage(originalCover || null);
-        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
-        return;
-      }
-
-      // Upload to backend
-      const uploadResult = await StorageService.uploadCover(token, finalUri);
-
-      if (uploadResult.success && uploadResult.url) {
-        // Update with backend URL immediately
-        const newCoverUrl = uploadResult.url;
-        setCoverImage(newCoverUrl);
-
-        // Update globalState
-        globalState.setLocalCover(newCoverUrl);
-
-        // Update userData via cache immediately
-        await updateCachedUserData({ coverImage: newCoverUrl });
-
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-
-        toast.showSuccess('تم', 'تم رفع صورة الغلاف بنجاح 🖼️');
-      } else {
-        // Revert on error
-        setCoverImage(originalCover || null);
-        toast.showError('خطأ', uploadResult.error || 'فشل في رفع صورة الغلاف');
-      }
-    } catch (error: any) {
-      logger.error('Cover upload error:', error);
-      // Revert to original cover
-      setCoverImage(userData?.coverImage || null);
-      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
-    }
-  };
-
-  const handleImageUpload = async () => {
-    // Validate userData exists
-    if (!userData) {
-      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
-      return;
-    }
-
-    // Check cooldown first
-    if (cooldowns && !cooldowns.avatar.canChange) {
-      // Haptic feedback for warning
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      const days = cooldowns.avatar.daysRemaining;
-      const hours = cooldowns.avatar.hoursRemaining;
-      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
-
-      Alert.alert(
-        '⏳ انتظر قليلاً',
-        `يمكنك تغيير صورة البروفايل بعد ${timeText}`,
-        [{ text: 'حسناً', style: 'default' }]
-      );
-      return;
-    }
-
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const imageUri = result.assets[0]?.uri;
-      if (!imageUri) {
-        toast.showError('خطأ', 'لم يتم اختيار صورة صحيحة');
-        return;
-      }
-
-      // Compress image before upload
-      let finalUri = imageUri;
-      try {
-        const compressed = await compressImage(imageUri, {
-          maxWidth: 1080,
-          maxHeight: 1080,
-          quality: 0.7,
-        });
-        finalUri = compressed.uri;
-        console.log(`Avatar compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
-      } catch (error) {
-        console.warn('Avatar compression failed, using original:', error);
-        finalUri = imageUri; // Fallback to original
-      }
-
-      // Store original avatar for revert
-      const originalAvatar = userData.avatar;
-
-      // Start loading
-      setIsAvatarUploading(true);
-
-      // Optimistic UI - show immediately
-      setLocalImage(finalUri);
-
-      // Get token
-      const token = await getToken();
-      if (!token) {
-        // Revert on no token
-        setLocalImage(originalAvatar || null);
-        setIsAvatarUploading(false);
-        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
-        return;
-      }
-
-      // Upload to backend
-      const uploadResult = await StorageService.uploadAvatar(token, finalUri);
-
-      if (uploadResult.success && uploadResult.url) {
-        // Update with backend URL immediately
-        const newAvatarUrl = uploadResult.url;
-        setLocalImage(newAvatarUrl);
-
-        // Update globalState
-        if (globalState.userProfile) {
-          globalState.userProfile.avatar = newAvatarUrl;
-        }
-        globalState.setLocalAvatar(newAvatarUrl);
-
-        // Update userData via cache immediately
-        await updateCachedUserData({ avatar: newAvatarUrl });
-
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-
-  // Mark profile completion step as completed and refresh with retry
-        try {
-          // ✅ Clear frontend cache first to force fresh data
-          await cacheService.invalidate(CACHE_KEYS.PROFILE_COMPLETION);
-          
-          // ✅ Wait a bit for database to update
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Force immediate refresh of completion status (with retry)
-          let retries = 3;
-          while (retries > 0) {
-            await fetchCompletionStatus();
-            
-            // Check if avatar step is now completed
-            const status = completionStatus;
-            const avatarStep = status?.steps.find(s => s.id === 'avatar');
-            
-            if (avatarStep?.completed) {
-              logger.info('✅ Avatar step marked as completed');
-              break;
-            }
-            
-            retries--;
-            if (retries > 0) {
-              logger.warn(`Avatar step not completed yet, retrying... (${retries} attempts left)`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          }
-        } catch (err) {
-          logger.error('Error refreshing completion status:', err);
-        }
-
-        toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح 📸');
-      } else {
-        // Revert local image on error
-        setLocalImage(originalAvatar || null);
-        toast.showError('خطأ', uploadResult.error || 'فشل في رفع الصورة');
-      }
-    } catch (error: any) {
-      logger.error('Avatar upload error:', error);
-      // Revert to original avatar
-      setLocalImage(userData?.avatar || null);
-      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
-    } finally {
-      setIsAvatarUploading(false);
-    }
-  };
-
-  const handleCountrySelect = async (country: Country) => {
-    if (!country?.flag || !country?.name) {
-      toast.showError('خطأ', 'بيانات البلد غير صحيحة');
-      return;
-    }
-
-    const token = await getValidatedToken();
-    if (!token) return;
-
-    // Store original values for rollback
-    const originalCountryFlag = userData?.countryFlag || DEFAULT_COUNTRY_FLAG;
-    const originalLocation = userData?.location || location;
-
-    try {
-      // Start loading
-      setIsCountryUpdating(true);
-
-      // ✅ INSTANT UPDATE: Update UI immediately (optimistic)
-      setCountryFlag(country.flag);
-      setLocation(country.name); // ✅ Update location state immediately
-
-      // Update cache immediately for instant UI
-      await updateCachedUserData({
-        location: country.name,
-        countryFlag: country.flag
-      });
-
-      // Save to backend in background (non-blocking)
-      const result = await CardProfileService.updateCardProfile(token, {
-        countryFlag: country.flag,
-        country: country.name
-      });
-
-      if (result.success) {
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        
-        // Mark profile completion step as completed and refresh with retry
-        try {
-          // ✅ Clear frontend cache first to force fresh data
-          await cacheService.invalidate(CACHE_KEYS.PROFILE_COMPLETION);
-          
-          // ✅ Wait a bit for database to update
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Force immediate refresh of completion status (with retry)
-          let retries = 3;
-          while (retries > 0) {
-            await fetchCompletionStatus();
-            
-            // Check if country step is now completed
-            const status = completionStatus;
-            const countryStep = status?.steps.find(s => s.id === 'country');
-            
-            if (countryStep?.completed) {
-              logger.info('✅ Country step marked as completed');
-              break;
-            }
-            
-            retries--;
-            if (retries > 0) {
-              logger.warn(`Country step not completed yet, retrying... (${retries} attempts left)`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          }
-        } catch (err) {
-          logger.error('Error refreshing completion status:', err);
-        }
-        
-        toast.showSuccess('تم', 'تم تحديث البلد بنجاح ✅');
-      } else {
-        // Rollback on error
-        setCountryFlag(originalCountryFlag);
-        setLocation(originalLocation);
-        await updateCachedUserData({
-          location: originalLocation,
-          countryFlag: originalCountryFlag
-        });
-        toast.showError('خطأ', result.error || 'فشل في حفظ البلد');
-      }
-    } catch (error: any) {
-      logger.error('Error saving country:', error);
-      // Rollback on error
-      setCountryFlag(originalCountryFlag);
-      setLocation(originalLocation);
-      await updateCachedUserData({
-        location: originalLocation,
-        countryFlag: originalCountryFlag
-      });
-      toast.showError('خطأ', error.message || 'فشل في حفظ البلد');
-    } finally {
-      setIsCountryUpdating(false);
-    }
-  };
-
-  const handlePositionSelect = async (pos: string) => {
-    if (!pos || pos.trim() === '') {
-      toast.showError('خطأ', 'المركز غير صحيح');
-      return;
-    }
-
-    const token = await getValidatedToken();
-    if (!token) return;
-
-    // Store original value for rollback
-    const originalPosition = userData?.position || DEFAULT_POSITION;
-
-    try {
-      // Optimistic update
-      setPosition(pos);
-      await updateCachedUserData({ position: pos }); // ✅ إضافة هذا
-
-      // Save to backend
-      const result = await CardProfileService.updateCardProfile(token, { position: pos });
-      if (result.success) {
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        toast.showSuccess('تم', 'تم تحديث المركز بنجاح ✅');
-      } else {
-        // Rollback on error
-        setPosition(originalPosition);
-        await updateCachedUserData({ position: originalPosition });
-        toast.showError('خطأ', result.error || 'فشل في حفظ المركز');
-      }
-    } catch (error: any) {
-      logger.error('Error saving position:', error);
-      // Rollback on error
-      setPosition(originalPosition);
-      await updateCachedUserData({ position: originalPosition });
-      toast.showError('خطأ', error.message || 'فشل في حفظ المركز');
-    }
-  };
-
-  const handleClubSelect = async (selectedClub: Club) => {
-    if (!selectedClub?.name) {
-      toast.showError('خطأ', 'بيانات النادي غير صحيحة');
-      return;
-    }
-
-    const token = await getValidatedToken();
-    if (!token) return;
-
-    // Store original values for rollback
-    const originalClub = userData?.clubLogo;
-    const originalFavoriteTeam = userData?.favoriteTeam;
-
-    try {
-      // Start loading
-      setIsClubUpdating(true);
-
-      // ✅ Always fetch fresh logo from API to ensure it's real and up-to-date
-      let clubLogo = selectedClub.logo;
-      if (selectedClub.apiId) {
-        const { getClubLogo } = await import('../../services/clubLogoService');
-        const logo = await getClubLogo(selectedClub.apiId);
-        if (logo) {
-          clubLogo = logo;
-          // Update club object for future use
-          selectedClub.logo = logo;
-        } else if (!clubLogo) {
-          // If API fetch failed and no cached logo, show error
-          toast.showError('خطأ', 'لم يتم العثور على شعار النادي من API');
-          return;
-        }
-      }
-
-      if (!clubLogo) {
-        toast.showError('خطأ', 'لم يتم العثور على شعار النادي');
-        return;
-      }
-
-      // ✅ Optimistic update - update UI immediately
-      setClub(clubLogo);
-
-      // ✅ Update cached user data immediately (for instant UI update)
-      await updateCachedUserData({
-        favoriteTeam: selectedClub.name,
-        clubLogo: clubLogo
-      });
-
-      // ✅ Save to backend (persistent storage)
-      const result = await CardProfileService.updateCardProfile(token, {
-        clubLogo: clubLogo,
-        favoriteTeam: selectedClub.name
-      });
-
-      if (result.success) {
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        
-        // Mark profile completion step as completed and refresh with retry
-        try {
-          // ✅ Wait a bit for database to update
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Force immediate refresh of completion status (with retry)
-          let retries = 3;
-          while (retries > 0) {
-            await fetchCompletionStatus();
-            
-            // Check if club step is now completed
-            const status = completionStatus;
-            const clubStep = status?.steps.find(s => s.id === 'club');
-            
-            if (clubStep?.completed) {
-              logger.info('✅ Club step marked as completed');
-              break;
-            }
-            
-            retries--;
-            if (retries > 0) {
-              logger.warn(`Club step not completed yet, retrying... (${retries} attempts left)`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          }
-        } catch (err) {
-          logger.error('Error refreshing completion status:', err);
-        }
-        
-        toast.showSuccess('تم', `تم حفظ ${selectedClub.name} بنجاح ⚽`);
-      } else {
-        // Rollback on error
-        setClub(originalClub || undefined);
-        await updateCachedUserData({
-          favoriteTeam: originalFavoriteTeam,
-          clubLogo: originalClub,
-        });
-        toast.showError('خطأ', result.error || 'فشل في حفظ النادي');
-      }
-    } catch (error: any) {
-      logger.error('Error saving club:', error);
-      // Rollback on error
-      setClub(originalClub || undefined);
-      await updateCachedUserData({
-        favoriteTeam: originalFavoriteTeam,
-        clubLogo: originalClub,
-      });
-      toast.showError('خطأ', error.message || 'فشل في حفظ النادي');
-    } finally {
-      setIsClubUpdating(false);
-    }
-  };
-
-  const handleBrandSelect = async (selectedBrand: Brand) => {
-    if (!selectedBrand?.logo) {
-      toast.showError('خطأ', 'بيانات البراند غير صحيحة');
-      return;
-    }
-
-    const token = await getValidatedToken();
-    if (!token) return;
-
-    // Store original value for rollback
-    const originalBrand = userData?.brandLogo;
-
-    try {
-      // ✅ Validate logo is a valid URL
-      if (!selectedBrand.logo.startsWith('http')) {
-        toast.showError('خطأ', 'شعار البراند غير صحيح');
-        return;
-      }
-
-      // ✅ Optimistic update - update UI immediately
-      setBrand(selectedBrand.logo);
-
-      // ✅ Update cached user data immediately (for instant UI update)
-      await updateCachedUserData({
-        brandLogo: selectedBrand.logo
-      });
-
-      // ✅ Save to backend (persistent storage)
-      const result = await CardProfileService.updateCardProfile(token, {
-        brandLogo: selectedBrand.logo
-      });
-
-      if (result.success) {
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        toast.showSuccess('تم', `تم حفظ ${selectedBrand.name} بنجاح 👟`);
-      } else {
-        // Rollback on error
-        setBrand(originalBrand || undefined);
-        await updateCachedUserData({
-          brandLogo: originalBrand,
-        });
-        toast.showError('خطأ', result.error || 'فشل في حفظ البراند');
-      }
-    } catch (error: any) {
-      logger.error('Error saving brand:', error);
-      // Rollback on error
-      setBrand(originalBrand || undefined);
-      await updateCachedUserData({
-        brandLogo: originalBrand,
-      });
-      toast.showError('خطأ', error.message || 'فشل في حفظ البراند');
-    }
-  };
-
-  const handleStatsSave = async (newStats: Stats) => {
-    // Validate stats but allow empty strings (represented as null/undefined backend side)
-    const age = newStats.age ? parseInt(newStats.age) : null;
-    const height = newStats.height ? parseInt(newStats.height) : null;
-    const weight = newStats.weight ? parseInt(newStats.weight) : null;
-
-    if (age !== null && (isNaN(age) || age < 15 || age > 60)) {
-      toast.showError('خطأ', 'العمر يجب أن يكون بين 15 و 60 سنة');
-      return;
-    }
-
-    if (height !== null && (isNaN(height) || height < 120 || height > 250)) {
-      toast.showError('خطأ', 'الطول يجب أن يكون بين 120 و 250 سم');
-      return;
-    }
-
-    if (weight !== null && (isNaN(weight) || weight < 40 || weight > 150)) {
-      toast.showError('خطأ', 'الوزن يجب أن يكون بين 40 و 150 كجم');
-      return;
-    }
-
-    if (newStats.foot && !['R', 'L', 'B'].includes(newStats.foot)) {
-      toast.showError('خطأ', 'القدم المفضلة غير صحيحة');
-      return;
-    }
-
-    const token = await getValidatedToken();
-    if (!token) return;
-
-    // Store original values for rollback
-    const originalStats = {
-      age: userData?.age?.toString() || DEFAULT_STATS.age,
-      height: userData?.height?.toString() || DEFAULT_STATS.height,
-      weight: userData?.weight?.toString() || DEFAULT_STATS.weight,
-      foot: (userData?.preferredFoot as '' | 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
-    };
-
-    try {
-      // Optimistic update
-      setStats(newStats);
-      await updateCachedUserData({
-        age: age ?? undefined,
-        height: height ?? undefined,
-        weight: weight ?? undefined,
-        preferredFoot: newStats.foot || undefined,
-      } as any);
-
-      // Save to backend
-      const result = await CardProfileService.updateCardProfile(token, {
-        age: age ?? undefined,
-        height: height ?? undefined,
-        weight: weight ?? undefined,
-        preferredFoot: newStats.foot || undefined,
-      } as any);
-
-      if (result.success) {
-        // ✅ OPTIMIZATION: Refresh in background without blocking UI
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        toast.showSuccess('تم', 'تم حفظ البيانات بنجاح 📊');
-      } else {
-        // Rollback on error
-        setStats(originalStats);
-        await updateCachedUserData({
-          age: originalStats.age ? parseInt(originalStats.age) : undefined,
-          height: originalStats.height ? parseInt(originalStats.height) : undefined,
-          weight: originalStats.weight ? parseInt(originalStats.weight) : undefined,
-          preferredFoot: originalStats.foot || undefined,
-        } as any);
-        toast.showError('خطأ', result.error || 'فشل في حفظ البيانات');
-      }
-    } catch (error: any) {
-      logger.error('Error saving stats:', error);
-      // Rollback on error
-      setStats(originalStats);
-      await updateCachedUserData({
-        age: originalStats.age ? parseInt(originalStats.age) : undefined,
-        height: originalStats.height ? parseInt(originalStats.height) : undefined,
-        weight: originalStats.weight ? parseInt(originalStats.weight) : undefined,
-        preferredFoot: originalStats.foot || undefined,
-      } as any);
-      toast.showError('خطأ', error.message || 'فشل في حفظ البيانات');
-    }
-  };
-
-  const handleUploadVideo = async (newVideo: any) => {
-    // Check cooldown first - if cooldowns not loaded, refresh and block
-    if (!cooldowns) {
-      // Try to refresh cooldowns first
-      await refreshCache(false);
-      toast.showError('خطأ', 'جاري تحميل معلومات الرفع، يرجى المحاولة مرة أخرى');
-      return;
-    }
-
-    // Check if cooldown is active
-    if (!cooldowns.reelUpload.canChange) {
-      // Haptic feedback for warning
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      const days = cooldowns.reelUpload.daysRemaining;
-      const hours = cooldowns.reelUpload.hoursRemaining;
-      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
-
-      Alert.alert(
-        '⏳ انتظر قليلاً',
-        `يمكنك رفع فيديو جديد بعد ${timeText}`,
-        [{ text: 'حسناً', style: 'default' }]
-      );
-      return;
-    }
-
-    // Update user data in context for reels page
-    setUserVideoData({
-      username: userData?.username || 'user',
-      avatar: localImage || userData?.avatar || null,
-      displayName: userData?.displayName || userData?.username || 'User',
-    });
-
-    setActiveTab('videos');
-
-    // OPTIMISTIC: Add video to context immediately (shows in UI instantly)
-    const tempVideo = {
-      id: newVideo.id,
-      uri: newVideo.uri,
-      thumbnail: newVideo.thumbnail,
-      createdAt: new Date(),
-      isUploading: true,
-      uploadProgress: 0,
-    };
-    addVideo(tempVideo);
-
-    // Show uploading toast
-    toast.showInfo('جاري الرفع', 'يتم رفع الفيديو في الخلفية...');
-
-    // Upload to backend in background (non-blocking)
-    (async () => {
-      try {
-        const token = await getToken();
-        if (token) {
-          // Update progress: Preparing (10%)
-          const updateProgress = (progress: number) => {
-            const updatedVideo = {
-              ...tempVideo,
-              uploadProgress: progress,
-            };
-            // Update in context
-            removeVideo(tempVideo.id);
-            addVideo(updatedVideo);
-          };
-
-          updateProgress(10);
-
-          // Extract hashtags and mentions from caption if any
-          const caption = newVideo.caption || '';
-          const hashtags = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
-          const mentions = caption.match(/@[\w]+/g) || [];
-
-          updateProgress(30);
-
-          const uploadResult = await StorageService.uploadReel(
-            token,
-            newVideo.uri,
-            newVideo.thumbnail,
-            caption,
-            hashtags.map((h: string) => h.replace('#', '')),
-            mentions.map((m: string) => m.replace('@', '')),
-            updateProgress // Pass progress callback
-          );
-
-          // Check for cooldown error from backend
-          if (!uploadResult.success) {
-            // Remove optimistic video on failure
-            removeVideo(newVideo.id);
-
-            // Check if it's a cooldown error
-            if (uploadResult.error?.includes('ساعة') || uploadResult.error?.includes('cooldown')) {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              Alert.alert(
-                '⏳ انتظر قليلاً',
-                uploadResult.error || 'لا يمكنك رفع فيديو جديد الآن',
-                [{ text: 'حسناً', style: 'default' }]
-              );
-            } else {
-              toast.showError('خطأ', uploadResult.error || 'فشل في رفع الفيديو');
-            }
-
-            // Refresh cooldowns to get latest status
-            await refreshCache(true);
-            return;
-          }
-
-          if (uploadResult.success) {
-            // Only update to 100% if not already at 100% (avoid duplicate calls)
-            updateProgress(100);
-
-            // Small delay to show 100% completion
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            toast.showSuccess('تم', 'تم رفع الفيديو بنجاح! 🚀');
-
-            // Remove optimistic video and refresh to get real video from server
-            removeVideo(newVideo.id);
-
-            // Force refresh to get the real video data from server including cooldowns
-            await refreshCache(true);
-
-            // Also reload videos specifically
-            if (userData?.username) {
-              await loadVideos(userData.username);
-            }
-          } else {
-            // Remove optimistic video on failure
-            removeVideo(newVideo.id);
-            toast.showError('خطأ', uploadResult.error || 'فشل في رفع الفيديو');
-          }
-        }
-      } catch (error: any) {
-        logger.error('Video upload error:', error);
-        // Remove optimistic video on failure
-        removeVideo(newVideo.id);
-        toast.showError('خطأ', error.message || 'حدث خطأ أثناء رفع الفيديو');
-      }
-    })();
-  };
-
-  // ✅ OPTIMIZATION: Memoize delete handler
-  const handleDeleteVideo = useCallback((videoId: string) => {
-    // Requirements 13.4, 13.5, 13.6, 13.7: Show remaining deletes and handle limits
-    const maxDeletes = 2;
-    const deletesUsed = cooldowns?.reelDelete?.deletesUsed ?? 0;
-    const remainingDeletes = Math.max(0, maxDeletes - deletesUsed);
-
-    // Check if already at limit before showing dialog
-    if (remainingDeletes === 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        '⛔ الحد الأقصى',
-        'لقد وصلت للحد الأقصى من مسح الفيديوهات (2 مرات)',
-        [{ text: 'حسناً', style: 'default' }]
-      );
-      return;
-    }
-
-    Alert.alert(
-      'حذف الفيديو',
-      `هل أنت متأكد من حذف هذا الفيديو؟\n\n⚠️ تنبيه: متبقي لك ${remainingDeletes} عمليات حذف من أصل ${maxDeletes}`,
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await getToken();
-              if (token) {
-                const response = await fetch(`${API_URL}/videos/${videoId}`, {
-                  method: 'DELETE',
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                  },
-                });
-
-                if (!response.ok) {
-                  const errorData = await response.json();
-                  if (errorData.code === 'MAX_DELETES_REACHED') {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                    Alert.alert(
-                      '⛔ الحد الأقصى',
-                      'لقد وصلت للحد الأقصى من مسح الفيديوهات (2 مرات)',
-                      [{ text: 'حسناً', style: 'default' }]
-                    );
-                  } else {
-                    toast.showError('خطأ', errorData.message || 'فشل في حذف الفيديو');
-                  }
-                  // Refresh cooldowns
-                  await refreshCache(false);
-                  return;
-                }
-
-                const data = await response.json();
-                if (data.status === 'SUCCESS') {
-                  const newRemainingDeletes = data.data?.remainingDeletes;
-                  const uploadCooldownReset = data.data?.uploadCooldownReset;
-
-                  // Build success message (Requirement 13.7)
-                  let message = 'تم حذف الفيديو بنجاح';
-                  if (newRemainingDeletes !== undefined) {
-                    message += `\nمتبقي لك ${newRemainingDeletes} عمليات حذف`;
-                  }
-                  // Requirement 13.4: Notify user that upload is now available
-                  if (uploadCooldownReset) {
-                    message += '\n✅ يمكنك الآن رفع فيديو جديد!';
-                  }
-
-                  toast.showSuccess('تم', message);
-                  // Refresh videos, stats, and cooldowns from backend (updates upload button state)
-                  await refreshCache(false);
-                  // Also remove from context
-                  removeVideo(videoId);
-                } else if (data.code === 'MAX_DELETES_REACHED') {
-                  // Haptic feedback for error
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                  Alert.alert(
-                    '⛔ الحد الأقصى',
-                    'لقد وصلت للحد الأقصى من مسح الفيديوهات (2 مرات)',
-                    [{ text: 'حسناً', style: 'default' }]
-                  );
-                } else {
-                  toast.showError('خطأ', data.message || 'فشل في حذف الفيديو');
-                }
-              }
-            } catch (error: any) {
-              logger.error('Delete video error:', error);
-              toast.showError('خطأ', error.message || 'حدث خطأ أثناء الحذف');
-            }
-          }
-        }
-      ]
-    );
-  }, [cooldowns, getToken, removeVideo, refreshCache, toast]); // ✅ Proper deps
-
-
-  // ✅ OPTIMIZATION: Memoize handlers
-  const handleVideoPress = useCallback((video: any, _index: number) => {
-    if (isDeleteMode) {
-      handleDeleteVideo(video.id);
-    } else {
-      // Open video player modal
-      setSelectedVideoUrl(video.uri);
-      setIsVideoPlayerVisible(true);
-    }
-  }, [isDeleteMode, handleDeleteVideo]);
-
-  const handleVideoLongPress = useCallback((_video: any) => {
-    setIsDeleteMode(prev => !prev);
-  }, []);
-
-
-
-
-
-  // Pull to refresh handler - uses cache hook's refresh with force flag
-  const onRefresh = async () => {
-    await refreshCache(true);
-    // Also refresh prediction stats
-    const token = await getToken();
-    if (token) {
-      fetchPredictionStats(token);
-    }
-  };
-
-  // ✅ OPTIMIZATION: Memoize simple handlers
-  const handleEditProfile = useCallback(() => {
-    setIsEditProfileModalVisible(true);
-  }, []);
-
-  // Profile completion step handler with error handling
-  const handleProfileStepPress = useCallback((stepId: string) => {
-    // Don't allow step actions if there are completion errors
-    if (completionError) {
-      toast.showError('خطأ', 'يرجى إعادة تحميل الصفحة أولاً');
-      return;
-    }
-
-    switch (stepId) {
-      case 'avatar':
-        handleImageUpload();
-        break;
-      case 'country':
-        setIsCountryModalVisible(true);
-        break;
-      case 'club':
-        setIsClubModalVisible(true);
-        break;
-      case 'position':
-        setIsPositionModalVisible(true);
-        break;
-      case 'brand':
-        setIsBrandModalVisible(true);
-        break;
-      case 'cardData':
-        // Open stats modal for card data (age, height, weight, foot)
-        setIsStatsModalVisible(true);
-        break;
-      case 'bio':
-      case 'socialLinks':
-        setIsEditProfileModalVisible(true);
-        break;
-      default:
-        console.log('Unknown step:', stepId);
-    }
-  }, [handleImageUpload, completionError, toast]);
-
-  const handleSaveProfile = async (newData: any) => {
-    try {
-      const token = await getToken();
-      if (!token) {
-        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
-        return;
-      }
-
-      // ✅ OPTIMISTIC UPDATE: Update UI immediately before backend calls
-      const previousUserData = { ...userData };
-
-      // Update cached user data immediately (optimistic update)
-      await updateCachedUserData({
-        displayName: newData.name,
-        username: newData.username,
-        bio: newData.bio,
-        lastUsernameChange: newData.username !== userData?.username ? new Date() : userData?.lastUsernameChange,
-        socialLinks: newData.socials || [],
-      });
-
-      // Update globalState immediately
-      if (globalState.userProfile) {
-        globalState.userProfile.username = newData.username;
-        globalState.userProfile.displayName = newData.name;
-        globalState.userProfile.bio = newData.bio;
-      }
-      globalState.username = newData.username;
-
-      // Check if username is being changed (Requirements 12.1, 12.2, 12.3)
-      const usernameChanged = newData.username !== previousUserData?.username;
-
-      // Send updates to backend in background (non-blocking)
-      Promise.all([
-        // Update username if changed
-        usernameChanged ? AuthService.updateUsername(token, newData.username).catch((error) => {
-          logger.error('Error updating username:', error);
-          // Revert on error
-          updateCachedUserData(previousUserData);
-          if (error.daysRemaining !== undefined) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            Alert.alert(
-              '⏳ انتظر قليلاً',
-              `يمكنك تغيير اسم المستخدم بعد ${error.daysRemaining} يوم`,
-              [{ text: 'حسناً', style: 'default' }]
-            );
-          } else {
-            toast.showError('خطأ', error.error || 'فشل في تغيير اسم المستخدم');
-          }
-          throw error;
-        }) : Promise.resolve({ success: true }),
-
-        // Update profile
-        AuthService.updateProfile(token, {
-          displayName: newData.name,
-          bio: newData.bio,
-        }).catch((error) => {
-          logger.error('Error updating profile:', error);
-          // Revert on error
-          updateCachedUserData(previousUserData);
-          toast.showError('خطأ', error.message || 'فشل في حفظ التغييرات');
-          throw error;
-        }),
-
-        // Update social links in background
-        newData.socials && Array.isArray(newData.socials)
-          ? ProfileService.updateSocialLinks(token, newData.socials).catch((error) => {
-            logger.error('Error updating social links:', error);
-            // Don't revert social links on error - they're already shown
-            // Just log the error silently
-            return { success: false };
-          })
-          : Promise.resolve({ success: true })
-      ]).then(async ([usernameResult, profileResult, socialLinksResult]) => {
-        // All backend calls completed successfully
-        // Refresh cache to get latest data from backend (including cooldowns)
-        await refreshCache(true);
-
-        // Show success message
-        toast.showSuccess('تم', 'تم حفظ التغييرات بنجاح');
-      }).catch((error) => {
-        // Error already handled in individual catch blocks
-        // Just ensure we don't show duplicate errors
-      });
-    } catch (error: any) {
-      logger.error('Error saving profile:', error);
-      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الحفظ');
-    }
-  };
-
-  // ✅ CRITICAL: Compute social links BEFORE early returns to avoid hooks count mismatch
-  const socialLinks = useMemo(() => {
-    // Read from socialLinks (new format) or fallback to socials (old format)
-    if (userData?.socialLinks && Array.isArray(userData.socialLinks) && userData.socialLinks.length > 0) {
-      return userData.socialLinks.map((link: any) => ({
-        platform: link.platform || 'website',
-        url: link.url || '',
-        username: link.username,
-      })).filter((link: any) => link.url && link.url.trim() !== '');
-    }
-
-    // Fallback to old format (socials object) for backward compatibility
-    if (userData?.socials && typeof userData.socials === 'object') {
-      const links: Array<{ platform: string; url: string; username?: string }> = [];
-      if (userData.socials.instagram) {
-        links.push({
-          platform: 'instagram',
-          url: userData.socials.instagram.startsWith('http')
-            ? userData.socials.instagram
-            : `https://instagram.com/${userData.socials.instagram.replace('@', '')}`,
-          username: userData.socials.instagram.replace('@', ''),
-        });
-      }
-      if (userData.socials.twitter) {
-        links.push({
-          platform: 'twitter',
-          url: userData.socials.twitter.startsWith('http')
-            ? userData.socials.twitter
-            : `https://twitter.com/${userData.socials.twitter.replace('@', '')}`,
-          username: userData.socials.twitter.replace('@', ''),
-        });
-      }
-      if (userData.socials.facebook) {
-        links.push({
-          platform: 'facebook',
-          url: userData.socials.facebook.startsWith('http')
-            ? userData.socials.facebook
-            : `https://facebook.com/${userData.socials.facebook.replace('@', '')}`,
-          username: userData.socials.facebook.replace('@', ''),
-        });
-      }
-      return links;
-    }
-
-    return [];
-  }, [userData?.socialLinks, userData?.socials]);
-
-  // Prevent guest access - redirect to auth
-  if (!isSignedIn) {
-    return null;
-  }
-
-  // Loading state - show skeleton when loading and no cache
-  if (isLoading && !userData) {
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
-        <ProfileSkeleton />
-      </View>
-    );
-  }
-
-  // ✅ CRITICAL FIX: Show error state with retry button if data failed to load
-  if (!userData && (cacheError || !isLoading)) {
-    return (
-      <View style={[styles.container, styles.centerContent]}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
-        <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
-        <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
-          {cacheError || 'فشل في تحميل البروفايل'}
-        </Text>
-        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
-          {cacheError?.includes('المحفوظة') ? 'الخادم متوقف حالياً. جاري المحاولة...' : 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى'}
-        </Text>
-        <View style={{ marginTop: 24, paddingHorizontal: 40, width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' }}>
-          <View style={{
-            backgroundColor: ProfileTheme.colors.neonGreen,
-            borderRadius: 12,
-            paddingVertical: 12,
-            paddingHorizontal: 24,
-            minWidth: 120,
-            alignItems: 'center'
-          }}>
-            <Text
-              style={{ color: ProfileTheme.colors.deepBlack, fontWeight: 'bold', fontSize: 16 }}
-              onPress={async () => {
-                console.log('[ProfileScreen] 🔄 Manual retry triggered');
-                try {
-                  // Force refresh without clearing cache
-                  await refreshCache(true);
-                  toast.showInfo('جاري التحميل', 'يتم إعادة تحميل البيانات...');
-                } catch (err) {
-                  console.error('[ProfileScreen] ❌ Manual retry failed:', err);
-                  toast.showError('خطأ', 'فشلت إعادة المحاولة');
-                }
-              }}
-            >
-              إعادة المحاولة
-            </Text>
-          </View>
-          <View style={{
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            borderRadius: 12,
-            paddingVertical: 12,
-            paddingHorizontal: 24,
-            minWidth: 120,
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.2)'
-          }}>
-            <Text
-              style={{ color: ProfileTheme.colors.textPrimary, fontWeight: 'bold', fontSize: 16 }}
-              onPress={() => {
-                console.log('[ProfileScreen] 🚪 Navigating to auth');
-                router.replace('/auth');
-              }}
-            >
-              تسجيل الخروج
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // If no userData after loading, show skeleton (will retry)
-  if (!userData) {
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
-        <ProfileSkeleton />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
-
-      <CountryPickerModal
-        visible={isCountryModalVisible}
-        onClose={() => setIsCountryModalVisible(false)}
-        onSelect={handleCountrySelect}
-        selectedCountryCode={countryFlag}
-      />
-
-      <PositionPickerModal
-        visible={isPositionModalVisible}
-        onClose={() => setIsPositionModalVisible(false)}
-        onSelect={handlePositionSelect}
-        selectedPosition={position}
-      />
-
-      <ClubPickerModal
-        visible={isClubModalVisible}
-        onClose={() => setIsClubModalVisible(false)}
-        onSelect={handleClubSelect}
-      />
-
-      <BrandPickerModal
-        visible={isBrandModalVisible}
-        onClose={() => setIsBrandModalVisible(false)}
-        onSelect={handleBrandSelect}
-      />
-
-      <StatsEditModal
-        visible={isStatsModalVisible}
-        onClose={() => setIsStatsModalVisible(false)}
-        onSave={handleStatsSave}
-        initialStats={stats}
-      />
-
-      <ProfileEditModal
-        visible={isEditProfileModalVisible}
-        onClose={() => setIsEditProfileModalVisible(false)}
-        initialData={{
-          name: userData?.displayName || userData?.username || 'User',
-          username: userData?.username || 'user',
-          bio: userData?.bio || '',
-          socials: (userData?.socialLinks && Array.isArray(userData.socialLinks))
-            ? userData.socialLinks.map((link: any) => ({
-              platform: link.platform || 'website',
-              url: link.url || '',
-            }))
-            : [],
-          lastUsernameChange: userData?.lastUsernameChange || undefined
-        }}
-        onSave={handleSaveProfile}
-        usernameCooldown={cooldowns?.username}
-      />
-
-      <ReelUploadModal
-        visible={isUploadModalVisible}
-        onClose={() => setIsUploadModalVisible(false)}
-        onUpload={handleUploadVideo}
-        canUploadVideo={completionStatus?.canUploadVideo ?? true}
-        missingRequiredSteps={completionStatus?.missingRequiredSteps ?? []}
-      />
-
-      <VideoPlayerModal
-        visible={isVideoPlayerVisible}
-        videoUrl={selectedVideoUrl}
-        onClose={() => setIsVideoPlayerVisible(false)}
-        userImage={localImage}
-        username={userData?.username || 'user'}
-        reelId={selectedVideoUrl}
-        comments={reelComments[selectedVideoUrl || ''] || []}
-        onAddComment={(comment: Comment) => { if (selectedVideoUrl) addComment(selectedVideoUrl, comment); }}
-        onToggleLike={(commentId: string) => { if (selectedVideoUrl) toggleCommentLike(selectedVideoUrl, commentId); }}
-      />
-
-      <ImageViewerModal
-        visible={isImageViewerVisible}
-        imageUrl={coverImage || 'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop'}
-        onClose={() => setIsImageViewerVisible(false)}
-      />
-
-      {/* Followers/Following List Modal */}
-      <FollowersListModal
-        visible={isFollowersModalVisible}
-        onClose={() => setIsFollowersModalVisible(false)}
-        userId={userData?.id || ''}
-        initialTab={followersModalTab}
-        username={userData?.username}
-      />
-
-      {/* QR Code Modal */}
-      <QRCodeModal
-        visible={isQRModalVisible}
-        onClose={() => setIsQRModalVisible(false)}
-        username={userData?.username || 'user'}
-        displayName={userData?.displayName || undefined}
-        avatar={localImage || userData?.avatar}
-      />
-
-      {/* Profile Tasks Modal */}
-      {completionStatus && (
-        <ProfileTasksModal
-          visible={isTasksModalVisible}
-          onClose={() => setIsTasksModalVisible(false)}
-          percentage={completionStatus.percentage}
-          completedSteps={completionStatus.completedSteps}
-          totalSteps={completionStatus.totalSteps}
-          steps={completionStatus.steps.map(step => ({
-            ...step,
-            icon: getStepIcon(step.id),
-          }))}
-          canUploadVideo={completionStatus.canUploadVideo}
-          onStepPress={handleProfileStepPress}
-        />
-      )}
-
-      {/* Coins Badge */}
-      <View style={styles.coinsBadgeContainer}>
-        <CoinsBadge />
-      </View>
-
-      {/* Profile Tasks Badge - Only show if incomplete */}
-      {completionStatus && completionStatus.percentage < 100 && (
-        <View style={styles.tasksBadgeContainer}>
-          <ProfileTasksBadge
-            remainingTasks={completionStatus.totalSteps - completionStatus.completedSteps}
-            totalTasks={completionStatus.totalSteps}
-            percentage={completionStatus.percentage}
-            onPress={() => setIsTasksModalVisible(true)}
-          />
-        </View>
-      )}
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={ProfileTheme.colors.neonGreen}
-            colors={[ProfileTheme.colors.neonGreen]}
-            progressBackgroundColor={ProfileTheme.colors.deepBlack}
-          />
-        }
-      >
-        <ProfileHeader
-          coverImage={coverImage ? { uri: coverImage } : undefined}
-          onPress={handleCoverPress}
-        />
-
-        {/* Profile FIFA Card Frame */}
-        <View style={styles.profileCardContainer}>
-          <ProfileCard
-            playerImage={localImage ? { uri: localImage } : (userData?.avatar ? { uri: userData.avatar } : { uri: 'https://picsum.photos/200' })}
-            cardType="gold"
-            scale={0.60}
-            onImageUpload={handleImageUpload}
-            uploadedImage={localImage || userData?.avatar || null}
-            countryFlag={countryFlag}
-            onCountryPress={() => setIsCountryModalVisible(true)}
-            position={position}
-            onPositionPress={() => setIsPositionModalVisible(true)}
-            age={stats.age}
-            height={stats.height}
-            weight={stats.weight}
-            foot={stats.foot}
-            onStatsPress={() => setIsStatsModalVisible(true)}
-            clubLogo={club}
-            onClubPress={() => setIsClubModalVisible(true)}
-            brandLogo={brand}
-            onBrandPress={() => setIsBrandModalVisible(true)}
-            isAvatarUploading={isAvatarUploading}
-            isCountryUpdating={isCountryUpdating}
-            isClubUpdating={isClubUpdating}
-            isBrandUpdating={isBrandUpdating}
-            isStatsUpdating={isStatsUpdating}
-          />
-        </View>
-
-        <UserInfo
-          name={userData?.displayName || userData?.username || 'User'}
-          username={userData?.username || 'user'}
-          bio={userData?.bio}
-          location={location} // ✅ Use local state for instant updates
-          team={userData?.favoriteTeam || ''} // ✅ Let UserInfo handle empty state 'اختر ناديك'
-          isVerified={userData?.isVerified || false}
-          isDeveloper={userData?.isDeveloper || false}
-          onBioLongPress={() => setIsEditProfileModalVisible(true)}
-          onNameLongPress={() => setIsEditProfileModalVisible(true)}
-          clubLogo={club}
-          onEditPress={handleEditProfile}
-          socials={userData?.socials}
-          consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
-        />
-
-        {/* Profile Completion Card - Only show if user data exists and no completion errors */}
-        {completionStatus && userData && !completionError && (
-          <ProfileCompletionCard
-            percentage={completionStatus.percentage}
-            completedSteps={completionStatus.completedSteps}
-            totalSteps={completionStatus.totalSteps}
-            steps={completionStatus.steps.map(step => ({
-              ...step,
-              icon: getStepIcon(step.id),
-            }))}
-            canUploadVideo={completionStatus.canUploadVideo}
-            onStepPress={handleProfileStepPress}
-          />
-        )}
-
-        {/* Social Links Section */}
-        <SocialLinksSection
-          links={socialLinks}
-          isOwnProfile={true}
-          onEditPress={handleEditProfile}
-        />
-
-        {/* Badges Display - الميداليات */}
-        {userData?.id && (
-          <View style={styles.badgesContainer}>
-            <BadgesDisplay
-              userId={userData.id}
-              token={authToken}
-              compact={true}
-            />
-          </View>
-        )}
-
-        <ActionButtons
-          onEditPress={() => setIsUploadModalVisible(true)}
-          onSharePress={async () => {
-            try {
-              await Share.share({
-                message: `${t.profile.checkMyProfile} @${userData?.username}\nhttps://90plus.app/@${userData?.username}`,
-              });
-            } catch (error) {
-              logger.warn('Share error:', error);
-            }
-          }}
-          onQRPress={() => setIsQRModalVisible(true)}
-          uploadCooldown={cooldowns?.reelUpload}
-        />
-
-        <StatsRow
-          followers={followStats.followersCount.toString()}
-          following={followStats.followingCount.toString()}
-          videos={(followStats.reelsCount || myVideos.length).toString()}
-          onFollowersPress={() => {
-            setFollowersModalTab('followers');
-            setIsFollowersModalVisible(true);
-          }}
-          onFollowingPress={() => {
-            setFollowersModalTab('following');
-            setIsFollowersModalVisible(true);
-          }}
-        />
-
-        <ContentTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          videoCount={myVideos.length}
-          savedCount={savedVideos.length}
-          isOwnProfile={true}
-        />
-
-        {activeTab === 'videos' && (
-          <VideoGrid
-            videos={myVideos}
-            onVideoPress={handleVideoPress}
-            onVideoLongPress={handleVideoLongPress}
-            onDeleteVideo={handleDeleteVideo}
-            isDeleteMode={isDeleteMode}
-          />
-        )}
-
-        {activeTab === 'saved' && (
-          <VideoGrid
-            videos={savedVideos.map(video => ({
-              id: video.id,
-              thumbnail: video.thumbnail || video.videoUrl,
-              views: video.views?.toString() || '0',
-              duration: '', // Saved videos may not have duration
-            }))}
-            onVideoPress={(video, index) => {
-              // Navigate to reels page and open this video
-              router.push({
-                pathname: '/(tabs)/reels',
-                params: { reelId: video.id }
-              });
-            }}
-            onVideoLongPress={() => { }}
-            onDeleteVideo={() => { }}
-            isDeleteMode={false}
-          />
-        )}
-
-        {activeTab === 'analytics' && (
-          <View style={styles.analyticsContainer}>
-            <Text style={styles.analyticsTitle}>{t.profile.videoAnalytics}</Text>
-
-            <View style={styles.analyticsGrid}>
-              <View style={styles.analyticsCard}>
-                <Ionicons name="eye-outline" size={28} color={ProfileTheme.colors.neonBlue} />
-                <Text style={styles.analyticsValue}>{analytics?.totalViews || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.views}</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Ionicons name="heart-outline" size={28} color="#FF6B6B" />
-                <Text style={styles.analyticsValue}>{analytics?.totalLikes || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.likes}</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Ionicons name="chatbubble-outline" size={28} color={ProfileTheme.colors.neonGreen} />
-                <Text style={styles.analyticsValue}>{analytics?.totalComments || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.comments}</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Ionicons name="person-add-outline" size={28} color="#9B59B6" />
-                <Text style={styles.analyticsValue}>{analytics?.recentFollowers || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.newFollowers}</Text>
-              </View>
-            </View>
-
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>{t.profile.performanceSummary}</Text>
-              <View style={styles.summaryCard}>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>{t.profile.totalVideos}</Text>
-                  <Text style={styles.summaryValue}>{myVideos.length}</Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>{t.profile.profileVisits}</Text>
-                  <Text style={styles.summaryValue}>{analytics?.profileViews || 0}</Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>{t.profile.avgEngagement}</Text>
-                  <Text style={styles.summaryValue}>
-                    {myVideos.length > 0
-                      ? Math.round(((analytics?.totalLikes || 0) + (analytics?.totalComments || 0)) / myVideos.length)
-                      : 0}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Prediction Statistics Section */}
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>📊 {t.profile.predictionStats}</Text>
-              <View style={styles.analyticsGrid}>
-                <View style={[styles.analyticsCard, { borderColor: '#22c55e', borderWidth: 1 }]}>
-                  <Ionicons name="checkmark-circle" size={28} color="#22c55e" />
-                  <Text style={[styles.analyticsValue, { color: '#22c55e' }]}>{predictionStats?.correct || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.correctPredictions}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#ef4444', borderWidth: 1 }]}>
-                  <Ionicons name="close-circle" size={28} color="#ef4444" />
-                  <Text style={[styles.analyticsValue, { color: '#ef4444' }]}>{predictionStats?.incorrect || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.wrongPredictions}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#f59e0b', borderWidth: 1 }]}>
-                  <Ionicons name="time" size={28} color="#f59e0b" />
-                  <Text style={[styles.analyticsValue, { color: '#f59e0b' }]}>{predictionStats?.pending || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.pendingPredictions}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#3b82f6', borderWidth: 1 }]}>
-                  <Ionicons name="analytics" size={28} color="#3b82f6" />
-                  <Text style={[styles.analyticsValue, { color: '#3b82f6' }]}>{predictionStats?.accuracy || 0}%</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.successRate}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#FFD700', borderWidth: 1, width: '100%' }]}>
-                  <Text style={{ fontSize: 28 }}>🪙</Text>
-                  <Text style={[styles.analyticsValue, { color: '#FFD700' }]}>+{predictionStats?.totalCoinsWon || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.coinsEarned}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Achievements Section */}
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>🏆 {t.profile.achievementsTitle}</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                {/* First Prediction */}
-                <View style={[styles.achievementBadge, (predictionStats?.total || 0) >= 1 && styles.achievementUnlocked]}>
-                  <Text style={{ fontSize: 24 }}>🎯</Text>
-                  <Text style={styles.achievementLabel}>{t.profile.firstPrediction}</Text>
-                </View>
-                {/* 10 Predictions */}
-                <View style={[styles.achievementBadge, (predictionStats?.total || 0) >= 10 && styles.achievementUnlocked]}>
-                  <Text style={{ fontSize: 24 }}>🔮</Text>
-                  <Text style={styles.achievementLabel}>{t.profile.tenPredictions}</Text>
-                </View>
-                {/* First Correct */}
-                <View style={[styles.achievementBadge, (predictionStats?.correct || 0) >= 1 && styles.achievementUnlocked]}>
-                  <Text style={{ fontSize: 24 }}>✅</Text>
-                  <Text style={styles.achievementLabel}>{t.profile.firstCorrect}</Text>
-                </View>
-                {/* 5 Correct */}
-                <View style={[styles.achievementBadge, (predictionStats?.correct || 0) >= 5 && styles.achievementUnlocked]}>
-                  <Text style={{ fontSize: 24 }}>🌟</Text>
-                  <Text style={styles.achievementLabel}>{t.profile.fiveCorrect}</Text>
-                </View>
-                {/* 50% Accuracy */}
-                <View style={[styles.achievementBadge, (predictionStats?.accuracy || 0) >= 50 && styles.achievementUnlocked]}>
-                  <Text style={{ fontSize: 24 }}>📈</Text>
-                  <Text style={styles.achievementLabel}>{t.profile.fiftyAccuracy}</Text>
-                </View>
-                {/* 10 Correct */}
-                <View style={[styles.achievementBadge, (predictionStats?.correct || 0) >= 10 && styles.achievementUnlocked]}>
-                  <Text style={{ fontSize: 24 }}>🏅</Text>
-                  <Text style={styles.achievementLabel}>{t.profile.professional}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Coins Summary */}
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>💰 {t.profile.coinsStats}</Text>
-              <View style={styles.coinsSummaryCard}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <Text style={{ fontSize: 40 }}>🪙</Text>
-                  <View>
-                    <Text style={{ color: '#22c55e', fontSize: 32, fontWeight: 'bold' }}>
-                      +{predictionStats?.totalCoinsWon || 0}
-                    </Text>
-                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
-                      {t.profile.coinsFromPredictions}
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>
-                      {t.profile.coinsSpent}
-                    </Text>
-                    <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '600' }}>
-                      -{(predictionStats?.total || 0) * 5}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>
-                      {t.profile.netProfit}
-                    </Text>
-                    <Text style={{
-                      color: ((predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)) >= 0 ? '#22c55e' : '#ef4444',
-                      fontSize: 14,
-                      fontWeight: '600'
-                    }}>
-                      {((predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)) >= 0 ? '+' : ''}
-                      {(predictionStats?.totalCoinsWon || 0) - ((predictionStats?.total || 0) * 5)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'right' }}>
-                    {t.profile.predictionCost}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView >
-    </View >
-  );
-}
-
+// StyleSheet definition - moved to top to avoid "used before declaration" errors
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -2175,37 +87,15 @@ const styles = StyleSheet.create({
   },
   profileCardContainer: {
     alignItems: 'center',
-    marginTop: -300, // Card centered in extended cover
+    marginTop: -300,
     marginBottom: 20,
-    zIndex: 10, // Ensure card is above cover
+    zIndex: 10,
   },
   coinsBadgeContainer: {
     position: 'absolute',
     top: 50,
     left: 20,
     zIndex: 1000,
-  },
-  tasksBadgeContainer: {
-    position: 'absolute',
-    top: 50,
-    left: 90, // Position it next to coins badge (20 + 50 badge width + 20 gap)
-    zIndex: 1000,
-  },
-  settingsButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 1000,
-    borderRadius: 22,
-    overflow: 'hidden',
-  },
-  settingsGradient: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
   },
   centerContent: {
     justifyContent: 'center',
@@ -2320,3 +210,806 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 });
+
+export default function ProfileScreen() {
+  const [activeTab, setActiveTab] = useState('videos');
+  const { isSignedIn, getToken } = useAuth();
+  const { user: clerkUser } = useUser();
+
+  // Performance: Memoize these to prevent re-creation
+  const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
+  const toast = useToast();
+  const { t } = useTranslation();
+
+  // Optimization: Prevent guest access - redirect to auth
+  useEffect(() => {
+    if (!isSignedIn) {
+      router.replace('/auth');
+    }
+  }, [isSignedIn]);
+
+  // Use the profile cache hook for cache-first loading
+  const {
+    userData: cachedUserData,
+    followStats: cachedFollowStats,
+    videos: cachedVideos,
+    analytics: cachedAnalytics,
+    cooldowns: cachedCooldowns,
+    isLoading,
+    isRefreshing,
+    isCacheHit,
+    error: cacheError,
+    refresh: refreshCache,
+    loadVideos,
+    updateUserData: updateCachedUserData,
+    updateFollowStats: updateCachedFollowStats,
+  } = useProfileCache({
+    getToken,
+    clerkUserImageUrl: clerkUser?.imageUrl,
+    clerkUserId: clerkUser?.id,
+  });
+
+  // TEMPORARILY DISABLED: Profile completion hook causing infinite loop
+  const completionStatus = null;
+  const isCompletionLoading = false;
+  const completionError = null;
+  const markStepCompleted = () => Promise.resolve(false);
+
+  // Log cache errors
+  useEffect(() => {
+    if (cacheError) {
+      console.error('[ProfileScreen] ❌ Cache error:', cacheError);
+      logger.error('Profile cache error:', cacheError);
+    }
+  }, [cacheError]);
+
+  // Log loading state changes
+  useEffect(() => {
+    console.log('[ProfileScreen] 📊 State:', {
+      isLoading,
+      hasUserData: !!cachedUserData,
+      isCacheHit,
+      error: cacheError,
+    });
+  }, [isLoading, cachedUserData, isCacheHit, cacheError]);
+
+  // CRITICAL FIX: Auto-retry when backend is down (502 error)
+  useEffect(() => {
+    if (cacheError && cacheError.includes('المحفوظة') && !isLoading) {
+      const retryTimeout = setTimeout(() => {
+        console.log('[ProfileScreen] 🔄 Auto-retry after backend cold start (8s delay)');
+        refreshCache(true).catch(err => {
+          console.error('[ProfileScreen] ❌ Auto-retry failed:', err);
+        });
+      }, 8000);
+
+      return () => clearTimeout(retryTimeout);
+    }
+  }, [cacheError, isLoading, refreshCache]);
+
+  // CRITICAL FIX: Timeout fallback if loading takes too long
+  useEffect(() => {
+    if (isLoading && !cachedUserData) {
+      const timeout = setTimeout(() => {
+        console.error('[ProfileScreen] ⏰ Loading timeout - forcing refresh');
+        logger.error('Profile loading timeout - forcing refresh');
+        refreshCache(true).catch(err => {
+          console.error('[ProfileScreen] ❌ Refresh failed:', err);
+          toast.showError('خطأ', 'فشل في تحميل البروفايل. يرجى المحاولة مرة أخرى');
+        });
+      }, 15000);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading, cachedUserData, refreshCache, toast]);
+  // Local state for UI-specific data not in cache
+  const [localImage, setLocalImageState] = useState<string | null>(globalState.localAvatar || null);
+  const setLocalImage = (image: string | null) => {
+    setLocalImageState(image);
+    globalState.setLocalAvatar(image || undefined);
+  };
+
+  const [countryFlag, setCountryFlag] = useState<string>(DEFAULT_COUNTRY_FLAG);
+  const [location, setLocation] = useState<string>('');
+  const [position, setPosition] = useState<string>(DEFAULT_POSITION);
+  const [club, setClub] = useState<string | undefined>(undefined);
+  const [brand, setBrand] = useState<string | undefined>(undefined);
+
+  // Stats State - MUST be defined before useEffect that uses it
+  const [stats, setStats] = useState({
+    age: DEFAULT_STATS.age,
+    height: DEFAULT_STATS.height,
+    weight: DEFAULT_STATS.weight,
+    foot: DEFAULT_STATS.foot
+  });
+
+  // Modal visibility states
+  const [isCountryModalVisible, setIsCountryModalVisible] = useState(false);
+  const [isPositionModalVisible, setIsPositionModalVisible] = useState(false);
+  const [isClubModalVisible, setIsClubModalVisible] = useState(false);
+  const [isBrandModalVisible, setIsBrandModalVisible] = useState(false);
+  const [isStatsModalVisible, setIsStatsModalVisible] = useState(false);
+  const [isEditProfileModalVisible, setIsEditProfileModalVisible] = useState(false);
+  const [isUploadModalVisible, setIsUploadModalVisible] = useState(false);
+  const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+  const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
+
+  // Loading states for profile operations
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const [isCountryUpdating, setIsCountryUpdating] = useState(false);
+  const [isClubUpdating, setIsClubUpdating] = useState(false);
+  const [isBrandUpdating, setIsBrandUpdating] = useState(false);
+  const [isStatsUpdating, setIsStatsUpdating] = useState(false);
+
+  // New modals for profile features
+  const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
+  const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
+  const [isQRModalVisible, setIsQRModalVisible] = useState(false);
+  const [isTasksModalVisible, setIsTasksModalVisible] = useState(false);
+
+  // Cover image state
+  const [coverImage, setCoverImageState] = useState<string | null>(globalState.localCover || null);
+  const setCoverImage = (image: string | null) => {
+    setCoverImageState(image);
+    globalState.setLocalCover(image || undefined);
+  };
+
+  // Video Management State
+  const [isDeleteMode, setIsDeleteMode] = useState(false);
+
+  // Optimization: Token state for BadgesDisplay
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Optimization: Fetch token for badges (memoized)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchToken = async () => {
+      try {
+        const token = await getToken();
+        if (isMounted && token) {
+          setAuthToken(token);
+        }
+      } catch (error) {
+        // Silent fail - badges will handle missing token
+      }
+    };
+    fetchToken();
+    return () => { isMounted = false; };
+  }, []);
+
+  // Optimization: Derive state from cache with memoization
+  const userData = cachedUserData;
+  const followStats = useMemo(() =>
+    cachedFollowStats || DEFAULT_FOLLOW_STATS,
+    [cachedFollowStats]
+  );
+
+  // Helper function to validate and get token
+  const getValidatedToken = async (): Promise<string | null> => {
+    if (!userData) {
+      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
+      return null;
+    }
+    const token = await getToken();
+    if (!token) {
+      toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
+      return null;
+    }
+    return token;
+  };
+
+  // Saved videos state
+  const [savedVideos, setSavedVideos] = useState<any[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [savedVideosCursor, setSavedVideosCursor] = useState<string | null>(null);
+  const [hasMoreSaved, setHasMoreSaved] = useState(true);
+
+  // Optimization: Load saved videos (with cancellation support)
+  const loadSavedVideos = useCallback(async (cursor?: string) => {
+    setIsLoadingSaved(true);
+    try {
+      const token = await getToken();
+      if (!token) {
+        setIsLoadingSaved(false);
+        return;
+      }
+
+      const result = await ReelsService.getSavedReels(token, cursor);
+      if (result) {
+        if (cursor) {
+          setSavedVideos(prev => [...prev, ...result.savedReels]);
+        } else {
+          setSavedVideos(result.savedReels);
+        }
+        setSavedVideosCursor(result.nextCursor);
+        setHasMoreSaved(result.hasMore);
+      }
+    } catch (error) {
+      logger.error('Error loading saved videos:', error);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  }, []);
+
+  // Optimization: Load saved videos when saved tab is active
+  const hasLoadedSavedRef = useRef(false);
+  useEffect(() => {
+    if (activeTab === 'saved' && !hasLoadedSavedRef.current && !isLoadingSaved) {
+      hasLoadedSavedRef.current = true;
+      loadSavedVideos();
+    }
+  }, [activeTab, isLoadingSaved, loadSavedVideos]);
+
+  const myVideos = React.useMemo(() => {
+    const cached = cachedVideos || [];
+    const uploaded = uploadedVideos || [];
+
+    const allVideos = [...uploaded, ...cached];
+
+    const uniqueVideos = allVideos.reduce((acc, video) => {
+      if (!acc.find(v => v.id === video.id)) {
+        acc.push(video);
+      }
+      return acc;
+    }, [] as any[]);
+
+    return uniqueVideos.map(video => ({
+      id: video.id,
+      thumbnail: video.thumbnail || video.uri,
+      views: video.views || '0',
+      duration: video.duration || '',
+      isUploading: video.isUploading || false,
+      uploadProgress: video.uploadProgress,
+    }));
+  }, [cachedVideos, uploadedVideos]);
+  
+  const analytics = cachedAnalytics;
+  const cooldowns = cachedCooldowns;
+
+  // Predictions store for prediction stats
+  const { stats: predictionStats, fetchPredictionStats } = usePredictionsStore();
+
+  // Optimization: Fetch prediction stats when authenticated (with cleanup)
+  useEffect(() => {
+    let isMounted = true;
+    const loadPredictionStats = async () => {
+      try {
+        const token = await getToken();
+        if (isMounted && token) {
+          await fetchPredictionStats(token);
+        }
+      } catch (error) {
+        logger.error('Error loading prediction stats:', error);
+      }
+    };
+    loadPredictionStats();
+    return () => { isMounted = false; };
+  }, []);
+  // Optimization: Sync local state with cached data (reduced re-renders)
+  const prevUserDataRef = useRef(userData);
+  useEffect(() => {
+    if (!userData) return;
+
+    const prev = prevUserDataRef.current;
+    const hasChanged = !prev ||
+      prev.position !== userData.position ||
+      prev.countryFlag !== userData.countryFlag ||
+      prev.avatar !== userData.avatar ||
+      prev.coverImage !== userData.coverImage ||
+      prev.clubLogo !== userData.clubLogo ||
+      prev.brandLogo !== userData.brandLogo ||
+      prev.age !== userData.age ||
+      prev.height !== userData.height ||
+      prev.weight !== userData.weight ||
+      prev.preferredFoot !== userData.preferredFoot;
+
+    if (!hasChanged) return;
+
+    prevUserDataRef.current = userData;
+
+    if (userData.position) setPosition(userData.position);
+    if (userData.countryFlag) setCountryFlag(userData.countryFlag);
+    if (userData.location) setLocation(userData.location);
+    if (userData.avatar) {
+      setLocalImage(userData.avatar);
+      globalState.setLocalAvatar(userData.avatar);
+    }
+    if (userData.coverImage) {
+      setCoverImage(userData.coverImage);
+    }
+
+    if (userData.clubLogo) {
+      setClub(userData.clubLogo);
+    } else if (userData.favoriteTeam && !prev?.favoriteTeam) {
+      const loadClubLogo = async () => {
+        try {
+          const { CLUBS } = await import('../../data/clubs');
+          const matchedClub = CLUBS.find(c =>
+            c.name === userData.favoriteTeam ||
+            c.name.includes(userData.favoriteTeam) ||
+            userData.favoriteTeam.includes(c.name)
+          );
+          if (matchedClub?.apiId) {
+            const { getClubLogo } = await import('../../services/clubLogoService');
+            const logo = await getClubLogo(matchedClub.apiId);
+            if (logo) {
+              setClub(logo);
+              await updateCachedUserData({ clubLogo: logo });
+            }
+          }
+        } catch (error) {
+          logger.error('Error loading club logo:', error);
+        }
+      };
+      loadClubLogo();
+    }
+
+    if (userData.brandLogo) setBrand(userData.brandLogo);
+
+    if (userData.age || userData.height || userData.weight || userData.preferredFoot) {
+      setStats({
+        age: userData.age?.toString() || DEFAULT_STATS.age,
+        height: userData.height?.toString() || DEFAULT_STATS.height,
+        weight: userData.weight?.toString() || DEFAULT_STATS.weight,
+        foot: (userData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
+      });
+    }
+
+    globalState.username = userData.username;
+  }, [userData, updateCachedUserData]);
+
+  // Ref to store refreshCache to avoid dependency issues
+  const refreshCacheRef = useRef(refreshCache);
+  refreshCacheRef.current = refreshCache;
+
+  // Refresh on focus - use cache hook's refresh
+  useFocusEffect(
+    useCallback(() => {
+      refreshCacheRef.current(false);
+    }, [])
+  );
+
+  // Auto-refresh when app returns from background
+  const appStateRef = useRef(AppState.currentState);
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        refreshCacheRef.current(false);
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, []);
+
+  // Optimization: Memoize cover press handler
+  const handleCoverPress = useCallback(() => {
+    const options = ['عرض الصورة', 'تغيير الصورة', 'إلغاء'];
+    const cancelButtonIndex = 2;
+
+    const handlePress = (buttonIndex: number) => {
+      if (buttonIndex === 0) {
+        setIsImageViewerVisible(true);
+      } else if (buttonIndex === 1) {
+        handleCoverUpload();
+      }
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex },
+        handlePress
+      );
+    } else {
+      Alert.alert(
+        'صورة الغلاف',
+        'ماذا تريد أن تفعل؟',
+        [
+          { text: 'عرض الصورة', onPress: () => handlePress(0) },
+          { text: 'تغيير الصورة', onPress: () => handlePress(1) },
+          { text: 'إلغاء', style: 'cancel' },
+        ]
+      );
+    }
+  }, []);
+
+  const handleCoverUpload = async () => {
+    if (!userData) {
+      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
+      return;
+    }
+
+    if (cooldowns && !cooldowns.cover.canChange) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+      const days = cooldowns.cover.daysRemaining;
+      const hours = cooldowns.cover.hoursRemaining;
+      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
+
+      Alert.alert(
+        '⏳ انتظر قليلاً',
+        `يمكنك تغيير صورة الغلاف بعد ${timeText}`,
+        [{ text: 'حسناً', style: 'default' }]
+      );
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const imageUri = result.assets[0]?.uri;
+      if (!imageUri) {
+        toast.showError('خطأ', 'لم يتم اختيار صورة صحيحة');
+        return;
+      }
+
+      let finalUri = imageUri;
+      try {
+        const compressed = await compressImage(imageUri, {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 0.8,
+        });
+        finalUri = compressed.uri;
+        console.log(`Cover compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
+      } catch (error) {
+        console.warn('Cover compression failed, using original:', error);
+        finalUri = imageUri;
+      }
+
+      const originalCover = userData.coverImage;
+      setCoverImage(finalUri);
+
+      const token = await getToken();
+      if (!token) {
+        setCoverImage(originalCover || null);
+        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
+        return;
+      }
+
+      const uploadResult = await StorageService.uploadCover(token, finalUri);
+
+      if (uploadResult.success && uploadResult.url) {
+        const newCoverUrl = uploadResult.url;
+        setCoverImage(newCoverUrl);
+        globalState.setLocalCover(newCoverUrl);
+        await updateCachedUserData({ coverImage: newCoverUrl });
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', 'تم رفع صورة الغلاف بنجاح 🖼️');
+      } else {
+        setCoverImage(originalCover || null);
+        toast.showError('خطأ', uploadResult.error || 'فشل في رفع صورة الغلاف');
+      }
+    } catch (error: any) {
+      logger.error('Cover upload error:', error);
+      setCoverImage(userData?.coverImage || null);
+      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
+    }
+  };
+  const handleImageUpload = async () => {
+    if (!userData) {
+      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
+      return;
+    }
+
+    if (cooldowns && !cooldowns.avatar.canChange) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+      const days = cooldowns.avatar.daysRemaining;
+      const hours = cooldowns.avatar.hoursRemaining;
+      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
+
+      Alert.alert(
+        '⏳ انتظر قليلاً',
+        `يمكنك تغيير صورة البروفايل بعد ${timeText}`,
+        [{ text: 'حسناً', style: 'default' }]
+      );
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const imageUri = result.assets[0]?.uri;
+      if (!imageUri) {
+        toast.showError('خطأ', 'لم يتم اختيار صورة صحيحة');
+        return;
+      }
+
+      let finalUri = imageUri;
+      try {
+        const compressed = await compressImage(imageUri, {
+          maxWidth: 1080,
+          maxHeight: 1080,
+          quality: 0.7,
+        });
+        finalUri = compressed.uri;
+        console.log(`Avatar compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
+      } catch (error) {
+        console.warn('Avatar compression failed, using original:', error);
+        finalUri = imageUri;
+      }
+
+      const originalAvatar = userData.avatar;
+      setIsAvatarUploading(true);
+      setLocalImage(finalUri);
+
+      const token = await getToken();
+      if (!token) {
+        setLocalImage(originalAvatar || null);
+        setIsAvatarUploading(false);
+        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
+        return;
+      }
+
+      const uploadResult = await StorageService.uploadAvatar(token, finalUri);
+
+      if (uploadResult.success && uploadResult.url) {
+        const newAvatarUrl = uploadResult.url;
+        setLocalImage(newAvatarUrl);
+
+        if (globalState.userProfile) {
+          globalState.userProfile.avatar = newAvatarUrl;
+        }
+        globalState.setLocalAvatar(newAvatarUrl);
+
+        await updateCachedUserData({ avatar: newAvatarUrl });
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح 📸');
+      } else {
+        setLocalImage(originalAvatar || null);
+        toast.showError('خطأ', uploadResult.error || 'فشل في رفع الصورة');
+      }
+    } catch (error: any) {
+      logger.error('Avatar upload error:', error);
+      setLocalImage(userData?.avatar || null);
+      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
+    } finally {
+      setIsAvatarUploading(false);
+    }
+  };
+
+  // Pull to refresh handler
+  const onRefresh = async () => {
+    await refreshCache(true);
+    const token = await getToken();
+    if (token) {
+      fetchPredictionStats(token);
+    }
+  };
+
+  // Optimization: Memoize simple handlers
+  const handleEditProfile = useCallback(() => {
+    setIsEditProfileModalVisible(true);
+  }, []);
+
+  // CRITICAL: Compute social links BEFORE early returns to avoid hooks count mismatch
+  const socialLinks = useMemo(() => {
+    if (userData?.socialLinks && Array.isArray(userData.socialLinks) && userData.socialLinks.length > 0) {
+      return userData.socialLinks.map((link: any) => ({
+        platform: link.platform || 'website',
+        url: link.url || '',
+        username: link.username,
+      })).filter((link: any) => link.url && link.url.trim() !== '');
+    }
+
+    if (userData?.socials && typeof userData.socials === 'object') {
+      const links: Array<{ platform: string; url: string; username?: string }> = [];
+      if (userData.socials.instagram) {
+        links.push({
+          platform: 'instagram',
+          url: userData.socials.instagram.startsWith('http')
+            ? userData.socials.instagram
+            : `https://instagram.com/${userData.socials.instagram.replace('@', '')}`,
+          username: userData.socials.instagram.replace('@', ''),
+        });
+      }
+      if (userData.socials.twitter) {
+        links.push({
+          platform: 'twitter',
+          url: userData.socials.twitter.startsWith('http')
+            ? userData.socials.twitter
+            : `https://twitter.com/${userData.socials.twitter.replace('@', '')}`,
+          username: userData.socials.twitter.replace('@', ''),
+        });
+      }
+      if (userData.socials.facebook) {
+        links.push({
+          platform: 'facebook',
+          url: userData.socials.facebook.startsWith('http')
+            ? userData.socials.facebook
+            : `https://facebook.com/${userData.socials.facebook.replace('@', '')}`,
+          username: userData.socials.facebook.replace('@', ''),
+        });
+      }
+      return links;
+    }
+
+    return [];
+  }, [userData?.socialLinks, userData?.socials]);
+
+  // Prevent guest access - redirect to auth
+  if (!isSignedIn) {
+    return null;
+  }
+
+  // Loading state - show skeleton when loading and no cache
+  if (isLoading && !userData) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <ProfileSkeleton />
+      </View>
+    );
+  }
+
+  // CRITICAL FIX: Show error state with retry button if data failed to load
+  if (!userData && (cacheError || !isLoading)) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
+        <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
+          {cacheError || 'فشل في تحميل البروفايل'}
+        </Text>
+        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
+          {cacheError?.includes('المحفوظة') ? 'الخادم متوقف حالياً. جاري المحاولة...' : 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى'}
+        </Text>
+        <View style={{ marginTop: 24, paddingHorizontal: 40, width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' }}>
+          <TouchableOpacity 
+            style={{
+              backgroundColor: ProfileTheme.colors.neonGreen,
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 24,
+              minWidth: 120,
+              alignItems: 'center'
+            }}
+            onPress={async () => {
+              console.log('[ProfileScreen] 🔄 Manual retry triggered');
+              try {
+                await refreshCache(true);
+                toast.showInfo('جاري التحميل', 'يتم إعادة تحميل البيانات...');
+              } catch (err) {
+                console.error('[ProfileScreen] ❌ Manual retry failed:', err);
+                toast.showError('خطأ', 'فشلت إعادة المحاولة');
+              }
+            }}
+          >
+            <Text style={{ color: ProfileTheme.colors.deepBlack, fontWeight: 'bold', fontSize: 16 }}>
+              إعادة المحاولة
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 24,
+              minWidth: 120,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.2)'
+            }}
+            onPress={() => {
+              console.log('[ProfileScreen] 🚪 Navigating to auth');
+              router.replace('/auth');
+            }}
+          >
+            <Text style={{ color: ProfileTheme.colors.textPrimary, fontWeight: 'bold', fontSize: 16 }}>
+              تسجيل الخروج
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // If no userData after loading, show skeleton (will retry)
+  if (!userData) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <ProfileSkeleton />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+
+      {/* Coins Badge */}
+      <View style={styles.coinsBadgeContainer}>
+        <CoinsBadge />
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={ProfileTheme.colors.neonGreen}
+            colors={[ProfileTheme.colors.neonGreen]}
+            progressBackgroundColor={ProfileTheme.colors.deepBlack}
+          />
+        }
+      >
+        <ProfileHeader
+          coverImage={coverImage ? { uri: coverImage } : undefined}
+          onPress={handleCoverPress}
+        />
+
+        {/* Profile FIFA Card Frame */}
+        <View style={styles.profileCardContainer}>
+          <ProfileCard
+            playerImage={localImage ? { uri: localImage } : (userData?.avatar ? { uri: userData.avatar } : undefined)}
+            cardType="gold"
+            scale={0.60}
+            onImageUpload={handleImageUpload}
+            uploadedImage={localImage || userData?.avatar || null}
+            countryFlag={countryFlag}
+            onCountryPress={() => setIsCountryModalVisible(true)}
+            position={position}
+            onPositionPress={() => setIsPositionModalVisible(true)}
+            age={stats.age}
+            height={stats.height}
+            weight={stats.weight}
+            foot={stats.foot}
+            onStatsPress={() => setIsStatsModalVisible(true)}
+            clubLogo={club}
+            onClubPress={() => setIsClubModalVisible(true)}
+            brandLogo={brand}
+            onBrandPress={() => setIsBrandModalVisible(true)}
+            isAvatarUploading={isAvatarUploading}
+            isCountryUpdating={isCountryUpdating}
+            isClubUpdating={isClubUpdating}
+            isBrandUpdating={isBrandUpdating}
+            isStatsUpdating={isStatsUpdating}
+          />
+        </View>
+
+        <UserInfo
+          name={userData?.displayName || userData?.username || 'User'}
+          username={userData?.username || 'user'}
+          bio={userData?.bio}
+          location={location}
+          team={userData?.favoriteTeam || ''}
+          isVerified={userData?.isVerified || false}
+          isDeveloper={userData?.isDeveloper || false}
+          onBioLongPress={() => setIsEditProfileModalVisible(true)}
+          onNameLongPress={() => setIsEditProfileModalVisible(true)}
+          clubLogo={club}
+          onEditPress={handleEditProfile}
+          socials={userData?.socials}
+          consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
+        />
+      </ScrollView>
+    </View>
+  );
+}
