@@ -9,13 +9,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Image,
   ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
 import { BlockService, BlockedUser } from '../../services/blockService';
@@ -201,7 +201,7 @@ export default function BlockedUsersScreen() {
       </View>
 
       {/* Blocked Users List */}
-      <FlatList
+      <FlashList
         data={blockedUsers}
         renderItem={renderBlockedUser}
         keyExtractor={(item) => item.id}
@@ -216,6 +216,7 @@ export default function BlockedUsersScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        estimatedItemSize={80}
       />
     </View>
   );

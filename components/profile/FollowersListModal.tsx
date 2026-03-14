@@ -4,12 +4,12 @@ import {
     Text,
     Modal,
     TouchableOpacity,
-    FlatList,
     StyleSheet,
     Dimensions,
     ActivityIndicator,
     TextInput,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { X, Search, BadgeCheck, Code, UserPlus, UserMinus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -231,12 +231,13 @@ export default function FollowersListModal({
                             <ActivityIndicator size="large" color={ProfileTheme.colors.neonGreen} />
                         </View>
                     ) : (
-                        <FlatList
+                        <FlashList
                             data={filteredList}
                             keyExtractor={item => item.id}
                             renderItem={renderUserCard}
                             contentContainerStyle={styles.listContent}
                             showsVerticalScrollIndicator={false}
+                            estimatedItemSize={90}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>

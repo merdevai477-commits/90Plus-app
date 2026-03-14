@@ -1,156 +1,184 @@
 /**
- * Profile Completion Hook
- * Manages profile completion status and step tracking
+ * useProfileCompletion Hook
+ * Hook لإدارة حالة إكمال البروفايل والمهام
+ * 
+ * الميزات:
+ * 1. جلب حالة الإكمال من الـ Backend
+ * 2. تحديث المهام تلقائياً عند إكمالها
+ * 3. Cache للبيانات لتحسين الأداء
+ * 4. Auto-refresh عند العودة للتطبيق
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { ProfileCompletionService, ProfileCompletionStatus } from '../services/profileCompletion.service';
-import { logger } from '../utils/logger';
-import { cacheService, CACHE_KEYS } from '../services/cacheService';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
+import { useAuth } from '@clerk/clerk-expo';
+import { ProfileService, ProfileCompletionStatus } from '../src/services/authService';
+import { logger } from '../services/logger';
 
-export const useProfileCompletion = (getToken: () => Promise<string | null>) => {
-  const [completionStatus, setCompletionStatus] = useState<ProfileCompletionStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export interface UseProfileCompletionReturn {
+    completionStatus: ProfileCompletionStatus | null;
+    isLoading: boolean;
+    error: string | null;
+    refresh: () => Promise<void>;
+    markStepCompleted: (stepId: string) => Promise<boolean>;
+}
 
-  // Fetch completion status
-  const fetchCompletionStatus = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+/**
+ * Hook لإدارة حالة إكمال البروفايل
+ */
+export function useProfileCompletion(): UseProfileCompletionReturn {
+    const { getToken, isSignedIn } = useAuth();
+    const [completionStatus, setCompletionStatus] = useState<ProfileCompletionStatus | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    
+    // Ref to prevent multiple simultaneous fetches
+    const isFetchingRef = useRef(false);
+    const lastFetchTimeRef = useRef<number>(0);
+    const FETCH_COOLDOWN = 5000; // 5 seconds cooldown between fetches
 
-      const token = await getToken();
-      if (!token) {
-        // Set default incomplete profile if no token
-        setCompletionStatus({
-          percentage: 0,
-          completedSteps: 0,
-          totalSteps: 8,
-          steps: [
-            { id: 'avatar', label: 'صورة البروفايل', completed: false, required: true, weight: 20 },
-            { id: 'country', label: 'البلد', completed: false, required: true, weight: 15 },
-            { id: 'club', label: 'النادي المفضل', completed: false, required: true, weight: 15 },
-            { id: 'bio', label: 'النبذة التعريفية', completed: false, required: false, weight: 10 },
-            { id: 'position', label: 'المركز', completed: false, required: false, weight: 10 },
-            { id: 'cardData', label: 'بيانات الكارت', completed: false, required: false, weight: 20 },
-            { id: 'brand', label: 'البراند المفضل', completed: false, required: false, weight: 5 },
-            { id: 'socialLinks', label: 'روابط السوشيال ميديا', completed: false, required: false, weight: 5 },
-          ],
-          canUploadVideo: false,
-          missingRequiredSteps: ['صورة البروفايل', 'البلد', 'النادي المفضل'],
+    /**
+     * Fetch completion status from backend
+     */
+    const fetchCompletionStatus = useCallback(async (force = false) => {
+        if (!isSignedIn) {
+            setCompletionStatus(null);
+            setIsLoading(false);
+            return;
+        }
+
+        // Prevent multiple simultaneous fetches
+        if (isFetchingRef.current && !force) {
+            logger.debug('[useProfileCompletion] Fetch already in progress, skipping');
+            return;
+        }
+
+        // Check cooldown
+        const now = Date.now();
+        if (!force && now - lastFetchTimeRef.current < FETCH_COOLDOWN) {
+            logger.debug('[useProfileCompletion] Fetch cooldown active, skipping');
+            return;
+        }
+
+        try {
+            isFetchingRef.current = true;
+            lastFetchTimeRef.current = now;
+            setIsLoading(true);
+            setError(null);
+
+            const token = await getToken();
+            if (!token) {
+                throw new Error('No authentication token');
+            }
+
+            logger.debug('[useProfileCompletion] Fetching completion status...');
+            const status = await ProfileService.getCompletionStatus(token);
+            
+            if (status) {
+                setCompletionStatus(status);
+                logger.debug('[useProfileCompletion] Completion status loaded:', {
+                    percentage: status.percentage,
+                    completedSteps: status.completedSteps,
+                    totalSteps: status.totalSteps,
+                });
+            } else {
+                logger.warn('[useProfileCompletion] No completion status returned');
+            }
+        } catch (err: any) {
+            logger.error('[useProfileCompletion] Error fetching completion status:', err);
+            setError(err.message || 'Failed to load profile completion status');
+        } finally {
+            setIsLoading(false);
+            isFetchingRef.current = false;
+        }
+    }, [isSignedIn, getToken]);
+
+    /**
+     * Mark a step as completed
+     */
+    const markStepCompleted = useCallback(async (stepId: string): Promise<boolean> => {
+        if (!isSignedIn) {
+            logger.warn('[useProfileCompletion] Cannot mark step completed: not signed in');
+            return false;
+        }
+
+        try {
+            const token = await getToken();
+            if (!token) {
+                throw new Error('No authentication token');
+            }
+
+            logger.debug('[useProfileCompletion] Marking step as completed:', stepId);
+            const result = await ProfileService.markStepCompleted(token, stepId);
+            
+            if (result.success && result.data) {
+                setCompletionStatus(result.data);
+                logger.debug('[useProfileCompletion] Step marked as completed:', {
+                    stepId,
+                    newPercentage: result.data.percentage,
+                });
+                return true;
+            }
+            
+            logger.warn('[useProfileCompletion] Failed to mark step as completed:', stepId);
+            return false;
+        } catch (err: any) {
+            logger.error('[useProfileCompletion] Error marking step completed:', err);
+            return false;
+        }
+    }, [isSignedIn, getToken]);
+
+    /**
+     * Refresh completion status (force fetch)
+     */
+    const refresh = useCallback(async () => {
+        await fetchCompletionStatus(true);
+    }, [fetchCompletionStatus]);
+
+    // Initial fetch
+    useEffect(() => {
+        fetchCompletionStatus();
+    }, [fetchCompletionStatus]);
+
+    // Auto-refresh when app comes to foreground
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active') {
+                logger.debug('[useProfileCompletion] App became active, refreshing...');
+                fetchCompletionStatus();
+            }
         });
-        return;
-      }
 
-      const status = await ProfileCompletionService.getCompletionStatus(token);
-      if (status) {
-        setCompletionStatus(status);
-        // ✅ Cache the completion status
-        await cacheService.set(CACHE_KEYS.PROFILE_COMPLETION, status, 5 * 60 * 1000); // 5 minutes
-      }
-    } catch (err: any) {
-      // Don't log "User not found" errors - they're expected on first login
-      if (!err.message?.includes('User not found')) {
-        logger.warn('Profile completion status unavailable:', err.message);
-      }
-      
-      // Don't set error state for "User not found" - it's expected
-      if (!err.message?.includes('User not found')) {
-        setError(err.message || 'Failed to load profile completion status');
-      }
-      
-      // Try to load from cache on error
-      const cachedStatus = await cacheService.get<ProfileCompletionStatus>(CACHE_KEYS.PROFILE_COMPLETION);
-      if (cachedStatus) {
-        setCompletionStatus(cachedStatus);
-        return;
-      }
-      
-      // Set default incomplete profile on error (fallback)
-      setCompletionStatus({
-        percentage: 0,
-        completedSteps: 0,
-        totalSteps: 8,
-        steps: [
-          { id: 'avatar', label: 'صورة البروفايل', completed: false, required: true, weight: 20 },
-          { id: 'country', label: 'البلد', completed: false, required: true, weight: 15 },
-          { id: 'club', label: 'النادي المفضل', completed: false, required: true, weight: 15 },
-          { id: 'bio', label: 'النبذة التعريفية', completed: false, required: false, weight: 10 },
-          { id: 'position', label: 'المركز', completed: false, required: false, weight: 10 },
-          { id: 'cardData', label: 'بيانات الكارت', completed: false, required: false, weight: 20 },
-          { id: 'brand', label: 'البراند المفضل', completed: false, required: false, weight: 5 },
-          { id: 'socialLinks', label: 'روابط السوشيال ميديا', completed: false, required: false, weight: 5 },
-        ],
-        canUploadVideo: false,
-        missingRequiredSteps: ['صورة البروفايل', 'البلد', 'النادي المفضل'],
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [getToken]);
+        return () => subscription.remove();
+    }, [fetchCompletionStatus]);
 
-  // Mark step as completed
-  const markStepCompleted = useCallback(async (stepId: string) => {
-    try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error('No authentication token');
-      }
-
-      const updatedStatus = await ProfileCompletionService.markStepCompleted(token, stepId);
-      if (updatedStatus) {
-        setCompletionStatus(updatedStatus);
-        // ✅ Update cache immediately
-        await cacheService.set(CACHE_KEYS.PROFILE_COMPLETION, updatedStatus, 5 * 60 * 1000);
-      }
-    } catch (err: any) {
-      logger.error('Error marking step completed:', err);
-      throw err;
-    }
-  }, [getToken]);
-
-  // Load on mount with error handling
-  useEffect(() => {
-    let isMounted = true;
-    
-    const loadWithRetry = async () => {
-      try {
-        // Try to load from cache first
-        const cachedStatus = await cacheService.get<ProfileCompletionStatus>(CACHE_KEYS.PROFILE_COMPLETION);
-        if (cachedStatus && isMounted) {
-          setCompletionStatus(cachedStatus);
-        }
-        
-        // Then fetch fresh data
-        const token = await getToken();
-        if (!token || !isMounted) return;
-
-        const status = await ProfileCompletionService.getCompletionStatus(token);
-        if (isMounted && status) {
-          setCompletionStatus(status);
-          // Update cache
-          await cacheService.set(CACHE_KEYS.PROFILE_COMPLETION, status, 5 * 60 * 1000);
-        }
-      } catch (err: any) {
-        // Silently fail for "User not found" - it's expected on first login
-        if (!err.message?.includes('User not found') && isMounted) {
-          logger.info('Profile completion not yet available:', err.message);
-        }
-      }
+    return {
+        completionStatus,
+        isLoading,
+        error,
+        refresh,
+        markStepCompleted,
     };
+}
 
-    loadWithRetry();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, []); // Empty deps - only run once on mount
+/**
+ * Helper function to check if a specific step is completed
+ */
+export function isStepCompleted(
+    completionStatus: ProfileCompletionStatus | null,
+    stepId: string
+): boolean {
+    if (!completionStatus) return false;
+    return completionStatus.steps.some(step => step.id === stepId && step.isCompleted);
+}
 
-  return {
-    completionStatus,
-    isLoading,
-    error,
-    fetchCompletionStatus,
-    markStepCompleted,
-  };
-};
+/**
+ * Helper function to get step by ID
+ */
+export function getStep(
+    completionStatus: ProfileCompletionStatus | null,
+    stepId: string
+) {
+    if (!completionStatus) return null;
+    return completionStatus.steps.find(step => step.id === stepId) || null;
+}

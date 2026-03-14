@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, memo } from 'react';
-import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Platform, StatusBar, TextInput, Dimensions } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, Platform, StatusBar, TextInput, Dimensions } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -219,7 +220,7 @@ export default function CountryPickerModal({ visible, onClose, onSelect, selecte
                     </View>
 
                     {/* Region Filters */}
-                    <FlatList
+                    <FlashList
                         horizontal
                         data={REGIONS}
                         keyExtractor={(item) => item.key}
@@ -258,20 +259,11 @@ export default function CountryPickerModal({ visible, onClose, onSelect, selecte
                     </Text>
 
                     {/* Countries List */}
-                    <FlatList
+                    <FlashList
                         data={filteredCountries}
                         keyExtractor={keyExtractor}
                         renderItem={renderItem}
                         showsVerticalScrollIndicator={false}
-                        initialNumToRender={15}
-                        maxToRenderPerBatch={20}
-                        windowSize={10}
-                        removeClippedSubviews={true}
-                        getItemLayout={(_, index) => ({
-                            length: 72,
-                            offset: 72 * index,
-                            index,
-                        })}
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.2)" />

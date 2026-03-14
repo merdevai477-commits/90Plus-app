@@ -1520,7 +1520,76 @@ export class ReelsService {
 // PROFILE SERVICE (Extended)
 // ============================================
 
+export interface ProfileCompletionStep {
+    id: string;
+    name: string;
+    description: string;
+    isCompleted: boolean;
+    completedAt?: string;
+}
+
+export interface ProfileCompletionStatus {
+    percentage: number;
+    completedSteps: number;
+    totalSteps: number;
+    steps: ProfileCompletionStep[];
+}
+
 export class ProfileService {
+    /**
+     * Get profile completion status
+     */
+    static async getCompletionStatus(token: string): Promise<ProfileCompletionStatus | null> {
+        try {
+            const response = await fetch(`${API_URL}/profile/completion`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                console.error('Failed to get profile completion:', response.status);
+                return null;
+            }
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return data.data;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting profile completion:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Mark a profile completion step as completed
+     */
+    static async markStepCompleted(token: string, stepId: string): Promise<{ success: boolean; data?: ProfileCompletionStatus }> {
+        try {
+            const response = await fetch(`${API_URL}/profile/completion/step`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ stepId }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return { success: true, data: data.data };
+            }
+            return { success: false };
+        } catch (error) {
+            console.error('Error marking step completed:', error);
+            return { success: false };
+        }
+    }
+
     /**
      * Update avatar (7 days cooldown)
      */

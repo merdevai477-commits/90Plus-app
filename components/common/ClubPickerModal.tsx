@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, FlatList, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -173,15 +174,14 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                             <Text style={styles.loadingText}>جاري تحميل الأندية...</Text>
                         </View>
                     ) : (
-                        <FlatList
+                        <FlashList
                             data={filteredClubs}
                             keyExtractor={(item) => item.id.toString()}
                             numColumns={3}
                             contentContainerStyle={styles.listContent}
                             renderItem={renderClubItem}
-                            removeClippedSubviews={true}
-                            maxToRenderPerBatch={15}
-                            windowSize={5}
+                            // @ts-ignore - estimatedItemSize is valid but TypeScript definitions may be outdated
+                            estimatedItemSize={110}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>لا توجد أندية</Text>

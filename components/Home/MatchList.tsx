@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
 import { Match } from '../../src/store/home.store';
@@ -91,7 +92,7 @@ export const MatchList: React.FC<MatchListProps> = ({ matches, onMatchPress, onV
             </View>
 
             {isLoading ? (
-                <FlatList
+                <FlashList
                     data={skeletonData}
                     renderItem={renderSkeleton}
                     keyExtractor={(item) => item.id}
@@ -99,10 +100,9 @@ export const MatchList: React.FC<MatchListProps> = ({ matches, onMatchPress, onV
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
                     ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
-                    initialNumToRender={3}
                 />
             ) : (
-                <FlatList
+                <FlashList
                     data={matches}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
@@ -110,15 +110,6 @@ export const MatchList: React.FC<MatchListProps> = ({ matches, onMatchPress, onV
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
                     ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
-                    initialNumToRender={3}
-                    windowSize={3}
-                    maxToRenderPerBatch={3}
-                    removeClippedSubviews={true}
-                    getItemLayout={(data, index) => ({
-                        length: 330 + Spacing.md,
-                        offset: (330 + Spacing.md) * index,
-                        index,
-                    })}
                 />
             )}
         </Animated.View>

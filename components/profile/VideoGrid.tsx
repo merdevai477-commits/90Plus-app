@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, Image, Text, StyleSheet, Dimensions, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Image, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -104,14 +105,13 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
     );
 
     return (
-        <FlatList
+        <FlashList
             data={videos}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
             numColumns={COLUMN_COUNT}
             scrollEnabled={false}
             contentContainerStyle={styles.grid}
-            columnWrapperStyle={{ gap: SPACING }}
         />
     );
 });

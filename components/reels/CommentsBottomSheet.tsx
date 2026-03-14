@@ -5,12 +5,12 @@ import {
     Modal,
     StyleSheet,
     TouchableOpacity,
-    FlatList,
     TextInput,
     Image,
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Heart, Send } from 'lucide-react-native';
 import { Comment } from './types';
@@ -105,12 +105,13 @@ export const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({
                         </TouchableOpacity>
                     </LinearGradient>
 
-                    <FlatList
+                    <FlashList
                         data={comments}
                         renderItem={renderComment}
                         keyExtractor={(item) => item.id}
                         contentContainerStyle={styles.commentsList}
                         showsVerticalScrollIndicator={false}
+                        estimatedItemSize={100}
                     />
 
                     <LinearGradient

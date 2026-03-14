@@ -30,6 +30,8 @@ import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
 import { getDailyQuizStatus, DailyQuizStatus } from '../../services/quizApi';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
+import { ProfileCompletionService } from '../../services/profileCompletion.service';
+import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 
 const API_URL = getApiUrl();
 
@@ -166,6 +168,51 @@ export default function HomeScreen() {
     }
   }, [getToken, isSignedIn, user]);
 
+  // ✅ Preload profile data in background for instant profile screen loading
+  const preloadProfileData = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token || !isSignedIn) return;
+
+      // Preload profile completion status (for tasks badge)
+      ProfileCompletionService.getCompletionStatus(token)
+        .then(status => {
+          if (status) {
+            // Cache it for instant access when user opens profile
+            cacheService.set(CACHE_KEYS.PROFILE_COMPLETION, status, 5 * 60 * 1000);
+            logger.info('✅ Profile completion preloaded in background');
+          }
+        })
+        .catch(err => {
+          // Silent fail - not critical
+          logger.debug('Profile completion preload failed (non-critical):', err.message);
+        });
+
+      // Preload full user profile data (for profile screen)
+      fetch(`${API_URL}/clerk/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(async response => {
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'SUCCESS' && data.data?.user) {
+              // Cache full profile data
+              await cacheService.set(CACHE_KEYS.PROFILE_DATA, data.data.user, 5 * 60 * 1000);
+              logger.info('✅ Full profile data preloaded in background');
+            }
+          }
+        })
+        .catch(err => {
+          // Silent fail - not critical
+          logger.debug('Profile data preload failed (non-critical):', err.message);
+        });
+
+    } catch (error) {
+      // Silent fail - preloading is not critical
+      logger.debug('Profile preload error (non-critical):', error);
+    }
+  }, [getToken, isSignedIn]);
+
   const {
     userMode,
     matches,
@@ -242,6 +289,7 @@ export default function HomeScreen() {
   const fetchPredictionsDataRef = useRef(fetchPredictionsData);
   const fetchHomeDataRef = useRef(fetchHomeData);
   const fetchRankingsDataRef = useRef(fetchRankingsData);
+  const preloadProfileDataRef = useRef(preloadProfileData);
   const getTokenRef = useRef(getToken);
   const setUserModeRef = useRef(setUserMode);
   const lastLoadTimeRef = useRef(0);
@@ -256,9 +304,10 @@ export default function HomeScreen() {
     fetchPredictionsDataRef.current = fetchPredictionsData;
     fetchHomeDataRef.current = fetchHomeData;
     fetchRankingsDataRef.current = fetchRankingsData;
+    preloadProfileDataRef.current = preloadProfileData;
     getTokenRef.current = getToken;
     setUserModeRef.current = setUserMode;
-  }, [fetchUserProfile, fetchSpinWheelStatus, fetchDailyQuizStatus, fetchUserRank, fetchPredictionsData, fetchHomeData, fetchRankingsData, getToken, setUserMode]);
+  }, [fetchUserProfile, fetchSpinWheelStatus, fetchDailyQuizStatus, fetchUserRank, fetchPredictionsData, fetchHomeData, fetchRankingsData, preloadProfileData, getToken, setUserMode]);
 
   // Sync userMode separately to avoid re-render loop
   useEffect(() => {
@@ -340,6 +389,12 @@ export default function HomeScreen() {
           // ✅ Load secondary data without blocking
           Promise.all(secondaryPromises).catch(() => {
             // Silent fail for secondary data
+          });
+          
+          // ✅ Preload profile data in background for instant profile screen access
+          // This runs completely in background without blocking anything
+          preloadProfileDataRef.current().catch(() => {
+            // Silent fail - preloading is not critical
           });
           
         } catch (error) {

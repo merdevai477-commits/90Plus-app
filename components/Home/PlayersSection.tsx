@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { PlayerCard } from './PlayerCard';
 import { SkeletonLoader } from './SkeletonLoader';
 import { Player } from './types';
@@ -36,7 +37,7 @@ export const PlayersSection: React.FC<PlayersSectionProps> = ({
           <SkeletonLoader width={140} height={160} />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={players}
           renderItem={({ item }) => (
             <PlayerCard
@@ -50,7 +51,8 @@ export const PlayersSection: React.FC<PlayersSectionProps> = ({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalList}
-          scrollEnabled={true}
+          // @ts-ignore - estimatedItemSize is valid but TypeScript definitions may be outdated
+          estimatedItemSize={120}
         />
       )}
     </View>

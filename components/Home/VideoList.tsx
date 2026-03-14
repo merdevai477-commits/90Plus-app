@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
 import { Video } from '../../src/store/home.store';
@@ -135,7 +136,7 @@ export const VideoList: React.FC<VideoListProps> = ({ videos, onVideoPress, onVi
             </View>
 
             {isLoading ? (
-                <FlatList
+                <FlashList
                     data={skeletonData}
                     renderItem={renderSkeleton}
                     keyExtractor={(item) => item.id}
@@ -143,18 +144,9 @@ export const VideoList: React.FC<VideoListProps> = ({ videos, onVideoPress, onVi
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
                     ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
-                    initialNumToRender={3}
-                    windowSize={3}
-                    maxToRenderPerBatch={3}
-                    removeClippedSubviews={true}
-                    getItemLayout={(data, index) => ({
-                        length: 120 + Spacing.md,
-                        offset: (120 + Spacing.md) * index,
-                        index,
-                    })}
                 />
             ) : hasVideos ? (
-                <FlatList
+                <FlashList
                     data={videos}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
@@ -162,19 +154,10 @@ export const VideoList: React.FC<VideoListProps> = ({ videos, onVideoPress, onVi
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
                     ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
-                    initialNumToRender={3}
-                    windowSize={3}
-                    maxToRenderPerBatch={3}
-                    removeClippedSubviews={true}
-                    getItemLayout={(data, index) => ({
-                        length: 120 + Spacing.md,
-                        offset: (120 + Spacing.md) * index,
-                        index,
-                    })}
                 />
             ) : (
                 // Empty state - show placeholder cards with encouraging messages
-                <FlatList
+                <FlashList
                     data={placeholderData}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
@@ -182,10 +165,6 @@ export const VideoList: React.FC<VideoListProps> = ({ videos, onVideoPress, onVi
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
                     ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
-                    initialNumToRender={3}
-                    windowSize={3}
-                    maxToRenderPerBatch={3}
-                    removeClippedSubviews={true}
                 />
             )}
         </Animated.View>

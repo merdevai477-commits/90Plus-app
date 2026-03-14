@@ -4,7 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import Animated, {
   useSharedValue,
@@ -114,7 +115,7 @@ const TransfersLeagueSection: React.FC<TransfersLeagueSectionProps> = React.memo
       {/* Transfers List - Lazy rendered only when expanded */}
       {shouldRenderContent && isExpanded && (
         <View style={styles.transfersContainer}>
-          <FlatList
+          <FlashList
             data={transfers}
             renderItem={({ item: transfer, index: transferIndex }) => (
               <TransferCard
@@ -126,11 +127,6 @@ const TransfersLeagueSection: React.FC<TransfersLeagueSectionProps> = React.memo
             )}
             keyExtractor={(transfer, index) => `${transfer.player.id}-${index}`}
             scrollEnabled={false}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
-            updateCellsBatchingPeriod={50}
-            initialNumToRender={5}
-            windowSize={10}
             contentContainerStyle={styles.transfersList}
             showsVerticalScrollIndicator={false}
           />

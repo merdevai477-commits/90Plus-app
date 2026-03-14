@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
 import { Player } from '../../src/store/home.store';
@@ -132,7 +133,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({ players, onPlayerPress, 
                 )}
             </View>
 
-            <FlatList
+            <FlashList
                 data={isLoading ? skeletonData : (hasPlayers ? players : placeholderData)}
                 renderItem={isLoading ? renderSkeleton : renderItem}
                 keyExtractor={(item) => item.id}
@@ -140,15 +141,6 @@ export const PlayerList: React.FC<PlayerListProps> = ({ players, onPlayerPress, 
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
                 ItemSeparatorComponent={() => <View style={{ width: Spacing.md }} />}
-                initialNumToRender={3}
-                windowSize={3}
-                maxToRenderPerBatch={3}
-                removeClippedSubviews={true}
-                getItemLayout={(data, index) => ({
-                    length: 140 + Spacing.md,
-                    offset: (140 + Spacing.md) * index,
-                    index,
-                })}
             />
         </Animated.View>
     );

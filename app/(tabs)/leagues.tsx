@@ -2,13 +2,12 @@
  * Leagues Screen - 365 Days Style Design
  * ✅ INTEGRATED: Direct backend API integration
  * Clean, modern design inspired by 365 Days app
- * Uses react-native-reanimated, FlatList/SectionList, and optimized performance
+ * Uses react-native-reanimated, FlashList, and optimized performance
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
-  FlatList,
   StyleSheet,
   StatusBar,
   RefreshControl,
@@ -23,6 +22,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -78,7 +78,7 @@ const DEFAULT_SORT: SortState = {
   type: 'status_priority',
 };
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Match>);
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<Match>);
 
 /**
  * Leagues Screen - 365 Days Style
@@ -975,9 +975,9 @@ const LeaguesScreen = () => {
         <CouponsBar activeCoupon={activeCoupon} onCouponPress={setActiveCoupon} matchesCount={sortedMatches.length} />
       )}
 
-      {/* Content - Feature 7: FlatList/SectionList */}
+      {/* Content - Feature 7: FlashList for Performance */}
       {activeTab === 'predictions' ? (
-        <AnimatedFlatList
+        <AnimatedFlashList
           data={sortedMatches}
           renderItem={renderPredictionCard}
           keyExtractor={keyExtractor}
@@ -996,13 +996,6 @@ const LeaguesScreen = () => {
           }
           onScroll={scrollHandler}
           scrollEventThrottle={16}
-          // Performance optimizations - Feature 7
-          removeClippedSubviews={Platform.OS === 'android'}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={5}
-          updateCellsBatchingPeriod={50}
-          getItemLayout={getItemLayout}
           // Feature 10: Entry Animations
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />

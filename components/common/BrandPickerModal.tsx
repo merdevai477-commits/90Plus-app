@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -66,7 +67,7 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
                         </TouchableOpacity>
                     </View>
 
-                    <FlatList
+                    <FlashList
                         data={BRANDS}
                         keyExtractor={(item) => item.id}
                         numColumns={3}

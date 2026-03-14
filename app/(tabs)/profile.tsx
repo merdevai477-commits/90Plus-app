@@ -28,6 +28,7 @@ import { useProfileCache } from '../../hooks/useProfileCache';
 import { useTranslation } from '../../src/i18n';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
+import { compressImage } from '@/utils/imageCompressor';
 import { logger } from '../../utils/logger';
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 
@@ -566,11 +567,26 @@ export default function ProfileScreen() {
         return;
       }
 
+      // Compress image before upload
+      let finalUri = imageUri;
+      try {
+        const compressed = await compressImage(imageUri, {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 0.8,
+        });
+        finalUri = compressed.uri;
+        console.log(`Cover compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
+      } catch (error) {
+        console.warn('Cover compression failed, using original:', error);
+        finalUri = imageUri; // Fallback to original
+      }
+
       // Store original cover for revert
       const originalCover = userData.coverImage;
 
       // Optimistic UI - show immediately
-      setCoverImage(imageUri);
+      setCoverImage(finalUri);
 
       // Get token
       const token = await getToken();
@@ -582,7 +598,7 @@ export default function ProfileScreen() {
       }
 
       // Upload to backend
-      const uploadResult = await StorageService.uploadCover(token, imageUri);
+      const uploadResult = await StorageService.uploadCover(token, finalUri);
 
       if (uploadResult.success && uploadResult.url) {
         // Update with backend URL immediately
@@ -654,6 +670,21 @@ export default function ProfileScreen() {
         return;
       }
 
+      // Compress image before upload
+      let finalUri = imageUri;
+      try {
+        const compressed = await compressImage(imageUri, {
+          maxWidth: 1080,
+          maxHeight: 1080,
+          quality: 0.7,
+        });
+        finalUri = compressed.uri;
+        console.log(`Avatar compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
+      } catch (error) {
+        console.warn('Avatar compression failed, using original:', error);
+        finalUri = imageUri; // Fallback to original
+      }
+
       // Store original avatar for revert
       const originalAvatar = userData.avatar;
 
@@ -661,7 +692,7 @@ export default function ProfileScreen() {
       setIsAvatarUploading(true);
 
       // Optimistic UI - show immediately
-      setLocalImage(imageUri);
+      setLocalImage(finalUri);
 
       // Get token
       const token = await getToken();
@@ -674,7 +705,7 @@ export default function ProfileScreen() {
       }
 
       // Upload to backend
-      const uploadResult = await StorageService.uploadAvatar(token, imageUri);
+      const uploadResult = await StorageService.uploadAvatar(token, finalUri);
 
       if (uploadResult.success && uploadResult.url) {
         // Update with backend URL immediately

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl, Image, AppState, AppStateStatus, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl, Image, AppState, AppStateStatus, TextInput } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import { COLORS } from '../components/reels/constants';
 import { Bell, Heart, MessageCircle, UserPlus, AtSign, Info, Reply, Star, Gift, Trash2, CheckCircle, Search, X, AlertCircle } from 'lucide-react-native';
@@ -994,7 +995,7 @@ export default function NotificationsScreen() {
                 }}
             />
 
-            <FlatList
+            <FlashList
                 data={notifications}
                 renderItem={({ item, index }) => (
                     <MemoizedNotificationItem 
@@ -1007,16 +1008,6 @@ export default function NotificationsScreen() {
                 )}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.listContent}
-                getItemLayout={(data, index) => ({
-                    length: 92, // Updated height
-                    offset: 92 * index,
-                    index,
-                })}
-                removeClippedSubviews={true}
-                initialNumToRender={8}
-                maxToRenderPerBatch={3}
-                windowSize={5}
-                updateCellsBatchingPeriod={50}
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefreshing}

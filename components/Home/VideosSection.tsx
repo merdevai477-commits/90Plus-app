@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from './SkeletonLoader';
 import { Video } from './types';
@@ -36,7 +37,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
           <SkeletonLoader width={160} height={140} />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={videos}
           renderItem={({ item }) => (
             <VideoCard
@@ -50,7 +51,8 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalList}
-          scrollEnabled={true}
+          // @ts-ignore - estimatedItemSize is valid but TypeScript definitions may be outdated
+          estimatedItemSize={120}
         />
       )}
     </View>

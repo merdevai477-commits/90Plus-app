@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, StyleSheet, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import type { FlashListProps } from '@shopify/flash-list';
 
 type Props<T> = {
   data: T[];
@@ -10,7 +12,7 @@ type Props<T> = {
 };
 
 function RotatingCarousel<T>({ data, renderItem, itemWidth, visibleCount = 5, autoMs = 1000 }: Props<T>) {
-  const listRef = useRef<FlatList>(null);
+  const listRef = useRef<any>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -37,7 +39,7 @@ function RotatingCarousel<T>({ data, renderItem, itemWidth, visibleCount = 5, au
   };
 
   return (
-    <FlatList
+    <FlashList
       ref={listRef}
       horizontal
       data={data}
