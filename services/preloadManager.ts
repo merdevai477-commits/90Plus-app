@@ -269,55 +269,58 @@ class PreloadManagerClass {
    * Preload profile data
    */
   private async preloadProfile(token: string): Promise<void> {
-    // Fetch user data, follow stats, and analytics in parallel
-    const [userResult, statsResult] = await Promise.all([
-      AuthService.syncUserWithBackend(token),
-      FollowService.getMyStats(token),
-      // TEMPORARILY DISABLED: ProfileService causing infinite loop
-      // ProfileService.getAnalytics(token),
-      // ProfileService.getCooldowns(token),
-    ]);
+    try {
+      // Fetch user data and follow stats in parallel
+      const [userResult, statsResult] = await Promise.all([
+        AuthService.syncUserWithBackend(token),
+        FollowService.getMyStats(token),
+      ]);
 
-    if (userResult) {
-      // Also fetch user's videos
-      const reels = await AuthService.getUserReels(token, userResult.username);
-      
-      const profileData = {
-        userData: {
-          displayName: userResult.displayName || userResult.username,
-          username: userResult.username,
-          bio: userResult.bio || '',
-          avatar: userResult.avatar || null,
-          createdAt: new Date(userResult.createdAt),
-          isVerified: userResult.isVerified || false,
-          isDeveloper: userResult.isDeveloper || false,
-          favoriteTeam: userResult.favoriteTeam || '',
-          location: 'مصر',
-          lastUsernameChange: userResult.lastUsernameChange ? new Date(userResult.lastUsernameChange) : null,
-          socials: {},
-          position: userResult.position,
-          countryFlag: userResult.countryFlag,
-          age: userResult.age,
-          height: userResult.height,
-          weight: userResult.weight,
-          preferredFoot: userResult.preferredFoot,
-        },
-        followStats: statsResult,
-        videos: reels.map(r => ({
-          id: r.id,
-          uri: r.uri,
-          thumbnail: r.thumbnail,
-          views: r.views,
-          likes: r.likes,
-          shares: 0,
-          duration: '0:00',
-          createdAt: new Date(r.createdAt),
-        })),
-        analytics: analyticsResult,
-        cooldowns: cooldownsResult,
-      };
+      if (userResult) {
+        // Also fetch user's videos
+        const reels = await AuthService.getUserReels(token, userResult.username);
+        
+        const profileData = {
+          userData: {
+            displayName: userResult.displayName || userResult.username,
+            username: userResult.username,
+            bio: userResult.bio || '',
+            avatar: userResult.avatar || null,
+            createdAt: new Date(userResult.createdAt),
+            isVerified: userResult.isVerified || false,
+            isDeveloper: userResult.isDeveloper || false,
+            favoriteTeam: userResult.favoriteTeam || '',
+            location: 'مصر',
+            lastUsernameChange: userResult.lastUsernameChange ? new Date(userResult.lastUsernameChange) : null,
+            socials: {},
+            position: userResult.position,
+            countryFlag: userResult.countryFlag,
+            age: userResult.age,
+            height: userResult.height,
+            weight: userResult.weight,
+            preferredFoot: userResult.preferredFoot,
+          },
+          followStats: statsResult,
+          videos: reels.map(r => ({
+            id: r.id,
+            uri: r.uri,
+            thumbnail: r.thumbnail,
+            views: r.views,
+            likes: r.likes,
+            shares: 0,
+            duration: '0:00',
+            createdAt: new Date(r.createdAt),
+          })),
+          analytics: null, // Will be loaded separately if needed
+          cooldowns: null, // Will be loaded separately if needed
+        };
 
-      await cacheService.set(PRELOAD_CACHE_KEYS.profile, profileData, CACHE_TTL.PROFILE);
+        await cacheService.set(PRELOAD_CACHE_KEYS.profile, profileData, CACHE_TTL.PROFILE);
+        logger.debug('[PreloadManager] Profile data preloaded successfully');
+      }
+    } catch (error: any) {
+      logger.error('[PreloadManager] Failed to preload profile:', error);
+      throw error;
     }
   }
 

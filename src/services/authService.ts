@@ -585,6 +585,83 @@ export class AuthService {
             return [];
         }
     }
+
+    /**
+     * Update user profile with comprehensive field support
+     */
+    static async updateUserProfile(
+        token: string,
+        updates: {
+            username?: string;
+            displayName?: string;
+            bio?: string;
+            position?: string;
+            countryFlag?: string;
+            age?: number;
+            height?: number;
+            weight?: number;
+            preferredFoot?: string;
+            favoriteTeam?: string;
+            favoriteClub?: string;
+            favoriteBrand?: string;
+            socialLinks?: {
+                instagram?: string;
+                twitter?: string;
+                tiktok?: string;
+                youtube?: string;
+            };
+        }
+    ): Promise<AuthResponse> {
+        try {
+            logger.debug('🔄 Updating user profile with comprehensive data...');
+
+            // Determine which endpoint to use based on update type
+            let endpoint = `${API_URL}/clerk/profile`;
+            let body = { ...updates };
+
+            // If updating FIFA card fields, use card-profile endpoint
+            const cardFields = ['position', 'countryFlag', 'age', 'height', 'weight', 'preferredFoot'];
+            const hasCardFields = cardFields.some(field => updates.hasOwnProperty(field));
+            
+            if (hasCardFields) {
+                endpoint = `${API_URL}/clerk/card-profile`;
+            }
+
+            // If updating social links, merge with existing data
+            if (updates.socialLinks) {
+                body = {
+                    ...updates,
+                    ...updates.socialLinks // Flatten social links
+                };
+                delete body.socialLinks;
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+
+            const data: AuthResponse = await response.json();
+
+            if (data.status === 'SUCCESS') {
+                logger.debug('✅ Profile updated successfully');
+                return data;
+            } else {
+                console.error('❌ Failed to update profile:', data.message);
+                return data;
+            }
+        } catch (error: any) {
+            console.error('❌ Error updating profile:', error);
+            return {
+                status: 'ERROR',
+                message: error.message || 'Network error'
+            };
+        }
+    }
 }
 
 export interface SearchUserResult {
@@ -1968,82 +2045,6 @@ export class NotificationService {
         } catch (error) {
             console.error('Error getting unread count:', error);
             return 0;
-        }
-    }
-    /**
-     * Update user profile with comprehensive field support
-     */
-    static async updateUserProfile(
-        token: string,
-        updates: {
-            username?: string;
-            displayName?: string;
-            bio?: string;
-            position?: string;
-            countryFlag?: string;
-            age?: number;
-            height?: number;
-            weight?: number;
-            preferredFoot?: string;
-            favoriteTeam?: string;
-            favoriteClub?: string;
-            favoriteBrand?: string;
-            socialLinks?: {
-                instagram?: string;
-                twitter?: string;
-                tiktok?: string;
-                youtube?: string;
-            };
-        }
-    ): Promise<AuthResponse> {
-        try {
-            logger.debug('🔄 Updating user profile with comprehensive data...');
-
-            // Determine which endpoint to use based on update type
-            let endpoint = `${API_URL}/clerk/profile`;
-            let body = { ...updates };
-
-            // If updating FIFA card fields, use card-profile endpoint
-            const cardFields = ['position', 'countryFlag', 'age', 'height', 'weight', 'preferredFoot'];
-            const hasCardFields = cardFields.some(field => updates.hasOwnProperty(field));
-            
-            if (hasCardFields) {
-                endpoint = `${API_URL}/clerk/card-profile`;
-            }
-
-            // If updating social links, merge with existing data
-            if (updates.socialLinks) {
-                body = {
-                    ...updates,
-                    ...updates.socialLinks // Flatten social links
-                };
-                delete body.socialLinks;
-            }
-
-            const response = await fetch(endpoint, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(body),
-            });
-
-            const data: AuthResponse = await response.json();
-
-            if (data.status === 'SUCCESS') {
-                logger.debug('✅ Profile updated successfully');
-                return data;
-            } else {
-                console.error('❌ Failed to update profile:', data.message);
-                return data;
-            }
-        } catch (error: any) {
-            console.error('❌ Error updating profile:', error);
-            return {
-                status: 'ERROR',
-                message: error.message || 'Network error'
-            };
         }
     }
 
