@@ -184,6 +184,27 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
             // Check if username is taken
             const existingUser = await ClerkUserService.getUserByClerkId(clerkUserId);
             if (existingUser && existingUser.username !== username) {
+                // Check 15-day restriction for username changes
+                if (existingUser.lastUsernameChange) {
+                    const daysSinceLastChange = Math.floor(
+                        (Date.now() - existingUser.lastUsernameChange.getTime()) / (1000 * 60 * 60 * 24)
+                    );
+                    
+                    if (daysSinceLastChange < 15) {
+                        const daysRemaining = 15 - daysSinceLastChange;
+                        res.status(400).json({
+                            status: 'ERROR',
+                            message: `يمكنك تغيير اسم المستخدم بعد ${daysRemaining} يوم`,
+                            code: 'USERNAME_CHANGE_RESTRICTED',
+                            data: {
+                                daysRemaining,
+                                nextAllowedChange: new Date(existingUser.lastUsernameChange.getTime() + (15 * 24 * 60 * 60 * 1000))
+                            }
+                        });
+                        return;
+                    }
+                }
+
                 const userWithUsername = await prisma.user.findUnique({
                     where: { username },
                 });
@@ -1378,6 +1399,79 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
         res.status(500).json({
             status: 'ERROR',
             message: error.message || 'Internal server error',
+        });
+    }
+});
+
+/**
+ * GET /api/clerk/username-change-status
+ * Check if user can change username (15-day restriction)
+ */
+router.get('/username-change-status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+
+        if (!clerkUserId) {
+            res.status(401).json({
+                status: 'ERROR',
+                message: 'Unauthorized',
+                code: 'E002',
+            });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { lastUsernameChange: true }
+        });
+
+        if (!user) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'User not found',
+                code: 'E004',
+            });
+            return;
+        }
+
+        const now = new Date();
+        const lastChange = user.lastUsernameChange;
+        
+        // If never changed, allow change
+        if (!lastChange) {
+            res.json({
+                status: 'SUCCESS',
+                data: {
+                    canChange: true,
+                    lastChange: null,
+                    nextAllowedChange: null
+                }
+            });
+            return;
+        }
+
+        // Check if 15 days have passed
+        const daysSinceLastChange = Math.floor((now.getTime() - lastChange.getTime()) / (1000 * 60 * 60 * 24));
+        const canChange = daysSinceLastChange >= 15;
+        
+        const nextAllowedChange = new Date(lastChange.getTime() + (15 * 24 * 60 * 60 * 1000));
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                canChange,
+                lastChange: lastChange.toISOString(),
+                nextAllowedChange: nextAllowedChange.toISOString(),
+                daysRemaining: canChange ? 0 : 15 - daysSinceLastChange
+            }
+        });
+
+    } catch (error) {
+        logger.error('[/clerk/username-change-status] Error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: 'Internal server error',
+            code: 'E010',
         });
     }
 });
