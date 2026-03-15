@@ -31,6 +31,9 @@ export const ar = {
     loggingIn: 'جاري تسجيل الدخول...',
     signingUp: 'جاري التسجيل...',
     errorOccurred: 'حدث خطأ',
+    days: 'أيام',
+    hours: 'ساعات',
+    and: 'و',
   },
 
   home: {
@@ -529,6 +532,8 @@ export const ar = {
     myAchievements: 'إنجازاتي',
     interactions: 'التفاعلات',
     activity: 'النشاط',
+    saved: 'المحفوظة',
+    analytics: 'التحليلات',
 
     // Actions
     edit: 'تعديل',
@@ -596,6 +601,39 @@ export const ar = {
 
     // Social Links
     addSocialLinks: 'أضف روابط السوشيال ميديا',
+    socialLinks: 'روابط التواصل الاجتماعي',
+    instagram: 'إنستغرام',
+    twitter: 'تويتر',
+    tiktok: 'تيك توك',
+    youtube: 'يوتيوب',
+    facebook: 'فيسبوك',
+    snapchat: 'سناب شات',
+    linkedin: 'لينكد إن',
+    website: 'الموقع الإلكتروني',
+    editSocialLinks: 'تعديل روابط التواصل',
+    saveSocialLinks: 'حفظ الروابط',
+
+    // Profile Card
+    age: 'العمر',
+    height: 'الطول',
+    weight: 'الوزن',
+    foot: 'القدم',
+    position: 'المركز',
+    country: 'الدولة',
+    club: 'النادي',
+    brand: 'العلامة التجارية',
+    selectCountry: 'اختر الدولة',
+    selectPosition: 'اختر المركز',
+    selectClub: 'اختر النادي',
+    selectBrand: 'اختر العلامة التجارية',
+    editStats: 'تعديل الإحصائيات',
+    
+    // Action Buttons
+    shareQRCode: 'مشاركة رمز QR',
+    shareProfileLink: 'مشاركة رابط البروفايل',
+    uploadVideoAction: 'رفع فيديو جديد',
+    cooldownActive: 'يمكنك رفع فيديو كل 24 ساعة',
+    cooldownRemaining: 'متبقي {time} لرفع فيديو جديد',
 
     // Block & Report
     blockUser: 'حظر المستخدم',
@@ -609,6 +647,53 @@ export const ar = {
     additionalInfo: 'تفاصيل إضافية (اختياري)',
     sendReport: 'إرسال البلاغ',
     reportSent: 'تم إرسال البلاغ بنجاح. سنراجعه قريباً.',
+
+    // Error Messages & Alerts
+    error: 'خطأ',
+    success: 'تم',
+    loading: 'جاري التحميل',
+    userDataNotAvailable: 'بيانات المستخدم غير متوفرة',
+    pleaseLoginAgain: 'يرجى تسجيل الدخول مرة أخرى',
+    profileLoadFailed: 'فشل في تحميل البروفايل. يرجى المحاولة مرة أخرى',
+    serverDown: 'الخادم متوقف حالياً. جاري المحاولة...',
+    checkConnection: 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى',
+    retryFailed: 'فشلت إعادة المحاولة',
+    reloadingData: 'يتم إعادة تحميل البيانات...',
+
+    // Cover Image
+    coverImage: 'صورة الغلاف',
+    viewImage: 'عرض الصورة',
+    changeImage: 'تغيير الصورة',
+    cancel: 'إلغاء',
+    whatToDo: 'ماذا تريد أن تفعل؟',
+    waitABit: '⏳ انتظر قليلاً',
+    canChangeCoverAfter: 'يمكنك تغيير صورة الغلاف بعد {time}',
+    canChangeAvatarAfter: 'يمكنك تغيير صورة البروفايل بعد {time}',
+    canUploadVideoAfter: 'يمكنك رفع فيديو جديد بعد {time}',
+    okay: 'حسناً',
+    noValidImageSelected: 'لم يتم اختيار صورة صحيحة',
+    coverUploadSuccess: 'تم رفع صورة الغلاف بنجاح 🖼️',
+    coverUploadFailed: 'فشل في رفع صورة الغلاف',
+    uploadError: 'حدث خطأ أثناء الرفع',
+    avatarUploadSuccess: 'تم رفع صورة البروفايل بنجاح 📸',
+    avatarUploadFailed: 'فشل في رفع الصورة',
+
+    // Video Upload
+    loadingUploadInfo: 'جاري تحميل معلومات الرفع، يرجى المحاولة مرة أخرى',
+    uploadingInBackground: 'يتم رفع الفيديو في الخلفية...',
+    videoUploadSuccess: 'تم رفع الفيديو بنجاح! 🚀',
+    videoUploadFailed: 'فشل في رفع الفيديو',
+    videoUploadError: 'حدث خطأ أثناء رفع الفيديو',
+
+    // Video Management
+    deleteVideo: 'حذف الفيديو',
+    confirmDeleteVideo: 'هل أنت متأكد من حذف هذا الفيديو؟',
+    delete: 'حذف',
+
+    // Profile Loading States
+    profileLoadError: 'فشل في تحميل البروفايل',
+    retryButton: 'إعادة المحاولة',
+    logoutButton: 'تسجيل الخروج',
   },
 
   settings: {

@@ -313,7 +313,7 @@ export default function NotificationsScreen() {
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearchQuery(searchQuery);
-        }, 300);
+        }, 500); // Increased debounce for better performance
         return () => clearTimeout(timer);
     }, [searchQuery]);
     

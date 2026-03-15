@@ -3,6 +3,7 @@ import { requestDeduplicator } from '../../services/requestDeduplicator';
 import { logger } from './logger';
 import { safeJsonParse } from '../../utils/safeJsonParse';
 import { EnhancedApiClient } from '../../utils/enhancedNetworkService';
+import { monitorSearchPerformance } from '../../utils/searchPerformanceMonitor';
 
 const API_URL = getApiUrl();
 
@@ -137,7 +138,7 @@ export class AuthService {
    * Get trending hashtags
    * @returns Promise<string[]> Array of trending hashtag strings
    */
-  static getTrendingHashtags: () => Promise<string[]>;
+  static getTrendingHashtags: () => Promise<any[]>;
   
   /**
      * Check if API is reachable
@@ -495,33 +496,36 @@ export class AuthService {
     /**
      * Search users by username or displayName
      */
-    static async searchUsers(
-        token: string,
-        query: string,
-        limit: number = 10
-    ): Promise<SearchUserResult[]> {
-        try {
-            const response = await fetch(
-                `${API_URL}/clerk/search?q=${encodeURIComponent(query)}&limit=${limit}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            );
+    static searchUsers = monitorSearchPerformance(
+        '/clerk/search',
+        async (
+            token: string,
+            query: string,
+            limit: number = 10
+        ): Promise<SearchUserResult[]> => {
+            try {
+                const response = await fetch(
+                    `${API_URL}/clerk/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                        },
+                    }
+                );
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return data.data.users || [];
+                const data = await response.json();
+                if (data.status === 'SUCCESS') {
+                    return data.data.users || [];
+                }
+                return [];
+            } catch (error) {
+                console.error('Error searching users:', error);
+                return [];
             }
-            return [];
-        } catch (error) {
-            console.error('Error searching users:', error);
-            return [];
         }
-    }
+    );
 
     /**
      * Get public user profile by username
@@ -1241,57 +1245,63 @@ export class ReelsService {
     /**
      * Search reels/videos by caption, hashtags, or username
      */
-    static async searchReels(
-        token: string,
-        query: string,
-        limit: number = 10,
-        type: 'all' | 'reels' | 'hashtags' = 'all'
-    ): Promise<{ reels: any[]; hashtags: any[] }> {
-        try {
-            const response = await fetch(
-                `${API_URL}/reels/search?q=${encodeURIComponent(query)}&limit=${limit}&type=${type}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            );
+    static searchReels = monitorSearchPerformance(
+        '/reels/search',
+        async (
+            token: string,
+            query: string,
+            limit: number = 10,
+            type: 'all' | 'reels' | 'hashtags' = 'all'
+        ): Promise<{ reels: any[]; hashtags: any[] }> => {
+            try {
+                const response = await fetch(
+                    `${API_URL}/reels/search?q=${encodeURIComponent(query)}&limit=${limit}&type=${type}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                        },
+                    }
+                );
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return data.data || { reels: [], hashtags: [] };
+                const data = await response.json();
+                if (data.status === 'SUCCESS') {
+                    return data.data || { reels: [], hashtags: [] };
+                }
+                return { reels: [], hashtags: [] };
+            } catch (error) {
+                console.error('Error searching reels:', error);
+                return { reels: [], hashtags: [] };
             }
-            return { reels: [], hashtags: [] };
-        } catch (error) {
-            console.error('Error searching reels:', error);
-            return { reels: [], hashtags: [] };
         }
-    }
+    );
 
     /**
      * Get trending hashtags (no auth required)
      */
-    static async getTrendingHashtags(): Promise<any[]> {
-        try {
-            const response = await fetch(`${API_URL}/reels/trending-hashtags`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });
+    static getTrendingHashtags = monitorSearchPerformance(
+        '/reels/trending-hashtags',
+        async (): Promise<any[]> => {
+            try {
+                const response = await fetch(`${API_URL}/reels/trending-hashtags`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
 
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return data.data.hashtags || [];
+                const data = await response.json();
+                if (data.status === 'SUCCESS') {
+                    return data.data.hashtags || [];
+                }
+                return [];
+            } catch (error) {
+                console.error('Error getting trending hashtags:', error);
+                return [];
             }
-            return [];
-        } catch (error) {
-            console.error('Error getting trending hashtags:', error);
-            return [];
         }
-    }
+    );
 
     /**
      * Delete a comment (own comments only)
@@ -1959,6 +1969,89 @@ export class NotificationService {
             console.error('Error getting unread count:', error);
             return 0;
         }
+    }
+    /**
+     * Update user profile with comprehensive field support
+     */
+    static async updateUserProfile(
+        token: string,
+        updates: {
+            username?: string;
+            displayName?: string;
+            bio?: string;
+            position?: string;
+            countryFlag?: string;
+            age?: number;
+            height?: number;
+            weight?: number;
+            preferredFoot?: string;
+            favoriteTeam?: string;
+            favoriteClub?: string;
+            favoriteBrand?: string;
+            socialLinks?: {
+                instagram?: string;
+                twitter?: string;
+                tiktok?: string;
+                youtube?: string;
+            };
+        }
+    ): Promise<AuthResponse> {
+        try {
+            logger.debug('🔄 Updating user profile with comprehensive data...');
+
+            // Determine which endpoint to use based on update type
+            let endpoint = `${API_URL}/clerk/profile`;
+            let body = { ...updates };
+
+            // If updating FIFA card fields, use card-profile endpoint
+            const cardFields = ['position', 'countryFlag', 'age', 'height', 'weight', 'preferredFoot'];
+            const hasCardFields = cardFields.some(field => updates.hasOwnProperty(field));
+            
+            if (hasCardFields) {
+                endpoint = `${API_URL}/clerk/card-profile`;
+            }
+
+            // If updating social links, merge with existing data
+            if (updates.socialLinks) {
+                body = {
+                    ...updates,
+                    ...updates.socialLinks // Flatten social links
+                };
+                delete body.socialLinks;
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+
+            const data: AuthResponse = await response.json();
+
+            if (data.status === 'SUCCESS') {
+                logger.debug('✅ Profile updated successfully');
+                return data;
+            } else {
+                console.error('❌ Failed to update profile:', data.message);
+                return data;
+            }
+        } catch (error: any) {
+            console.error('❌ Error updating profile:', error);
+            return {
+                status: 'ERROR',
+                message: error.message || 'Network error'
+            };
+        }
+    }
+
+    /**
+     * Get API URL for external use
+     */
+    static getApiUrl(): string {
+        return API_URL;
     }
 }
 

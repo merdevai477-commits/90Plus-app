@@ -41,6 +41,17 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Cache for search results (5 minutes TTL)
 const searchCache = new Map<string, { results: any; timestamp: number }>();
 const SEARCH_CACHE_TTL = 5 * 60 * 1000;
+const SEARCH_TIMEOUT = 10000; // 10 seconds timeout for search operations
+
+// Clean up expired cache entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of searchCache.entries()) {
+    if (now - value.timestamp > SEARCH_CACHE_TTL) {
+      searchCache.delete(key);
+    }
+  }
+}, 60000); // Clean every minute
 
 // Recent searches storage key
 const RECENT_SEARCHES_KEY = '@search_recent_searches';
@@ -217,7 +228,12 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
 
       if (tab === 'all' || tab === 'users') {
         promises.push(
-          AuthService.searchUsers(token, query, 10).catch(() => [])
+          Promise.race([
+            AuthService.searchUsers(token, query, 10).catch(() => []),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('User search timeout')), SEARCH_TIMEOUT)
+            )
+          ])
         );
       } else {
         promises.push(Promise.resolve([]));
@@ -226,7 +242,12 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
       if (tab === 'all' || tab === 'reels' || tab === 'hashtags') {
         const searchType = tab === 'hashtags' ? 'hashtags' : tab === 'reels' ? 'reels' : 'all';
         promises.push(
-          ReelsService.searchReels(token, query, 10, searchType).catch(() => ({ reels: [], hashtags: [] }))
+          Promise.race([
+            ReelsService.searchReels(token, query, 10, searchType).catch(() => ({ reels: [], hashtags: [] })),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Reels search timeout')), SEARCH_TIMEOUT)
+            )
+          ])
         );
       } else {
         promises.push(Promise.resolve({ reels: [], hashtags: [] }));
@@ -285,8 +306,14 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-      console.error('Search error:', error);
+        console.error('Search error:', error);
         setIsSearching(false);
+        
+        // Show user-friendly error message
+        if (error.message.includes('timeout') || error.message.includes('network')) {
+          // Could add a toast notification here
+          console.warn('Search timeout - please check your connection');
+        }
       }
     }
   }, [getToken]); // Removed saveToRecentSearches to prevent loop
@@ -314,7 +341,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
       if (performSearchRef.current) {
         performSearchRef.current(searchQuery, activeTab);
       }
-    }, 150); // Faster debounce for better UX
+    }, 300); // Slightly slower debounce for better UX and reduced API calls
 
     return () => {
       clearTimeout(timeoutId);

@@ -40,6 +40,7 @@ import ProfileEditModal from '../../components/profile/ProfileEditModal';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import QRCodeModal from '../../components/profile/QRCodeModal';
+import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOptimisticProfile';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { Club } from '../../data/clubs';
 
@@ -215,6 +216,17 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('videos');
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
+  
+  // Optimistic Profile Updates
+  const { 
+    updateUsername, 
+    updateDisplayName, 
+    updateBio, 
+    updateFIFACard, 
+    updateSocialLinks, 
+    updateFavorites,
+    isUpdating: isOptimisticUpdating 
+  } = useProfileFieldUpdate();
 
   // Performance: Memoize these to prevent re-creation
   const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
@@ -295,7 +307,7 @@ export default function ProfileScreen() {
         logger.error('Profile loading timeout - forcing refresh');
         refreshCache(true).catch(err => {
           console.error('[ProfileScreen] ❌ Refresh failed:', err);
-          toast.showError('خطأ', 'فشل في تحميل البروفايل. يرجى المحاولة مرة أخرى');
+          toast.showError(t.profile.error, t.profile.profileLoadFailed);
         });
       }, 15000);
 
@@ -389,12 +401,12 @@ export default function ProfileScreen() {
   // Helper function to validate and get token
   const getValidatedToken = async (): Promise<string | null> => {
     if (!userData) {
-      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
+      toast.showError(t.profile.error, t.profile.userDataNotAvailable);
       return null;
     }
     const token = await getToken();
     if (!token) {
-      toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
+      toast.showError(t.profile.error, t.profile.pleaseLoginAgain);
       return null;
     }
     return token;
@@ -590,7 +602,7 @@ export default function ProfileScreen() {
 
   // Optimization: Memoize cover press handler
   const handleCoverPress = useCallback(() => {
-    const options = ['عرض الصورة', 'تغيير الصورة', 'إلغاء'];
+    const options = [t.profile.viewImage, t.profile.changeImage, t.profile.cancel];
     const cancelButtonIndex = 2;
 
     const handlePress = (buttonIndex: number) => {
@@ -608,20 +620,20 @@ export default function ProfileScreen() {
       );
     } else {
       Alert.alert(
-        'صورة الغلاف',
-        'ماذا تريد أن تفعل؟',
+        t.profile.coverImage,
+        t.profile.whatToDo,
         [
-          { text: 'عرض الصورة', onPress: () => handlePress(0) },
-          { text: 'تغيير الصورة', onPress: () => handlePress(1) },
-          { text: 'إلغاء', style: 'cancel' },
+          { text: t.profile.viewImage, onPress: () => handlePress(0) },
+          { text: t.profile.changeImage, onPress: () => handlePress(1) },
+          { text: t.profile.cancel, style: 'cancel' },
         ]
       );
     }
-  }, []);
+  }, [t]);
 
   const handleCoverUpload = async () => {
     if (!userData) {
-      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
+      toast.showError(t.profile.error, t.profile.userDataNotAvailable);
       return;
     }
 
@@ -630,12 +642,12 @@ export default function ProfileScreen() {
 
       const days = cooldowns.cover.daysRemaining;
       const hours = cooldowns.cover.hoursRemaining;
-      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
+      const timeText = days > 0 ? `${days} ${t.common.days} ${t.common.and} ${hours} ${t.common.hours}` : `${hours} ${t.common.hours}`;
 
       Alert.alert(
-        '⏳ انتظر قليلاً',
-        `يمكنك تغيير صورة الغلاف بعد ${timeText}`,
-        [{ text: 'حسناً', style: 'default' }]
+        t.profile.waitABit,
+        t.profile.canChangeCoverAfter.replace('{time}', timeText),
+        [{ text: t.profile.okay, style: 'default' }]
       );
       return;
     }
@@ -654,7 +666,7 @@ export default function ProfileScreen() {
 
       const imageUri = result.assets[0]?.uri;
       if (!imageUri) {
-        toast.showError('خطأ', 'لم يتم اختيار صورة صحيحة');
+        toast.showError(t.profile.error, t.profile.noValidImageSelected);
         return;
       }
 
@@ -678,7 +690,7 @@ export default function ProfileScreen() {
       const token = await getToken();
       if (!token) {
         setCoverImage(originalCover || null);
-        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
+        toast.showError(t.profile.error, t.profile.pleaseLoginAgain);
         return;
       }
 
@@ -690,20 +702,20 @@ export default function ProfileScreen() {
         globalState.setLocalCover(newCoverUrl);
         await updateCachedUserData({ coverImage: newCoverUrl });
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        toast.showSuccess('تم', 'تم رفع صورة الغلاف بنجاح 🖼️');
+        toast.showSuccess(t.profile.success, t.profile.coverUploadSuccess);
       } else {
         setCoverImage(originalCover || null);
-        toast.showError('خطأ', uploadResult.error || 'فشل في رفع صورة الغلاف');
+        toast.showError(t.profile.error, uploadResult.error || t.profile.coverUploadFailed);
       }
     } catch (error: any) {
       logger.error('Cover upload error:', error);
       setCoverImage(userData?.coverImage || null);
-      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
+      toast.showError(t.profile.error, error.message || t.profile.uploadError);
     }
   };
   const handleImageUpload = async () => {
     if (!userData) {
-      toast.showError('خطأ', 'بيانات المستخدم غير متوفرة');
+      toast.showError(t.profile.error, t.profile.userDataNotAvailable);
       return;
     }
 
@@ -712,12 +724,12 @@ export default function ProfileScreen() {
 
       const days = cooldowns.avatar.daysRemaining;
       const hours = cooldowns.avatar.hoursRemaining;
-      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
+      const timeText = days > 0 ? `${days} ${t.common.days} ${t.common.and} ${hours} ${t.common.hours}` : `${hours} ${t.common.hours}`;
 
       Alert.alert(
-        '⏳ انتظر قليلاً',
-        `يمكنك تغيير صورة البروفايل بعد ${timeText}`,
-        [{ text: 'حسناً', style: 'default' }]
+        t.profile.waitABit,
+        `${t.profile.canChangeAvatarAfter.replace('{time}', timeText)}`,
+        [{ text: t.profile.okay, style: 'default' }]
       );
       return;
     }
@@ -736,7 +748,7 @@ export default function ProfileScreen() {
 
       const imageUri = result.assets[0]?.uri;
       if (!imageUri) {
-        toast.showError('خطأ', 'لم يتم اختيار صورة صحيحة');
+        toast.showError(t.profile.error, t.profile.noValidImageSelected);
         return;
       }
 
@@ -762,7 +774,7 @@ export default function ProfileScreen() {
       if (!token) {
         setLocalImage(originalAvatar || null);
         setIsAvatarUploading(false);
-        toast.showError('خطأ', 'يرجى تسجيل الدخول مرة أخرى');
+        toast.showError(t.profile.error, t.profile.pleaseLoginAgain);
         return;
       }
 
@@ -779,15 +791,15 @@ export default function ProfileScreen() {
 
         await updateCachedUserData({ avatar: newAvatarUrl });
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        toast.showSuccess('تم', 'تم رفع صورة البروفايل بنجاح 📸');
+        toast.showSuccess(t.profile.success, t.profile.avatarUploadSuccess);
       } else {
         setLocalImage(originalAvatar || null);
-        toast.showError('خطأ', uploadResult.error || 'فشل في رفع الصورة');
+        toast.showError(t.profile.error, uploadResult.error || t.profile.avatarUploadFailed);
       }
     } catch (error: any) {
       logger.error('Avatar upload error:', error);
       setLocalImage(userData?.avatar || null);
-      toast.showError('خطأ', error.message || 'حدث خطأ أثناء الرفع');
+      toast.showError(t.profile.error, error.message || t.profile.uploadError);
     } finally {
       setIsAvatarUploading(false);
     }
@@ -797,7 +809,7 @@ export default function ProfileScreen() {
   const handleUploadVideo = async (newVideo: any) => {
     if (!cooldowns) {
       await refreshCache(false);
-      toast.showError('خطأ', 'جاري تحميل معلومات الرفع، يرجى المحاولة مرة أخرى');
+      toast.showError(t.profile.error, t.profile.loadingUploadInfo);
       return;
     }
 
@@ -806,12 +818,12 @@ export default function ProfileScreen() {
 
       const days = cooldowns.reelUpload.daysRemaining;
       const hours = cooldowns.reelUpload.hoursRemaining;
-      const timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة`;
+      const timeText = days > 0 ? `${days} ${t.common.days} ${t.common.and} ${hours} ${t.common.hours}` : `${hours} ${t.common.hours}`;
 
       Alert.alert(
-        '⏳ انتظر قليلاً',
-        `يمكنك رفع فيديو جديد بعد ${timeText}`,
-        [{ text: 'حسناً', style: 'default' }]
+        t.profile.waitABit,
+        t.profile.canUploadVideoAfter.replace('{time}', timeText),
+        [{ text: t.profile.okay, style: 'default' }]
       );
       return;
     }
@@ -834,7 +846,7 @@ export default function ProfileScreen() {
     };
     addVideo(tempVideo);
 
-    toast.showInfo('جاري الرفع', 'يتم رفع الفيديو في الخلفية...');
+    toast.showInfo(t.profile.loading, t.profile.uploadingInBackground);
 
     try {
       const token = await getToken();
@@ -858,7 +870,7 @@ export default function ProfileScreen() {
         );
 
         if (uploadResult.success) {
-          toast.showSuccess('تم', 'تم رفع الفيديو بنجاح! 🚀');
+          toast.showSuccess(t.profile.success, t.profile.videoUploadSuccess);
           removeVideo(newVideo.id);
           await refreshCache(true);
           if (userData?.username) {
@@ -866,13 +878,13 @@ export default function ProfileScreen() {
           }
         } else {
           removeVideo(newVideo.id);
-          toast.showError('خطأ', uploadResult.error || 'فشل في رفع الفيديو');
+          toast.showError(t.profile.error, uploadResult.error || t.profile.videoUploadFailed);
         }
       }
     } catch (error: any) {
       logger.error('Video upload error:', error);
       removeVideo(newVideo.id);
-      toast.showError('خطأ', error.message || 'حدث خطأ أثناء رفع الفيديو');
+      toast.showError(t.profile.error, error.message || t.profile.videoUploadError);
     }
   };
 
@@ -957,10 +969,10 @@ export default function ProfileScreen() {
         <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
         <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
         <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
-          {cacheError || 'فشل في تحميل البروفايل'}
+          {cacheError || t.profile.profileLoadFailed}
         </Text>
         <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
-          {cacheError?.includes('المحفوظة') ? 'الخادم متوقف حالياً. جاري المحاولة...' : 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى'}
+          {cacheError?.includes('المحفوظة') ? t.profile.serverDown : t.profile.checkConnection}
         </Text>
         <View style={{ marginTop: 24, paddingHorizontal: 40, width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' }}>
           <TouchableOpacity 
@@ -976,15 +988,15 @@ export default function ProfileScreen() {
               console.log('[ProfileScreen] 🔄 Manual retry triggered');
               try {
                 await refreshCache(true);
-                toast.showInfo('جاري التحميل', 'يتم إعادة تحميل البيانات...');
+                toast.showInfo(t.profile.loading, t.profile.reloadingData);
               } catch (err) {
                 console.error('[ProfileScreen] ❌ Manual retry failed:', err);
-                toast.showError('خطأ', 'فشلت إعادة المحاولة');
+                toast.showError(t.profile.error, t.profile.retryFailed);
               }
             }}
           >
             <Text style={{ color: ProfileTheme.colors.deepBlack, fontWeight: 'bold', fontSize: 16 }}>
-              إعادة المحاولة
+              {t.profile.retryButton}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -1004,7 +1016,7 @@ export default function ProfileScreen() {
             }}
           >
             <Text style={{ color: ProfileTheme.colors.textPrimary, fontWeight: 'bold', fontSize: 16 }}>
-              تسجيل الخروج
+              {t.profile.logoutButton}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1100,7 +1112,7 @@ export default function ProfileScreen() {
           onEditPress={handleEditProfile}
         />
 
-        {/* Badges Display - الميداليات */}
+        {/* Badges Display */}
         {userData?.id && (
           <View style={styles.badgesContainer}>
             <BadgesDisplay
@@ -1158,12 +1170,12 @@ export default function ProfileScreen() {
             onVideoLongPress={() => setIsDeleteMode(prev => !prev)}
             onDeleteVideo={(videoId) => {
               Alert.alert(
-                'حذف الفيديو',
-                'هل أنت متأكد من حذف هذا الفيديو؟',
+                t.profile.deleteVideo,
+                t.profile.confirmDeleteVideo,
                 [
-                  { text: 'إلغاء', style: 'cancel' },
+                  { text: t.profile.cancel, style: 'cancel' },
                   {
-                    text: 'حذف',
+                    text: t.profile.delete,
                     style: 'destructive',
                     onPress: () => removeVideo(videoId)
                   }
@@ -1263,10 +1275,14 @@ export default function ProfileScreen() {
       <CountryPickerModal
         visible={isCountryModalVisible}
         onClose={() => setIsCountryModalVisible(false)}
-        onSelect={(country) => {
+        onSelect={async (country) => {
+          // Optimistic update - UI changes immediately
           setCountryFlag(country.flag);
           setLocation(country.name);
           setIsCountryModalVisible(false);
+          
+          // Send to backend with optimistic updates
+          await updateFIFACard({ countryFlag: country.flag });
         }}
         selectedCountryCode={countryFlag}
       />
@@ -1274,9 +1290,13 @@ export default function ProfileScreen() {
       <PositionPickerModal
         visible={isPositionModalVisible}
         onClose={() => setIsPositionModalVisible(false)}
-        onSelect={(pos) => {
+        onSelect={async (pos) => {
+          // Optimistic update - UI changes immediately
           setPosition(pos);
           setIsPositionModalVisible(false);
+          
+          // Send to backend with optimistic updates
+          await updateFIFACard({ position: pos });
         }}
         selectedPosition={position}
       />
@@ -1284,27 +1304,46 @@ export default function ProfileScreen() {
       <ClubPickerModal
         visible={isClubModalVisible}
         onClose={() => setIsClubModalVisible(false)}
-        onSelect={(selectedClub) => {
+        onSelect={async (selectedClub) => {
+          // Optimistic update - UI changes immediately
           setClub(selectedClub.logo);
+          updateCachedUserData({ clubLogo: selectedClub.logo });
           setIsClubModalVisible(false);
+          
+          // Send to backend with optimistic updates
+          await updateFavorites({ favoriteClub: selectedClub.name });
         }}
       />
 
       <BrandPickerModal
         visible={isBrandModalVisible}
         onClose={() => setIsBrandModalVisible(false)}
-        onSelect={(selectedBrand) => {
+        onSelect={async (selectedBrand) => {
+          // Optimistic update - UI changes immediately
           setBrand(selectedBrand.logo);
+          updateCachedUserData({ brandLogo: selectedBrand.logo });
           setIsBrandModalVisible(false);
+          
+          // Send to backend with optimistic updates
+          await updateFavorites({ favoriteBrand: selectedBrand.name });
         }}
       />
 
       <StatsEditModal
         visible={isStatsModalVisible}
         onClose={() => setIsStatsModalVisible(false)}
-        onSave={(newStats) => {
+        onSave={async (newStats) => {
+          // Optimistic update - UI changes immediately
           setStats(newStats);
           setIsStatsModalVisible(false);
+          
+          // Send to backend with optimistic updates
+          await updateFIFACard({
+            age: parseInt(newStats.age) || undefined,
+            height: parseInt(newStats.height) || undefined,
+            weight: parseInt(newStats.weight) || undefined,
+            preferredFoot: newStats.foot === 'R' ? 'Right' : newStats.foot === 'L' ? 'Left' : newStats.foot === 'B' ? 'Both' : undefined
+          });
         }}
         initialStats={stats}
       />
@@ -1319,9 +1358,59 @@ export default function ProfileScreen() {
           socials: [],
           lastUsernameChange: userData?.lastUsernameChange || undefined
         }}
-        onSave={(newData) => {
-          // Handle save
+        onSave={async (newData) => {
+          // Close modal immediately
           setIsEditProfileModalVisible(false);
+          
+          // Prepare updates object
+          const updates: any = {};
+          
+          if (newData.name !== userData?.displayName) {
+            updates.displayName = newData.name;
+          }
+          
+          if (newData.username !== userData?.username) {
+            updates.username = newData.username;
+          }
+          
+          if (newData.bio !== userData?.bio) {
+            updates.bio = newData.bio;
+          }
+          
+          // Handle social links if they exist
+          if (newData.socials && newData.socials.length > 0) {
+            const socialLinks: any = {};
+            newData.socials.forEach((social: any) => {
+              if (social.platform && social.url) {
+                socialLinks[social.platform.toLowerCase()] = social.url;
+              }
+            });
+            if (Object.keys(socialLinks).length > 0) {
+              updates.socialLinks = socialLinks;
+            }
+          }
+          
+          // Send updates if there are any changes
+          if (Object.keys(updates).length > 0) {
+            if (updates.username) {
+              await updateUsername(updates.username);
+              delete updates.username; // Remove from batch update
+            }
+            
+            if (updates.displayName) {
+              await updateDisplayName(updates.displayName);
+              delete updates.displayName;
+            }
+            
+            if (updates.bio) {
+              await updateBio(updates.bio);
+              delete updates.bio;
+            }
+            
+            if (updates.socialLinks) {
+              await updateSocialLinks(updates.socialLinks);
+            }
+          }
         }}
         usernameCooldown={cooldowns?.username}
       />

@@ -9,34 +9,19 @@ import { logger } from '../utils/logger';
 
 // Brand logo URLs by API ID (matching the apiId in brands.ts)
 const BRAND_LOGOS_BY_API_ID: Record<number, string> = {
-    1: 'https://logos-world.net/wp-content/uploads/2020/04/Nike-Logo.png', // Nike
-    2: 'https://logos-world.net/wp-content/uploads/2020/04/Adidas-Logo.png', // Adidas
-    3: 'https://logos-world.net/wp-content/uploads/2020/04/Puma-Logo.png', // Puma
-    4: 'https://logos-world.net/wp-content/uploads/2020/04/Under-Armour-Logo.png', // Under Armour
-    5: 'https://logos-world.net/wp-content/uploads/2020/04/New-Balance-Logo.png', // New Balance
-    6: 'https://logos-world.net/wp-content/uploads/2020/04/Reebok-Logo.png', // Reebok
-    7: 'https://logos-world.net/wp-content/uploads/2020/04/Umbro-Logo.png', // Umbro
-    8: 'https://logos-world.net/wp-content/uploads/2020/04/Kappa-Logo.png', // Kappa
-    9: 'https://logos-world.net/wp-content/uploads/2020/04/Joma-Logo.png', // Joma
-    10: 'https://logos-world.net/wp-content/uploads/2020/04/Hummel-Logo.png', // Hummel
-    11: 'https://logos-world.net/wp-content/uploads/2020/04/Mizuno-Logo.png', // Mizuno
-    12: 'https://logos-world.net/wp-content/uploads/2020/04/Diadora-Logo.png', // Diadora
+    1: 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg', // Nike
+    2: 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg', // Adidas
+    3: 'https://upload.wikimedia.org/wikipedia/en/d/da/Puma_complete_logo.svg', // Puma
+    4: 'https://logos-world.net/wp-content/uploads/2020/09/New-Balance-Logo.png', // New Balance
 };
 
-// Brand logo URLs by brand name (for backward compatibility)
+// Brand logo URLs by brand name (using reliable CDN sources)
 const BRAND_LOGOS_BY_NAME: Record<string, string> = {
-    'Nike': 'https://logos-world.net/wp-content/uploads/2020/04/Nike-Logo.png',
-    'Adidas': 'https://logos-world.net/wp-content/uploads/2020/04/Adidas-Logo.png',
-    'Puma': 'https://logos-world.net/wp-content/uploads/2020/04/Puma-Logo.png',
-    'Under Armour': 'https://logos-world.net/wp-content/uploads/2020/04/Under-Armour-Logo.png',
-    'New Balance': 'https://logos-world.net/wp-content/uploads/2020/04/New-Balance-Logo.png',
-    'Reebok': 'https://logos-world.net/wp-content/uploads/2020/04/Reebok-Logo.png',
-    'Umbro': 'https://logos-world.net/wp-content/uploads/2020/04/Umbro-Logo.png',
-    'Kappa': 'https://logos-world.net/wp-content/uploads/2020/04/Kappa-Logo.png',
-    'Joma': 'https://logos-world.net/wp-content/uploads/2020/04/Joma-Logo.png',
-    'Hummel': 'https://logos-world.net/wp-content/uploads/2020/04/Hummel-Logo.png',
-    'Mizuno': 'https://logos-world.net/wp-content/uploads/2020/04/Mizuno-Logo.png',
-    'Diadora': 'https://logos-world.net/wp-content/uploads/2020/04/Diadora-Logo.png',
+    // ============ SPORTS BRANDS - TOP 4 ONLY ============
+    'Nike': 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg',
+    'Adidas': 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg',
+    'Puma': 'https://upload.wikimedia.org/wikipedia/en/d/da/Puma_complete_logo.svg',
+    'New Balance': 'https://logos-world.net/wp-content/uploads/2020/09/New-Balance-Logo.png',
 };
 
 /**

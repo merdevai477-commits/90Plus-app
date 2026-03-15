@@ -1,10 +1,10 @@
-import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { BRANDS } from '../../data/brands';
+import { BRANDS, getBrandsByCategory, getBrandCategories } from '../../data/brands';
 
 interface BrandPickerModalProps {
     visible: boolean;
@@ -14,6 +14,38 @@ interface BrandPickerModalProps {
 }
 
 export default function BrandPickerModal({ visible, onClose, onSelect, selectedBrandId }: BrandPickerModalProps) {
+    const [selectedCategory, setSelectedCategory] = useState<string>('All');
+    
+    const categories = ['All', ...getBrandCategories()];
+    const filteredBrands = selectedCategory === 'All' 
+        ? BRANDS 
+        : getBrandsByCategory(selectedCategory);
+
+    const renderCategoryTab = (category: string) => (
+        <TouchableOpacity
+            key={category}
+            style={[
+                styles.categoryTab,
+                selectedCategory === category && styles.selectedCategoryTab
+            ]}
+            onPress={() => setSelectedCategory(category)}
+        >
+            <Text style={[
+                styles.categoryText,
+                selectedCategory === category && styles.selectedCategoryText
+            ]}>
+                {category === 'All' ? 'الكل' : 
+                 category === 'Sports' ? 'رياضة' :
+                 category === 'Luxury' ? 'فاخرة' :
+                 category === 'Streetwear' ? 'شارع' :
+                 category === 'Tech' ? 'تقنية' :
+                 category === 'Automotive' ? 'سيارات' :
+                 category === 'Food & Beverage' ? 'طعام وشراب' :
+                 category}
+            </Text>
+        </TouchableOpacity>
+    );
+
     const renderBrandItem = ({ item }: { item: typeof BRANDS[0] }) => {
         const isSelected = selectedBrandId === item.id;
         const hasLogo = item.logo && item.logo.length > 0;
@@ -22,7 +54,7 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
             <TouchableOpacity
                 style={[
                     styles.item,
-                    { backgroundColor: item.color },
+                    { backgroundColor: item.color === '#FFFFFF' || item.color === '#FFF' ? '#2A2A2A' : item.color },
                     isSelected && styles.selectedItem
                 ]}
                 onPress={() => {
@@ -38,7 +70,12 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
                         transition={200}
                     />
                 ) : (
-                    <Text style={styles.brandName}>{item.name}</Text>
+                    <Text style={[
+                        styles.brandName,
+                        { color: item.color === '#000000' || item.color === '#000' ? '#FFF' : '#000' }
+                    ]}>
+                        {item.name}
+                    </Text>
                 )}
                 {isSelected && (
                     <View style={styles.checkmark}>
@@ -67,12 +104,28 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
                         </TouchableOpacity>
                     </View>
 
+                    {/* Category Tabs */}
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.categoryContainer}
+                        contentContainerStyle={styles.categoryContent}
+                    >
+                        {categories.map(renderCategoryTab)}
+                    </ScrollView>
+
+                    {/* Brand Grid */}
                     <FlashList
-                        data={BRANDS}
+                        data={filteredBrands}
                         keyExtractor={(item) => item.id}
                         numColumns={3}
                         contentContainerStyle={styles.listContent}
                         renderItem={renderBrandItem}
+                        ListEmptyComponent={
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>لا توجد علامات تجارية</Text>
+                            </View>
+                        }
                     />
                 </View>
             </View>
@@ -90,7 +143,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#1E1E1E',
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        height: '50%',
+        height: '70%',
         padding: 20,
     },
     header: {
@@ -108,6 +161,34 @@ const styles = StyleSheet.create({
         padding: 4,
         backgroundColor: 'rgba(255,255,255,0.1)',
         borderRadius: 20,
+    },
+    categoryContainer: {
+        marginBottom: 20,
+        maxHeight: 50,
+    },
+    categoryContent: {
+        paddingHorizontal: 5,
+    },
+    categoryTab: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        marginHorizontal: 4,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 20,
+        minWidth: 60,
+        alignItems: 'center',
+    },
+    selectedCategoryTab: {
+        backgroundColor: '#22c55e',
+    },
+    categoryText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    selectedCategoryText: {
+        color: '#FFF',
+        fontWeight: 'bold',
     },
     listContent: {
         paddingBottom: 20,
@@ -147,5 +228,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderRadius: 10,
         padding: 2,
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 40,
+    },
+    emptyText: {
+        color: '#888',
+        fontSize: 16,
     },
 });

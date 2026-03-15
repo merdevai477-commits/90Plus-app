@@ -180,8 +180,6 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                             numColumns={3}
                             contentContainerStyle={styles.listContent}
                             renderItem={renderClubItem}
-                            // @ts-ignore - estimatedItemSize is valid but TypeScript definitions may be outdated
-                            estimatedItemSize={110}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>لا توجد أندية</Text>
