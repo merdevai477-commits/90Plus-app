@@ -90,8 +90,15 @@ export const useMatchEventsMonitor = () => {
     const stopMonitoring = () => {
         if (intervalRef.current) {
             logger.debug('🛑 Stopping match event monitoring...');
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
+            try {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+                logger.debug('✅ Match event monitoring stopped successfully');
+            } catch (error) {
+                logger.error('❌ Error stopping match event monitoring:', error);
+                // Force clear the interval reference
+                intervalRef.current = null;
+            }
         }
     };
 
@@ -116,8 +123,18 @@ export const useMatchEventsMonitor = () => {
 
         // Cleanup on unmount
         return () => {
-            stopMonitoring();
-            subscription.remove();
+            try {
+                stopMonitoring();
+                subscription.remove();
+                logger.debug('✅ Match events monitor cleanup completed');
+            } catch (error) {
+                logger.error('❌ Error during match events monitor cleanup:', error);
+                // Force cleanup
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+            }
         };
     }, []);
 

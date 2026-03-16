@@ -37,7 +37,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LanguagePickerModal from '../../components/common/LanguagePickerModal';
 import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
-import AccountDeletionModal from '../../components/common/AccountDeletionModal';
+import ImprovedAccountDeletionModal from '../../components/common/ImprovedAccountDeletionModal';
 import { AccountDeletionService } from '../../services/accountDeletionService';
 
 const { width } = Dimensions.get('window');
@@ -86,8 +86,20 @@ export default function SettingsScreen() {
   // Safety check for translations
   if (!t || !t.settings) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
-        <ActivityIndicator size="large" color="#22c55e" />
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <View style={styles.loadingContent}>
+          <View style={styles.loadingIconContainer}>
+            <Ionicons name="settings" size={48} color="#22c55e" />
+          </View>
+          <Text style={styles.loadingTitle}>
+            {isRTL ? 'جاري تحميل الإعدادات...' : 'Loading Settings...'}
+          </Text>
+          <Text style={styles.loadingSubtitle}>
+            {isRTL ? 'يرجى الانتظار قليلاً' : 'Please wait a moment'}
+          </Text>
+          <ActivityIndicator size="large" color="#22c55e" style={{ marginTop: 20 }} />
+        </View>
       </View>
     );
   }
@@ -105,6 +117,11 @@ export default function SettingsScreen() {
   const [soundEffects, setSoundEffects] = useState(true);
   const [hapticFeedback, setHapticFeedback] = useState(true);
   const [deletionModalVisible, setDeletionModalVisible] = useState(false);
+
+  // Loading states for better UX
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isChangingLanguage, setIsChangingLanguage] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -260,6 +277,7 @@ export default function SettingsScreen() {
           text: t.settings.logout,
           style: 'destructive',
           onPress: async () => {
+            setIsLoggingOut(true);
             try {
               console.log('🔄 Starting logout process...');
 
@@ -322,6 +340,8 @@ export default function SettingsScreen() {
               console.error('❌ Logout error:', e);
               console.error('Error details:', e.message, e.stack);
               Alert.alert(t.common.error, isRTL ? 'فشل تسجيل الخروج. حاول مرة أخرى.' : 'Logout failed. Please try again.');
+            } finally {
+              setIsLoggingOut(false);
             }
           },
         },
@@ -334,6 +354,7 @@ export default function SettingsScreen() {
   };
 
   const handleConfirmDeletion = async () => {
+    setIsDeletingAccount(true);
     try {
       // Call the deletion service
       await AccountDeletionService.deleteAccount();
@@ -380,6 +401,9 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('Delete account error:', error);
       Alert.alert(t.common.error, isRTL ? 'فشل حذف الحساب' : 'Failed to delete account');
+    } finally {
+      setIsDeletingAccount(false);
+      setDeletionModalVisible(false);
     }
   };
 
@@ -463,17 +487,29 @@ export default function SettingsScreen() {
    * Requirements: 7.1, 7.4
    */
   const handleLanguageChange = async (lang: Language) => {
+    setIsChangingLanguage(true);
     try {
       // Update new i18n system
       await setI18nLanguage(lang);
       // Also update old context for backward compatibility
       await setAppLanguage(lang);
+      
+      // Show success message
+      setTimeout(() => {
+        Alert.alert(
+          t.common.success,
+          isRTL ? 'تم تغيير اللغة بنجاح' : 'Language changed successfully'
+        );
+      }, 500);
+      
       setLanguageModalVisible(false);
     } catch (error) {
       Alert.alert(
         t.common.error,
         t.settings.changeLanguageError
       );
+    } finally {
+      setIsChangingLanguage(false);
     }
   };
 
@@ -537,30 +573,42 @@ export default function SettingsScreen() {
     onPress: () => void,
     icon: string,
     showChevron: boolean = true,
-    danger: boolean = false
+    danger: boolean = false,
+    loading: boolean = false,
+    loadingText?: string
   ) => (
     <TouchableOpacity
-      style={styles.settingItem}
-      onPress={onPress}
-      activeOpacity={0.7}
+      style={[styles.settingItem, loading && styles.settingItemLoading]}
+      onPress={loading ? undefined : onPress}
+      activeOpacity={loading ? 1 : 0.7}
+      disabled={loading}
     >
       <View style={styles.settingLeft}>
         <View style={styles.settingIconContainer}>
-          <Ionicons
-            name={icon as any}
-            size={22}
-            color={danger ? '#ef4444' : '#888'}
-          />
+          {loading ? (
+            <ActivityIndicator size="small" color={danger ? '#ef4444' : '#22c55e'} />
+          ) : (
+            <Ionicons
+              name={icon as any}
+              size={22}
+              color={danger ? '#ef4444' : '#888'}
+            />
+          )}
         </View>
         <View style={styles.settingTextContainer}>
-          <Text style={[styles.settingLabel, danger && styles.dangerText]}>
-            {label}
+          <Text style={[styles.settingLabel, danger && styles.dangerText, loading && styles.loadingLabel]}>
+            {loading && loadingText ? loadingText : label}
           </Text>
           <Text style={styles.settingSubtitle}>{subtitle}</Text>
         </View>
       </View>
-      {showChevron && (
+      {showChevron && !loading && (
         <Ionicons name="chevron-forward" size={20} color="#666" />
+      )}
+      {loading && (
+        <View style={styles.loadingIndicator}>
+          <ActivityIndicator size="small" color="#22c55e" />
+        </View>
       )}
     </TouchableOpacity>
   );
@@ -583,8 +631,18 @@ export default function SettingsScreen() {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
-        <Ionicons name="settings" size={48} color="#22c55e" />
-        <Text style={styles.loadingText}>{t.common.loading}</Text>
+        <View style={styles.loadingContent}>
+          <View style={styles.loadingIconContainer}>
+            <Ionicons name="settings" size={48} color="#22c55e" />
+          </View>
+          <Text style={styles.loadingTitle}>
+            {isRTL ? 'جاري تحميل الإعدادات...' : 'Loading Settings...'}
+          </Text>
+          <Text style={styles.loadingSubtitle}>
+            {isRTL ? 'يرجى الانتظار قليلاً' : 'Please wait a moment'}
+          </Text>
+          <ActivityIndicator size="large" color="#22c55e" style={{ marginTop: 20 }} />
+        </View>
       </View>
     );
   }
@@ -663,7 +721,11 @@ export default function SettingsScreen() {
                 t.settings.language,
                 getLanguageName(currentLanguage),
                 () => setLanguageModalVisible(true),
-                'language-outline'
+                'language-outline',
+                true,
+                false,
+                isChangingLanguage,
+                isRTL ? 'جاري تغيير اللغة...' : 'Changing language...'
               )}
             </View>
           </View>
@@ -707,8 +769,8 @@ export default function SettingsScreen() {
                 'settings-outline'
               )}
               {renderActionItem(
-                isRTL ? 'المستخدمون المحظورون' : 'Blocked Users',
-                isRTL ? 'إدارة المستخدمين المحظورين' : 'Manage blocked users',
+                t.profile.blockedUsers,
+                t.profile.manageBlockedUsers,
                 () => router.push('/settings/blocked-users' as any),
                 'ban-outline'
               )}
@@ -830,7 +892,9 @@ export default function SettingsScreen() {
                 handleLogout,
                 'log-out-outline',
                 false,
-                true
+                true,
+                isLoggingOut,
+                isRTL ? 'جاري تسجيل الخروج...' : 'Logging out...'
               )}
               {renderActionItem(
                 t.settings.deleteAccount,
@@ -838,7 +902,9 @@ export default function SettingsScreen() {
                 handleDeleteAccount,
                 'trash-outline',
                 false,
-                true
+                true,
+                isDeletingAccount,
+                isRTL ? 'جاري حذف الحساب...' : 'Deleting account...'
               )}
             </View>
           </View>
@@ -864,10 +930,11 @@ export default function SettingsScreen() {
       />
 
       {/* Account Deletion Modal */}
-      <AccountDeletionModal
+      <ImprovedAccountDeletionModal
         visible={deletionModalVisible}
         onClose={() => setDeletionModalVisible(false)}
         onConfirm={handleConfirmDeletion}
+        isDeleting={isDeletingAccount}
       />
     </View >
   );
@@ -887,7 +954,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
+  },
+  loadingContent: {
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#22c55e15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#22c55e30',
+  },
+  loadingTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   loadingText: {
     color: '#888',
@@ -980,6 +1074,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
   },
+  settingItemLoading: {
+    opacity: 0.7,
+  },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1003,6 +1100,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 3,
   },
+  loadingLabel: {
+    color: '#22c55e',
+  },
   settingSubtitle: {
     fontSize: 12,
     color: '#666',
@@ -1010,6 +1110,9 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: '#ef4444',
+  },
+  loadingIndicator: {
+    marginLeft: 8,
   },
   infoItem: {
     flexDirection: 'row',

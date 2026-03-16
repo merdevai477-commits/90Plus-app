@@ -30,11 +30,13 @@ import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { BlockService } from '../../services/blockService';
 import { Alert } from 'react-native';
+import { useTranslation } from '../../src/i18n';
 
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { getToken } = useAuth();
   const toast = useToast();
+  const { t } = useTranslation();
   const { reelComments, addComment, toggleCommentLike } = useVideos();
 
   // User data state
@@ -287,15 +289,23 @@ export default function UserProfileScreen() {
   const handleBlockUser = async () => {
     if (!user) return;
 
+    const blockAction = isBlocked ? 'إلغاء الحظر' : 'حظر';
+    const blockTitle = isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم';
+    const blockMessage = isBlocked 
+      ? `هل تريد إلغاء حظر @${user.username}؟\n\nسيتمكن من رؤية محتواك والتفاعل معه مرة أخرى.`
+      : `هل تريد حظر @${user.username}؟\n\nلن يتمكن من رؤية محتواك أو التفاعل معه، وسيتم إلغاء المتابعة تلقائياً.`;
+
     Alert.alert(
-      isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم',
-      isBlocked 
-        ? `هل تريد إلغاء حظر @${user.username}؟`
-        : `هل تريد حظر @${user.username}؟ لن تتمكن من رؤية محتواه ولن يتمكن من التواصل معك.`,
+      blockTitle,
+      blockMessage,
       [
-        { text: 'إلغاء', style: 'cancel' },
+        { 
+          text: 'إلغاء', 
+          style: 'cancel',
+          onPress: () => console.log('Block action cancelled')
+        },
         {
-          text: isBlocked ? 'إلغاء الحظر' : 'حظر',
+          text: blockAction,
           style: isBlocked ? 'default' : 'destructive',
           onPress: async () => {
             setIsBlockLoading(true);
@@ -307,27 +317,33 @@ export default function UserProfileScreen() {
               }
 
               if (isBlocked) {
+                // Unblock user
                 await BlockService.unblockUser(user.id, token);
                 setIsBlocked(false);
-                toast.showSuccess('تم', 'تم إلغاء حظر المستخدم');
+                toast.showSuccess('✅ تم بنجاح', `تم إلغاء حظر @${user.username}`);
               } else {
+                // Block user
                 await BlockService.blockUser(user.id, token);
                 setIsBlocked(true);
+                
                 // Unfollow if following
                 if (user.isFollowing) {
                   await performUnfollow();
                 }
-                toast.showSuccess('تم', 'تم حظر المستخدم بنجاح');
+                
+                toast.showSuccess('✅ تم بنجاح', `تم حظر @${user.username}`);
               }
-            } catch (error) {
+            } catch (error: any) {
               console.error('Block error:', error);
-              toast.showError('خطأ', 'حدث خطأ أثناء العملية');
+              const errorMessage = error?.message || 'حدث خطأ أثناء العملية';
+              toast.showError('خطأ', errorMessage);
             } finally {
               setIsBlockLoading(false);
             }
           },
         },
-      ]
+      ],
+      { cancelable: true }
     );
   };
 
@@ -543,13 +559,20 @@ const formattedVideos = userVideos.map(v => ({
             activeOpacity={0.7}
           >
             {isBlockLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <View style={styles.blockLoadingContainer}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
             ) : (
-              <Ionicons 
-                name={isBlocked ? "checkmark-circle" : "ban"} 
-                size={20} 
-                color={isBlocked ? ProfileTheme.colors.neonGreen : "#ef4444"} 
-              />
+              <View style={styles.blockButtonContent}>
+                <Ionicons 
+                  name={isBlocked ? "checkmark-circle" : "ban"} 
+                  size={20} 
+                  color={isBlocked ? ProfileTheme.colors.neonGreen : "#ef4444"} 
+                />
+                {isBlocked && (
+                  <Text style={styles.blockButtonText}>محظور</Text>
+                )}
+              </View>
             )}
           </TouchableOpacity>
         </View>
@@ -746,6 +769,21 @@ const styles = StyleSheet.create({
   blockedButton: {
     backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderColor: 'rgba(34, 197, 94, 0.3)',
+    width: 80,
+  },
+  blockLoadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blockButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  blockButtonText: {
+    color: ProfileTheme.colors.neonGreen,
+    fontSize: 12,
+    fontWeight: '600',
   },
   followGradient: {
     flexDirection: 'row',
