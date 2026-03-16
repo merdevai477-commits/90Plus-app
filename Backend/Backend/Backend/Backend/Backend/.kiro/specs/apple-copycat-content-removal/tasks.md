@@ -1,0 +1,146 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Fault Condition** - Copyrighted Content Detection
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate copyrighted content exists in the app
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases: team logos, league branding, official names
+  - Test that the app displays copyrighted content (team logos, league names, team names) across all screens
+  - Verify frontend components (MatchCard, HeroSection, leagues screens) render copyrighted logos and names
+  - Verify backend seed data contains official team and league names
+  - Verify database schema and queries return copyrighted content
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves copyrighted content exists)
+  - Document counterexamples found:
+    - Team logos displayed in match cards
+    - Official league names in league screens
+    - Trademarked team names in database
+    - Copyrighted branding in app metadata
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Core Functionality Preservation
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for core functionality:
+    - Live match scores and updates display correctly
+    - Predictions process and award coins correctly
+    - Social features (reels, comments, likes) function properly
+    - Quiz functionality works without issues
+    - Navigation between screens is seamless
+    - External API data fetching works correctly
+    - Search functionality returns results
+    - User profiles display favorite teams
+  - Write property-based tests capturing observed behavior patterns:
+    - Property: Match data fetching returns valid match objects with scores
+    - Property: Prediction submission returns success and updates coin balance
+    - Property: Social interactions (like, comment, share) complete successfully
+    - Property: Quiz questions load and answers are validated correctly
+    - Property: Navigation transitions complete without errors
+    - Property: Search queries return non-empty results for valid inputs
+    - Property: User profile data loads with team preferences
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
+
+- [x] 3. Remove copyrighted content and implement generic alternatives
+
+  - [x] 3.1 Update frontend components to use generic placeholders
+    - Replace team logo images with generic team icons or text-based identifiers in MatchCard component
+    - Replace league logos with generic league identifiers in leagues screens
+    - Update HeroSection to display generic team representations
+    - Remove all references to copyrighted team and league names in UI components
+    - Implement fallback rendering for missing logo assets (show generic placeholder)
+    - Update mockData files to use generic team/league names
+    - _Bug_Condition: isBugCondition(content) where content contains copyrighted logos, official team names, or league branding_
+    - _Expected_Behavior: All UI components display generic, non-copyrighted content (text identifiers, generic icons)_
+    - _Preservation: Core UI functionality and navigation remain unchanged (3.5)_
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.6, 2.1, 2.2, 2.3, 2.4, 2.6_
+
+  - [x] 3.2 Update backend seed data and database content
+    - Replace official team names with generic alternatives in seed.ts
+    - Replace official league names with generic alternatives in seed.ts
+    - Update quiz-questions-seed.ts to remove copyrighted team/league references
+    - Update legends-complete.ts quiz data to use generic names
+    - Remove any hardcoded copyrighted content from backend data files
+    - Run database migration to update existing records with generic names
+    - _Bug_Condition: isBugCondition(data) where data contains official trademarked names_
+    - _Expected_Behavior: Database stores only generic team and league identifiers (2.7)_
+    - _Preservation: Database queries and data retrieval continue to function correctly (3.6)_
+    - _Requirements: 1.3, 1.4, 1.7, 2.3, 2.4, 2.7_
+
+  - [x] 3.3 Update API responses and data transformation layer
+    - Implement content transformation middleware to convert copyrighted names to generic alternatives
+    - Update football.controller.ts to transform external API responses before sending to frontend
+    - Update search-cache.service.ts to cache generic names instead of copyrighted ones
+    - Ensure all API endpoints return generic content
+    - Add mapping layer between external API data (SportMonks) and app data
+    - _Bug_Condition: isBugCondition(apiResponse) where apiResponse contains copyrighted content from external APIs_
+    - _Expected_Behavior: API responses contain only generic identifiers (2.1, 2.2, 2.3, 2.4)_
+    - _Preservation: External API data fetching and transformation continue to work (3.6)_
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 3.4 Update app metadata and configuration
+    - Remove references to third-party sports content from app.json
+    - Update app name, description, and keywords to avoid trademarked terms
+    - Remove copyrighted content from splash screens and app icons if present
+    - Update eas.json build configuration to exclude copyrighted assets
+    - Review and update privacy.html and terms.html to remove unauthorized references
+    - _Bug_Condition: isBugCondition(metadata) where metadata references unauthorized third-party sports content_
+    - _Expected_Behavior: App metadata contains zero references to copyrighted content (2.5)_
+    - _Preservation: App configuration and build process remain functional_
+    - _Requirements: 1.5, 2.5_
+
+  - [x] 3.5 Update services and business logic
+    - Update quizApi.ts to handle generic team/league names
+    - Update websocketClient.ts to transform real-time match data to generic format
+    - Update home.store.ts to store generic team identifiers
+    - Update any service files that reference team or league data
+    - Ensure quiz functionality works with generic content
+    - _Bug_Condition: isBugCondition(serviceData) where serviceData processes copyrighted content_
+    - _Expected_Behavior: Services process only generic content while maintaining functionality_
+    - _Preservation: Quiz functionality (3.4), predictions (3.2), and social features (3.3) continue to work_
+    - _Requirements: 1.3, 1.4, 1.6, 2.3, 2.4, 2.6_
+
+  - [x] 3.6 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - No Copyrighted Content Present
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms copyrighted content has been removed
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms copyrighted content is removed)
+    - Verify no team logos, league branding, or official names appear in:
+      - Frontend components (MatchCard, HeroSection, leagues screens)
+      - Backend seed data and database
+      - API responses
+      - App metadata
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
+
+  - [x] 3.7 Verify preservation tests still pass
+    - **Property 2: Preservation** - Core Functionality Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all core functionality still works:
+      - Live match scores and updates (3.1)
+      - Predictions and coin awards (3.2)
+      - Social features (reels, comments, likes) (3.3)
+      - Quiz functionality (3.4)
+      - Navigation (3.5)
+      - External API data fetching (3.6)
+      - Search functionality (3.7)
+      - User profiles (3.8)
+    - Confirm all tests still pass after fix (no regressions)
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run all property-based tests (fault condition + preservation)
+  - Verify no copyrighted content remains in the app
+  - Verify all core functionality works correctly
+  - Test on both iOS and Android platforms
+  - Review app for any missed copyrighted content
+  - Ensure app is ready for Apple Review resubmission
+  - Ask the user if questions arise or if additional verification is needed
