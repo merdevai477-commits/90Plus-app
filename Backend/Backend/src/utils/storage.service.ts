@@ -22,22 +22,78 @@ export class StorageService {
         resourceType: 'image' | 'video' = 'image'
     ): Promise<{ url: string; publicId: string }> {
         return new Promise((resolve, reject) => {
-            const uploadStream = cloudinary.uploader.upload_stream(
-                {
-                    folder: `football-app/${folder}`,
-                    resource_type: resourceType,
-                },
-                (error, result) => {
-                    if (error) return reject(error);
-                    if (!result) return reject(new Error('Upload failed'));
-                    resolve({
-                        url: result.secure_url,
-                        publicId: result.public_id,
-                    });
-                }
-            );
+            let uploadStream: any = null;
+            let readStream: any = null;
 
-            streamifier.createReadStream(fileBuffer).pipe(uploadStream);
+            try {
+                uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: `football-app/${folder}`,
+                        resource_type: resourceType,
+                    },
+                    (error, result) => {
+                        // Clean up streams
+                        if (readStream && !readStream.destroyed) {
+                            readStream.destroy();
+                        }
+                        if (uploadStream && !uploadStream.destroyed) {
+                            uploadStream.destroy();
+                        }
+
+                        if (error) {
+                            logger.error('Cloudinary upload error:', error);
+                            return reject(error);
+                        }
+                        if (!result) {
+                            return reject(new Error('Upload failed - no result'));
+                        }
+                        resolve({
+                            url: result.secure_url,
+                            publicId: result.public_id,
+                        });
+                    }
+                );
+
+                // Create read stream from buffer
+                readStream = streamifier.createReadStream(fileBuffer);
+
+                // Handle stream errors
+                readStream.on('error', (error: Error) => {
+                    logger.error('Read stream error:', error);
+                    // Clean up streams
+                    if (uploadStream && !uploadStream.destroyed) {
+                        uploadStream.destroy();
+                    }
+                    reject(error);
+                });
+
+                uploadStream.on('error', (error: Error) => {
+                    logger.error('Upload stream error:', error);
+                    // Clean up streams
+                    if (readStream && !readStream.destroyed) {
+                        readStream.destroy();
+                    }
+                    reject(error);
+                });
+
+                // Check if upload stream is writable before piping
+                if (uploadStream && uploadStream.writable) {
+                    readStream.pipe(uploadStream);
+                } else {
+                    throw new Error('Upload stream is not writable');
+                }
+
+            } catch (error) {
+                logger.error('Stream setup error:', error);
+                // Clean up any created streams
+                if (readStream && !readStream.destroyed) {
+                    readStream.destroy();
+                }
+                if (uploadStream && !uploadStream.destroyed) {
+                    uploadStream.destroy();
+                }
+                reject(error);
+            }
         });
     }
 

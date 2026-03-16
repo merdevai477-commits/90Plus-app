@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+.tsbuildinfo
+**/.tsbuildinfo
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Test files
+**/__tests__/
+**/*.test.ts
+**/*.spec.ts
+coverage/
+
+# Documentation
+*.md
+docs/
+
+# Scripts
+*.ps1
+*.sh
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Git
+.git/
+.gitignore
+
+# Railway
+.railwayignore
+
+# Nixpacks (generated files - should not be in build context)
+.nixpacks/
+.nixpacks/**
+

@@ -196,8 +196,8 @@ router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise
                 SELECT 
                     u.id,
                     u.username,
-                    u."fullName",
-                    u."avatarUrl",
+                    u."displayName" as "fullName",
+                    u.avatar as "avatarUrl",
                     b."createdAt" as "blockedAt"
                 FROM blocks b
                 JOIN users u ON b."blockedId" = u.id
