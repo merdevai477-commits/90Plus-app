@@ -6,6 +6,16 @@ export interface DiamondProfile {
     avatar?: string;
     coverImage?: string;
     bio?: string;
+    clubLogo?: string;
+    favoriteTeam?: string;
+    brandLogo?: string;
+    position?: string;
+    countryFlag?: string;
+    country?: string;
+    age?: number;
+    height?: number;
+    weight?: number;
+    preferredFoot?: string;
     stats: {
         views: number;
         likes: number;
