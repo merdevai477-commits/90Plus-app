@@ -1307,11 +1307,29 @@ export default function ProfileScreen() {
         onSelect={async (selectedClub) => {
           // Optimistic update - UI changes immediately
           setClub(selectedClub.logo);
-          updateCachedUserData({ clubLogo: selectedClub.logo });
+          
+          // Update cached data and global state immediately
+          updateCachedUserData({ 
+            clubLogo: selectedClub.logo,
+            favoriteTeam: selectedClub.name 
+          });
+          
+          // Update global state for immediate UI refresh
+          if (globalState.userProfile) {
+            globalState.setUserProfile({
+              ...globalState.userProfile,
+              clubLogo: selectedClub.logo,
+              favoriteTeam: selectedClub.name
+            });
+          }
+          
           setIsClubModalVisible(false);
           
           // Send to backend with optimistic updates
-          await updateFavorites({ favoriteClub: selectedClub.name });
+          await updateFavorites({ 
+            favoriteClub: selectedClub.name,
+            favoriteTeam: selectedClub.name 
+          });
         }}
       />
 
@@ -1393,16 +1411,22 @@ export default function ProfileScreen() {
           // Send updates if there are any changes
           if (Object.keys(updates).length > 0) {
             if (updates.username) {
+              // Update UI immediately before sending to backend
+              updateCachedUserData({ username: updates.username });
               await updateUsername(updates.username);
               delete updates.username; // Remove from batch update
             }
             
             if (updates.displayName) {
+              // Update UI immediately before sending to backend
+              updateCachedUserData({ displayName: updates.displayName });
               await updateDisplayName(updates.displayName);
               delete updates.displayName;
             }
             
             if (updates.bio) {
+              // Update UI immediately before sending to backend
+              updateCachedUserData({ bio: updates.bio });
               await updateBio(updates.bio);
               delete updates.bio;
             }

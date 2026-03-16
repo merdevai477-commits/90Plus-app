@@ -564,18 +564,22 @@ export class AuthService {
         offset: number = 0
     ): Promise<UserReel[]> {
         try {
-            const response = await fetch(
-                `${API_URL}/clerk/user/${username}/reels?limit=${limit}&offset=${offset}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            );
+            const url = `${API_URL}/clerk/user/${username}/reels?limit=${limit}&offset=${offset}`;
+            console.log('🔍 [getUserReels] Fetching URL:', url);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
 
+            console.log('📡 [getUserReels] Response status:', response.status);
+            
             const data = await response.json();
+            console.log('📦 [getUserReels] Response data:', data);
+            
             if (data.status === 'SUCCESS') {
                 return data.data.reels || [];
             }
