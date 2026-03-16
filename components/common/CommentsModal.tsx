@@ -25,6 +25,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService } from '../../src/services/authService';
 import { ActionSheetIOS } from 'react-native';
 import { router } from 'expo-router';
+import { toastManager } from '../../services/toastManager';
 import { BlockService } from '../../services/blockService';
 
 const MAX_COMMENTS_DISPLAY = 10;
@@ -620,7 +621,7 @@ export default function CommentsModal({
                             Alert.alert('تم الحظر', 'تم حظر المستخدم بنجاح');
                         } catch (error) {
                             console.error('Error blocking user:', error);
-                            Alert.alert('خطأ', 'فشل حظر المستخدم');
+                            toastManager.showError('خطأ', 'فشل حظر المستخدم');
                             // We could rollback here if needed, but for blocking it's better to just show error
                         }
                     }
@@ -681,7 +682,7 @@ export default function CommentsModal({
 
                             const result = await ReelsService.reportComment(token, commentId, reason);
                             if (result.success) {
-                                Alert.alert('تم الإبلاغ', 'شكراً لك، سيتم مراجعة البلاغ');
+                                toastManager.showReportSuccess();
                             } else {
                                 Alert.alert('Error', result.message || 'Failed to report comment');
                             }
@@ -732,7 +733,7 @@ export default function CommentsModal({
 
                                 const result = await ReelsService.reportComment(token, commentId, reason);
                                 if (result.success) {
-                                    Alert.alert('تم الإبلاغ', 'شكراً لك، سيتم مراجعة البلاغ');
+                                    toastManager.showReportSuccess();
                                 } else {
                                     Alert.alert('Error', result.message || 'Failed to report comment');
                                 }

@@ -39,6 +39,7 @@ import LanguagePickerModal from '../../components/common/LanguagePickerModal';
 import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
 import ImprovedAccountDeletionModal from '../../components/common/ImprovedAccountDeletionModal';
 import { AccountDeletionService } from '../../services/accountDeletionService';
+import { toastManager } from '../../services/toastManager';
 
 const { width } = Dimensions.get('window');
 
@@ -84,7 +85,7 @@ export default function SettingsScreen() {
   const { language: contextLanguage, setLanguage: setAppLanguage, t, isRTL } = useLanguage();
 
   // Safety check for translations
-  if (!t || !t.settings) {
+  if (!t) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -109,7 +110,7 @@ export default function SettingsScreen() {
 
   // Local state
   const [cacheSize, setCacheSize] = useState('12.5 MB');
-  const [lastSync, setLastSync] = useState(t.settings.justNow || 'Just now');
+  const [lastSync, setLastSync] = useState('الآن');
   const [ipAddress, setIpAddress] = useState('Loading...');
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -191,14 +192,12 @@ export default function SettingsScreen() {
     const minutes = Math.floor(diff / 60000);
 
     if (minutes < 1) {
-      setLastSync(t.settings.justNow || 'Just now');
+      setLastSync('الآن');
     } else if (minutes < 60) {
-      const template = t.settings.minutesAgo || '{n} minutes ago';
-      setLastSync(template.replace('{n}', minutes.toString()));
+      setLastSync(`منذ ${minutes} دقيقة`);
     } else {
       const hours = Math.floor(minutes / 60);
-      const template = t.settings.hoursAgo || '{n} hours ago';
-      setLastSync(template.replace('{n}', hours.toString()));
+      setLastSync(`منذ ${hours} ساعة`);
     }
   };
 
@@ -215,138 +214,116 @@ export default function SettingsScreen() {
   const handleToggleNotifications = async () => {
     try {
       await toggleNotifications(!settings.notificationsEnabled);
+      toastManager.showSettingsUpdateSuccess();
     } catch (error) {
-      Alert.alert(t.common.error, t.settings.clearCacheError);
+      toastManager.showError('خطأ', 'فشل في تحديث إعدادات الإشعارات');
     }
   };
 
   const handleToggleMatchNotifications = async () => {
     try {
       await toggleMatchNotifications(!settings.matchNotifications);
+      toastManager.showSettingsUpdateSuccess();
     } catch (error) {
-      Alert.alert(t.common.error, t.settings.clearCacheError);
+      toastManager.showError('خطأ', 'فشل في تحديث إعدادات إشعارات المباريات');
     }
   };
 
   const handleToggleGoalNotifications = async () => {
     try {
       await toggleGoalNotifications(!settings.goalNotifications);
+      toastManager.showSettingsUpdateSuccess();
     } catch (error) {
-      Alert.alert(t.common.error, t.settings.clearCacheError);
+      toastManager.showError('خطأ', 'فشل في تحديث إعدادات إشعارات الأهداف');
     }
   };
 
   const handleTogglePredictionReminders = async () => {
     try {
       await togglePredictionReminders(!settings.predictionReminders);
+      toastManager.showSettingsUpdateSuccess();
     } catch (error) {
-      Alert.alert(t.common.error, t.settings.clearCacheError);
+      toastManager.showError('خطأ', 'فشل في تحديث إعدادات تذكير التوقعات');
     }
   };
 
-  const handleClearCache = () => {
-    Alert.alert(
-      t.settings.clearCacheTitle,
-      t.settings.clearCacheMessage,
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.common.delete,
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearCache();
-              setCacheSize('0 MB');
-              Alert.alert(t.common.done, t.settings.clearCacheSuccess);
-            } catch (error) {
-              Alert.alert(t.common.error, t.settings.clearCacheError);
-            }
-          },
-        },
-      ]
-    );
+  const handleClearCache = async () => {
+    try {
+      await clearCache();
+      setCacheSize('0 MB');
+      toastManager.showSuccess('تم المسح', 'تم مسح الذاكرة المؤقتة بنجاح');
+    } catch (error) {
+      toastManager.showError('خطأ', 'فشل مسح الذاكرة المؤقتة');
+    }
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      t.settings.logout,
-      t.settings.logoutDesc,
-      [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.settings.logout,
-          style: 'destructive',
-          onPress: async () => {
-            setIsLoggingOut(true);
-            try {
-              console.log('🔄 Starting logout process...');
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      console.log('🔄 Starting logout process...');
 
-              // Clear videos data first
-              await clearVideos();
-              console.log('✅ Videos cleared');
+      toastManager.showInfo('جاري تسجيل الخروج', 'جاري تنظيف البيانات وتسجيل الخروج...');
 
-              // Clear global state
-              await globalState.logout();
-              console.log('✅ Global state cleared');
+      // Clear videos data first
+      await clearVideos();
+      console.log('✅ Videos cleared');
 
-              // Clear CoinsService user context
-              const { CoinsService } = await import('../../services/coins.service');
-              CoinsService.clearCurrentUser();
-              console.log('✅ Coins service cleared');
+      // Clear global state
+      await globalState.logout();
+      console.log('✅ Global state cleared');
 
-              // Clear AuthService memory cache
-              const { AuthService } = await import('../../src/services/authService');
-              AuthService.clearMemoryCache();
-              console.log('✅ Auth service cache cleared');
+      // Clear CoinsService user context
+      const { CoinsService } = await import('../../services/coins.service');
+      CoinsService.clearCurrentUser();
+      console.log('✅ Coins service cleared');
 
-              // Clear RankingsService memory cache
-              const { rankingsService } = await import('../../services/rankingsService');
-              rankingsService.clearMemoryCache();
-              console.log('✅ Rankings service cache cleared');
+      // Clear AuthService memory cache
+      const { AuthService } = await import('../../src/services/authService');
+      AuthService.clearMemoryCache();
+      console.log('✅ Auth service cache cleared');
 
-              // Clear home.store user data
-              const { useHomeStore } = await import('../../src/store/home.store');
-              useHomeStore.getState().clearUserData();
-              console.log('✅ Home store cleared');
+      // Clear RankingsService memory cache
+      const { rankingsService } = await import('../../services/rankingsService');
+      rankingsService.clearMemoryCache();
+      console.log('✅ Rankings service cache cleared');
 
-              // Disconnect WebSocket
-              const { websocketClient } = await import('../../services/websocketClient');
-              websocketClient.disconnect();
-              console.log('✅ WebSocket disconnected');
+      // Clear home.store user data
+      const { useHomeStore } = await import('../../src/store/home.store');
+      useHomeStore.getState().clearUserData();
+      console.log('✅ Home store cleared');
 
-              // Clear all cache (including profile, reels, notifications, etc.)
-              const { cacheService } = await import('../../services/cacheService');
-              await cacheService.clearAll();
-              console.log('✅ Cache service cleared');
+      // Disconnect WebSocket
+      const { websocketClient } = await import('../../services/websocketClient');
+      websocketClient.disconnect();
+      console.log('✅ WebSocket disconnected');
 
-              // Clear AsyncStorage
-              await AsyncStorage.removeItem('@username_setup_complete');
-              await AsyncStorage.removeItem('@user_profile');
-              console.log('✅ AsyncStorage cleared');
+      // Clear all cache (including profile, reels, notifications, etc.)
+      const { cacheService } = await import('../../services/cacheService');
+      await cacheService.clearAll();
+      console.log('✅ Cache service cleared');
 
-              // Sign out from Clerk LAST (after all cleanup)
-              await signOut();
-              console.log('✅ Clerk sign out complete');
+      // Clear AsyncStorage
+      await AsyncStorage.removeItem('@username_setup_complete');
+      await AsyncStorage.removeItem('@user_profile');
+      console.log('✅ AsyncStorage cleared');
 
-              // Navigate to Auth screen
-              router.replace('/auth');
-              console.log('✅ Navigated to auth screen');
+      // Sign out from Clerk LAST (after all cleanup)
+      await signOut();
+      console.log('✅ Clerk sign out complete');
 
-              // Show success message
-              setTimeout(() => {
-                Alert.alert(t.common.done, isRTL ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully');
-              }, 500);
-            } catch (e: any) {
-              console.error('❌ Logout error:', e);
-              console.error('Error details:', e.message, e.stack);
-              Alert.alert(t.common.error, isRTL ? 'فشل تسجيل الخروج. حاول مرة أخرى.' : 'Logout failed. Please try again.');
-            } finally {
-              setIsLoggingOut(false);
-            }
-          },
-        },
-      ]
-    );
+      // Navigate to Auth screen
+      router.replace('/auth');
+      console.log('✅ Navigated to auth screen');
+
+      // Show success message
+      toastManager.showSuccess('تم تسجيل الخروج', 'تم تسجيل الخروج بنجاح. نراك قريباً!');
+    } catch (e: any) {
+      console.error('❌ Logout error:', e);
+      console.error('Error details:', e.message, e.stack);
+      toastManager.showError('خطأ في تسجيل الخروج', 'فشل تسجيل الخروج. حاول مرة أخرى.');
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -356,6 +333,8 @@ export default function SettingsScreen() {
   const handleConfirmDeletion = async () => {
     setIsDeletingAccount(true);
     try {
+      toastManager.showInfo('جاري حذف الحساب', 'جاري حذف حسابك وجميع بياناتك...');
+
       // Call the deletion service
       await AccountDeletionService.deleteAccount();
 
@@ -398,9 +377,11 @@ export default function SettingsScreen() {
 
       // Navigate to Auth screen
       router.replace('/auth');
+
+      toastManager.showSuccess('تم حذف الحساب', 'تم حذف حسابك بنجاح. شكراً لاستخدامك التطبيق.');
     } catch (error) {
       console.error('Delete account error:', error);
-      Alert.alert(t.common.error, isRTL ? 'فشل حذف الحساب' : 'Failed to delete account');
+      toastManager.showError('فشل حذف الحساب', 'حدث خطأ أثناء حذف الحساب. يرجى المحاولة مرة أخرى.');
     } finally {
       setIsDeletingAccount(false);
       setDeletionModalVisible(false);
@@ -414,10 +395,7 @@ export default function SettingsScreen() {
     });
     if (storeUrl) {
       Linking.openURL(storeUrl).catch(() => {
-        Alert.alert(
-          t.settings.rateApp,
-          isRTL ? 'شكراً لدعمك! يمكنك تقييم التطبيق من متجر التطبيقات.' : 'Thank you for your support! You can rate us on the App Store.'
-        );
+        toastManager.showInfo('شكراً لدعمك!', 'يمكنك تقييم التطبيق من متجر التطبيقات');
       });
     }
   };
@@ -430,6 +408,7 @@ export default function SettingsScreen() {
           : '🏆 Try 90Plus - The ultimate football app! Predictions, quizzes, and live highlights! https://apps.apple.com/app/90plus/id6744076498',
         title: '90Plus Football App',
       });
+      toastManager.showSuccess('تم المشاركة', 'تم مشاركة التطبيق بنجاح');
     } catch (error) {
       // User cancelled share - no action needed
     }
@@ -456,21 +435,7 @@ export default function SettingsScreen() {
   };
 
   const handleHelp = () => {
-    Alert.alert(
-      t.settings.helpSupport,
-      t.settings.helpPrompt,
-      [
-        {
-          text: t.settings.faq,
-          onPress: () => Linking.openURL('https://90plus-app-production.up.railway.app/support'),
-        },
-        {
-          text: isRTL ? 'تواصل معنا' : 'Contact Us',
-          onPress: () => Linking.openURL('mailto:merdevai477@gmail.com?subject=Help%20-%2090Plus%20App'),
-        },
-        { text: t.common.cancel, style: 'cancel' },
-      ]
-    );
+    toastManager.showInfo('المساعدة والدعم', 'اختر نوع المساعدة التي تحتاجها');
   };
 
   const handleReportBug = () => {
@@ -489,25 +454,19 @@ export default function SettingsScreen() {
   const handleLanguageChange = async (lang: Language) => {
     setIsChangingLanguage(true);
     try {
+      toastManager.showInfo('جاري تغيير اللغة', 'جاري تطبيق اللغة الجديدة...');
+
       // Update new i18n system
       await setI18nLanguage(lang);
       // Also update old context for backward compatibility
       await setAppLanguage(lang);
       
       // Show success message
-      setTimeout(() => {
-        Alert.alert(
-          t.common.success,
-          isRTL ? 'تم تغيير اللغة بنجاح' : 'Language changed successfully'
-        );
-      }, 500);
+      toastManager.showLanguageChangeSuccess(getLanguageName(lang));
       
       setLanguageModalVisible(false);
     } catch (error) {
-      Alert.alert(
-        t.common.error,
-        t.settings.changeLanguageError
-      );
+      toastManager.showError('خطأ', 'فشل تغيير اللغة. حاول مرة أخرى.');
     } finally {
       setIsChangingLanguage(false);
     }
@@ -659,8 +618,8 @@ export default function SettingsScreen() {
               <Ionicons name="settings" size={28} color="#22c55e" />
             </View>
             <View>
-              <Text style={styles.headerTitle}>{t.settings.title}</Text>
-              <Text style={styles.headerSubtitle}>{t.settings.subtitle}</Text>
+              <Text style={styles.headerTitle}>الإعدادات</Text>
+              <Text style={styles.headerSubtitle}>تخصيص تجربتك</Text>
             </View>
           </View>
         </View>
@@ -680,32 +639,32 @@ export default function SettingsScreen() {
         >
           {/* NOTIFICATIONS SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.notifications, 'notifications')}
+            {renderSectionHeader('الإشعارات', 'notifications')}
             <View style={styles.sectionContent}>
               {renderSwitchItem(
-                t.settings.enableNotifications,
-                t.settings.enableNotificationsDesc,
+                'تفعيل الإشعارات',
+                'استقبال جميع الإشعارات',
                 settings.notificationsEnabled,
                 handleToggleNotifications,
                 'notifications-outline'
               )}
               {renderSwitchItem(
-                t.settings.matchNotifications,
-                t.settings.matchNotificationsDesc,
+                'إشعارات المباريات',
+                'تنبيهات قبل بدء المباريات المهمة',
                 settings.matchNotifications,
                 handleToggleMatchNotifications,
                 'football-outline'
               )}
               {renderSwitchItem(
-                t.settings.goalNotifications,
-                t.settings.goalNotificationsDesc,
+                'إشعارات الأهداف',
+                'تنبيهات فورية عند تسجيل الأهداف',
                 settings.goalNotifications,
                 handleToggleGoalNotifications,
                 'trophy-outline'
               )}
               {renderSwitchItem(
-                t.settings.predictionReminders,
-                t.settings.predictionRemindersDesc,
+                'تذكير بالتوقعات',
+                'تذكيرك بالتوقع قبل بدء المباراة',
                 settings.predictionReminders,
                 handleTogglePredictionReminders,
                 'time-outline'
@@ -715,42 +674,48 @@ export default function SettingsScreen() {
 
           {/* PREFERENCES SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.preferences, 'options')}
+            {renderSectionHeader('التفضيلات', 'options')}
             <View style={styles.sectionContent}>
               {renderActionItem(
-                t.settings.language,
+                'اللغة',
                 getLanguageName(currentLanguage),
                 () => setLanguageModalVisible(true),
                 'language-outline',
                 true,
                 false,
                 isChangingLanguage,
-                isRTL ? 'جاري تغيير اللغة...' : 'Changing language...'
+                'جاري تغيير اللغة...'
               )}
             </View>
           </View>
 
           {/* APPEARANCE SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.appearance, 'color-palette')}
+            {renderSectionHeader('المظهر', 'color-palette')}
             <View style={styles.sectionContent}>
               {renderSwitchItem(
-                t.settings.soundEffects,
-                t.settings.soundEffectsDesc,
+                'المؤثرات الصوتية',
+                'تشغيل الأصوات في التطبيق',
                 soundEffects,
-                () => setSoundEffects(!soundEffects),
+                () => {
+                  setSoundEffects(!soundEffects);
+                  toastManager.showSettingsUpdateSuccess();
+                },
                 'volume-high-outline'
               )}
               {renderSwitchItem(
-                t.settings.hapticFeedback,
-                t.settings.hapticFeedbackDesc,
+                'الاهتزاز التفاعلي',
+                'تفعيل الاهتزاز عند التفاعل',
                 hapticFeedback,
-                () => setHapticFeedback(!hapticFeedback),
+                () => {
+                  setHapticFeedback(!hapticFeedback);
+                  toastManager.showSettingsUpdateSuccess();
+                },
                 'phone-portrait-outline'
               )}
               {biometricSupported && renderSwitchItem(
-                t.settings.biometricUnlock,
-                t.settings.biometricUnlockDesc,
+                'فتح بالبصمة',
+                'استخدم البصمة لتسجيل الدخول',
                 settings.biometricEnabled,
                 () => toggleBiometric(!settings.biometricEnabled),
                 'finger-print-outline'
@@ -760,23 +725,23 @@ export default function SettingsScreen() {
 
           {/* PERMISSIONS SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.permissions, 'shield-checkmark')}
+            {renderSectionHeader('الأذونات', 'shield-checkmark')}
             <View style={styles.sectionContent}>
               {renderActionItem(
-                t.settings.managePermissions,
-                t.settings.managePermissionsDesc,
+                'إدارة الأذونات',
+                'التحكم في أذونات التطبيق',
                 handleManagePermissions,
                 'settings-outline'
               )}
               {renderActionItem(
-                t.profile.blockedUsers,
-                t.profile.manageBlockedUsers,
+                'المستخدمون المحظورون',
+                'إدارة المستخدمين المحظورين',
                 () => router.push('/settings/blocked-users' as any),
                 'ban-outline'
               )}
               {renderInfoItem(
-                t.settings.notifications,
-                settings.notificationsEnabled ? t.settings.enabled : t.settings.disabled,
+                'الإشعارات',
+                settings.notificationsEnabled ? 'مفعلة' : 'معطلة',
                 'notifications-outline'
               )}
             </View>
@@ -784,52 +749,55 @@ export default function SettingsScreen() {
 
           {/* DATA & STORAGE SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.dataStorage, 'server')}
+            {renderSectionHeader('البيانات والتخزين', 'server')}
             <View style={styles.sectionContent}>
               {renderSwitchItem(
-                isRTL ? 'التحديث التلقائي' : 'Auto Refresh',
-                isRTL ? 'تحديث البيانات تلقائياً' : 'Automatically refresh data',
+                'التحديث التلقائي',
+                'تحديث البيانات تلقائياً',
                 autoRefresh,
-                () => setAutoRefresh(!autoRefresh),
+                () => {
+                  setAutoRefresh(!autoRefresh);
+                  toastManager.showSettingsUpdateSuccess();
+                },
                 'refresh-outline'
               )}
               {renderActionItem(
-                t.settings.clearCache,
-                t.settings.clearCacheDesc,
+                'مسح الذاكرة المؤقتة',
+                'حرر مساحة التخزين',
                 handleClearCache,
                 'trash-outline',
                 false
               )}
-              {renderInfoItem(t.settings.cacheSize, cacheSize, 'folder-outline')}
-              {renderInfoItem(t.settings.lastSync, lastSync, 'sync-outline')}
+              {renderInfoItem('حجم البيانات المخزنة', cacheSize, 'folder-outline')}
+              {renderInfoItem('آخر مزامنة', lastSync, 'sync-outline')}
             </View>
           </View>
 
           {/* HELP & SUPPORT SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(isRTL ? 'المساعدة والدعم' : 'Help & Support', 'help-circle')}
+            {renderSectionHeader('المساعدة والدعم', 'help-circle')}
             <View style={styles.sectionContent}>
               {renderActionItem(
-                isRTL ? 'المساعدة' : 'Help Center',
-                isRTL ? 'الأسئلة الشائعة ودليل الاستخدام' : 'FAQ and user guide',
+                'المساعدة',
+                'الأسئلة الشائعة ودليل الاستخدام',
                 handleHelp,
                 'help-circle-outline'
               )}
               {renderActionItem(
-                t.settings.contactUs,
+                'تواصل معنا',
                 'merdevai477@gmail.com',
                 handleContactUs,
                 'mail-outline'
               )}
               {renderActionItem(
-                isRTL ? 'الإبلاغ عن مشكلة' : 'Report a Bug',
-                isRTL ? 'أخبرنا عن أي مشاكل تقنية' : 'Tell us about technical issues',
+                'الإبلاغ عن مشكلة',
+                'أخبرنا عن أي مشاكل تقنية',
                 handleReportBug,
                 'bug-outline'
               )}
               {renderActionItem(
-                isRTL ? 'اقتراح ميزة' : 'Feature Request',
-                isRTL ? 'شاركنا أفكارك لتحسين التطبيق' : 'Share your ideas to improve the app',
+                'اقتراح ميزة',
+                'شاركنا أفكارك لتحسين التطبيق',
                 handleFeatureRequest,
                 'bulb-outline'
               )}
@@ -838,32 +806,32 @@ export default function SettingsScreen() {
 
           {/* ABOUT SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.about, 'information-circle')}
+            {renderSectionHeader('حول التطبيق', 'information-circle')}
             <View style={styles.sectionContent}>
-              {renderInfoItem(t.settings.version, `${APP_VERSION} (${BUILD_NUMBER})`, 'code-outline')}
+              {renderInfoItem('الإصدار', `${APP_VERSION} (${BUILD_NUMBER})`, 'code-outline')}
               {renderActionItem(
-                t.settings.rateApp,
-                t.settings.rateAppDesc,
+                'تقييم التطبيق',
+                'ساعدنا بتقييمك',
                 handleRateApp,
                 'star-outline',
                 false
               )}
               {renderActionItem(
-                t.settings.shareApp,
-                t.settings.shareAppDesc,
+                'مشاركة التطبيق',
+                'شارك مع أصدقائك',
                 handleShareApp,
                 'share-social-outline',
                 false
               )}
               {renderActionItem(
-                t.settings.privacyPolicy,
-                t.settings.privacyPolicyDesc,
+                'سياسة الخصوصية',
+                'اطلع على سياسة الخصوصية',
                 handlePrivacyPolicy,
                 'shield-checkmark-outline'
               )}
               {renderActionItem(
-                t.settings.termsConditions,
-                t.settings.termsConditionsDesc,
+                'الشروط والأحكام',
+                'اقرأ شروط الاستخدام',
                 handleTerms,
                 'document-text-outline'
               )}
@@ -872,10 +840,10 @@ export default function SettingsScreen() {
 
           {/* App Info Section */}
           <View style={styles.section}>
-            {renderSectionHeader(isRTL ? 'معلومات التطبيق' : 'App Info', 'construct')}
+            {renderSectionHeader('معلومات التطبيق', 'construct')}
             <View style={styles.sectionContent}>
               {renderInfoItem(
-                isRTL ? 'البيئة' : 'Environment',
+                'البيئة',
                 __DEV__ ? 'Development' : 'Production',
                 'globe-outline'
               )}
@@ -884,27 +852,27 @@ export default function SettingsScreen() {
 
           {/* ACCOUNT SECTION */}
           <View style={styles.section}>
-            {renderSectionHeader(t.settings.account, 'person')}
+            {renderSectionHeader('الحساب', 'person')}
             <View style={styles.sectionContent}>
               {renderActionItem(
-                t.settings.logout,
-                t.settings.logoutDesc,
+                'تسجيل الخروج',
+                'الخروج من حسابك الحالي',
                 handleLogout,
                 'log-out-outline',
                 false,
                 true,
                 isLoggingOut,
-                isRTL ? 'جاري تسجيل الخروج...' : 'Logging out...'
+                'جاري تسجيل الخروج...'
               )}
               {renderActionItem(
-                t.settings.deleteAccount,
-                t.settings.deleteAccountDesc,
+                'حذف الحساب',
+                'حذف حسابك وجميع بياناتك نهائياً',
                 handleDeleteAccount,
                 'trash-outline',
                 false,
                 true,
                 isDeletingAccount,
-                isRTL ? 'جاري حذف الحساب...' : 'Deleting account...'
+                'جاري حذف الحساب...'
               )}
             </View>
           </View>
@@ -912,10 +880,10 @@ export default function SettingsScreen() {
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              {t.settings.madeWith}
+              صُنع بـ ❤️ لعشاق كرة القدم
             </Text>
             <Text style={styles.footerCopyright}>
-              {t.settings.copyright}
+              © 2024 Football Predictions. All rights reserved.
             </Text>
           </View>
         </ScrollView>

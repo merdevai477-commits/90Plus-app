@@ -12,6 +12,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { ChevronUp } from 'lucide-react-native';
+import { toastManager } from '../../services/toastManager';
 // Safe import for expo-av
 let Video: any = null;
 try {
@@ -172,7 +173,13 @@ export const ReelsFeed: React.FC = () => {
           }
         : reel
     ));
-  }, [haptic]);
+    
+    // Show success toast
+    const reel = reels.find(r => r.id === reelId);
+    if (reel && !reel.liked) {
+      toastManager.showLikeSuccess();
+    }
+  }, [haptic, reels]);
 
   // Handle Mute Toggle
   const handleToggleMute = useCallback((reelId: string) => {
@@ -198,13 +205,15 @@ export const ReelsFeed: React.FC = () => {
     
     // Show toast
     const saved = reels.find(r => r.id === reelId)?.saved;
-    Alert.alert('', saved ? 'تم إلغاء الحفظ' : 'تم الحفظ', [{ text: 'حسناً' }]);
+    if (!saved) {
+      toastManager.showSaveSuccess();
+    }
   }, [haptic, reels]);
 
   // Handle Report
   const handleReport = useCallback((reason: string) => {
     console.log('Report submitted:', reason);
-    Alert.alert('تم الإرسال', 'شكراً لك على الإبلاغ. سنراجع المحتوى قريباً.');
+    toastManager.showReportSuccess();
   }, []);
 
   // Handle Share
@@ -220,10 +229,10 @@ export const ReelsFeed: React.FC = () => {
       });
 
       if (result.action === Share.sharedAction) {
-        console.log('Shared successfully');
+        toastManager.showShareSuccess();
       }
     } catch (error) {
-      Alert.alert('خطأ', 'حدث خطأ أثناء المشاركة');
+      toastManager.showError('خطأ', 'حدث خطأ أثناء المشاركة');
     }
   }, [haptic]);
 

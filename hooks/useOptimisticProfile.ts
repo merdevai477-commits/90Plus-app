@@ -6,7 +6,8 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { optimisticProfileService, ProfileUpdateData, OptimisticUpdateResult } from '../services/optimisticProfileService';
-import { Alert } from 'react-native';
+import { useToast } from '../contexts/ToastContext';
+import { ToastHelper } from '../utils/professionalToastHelpers';
 
 export interface UseOptimisticProfileReturn {
   updateProfile: (updates: ProfileUpdateData) => Promise<OptimisticUpdateResult>;
@@ -19,6 +20,7 @@ export interface UseOptimisticProfileReturn {
 export const useOptimisticProfile = (): UseOptimisticProfileReturn => {
   const [isUpdating, setIsUpdating] = useState(false);
   const { getToken } = useAuth();
+  const toast = useToast();
 
   const updateProfile = useCallback(async (updates: ProfileUpdateData): Promise<OptimisticUpdateResult> => {
     setIsUpdating(true);
@@ -46,10 +48,10 @@ export const useOptimisticProfile = (): UseOptimisticProfileReturn => {
 
   const showUpdateResult = useCallback((result: OptimisticUpdateResult) => {
     if (result.success) {
-      Alert.alert(
-        '✅ تم التحديث',
-        'تم تحديث البروفايل بنجاح',
-        [{ text: 'حسناً', style: 'default' }]
+      ToastHelper.success(
+        toast,
+        'تم التحديث بنجاح',
+        'تم تحديث البروفايل بنجاح وسيتم مزامنته مع الخادم'
       );
     } else {
       let message = result.error || 'فشل في تحديث البروفايل';
@@ -60,27 +62,29 @@ export const useOptimisticProfile = (): UseOptimisticProfileReturn => {
           (result.nextAllowedChange.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
         );
         message = `يمكنك تغيير اسم المستخدم بعد ${daysRemaining} يوم`;
+        ToastHelper.warning(
+          toast,
+          'تغيير غير مسموح',
+          message,
+          { duration: 5000, position: 'center' }
+        );
+      } else if (result.canRetry) {
+        ToastHelper.error(
+          toast,
+          'خطأ مؤقت',
+          `${message}. يمكنك المحاولة مرة أخرى`,
+          { duration: 4000 }
+        );
+      } else {
+        ToastHelper.error(
+          toast,
+          'خطأ في التحديث',
+          message,
+          { duration: 4000 }
+        );
       }
-
-      const buttons: any[] = [{ text: 'حسناً', style: 'cancel' }];
-      
-      if (result.canRetry) {
-        buttons.unshift({
-          text: 'إعادة المحاولة',
-          style: 'default',
-          onPress: () => {
-            // Could implement retry logic here
-          }
-        });
-      }
-
-      Alert.alert(
-        '❌ خطأ في التحديث',
-        message,
-        buttons
-      );
     }
-  }, []);
+  }, [toast]);
 
   return {
     updateProfile,
@@ -143,6 +147,8 @@ export const useProfileFieldUpdate = () => {
     favoriteTeam?: string;
     favoriteClub?: string;
     favoriteBrand?: string;
+    clubLogo?: string;
+    brandLogo?: string;
   }) => {
     const result = await updateProfile(favorites);
     showUpdateResult(result);

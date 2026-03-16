@@ -1,21 +1,28 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import CustomToast from '../components/common/CustomToast';
-
-type ToastType = 'success' | 'error' | 'warning' | 'info';
+import { ProfessionalToast, ToastType } from '../components/common/ProfessionalToast';
 
 interface ToastState {
     visible: boolean;
     type: ToastType;
     title: string;
-    message?: string;
+    message: string;
+    duration?: number;
+    position?: 'top' | 'center' | 'bottom';
+    onPress?: () => void;
+}
+
+interface ToastOptions {
+    duration?: number;
+    position?: 'top' | 'center' | 'bottom';
+    onPress?: () => void;
 }
 
 interface ToastContextType {
-    showToast: (type: ToastType, title: string, message?: string) => void;
-    showSuccess: (title: string, message?: string) => void;
-    showError: (title: string, message?: string) => void;
-    showWarning: (title: string, message?: string) => void;
-    showInfo: (title: string, message?: string) => void;
+    showToast: (type: ToastType, title: string, message: string, options?: ToastOptions) => void;
+    showSuccess: (title: string, message: string, options?: ToastOptions) => void;
+    showError: (title: string, message: string, options?: ToastOptions) => void;
+    showWarning: (title: string, message: string, options?: ToastOptions) => void;
+    showInfo: (title: string, message: string, options?: ToastOptions) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -25,42 +32,63 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         visible: false,
         type: 'success',
         title: '',
-        message: undefined,
+        message: '',
+        duration: 4000,
+        position: 'top',
+        onPress: undefined,
     });
 
-    const showToast = useCallback((type: ToastType, title: string, message?: string) => {
-        setToast({ visible: true, type, title, message });
+    const showToast = useCallback((type: ToastType, title: string, message: string, options?: ToastOptions) => {
+        setToast({ 
+            visible: true, 
+            type, 
+            title, 
+            message,
+            duration: options?.duration || 4000,
+            position: options?.position || 'top',
+            onPress: options?.onPress,
+        });
     }, []);
 
-    const showSuccess = useCallback((title: string, message?: string) => {
-        showToast('success', title, message);
+    const showSuccess = useCallback((title: string, message: string, options?: ToastOptions) => {
+        showToast('success', title, message, options);
     }, [showToast]);
 
-    const showError = useCallback((title: string, message?: string) => {
-        showToast('error', title, message);
+    const showError = useCallback((title: string, message: string, options?: ToastOptions) => {
+        showToast('error', title, message, options);
     }, [showToast]);
 
-    const showWarning = useCallback((title: string, message?: string) => {
-        showToast('warning', title, message);
+    const showWarning = useCallback((title: string, message: string, options?: ToastOptions) => {
+        showToast('warning', title, message, options);
     }, [showToast]);
 
-    const showInfo = useCallback((title: string, message?: string) => {
-        showToast('info', title, message);
+    const showInfo = useCallback((title: string, message: string, options?: ToastOptions) => {
+        showToast('info', title, message, options);
     }, [showToast]);
 
     const hideToast = useCallback(() => {
         setToast(prev => ({ ...prev, visible: false }));
     }, []);
 
+    const handleToastPress = useCallback(() => {
+        if (toast.onPress) {
+            toast.onPress();
+            hideToast();
+        }
+    }, [toast.onPress, hideToast]);
+
     return (
         <ToastContext.Provider value={{ showToast, showSuccess, showError, showWarning, showInfo }}>
             {children}
-            <CustomToast
+            <ProfessionalToast
                 visible={toast.visible}
                 type={toast.type}
                 title={toast.title}
                 message={toast.message}
+                duration={toast.duration}
+                position={toast.position}
                 onHide={hideToast}
+                onPress={toast.onPress ? handleToastPress : undefined}
             />
         </ToastContext.Provider>
     );

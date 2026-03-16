@@ -26,6 +26,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
+import { toastManager } from '../../services/toastManager';
 
 const { width } = Dimensions.get('window');
 
@@ -180,7 +181,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
     if (!selectedPrediction) return;
 
     if (match.status !== 'upcoming') {
-      Alert.alert(t.predictions.alertTitle, t.predictions.cannotPredictLive);
+      toastManager.showWarning('تحذير', 'لا يمكن التوقع للمباريات المباشرة');
       return;
     }
 
@@ -196,9 +197,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
       });
 
       setShowPredictionModal(false);
-      Alert.alert(t.predictions.successTitle, t.predictions.successMessage);
+      toastManager.showPredictionSuccess();
     } catch (error) {
-      Alert.alert(t.predictions.errorTitle, t.predictions.errorMessage);
+      toastManager.showPredictionError();
     } finally {
       setIsSubmitting(false);
     }

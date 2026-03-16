@@ -133,12 +133,32 @@ export interface AuthResponse {
  * Authentication Service
  * Handles all communication with the backend for user authentication
  */
+import { toastManager } from '../../services/toastManager';
+
 export class AuthService {
   /**
    * Get trending hashtags
    * @returns Promise<string[]> Array of trending hashtag strings
    */
-  static getTrendingHashtags: () => Promise<any[]>;
+  static getTrendingHashtags = async (): Promise<any[]> => {
+    try {
+      const response = await fetch(`${API_URL}/reels/trending-hashtags`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      if (data.status === 'SUCCESS') {
+        return data.data.hashtags || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error getting trending hashtags:', error);
+      return [];
+    }
+  };
   
   /**
      * Check if API is reachable
@@ -672,13 +692,16 @@ export class AuthService {
 
             if (data.status === 'SUCCESS') {
                 logger.debug('✅ Profile updated successfully');
+                toastManager.showProfileUpdateSuccess();
                 return data;
             } else {
                 console.error('❌ Failed to update profile:', data.message);
+                toastManager.showError('فشل التحديث', data.message || 'فشل في تحديث الملف الشخصي');
                 return data;
             }
         } catch (error: any) {
             console.error('❌ Error updating profile:', error);
+            toastManager.showError('خطأ في الشبكة', error.message || 'فشل في الاتصال بالخادم');
             return {
                 status: 'ERROR',
                 message: error.message || 'Network error'

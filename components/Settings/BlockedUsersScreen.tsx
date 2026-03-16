@@ -22,14 +22,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@clerk/clerk-expo';
 import { BlockService, BlockedUser } from '../../services/blockService';
-import { useToast } from '../../contexts/ToastContext';
+import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function BlockedUsersScreen() {
   const { getToken } = useAuth();
-  const toast = useToast();
   const { t } = useTranslation();
 
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
@@ -54,7 +53,7 @@ export default function BlockedUsersScreen() {
     try {
       const token = await getToken();
       if (!token) {
-        toast.showError(t.common.error, 'يرجى تسجيل الدخول');
+        toastManager.showAuthError();
         return;
       }
 
@@ -62,7 +61,7 @@ export default function BlockedUsersScreen() {
       setBlockedUsers(users);
     } catch (error) {
       console.error('Load blocked users error:', error);
-      toast.showError(t.common.error, 'فشل تحميل المستخدمين المحظورين');
+      toastManager.showError(t.common.error, 'فشل تحميل المستخدمين المحظورين');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -97,7 +96,7 @@ export default function BlockedUsersScreen() {
             try {
               const token = await getToken();
               if (!token) {
-                toast.showError(t.common.error, 'يرجى تسجيل الدخول');
+                toastManager.showAuthError();
                 return;
               }
 
@@ -106,10 +105,10 @@ export default function BlockedUsersScreen() {
               // Remove from list with animation
               setBlockedUsers(prev => prev.filter(u => u.id !== user.id));
               
-              toast.showSuccess('✅ تم بنجاح', `تم إلغاء حظر @${user.username}`);
+              toastManager.showUnblockSuccess(user.username);
             } catch (error) {
               console.error('Unblock error:', error);
-              toast.showError(t.common.error, 'فشل إلغاء الحظر. حاول مرة أخرى.');
+              toastManager.showError(t.common.error, 'فشل إلغاء الحظر. حاول مرة أخرى.');
             } finally {
               setUnblockingUserId(null);
             }

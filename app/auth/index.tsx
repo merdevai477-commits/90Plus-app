@@ -48,6 +48,7 @@ import { CoinsService } from '../../services/coins.service';
 import { rankingsService } from '../../services/rankingsService';
 import { websocketClient } from '../../services/websocketClient';
 import { cacheService } from '../../services/cacheService';
+import { toastManager } from '../../services/toastManager';
 import { preloadManager } from '../../services/preloadManager';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -207,22 +208,14 @@ export default function AuthScreen() {
                         console.log('❌ Sync failed, signing out');
                         await signOut?.();
                         setShowLoadingScreen(false);
-                        Alert.alert(
-                            'خطأ في المزامنة',
-                            'فشل تحميل بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.',
-                            [{ text: 'حسناً' }]
-                        );
+                        toastManager.showError('خطأ في المزامنة', 'فشل تحميل بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.');
                     }
                 } catch (error) {
                     console.error('❌ Sync attempt failed:', error);
                     // Sign out on error
                     await signOut?.();
                     setShowLoadingScreen(false);
-                    Alert.alert(
-                        'خطأ',
-                        'حدث خطأ أثناء التحقق من حالة تسجيل الدخول. يرجى المحاولة مرة أخرى.',
-                        [{ text: 'حسناً' }]
-                    );
+                    toastManager.showError('خطأ', 'حدث خطأ أثناء التحقق من حالة تسجيل الدخول. يرجى المحاولة مرة أخرى.');
                 }
             };
             
@@ -396,11 +389,7 @@ export default function AuthScreen() {
                 // Check for database error (E009)
                 if (error.message.includes('E009') || error.message.includes('Database error')) {
                     console.error('❌ Database connection error - server may be starting up');
-                    Alert.alert(
-                        'خطأ في الاتصال',
-                        'حدث خطأ في الاتصال بقاعدة البيانات. يرجى المحاولة مرة أخرى بعد قليل.',
-                        [{ text: 'حسناً' }]
-                    );
+                    toastManager.showError('خطأ في الاتصال', 'حدث خطأ في الاتصال بقاعدة البيانات. يرجى المحاولة مرة أخرى بعد قليل.');
                     return { success: false, isNewUser: false };
                 }
                 
@@ -541,7 +530,7 @@ export default function AuthScreen() {
 
     const handleAuth = async () => {
         if (!email || !password) {
-            Alert.alert(t.common.error, t.common.fillAllFields);
+            toastManager.showError(t.common.error, t.common.fillAllFields);
             return;
         }
 
@@ -551,7 +540,7 @@ export default function AuthScreen() {
             if (isLogin) {
                 // Login with Clerk
                 if (!signIn) {
-                    Alert.alert(t.common.error, t.common.loginServiceUnavailable);
+                    toastManager.showError(t.common.error, t.common.loginServiceUnavailable);
                     setIsLoading(false);
                     return;
                 }
@@ -662,18 +651,18 @@ export default function AuthScreen() {
                     }
                 } else {
                     setShowLoadingScreen(false);
-                    Alert.alert(t.common.error, t.common.operationFailed);
+                    toastManager.showError('خطأ', t.common.operationFailed);
                 }
             } else {
                 // Sign up - Check terms acceptance
                 if (!name) {
-                    Alert.alert('خطأ', 'يرجى إدخال الاسم');
+                    toastManager.showError('خطأ', 'يرجى إدخال الاسم');
                     setIsLoading(false);
                     return;
                 }
 
                 if (!termsAccepted) {
-                    Alert.alert('خطأ', 'يجب الموافقة على الشروط والأحكام للمتابعة');
+                    toastManager.showWarning('خطأ', 'يجب الموافقة على الشروط والأحكام للمتابعة');
                     setIsLoading(false);
                     return;
                 }
@@ -706,7 +695,7 @@ export default function AuthScreen() {
             const signupName = name;
 
             if (!signUp) {
-                Alert.alert('خطأ', 'خدمة التسجيل غير متاحة');
+                toastManager.showError('خطأ', 'خدمة التسجيل غير متاحة');
                 setIsLoading(false);
                 return;
             }
@@ -771,11 +760,11 @@ export default function AuthScreen() {
             if (supported) {
                 await Linking.openURL(termsUrl);
             } else {
-                Alert.alert('خطأ', 'لا يمكن فتح الرابط');
+                toastManager.showError('خطأ', 'لا يمكن فتح الرابط');
             }
         } catch (error) {
             console.error('Error opening terms:', error);
-            Alert.alert('خطأ', 'فشل فتح الشروط والأحكام');
+            toastManager.showError('خطأ', 'فشل فتح الشروط والأحكام');
         }
     };
 
@@ -784,7 +773,7 @@ export default function AuthScreen() {
      */
     const handleVerifyEmail = async () => {
         if (!verificationCode || verificationCode.length < 6) {
-            Alert.alert('خطأ', 'يرجى إدخال رمز التحقق المكون من 6 أرقام');
+            toastManager.showError('خطأ', 'يرجى إدخال رمز التحقق المكون من 6 أرقام');
             return;
         }
 
@@ -876,9 +865,9 @@ export default function AuthScreen() {
     const handleResendCode = async () => {
         try {
             await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' });
-            Alert.alert('تم', 'تم إرسال رمز جديد إلى بريدك الإلكتروني');
+            toastManager.showSuccess('تم', 'تم إرسال رمز جديد إلى بريدك الإلكتروني');
         } catch (error: any) {
-            Alert.alert('خطأ', 'فشل إرسال الرمز، حاول مرة أخرى');
+            toastManager.showError('خطأ', 'فشل إرسال الرمز، حاول مرة أخرى');
         }
     };
 
@@ -1034,7 +1023,7 @@ export default function AuthScreen() {
                 errorMessage = error.message;
             }
 
-            Alert.alert(t.common.error, errorMessage);
+            toastManager.showError('خطأ', errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -1168,7 +1157,7 @@ export default function AuthScreen() {
                 errorMessage = error.message;
             }
 
-            Alert.alert(t.common.error, errorMessage);
+            toastManager.showError('خطأ', errorMessage);
         } finally {
             setIsLoading(false);
         }

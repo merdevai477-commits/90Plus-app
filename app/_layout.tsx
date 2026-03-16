@@ -11,6 +11,7 @@ import { LanguageProvider } from "../contexts/LanguageContext";
 import { CoinsProvider } from "../contexts/CoinsContext";
 import { VideosProvider } from "../contexts/VideosContext";
 import { ToastProvider } from "../contexts/ToastContext";
+import { ProfessionalToastProvider } from '../contexts/ProfessionalToastContext';
 import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
@@ -399,17 +400,19 @@ export default function RootLayout() {
                     <CoinsProvider>
                       <VideosProvider>
                         <ToastProvider>
-                          <GestureHandlerRootView>
-                            <SafeAreaProvider>
-                              <View style={{ flex: 1, backgroundColor: '#000' }}>
-                                <StatusBar
-                                  barStyle="light-content"
-                                  backgroundColor="#000"
-                                />
-                                <RootLayoutNav />
-                              </View>
-                            </SafeAreaProvider>
-                          </GestureHandlerRootView>
+                          <ProfessionalToastProvider>
+                            <GestureHandlerRootView>
+                              <SafeAreaProvider>
+                                <View style={{ flex: 1, backgroundColor: '#000' }}>
+                                  <StatusBar
+                                    barStyle="light-content"
+                                    backgroundColor="#000"
+                                  />
+                                  <RootLayoutNav />
+                                </View>
+                              </SafeAreaProvider>
+                            </GestureHandlerRootView>
+                          </ProfessionalToastProvider>
                         </ToastProvider>
                       </VideosProvider>
                     </CoinsProvider>

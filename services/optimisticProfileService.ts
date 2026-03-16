@@ -21,6 +21,8 @@ export interface ProfileUpdateData {
   favoriteTeam?: string;
   favoriteClub?: string;
   favoriteBrand?: string;
+  clubLogo?: string;
+  brandLogo?: string;
   socialLinks?: {
     instagram?: string;
     twitter?: string;
