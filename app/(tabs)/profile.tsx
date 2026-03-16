@@ -1305,10 +1305,12 @@ export default function ProfileScreen() {
         visible={isClubModalVisible}
         onClose={() => setIsClubModalVisible(false)}
         onSelect={async (selectedClub) => {
+          console.log('🏆 [ClubPicker] Selected club:', selectedClub.name);
+          
           // Optimistic update - UI changes immediately
           setClub(selectedClub.logo);
           
-          // Update cached data and global state immediately
+          // Update cached data immediately (synchronous now)
           updateCachedUserData({ 
             clubLogo: selectedClub.logo,
             favoriteTeam: selectedClub.name 
@@ -1325,12 +1327,16 @@ export default function ProfileScreen() {
           
           setIsClubModalVisible(false);
           
+          console.log('✅ [ClubPicker] UI updated, sending to backend...');
+          
           // Send to backend with optimistic updates
           await updateFavorites({ 
             favoriteClub: selectedClub.name,
             favoriteTeam: selectedClub.name 
           });
-        }}
+          
+          console.log('✅ [ClubPicker] Backend update completed');
+        }}}
       />
 
       <BrandPickerModal
@@ -1413,6 +1419,15 @@ export default function ProfileScreen() {
             if (updates.username) {
               // Update UI immediately before sending to backend
               updateCachedUserData({ username: updates.username });
+              
+              // Also update global state for immediate UI refresh
+              if (globalState.userProfile) {
+                globalState.setUserProfile({
+                  ...globalState.userProfile,
+                  username: updates.username
+                });
+              }
+              
               await updateUsername(updates.username);
               delete updates.username; // Remove from batch update
             }
@@ -1420,6 +1435,15 @@ export default function ProfileScreen() {
             if (updates.displayName) {
               // Update UI immediately before sending to backend
               updateCachedUserData({ displayName: updates.displayName });
+              
+              // Also update global state for immediate UI refresh
+              if (globalState.userProfile) {
+                globalState.setUserProfile({
+                  ...globalState.userProfile,
+                  displayName: updates.displayName
+                });
+              }
+              
               await updateDisplayName(updates.displayName);
               delete updates.displayName;
             }

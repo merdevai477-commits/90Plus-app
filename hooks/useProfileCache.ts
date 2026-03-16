@@ -561,18 +561,25 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
    * Update user data locally (for optimistic updates)
    * Also updates cache immediately
    */
-  const updateUserData = useCallback(async (updates: Partial<ProfileUserData>): Promise<void> => {
+  const updateUserData = useCallback((updates: Partial<ProfileUserData>): void => {
+    // Update state immediately (synchronous)
     setUserData(prev => prev ? { ...prev, ...updates } : null);
     
-    // Update cache immediately with new data
-    const currentCache = await cacheService.get<ProfileCacheData>(cacheKey);
-    if (currentCache && currentCache.userData) {
-      await saveToCache({
-        ...currentCache,
-        userData: { ...currentCache.userData, ...updates },
-      });
-    }
-  }, [saveToCache]);
+    // Update cache in background (asynchronous)
+    (async () => {
+      try {
+        const currentCache = await cacheService.get<ProfileCacheData>(cacheKey);
+        if (currentCache && currentCache.userData) {
+          await saveToCache({
+            ...currentCache,
+            userData: { ...currentCache.userData, ...updates },
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to update cache:', error);
+      }
+    })();
+  }, [saveToCache, cacheKey]);
 
   /**
    * Update follow stats locally

@@ -564,8 +564,19 @@ export class AuthService {
         offset: number = 0
     ): Promise<UserReel[]> {
         try {
-            const url = `${API_URL}/clerk/user/${username}/reels?limit=${limit}&offset=${offset}`;
-            console.log('🔍 [getUserReels] Fetching URL:', url);
+            // Debug logging
+            console.log('🔍 [getUserReels] Input params:', { username, limit, offset });
+            console.log('🔍 [getUserReels] API_URL:', API_URL);
+            
+            // Ensure username is clean (no extra characters)
+            const cleanUsername = username?.trim();
+            if (!cleanUsername) {
+                console.error('❌ [getUserReels] Invalid username:', username);
+                return [];
+            }
+            
+            const url = `${API_URL}/clerk/user/${cleanUsername}/reels?limit=${limit}&offset=${offset}`;
+            console.log('� [getUserReels] Final URL:', url);
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -576,6 +587,12 @@ export class AuthService {
             });
 
             console.log('📡 [getUserReels] Response status:', response.status);
+            console.log('📡 [getUserReels] Response URL:', response.url);
+            
+            if (!response.ok) {
+                console.error('❌ [getUserReels] HTTP Error:', response.status, response.statusText);
+                return [];
+            }
             
             const data = await response.json();
             console.log('📦 [getUserReels] Response data:', data);
@@ -583,9 +600,11 @@ export class AuthService {
             if (data.status === 'SUCCESS') {
                 return data.data.reels || [];
             }
+            
+            console.warn('⚠️ [getUserReels] API returned non-success status:', data.status);
             return [];
         } catch (error) {
-            console.error('Error getting user reels:', error);
+            console.error('❌ [getUserReels] Error:', error);
             return [];
         }
     }
