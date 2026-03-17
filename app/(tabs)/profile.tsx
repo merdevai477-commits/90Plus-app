@@ -23,6 +23,7 @@ import { globalState } from '../../globalState';
 import { AuthService, CardProfileService, ProfileService, ReelsService } from '../../src/services/authService';
 import { StorageService } from '../../src/services/storageService';
 import { toastManager } from '../../services/toastManager';
+import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
 import { useProfileCache } from '../../hooks/useProfileCache';
 import { useTranslation } from '../../src/i18n';
@@ -42,7 +43,7 @@ import FollowersListModal from '../../components/profile/FollowersListModal';
 import QRCodeModal from '../../components/profile/QRCodeModal';
 import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOptimisticProfile';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
-import { Club } from '../../data/clubs';
+import { TopClub } from '../../data/top5LeaguesClubs';
 
 const API_URL = getApiUrl();
 
@@ -503,6 +504,32 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!userData) return;
 
+    // Load local profile data and merge with server data
+    const loadLocalData = async () => {
+      try {
+        const mergedData = await localProfileStorage.mergeWithServerData(userData);
+        
+        // Update state with merged data
+        if (mergedData.position) setPosition(mergedData.position);
+        if (mergedData.countryFlag) setCountryFlag(mergedData.countryFlag);
+        if (mergedData.country) setLocation(mergedData.country);
+        if (mergedData.clubLogo) setClub(mergedData.clubLogo);
+        if (mergedData.brandLogo) setBrand(mergedData.brandLogo);
+        
+        // Update stats
+        if (mergedData.age || mergedData.height || mergedData.weight || mergedData.preferredFoot) {
+          setStats({
+            age: mergedData.age?.toString() || DEFAULT_STATS.age,
+            height: mergedData.height?.toString() || DEFAULT_STATS.height,
+            weight: mergedData.weight?.toString() || DEFAULT_STATS.weight,
+            foot: (mergedData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
+          });
+        }
+      } catch (error) {
+        logger.error('Error loading local profile data:', error);
+      }
+    };
+
     const prev = prevUserDataRef.current;
     const hasChanged = !prev ||
       prev.position !== userData.position ||
@@ -520,52 +547,14 @@ export default function ProfileScreen() {
 
     prevUserDataRef.current = userData;
 
-    if (userData.position) setPosition(userData.position);
-    if (userData.countryFlag) setCountryFlag(userData.countryFlag);
-    if (userData.location) setLocation(userData.location);
+    // Load local data first, then fallback to server data
+    loadLocalData();
     if (userData.avatar) {
       setLocalImage(userData.avatar);
       globalState.setLocalAvatar(userData.avatar);
     }
     if (userData.coverImage) {
       setCoverImage(userData.coverImage);
-    }
-
-    if (userData.clubLogo) {
-      setClub(userData.clubLogo);
-    } else if (userData.favoriteTeam && !prev?.favoriteTeam) {
-      const loadClubLogo = async () => {
-        try {
-          const { CLUBS } = await import('../../data/clubs');
-          const matchedClub = CLUBS.find(c =>
-            c.name === userData.favoriteTeam ||
-            c.name.includes(userData.favoriteTeam) ||
-            userData.favoriteTeam.includes(c.name)
-          );
-          if (matchedClub?.apiId) {
-            const { getClubLogo } = await import('../../services/clubLogoService');
-            const logo = await getClubLogo(matchedClub.apiId);
-            if (logo) {
-              setClub(logo);
-              await updateCachedUserData({ clubLogo: logo });
-            }
-          }
-        } catch (error) {
-          logger.error('Error loading club logo:', error);
-        }
-      };
-      loadClubLogo();
-    }
-
-    if (userData.brandLogo) setBrand(userData.brandLogo);
-
-    if (userData.age || userData.height || userData.weight || userData.preferredFoot) {
-      setStats({
-        age: userData.age?.toString() || DEFAULT_STATS.age,
-        height: userData.height?.toString() || DEFAULT_STATS.height,
-        weight: userData.weight?.toString() || DEFAULT_STATS.weight,
-        foot: (userData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
-      });
     }
 
     globalState.username = userData.username;
@@ -1289,19 +1278,34 @@ export default function ProfileScreen() {
         onSelect={async (country) => {
           // Optimistic update - UI changes immediately
           setCountryFlag(country.flag);
-          setLocation(country.name);
+          setLocation(country.nameAr);
+          
+          // Save locally immediately
+          await localProfileStorage.saveProfileData({
+            countryFlag: country.flag,
+            country: country.nameAr
+          });
+          
+          // Update cached data immediately
+          await updateCachedUserData({ 
+            countryFlag: country.flag,
+            country: country.nameAr 
+          });
+          
           setIsCountryModalVisible(false);
           
-          toastManager.showInfo('جاري التحديث', `جاري تحديث البلد إلى ${country.name}...`);
+          toastManager.showInfo('جاري التحديث', `جاري تحديث البلد إلى ${country.nameAr}...`);
           
           // Send to backend with optimistic updates
-          const result = await updateFIFACard({ countryFlag: country.flag });
+          const result = await updateFIFACard({ 
+            countryFlag: country.flag
+          });
           
           if (result.success) {
-            toastManager.showSuccess('تم التحديث', `تم تحديث البلد إلى ${country.name} بنجاح`);
+            toastManager.showSuccess('تم التحديث', `تم تحديث البلد إلى ${country.nameAr} بنجاح`);
           }
         }}
-        selectedCountryCode={countryFlag}
+        selectedCountryId={countryFlag}
       />
 
       <PositionPickerModal
@@ -1328,15 +1332,21 @@ export default function ProfileScreen() {
         visible={isClubModalVisible}
         onClose={() => setIsClubModalVisible(false)}
         onSelect={async (selectedClub) => {
-          console.log('🏆 [ClubPicker] Selected club:', selectedClub.name);
+          console.log('🏆 [ClubPicker] Selected club:', selectedClub.nameAr);
           
           // Optimistic update - UI changes immediately
           setClub(selectedClub.logo);
           
+          // Save locally immediately
+          await localProfileStorage.saveProfileData({
+            clubLogo: selectedClub.logo,
+            favoriteTeam: selectedClub.nameAr
+          });
+          
           // Update cached data immediately (synchronous now)
           updateCachedUserData({ 
             clubLogo: selectedClub.logo,
-            favoriteTeam: selectedClub.name 
+            favoriteTeam: selectedClub.nameAr 
           });
           
           // Update global state for immediate UI refresh
@@ -1344,25 +1354,25 @@ export default function ProfileScreen() {
             globalState.setUserProfile({
               ...globalState.userProfile,
               clubLogo: selectedClub.logo,
-              favoriteTeam: selectedClub.name
+              favoriteTeam: selectedClub.nameAr
             });
           }
           
           setIsClubModalVisible(false);
           
-          toastManager.showInfo('جاري التحديث', `جاري تحديث النادي إلى ${selectedClub.name}...`);
+          toastManager.showInfo('جاري التحديث', `جاري تحديث النادي إلى ${selectedClub.nameAr}...`);
           
           console.log('✅ [ClubPicker] UI updated, sending to backend...');
           
           // Send to backend with optimistic updates
           const result = await updateFavorites({ 
-            favoriteClub: selectedClub.name,
-            favoriteTeam: selectedClub.name,
+            favoriteClub: selectedClub.nameAr,
+            favoriteTeam: selectedClub.nameAr,
             clubLogo: selectedClub.logo
           });
           
           if (result.success) {
-            toastManager.showSuccess('تم التحديث', `تم تحديث النادي إلى ${selectedClub.name} بنجاح`);
+            toastManager.showSuccess('تم التحديث', `تم تحديث النادي إلى ${selectedClub.nameAr} بنجاح`);
           }
           
           console.log('✅ [ClubPicker] Backend update completed');
@@ -1375,19 +1385,31 @@ export default function ProfileScreen() {
         onSelect={async (selectedBrand) => {
           // Optimistic update - UI changes immediately
           setBrand(selectedBrand.logo);
-          updateCachedUserData({ brandLogo: selectedBrand.logo });
+          
+          // Save locally immediately
+          await localProfileStorage.saveProfileData({
+            brandLogo: selectedBrand.logo,
+            favoriteBrand: selectedBrand.nameAr
+          });
+          
+          // Update cached data immediately
+          await updateCachedUserData({ 
+            brandLogo: selectedBrand.logo,
+            favoriteBrand: selectedBrand.nameAr
+          });
+          
           setIsBrandModalVisible(false);
           
-          toastManager.showInfo('جاري التحديث', `جاري تحديث العلامة التجارية إلى ${selectedBrand.name}...`);
+          toastManager.showInfo('جاري التحديث', `جاري تحديث العلامة التجارية إلى ${selectedBrand.nameAr}...`);
           
           // Send to backend with optimistic updates
           const result = await updateFavorites({ 
-            favoriteBrand: selectedBrand.name,
+            favoriteBrand: selectedBrand.nameAr,
             brandLogo: selectedBrand.logo
           });
           
           if (result.success) {
-            toastManager.showSuccess('تم التحديث', `تم تحديث العلامة التجارية إلى ${selectedBrand.name} بنجاح`);
+            toastManager.showSuccess('تم التحديث', `تم تحديث العلامة التجارية إلى ${selectedBrand.nameAr} بنجاح`);
           }
         }}
       />

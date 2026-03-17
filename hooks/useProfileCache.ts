@@ -52,12 +52,14 @@ export interface ProfileUserData {
   // FIFA Card fields
   position?: string;
   countryFlag?: string;
+  country?: string; // Country name in Arabic
   age?: number;
   height?: number;
   weight?: number;
   preferredFoot?: string;
   clubLogo?: string;
   brandLogo?: string;
+  favoriteBrand?: string; // Brand name in Arabic
   coverImage?: string;
   consecutiveLoginDays?: number; // أيام تسجيل الدخول المتتالية
 }

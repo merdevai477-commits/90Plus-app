@@ -4,23 +4,13 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { TOP_5_LEAGUES_CLUBS, getClubsByLeague, getAllLeagues } from '../../data/top5LeaguesClubs';
+import { TOP_5_LEAGUES_CLUBS, TopClub, getClubsByLeague, getAllLeagues } from '../../data/top5LeaguesClubs';
 import { logger } from '../../utils/logger';
-
-interface Club {
-    id: string;          // Convert teamId to string for compatibility
-    apiId?: number;      // Numeric teamId for API calls
-    name: string;
-    logo: string;        // Non-nullable for compatibility
-    country: string;     // Non-nullable for compatibility
-    league: string;      // Non-nullable for compatibility
-    color: string;       // Non-nullable for compatibility
-}
 
 interface ClubPickerModalProps {
     visible: boolean;
     onClose: () => void;
-    onSelect: (club: Club) => void;
+    onSelect: (club: TopClub) => void;
     selectedClubId?: string | number;  // ✅ Accept both string and number
 }
 
@@ -54,7 +44,7 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
         return leagueNames[league] || league;
     };
 
-    const renderClubItem = ({ item }: { item: Club }) => {
+    const renderClubItem = ({ item }: { item: TopClub }) => {
         const isSelected = selectedClubId === item.id || selectedClubId === item.apiId;
 
         return (
