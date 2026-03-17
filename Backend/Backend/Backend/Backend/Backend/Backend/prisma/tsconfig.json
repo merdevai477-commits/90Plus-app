@@ -1,0 +1,12 @@
+{
+    "extends": "../tsconfig.json",
+    "include": [
+        "seed.ts"
+    ],
+    "exclude": [],
+    "compilerOptions": {
+        "noEmit": true,
+        "module": "commonjs",
+        "rootDir": "."
+    }
+}
