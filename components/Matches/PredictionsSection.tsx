@@ -21,7 +21,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,6 +33,7 @@ import { PredictionsService } from '../../services/predictions.service';
 import { useCoins } from '../../contexts/CoinsContext';
 import { logger } from '../../utils/logger';
 import { MAJOR_LEAGUES } from '../../services/apiFootball';
+import { toastManager } from '../../services/toastManager';
 
 interface PredictionsSectionProps {
   matches: Match[];
@@ -335,30 +335,27 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
 
       // Check if already predicted
       if (currentPredictions[match.id]?.prediction) {
-        Alert.alert(
+        toastManager.showWarning(
           'تنبيه',
-          'لقد قمت بالتوقع على هذه المباراة مسبقاً. لا يمكن تغيير التوقع.',
-          [{ text: 'حسناً' }]
+          'لقد قمت بالتوقع على هذه المباراة مسبقاً. لا يمكن تغيير التوقع.'
         );
         return;
       }
 
       // Check coins
       if (currentCoins < PREDICTION_COST) {
-        Alert.alert(
+        toastManager.showWarning(
           'كوبونات غير كافية',
-          `تحتاج إلى ${PREDICTION_COST} كوبونات للتوقع. رصيدك الحالي: ${currentCoins}`,
-          [{ text: 'حسناً' }]
+          `تحتاج إلى ${PREDICTION_COST} كوبونات للتوقع. رصيدك الحالي: ${currentCoins}`
         );
         return;
       }
 
       // Check remaining predictions
       if (currentRemaining !== null && currentRemaining <= 0) {
-        Alert.alert(
+        toastManager.showWarning(
           'حد التوقعات اليومي',
-          'لقد وصلت إلى الحد الأقصى للتوقعات اليومية. جرب مرة أخرى غداً!',
-          [{ text: 'حسناً' }]
+          'لقد وصلت إلى الحد الأقصى للتوقعات اليومية. جرب مرة أخرى غداً!'
         );
         return;
       }
@@ -408,10 +405,9 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         // ✅ تحديث الـ cache
         predictionsCache.delete('user-predictions');
 
-        Alert.alert(
+        toastManager.showSuccess(
           'تم التوقع بنجاح! 🎯',
-          `تم خصم ${PREDICTION_COST} كوبونات. سيتم تحديث النتيجة بعد انتهاء المباراة.`,
-          [{ text: 'رائع!' }]
+          `تم خصم ${PREDICTION_COST} كوبونات. سيتم تحديث النتيجة بعد انتهاء المباراة.`
         );
       } catch (error) {
         logger.error('Error submitting prediction:', error);
@@ -426,10 +422,9 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         const errorMessage = error instanceof Error ? error.message : 'خطأ غير معروف';
         setError(`فشل إرسال التوقع: ${errorMessage}`);
         
-        Alert.alert(
+        toastManager.showError(
           'خطأ',
-          'حدث خطأ أثناء إرسال التوقع. حاول مرة أخرى.',
-          [{ text: 'حسناً' }]
+          'حدث خطأ أثناء إرسال التوقع. حاول مرة أخرى.'
         );
       }
     },

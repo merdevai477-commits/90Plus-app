@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions } from 'react-native';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import ReelUploadModal from '../../components/common/ReelUploadModal';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
@@ -46,6 +46,25 @@ import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { TopClub } from '../../data/top5LeaguesClubs';
 
 const API_URL = getApiUrl();
+
+// Get screen dimensions for responsive design
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const isSmallScreen = screenWidth < 375; // iPhone SE and smaller
+const isLargeScreen = screenWidth > 414;  // iPhone Plus and larger
+
+// Responsive font sizes
+const getFontSize = (base: number) => {
+  if (isSmallScreen) return base * 0.9;
+  if (isLargeScreen) return base * 1.1;
+  return base;
+};
+
+// Responsive spacing
+const getSpacing = (base: number) => {
+  if (isSmallScreen) return base * 0.8;
+  if (isLargeScreen) return base * 1.2;
+  return base;
+};
 
 // Types for profile handlers
 interface Country {
@@ -105,18 +124,18 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: ProfileTheme.colors.textSecondary,
-    fontSize: 16,
-    marginTop: 16,
+    fontSize: getFontSize(16),
+    marginTop: getSpacing(16),
   },
   analyticsContainer: {
     paddingHorizontal: 20,
   },
   analyticsTitle: {
-    fontSize: 20,
+    fontSize: getFontSize(20),
     fontWeight: 'bold',
     color: ProfileTheme.colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: getSpacing(20),
   },
   analyticsGrid: {
     flexDirection: 'row',
@@ -125,24 +144,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   analyticsCard: {
-    width: '47%',
+    width: isSmallScreen ? '100%' : '47%',
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: getSpacing(16),
+    padding: getSpacing(20),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: isSmallScreen ? getSpacing(12) : 0,
   },
   analyticsValue: {
-    fontSize: 28,
+    fontSize: getFontSize(28),
     fontWeight: 'bold',
     color: ProfileTheme.colors.textPrimary,
-    marginTop: 8,
+    marginTop: getSpacing(8),
   },
   analyticsLabel: {
-    fontSize: 14,
+    fontSize: getFontSize(14),
     color: ProfileTheme.colors.textSecondary,
-    marginTop: 4,
+    marginTop: getSpacing(4),
   },
   analyticsSection: {
     marginTop: 24,
@@ -1534,6 +1554,24 @@ export default function ProfileScreen() {
             }
             
             if (updates.socialLinks) {
+              // Update UI immediately before sending to backend
+              const newSocialLinks = Object.entries(updates.socialLinks).map(([platform, url]) => ({
+                platform,
+                url: url as string,
+                username: url?.replace(/.*\//, '').replace('@', '') // Extract username from URL
+              }));
+              
+              // Update cached data immediately (synchronous now)
+              updateCachedUserData({ socialLinks: newSocialLinks });
+              
+              // Also update global state for immediate UI refresh
+              if (globalState.userProfile) {
+                globalState.setUserProfile({
+                  ...globalState.userProfile,
+                  socialLinks: newSocialLinks
+                });
+              }
+              
               const result = await updateSocialLinks(updates.socialLinks);
               if (result.success) {
                 toastManager.showSuccess('تم التحديث', 'تم تحديث الروابط الاجتماعية بنجاح');

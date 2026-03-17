@@ -17,9 +17,6 @@ import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 import { formatDateItem, isSameDay } from '../league-center/dateUtils';
 import { useTranslation } from '../../src/i18n/useTranslation';
 import DatePickerModal from './DatePickerModal';
-import { useDailyPredictions } from '../../hooks/useDailyPredictions';
-import { useAuth } from '@clerk/clerk-expo';
-import { CoinsBadge } from '../common/CoinsBadge';
 
 interface MatchTopBarProps {
   selectedDate: Date;
@@ -36,24 +33,11 @@ const MatchTopBar: React.FC<MatchTopBarProps> = React.memo(({
 }) => {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { getToken } = useAuth();
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const isToday = isSameDay(selectedDate, today);
-
-  // Get token for predictions
-  React.useEffect(() => {
-    const loadToken = async () => {
-      const authToken = await getToken();
-      setToken(authToken);
-    };
-    loadToken();
-  }, [getToken]);
-
-  const { data: predictionsData } = useDailyPredictions(token);
 
   const handlePreviousDay = () => {
     const newDate = new Date(selectedDate);
@@ -100,33 +84,35 @@ const MatchTopBar: React.FC<MatchTopBarProps> = React.memo(({
       <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
       <Animated.View style={[StyleSheet.absoluteFill, containerStyle, { backgroundColor: 'rgba(15, 7, 32, 0.95)' }]} />
       <View style={styles.content}>
+        {/* Navigation Arrows */}
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={handlePreviousDay}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={20} color={MATCH_DETAILS_COLORS.text} />
+        </TouchableOpacity>
+
         {/* Date Display - Centered */}
-        <View style={styles.navigation}>
-          <TouchableOpacity
-            style={[styles.dateButton, isToday && styles.dateButtonToday]}
-            onPress={handleDatePress}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dateText}>
-              {isToday ? t.matches.time.today : dateDisplay.dayAbbr}
-            </Text>
-            <Text style={styles.dateNumber}>{dateDisplay.dayNumber}</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.dateButton, isToday && styles.dateButtonToday]}
+          onPress={handleDatePress}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.dateText}>
+            {isToday ? t.matches.time.today : dateDisplay.dayAbbr}
+          </Text>
+          <Text style={styles.dateNumber}>{dateDisplay.dayNumber}</Text>
+        </TouchableOpacity>
 
-        {/* Right Section - Tickets & Coins */}
-        <View style={styles.rightSection}>
-          {/* Tickets */}
-          <TouchableOpacity style={styles.ticketContainer} activeOpacity={0.7}>
-            <Ionicons name="ticket-outline" size={20} color="#3B82F6" />
-            <Text style={styles.ticketText}>
-              {predictionsData ? `${predictionsData.remaining}/10` : '10/10'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Coins */}
-          <CoinsBadge />
-        </View>
+        {/* Navigation Arrows */}
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={handleNextDay}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-forward" size={20} color={MATCH_DETAILS_COLORS.text} />
+        </TouchableOpacity>
       </View>
 
       {/* Date Picker Modal */}
@@ -159,22 +145,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  navigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  navButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: MATCH_DETAILS_COLORS.card,
     justifyContent: 'center',
-    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: MATCH_DETAILS_COLORS.border,
   },
   dateButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 12,
     backgroundColor: MATCH_DETAILS_COLORS.card,
     borderWidth: 1,
     borderColor: MATCH_DETAILS_COLORS.border,
-    minWidth: 80,
+    minWidth: 100,
   },
   dateButtonToday: {
     backgroundColor: `rgba(34, 197, 94, 0.15)`,
@@ -191,35 +181,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: MATCH_DETAILS_COLORS.text,
-  },
-  filterButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: MATCH_DETAILS_COLORS.card,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: MATCH_DETAILS_COLORS.border,
-  },
-  rightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  ticketContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: `rgba(59, 130, 246, 0.1)`,
-  },
-  ticketText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#3B82F6',
   },
 });
 
