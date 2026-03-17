@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
+import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
 import { r2Storage } from '../services/r2-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
@@ -26,7 +27,7 @@ const REEL_UPLOAD_COOLDOWN_DAYS = 3;
  * POST /api/upload/avatar
  * Upload avatar image to R2 Storage
  */
-router.post('/avatar', requireAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+router.post('/avatar', requireAuth, upload.single('file'), optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -164,7 +165,7 @@ router.post('/avatar', requireAuth, upload.single('file'), async (req: Request, 
  * POST /api/upload/cover
  * Upload cover image to R2 Storage
  */
-router.post('/cover', requireAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+router.post('/cover', requireAuth, upload.single('file'), optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
