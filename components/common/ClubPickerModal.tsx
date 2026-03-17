@@ -4,9 +4,8 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { getApiUrl } from '../../config/api.config';
+import { TOP_5_LEAGUES_CLUBS, getClubsByLeague, getAllLeagues } from '../../data/top5LeaguesClubs';
 import { logger } from '../../utils/logger';
-import { useAuth } from '@clerk/clerk-expo';
 
 interface Club {
     id: string;          // Convert teamId to string for compatibility
@@ -27,78 +26,36 @@ interface ClubPickerModalProps {
 
 export default function ClubPickerModal({ visible, onClose, onSelect, selectedClubId }: ClubPickerModalProps) {
     const [search, setSearch] = useState('');
-    const [clubs, setClubs] = useState<Club[]>([]);
+    const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [loading, setLoading] = useState(false);
-    const [failedLogos, setFailedLogos] = useState<Set<number>>(new Set());
-    const { getToken } = useAuth();
 
-    // ✅ Load clubs from backend database
-    useEffect(() => {
-        if (visible) {
-            loadClubsFromBackend();
-        }
-    }, [visible]);
+    // ✅ Use local clubs from top 5 leagues
+    const clubs = selectedLeague === 'all' 
+        ? TOP_5_LEAGUES_CLUBS 
+        : getClubsByLeague(selectedLeague);
 
-    const loadClubsFromBackend = async () => {
-        try {
-            setLoading(true);
-            const token = await getToken();
-            const response = await fetch(`${getApiUrl()}/football/cached/teams/all`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const teams: Club[] = (data.response || data.teams || [])
-                    .filter((team: any) => team.logo)  // ✅ Only include teams with logos
-                    .map((team: any) => ({
-                        id: String(team.teamId || team.id),  // ✅ Convert to string for compatibility
-                        apiId: team.teamId || team.id,       // ✅ Keep numeric for API calls
-                        name: team.name,
-                        logo: team.logo || '',               // ✅ Default to empty string
-                        country: team.country || '',         // ✅ Default to empty string
-                        league: team.country || '',          // ✅ Use country as league for now
-                        color: '#FFFFFF',                    // ✅ Default color
-                    }));
-                
-                // ✅ Sort: Popular leagues first, then alphabetically
-                const sortedTeams = teams.sort((a, b) => {
-                    const popularCountries = ['England', 'Spain', 'Germany', 'Italy', 'France', 'Egypt'];
-                    const aPopular = popularCountries.includes(a.country || '');
-                    const bPopular = popularCountries.includes(b.country || '');
-                    
-                    if (aPopular && !bPopular) return -1;
-                    if (!aPopular && bPopular) return 1;
-                    
-                    return a.name.localeCompare(b.name);
-                });
-                
-                setClubs(sortedTeams);
-                logger.info(`✅ Loaded ${sortedTeams.length} clubs from backend`);
-            } else {
-                logger.error('Failed to load clubs:', response.status);
-            }
-        } catch (error) {
-            logger.error('Error loading clubs:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const leagues = ['all', ...getAllLeagues()];
 
     const filteredClubs = clubs.filter(c => 
         c.name.toLowerCase().includes(search.toLowerCase()) ||
-        (c.country && c.country.toLowerCase().includes(search.toLowerCase()))
+        c.nameAr.includes(search) ||
+        c.league.toLowerCase().includes(search.toLowerCase())
     );
 
-    const handleImageError = (clubId: number) => {
-        setFailedLogos(prev => new Set(prev).add(clubId));
+    const getLeagueDisplayName = (league: string) => {
+        const leagueNames: Record<string, string> = {
+            'all': 'الكل',
+            'Premier League': 'الدوري الإنجليزي',
+            'La Liga': 'الدوري الإسباني',
+            'Serie A': 'الدوري الإيطالي',
+            'Bundesliga': 'الدوري الألماني',
+            'Ligue 1': 'الدوري الفرنسي',
+        };
+        return leagueNames[league] || league;
     };
 
     const renderClubItem = ({ item }: { item: Club }) => {
         const isSelected = selectedClubId === item.id || selectedClubId === item.apiId;
-        const logoFailed = failedLogos.has(item.apiId || 0);
 
         return (
             <TouchableOpacity
@@ -111,25 +68,14 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                     onClose();
                 }}
             >
-                {!logoFailed && item.logo ? (
-                    <Image
-                        source={{ uri: item.logo }}
-                        style={styles.logo}
-                        contentFit="contain"
-                        transition={200}
-                        onError={() => handleImageError(item.apiId || 0)}
-                    />
-                ) : (
-                    <View style={styles.logoFallback}>
-                        <Text style={styles.logoFallbackText}>
-                            {item.name.charAt(0)}
-                        </Text>
-                    </View>
-                )}
-                <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                {item.country && item.country.length > 0 && (
-                    <Text style={styles.leagueName} numberOfLines={1}>{item.country}</Text>
-                )}
+                <Image
+                    source={{ uri: item.logo }}
+                    style={styles.logo}
+                    contentFit="contain"
+                    transition={200}
+                />
+                <Text style={styles.itemName} numberOfLines={2}>{item.nameAr}</Text>
+                <Text style={styles.leagueName} numberOfLines={1}>{getLeagueDisplayName(item.league)}</Text>
                 {isSelected && (
                     <View style={styles.checkmark}>
                         <Ionicons name="checkmark" size={14} color="#22c55e" />
@@ -168,25 +114,45 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                         />
                     </View>
 
-                    {loading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text style={styles.loadingText}>جاري تحميل الأندية...</Text>
-                        </View>
-                    ) : (
+                    {/* League Filter */}
+                    <View style={styles.leagueFilter}>
                         <FlashList
-                            data={filteredClubs}
-                            keyExtractor={(item) => item.id.toString()}
-                            numColumns={3}
-                            contentContainerStyle={styles.listContent}
-                            renderItem={renderClubItem}
-                            ListEmptyComponent={
-                                <View style={styles.emptyContainer}>
-                                    <Text style={styles.emptyText}>لا توجد أندية</Text>
-                                </View>
-                            }
+                            data={leagues}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.leagueButton,
+                                        selectedLeague === item && styles.leagueButtonActive
+                                    ]}
+                                    onPress={() => setSelectedLeague(item)}
+                                >
+                                    <Text style={[
+                                        styles.leagueButtonText,
+                                        selectedLeague === item && styles.leagueButtonTextActive
+                                    ]}>
+                                        {getLeagueDisplayName(item)}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                            estimatedItemSize={100}
                         />
-                    )}
+                    </View>
+
+                    <FlashList
+                        data={filteredClubs}
+                        keyExtractor={(item) => item.id.toString()}
+                        numColumns={3}
+                        contentContainerStyle={styles.listContent}
+                        renderItem={renderClubItem}
+                        ListEmptyComponent={
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>لا توجد أندية</Text>
+                            </View>
+                        }
+                    />
                 </View>
             </View>
         </Modal>
@@ -239,6 +205,30 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 16,
         textAlign: 'right',
+    },
+    leagueFilter: {
+        marginBottom: 15,
+        height: 40,
+    },
+    leagueButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        marginRight: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    leagueButtonActive: {
+        backgroundColor: '#22c55e',
+    },
+    leagueButtonText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    leagueButtonTextActive: {
+        color: '#000',
     },
     loadingContainer: {
         flex: 1,

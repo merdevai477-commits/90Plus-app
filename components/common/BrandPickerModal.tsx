@@ -4,7 +4,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { BRANDS, getBrandsByCategory, getBrandCategories } from '../../data/brands';
+import { LOCAL_BRANDS, getBrandsByCategory } from '../../data/localBrands';
 
 interface BrandPickerModalProps {
     visible: boolean;
@@ -16,9 +16,9 @@ interface BrandPickerModalProps {
 export default function BrandPickerModal({ visible, onClose, onSelect, selectedBrandId }: BrandPickerModalProps) {
     const [selectedCategory, setSelectedCategory] = useState<string>('All');
     
-    const categories = ['All', ...getBrandCategories()];
+    const categories = ['All', 'Sports'];
     const filteredBrands = selectedCategory === 'All' 
-        ? BRANDS 
+        ? LOCAL_BRANDS 
         : getBrandsByCategory(selectedCategory);
 
     const renderCategoryTab = (category: string) => (
@@ -36,17 +36,12 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
             ]}>
                 {category === 'All' ? 'الكل' : 
                  category === 'Sports' ? 'رياضة' :
-                 category === 'Luxury' ? 'فاخرة' :
-                 category === 'Streetwear' ? 'شارع' :
-                 category === 'Tech' ? 'تقنية' :
-                 category === 'Automotive' ? 'سيارات' :
-                 category === 'Food & Beverage' ? 'طعام وشراب' :
                  category}
             </Text>
         </TouchableOpacity>
     );
 
-    const renderBrandItem = ({ item }: { item: typeof BRANDS[0] }) => {
+    const renderBrandItem = ({ item }: { item: typeof LOCAL_BRANDS[0] }) => {
         const isSelected = selectedBrandId === item.id;
         const hasLogo = item.logo && item.logo.length > 0;
         
@@ -74,7 +69,7 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
                         styles.brandName,
                         { color: item.color === '#000000' || item.color === '#000' ? '#FFF' : '#000' }
                     ]}>
-                        {item.name}
+                        {item.nameAr}
                     </Text>
                 )}
                 {isSelected && (
