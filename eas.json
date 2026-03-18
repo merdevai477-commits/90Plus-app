@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "node": "20",
+      "node": "20.18.0",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
@@ -16,7 +16,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
-      "node": "20",
+      "node": "20.18.0",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
@@ -24,7 +24,7 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "node": "20",
+      "node": "20.18.0",
       "ios": {
         "image": "macos-sonoma-14.6-xcode-16.1"
       },
