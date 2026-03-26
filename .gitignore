@@ -6,5 +6,6 @@ expo-env.d.ts
 # @end expo-cli
 node_modules
 .expo/
-node_modules
-node_modules
+
+# Sentry
+sentry.properties
