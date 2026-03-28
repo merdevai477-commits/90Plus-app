@@ -260,40 +260,79 @@ app.use('/', supportRoutes);
 
 // Serve static files for privacy and terms (Apple compliance)
 // Determine public path based on environment
-// In production (Railway): /app/dist/public
+// In production (Railway): /app/public (Railway copies Backend/public to /app/public)
 // In development: Backend/public
 const publicPath = isProduction 
-    ? path.join(__dirname, '../public')  // dist/public
-    : path.join(__dirname, '../../public'); // Backend/public
+    ? path.join(__dirname, '../../public')  // /app/public in Railway
+    : path.join(__dirname, '../../public'); // Backend/public in development
 
 logger.info(`📁 Public path: ${publicPath}`);
+logger.info(`📁 Current directory: ${__dirname}`);
+logger.info(`📁 Production mode: ${isProduction}`);
+
+// Serve static files from public directory
 app.use(express.static(publicPath));
 
-// Serve privacy and terms pages directly
-app.get('/privacy', (req, res) => {
-    const filePath = path.join(publicPath, 'privacy.html');
+// Serve legal pages with proper error handling and logging
+app.get('/privacy-policy.html', (req, res) => {
+    const filePath = path.join(publicPath, 'privacy-policy.html');
+    logger.info(`📄 Serving privacy policy from: ${filePath}`);
     res.sendFile(filePath, (err) => {
         if (err) {
-            logger.error('Failed to send privacy.html:', err);
-            res.status(500).json({ 
+            logger.error('Failed to send privacy-policy.html:', err);
+            res.status(404).json({ 
                 status: 'ERROR', 
-                message: err.message 
+                message: 'Privacy policy not found',
+                path: filePath,
+                exists: require('fs').existsSync(filePath)
             });
         }
     });
 });
 
-app.get('/terms', (req, res) => {
-    const filePath = path.join(publicPath, 'terms.html');
+app.get('/terms-of-service.html', (req, res) => {
+    const filePath = path.join(publicPath, 'terms-of-service.html');
+    logger.info(`📄 Serving terms of service from: ${filePath}`);
     res.sendFile(filePath, (err) => {
         if (err) {
-            logger.error('Failed to send terms.html:', err);
-            res.status(500).json({ 
+            logger.error('Failed to send terms-of-service.html:', err);
+            res.status(404).json({ 
                 status: 'ERROR', 
-                message: err.message 
+                message: 'Terms of service not found',
+                path: filePath,
+                exists: require('fs').existsSync(filePath)
             });
         }
     });
+});
+
+app.get('/support.html', (req, res) => {
+    const filePath = path.join(publicPath, 'support.html');
+    logger.info(`📄 Serving support page from: ${filePath}`);
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send support.html:', err);
+            res.status(404).json({ 
+                status: 'ERROR', 
+                message: 'Support page not found',
+                path: filePath,
+                exists: require('fs').existsSync(filePath)
+            });
+        }
+    });
+});
+
+// Legacy routes for backward compatibility
+app.get('/privacy', (req, res) => {
+    res.redirect('/privacy-policy.html');
+});
+
+app.get('/terms', (req, res) => {
+    res.redirect('/terms-of-service.html');
+});
+
+app.get('/support', (req, res) => {
+    res.redirect('/support.html');
 });
 
 // Register quiz routes with error handling
