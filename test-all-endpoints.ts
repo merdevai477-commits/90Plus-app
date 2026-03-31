@@ -181,7 +181,7 @@ async function runTests() {
   logSection('2. USER ENDPOINTS');
   
   await testEndpoint('Users', 'GET /api/users', 'get', '/users');
-  await testEndpoint('Users', 'GET /api/users/:username (search)', 'get', '/users/test');
+  await testEndpoint('Users', 'GET /api/users/:username (search)', 'get', '/users/testuser');
   
   // ============================================================================
   // 3. AUTHENTICATION ENDPOINTS (CLERK)
@@ -349,7 +349,7 @@ async function runTests() {
   logSection('17. APP VERSION ENDPOINTS');
   
   await testEndpoint('App Version', 'GET /api/app/version', 'get', '/app/version');
-  await testEndpoint('App Version', 'GET /api/app/check-update', 'get', '/app/check-update');
+  await testEndpoint('App Version', 'GET /api/app/check-update', 'get', '/app/check-update?currentVersion=1.0.0');
   
   // ============================================================================
   // 18. LEGAL PAGES
