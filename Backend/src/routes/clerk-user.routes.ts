@@ -1479,4 +1479,60 @@ router.get('/username-change-status', requireAuth, async (req: Request, res: Res
     }
 });
 
+/**
+ * GET /api/clerk/user
+ * Get current authenticated user (protected)
+ */
+router.get('/user', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        
+        if (!clerkUserId) {
+            res.status(401).json({
+                status: 'ERROR',
+                message: 'Unauthorized'
+            });
+            return;
+        }
+        
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: {
+                id: true,
+                clerkUserId: true,
+                username: true,
+                displayName: true,
+                email: true,
+                avatar: true,
+                bio: true,
+                isVerified: true,
+                isDeveloper: true,
+                coins: true,
+                level: true,
+                xp: true,
+                createdAt: true,
+            }
+        });
+        
+        if (!user) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'User not found'
+            });
+            return;
+        }
+        
+        res.json({
+            status: 'SUCCESS',
+            data: { user }
+        });
+    } catch (error: any) {
+        logger.error('Get current user error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message
+        });
+    }
+});
+
 export default router;
