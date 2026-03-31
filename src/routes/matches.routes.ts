@@ -266,13 +266,11 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
 // ============================================
 router.get('/live', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { FootballService } = await import('../services/football.service');
-        const liveMatches = await FootballService.getLiveFixtures();
+        // Import FootballController instead of FootballService
+        const { FootballController } = await import('../controllers/football.controller');
         
-        res.json({
-            status: 'SUCCESS',
-            data: { matches: liveMatches }
-        });
+        // Call the controller method directly
+        await FootballController.getLiveFixtures(req, res);
     } catch (error: any) {
         logger.error('Get live matches error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
@@ -285,14 +283,13 @@ router.get('/live', async (req: Request, res: Response): Promise<void> => {
 // ============================================
 router.get('/today', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { FootballService } = await import('../services/football.service');
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-        const todayMatches = await FootballService.getFixturesByDate(today);
+        // Use football fixtures endpoint with today's date
+        const { FootballController } = await import('../controllers/football.controller');
         
-        res.json({
-            status: 'SUCCESS',
-            data: { matches: todayMatches }
-        });
+        // Set query params for today
+        req.query.date = new Date().toISOString().split('T')[0];
+        
+        await FootballController.getFixtures(req, res);
     } catch (error: any) {
         logger.error('Get today matches error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
@@ -305,20 +302,17 @@ router.get('/today', async (req: Request, res: Response): Promise<void> => {
 // ============================================
 router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { FootballService } = await import('../services/football.service');
+        const { FootballController } = await import('../controllers/football.controller');
+        
+        // Set query params for next 7 days
         const today = new Date();
         const nextWeek = new Date(today);
         nextWeek.setDate(nextWeek.getDate() + 7);
         
-        const from = today.toISOString().split('T')[0];
-        const to = nextWeek.toISOString().split('T')[0];
+        req.query.from = today.toISOString().split('T')[0];
+        req.query.to = nextWeek.toISOString().split('T')[0];
         
-        const upcomingMatches = await FootballService.getFixturesByDateRange(from, to);
-        
-        res.json({
-            status: 'SUCCESS',
-            data: { matches: upcomingMatches }
-        });
+        await FootballController.getFixtures(req, res);
     } catch (error: any) {
         logger.error('Get upcoming matches error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
