@@ -99,6 +99,15 @@ model User {
   isDeleted            Boolean   @default(false)
   deletedAt            DateTime?
   scheduledDeletionAt  DateTime?
+  deletionRequestedAt  DateTime?
+
+  // GDPR Consent fields
+  analyticsConsent            Boolean   @default(true)
+  pushNotificationsConsent    Boolean   @default(true)
+  emailCommunicationsConsent  Boolean   @default(true)
+  dataSharingConsent          Boolean   @default(false)
+  privacyPolicyVersion        String?
+  privacyPolicyAcceptedAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -147,6 +156,12 @@ model User {
 
   // Terms Acceptance (Apple Compliance)
   termsAcceptances TermsAcceptance[]
+
+  // GDPR Compliance
+  dataExportRequests      DataExportRequest[]      @relation("UserDataExports")
+  accountDeletionRequests AccountDeletionRequest[] @relation("UserAccountDeletions")
+  consentLogs             ConsentLog[]             @relation("UserConsentLogs")
+  gdprAuditLogs           GDPRAuditLog[]           @relation("UserGDPRAuditLogs")
 
   @@index([email])
   @@index([username])
@@ -1452,4 +1467,115 @@ model TermsAcceptance {
   @@index([version])
   @@index([acceptedAt])
   @@map("terms_acceptances")
+}
+
+// ============================================
+// GDPR COMPLIANCE (Data Export & Account Deletion)
+// ============================================
+
+model DataExportRequest {
+  id           String   @id @default(uuid())
+  userId       String
+  status       ExportStatus @default(PENDING)
+  fileUrl      String?
+  fileSize     Int?
+  expiresAt    DateTime?
+  requestedAt  DateTime @default(now())
+  completedAt  DateTime?
+  failedReason String?  @db.Text
+  ipAddress    String?
+  userAgent    String?  @db.Text
+
+  user User @relation("UserDataExports", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([expiresAt])
+  @@map("data_export_requests")
+}
+
+model AccountDeletionRequest {
+  id                  String   @id @default(uuid())
+  userId              String
+  status              DeletionStatus @default(PENDING)
+  reason              String?  @db.Text
+  requestedAt         DateTime @default(now())
+  scheduledAt         DateTime?
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?  @db.Text
+  ipAddress           String?
+  userAgent           String?  @db.Text
+
+  user User @relation("UserAccountDeletions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([requestedAt])
+  @@map("account_deletion_requests")
+}
+
+model ConsentLog {
+  id          String   @id @default(uuid())
+  userId      String
+  consentType ConsentType
+  granted     Boolean
+  timestamp   DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?  @db.Text
+  version     String?  // Privacy policy version
+
+  user User @relation("UserConsentLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([consentType])
+  @@index([timestamp])
+  @@map("consent_logs")
+}
+
+model GDPRAuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    GDPRAction
+  details   String?  @db.Text
+  ipAddress String?
+  userAgent String?  @db.Text
+  timestamp DateTime @default(now())
+
+  user User @relation("UserGDPRAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("gdpr_audit_logs")
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum DeletionStatus {
+  PENDING
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum ConsentType {
+  ANALYTICS
+  PUSH_NOTIFICATIONS
+  EMAIL_COMMUNICATIONS
+  DATA_SHARING
+}
+
+enum GDPRAction {
+  DATA_EXPORT
+  ACCOUNT_DELETION
+  CONSENT_CHANGE
+  DATA_ACCESS
 }

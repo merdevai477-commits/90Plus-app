@@ -217,6 +217,7 @@ import appVersionRoutes from './routes/app-version.routes';
 import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
+import gdprRoutes from './routes/gdpr.routes';
 import path from 'path';
 
 // Import services
@@ -254,6 +255,8 @@ app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);
 app.use(`${API_PREFIX}/reports`, reportsRoutes);
+app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
+app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
@@ -768,6 +771,31 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ Account Deletion Cron Job scheduled (daily at 2 AM)');
+                    
+                    // ✅ Setup GDPR Cron Jobs
+                    // 1. Check for scheduled deletions (every hour)
+                    cron.schedule('0 * * * *', async () => {
+                        logger.info('⏰ GDPR Cron: Checking scheduled deletions...');
+                        try {
+                            const { setupGDPRCronJobs } = await import('./services/data-anonymization.service');
+                            await setupGDPRCronJobs();
+                        } catch (error) {
+                            logger.error('❌ GDPR cron job failed:', error);
+                        }
+                    });
+                    logger.info('✅ GDPR Cron Jobs scheduled (hourly)');
+                    
+                    // 2. Cleanup expired export files (daily at 3 AM)
+                    cron.schedule('0 3 * * *', async () => {
+                        logger.info('⏰ GDPR Cron: Cleaning up expired export files...');
+                        try {
+                            const { cleanupOldExports } = await import('./services/data-anonymization.service');
+                            await cleanupOldExports();
+                        } catch (error) {
+                            logger.error('❌ Export cleanup cron job failed:', error);
+                        }
+                    });
+                    logger.info('✅ GDPR Export Cleanup Cron Job scheduled (daily at 3 AM)');
                     
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();
