@@ -6,6 +6,7 @@ import { WebSocketService } from '../services/websocket.service';
 import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
 import { lenientLimiter, writeLimiter, strictLimiter } from '../middleware/rateLimit.middleware';
 import { redisCacheService } from '../services/redis-cache.service';
+import { moderateReelCaption, moderateComment } from '../middleware/content-moderation.middleware';
 
 const router = Router();
 
@@ -259,7 +260,7 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
  * POST /api/reels
  * Upload a new reel (3 days cooldown)
  */
-router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, moderateReelCaption, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -698,7 +699,7 @@ import { COMMENT_LIMITS } from '../config/supabase.config';
  * POST /api/reels/:id/comments
  * Add a comment or reply to a reel
  */
-router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', requireAuth, writeLimiter, moderateComment, async (req: Request, res: Response): Promise<void> => {
     // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
