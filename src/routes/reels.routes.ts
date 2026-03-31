@@ -2987,4 +2987,145 @@ router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 6
     }
 });
 
+// ============================================
+// GET /api/reels
+// Get all reels (alias for /feed)
+// ============================================
+router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
+    // Redirect to /feed endpoint
+    req.url = '/feed';
+    req.originalUrl = req.originalUrl.replace(/\/$/, '/feed');
+    return router.handle(req, res, () => {});
+});
+
+// ============================================
+// GET /api/reels/trending
+// Get trending reels (most viewed/liked in last 24 hours)
+// ============================================
+router.get('/trending', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { limit = '10' } = req.query;
+        const take = Math.min(parseInt(limit as string) || 10, 20);
+        
+        // Get reels from last 24 hours, sorted by engagement
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        const trendingReels = await prisma.reel.findMany({
+            where: {
+                isDeleted: false,
+                createdAt: { gte: yesterday }
+            },
+            take,
+            orderBy: [
+                { views: 'desc' }
+            ],
+            select: {
+                id: true,
+                videoUrl: true,
+                thumbnail: true,
+                caption: true,
+                views: true,
+                sharesCount: true,
+                createdAt: true,
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatar: true,
+                        isVerified: true,
+                    }
+                },
+                _count: {
+                    select: {
+                        likes: true,
+                        comments: true,
+                    }
+                }
+            }
+        });
+        
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                reels: trendingReels.map(reel => ({
+                    ...reel,
+                    likesCount: reel._count.likes,
+                    commentsCount: reel._count.comments,
+                }))
+            }
+        });
+    } catch (error: any) {
+        logger.error('Get trending reels error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+// ============================================
+// GET /api/reels/rankings
+// Get user rankings by reel engagement
+// ============================================
+router.get('/rankings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { limit = '10' } = req.query;
+        const take = Math.min(parseInt(limit as string) || 10, 50);
+        
+        // Get users with most total views/likes on their reels
+        const rankings = await prisma.user.findMany({
+            take,
+            select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatar: true,
+                isVerified: true,
+                reels: {
+                    where: { isDeleted: false },
+                    select: {
+                        views: true,
+                        _count: {
+                            select: { likes: true }
+                        }
+                    }
+                }
+            },
+            orderBy: {
+                reels: {
+                    _count: 'desc'
+                }
+            }
+        });
+        
+        // Calculate total engagement for each user
+        const rankedUsers = rankings.map(user => {
+            const totalViews = user.reels.reduce((sum, reel) => sum + reel.views, 0);
+            const totalLikes = user.reels.reduce((sum, reel) => sum + reel._count.likes, 0);
+            const reelsCount = user.reels.length;
+            
+            return {
+                id: user.id,
+                username: user.username,
+                displayName: user.displayName,
+                avatar: user.avatar,
+                isVerified: user.isVerified,
+                stats: {
+                    totalViews,
+                    totalLikes,
+                    reelsCount,
+                    engagement: totalViews + (totalLikes * 10) // Weight likes more
+                }
+            };
+        }).sort((a, b) => b.stats.engagement - a.stats.engagement);
+        
+        res.json({
+            status: 'SUCCESS',
+            data: { rankings: rankedUsers }
+        });
+    } catch (error: any) {
+        logger.error('Get reels rankings error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 export default router;

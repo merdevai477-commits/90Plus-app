@@ -260,4 +260,69 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
     }
 });
 
+// ============================================
+// GET /api/matches/live
+// Get live matches from Football API
+// ============================================
+router.get('/live', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { FootballService } = await import('../services/football.service');
+        const liveMatches = await FootballService.getLiveFixtures();
+        
+        res.json({
+            status: 'SUCCESS',
+            data: { matches: liveMatches }
+        });
+    } catch (error: any) {
+        logger.error('Get live matches error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+// ============================================
+// GET /api/matches/today
+// Get today's matches
+// ============================================
+router.get('/today', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { FootballService } = await import('../services/football.service');
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const todayMatches = await FootballService.getFixturesByDate(today);
+        
+        res.json({
+            status: 'SUCCESS',
+            data: { matches: todayMatches }
+        });
+    } catch (error: any) {
+        logger.error('Get today matches error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+// ============================================
+// GET /api/matches/upcoming
+// Get upcoming matches (next 7 days)
+// ============================================
+router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { FootballService } = await import('../services/football.service');
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        
+        const from = today.toISOString().split('T')[0];
+        const to = nextWeek.toISOString().split('T')[0];
+        
+        const upcomingMatches = await FootballService.getFixturesByDateRange(from, to);
+        
+        res.json({
+            status: 'SUCCESS',
+            data: { matches: upcomingMatches }
+        });
+    } catch (error: any) {
+        logger.error('Get upcoming matches error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 export default router;
