@@ -35,18 +35,18 @@ export function validateZod(schema: ZodValidationSchema) {
 
       // Validate query
       if (schema.query) {
-        req.query = await schema.query.parseAsync(req.query);
+        req.query = await schema.query.parseAsync(req.query) as any;
       }
 
       // Validate params
       if (schema.params) {
-        req.params = await schema.params.parseAsync(req.params);
+        req.params = await schema.params.parseAsync(req.params) as any;
       }
 
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = error.errors.map(err => ({
+        const errors = error.issues.map(err => ({
           field: err.path.join('.'),
           message: err.message,
           code: err.code,

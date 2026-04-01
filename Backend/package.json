@@ -88,7 +88,8 @@
     "streamifier": "^0.1.1",
     "svix": "^1.82.0",
     "uuid": "^11.0.3",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
