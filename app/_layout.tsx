@@ -24,6 +24,7 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { initSentry, captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
+import { useEULAGuard } from "../hooks/useEULAGuard";
 
 // Lazy load websocket client to avoid bundling issues with socket.io-client
 let websocketClient: any = null;
@@ -80,6 +81,42 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen 
+        name="eula" 
+        options={{ 
+          headerShown: false,
+          presentation: 'modal',
+          gestureEnabled: false, // Prevent swipe back
+        }} 
+      />
+      <Stack.Screen 
+        name="age-gate" 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false, // Prevent swipe back
+        }} 
+      />
+      <Stack.Screen 
+        name="blocked" 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false, // Prevent swipe back
+        }} 
+      />
+      <Stack.Screen 
+        name="parental-consent" 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false, // Prevent swipe back
+        }} 
+      />
+      <Stack.Screen 
+        name="waiting-consent" 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false, // Prevent swipe back
+        }} 
+      />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="user" options={{ headerShown: false }} />
       <Stack.Screen name="player-profile" options={{ headerShown: false }} />
@@ -153,6 +190,9 @@ function WebSocketInitializer({ children }: { children: React.ReactNode }) {
 
 function PreloadInitializer({ children }: { children: React.ReactNode }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();
+  
+  // EULA Guard - Apple UGC Compliance
+  const { isChecking: isCheckingEULA } = useEULAGuard();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -210,6 +250,15 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
       }
     };
   }, [isSignedIn, isLoaded, getToken]);
+
+  // Show loading while checking EULA (Apple UGC Compliance)
+  if (isCheckingEULA) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#22c55e" />
+      </View>
+    );
+  }
 
   return <>{children}</>;
 }
