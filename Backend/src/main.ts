@@ -4,7 +4,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import prisma, { startKeepAlive, stopKeepAlive } from './lib/prisma';
@@ -100,9 +99,6 @@ app.use(express.urlencoded({
     limit: '10mb',
     parameterLimit: 10000, // ✅ Limit number of parameters
 }));
-
-// ✅ TASK 10: Cookie parser for CSRF protection
-app.use(cookieParser());
 
 // Compression middleware with production optimizations
 app.use(
@@ -424,10 +420,6 @@ try {
 
 // Metrics endpoint (for monitoring)
 app.get(`${API_PREFIX}/metrics`, getMetricsHandler);
-
-// ✅ TASK 10: CSRF token endpoint
-import { getCSRFTokenHandler } from './middleware/csrf.middleware';
-app.get(`${API_PREFIX}/csrf-token`, getCSRFTokenHandler);
 
 app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
     const timestamp = new Date().toISOString();

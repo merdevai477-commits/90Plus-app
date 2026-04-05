@@ -1,23 +1,13 @@
 #!/bin/bash
-# Quick push script for Backend
+# Quick Git Push - No prompts, uses default message
 
-echo "🚀 Quick push to GitHub..."
-
-# Add all changes
+echo "🚀 Quick Push to GitHub..."
 git add .
+git commit -m "fix: TypeScript errors and component updates"
+git push
 
-# Check if there are changes
-if git diff --staged --quiet; then
-    echo "ℹ️ No changes to commit"
-    git status
+if [ $? -eq 0 ]; then
+    echo "✅ Done!"
 else
-    # Commit with timestamp
-    git commit -m "Backend update - $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "✅ Committed changes"
+    echo "❌ Failed! Run git-push.sh for detailed process"
 fi
-
-# Push to GitHub
-echo "🌐 Pushing to GitHub..."
-git push origin main
-
-echo "✅ Done! Check: https://github.com/merdevai477-commits/90Plus-app"

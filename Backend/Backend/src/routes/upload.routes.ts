@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
 import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
-import { supabaseStorage } from '../services/supabase-storage.service';
+import { r2Storage } from '../services/r2-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
 import prisma from '../lib/prisma';
@@ -94,7 +94,7 @@ router.post('/avatar', requireAuth, upload.single('file'), optimizeUploadedImage
 
         // Delete old avatar if exists
         if (user.avatarStoragePath) {
-            await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
+            await r2Storage.deleteFile('avatars', user.avatarStoragePath);
         }
 
         // Validate file buffer is not empty
@@ -108,7 +108,7 @@ router.post('/avatar', requireAuth, upload.single('file'), optimizeUploadedImage
 
         // Upload new avatar
         const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await supabaseStorage.uploadFile('avatars', file.buffer, fileName, file.mimetype);
+        const result = await r2Storage.uploadFile('avatars', file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             logger.error('R2 upload error:', result.error);
@@ -217,12 +217,12 @@ router.post('/cover', requireAuth, upload.single('file'), optimizeUploadedImage,
 
         // Delete old cover if exists
         if (user.coverStoragePath) {
-            await supabaseStorage.deleteFile('covers', user.coverStoragePath);
+            await r2Storage.deleteFile('covers', user.coverStoragePath);
         }
 
         // Upload new cover
         const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await supabaseStorage.uploadFile('covers', file.buffer, fileName, file.mimetype);
+        const result = await r2Storage.uploadFile('covers', file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             res.status(500).json({ status: 'ERROR', message: 'Failed to upload file' });
@@ -336,7 +336,7 @@ router.post(
         
         const uploadStartTime = Date.now();
         
-        const uploadPromise = supabaseStorage.uploadFile(
+        const uploadPromise = r2Storage.uploadFile(
             'reels', 
             videoFile.buffer, 
             videoFileName, 
@@ -392,7 +392,7 @@ router.post(
                 logger.info(`Starting thumbnail upload: ${thumbFileName}, size: ${thumbSizeMB}MB`);
                 const thumbStartTime = Date.now();
                 
-                const thumbUploadPromise = supabaseStorage.uploadFile('thumbnails', thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype);
+                const thumbUploadPromise = r2Storage.uploadFile('thumbnails', thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype);
                 const thumbTimeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
                     setTimeout(() => {
                         const elapsed = Date.now() - thumbStartTime;
@@ -526,7 +526,7 @@ router.post(
         // Clean up uploaded files if database operation failed
         if (videoUploaded && videoResult && videoResult.success && videoResult.path) {
             try {
-                await supabaseStorage.deleteFile('reels', videoResult.path);
+                await r2Storage.deleteFile('reels', videoResult.path);
                 logger.info(`Cleaned up uploaded video file: ${videoResult.path}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup video file ${videoResult.path}:`, cleanupError?.message || cleanupError);
@@ -535,7 +535,7 @@ router.post(
         
         if (thumbnailUploaded && thumbnailPath) {
             try {
-                await supabaseStorage.deleteFile('thumbnails', thumbnailPath);
+                await r2Storage.deleteFile('thumbnails', thumbnailPath);
                 logger.info(`Cleaned up uploaded thumbnail file: ${thumbnailPath}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup thumbnail file ${thumbnailPath}:`, cleanupError?.message || cleanupError);

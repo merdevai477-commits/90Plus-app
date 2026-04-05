@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabaseStorage } from '../services/supabase-storage.service';
+import { supabaseStorage } from '../services/r2-storage.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 

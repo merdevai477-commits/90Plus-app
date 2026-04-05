@@ -22,9 +22,6 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-// Apply authentication middleware to all GDPR routes
-router.use(requireAuth);
-
 // Rate limiters
 const exportLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours

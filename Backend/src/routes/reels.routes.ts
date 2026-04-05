@@ -6,8 +6,6 @@ import { WebSocketService } from '../services/websocket.service';
 import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
 import { lenientLimiter, writeLimiter, strictLimiter } from '../middleware/rateLimit.middleware';
 import { redisCacheService } from '../services/redis-cache.service';
-import { moderateReelCaption, moderateComment } from '../middleware/content-moderation.middleware';
-import { filterUGCContent } from '../middleware/filter-content.middleware';
 
 const router = Router();
 
@@ -260,9 +258,8 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
 /**
  * POST /api/reels
  * Upload a new reel (3 days cooldown)
- * Apple UGC Compliance: Content filtering applied
  */
-router.post('/', requireAuth, filterUGCContent, moderateReelCaption, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -700,9 +697,8 @@ import { COMMENT_LIMITS } from '../config/supabase.config';
 /**
  * POST /api/reels/:id/comments
  * Add a comment or reply to a reel
- * Apple UGC Compliance: Content filtering applied
  */
-router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, moderateComment, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
@@ -2987,278 +2983,6 @@ router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 6
         });
     } catch (error: any) {
         logger.error('Get user badges error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
-    }
-});
-
-// ============================================
-// GET /api/reels
-// Get all reels (alias for /feed)
-// ============================================
-router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
-    // Forward to /feed endpoint logic
-    try {
-        const { cursor, limit = REELS_PER_PAGE.toString() } = req.query;
-        const currentUserId = req.auth?.userId;
-        const take = Math.min(parseInt(limit as string) || REELS_PER_PAGE, 10);
-
-        // Check feed cache (only for first page without cursor)
-        const cacheKey = `feed_${currentUserId}_${cursor || 'first'}_${take}`;
-        const cached = feedCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < FEED_CACHE_TTL) {
-            res.json(cached.data);
-            return;
-        }
-
-        // Get current user's DB id (with caching)
-        let currentUser: { id: string } | null = null;
-        if (currentUserId) {
-            const cachedUserId = userIdCache.get(currentUserId);
-            if (cachedUserId && Date.now() - cachedUserId.timestamp < USER_ID_CACHE_TTL) {
-                currentUser = { id: cachedUserId.id };
-            } else {
-                currentUser = await prisma.user.findUnique({
-                    where: { clerkUserId: currentUserId },
-                    select: { id: true }
-                });
-                if (currentUser) {
-                    userIdCache.set(currentUserId, { id: currentUser.id, timestamp: Date.now() });
-                }
-            }
-        }
-
-        const reels = await prisma.reel.findMany({
-            where: { isDeleted: false },
-            take: take + 1,
-            ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                videoUrl: true,
-                thumbnail: true,
-                caption: true,
-                views: true,
-                sharesCount: true,
-                createdAt: true,
-                user: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatar: true,
-                        isVerified: true,
-                    }
-                },
-                _count: {
-                    select: {
-                        likes: true,
-                        comments: true,
-                    }
-                },
-                hashtags: {
-                    select: {
-                        hashtag: {
-                            select: { name: true }
-                        }
-                    }
-                },
-                mentions: {
-                    select: {
-                        mentionedUserId: true
-                    }
-                },
-                comments: {
-                    where: { isDeleted: false },
-                    take: MAX_COMMENTS_PREVIEW,
-                    orderBy: { createdAt: 'desc' },
-                    select: {
-                        id: true,
-                        content: true,
-                        createdAt: true,
-                        user: {
-                            select: {
-                                username: true,
-                                avatar: true,
-                            }
-                        }
-                    }
-                },
-                likes: currentUser ? {
-                    where: { userId: currentUser.id },
-                    select: { id: true }
-                } : false,
-                savedBy: currentUser ? {
-                    where: { userId: currentUser.id },
-                    select: { id: true }
-                } : false,
-            }
-        });
-
-        const hasMore = reels.length > take;
-        const data = hasMore ? reels.slice(0, -1) : reels;
-        const nextCursor = hasMore ? data[data.length - 1]?.id : null;
-
-        const formattedReels = data.map((reel: any) => ({
-            id: reel.id,
-            videoUrl: reel.videoUrl,
-            thumbnail: reel.thumbnail,
-            caption: reel.caption,
-            views: reel.views,
-            likesCount: reel._count.likes,
-            commentsCount: reel._count.comments,
-            sharesCount: reel.sharesCount || 0,
-            isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
-            isSaved: Array.isArray(reel.savedBy) && reel.savedBy.length > 0,
-            hashtags: reel.hashtags.map((h: any) => h.hashtag.name),
-            mentions: reel.mentions.map((m: any) => m.mentionedUserId),
-            previewComments: reel.comments,
-            user: reel.user,
-            createdAt: reel.createdAt,
-        }));
-
-        const responseData = {
-            status: 'SUCCESS',
-            data: {
-                reels: formattedReels,
-                nextCursor,
-                hasMore,
-            }
-        };
-
-        feedCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
-        res.json(responseData);
-    } catch (error: any) {
-        logger.error('Get reels feed error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
-    }
-});
-
-// ============================================
-// GET /api/reels/trending
-// Get trending reels (most viewed/liked in last 24 hours)
-// ============================================
-router.get('/trending', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { limit = '10' } = req.query;
-        const take = Math.min(parseInt(limit as string) || 10, 20);
-        
-        // Get reels from last 24 hours, sorted by engagement
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        const trendingReels = await prisma.reel.findMany({
-            where: {
-                isDeleted: false,
-                createdAt: { gte: yesterday }
-            },
-            take,
-            orderBy: [
-                { views: 'desc' }
-            ],
-            select: {
-                id: true,
-                videoUrl: true,
-                thumbnail: true,
-                caption: true,
-                views: true,
-                sharesCount: true,
-                createdAt: true,
-                user: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatar: true,
-                        isVerified: true,
-                    }
-                },
-                _count: {
-                    select: {
-                        likes: true,
-                        comments: true,
-                    }
-                }
-            }
-        });
-        
-        res.json({
-            status: 'SUCCESS',
-            data: {
-                reels: trendingReels.map(reel => ({
-                    ...reel,
-                    likesCount: reel._count.likes,
-                    commentsCount: reel._count.comments,
-                }))
-            }
-        });
-    } catch (error: any) {
-        logger.error('Get trending reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
-    }
-});
-
-// ============================================
-// GET /api/reels/rankings
-// Get user rankings by reel engagement
-// ============================================
-router.get('/rankings', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { limit = '10' } = req.query;
-        const take = Math.min(parseInt(limit as string) || 10, 50);
-        
-        // Get users with most total views/likes on their reels
-        const rankings = await prisma.user.findMany({
-            take,
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                isVerified: true,
-                reels: {
-                    where: { isDeleted: false },
-                    select: {
-                        views: true,
-                        _count: {
-                            select: { likes: true }
-                        }
-                    }
-                }
-            },
-            orderBy: {
-                reels: {
-                    _count: 'desc'
-                }
-            }
-        });
-        
-        // Calculate total engagement for each user
-        const rankedUsers = rankings.map(user => {
-            const totalViews = user.reels.reduce((sum, reel) => sum + reel.views, 0);
-            const totalLikes = user.reels.reduce((sum, reel) => sum + reel._count.likes, 0);
-            const reelsCount = user.reels.length;
-            
-            return {
-                id: user.id,
-                username: user.username,
-                displayName: user.displayName,
-                avatar: user.avatar,
-                isVerified: user.isVerified,
-                stats: {
-                    totalViews,
-                    totalLikes,
-                    reelsCount,
-                    engagement: totalViews + (totalLikes * 10) // Weight likes more
-                }
-            };
-        }).sort((a, b) => b.stats.engagement - a.stats.engagement);
-        
-        res.json({
-            status: 'SUCCESS',
-            data: { rankings: rankedUsers }
-        });
-    } catch (error: any) {
-        logger.error('Get reels rankings error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });

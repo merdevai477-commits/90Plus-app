@@ -7,6 +7,7 @@ import { responseCacheMiddleware, clearResponseCache } from '../middleware/respo
 import { lenientLimiter, writeLimiter, strictLimiter } from '../middleware/rateLimit.middleware';
 import { redisCacheService } from '../services/redis-cache.service';
 import { moderateReelCaption, moderateComment } from '../middleware/content-moderation.middleware';
+import { filterUGCContent } from '../middleware/filter-content.middleware';
 
 const router = Router();
 
@@ -259,8 +260,9 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
 /**
  * POST /api/reels
  * Upload a new reel (3 days cooldown)
+ * Apple UGC Compliance: Content filtering applied
  */
-router.post('/', requireAuth, moderateReelCaption, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, filterUGCContent, moderateReelCaption, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -698,8 +700,9 @@ import { COMMENT_LIMITS } from '../config/supabase.config';
 /**
  * POST /api/reels/:id/comments
  * Add a comment or reply to a reel
+ * Apple UGC Compliance: Content filtering applied
  */
-router.post('/:id/comments', requireAuth, writeLimiter, moderateComment, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, moderateComment, async (req: Request, res: Response): Promise<void> => {
     // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
@@ -2993,10 +2996,141 @@ router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 6
 // Get all reels (alias for /feed)
 // ============================================
 router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
-    // Redirect to /feed endpoint
-    req.url = '/feed';
-    req.originalUrl = req.originalUrl.replace(/\/$/, '/feed');
-    return router.handle(req, res, () => {});
+    // Forward to /feed endpoint logic
+    try {
+        const { cursor, limit = REELS_PER_PAGE.toString() } = req.query;
+        const currentUserId = req.auth?.userId;
+        const take = Math.min(parseInt(limit as string) || REELS_PER_PAGE, 10);
+
+        // Check feed cache (only for first page without cursor)
+        const cacheKey = `feed_${currentUserId}_${cursor || 'first'}_${take}`;
+        const cached = feedCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < FEED_CACHE_TTL) {
+            res.json(cached.data);
+            return;
+        }
+
+        // Get current user's DB id (with caching)
+        let currentUser: { id: string } | null = null;
+        if (currentUserId) {
+            const cachedUserId = userIdCache.get(currentUserId);
+            if (cachedUserId && Date.now() - cachedUserId.timestamp < USER_ID_CACHE_TTL) {
+                currentUser = { id: cachedUserId.id };
+            } else {
+                currentUser = await prisma.user.findUnique({
+                    where: { clerkUserId: currentUserId },
+                    select: { id: true }
+                });
+                if (currentUser) {
+                    userIdCache.set(currentUserId, { id: currentUser.id, timestamp: Date.now() });
+                }
+            }
+        }
+
+        const reels = await prisma.reel.findMany({
+            where: { isDeleted: false },
+            take: take + 1,
+            ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                videoUrl: true,
+                thumbnail: true,
+                caption: true,
+                views: true,
+                sharesCount: true,
+                createdAt: true,
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatar: true,
+                        isVerified: true,
+                    }
+                },
+                _count: {
+                    select: {
+                        likes: true,
+                        comments: true,
+                    }
+                },
+                hashtags: {
+                    select: {
+                        hashtag: {
+                            select: { name: true }
+                        }
+                    }
+                },
+                mentions: {
+                    select: {
+                        mentionedUserId: true
+                    }
+                },
+                comments: {
+                    where: { isDeleted: false },
+                    take: MAX_COMMENTS_PREVIEW,
+                    orderBy: { createdAt: 'desc' },
+                    select: {
+                        id: true,
+                        content: true,
+                        createdAt: true,
+                        user: {
+                            select: {
+                                username: true,
+                                avatar: true,
+                            }
+                        }
+                    }
+                },
+                likes: currentUser ? {
+                    where: { userId: currentUser.id },
+                    select: { id: true }
+                } : false,
+                savedBy: currentUser ? {
+                    where: { userId: currentUser.id },
+                    select: { id: true }
+                } : false,
+            }
+        });
+
+        const hasMore = reels.length > take;
+        const data = hasMore ? reels.slice(0, -1) : reels;
+        const nextCursor = hasMore ? data[data.length - 1]?.id : null;
+
+        const formattedReels = data.map((reel: any) => ({
+            id: reel.id,
+            videoUrl: reel.videoUrl,
+            thumbnail: reel.thumbnail,
+            caption: reel.caption,
+            views: reel.views,
+            likesCount: reel._count.likes,
+            commentsCount: reel._count.comments,
+            sharesCount: reel.sharesCount || 0,
+            isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
+            isSaved: Array.isArray(reel.savedBy) && reel.savedBy.length > 0,
+            hashtags: reel.hashtags.map((h: any) => h.hashtag.name),
+            mentions: reel.mentions.map((m: any) => m.mentionedUserId),
+            previewComments: reel.comments,
+            user: reel.user,
+            createdAt: reel.createdAt,
+        }));
+
+        const responseData = {
+            status: 'SUCCESS',
+            data: {
+                reels: formattedReels,
+                nextCursor,
+                hasMore,
+            }
+        };
+
+        feedCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+        res.json(responseData);
+    } catch (error: any) {
+        logger.error('Get reels feed error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
 });
 
 // ============================================
