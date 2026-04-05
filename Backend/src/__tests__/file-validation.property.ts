@@ -11,7 +11,7 @@ import {
     VIDEO_SIGNATURES,
     ValidationResult,
 } from '../middleware/file-validation.middleware';
-import { FILE_SIZE_LIMITS } from '../config/supabase.config';
+import { FILE_SIZE_LIMITS } from '../config/app.config';
 
 // Helper to create a buffer with specific magic bytes
 function createBufferWithMagicBytes(magicBytes: number[], size: number): Buffer {

@@ -15,7 +15,7 @@ import {
   getAgeStatus,
   resendParentalConsent,
 } from '../controllers/age-verification.controller';
-import { clerkMiddleware } from '../middleware/clerk.middleware';
+import { requireAuth as clerkMiddleware } from '../middleware/clerk.middleware';
 
 const router = Router();
 

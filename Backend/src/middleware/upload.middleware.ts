@@ -1,5 +1,5 @@
 import multer from 'multer';
-import { FILE_SIZE_LIMITS } from '../config/supabase.config';
+import { FILE_SIZE_LIMITS } from '../config/app.config';
 
 // Configure multer to store files in memory
 const storage = multer.memoryStorage();

@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
+import { validateUploadedImage } from '../middleware/image-moderation.middleware';
 import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
-import { validateUploadedImage, optimizeUploadedImage as optimizeImage } from '../middleware/image-moderation.middleware';
-import { supabaseStorage } from '../services/supabase-storage.service';
+import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
+import sharp from 'sharp';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
@@ -24,11 +25,29 @@ const AVATAR_CHANGE_COOLDOWN_DAYS = 7;
 const COVER_CHANGE_COOLDOWN_DAYS = 15;
 const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 
+// Helper: optimize image with sharp for specific use cases
+async function resizeAndCompress(
+  buffer: Buffer,
+  maxWidth: number,
+  maxHeight: number,
+  quality = 80
+): Promise<{ buffer: Buffer; mimetype: string }> {
+  try {
+    const optimized = await sharp(buffer)
+      .resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality, progressive: true, mozjpeg: true })
+      .toBuffer();
+    return { buffer: optimized, mimetype: 'image/jpeg' };
+  } catch {
+    return { buffer, mimetype: 'image/jpeg' };
+  }
+}
+
 /**
  * POST /api/upload/avatar
  * Upload avatar image to R2 Storage
  */
-router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage, optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
+router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -95,7 +114,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
 
         // Delete old avatar if exists
         if (user.avatarStoragePath) {
-            await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
+            await r2MediaStorage.deleteFile(user.avatarStoragePath);
         }
 
         // Validate file buffer is not empty
@@ -107,9 +126,16 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
 
         logger.info(`Uploading avatar: ${file.originalname}, size: ${file.buffer.length} bytes, type: ${file.mimetype}`);
 
-        // Upload new avatar
-        const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await supabaseStorage.uploadFile('avatars', file.buffer, fileName, file.mimetype);
+        // Optimize: resize to 400x400 max (avatars don't need to be larger)
+        const { buffer: optimizedBuffer, mimetype: optimizedMime } = await resizeAndCompress(file.buffer, 400, 400, 85);
+        const originalSize = file.buffer.length;
+        file.buffer = optimizedBuffer;
+        file.mimetype = optimizedMime;
+        logger.info(`Avatar optimized: ${(originalSize/1024).toFixed(0)}KB → ${(optimizedBuffer.length/1024).toFixed(0)}KB`);
+
+        // Upload new avatar - use .jpg extension always (we convert to jpeg)
+        const fileName = `${user.id}/${Date.now()}.jpg`;
+        const result = await r2MediaStorage.uploadFile('avatars', file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             logger.error('R2 upload error:', result.error);
@@ -166,7 +192,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
  * POST /api/upload/cover
  * Upload cover image to R2 Storage
  */
-router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage, optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
+router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -218,12 +244,17 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
 
         // Delete old cover if exists
         if (user.coverStoragePath) {
-            await supabaseStorage.deleteFile('covers', user.coverStoragePath);
+            await r2MediaStorage.deleteFile(user.coverStoragePath);
         }
 
+        // Optimize: resize to 1200x400 max (cover banner dimensions)
+        const { buffer: optimizedBuffer, mimetype: optimizedMime } = await resizeAndCompress(file.buffer, 1200, 400, 85);
+        file.buffer = optimizedBuffer;
+        file.mimetype = optimizedMime;
+
         // Upload new cover
-        const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await supabaseStorage.uploadFile('covers', file.buffer, fileName, file.mimetype);
+        const fileName = `${user.id}/${Date.now()}.jpg`;
+        const result = await r2MediaStorage.uploadFile('covers', file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             res.status(500).json({ status: 'ERROR', message: 'Failed to upload file' });
@@ -331,16 +362,16 @@ router.post(
         // Upload video with timeout protection
         // Railway gateway timeout is 60s, so we need to complete upload + response within that time
         // Reduce upload timeout to 45s to leave buffer for response processing
-        const videoFileName = `${user.id}/${Date.now()}_${videoFile.originalname}`;
+        const videoFileName = `${user.id}/${Date.now()}.mp4`;
         const fileSizeMB = (videoFile.buffer.length / (1024 * 1024)).toFixed(2);
         logger.info(`Starting video upload: ${videoFileName}, size: ${fileSizeMB}MB (${videoFile.buffer.length} bytes), type: ${videoFile.mimetype}`);
         
         const uploadStartTime = Date.now();
         
-        const uploadPromise = supabaseStorage.uploadFile(
-            'reels', 
-            videoFile.buffer, 
-            videoFileName, 
+        const uploadPromise = r2MediaStorage.uploadFile(
+            'reels',
+            videoFile.buffer,
+            videoFileName,
             videoFile.mimetype
         );
         
@@ -388,12 +419,12 @@ router.post(
         let thumbnailUrl = null;
         if (thumbnailFile) {
             try {
-                const thumbFileName = `${user.id}/${Date.now()}_thumb_${thumbnailFile.originalname}`;
+                const thumbFileName = `${user.id}/${Date.now()}_thumb.jpg`;
                 const thumbSizeMB = (thumbnailFile.buffer.length / (1024 * 1024)).toFixed(2);
                 logger.info(`Starting thumbnail upload: ${thumbFileName}, size: ${thumbSizeMB}MB`);
                 const thumbStartTime = Date.now();
                 
-                const thumbUploadPromise = supabaseStorage.uploadFile('thumbnails', thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype);
+                const thumbUploadPromise = r2MediaStorage.uploadFile('thumbnails', thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype);
                 const thumbTimeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
                     setTimeout(() => {
                         const elapsed = Date.now() - thumbStartTime;
@@ -527,7 +558,7 @@ router.post(
         // Clean up uploaded files if database operation failed
         if (videoUploaded && videoResult && videoResult.success && videoResult.path) {
             try {
-                await supabaseStorage.deleteFile('reels', videoResult.path);
+                await r2MediaStorage.deleteFile(videoResult.path);
                 logger.info(`Cleaned up uploaded video file: ${videoResult.path}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup video file ${videoResult.path}:`, cleanupError?.message || cleanupError);
@@ -536,7 +567,7 @@ router.post(
         
         if (thumbnailUploaded && thumbnailPath) {
             try {
-                await supabaseStorage.deleteFile('thumbnails', thumbnailPath);
+                await r2MediaStorage.deleteFile(thumbnailPath);
                 logger.info(`Cleaned up uploaded thumbnail file: ${thumbnailPath}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup thumbnail file ${thumbnailPath}:`, cleanupError?.message || cleanupError);

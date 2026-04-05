@@ -7,7 +7,7 @@
  */
 
 import * as fc from 'fast-check';
-import { COMMENT_LIMITS } from '../config/supabase.config';
+import { COMMENT_LIMITS } from '../config/app.config';
 
 // Simulated comment system for testing the logic
 interface Comment {

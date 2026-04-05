@@ -222,6 +222,7 @@ import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
 import gdprRoutes from './routes/gdpr.routes';
+import ageVerificationRoutes from './routes/age-verification.routes';
 import path from 'path';
 
 // Import services
@@ -260,6 +261,7 @@ app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);
 app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
+app.use(`${API_PREFIX}/auth`, ageVerificationRoutes); // Age verification & parental consent
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 
 // Support and legal pages (without API prefix)
