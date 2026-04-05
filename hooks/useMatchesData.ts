@@ -305,9 +305,14 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     }
   }, []);
 
+  // ✅ FIXED: Use ref to prevent infinite loop
+  // fetchData is memoized with useCallback, but we use ref for extra safety
+  const fetchDataRef = useRef(fetchData);
+  fetchDataRef.current = fetchData;
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchDataRef.current();
+  }, [dateString]); // Only re-fetch when date changes
 
   const refetch = useCallback(async () => {
     await fetchData(true);

@@ -85,6 +85,33 @@ class LocalProfileStorageService {
   }
 
   /**
+   * Clear all user-related data (for logout)
+   */
+  async clearAllUserData(): Promise<void> {
+    try {
+      // Clear profile data
+      await this.clearProfileData();
+      
+      // Clear other user-related keys
+      const keys = await AsyncStorage.getAllKeys();
+      const userKeys = keys.filter(key => 
+        key.includes('@90plus') || 
+        key.includes('user') || 
+        key.includes('profile') ||
+        key.includes('cache') ||
+        key.includes('local')
+      );
+      
+      if (userKeys.length > 0) {
+        await AsyncStorage.multiRemove(userKeys);
+        logger.debug('✅ All user data cleared:', userKeys);
+      }
+    } catch (error) {
+      logger.error('❌ Failed to clear all user data:', error);
+    }
+  }
+
+  /**
    * Update specific field
    */
   async updateField(field: keyof LocalProfileData, value: any): Promise<void> {

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionShee
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import ReelUploadModal from '../../components/common/ReelUploadModal';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
+import UploadProgressModal from '../../components/common/UploadProgressModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import ProfileHeader from '../../components/profile/ProfileHeader';
@@ -26,6 +27,7 @@ import { toastManager } from '../../services/toastManager';
 import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
 import { useProfileCache } from '../../hooks/useProfileCache';
+import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
@@ -44,6 +46,7 @@ import QRCodeModal from '../../components/profile/QRCodeModal';
 import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOptimisticProfile';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { TopClub } from '../../data/top5LeaguesClubs';
+import { DiamondProfile } from '../../types/profile';
 
 const API_URL = getApiUrl();
 
@@ -281,11 +284,14 @@ export default function ProfileScreen() {
     clerkUserId: clerkUser?.id,
   });
 
-  // TEMPORARILY DISABLED: Profile completion hook causing infinite loop
-  const completionStatus = null;
-  const isCompletionLoading = false;
-  const completionError = null;
-  const markStepCompleted = () => Promise.resolve(false);
+  // ✅ FIXED: Profile completion hook with infinite loop protection
+  const {
+    completionStatus,
+    isLoading: isCompletionLoading,
+    error: completionError,
+    refresh: refreshCompletion,
+    markStepCompleted,
+  } = useProfileCompletion();
 
   // Log cache errors
   useEffect(() => {
@@ -374,6 +380,11 @@ export default function ProfileScreen() {
   const [isClubUpdating, setIsClubUpdating] = useState(false);
   const [isBrandUpdating, setIsBrandUpdating] = useState(false);
   const [isStatsUpdating, setIsStatsUpdating] = useState(false);
+
+  // Video upload progress state
+  const [isVideoUploading, setIsVideoUploading] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [videoUploadMessage, setVideoUploadMessage] = useState('جاري الرفع...');
 
   // New modals for profile features
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
@@ -645,6 +656,10 @@ export default function ProfileScreen() {
       return;
     }
 
+    // Show loading toast immediately
+    toastManager.showInfo('جاري التحضير', 'جاري تحضير رفع صورة الغلاف...');
+
+    // Check cooldown first
     if (cooldowns && !cooldowns.cover.canChange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
@@ -676,6 +691,7 @@ export default function ProfileScreen() {
 
       let finalUri = imageUri;
       try {
+        toastManager.showInfo('جاري المعالجة', 'جاري ضغط صورة الغلاف...');
         const compressed = await compressImage(imageUri, {
           maxWidth: 1920,
           maxHeight: 1080,
@@ -691,10 +707,13 @@ export default function ProfileScreen() {
       const originalCover = userData.coverImage;
       setCoverImage(finalUri);
 
+      // Show upload start toast
+      toastManager.showInfo('جاري الرفع', 'جاري رفع صورة الغلاف...');
+
       const token = await getToken();
       if (!token) {
         setCoverImage(originalCover || null);
-        toastManager.showWarning('انتهت الجلسة', 'يرجى تسجيل الدخول مرة أخرى');
+        toastManager.showAuthError();
         return;
       }
 
@@ -709,12 +728,33 @@ export default function ProfileScreen() {
         toastManager.showUploadSuccess('image');
       } else {
         setCoverImage(originalCover || null);
-        toastManager.showUploadError('image');
+        
+        // Handle specific error cases
+        const errorMessage = uploadResult.error || 'حدث خطأ أثناء رفع صورة الغلاف';
+        
+        // Check if it's a cooldown error
+        if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
+          toastManager.showWarning('انتظر قليلاً', errorMessage);
+        } else {
+          toastManager.showUploadError('image');
+        }
       }
     } catch (error: any) {
-      logger.error('Cover upload error:', error);
       setCoverImage(userData?.coverImage || null);
-      toastManager.showUploadError('image');
+      
+      // Handle specific error cases
+      const errorMessage = error.message || 'حدث خطأ غير متوقع';
+      
+      // Check if it's a cooldown error
+      if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
+        // Don't log cooldown errors as errors since they're expected behavior
+        logger.info('Cover upload cooldown:', errorMessage);
+        toastManager.showCooldownError(errorMessage);
+      } else {
+        // Log actual errors
+        logger.error('Cover upload error:', error);
+        toastManager.showUploadError('image');
+      }
     }
   };
   const handleImageUpload = async () => {
@@ -723,6 +763,10 @@ export default function ProfileScreen() {
       return;
     }
 
+    // Show loading toast immediately
+    toastManager.showInfo('جاري التحضير', 'جاري تحضير رفع الصورة...');
+
+    // Check cooldown first
     if (cooldowns && !cooldowns.avatar.canChange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
@@ -754,6 +798,7 @@ export default function ProfileScreen() {
 
       let finalUri = imageUri;
       try {
+        toastManager.showInfo('جاري المعالجة', 'جاري ضغط الصورة...');
         const compressed = await compressImage(imageUri, {
           maxWidth: 1080,
           maxHeight: 1080,
@@ -770,11 +815,14 @@ export default function ProfileScreen() {
       setIsAvatarUploading(true);
       setLocalImage(finalUri);
 
+      // Show upload start toast
+      toastManager.showInfo('جاري الرفع', 'جاري رفع الصورة الشخصية...');
+
       const token = await getToken();
       if (!token) {
         setLocalImage(originalAvatar || null);
         setIsAvatarUploading(false);
-        toastManager.showWarning('انتهت الجلسة', 'يرجى تسجيل الدخول مرة أخرى');
+        toastManager.showAuthError();
         return;
       }
 
@@ -792,14 +840,38 @@ export default function ProfileScreen() {
         await updateCachedUserData({ avatar: newAvatarUrl });
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         toastManager.showUploadSuccess('image');
+        
+        // Mark avatar step as completed
+        await markStepCompleted('avatar');
       } else {
         setLocalImage(originalAvatar || null);
-        toastManager.showUploadError('image');
+        
+        // Handle specific error cases
+        const errorMessage = uploadResult.error || 'حدث خطأ أثناء رفع الصورة';
+        
+        // Check if it's a cooldown error
+        if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
+          toastManager.showWarning('انتظر قليلاً', errorMessage);
+        } else {
+          toastManager.showUploadError('image');
+        }
       }
     } catch (error: any) {
-      logger.error('Avatar upload error:', error);
       setLocalImage(userData?.avatar || null);
-      toastManager.showUploadError('image');
+      
+      // Handle specific error cases
+      const errorMessage = error.message || 'حدث خطأ غير متوقع';
+      
+      // Check if it's a cooldown error
+      if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
+        // Don't log cooldown errors as errors since they're expected behavior
+        logger.info('Avatar upload cooldown:', errorMessage);
+        toastManager.showCooldownError(errorMessage);
+      } else {
+        // Log actual errors
+        logger.error('Avatar upload error:', error);
+        toastManager.showUploadError('image');
+      }
     } finally {
       setIsAvatarUploading(false);
     }
@@ -845,6 +917,7 @@ export default function ProfileScreen() {
 
     setActiveTab('videos');
 
+    // Create optimistic video with loading state
     const tempVideo = {
       id: newVideo.id,
       uri: newVideo.uri,
@@ -852,16 +925,23 @@ export default function ProfileScreen() {
       createdAt: new Date(),
       isUploading: true,
       uploadProgress: 0,
+      views: '0',
+      duration: newVideo.duration || '0:00',
     };
+
+    // Add video to UI immediately (optimistic update)
     addVideo(tempVideo);
 
-    // Show professional upload start toast
-    toastManager.showInfo('بدء الرفع', 'جاري رفع الفيديو... يرجى الانتظار');
+    // ✅ Show upload progress modal
+    setIsVideoUploading(true);
+    setVideoUploadProgress(0);
+    setVideoUploadMessage('جاري التحضير...');
 
     try {
       const token = await getToken();
       if (!token) {
         removeVideo(newVideo.id);
+        setIsVideoUploading(false);
         toastManager.showAuthError();
         return;
       }
@@ -878,31 +958,64 @@ export default function ProfileScreen() {
         hashtags.map((h: string) => h.replace('#', '')),
         mentions.map((m: string) => m.replace('@', '')),
         (progress: number) => {
-          const updatedVideo = { ...tempVideo, uploadProgress: progress };
+          // ✅ Update progress modal
+          setVideoUploadProgress(progress);
+          
+          // Update message based on progress
+          if (progress < 20) {
+            setVideoUploadMessage('جاري التحضير...');
+          } else if (progress < 90) {
+            setVideoUploadMessage('جاري الرفع...');
+          } else if (progress < 100) {
+            setVideoUploadMessage('جاري المعالجة...');
+          } else {
+            setVideoUploadMessage('تم الرفع بنجاح!');
+          }
+          
+          // Update the video with real progress
+          const updatedVideo = { 
+            ...tempVideo, 
+            uploadProgress: progress,
+            isUploading: true 
+          };
+          
+          // Remove old and add updated
           removeVideo(newVideo.id);
           addVideo(updatedVideo);
-          
-          // Show progress toast for significant milestones
-          if (progress === 25 || progress === 50 || progress === 75) {
-            toastManager.showInfo('جاري الرفع', `تم رفع ${progress}% من الفيديو`);
-          }
         }
       );
 
       if (uploadResult.success) {
-        toastManager.showUploadSuccess('video');
+        // ✅ Show success message
+        setVideoUploadMessage('تم الرفع بنجاح!');
+        setVideoUploadProgress(100);
+        
+        // Wait a moment to show success
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Remove the temporary video
         removeVideo(newVideo.id);
+        
+        // Hide modal
+        setIsVideoUploading(false);
+        
+        // Show success toast
+        toastManager.showUploadSuccess('video');
+        
+        // Refresh data to get the real video from backend
         await refreshCache(true);
         if (userData?.username) {
           await loadVideos(userData.username);
         }
       } else {
         removeVideo(newVideo.id);
+        setIsVideoUploading(false);
         toastManager.showUploadError('video');
       }
     } catch (error: any) {
       logger.error('Video upload error:', error);
       removeVideo(newVideo.id);
+      setIsVideoUploading(false);
       toastManager.showError('خطأ في الرفع', error.message || 'حدث خطأ غير متوقع أثناء رفع الفيديو');
     }
   };
@@ -1133,6 +1246,57 @@ export default function ProfileScreen() {
           consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
         />
 
+        {/* Profile Completion Card - FIXED: No more infinite loop */}
+        {completionStatus && completionStatus.percentage < 100 && (
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                borderRadius: 16,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: 'rgba(34, 197, 94, 0.3)',
+              }}
+              onPress={() => {
+                // Show completion details
+                Alert.alert(
+                  'إكمال الملف الشخصي',
+                  `لقد أكملت ${completionStatus.percentage}% من ملفك الشخصي.\n\nالخطوات المتبقية:\n${completionStatus.missingRequiredSteps.map(step => `• ${step}`).join('\n')}`,
+                  [{ text: 'حسناً', style: 'default' }]
+                );
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: ProfileTheme.colors.textPrimary, fontSize: 16, fontWeight: 'bold', marginBottom: 4 }}>
+                    أكمل ملفك الشخصي
+                  </Text>
+                  <Text style={{ color: ProfileTheme.colors.textSecondary, fontSize: 14 }}>
+                    {completionStatus.completedSteps} من {completionStatus.totalSteps} خطوات مكتملة
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: ProfileTheme.colors.neonGreen, fontSize: 24, fontWeight: 'bold' }}>
+                    {completionStatus.percentage}%
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Progress Bar */}
+              <View style={{ marginTop: 12, height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
+                <View 
+                  style={{ 
+                    height: '100%', 
+                    width: `${completionStatus.percentage}%`, 
+                    backgroundColor: ProfileTheme.colors.neonGreen,
+                    borderRadius: 4,
+                  }} 
+                />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Social Links Section */}
         <SocialLinksSection
           links={socialLinks}
@@ -1323,6 +1487,8 @@ export default function ProfileScreen() {
           
           if (result.success) {
             toastManager.showSuccess('تم التحديث', `تم تحديث البلد إلى ${country.nameAr} بنجاح`);
+            // Mark country step as completed
+            await markStepCompleted('country');
           }
         }}
         selectedCountryId={countryFlag}
@@ -1343,6 +1509,8 @@ export default function ProfileScreen() {
           
           if (result.success) {
             toastManager.showSuccess('تم التحديث', `تم تحديث المركز إلى ${pos} بنجاح`);
+            // Mark position step as completed
+            await markStepCompleted('position');
           }
         }}
         selectedPosition={position}
@@ -1393,6 +1561,8 @@ export default function ProfileScreen() {
           
           if (result.success) {
             toastManager.showSuccess('تم التحديث', `تم تحديث النادي إلى ${selectedClub.nameAr} بنجاح`);
+            // Mark club step as completed
+            await markStepCompleted('club');
           }
           
           console.log('✅ [ClubPicker] Backend update completed');
@@ -1430,6 +1600,8 @@ export default function ProfileScreen() {
           
           if (result.success) {
             toastManager.showSuccess('تم التحديث', `تم تحديث العلامة التجارية إلى ${selectedBrand.nameAr} بنجاح`);
+            // Mark brand step as completed
+            await markStepCompleted('brand');
           }
         }}
       />
@@ -1454,6 +1626,8 @@ export default function ProfileScreen() {
           
           if (result.success) {
             toastManager.showSuccess('تم التحديث', 'تم تحديث إحصائيات اللاعب بنجاح');
+            // Mark cardData step as completed (age, height, weight, foot)
+            await markStepCompleted('cardData');
           }
         }}
         initialStats={stats}
@@ -1549,6 +1723,8 @@ export default function ProfileScreen() {
               const result = await updateBio(updates.bio);
               if (result.success) {
                 toastManager.showSuccess('تم التحديث', 'تم تحديث النبذة الشخصية بنجاح');
+                // Mark bio step as completed
+                await markStepCompleted('bio');
               }
               delete updates.bio;
             }
@@ -1558,7 +1734,7 @@ export default function ProfileScreen() {
               const newSocialLinks = Object.entries(updates.socialLinks).map(([platform, url]) => ({
                 platform,
                 url: url as string,
-                username: url?.replace(/.*\//, '').replace('@', '') // Extract username from URL
+                username: typeof url === 'string' ? url.replace(/.*\//, '').replace('@', '') : undefined // Extract username from URL
               }));
               
               // Update cached data immediately (synchronous now)
@@ -1575,6 +1751,8 @@ export default function ProfileScreen() {
               const result = await updateSocialLinks(updates.socialLinks);
               if (result.success) {
                 toastManager.showSuccess('تم التحديث', 'تم تحديث الروابط الاجتماعية بنجاح');
+                // Mark socialLinks step as completed
+                await markStepCompleted('socialLinks');
               }
             }
           } else {
@@ -1591,7 +1769,7 @@ export default function ProfileScreen() {
           addVideo(newVideo);
           setIsUploadModalVisible(false);
           
-          toastManager.showInfo('تم اختيار الفيديو', 'جاري معالجة الفيديو للرفع...');
+          toastManager.showSuccess('تم اختيار الفيديو', 'تم إضافة الفيديو وجاري الرفع...');
           
           // Call the upload handler
           handleUploadVideo(newVideo);
@@ -1614,6 +1792,13 @@ export default function ProfileScreen() {
         onToggleLike={(commentId: string) => { 
           if (selectedVideoUrl) toggleCommentLike(selectedVideoUrl, commentId); 
         }}
+      />
+
+      {/* Upload Progress Modal */}
+      <UploadProgressModal
+        visible={isVideoUploading}
+        progress={videoUploadProgress}
+        message={videoUploadMessage}
       />
 
       <ImageViewerModal

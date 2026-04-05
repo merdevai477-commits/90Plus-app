@@ -17,7 +17,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import * as LocalAuthentication from 'expo-local-authentication';
 import {
   Shield,
   ShieldCheck,
@@ -229,23 +228,11 @@ export const AdvancedSecuritySettings = ({
   };
 
   const handleBiometricToggle = async () => {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    
-    if (!hasHardware || !isEnrolled) {
-      Alert.alert(t.common?.unavailable || 'Unavailable', t.security?.biometricUnavailable || 'Fingerprint or Face ID not available on this device');
-      return;
-    }
-    
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: t.security?.confirmIdentity || 'Confirm Identity',
-      fallbackLabel: t.security?.usePasscode || 'Use Passcode',
-    });
-    
-    if (result.success) {
-      setBiometric(!security.biometricEnabled);
-      logEvent('biometric_toggled', { enabled: !security.biometricEnabled });
-    }
+    Alert.alert(
+      t.common?.unavailable || 'Unavailable', 
+      'Biometric authentication has been removed from this version of the app for better compatibility.',
+      [{ text: 'OK' }]
+    );
   };
 
   return (

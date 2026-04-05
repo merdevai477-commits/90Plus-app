@@ -13,6 +13,7 @@ import {
     ActivityIndicator,
     Modal,
     Image,
+    Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -52,6 +53,10 @@ import { toastManager } from '../../services/toastManager';
 import { preloadManager } from '../../services/preloadManager';
 
 WebBrowser.maybeCompleteAuthSession();
+
+// ✅ iPad Detection: Detect if device is iPad for responsive layout
+const { width, height } = Dimensions.get('window');
+const isTablet = width >= 768;
 
 /**
  * 🐉 DRAGON FIX: Clear all previous user data with proper coordination
@@ -529,6 +534,37 @@ export default function AuthScreen() {
     };
 
     const handleAuth = async () => {
+        // ✅ iPad Debug Logging
+        console.log('🔐 Login attempt started', {
+            device: {
+                width: Dimensions.get('window').width,
+                height: Dimensions.get('window').height,
+                isTablet,
+                platform: Platform.OS,
+                version: Platform.Version,
+            },
+            apiUrl: getApiUrl(),
+            hasEmail: !!email,
+            hasPassword: !!password,
+        });
+
+        // ✅ Sentry breadcrumb for remote debugging
+        try {
+            const Sentry = require('@sentry/react-native');
+            Sentry.addBreadcrumb({
+                category: 'auth',
+                message: 'Login attempt started',
+                level: 'info',
+                data: {
+                    platform: Platform.OS,
+                    isTablet,
+                    width: Dimensions.get('window').width,
+                }
+            });
+        } catch (e) {
+            // Sentry not available
+        }
+
         if (!email || !password) {
             toastManager.showError(t.common.error, t.common.fillAllFields);
             return;
@@ -540,17 +576,62 @@ export default function AuthScreen() {
             if (isLogin) {
                 // Login with Clerk
                 if (!signIn) {
+                    console.error('❌ signIn is null/undefined - Clerk not initialized');
+                    
+                    // ✅ Send to Sentry
+                    try {
+                        const Sentry = require('@sentry/react-native');
+                        Sentry.captureMessage('Clerk signIn is null', {
+                            level: 'error',
+                            tags: { platform: Platform.OS, screen: 'login' }
+                        });
+                    } catch (e) {}
+                    
                     toastManager.showError(t.common.error, t.common.loginServiceUnavailable);
                     setIsLoading(false);
                     return;
                 }
+
+                console.log('📞 Calling Clerk signIn.create()...');
+                console.log('📧 Email:', email.substring(0, 3) + '***');
+
+                // ✅ Sentry breadcrumb
+                try {
+                    const Sentry = require('@sentry/react-native');
+                    Sentry.addBreadcrumb({
+                        category: 'auth',
+                        message: 'Calling Clerk signIn.create',
+                        level: 'info',
+                    });
+                } catch (e) {}
 
                 const result = await signIn.create({
                     identifier: email,
                     password: password,
                 });
 
+                console.log('📦 Clerk response received:', {
+                    status: result.status,
+                    hasSessionId: !!result.createdSessionId,
+                    // Don't log full result - may contain sensitive data
+                });
+
+                // ✅ Sentry breadcrumb
+                try {
+                    const Sentry = require('@sentry/react-native');
+                    Sentry.addBreadcrumb({
+                        category: 'auth',
+                        message: 'Clerk response received',
+                        level: 'info',
+                        data: {
+                            status: result.status,
+                            hasSessionId: !!result.createdSessionId,
+                        }
+                    });
+                } catch (e) {}
+
                 if (result.status === 'complete') {
+                    console.log('✅ Clerk login status: complete');
                     // Show loading screen
                     setLoadingMessage(t.common.loggingIn);
                     setShowLoadingScreen(true);
@@ -562,6 +643,7 @@ export default function AuthScreen() {
                         await clearPreviousUserData();
                         
                         // ✅ Activate session to get valid token
+                        console.log('🔑 Activating Clerk session...');
                         await setActiveSignIn({ session: result.createdSessionId });
                         console.log('✅ Session activated successfully');
                         
@@ -650,8 +732,41 @@ export default function AuthScreen() {
                         }
                     }
                 } else {
+                    // ✅ CRITICAL: Log the actual status for debugging
+                    console.error('❌ Clerk login incomplete:', {
+                        status: result.status,
+                        identifier: email.substring(0, 3) + '***',
+                    });
+                    
+                    // ✅ Send to Sentry for remote debugging
+                    try {
+                        const Sentry = require('@sentry/react-native');
+                        Sentry.captureMessage(`Clerk login incomplete: ${result.status}`, {
+                            level: 'error',
+                            tags: {
+                                platform: Platform.OS,
+                                clerkStatus: result.status,
+                                isTablet: String(isTablet),
+                            },
+                            extra: {
+                                email: email.substring(0, 3) + '***',
+                                device: {
+                                    width: Dimensions.get('window').width,
+                                    height: Dimensions.get('window').height,
+                                    platform: Platform.OS,
+                                    version: Platform.Version,
+                                },
+                                hasSessionId: !!result.createdSessionId,
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('Failed to send to Sentry:', e);
+                    }
+                    
                     setShowLoadingScreen(false);
-                    toastManager.showError('خطأ', t.common.operationFailed);
+                    
+                    // ✅ Show actual status instead of generic error
+                    toastManager.showError('خطأ', `Login status: ${result.status}. Check Sentry for details.`);
                 }
             } else {
                 // Sign up - Check terms acceptance
@@ -672,8 +787,34 @@ export default function AuthScreen() {
             }
         } catch (error: any) {
             console.error('Auth error:', error);
+            
+            // ✅ iPad Debug: Log detailed error info
+            console.error('❌ Login failed:', {
+                error: error.message,
+                code: error.code,
+                errors: error.errors,
+                status: error.status,
+                name: error.name,
+                device: {
+                    isTablet,
+                    width: Dimensions.get('window').width,
+                    platform: Platform.OS,
+                },
+            });
+            
             setShowLoadingScreen(false); // ✅ FIX: Always hide loading screen on error
-            const errorMessage = getArabicErrorMessage(error);
+            
+            // ✅ iOS FIX: Show actual error message instead of generic
+            let errorMessage = getArabicErrorMessage(error);
+            
+            // Check for CORS/Network errors (common on iOS)
+            if (error.message?.includes('Network request failed') || 
+                error.message?.includes('CORS') ||
+                error.name === 'TypeError' && error.message?.includes('fetch')) {
+                errorMessage = 'خطأ في الاتصال بالخادم. تأكد من اتصال الإنترنت وحاول مرة أخرى.';
+                console.error('🚨 Possible CORS issue detected on iOS');
+            }
+            
             Alert.alert('خطأ', errorMessage);
         } finally {
             if (isLogin) {
@@ -1514,55 +1655,56 @@ const styles = StyleSheet.create({
     scrollContent: {
         flexGrow: 1,
         justifyContent: 'center',
-        padding: 24,
-        paddingBottom: 40,
+        padding: isTablet ? 40 : 24,
+        paddingHorizontal: isTablet ? 60 : 24,
+        paddingBottom: isTablet ? 60 : 40,
     },
     header: {
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: isTablet ? 32 : 24,
     },
     logoContainer: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
+        width: isTablet ? 120 : 100,
+        height: isTablet ? 120 : 100,
+        borderRadius: isTablet ? 60 : 50,
         backgroundColor: 'rgba(74, 20, 140, 0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: isTablet ? 20 : 16,
         borderWidth: 2,
         borderColor: '#4A148C',
         ...EFFECTS.greenGlow,
     },
     logoImageContainer: {
-        width: 80,
-        height: 80,
+        width: isTablet ? 100 : 80,
+        height: isTablet ? 100 : 80,
         justifyContent: 'center',
         alignItems: 'center',
-        borderRadius: 40,
+        borderRadius: isTablet ? 50 : 40,
         overflow: 'hidden',
     },
     logoImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: isTablet ? 100 : 80,
+        height: isTablet ? 100 : 80,
+        borderRadius: isTablet ? 50 : 40,
     },
     logoGlow: {
         position: 'absolute',
         width: '100%',
         height: '100%',
-        borderRadius: 50,
+        borderRadius: isTablet ? 60 : 50,
         backgroundColor: '#4A148C',
         opacity: 0.3,
         zIndex: -1,
     },
     appName: {
-        fontSize: 28,
+        fontSize: isTablet ? 36 : 28,
         fontWeight: 'bold',
         color: '#fff',
         marginBottom: 4,
     },
     tagline: {
-        fontSize: 14,
+        fontSize: isTablet ? 16 : 14,
         color: COLORS.textSecondary,
     },
     modeSwitcher: {
@@ -1573,10 +1715,13 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         borderWidth: 1,
         borderColor: 'rgba(255, 215, 0, 0.2)',
+        maxWidth: isTablet ? 600 : undefined,
+        alignSelf: isTablet ? 'center' : 'stretch',
+        width: isTablet ? '100%' : undefined,
     },
     modeButton: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: isTablet ? 14 : 10,
         alignItems: 'center',
         borderRadius: 12,
     },
@@ -1585,7 +1730,7 @@ const styles = StyleSheet.create({
     },
     modeText: {
         color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: 14,
+        fontSize: isTablet ? 16 : 14,
         fontWeight: '600',
     },
     modeTextActive: {
@@ -1593,15 +1738,18 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     formContainer: {
-        gap: 12,
+        gap: isTablet ? 16 : 12,
+        maxWidth: isTablet ? 600 : undefined,
+        alignSelf: isTablet ? 'center' : 'stretch',
+        width: '100%',
     },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255, 215, 0, 0.08)',
         borderRadius: 16,
-        paddingHorizontal: 16,
-        minHeight: Platform.OS === 'ios' ? 54 : 58,
+        paddingHorizontal: isTablet ? 20 : 16,
+        minHeight: isTablet ? 64 : (Platform.OS === 'ios' ? 54 : 58),
         borderWidth: 1,
         borderColor: 'rgba(255, 215, 0, 0.2)',
     },
@@ -1611,7 +1759,7 @@ const styles = StyleSheet.create({
     input: {
         flex: 1,
         color: COLORS.white,
-        fontSize: 16,
+        fontSize: isTablet ? 18 : 16,
         textAlign: 'right',
     },
     eyeIcon: {
@@ -1620,7 +1768,7 @@ const styles = StyleSheet.create({
     submitButton: {
         borderRadius: 16,
         overflow: 'hidden',
-        marginTop: 8,
+        marginTop: isTablet ? 12 : 8,
         borderWidth: 1,
         borderColor: '#FFD700',
     },
@@ -1628,20 +1776,20 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: Platform.OS === 'ios' ? 14 : 16,
+        paddingVertical: isTablet ? 18 : (Platform.OS === 'ios' ? 14 : 16),
         gap: 8,
         backgroundColor: '#FFD700',
     },
     submitText: {
         color: '#0A0514',
-        fontSize: 16,
+        fontSize: isTablet ? 18 : 16,
         fontWeight: 'bold',
     },
     guestButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 14,
+        paddingVertical: isTablet ? 16 : 14,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#FFD700',
@@ -1649,7 +1797,7 @@ const styles = StyleSheet.create({
     },
     guestText: {
         color: '#FFD700',
-        fontSize: 14,
+        fontSize: isTablet ? 16 : 14,
         fontWeight: '600',
     },
     forgotPassword: {
@@ -1658,13 +1806,13 @@ const styles = StyleSheet.create({
     },
     forgotPasswordText: {
         color: '#FFD700',
-        fontSize: 14,
+        fontSize: isTablet ? 16 : 14,
         fontWeight: '600',
     },
     divider: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginVertical: 16,
+        marginVertical: isTablet ? 20 : 16,
     },
     dividerLine: {
         flex: 1,
@@ -1673,20 +1821,20 @@ const styles = StyleSheet.create({
     },
     dividerText: {
         color: COLORS.textTertiary,
-        fontSize: 12,
+        fontSize: isTablet ? 14 : 12,
         marginHorizontal: 16,
         fontWeight: '600',
     },
     oauthContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        gap: 16,
+        gap: isTablet ? 20 : 16,
         marginBottom: 12,
     },
     oauthButton: {
-        width: Platform.OS === 'ios' ? 54 : 58,
-        height: Platform.OS === 'ios' ? 54 : 58,
-        borderRadius: Platform.OS === 'ios' ? 27 : 29,
+        width: isTablet ? 64 : (Platform.OS === 'ios' ? 54 : 58),
+        height: isTablet ? 64 : (Platform.OS === 'ios' ? 54 : 58),
+        borderRadius: isTablet ? 32 : (Platform.OS === 'ios' ? 27 : 29),
         backgroundColor: 'rgba(255,255,255,0.05)',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
@@ -1699,13 +1847,14 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.9)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: isTablet ? 40 : 20,
     },
     modalContent: {
         backgroundColor: '#0D0627',
         borderRadius: 28,
-        padding: 28,
+        padding: isTablet ? 36 : 28,
         width: '100%',
+        maxWidth: isTablet ? 600 : undefined,
         alignItems: 'center',
         borderWidth: 2,
         borderColor: '#FFD700',
@@ -1719,9 +1868,9 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 16,
         right: 16,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: isTablet ? 48 : 40,
+        height: isTablet ? 48 : 40,
+        borderRadius: isTablet ? 24 : 20,
         backgroundColor: 'rgba(255, 215, 0, 0.15)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -1729,34 +1878,34 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255, 215, 0, 0.3)',
     },
     modalTitle: {
-        fontSize: 24,
+        fontSize: isTablet ? 28 : 24,
         fontWeight: 'bold',
         color: COLORS.white,
         marginBottom: 12,
         textAlign: 'center',
     },
     modalSubtitle: {
-        fontSize: 15,
+        fontSize: isTablet ? 17 : 15,
         color: COLORS.textSecondary,
         textAlign: 'center',
-        marginBottom: 28,
-        lineHeight: 24,
+        marginBottom: isTablet ? 32 : 28,
+        lineHeight: isTablet ? 28 : 24,
     },
     codeInputWrapper: {
         width: '100%',
-        marginBottom: 20,
+        marginBottom: isTablet ? 24 : 20,
     },
     codeInput: {
         backgroundColor: 'rgba(50, 205, 50, 0.1)',
         borderRadius: 16,
-        paddingHorizontal: 16,
-        height: 65,
+        paddingHorizontal: isTablet ? 20 : 16,
+        height: isTablet ? 75 : 65,
         borderWidth: 2,
         borderColor: COLORS.neonGreen,
         color: COLORS.white,
-        fontSize: 32,
+        fontSize: isTablet ? 36 : 32,
         textAlign: 'center',
-        letterSpacing: 16,
+        letterSpacing: isTablet ? 20 : 16,
         fontWeight: 'bold',
     },
     verifyButton: {
@@ -1766,7 +1915,7 @@ const styles = StyleSheet.create({
     },
     resendText: {
         color: '#FFD700',
-        fontSize: 15,
+        fontSize: isTablet ? 17 : 15,
         fontWeight: '600',
         marginTop: 16,
     },
@@ -1774,12 +1923,12 @@ const styles = StyleSheet.create({
     termsContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: isTablet ? 16 : 12,
         paddingHorizontal: 4,
     },
     checkbox: {
-        width: 28,
-        height: 28,
+        width: isTablet ? 32 : 28,
+        height: isTablet ? 32 : 28,
         borderRadius: 8,
         borderWidth: 2,
         borderColor: 'rgba(255, 215, 0, 0.5)',
@@ -1794,17 +1943,17 @@ const styles = StyleSheet.create({
     },
     checkmark: {
         color: '#0A0514',
-        fontSize: 16,
+        fontSize: isTablet ? 18 : 16,
         fontWeight: 'bold',
     },
     termsTextContainer: {
         flex: 1,
     },
     termsText: {
-        fontSize: 14,
+        fontSize: isTablet ? 16 : 14,
         color: COLORS.textSecondary,
         textAlign: 'right',
-        lineHeight: 20,
+        lineHeight: isTablet ? 24 : 20,
     },
     termsLink: {
         color: '#FFD700',

@@ -20,8 +20,6 @@ import { COUNTRIES } from '../data/countries';
 import { LEAGUES } from '../data/leagues';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
-import { clubLogoService } from '../services/clubLogoService';
-import { brandLogoService } from '../services/brandLogoService';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,

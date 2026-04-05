@@ -13,17 +13,23 @@ import {
     StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
-// Video rendering is handled by UnifiedVideoPlayer (expo-av Video used internally)
-// Type-only import - safe even if expo-av not available
+
+// Safe video import - handle missing expo-av gracefully
 let Video: any = null;
+let ResizeMode: any = null;
+let hasExpoAV = false;
+
 try {
   const ExpoAV = require('expo-av');
   Video = ExpoAV.Video;
+  ResizeMode = ExpoAV.ResizeMode;
+  hasExpoAV = true;
+  console.log('✅ expo-av loaded successfully');
 } catch (e) {
-  // expo-av not available
+  console.warn('⚠️ expo-av not available, video playback disabled');
+  hasExpoAV = false;
 }
 
-import { SafeVideoPlayer as UnifiedVideoPlayer } from './SafeVideoPlayer';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     Heart,
@@ -45,6 +51,7 @@ import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { useLanguage } from '../../contexts/LanguageContext';
 import CommentsModal from '../common/CommentsModal'; // Import CommentsModal
 import { Comment } from '../../contexts/VideosContext';
+import { toastManager } from '../../services/toastManager';
 
 interface VideoPlayerModalProps {
     visible: boolean;
@@ -303,20 +310,32 @@ export default function VideoPlayerModal({
                     onPressOut={handleLongPressEnd}
                     style={styles.videoWrapper}
                 >
-                    {videoUrl && (
-                        <UnifiedVideoPlayer
-                            reel={{
-                                id: reelId || 'modal-video',
-                                videoUrl: videoUrl,
-                                muted: isMuted,
+                    {videoUrl && Video && hasExpoAV ? (
+                        <Video
+                            ref={videoRef}
+                            source={{ uri: videoUrl }}
+                            style={styles.video}
+                            resizeMode={ResizeMode?.COVER || 'cover'}
+                            shouldPlay={isVideoActive && !isPaused}
+                            isLooping
+                            isMuted={isMuted}
+                            useNativeControls={false}
+                            onError={(error: any) => {
+                                console.error('Video playback error:', error);
+                                toastManager.showError('خطأ في الفيديو', 'حدث خطأ أثناء تشغيل الفيديو');
                             }}
-                            isActive={isVideoActive && !isPaused}
-                            onVideoRef={(ref: any, id: string) => {
-                                videoRef.current = ref;
-                            }}
-                            disableReplayLimit={true}
-                            showProgressBar={false}
                         />
+                    ) : (
+                        <View style={styles.videoPlaceholder}>
+                            <Text style={styles.placeholderText}>
+                                {hasExpoAV ? 'جاري تحميل الفيديو...' : 'مشغل الفيديو غير متاح في بيئة التطوير'}
+                            </Text>
+                            {!hasExpoAV && (
+                                <Text style={[styles.placeholderText, { fontSize: 14, marginTop: 10 }]}>
+                                    سيعمل الفيديو بشكل طبيعي في التطبيق المنشور
+                                </Text>
+                            )}
+                        </View>
                     )}
 
                     {/* Play/Pause Overlay */}
@@ -504,6 +523,17 @@ const styles = StyleSheet.create({
     },
     video: {
         flex: 1, // ✅ SDK 52 / iPad fix: use flex instead of hardcoded SCREEN_WIDTH/SCREEN_HEIGHT
+    },
+    videoPlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    },
+    placeholderText: {
+        color: COLORS.textSecondary,
+        fontSize: 16,
+        textAlign: 'center',
     },
     pauseOverlay: {
         position: 'absolute',

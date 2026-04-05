@@ -26,7 +26,6 @@ import {
   Share,
 } from 'react-native';
 import * as Network from 'expo-network';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -67,7 +66,6 @@ export default function SettingsScreen() {
 
     clearCache,
     deleteAccount,
-    toggleBiometric,
   } = useSettings();
 
   const router = useRouter();
@@ -112,7 +110,6 @@ export default function SettingsScreen() {
   const [cacheSize, setCacheSize] = useState('12.5 MB');
   const [lastSync, setLastSync] = useState('الآن');
   const [ipAddress, setIpAddress] = useState('Loading...');
-  const [biometricSupported, setBiometricSupported] = useState(false);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [soundEffects, setSoundEffects] = useState(true);
@@ -137,7 +134,6 @@ export default function SettingsScreen() {
     animateEntry();
     calculateCacheSize();
     fetchIpAddress();
-    checkBiometrics();
   }, []);
 
   const fetchIpAddress = async () => {
@@ -147,12 +143,6 @@ export default function SettingsScreen() {
     } catch (e) {
       setIpAddress(t.common.unavailable);
     }
-  };
-
-  const checkBiometrics = async () => {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    setBiometricSupported(hasHardware && isEnrolled);
   };
 
   const animateEntry = () => {
@@ -712,13 +702,6 @@ export default function SettingsScreen() {
                   toastManager.showSettingsUpdateSuccess();
                 },
                 'phone-portrait-outline'
-              )}
-              {biometricSupported && renderSwitchItem(
-                'فتح بالبصمة',
-                'استخدم البصمة لتسجيل الدخول',
-                settings.biometricEnabled,
-                () => toggleBiometric(!settings.biometricEnabled),
-                'finger-print-outline'
               )}
             </View>
           </View>

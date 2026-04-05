@@ -11,7 +11,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 const { height } = Dimensions.get('window');
@@ -43,26 +42,9 @@ const AccountDeletionModal: React.FC<AccountDeletionModalProps> = ({
   };
 
   const handleBiometricAuth = async () => {
-    try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-      if (!hasHardware || !isEnrolled) {
-        // No biometric available, proceed directly
-        return true;
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: isRTL ? 'تأكيد حذف الحساب' : 'Confirm Account Deletion',
-        fallbackLabel: isRTL ? 'استخدام كلمة المرور' : 'Use Password',
-        cancelLabel: isRTL ? 'إلغاء' : 'Cancel',
-      });
-
-      return result.success;
-    } catch (error) {
-      console.error('Biometric auth error:', error);
-      return false;
-    }
+    // Biometric authentication has been removed for better compatibility
+    // Proceed directly without biometric check
+    return true;
   };
 
   const handleDelete = async () => {
@@ -199,8 +181,8 @@ const AccountDeletionModal: React.FC<AccountDeletionModalProps> = ({
                   <Ionicons name="shield-checkmark" size={20} color="#22c55e" />
                   <Text style={styles.infoText}>
                     {isRTL
-                      ? 'سيُطلب منك التحقق من هويتك باستخدام البصمة أو كلمة المرور.'
-                      : 'You will be asked to verify your identity using biometrics or password.'}
+                      ? 'سيتم تأكيد العملية بعد الضغط على زر الحذف.'
+                      : 'The operation will be confirmed after pressing the delete button.'}
                   </Text>
                 </View>
               </>

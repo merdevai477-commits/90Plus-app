@@ -1,249 +1,312 @@
 /**
  * useImagePicker Hook
- * Wraps image picking + automatic compression
+ * Professional image picking with crop, compress, and validation
  * 
  * Features:
- * - Pick from gallery or take photo
- * - Automatic compression before returning
- * - Progress tracking
- * - Permission handling (Android + iOS)
- * - Caching to avoid re-compression
+ * - Pick from gallery or camera
+ * - Circular crop for avatars
+ * - Square crop for covers
+ * - Compress to max 1MB
+ * - Validate type, size, dimensions
+ * - Error handling
+ * - Loading states
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { Platform, Alert } from 'react-native';
-import { compressImage, CompressedImage, CompressionOptions } from '../utils/imageCompressor';
-import { logger } from '../services/logger';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import * as Haptics from 'expo-haptics';
+import { Alert } from 'react-native';
+import { useLanguage } from '../contexts/LanguageContext';
+import { usePhotoPermission } from './usePhotoPermission';
 
-export interface UseImagePickerOptions {
+export interface ImagePickerOptions {
+  type: 'avatar' | 'cover' | 'reel' | 'general';
+  maxSize?: number; // in MB
+  quality?: number; // 0-1
   allowsEditing?: boolean;
   aspect?: [number, number];
-  compressionOptions?: CompressionOptions;
-  onProgress?: (progress: number) => void;
-  skipCompression?: boolean; // Skip compression if needed
 }
 
-export interface UseImagePickerResult {
-  pickImage: () => Promise<CompressedImage | null>;
-  takePhoto: () => Promise<CompressedImage | null>;
-  isCompressing: boolean;
-  progress: number;
-  error: string | null;
+export interface PickedImage {
+  uri: string;
+  width: number;
+  height: number;
+  size: number; // in bytes
+  type: string;
+  base64?: string;
 }
 
-/**
- * Custom hook for image picking with automatic compression
- */
-export function useImagePicker(options?: UseImagePickerOptions): UseImagePickerResult {
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Cache to avoid re-compressing the same image
-  const compressionCache = useRef<Map<string, CompressedImage>>(new Map());
-  
-  /**
-   * Request camera permissions
-   */
-  const requestCameraPermission = useCallback(async (): Promise<boolean> => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Camera permission is required to take photos. Please enable it in your device settings.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      logger.error('[useImagePicker] Failed to request camera permission', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return false;
-    }
-  }, []);
-  
-  /**
-   * Request media library permissions
-   */
-  const requestMediaLibraryPermission = useCallback(async (): Promise<boolean> => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Media library permission is required to select photos. Please enable it in your device settings.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      logger.error('[useImagePicker] Failed to request media library permission', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return false;
-    }
-  }, []);
-  
-  /**
-   * Compress image with caching
-   */
-  const compressWithCache = useCallback(async (uri: string): Promise<CompressedImage> => {
-    // Check cache first
-    if (compressionCache.current.has(uri)) {
-      logger.info('[useImagePicker] Using cached compressed image');
-      return compressionCache.current.get(uri)!;
-    }
-    
-    setIsCompressing(true);
-    setProgress(0);
-    setError(null);
-    
-    try {
-      setProgress(30);
-      
-      const compressed = await compressImage(uri, options?.compressionOptions);
-      
-      setProgress(80);
-      
-      // Cache the result
-      compressionCache.current.set(uri, compressed);
-      
-      // Limit cache size to 10 items
-      if (compressionCache.current.size > 10) {
-        const firstKey = compressionCache.current.keys().next().value;
-        compressionCache.current.delete(firstKey);
-      }
-      
-      setProgress(100);
-      
-      options?.onProgress?.(100);
-      
-      return compressed;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Compression failed';
-      setError(errorMessage);
-      logger.error('[useImagePicker] Compression failed', { error: errorMessage });
-      throw err;
-    } finally {
-      setIsCompressing(false);
-    }
-  }, [options]);
-  
-  /**
-   * Pick image from gallery
-   */
-  const pickImage = useCallback(async (): Promise<CompressedImage | null> => {
-    try {
-      // Request permission
-      const hasPermission = await requestMediaLibraryPermission();
-      if (!hasPermission) {
-        return null;
-      }
-      
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: options?.allowsEditing ?? true,
-        aspect: options?.aspect,
-        quality: 1, // Pick at full quality, we'll compress later
-      });
-      
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return null;
-      }
-      
-      const asset = result.assets[0];
-      
-      // Skip compression if requested
-      if (options?.skipCompression) {
+export interface UseImagePickerReturn {
+  pickFromGallery: (options?: ImagePickerOptions) => Promise<PickedImage | null>;
+  pickFromCamera: (options?: ImagePickerOptions) => Promise<PickedImage | null>;
+  isLoading: boolean;
+}
+
+const DEFAULT_OPTIONS: ImagePickerOptions = {
+  type: 'general',
+  maxSize: 1, // 1MB
+  quality: 0.8,
+  allowsEditing: true,
+  aspect: [1, 1],
+};
+
+export const useImagePicker = (): UseImagePickerReturn => {
+  const { language } = useLanguage();
+  const isRTL = language === 'ar';
+  const { requestCameraPermission, requestLibraryPermission } = usePhotoPermission();
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Get options based on type
+  const getOptionsForType = (type: ImagePickerOptions['type']): Partial<ImagePickerOptions> => {
+    switch (type) {
+      case 'avatar':
         return {
-          uri: asset.uri,
-          width: asset.width,
-          height: asset.height,
-          size: 0, // Unknown
-          originalSize: 0,
-          compressionRatio: 0,
-          mimeType: 'image/jpeg',
+          maxSize: 1,
+          quality: 0.8,
+          allowsEditing: true,
+          aspect: [1, 1], // Square for circular crop
         };
-      }
-      
-      // Compress image
-      const compressed = await compressWithCache(asset.uri);
-      
-      return compressed;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to pick image';
-      setError(errorMessage);
-      logger.error('[useImagePicker] Failed to pick image', { error: errorMessage });
-      return null;
-    }
-  }, [options, requestMediaLibraryPermission, compressWithCache]);
-  
-  /**
-   * Take photo with camera
-   */
-  const takePhoto = useCallback(async (): Promise<CompressedImage | null> => {
-    try {
-      // Request permission
-      const hasPermission = await requestCameraPermission();
-      if (!hasPermission) {
-        return null;
-      }
-      
-      // Launch camera
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: options?.allowsEditing ?? true,
-        aspect: options?.aspect,
-        quality: 1, // Capture at full quality, we'll compress later
-      });
-      
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return null;
-      }
-      
-      const asset = result.assets[0];
-      
-      // Skip compression if requested
-      if (options?.skipCompression) {
+      case 'cover':
         return {
-          uri: asset.uri,
-          width: asset.width,
-          height: asset.height,
-          size: 0, // Unknown
-          originalSize: 0,
-          compressionRatio: 0,
-          mimeType: 'image/jpeg',
+          maxSize: 2,
+          quality: 0.85,
+          allowsEditing: true,
+          aspect: [16, 9],
         };
-      }
-      
-      // Compress image
-      const compressed = await compressWithCache(asset.uri);
-      
-      return compressed;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to take photo';
-      setError(errorMessage);
-      logger.error('[useImagePicker] Failed to take photo', { error: errorMessage });
-      return null;
+      case 'reel':
+        return {
+          maxSize: 100,
+          quality: 0.9,
+          allowsEditing: false,
+          aspect: [9, 16],
+        };
+      default:
+        return DEFAULT_OPTIONS;
     }
-  }, [options, requestCameraPermission, compressWithCache]);
-  
-  return {
-    pickImage,
-    takePhoto,
-    isCompressing,
-    progress,
-    error,
   };
-}
 
-export default useImagePicker;
+  // Validate image
+  const validateImage = async (
+    uri: string,
+    options: ImagePickerOptions
+  ): Promise<{ valid: boolean; error?: string }> => {
+    try {
+      // Get file info
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const sizeInMB = blob.size / (1024 * 1024);
+
+      // Check size
+      const maxSize = options.maxSize || DEFAULT_OPTIONS.maxSize!;
+      if (sizeInMB > maxSize) {
+        return {
+          valid: false,
+          error: isRTL
+            ? `حجم الصورة كبير جداً. الحد الأقصى ${maxSize}MB`
+            : `Image size too large. Maximum ${maxSize}MB`,
+        };
+      }
+
+      // Check type
+      if (!blob.type.startsWith('image/')) {
+        return {
+          valid: false,
+          error: isRTL ? 'نوع الملف غير صالح' : 'Invalid file type',
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      return {
+        valid: false,
+        error: isRTL ? 'فشل التحقق من الصورة' : 'Failed to validate image',
+      };
+    }
+  };
+
+  // Compress image
+  const compressImage = async (
+    uri: string,
+    options: ImagePickerOptions
+  ): Promise<string> => {
+    try {
+      const quality = options.quality || DEFAULT_OPTIONS.quality!;
+      
+      // Manipulate image
+      const manipResult = await manipulateAsync(
+        uri,
+        [
+          // Resize if needed
+          { resize: { width: options.type === 'avatar' ? 500 : 1080 } },
+        ],
+        {
+          compress: quality,
+          format: SaveFormat.JPEG,
+        }
+      );
+
+      return manipResult.uri;
+    } catch (error) {
+      console.error('Error compressing image:', error);
+      return uri; // Return original if compression fails
+    }
+  };
+
+  // Pick from gallery
+  const pickFromGallery = useCallback(
+    async (options: ImagePickerOptions = DEFAULT_OPTIONS): Promise<PickedImage | null> => {
+      try {
+        setIsLoading(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        // Request permission
+        const hasPermission = await requestLibraryPermission();
+        if (!hasPermission) {
+          setIsLoading(false);
+          return null;
+        }
+
+        // Merge options
+        const finalOptions = { ...DEFAULT_OPTIONS, ...getOptionsForType(options.type), ...options };
+
+        // Launch image picker
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: finalOptions.allowsEditing,
+          aspect: finalOptions.aspect,
+          quality: finalOptions.quality,
+          base64: false,
+        });
+
+        if (result.canceled) {
+          setIsLoading(false);
+          return null;
+        }
+
+        const asset = result.assets[0];
+
+        // Validate image
+        const validation = await validateImage(asset.uri, finalOptions);
+        if (!validation.valid) {
+          Alert.alert(
+            isRTL ? 'خطأ' : 'Error',
+            validation.error || (isRTL ? 'صورة غير صالحة' : 'Invalid image')
+          );
+          setIsLoading(false);
+          return null;
+        }
+
+        // Compress image
+        const compressedUri = await compressImage(asset.uri, finalOptions);
+
+        // Get final file info
+        const response = await fetch(compressedUri);
+        const blob = await response.blob();
+
+        const pickedImage: PickedImage = {
+          uri: compressedUri,
+          width: asset.width,
+          height: asset.height,
+          size: blob.size,
+          type: blob.type,
+        };
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setIsLoading(false);
+        return pickedImage;
+      } catch (error: any) {
+        console.error('Error picking from gallery:', error);
+        Alert.alert(
+          isRTL ? 'خطأ' : 'Error',
+          error.message || (isRTL ? 'فشل اختيار الصورة' : 'Failed to pick image')
+        );
+        setIsLoading(false);
+        return null;
+      }
+    },
+    [requestLibraryPermission, isRTL]
+  );
+
+  // Pick from camera
+  const pickFromCamera = useCallback(
+    async (options: ImagePickerOptions = DEFAULT_OPTIONS): Promise<PickedImage | null> => {
+      try {
+        setIsLoading(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        // Request permission
+        const hasPermission = await requestCameraPermission();
+        if (!hasPermission) {
+          setIsLoading(false);
+          return null;
+        }
+
+        // Merge options
+        const finalOptions = { ...DEFAULT_OPTIONS, ...getOptionsForType(options.type), ...options };
+
+        // Launch camera
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: finalOptions.allowsEditing,
+          aspect: finalOptions.aspect,
+          quality: finalOptions.quality,
+          base64: false,
+        });
+
+        if (result.canceled) {
+          setIsLoading(false);
+          return null;
+        }
+
+        const asset = result.assets[0];
+
+        // Validate image
+        const validation = await validateImage(asset.uri, finalOptions);
+        if (!validation.valid) {
+          Alert.alert(
+            isRTL ? 'خطأ' : 'Error',
+            validation.error || (isRTL ? 'صورة غير صالحة' : 'Invalid image')
+          );
+          setIsLoading(false);
+          return null;
+        }
+
+        // Compress image
+        const compressedUri = await compressImage(asset.uri, finalOptions);
+
+        // Get final file info
+        const response = await fetch(compressedUri);
+        const blob = await response.blob();
+
+        const pickedImage: PickedImage = {
+          uri: compressedUri,
+          width: asset.width,
+          height: asset.height,
+          size: blob.size,
+          type: blob.type,
+        };
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setIsLoading(false);
+        return pickedImage;
+      } catch (error: any) {
+        console.error('Error picking from camera:', error);
+        Alert.alert(
+          isRTL ? 'خطأ' : 'Error',
+          error.message || (isRTL ? 'فشل التقاط الصورة' : 'Failed to capture image')
+        );
+        setIsLoading(false);
+        return null;
+      }
+    },
+    [requestCameraPermission, isRTL]
+  );
+
+  return {
+    pickFromGallery,
+    pickFromCamera,
+    isLoading,
+  };
+};

@@ -56,6 +56,7 @@ const pendingRequests = new Map<string, Promise<any>>();
 export class EnhancedNetworkService {
     private static initialized = false;
     private static healthCheckTimer: NodeJS.Timeout | null = null;
+    private static netInfoUnsubscribe: (() => void) | null = null;
 
     /**
      * Initialize the network service
@@ -64,8 +65,8 @@ export class EnhancedNetworkService {
         if (this.initialized) return;
 
         try {
-            // Listen to network state changes
-            NetInfo.addEventListener(state => {
+            // ✅ FIXED: Store unsubscribe function for cleanup
+            this.netInfoUnsubscribe = NetInfo.addEventListener(state => {
                 const wasConnected = networkState.isConnected;
                 
                 networkState.isConnected = state.isConnected ?? false;
@@ -379,16 +380,26 @@ export class EnhancedNetworkService {
     }
 
     /**
-     * Cleanup
+     * Cleanup - ✅ FIXED: Proper cleanup to prevent memory leaks
      */
     static cleanup(): void {
+        // Clear health check timer
         if (this.healthCheckTimer) {
             clearInterval(this.healthCheckTimer);
             this.healthCheckTimer = null;
         }
+        
+        // Remove NetInfo listener
+        if (this.netInfoUnsubscribe) {
+            this.netInfoUnsubscribe();
+            this.netInfoUnsubscribe = null;
+        }
+        
         this.clearCache();
         pendingRequests.clear();
         this.initialized = false;
+        
+        logger.debug('[EnhancedNetwork] Service cleaned up');
     }
 }
 

@@ -199,8 +199,8 @@ export const performanceMonitor = new PerformanceMonitor();
 /**
  * Hook to track component performance
  */
-export const usePerformanceTracking = (componentName: string): void => {
-  if (!__DEV__) return;
+export const usePerformanceTracking = (componentName: string): (() => void) => {
+  if (!__DEV__) return () => {};
 
   const startTime = performance.now();
 

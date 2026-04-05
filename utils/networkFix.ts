@@ -20,12 +20,13 @@ import NetInfo from '@react-native-community/netinfo';
 export class NetworkChecker {
     private static isOnline = true;
     private static listeners: Array<(isOnline: boolean) => void> = [];
+    private static netInfoUnsubscribe: (() => void) | null = null;
 
     /**
-     * Initialize network monitoring
+     * Initialize network monitoring - ✅ FIXED: Store unsubscribe function
      */
     static initialize() {
-        NetInfo.addEventListener(state => {
+        this.netInfoUnsubscribe = NetInfo.addEventListener(state => {
             const wasOnline = this.isOnline;
             this.isOnline = state.isConnected ?? false;
             
@@ -34,6 +35,18 @@ export class NetworkChecker {
                 this.notifyListeners();
             }
         });
+    }
+    
+    /**
+     * Cleanup - ✅ FIXED: Remove NetInfo listener
+     */
+    static cleanup() {
+        if (this.netInfoUnsubscribe) {
+            this.netInfoUnsubscribe();
+            this.netInfoUnsubscribe = null;
+        }
+        this.listeners = [];
+        logger.debug('[NetworkChecker] Cleaned up');
     }
 
     /**

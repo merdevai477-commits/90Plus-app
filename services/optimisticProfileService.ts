@@ -7,6 +7,9 @@ import { AuthService } from '../src/services/authService';
 import { globalState } from '../globalState';
 import { cacheService, CACHE_KEYS } from './cacheService';
 import * as Haptics from 'expo-haptics';
+import { getApiUrl } from '../config/api.config';
+
+const API_URL = getApiUrl();
 
 export interface ProfileUpdateData {
   username?: string;
@@ -177,19 +180,43 @@ class OptimisticProfileService {
           data: response.data
         };
       } else {
+        // Handle specific error messages
+        let errorMessage = response.message || 'فشل في تحديث البروفايل';
+        
+        // Check for username cooldown error
+        if (errorMessage.includes('يمكنك تغيير اسم المستخدم بعد') || 
+            errorMessage.includes('يوم') && updates.username) {
+          // Extract days from Arabic message
+          const daysMatch = errorMessage.match(/(\d+)\s*يوم/);
+          if (daysMatch) {
+            const days = parseInt(daysMatch[1]);
+            const nextDate = new Date();
+            nextDate.setDate(nextDate.getDate() + days);
+            
+            return {
+              success: false,
+              error: errorMessage,
+              canRetry: false,
+              nextAllowedChange: nextDate
+            };
+          }
+        }
+        
         return {
           success: false,
-          error: response.message || 'فشل في تحديث البروفايل',
+          error: errorMessage,
           canRetry: true
         };
       }
 
     } catch (error: any) {
       // Handle specific error types
-      if (error.message.includes('username')) {
+      if (error.message.includes('username') || error.message.includes('اسم المستخدم')) {
+        // Don't log username errors as errors since they might be cooldown messages
+        console.info('ℹ️ Username update info:', error.message);
         return {
           success: false,
-          error: 'اسم المستخدم غير متاح أو غير صالح',
+          error: error.message,
           canRetry: false
         };
       }
@@ -219,7 +246,7 @@ class OptimisticProfileService {
     nextAllowedDate?: Date;
   }> {
     try {
-      const response = await fetch(`${AuthService.getApiUrl()}/clerk/username-change-status`, {
+      const response = await fetch(`${API_URL}/clerk/username-change-status`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

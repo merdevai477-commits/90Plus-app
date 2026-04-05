@@ -16,6 +16,11 @@ export interface DiamondProfile {
     height?: number;
     weight?: number;
     preferredFoot?: string;
+    socialLinks?: Array<{
+        platform: string;
+        url: string;
+        username?: string;
+    }>;
     stats: {
         views: number;
         likes: number;

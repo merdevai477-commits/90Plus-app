@@ -3,6 +3,8 @@ import { View, StyleSheet, TouchableOpacity, Text, Animated, Easing } from 'reac
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path, ClipPath, Image as SvgImage } from 'react-native-svg';
+import { useSafeLoop } from '../../hooks/useSafeAnimation';
+import { usePerformanceMonitor } from '../../hooks/usePerformanceMonitor';
 
 interface ProfileCardProps {
     playerImage: any;
@@ -61,75 +63,47 @@ const ProfileCard = memo(function ProfileCard({
     isBrandUpdating = false,
     isStatsUpdating = false,
 }: ProfileCardProps) {
-    const shimmerAnim = useRef(new Animated.Value(0)).current;
-    const holoAnim = useRef(new Animated.Value(0)).current;
-    // ✅ PERFORMANCE: Store animation instances in refs to properly cleanup
-    const shimmerLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-    const holoLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+    // ✅ FIXED: Use safe animation hooks to prevent memory leaks
+    const shimmer = useSafeLoop(0, 1, 4000, {
+        easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+        useNativeDriver: true,
+        debug: false,
+    });
+    
+    const holo = useSafeLoop(0, 1, 5000, {
+        easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
+        useNativeDriver: true,
+        debug: false,
+    });
+    
+    // ✅ PERFORMANCE: Monitor component performance
+    usePerformanceMonitor({
+        componentName: 'ProfileCard',
+        enabled: __DEV__, // Only in development
+        memoryWarningThreshold: 50,
+        memoryCriticalThreshold: 100,
+        debug: false,
+    });
 
+    // ✅ FIXED: Start animations on mount with proper cleanup
     useEffect(() => {
-        // ✅ OPTIMIZATION: Reduce animation complexity for better performance
-        // Professional shimmer with slower, more elegant timing
-        shimmerLoopRef.current = Animated.loop(
-            Animated.sequence([
-                Animated.timing(shimmerAnim, {
-                    toValue: 1,
-                    duration: 4000, // Slightly slower for less CPU usage
-                    easing: Easing.bezier(0.4, 0.0, 0.2, 1),
-                    useNativeDriver: true, // ✅ Critical for performance
-                }),
-                Animated.delay(2500) // Longer pause reduces CPU usage
-            ])
-        );
+        shimmer.start();
+        holo.start();
+        
+        // Cleanup is handled automatically by useSafeLoop
+    }, []);
 
-        // Subtle holographic effect
-        holoLoopRef.current = Animated.loop(
-            Animated.sequence([
-                Animated.timing(holoAnim, {
-                    toValue: 1,
-                    duration: 5000, // Slower for less overhead
-                    easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
-                    useNativeDriver: true,
-                }),
-                Animated.timing(holoAnim, {
-                    toValue: 0,
-                    duration: 5000,
-                    easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
-                    useNativeDriver: true,
-                })
-            ])
-        );
-
-        shimmerLoopRef.current.start();
-        holoLoopRef.current.start();
-
-        // ✅ CRITICAL FIX: Proper cleanup to prevent memory leaks
-        return () => {
-            if (shimmerLoopRef.current) {
-                shimmerLoopRef.current.stop();
-                shimmerLoopRef.current = null;
-            }
-            if (holoLoopRef.current) {
-                holoLoopRef.current.stop();
-                holoLoopRef.current = null;
-            }
-            // Reset animated values
-            shimmerAnim.setValue(0);
-            holoAnim.setValue(0);
-        };
-    }, []); // ✅ Empty deps - only run once
-
-    const shimmerTranslate = shimmerAnim.interpolate({
+    const shimmerTranslate = shimmer.animatedValue.interpolate({
         inputRange: [0, 1],
         outputRange: [-400 * scale, 700 * scale], // Wider sweep
     });
 
-    const shimmerOpacity = shimmerAnim.interpolate({
+    const shimmerOpacity = shimmer.animatedValue.interpolate({
         inputRange: [0, 0.3, 0.7, 1],
         outputRange: [0, 0.8, 0.8, 0], // Fade in/out
     });
 
-    const holoOpacity = holoAnim.interpolate({
+    const holoOpacity = holo.animatedValue.interpolate({
         inputRange: [0, 0.5, 1],
         outputRange: [0.1, 0.25, 0.1], // Subtle pulsing
     });

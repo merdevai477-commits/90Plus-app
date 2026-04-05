@@ -134,6 +134,26 @@ class ToastManager {
   showSettingsUpdateSuccess() {
     this.showSuccess('تم الحفظ', 'تم حفظ الإعدادات بنجاح');
   }
+
+  // Cooldown specific methods
+  showCooldownWarning(type: 'avatar' | 'cover' | 'video' | 'username', timeRemaining: string) {
+    const typeMap = {
+      avatar: 'الصورة الشخصية',
+      cover: 'صورة الغلاف',
+      video: 'الفيديو',
+      username: 'اسم المستخدم'
+    };
+    this.showWarning('انتظر قليلاً', `يمكنك تغيير ${typeMap[type]} بعد ${timeRemaining}`);
+  }
+
+  showCooldownError(message: string) {
+    // Extract time information from Arabic message if possible
+    if (message.includes('يوم') || message.includes('ساعة')) {
+      this.showWarning('انتظر قليلاً', message);
+    } else {
+      this.showWarning('انتظر قليلاً', message);
+    }
+  }
 }
 
 export const toastManager = ToastManager.getInstance();

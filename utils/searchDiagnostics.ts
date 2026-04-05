@@ -167,11 +167,16 @@ export class SearchDiagnostics {
     const startTime = Date.now();
     
     try {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const response = await fetch(`${this.API_URL}/health`, {
         method: 'GET',
-        timeout: 5000
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
       const responseTime = Date.now() - startTime;
       
       if (response.ok) {
@@ -192,11 +197,14 @@ export class SearchDiagnostics {
     } catch (error: any) {
       const responseTime = Date.now() - startTime;
       
+      // Check if it's an abort error (timeout)
+      const isTimeout = error.name === 'AbortError' || responseTime > 5000;
+      
       return {
         endpoint: '/health',
-        status: responseTime > 5000 ? 'timeout' : 'error',
+        status: isTimeout ? 'timeout' : 'error',
         responseTime,
-        error: error.message
+        error: isTimeout ? 'Request timeout' : error.message
       };
     }
   }

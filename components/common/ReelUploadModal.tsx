@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
@@ -10,6 +10,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-na
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { extractDurationFromUrl } from '../../utils/videoDuration';
+import { toastManager } from '../../services/toastManager';
 
 interface ReelUploadModalProps {
     visible: boolean;
@@ -38,22 +39,17 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
         // Prevent guest access
         if (!isSignedIn) {
             onClose();
-            Alert.alert('تسجيل الدخول مطلوب', 'يجب تسجيل الدخول لرفع فيديو', [
-                { text: 'تسجيل الدخول', onPress: () => router.replace('/auth') },
-                { text: 'إلغاء', style: 'cancel' }
-            ]);
+            toastManager.showAuthError();
+            router.replace('/auth');
             return;
         }
 
         // Check profile completion before allowing upload
         if (!canUploadVideo) {
             onClose();
-            Alert.alert(
+            toastManager.showWarning(
                 'أكمل بروفايلك أولاً',
-                `يجب إكمال 3 خطوات على الأقل لرفع الفيديوهات:\n\n• ${missingRequiredSteps.join('\n• ')}`,
-                [
-                    { text: 'حسناً' }
-                ]
+                `يجب إكمال 3 خطوات على الأقل لرفع الفيديوهات:\n\n• ${missingRequiredSteps.join('\n• ')}`
             );
         }
     }, [visible, isSignedIn, canUploadVideo, missingRequiredSteps, onClose]);
@@ -68,12 +64,9 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         
         if (status !== 'granted') {
-            Alert.alert(
+            toastManager.showWarning(
                 'صلاحية مطلوبة',
-                'نحتاج إلى صلاحية الوصول للمعرض لرفع الفيديوهات.',
-                [
-                    { text: 'حسناً', style: 'default' }
-                ]
+                'نحتاج إلى صلاحية الوصول للمعرض لرفع الفيديوهات.'
             );
             return;
         }
@@ -97,23 +90,16 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
             if (duration === null) {
                 // In Expo Go, we can't extract duration - allow upload anyway
                 // Show warning but don't block
-                Alert.alert(
+                toastManager.showWarning(
                     'تنبيه',
-                    'لا يمكن التحقق من مدة الفيديو في Expo Go. تأكد أن الفيديو بين 5-60 ثانية.',
-                    [
-                        { text: 'إلغاء', style: 'cancel' },
-                        { 
-                            text: 'متابعة', 
-                            onPress: () => setVideoAsset(asset),
-                            style: 'default'
-                        }
-                    ]
+                    'لا يمكن التحقق من مدة الفيديو في Expo Go. تأكد أن الفيديو بين 5-60 ثانية.'
                 );
+                setVideoAsset(asset);
                 return;
             }
 
             if (duration < 5) {
-                Alert.alert(
+                toastManager.showWarning(
                     'فيديو قصير جداً',
                     'يجب أن تكون مدة الفيديو 5 ثوانٍ على الأقل.'
                 );
@@ -121,7 +107,7 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
             }
 
             if (duration > 60) {
-                Alert.alert(
+                toastManager.showWarning(
                     'فيديو طويل جداً',
                     'يجب أن لا تتجاوز مدة الفيديو 60 ثانية.'
                 );
