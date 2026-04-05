@@ -30,14 +30,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
-import { useLanguageStore } from '../src/i18n';
+import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
 import { getApiEndpoint } from '../config/api.config';
 
 export default function ParentalConsentScreen() {
   const { getToken } = useAuth();
-  const { t } = useLanguageStore();
+  const { translate: t, language, isRTL } = useTranslation();
   
   const [parentEmail, setParentEmail] = useState('');
   const [loading, setLoading] = useState(false);

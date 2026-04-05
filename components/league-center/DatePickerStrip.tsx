@@ -15,7 +15,8 @@ import { useHaptic } from '../../hooks/useHaptic';
 import { generateDateRange, isSameDay, DateItem } from './dateUtils';
 
 // Re-export for backwards compatibility
-export { generateDateRange, formatDateItem, DateItem } from './dateUtils';
+export { generateDateRange, formatDateItem } from './dateUtils';
+export type { DateItem } from './dateUtils';
 
 interface DatePickerStripProps {
   selectedDate: Date;

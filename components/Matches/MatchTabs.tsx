@@ -15,7 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
 import { useTranslation } from '../../src/i18n/useTranslation';
 
-export type MatchTabType = 'all' | 'live' | 'upcoming' | 'finished' | 'favorites' | 'predictions';
+export type MatchTabType = 'all' | 'live' | 'upcoming' | 'finished' | 'favorites' | 'predictions' | 'transfers';
 
 interface MatchTabsProps {
   activeTab: MatchTabType;

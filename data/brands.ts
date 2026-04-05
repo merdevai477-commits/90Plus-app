@@ -8,6 +8,7 @@ export interface Brand {
     logo: string;
     color: string;
     category: string;
+    apiId?: number; // Optional - used for logo fetching
 }
 
 export const BRANDS: Brand[] = [

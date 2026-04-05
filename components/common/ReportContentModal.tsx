@@ -89,7 +89,7 @@ export const ReportContentModal: React.FC<ReportContentModalProps> = ({
 
       const data = await response.json();
 
-      if (data.status === 'SUCCESS') {
+      if (response.ok && (data.status === 'SUCCESS' || response.status === 200)) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(
           'Report Submitted',
@@ -97,6 +97,12 @@ export const ReportContentModal: React.FC<ReportContentModalProps> = ({
           [{ text: 'OK', onPress: handleClose }]
         );
       } else {
+        if (response.status === 409) {
+          throw new Error('You have already reported this content');
+        }
+        if (response.status === 429) {
+          throw new Error('You have reached the daily report limit');
+        }
         throw new Error(data.message || 'Failed to submit report');
       }
     } catch (error: any) {

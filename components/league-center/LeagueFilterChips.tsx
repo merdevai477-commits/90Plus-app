@@ -5,7 +5,8 @@ import { useHaptic } from '../../hooks/useHaptic';
 import { LeagueChip, DEFAULT_LEAGUES, renderLeagueChip } from './leagueUtils';
 
 // Re-export for backwards compatibility
-export { LeagueChip, DEFAULT_LEAGUES, renderLeagueChip } from './leagueUtils';
+export { DEFAULT_LEAGUES, renderLeagueChip } from './leagueUtils';
+export type { LeagueChip } from './leagueUtils';
 
 interface LeagueFilterChipsProps {
   leagues: LeagueChip[];

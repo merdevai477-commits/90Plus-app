@@ -6,7 +6,7 @@ export interface Club {
     league: string;
     country: string;
     color: string;
-    // Removed apiId - no longer fetching real logos
+    apiId?: number; // Optional - used for logo fetching
 }
 
 // أندية عامة مستوحاة من الأندية الكبرى (بدون استخدام أسماء أو شعارات محمية)

@@ -197,7 +197,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
       });
 
       setShowPredictionModal(false);
-      toastManager.showSuccess('تم التوقع!', `تم تسجيل توقعك لمباراة ${match.homeTeam.name} ضد ${match.awayTeam.name} بنجاح`);
+      toastManager.showSuccess('تم التوقع!', `تم تسجيل توقعك لمباراة ${match.homeTeam} ضد ${match.awayTeam} بنجاح`);
     } catch (error) {
       toastManager.showError('فشل التوقع', 'حدث خطأ أثناء تسجيل التوقع. يرجى المحاولة مرة أخرى');
     } finally {

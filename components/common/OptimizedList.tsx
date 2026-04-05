@@ -1,7 +1,12 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { FlashList, FlashListProps } from '@shopify/flash-list';
 import { View, Text, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native';
-import { useTheme } from '../../contexts/ThemeContext';
+
+// Fallback theme colors (ThemeContext not available in this component)
+const THEME = {
+  primary: '#FFD700',
+  textSecondary: '#8E8E93',
+};
 
 interface OptimizedListProps<T> {
   data: T[];
@@ -52,7 +57,7 @@ export function OptimizedList<T>({
   onScroll,
   scrollEventThrottle = 16,
 }: OptimizedListProps<T>) {
-  const { theme } = useTheme();
+  const theme = THEME;
   const flashListRef = useRef<FlashList<T>>(null);
 
   // Default key extractor

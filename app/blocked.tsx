@@ -17,11 +17,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLanguageStore } from '../src/i18n';
+import { useTranslation } from '../src/i18n';
 import * as Updates from 'expo-updates';
 
 export default function BlockedScreen() {
-  const { t } = useLanguageStore();
+  const { translate: t, language, isRTL } = useTranslation();
 
   const handleExit = async () => {
     // Close the app (iOS will minimize, Android will exit)

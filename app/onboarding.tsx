@@ -28,6 +28,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { globalState } from '../globalState';
 import { useHomeStore } from '../src/store/home.store';
+import { clubLogoService } from '../services/clubLogoService';
+import { brandLogoService } from '../services/brandLogoService';
 import { useSettings } from '../contexts/SettingsContext';
 
 const { width } = Dimensions.get('window');

@@ -30,14 +30,14 @@ import { router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { useLanguageStore } from '../src/i18n';
+import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
 import { getApiEndpoint } from '../config/api.config';
 
 export default function AgeGateScreen() {
   const { getToken } = useAuth();
-  const { t } = useLanguageStore();
+  const { translate: t, language, isRTL } = useTranslation();
   
   const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);

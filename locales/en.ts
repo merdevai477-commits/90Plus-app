@@ -108,6 +108,8 @@ export const en = {
       noChanges: 'No changes',
       videoSelected: 'Video selected',
       refreshing: 'Refreshing',
+      uploadingInBackground: 'Uploading in background',
+      processingRequest: 'Processing request',
     }
   },
 

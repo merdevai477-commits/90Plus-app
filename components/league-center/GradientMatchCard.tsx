@@ -28,14 +28,13 @@ import {
 
 // Re-export types and utilities for backwards compatibility
 export {
-  Match,
-  TeamInfo,
   getGradientColors,
   getTeamGradients,
   extractTeamDisplayData,
   extractLiveIndicatorData,
   GRADIENT_SCHEMES,
 } from './matchCardUtils';
+export type { Match, TeamInfo } from './matchCardUtils';
 
 export interface UserPrediction {
   type: 'home' | 'draw' | 'away';
