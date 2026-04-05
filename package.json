@@ -63,7 +63,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/node-fetch": "^2.6.13",
     "@types/streamifier": "^0.1.2",
-    "bad-words": "^4.0.0",
+    "bad-words": "^3.0.4",
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
     "class-transformer": "^0.5.1",
