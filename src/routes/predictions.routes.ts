@@ -425,7 +425,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
  * POST /api/predictions/resolve/:matchId
  * Manually resolve predictions for a match (admin/debug)
  */
-router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<void> => {
+router.post('/resolve/:matchId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         // Ensure matchId is a string (handle array case)
         const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -450,7 +450,7 @@ router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<vo
  * POST /api/predictions/resolve-all
  * Trigger resolution check for all unresolved predictions (admin/debug)
  */
-router.post('/resolve-all', async (req: Request, res: Response): Promise<void> => {
+router.post('/resolve-all', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         // Import the service dynamically to avoid circular dependency
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');
@@ -489,7 +489,7 @@ router.post('/resolve-all', async (req: Request, res: Response): Promise<void> =
  * GET /api/predictions/unresolved
  * Get list of unresolved predictions (admin/debug)
  */
-router.get('/unresolved', async (req: Request, res: Response): Promise<void> => {
+router.get('/unresolved', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const unresolvedPredictions = await (prisma as any).prediction.findMany({
             where: { isCorrect: null },
@@ -667,11 +667,9 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
                     apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId,
                     predictionType,
                     coinsSpent: PREDICTION_COST,
-                    isCorrect: null, // ✅ Explicitly set to null (pending state)
-                    // Store the exact score prediction in a JSON field or separate columns
-                    // For now, using homeTeam/awayTeam fields to store scores
-                    homeTeam: `Score: ${home}`,
-                    awayTeam: `Score: ${away}`,
+                    isCorrect: null,
+                    homeTeam: `${home}`,
+                    awayTeam: `${away}`,
                 }
             }),
             prisma.user.update({
@@ -717,79 +715,3 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
 });
 
 export default router;
-
-/**
- * GET /api/predictions/leaderboard
- * Get top predictors leaderboard
- */
-router.get('/leaderboard', async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { limit = '10' } = req.query;
-        const take = Math.min(parseInt(limit as string) || 10, 50);
-        
-        // Get users with best prediction accuracy
-        const users = await prisma.user.findMany({
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                isVerified: true,
-                predictions: {
-                    select: {
-                        isCorrect: true,
-                        coinsWon: true,
-                    }
-                }
-            }
-        });
-        
-        // Calculate stats for each user
-        const leaderboard = users.map(user => {
-            const total = user.predictions.length;
-            const correct = user.predictions.filter((p: any) => p.isCorrect === true).length;
-            const incorrect = user.predictions.filter((p: any) => p.isCorrect === false).length;
-            const pending = user.predictions.filter((p: any) => p.isCorrect === null).length;
-            const totalCoinsWon = user.predictions
-                .filter((p: any) => p.isCorrect === true)
-                .reduce((sum, p: any) => sum + (p.coinsWon || 0), 0);
-            
-            const resolved = correct + incorrect;
-            const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
-            
-            return {
-                id: user.id,
-                username: user.username,
-                displayName: user.displayName,
-                avatar: user.avatar,
-                isVerified: user.isVerified,
-                stats: {
-                    total,
-                    correct,
-                    incorrect,
-                    pending,
-                    accuracy,
-                    totalCoinsWon,
-                    resolved
-                }
-            };
-        })
-        .filter(u => u.stats.resolved > 0) // Only users with resolved predictions
-        .sort((a, b) => {
-            // Sort by accuracy first, then by total correct
-            if (b.stats.accuracy !== a.stats.accuracy) {
-                return b.stats.accuracy - a.stats.accuracy;
-            }
-            return b.stats.correct - a.stats.correct;
-        })
-        .slice(0, take);
-        
-        res.json({
-            success: true,
-            data: { leaderboard }
-        });
-    } catch (error) {
-        logger.error('Error getting predictions leaderboard:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});

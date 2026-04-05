@@ -157,9 +157,12 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
   }
 });
 
-// GET /api/reports/my-reports
-router.get('/my-reports', requireAuth, async (req: Request, res: Response): Promise<void> => {
+// POST /api/reports/user/:userId
+router.post('/user/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const { userId } = req.params;
+    const userIdStr = ensureString(userId);
+    const { reason, additionalInfo } = req.body;
     const clerkUserId = req.auth?.userId;
 
     if (!clerkUserId) {
@@ -167,58 +170,77 @@ router.get('/my-reports', requireAuth, async (req: Request, res: Response): Prom
       return;
     }
 
-    const user = await prisma.user.findUnique({
+    const reporter = await prisma.user.findUnique({
       where: { clerkUserId },
       select: { id: true },
     });
 
-    if (!user) {
+    if (!reporter) {
       res.status(404).json({ status: 'ERROR', message: 'User not found' });
       return;
     }
 
-    // Get user's reports
-    const reports = await prisma.report.findMany({
-      where: {
-        reporterId: user.id,
-      },
-      select: {
-        id: true,
-        type: true,
-        reason: true,
-        status: true,
-        createdAt: true,
-        reportedReelId: true,
-        reportedCommentId: true,
-        reportedUserId: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 50, // Limit to last 50 reports
+    // Prevent self-reporting
+    if (reporter.id === userIdStr) {
+      res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+      return;
+    }
+
+    const reportedUser = await prisma.user.findUnique({
+      where: { id: userIdStr },
+      select: { id: true },
     });
 
-    // Format reports with content type
-    const formattedReports = reports.map(report => ({
-      id: report.id,
-      type: report.type,
-      reason: report.reason,
-      status: report.status,
-      createdAt: report.createdAt,
-      contentType: report.reportedReelId 
-        ? 'reel' 
-        : report.reportedCommentId 
-        ? 'comment' 
-        : 'user',
-      contentId: report.reportedReelId || report.reportedCommentId || report.reportedUserId || '',
-    }));
+    if (!reportedUser) {
+      res.status(404).json({ status: 'ERROR', message: 'Reported user not found' });
+      return;
+    }
+
+    // Check for duplicate report
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId: reporter.id,
+        reportedUserId: userIdStr,
+        reportedReelId: null,
+        reportedCommentId: null,
+      },
+    });
+
+    if (existing) {
+      res.status(409).json({ status: 'ERROR', message: 'You have already reported this user' });
+      return;
+    }
+
+    const reasonToType: Record<string, string> = {
+      'spam': 'SPAM',
+      'harassment': 'HARASSMENT',
+      'inappropriate': 'INAPPROPRIATE',
+      'violence': 'INAPPROPRIATE',
+      'hate': 'HARASSMENT',
+      'copyright': 'COPYRIGHT',
+      'other': 'OTHER',
+    };
+
+    const reportType = reasonToType[reason] || 'OTHER';
+
+    await prisma.report.create({
+      data: {
+        reporterId: reporter.id,
+        reportedUserId: userIdStr,
+        type: reportType as any,
+        reason: additionalInfo || reason,
+        status: 'PENDING',
+      },
+    });
+
+    logger.info(`User ${reporter.id} reported user ${userIdStr} for: ${reason}`);
 
     res.json({
       status: 'SUCCESS',
-      reports: formattedReports,
+      message: 'Report submitted successfully',
     });
   } catch (error: any) {
-    logger.error('Get my reports error:', error);
+    logger.error('Report user error:', error);
     res.status(500).json({
       status: 'ERROR',
       message: error.message || 'Internal server error',
