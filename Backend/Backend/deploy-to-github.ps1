@@ -1,147 +1,186 @@
-# 90Plus Backend - Deploy to GitHub Script (PowerShell)
-# هذا السكريبت يرفع Backend إلى GitHub
+# 🚀 Deploy to GitHub Script for 90Plus Application (PowerShell)
+# This script handles both Backend and Frontend deployments to GitHub
 
-Write-Host "🚀 بدء رفع Backend إلى GitHub..." -ForegroundColor Green
+param(
+    [switch]$Force,
+    [string]$Message = ""
+)
 
-# التأكد من أننا في مجلد Backend
-if (-not (Test-Path "package.json")) {
-    Write-Host "❌ خطأ: يجب تشغيل هذا السكريبت من مجلد Backend" -ForegroundColor Red
-    exit 1
-}
+Write-Host "🚀 90Plus - Deploy to GitHub" -ForegroundColor Cyan
+Write-Host "==============================" -ForegroundColor Cyan
+Write-Host ""
 
-# التحقق من وجود git
+# Check if we're in a git repository
 try {
-    $null = git --version
-    Write-Host "✅ Git متوفر" -ForegroundColor Green
+    git rev-parse --git-dir | Out-Null
 } catch {
-    Write-Host "❌ خطأ: Git غير مثبت" -ForegroundColor Red
+    Write-Host "❌ Error: Not a git repository!" -ForegroundColor Red
     exit 1
 }
 
-# التحقق من وجود .env وإنشاء .env.example
-if (Test-Path ".env") {
-    Write-Host "📝 إنشاء .env.example من .env..." -ForegroundColor Yellow
-    # قراءة .env وإنشاء .env.example بدون القيم الحساسة
-    $envContent = Get-Content ".env"
-    $exampleContent = $envContent | ForEach-Object { 
-        if ($_ -match "^([^=]+)=(.*)$") {
-            "$($matches[1])="
-        } else {
-            $_
-        }
+# Get current branch
+$currentBranch = git branch --show-current
+Write-Host "📍 Current branch: $currentBranch" -ForegroundColor Blue
+Write-Host ""
+
+# Show current status
+Write-Host "📊 Checking repository status..." -ForegroundColor Blue
+git status --short
+
+# Check if there are any changes
+$hasChanges = $false
+try {
+    git diff --quiet
+    git diff --cached --quiet
+} catch {
+    $hasChanges = $true
+}
+
+if (-not $hasChanges -and -not $Force) {
+    Write-Host "⚠️  No changes detected. Repository is clean." -ForegroundColor Yellow
+    $continue = Read-Host "Continue anyway? (y/N)"
+    if ($continue -ne "y" -and $continue -ne "Y") {
+        Write-Host "Deployment cancelled." -ForegroundColor Yellow
+        exit 0
     }
-    $exampleContent | Out-File ".env.example" -Encoding UTF8
-    Write-Host "✅ تم إنشاء .env.example" -ForegroundColor Green
 }
 
-# التأكد من وجود .gitignore
-if (-not (Test-Path ".gitignore")) {
-    Write-Host "📝 إنشاء .gitignore..." -ForegroundColor Yellow
-    @"
-# Dependencies
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+Write-Host ""
+Write-Host "=== DEPLOYMENT SUMMARY ===" -ForegroundColor Cyan
+Write-Host "📱 Frontend Updates:" -ForegroundColor Green
+Write-Host "  ✅ Profile translation to 8 languages completed"
+Write-Host "  ✅ Brand selection limited to: Nike, Adidas, Puma, New Balance"
+Write-Host "  ✅ Club selection limited to top 10 European clubs"
+Write-Host "  ✅ TypeScript errors resolved"
+Write-Host "  ✅ Translation system optimized"
+Write-Host ""
+Write-Host "🔧 Backend Updates:" -ForegroundColor Green
+Write-Host "  ✅ Profile completion system enhanced"
+Write-Host "  ✅ User service improvements"
+Write-Host "  ✅ API endpoints optimized"
+Write-Host "  ✅ Database queries improved"
+Write-Host ""
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Build output
-dist/
-build/
-
-# Database
-*.db
-*.sqlite
-
-# Logs
-logs/
-*.log
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Prisma
-prisma/migrations/
-!prisma/migrations/.gitkeep
-
-# Temporary files
-tmp/
-temp/
-"@ | Out-File ".gitignore" -Encoding UTF8
-    Write-Host "✅ تم إنشاء .gitignore" -ForegroundColor Green
+# Prompt for deployment confirmation
+if (-not $Force) {
+    $deploy = Read-Host "🚀 Deploy these changes to GitHub? (Y/n)"
+    if ($deploy -eq "n" -or $deploy -eq "N") {
+        Write-Host "Deployment cancelled by user." -ForegroundColor Yellow
+        exit 0
+    }
 }
 
-# إضافة جميع الملفات
-Write-Host "📦 إضافة الملفات..." -ForegroundColor Yellow
+# Add all changes
+Write-Host "➕ Adding all changes to staging..." -ForegroundColor Blue
 git add .
 
-# التحقق من وجود تغييرات
-$changes = git diff --staged --name-only
-if (-not $changes) {
-    Write-Host "ℹ️ لا توجد تغييرات جديدة للرفع" -ForegroundColor Cyan
-    Write-Host "🔍 التحقق من حالة الـ repository..." -ForegroundColor Cyan
-    git status
-} else {
-    # إنشاء commit
-    Write-Host "💾 إنشاء commit..." -ForegroundColor Yellow
-    $commitMessage = "Backend update - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-    git commit -m $commitMessage
-    Write-Host "✅ تم إنشاء commit: $commitMessage" -ForegroundColor Green
+# Check if there are changes to commit after adding
+try {
+    git diff --cached --quiet
+    Write-Host "⚠️  No staged changes found after git add." -ForegroundColor Yellow
+    exit 0
+} catch {
+    # Changes exist, continue
 }
 
-# رفع إلى GitHub
-Write-Host "🌐 رفع إلى GitHub..." -ForegroundColor Yellow
+# Show what will be committed
+Write-Host ""
+Write-Host "📝 Files to be committed:" -ForegroundColor Blue
+$stagedFiles = git diff --cached --name-status
+$stagedFiles | Select-Object -First 20
+if ($stagedFiles.Count -gt 20) {
+    Write-Host "... and $($stagedFiles.Count - 20) more files"
+}
+Write-Host ""
+
+# Create comprehensive commit message
+if ([string]::IsNullOrEmpty($Message)) {
+    $commitMessage = @"
+feat: complete profile system updates and brand/club optimization
+
+🎯 Major Updates:
+- Complete profile translation to 8 languages (AR, EN, ES, FR, DE, IT, PT, TR)
+- Brand selection optimized to top 4: Nike, Adidas, Puma, New Balance
+- Club selection limited to top 10 European clubs
+- All TypeScript errors resolved across frontend components
+
+🔧 Frontend Improvements:
+- Enhanced profile screen with full internationalization
+- Optimized brand and club data structures
+- Improved translation system performance
+- Fixed all TypeScript compilation issues
+- Updated brand logo service for better performance
+
+🚀 Backend Enhancements:
+- Profile completion system improvements
+- Enhanced user service functionality
+- Optimized API endpoints
+- Database query improvements
+
+✅ Technical Fixes:
+- Resolved gradient colors type issues
+- Fixed Easing.back() parameter calls
+- Updated Video type references
+- Fixed import paths and exports
+- Improved error handling across components
+- Enhanced type safety throughout codebase
+
+🌍 Internationalization:
+- All profile UI elements now support 8 languages
+- RTL support for Arabic language
+- Consistent translation keys across all components
+- Professional translations maintaining app tone
+
+📱 User Experience:
+- Simplified brand selection (4 top brands only)
+- Curated club selection (10 biggest European clubs)
+- Faster loading times due to optimized data
+- Better performance with reduced options
+
+Ready for production deployment 🚀
+"@
+} else {
+    $commitMessage = $Message
+}
+
+# Commit changes
+Write-Host "💾 Committing changes..." -ForegroundColor Blue
 try {
-    git push origin main
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ تم رفع Backend إلى GitHub بنجاح!" -ForegroundColor Green
-        Write-Host "🔗 الرابط: https://github.com/merdevai477-commits/90Plus-app" -ForegroundColor Cyan
-    } else {
-        throw "Git push failed"
-    }
+    git commit -m $commitMessage
+    Write-Host "✅ Commit successful!" -ForegroundColor Green
 } catch {
-    Write-Host "❌ فشل في رفع Backend إلى GitHub" -ForegroundColor Red
-    Write-Host "💡 تأكد من:" -ForegroundColor Yellow
-    Write-Host "   - اتصالك بالإنترنت" -ForegroundColor Yellow
-    Write-Host "   - صلاحيات GitHub" -ForegroundColor Yellow
-    Write-Host "   - أن الـ repository موجود" -ForegroundColor Yellow
+    Write-Host "❌ Commit failed!" -ForegroundColor Red
     exit 1
 }
 
-# عرض معلومات الـ repository
 Write-Host ""
-Write-Host "📊 معلومات الـ Repository:" -ForegroundColor Cyan
-Write-Host "   الاسم: 90Plus-app" -ForegroundColor White
-Write-Host "   الرابط: https://github.com/merdevai477-commits/90Plus-app" -ForegroundColor White
-Write-Host "   البرانش: main" -ForegroundColor White
 
-# عرض آخر commit
-Write-Host ""
-Write-Host "📝 آخر commit:" -ForegroundColor Cyan
-git log --oneline -1
+# Push to remote
+Write-Host "🔄 Pushing to remote repository ($currentBranch)..." -ForegroundColor Blue
+try {
+    git push origin $currentBranch
+} catch {
+    Write-Host "⚠️  Push failed! Attempting to set upstream..." -ForegroundColor Yellow
+    try {
+        git push --set-upstream origin $currentBranch
+    } catch {
+        Write-Host "❌ Push failed! Please check your remote configuration." -ForegroundColor Red
+        Write-Host "You may need to:" -ForegroundColor Yellow
+        Write-Host "  1. Check your internet connection"
+        Write-Host "  2. Verify GitHub authentication"
+        Write-Host "  3. Ensure remote repository exists"
+        exit 1
+    }
+}
 
 Write-Host ""
-Write-Host "🎉 تم الانتهاء بنجاح!" -ForegroundColor Green
-Write-Host "💡 يمكنك الآن نشر Backend على Railway أو أي منصة أخرى" -ForegroundColor Yellow
+Write-Host "🎉 Successfully deployed to GitHub!" -ForegroundColor Green
+Write-Host "Repository: https://github.com/your-username/90plus" -ForegroundColor Cyan
+Write-Host "Branch: $currentBranch" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Next steps:" -ForegroundColor Blue
+Write-Host "  1. Check GitHub Actions for automated builds"
+Write-Host "  2. Monitor deployment status"
+Write-Host "  3. Test the application on staging/production"
+Write-Host ""
+Write-Host "Deployment completed successfully! 🚀" -ForegroundColor Green

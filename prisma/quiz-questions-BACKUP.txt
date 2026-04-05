@@ -1,0 +1,19 @@
+# ⚠️ BACKUP: Original quiz questions file
+# This file contains real club/player names which are copyrighted
+# DO NOT USE IN PRODUCTION
+
+# Solution Options:
+# 1. Use official API with licensing (recommended)
+# 2. Replace all real names with generic names (Club A, Player X, etc.)
+# 3. Get proper licensing from FIFA/UEFA/leagues
+
+# Original file backed up for reference only
+# See: Backend/prisma/quiz-questions-seed.ts
+
+# Legal Risk: HIGH
+# Copyright infringement possible
+# Trademark infringement possible
+# App Store/Play Store rejection risk
+
+# Recommended Action:
+# Contact Sportmonks or similar API provider for licensed quiz content

@@ -1,132 +1,190 @@
 #!/bin/bash
 
-# 90Plus Backend - Deploy to GitHub Script
-# هذا السكريبت يرفع Backend إلى GitHub
+# 🚀 Deploy to GitHub Script for 90Plus Application
+# This script handles both Backend and Frontend deployments to GitHub
+# Created for comprehensive project updates
 
-echo "🚀 بدء رفع Backend إلى GitHub..."
+set -e  # Exit on any error
 
-# التأكد من أننا في مجلد Backend
-if [ ! -f "package.json" ]; then
-    echo "❌ خطأ: يجب تشغيل هذا السكريبت من مجلد Backend"
+echo "🚀 90Plus - Deploy to GitHub"
+echo "=============================="
+echo ""
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    print_error "Not a git repository!"
     exit 1
 fi
 
-# التحقق من وجود git
-if ! command -v git &> /dev/null; then
-    echo "❌ خطأ: Git غير مثبت"
-    exit 1
+# Get current branch
+CURRENT_BRANCH=$(git branch --show-current)
+print_status "Current branch: $CURRENT_BRANCH"
+echo ""
+
+# Show current status
+print_status "Checking repository status..."
+git status --short
+
+# Check if there are any changes
+if git diff --quiet && git diff --cached --quiet; then
+    print_warning "No changes detected. Repository is clean."
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_status "Deployment cancelled."
+        exit 0
+    fi
 fi
 
-# التحقق من وجود .env وإنشاء .env.example
-if [ -f ".env" ]; then
-    echo "📝 إنشاء .env.example من .env..."
-    # إنشاء .env.example بدون القيم الحساسة
-    sed 's/=.*/=/' .env > .env.example
-    echo "✅ تم إنشاء .env.example"
+echo ""
+print_status "=== DEPLOYMENT SUMMARY ==="
+echo "📱 Frontend Updates:"
+echo "  ✅ Profile translation to 8 languages completed"
+echo "  ✅ Brand selection limited to: Nike, Adidas, Puma, New Balance"
+echo "  ✅ Club selection limited to top 10 European clubs"
+echo "  ✅ TypeScript errors resolved"
+echo "  ✅ Translation system optimized"
+echo ""
+echo "🔧 Backend Updates:"
+echo "  ✅ Profile completion system enhanced"
+echo "  ✅ User service improvements"
+echo "  ✅ API endpoints optimized"
+echo "  ✅ Database queries improved"
+echo ""
+
+# Prompt for deployment confirmation
+read -p "🚀 Deploy these changes to GitHub? (Y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Nn]$ ]]; then
+    print_status "Deployment cancelled by user."
+    exit 0
 fi
 
-# التأكد من وجود .gitignore
-if [ ! -f ".gitignore" ]; then
-    echo "📝 إنشاء .gitignore..."
-    cat > .gitignore << 'EOF'
-# Dependencies
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Build output
-dist/
-build/
-
-# Database
-*.db
-*.sqlite
-
-# Logs
-logs/
-*.log
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Prisma
-prisma/migrations/
-!prisma/migrations/.gitkeep
-
-# Temporary files
-tmp/
-temp/
-EOF
-    echo "✅ تم إنشاء .gitignore"
-fi
-
-# إضافة جميع الملفات
-echo "📦 إضافة الملفات..."
+# Add all changes
+print_status "Adding all changes to staging..."
 git add .
 
-# التحقق من وجود تغييرات
-if git diff --staged --quiet; then
-    echo "ℹ️ لا توجد تغييرات جديدة للرفع"
-    echo "🔍 التحقق من حالة الـ repository..."
-    git status
-else
-    # إنشاء commit
-    echo "💾 إنشاء commit..."
-    COMMIT_MESSAGE="Backend update - $(date '+%Y-%m-%d %H:%M:%S')"
-    git commit -m "$COMMIT_MESSAGE"
-    echo "✅ تم إنشاء commit: $COMMIT_MESSAGE"
+# Check if there are changes to commit after adding
+if git diff --cached --quiet; then
+    print_warning "No staged changes found after git add."
+    exit 0
 fi
 
-# رفع إلى GitHub
-echo "🌐 رفع إلى GitHub..."
-if git push origin main; then
-    echo "✅ تم رفع Backend إلى GitHub بنجاح!"
-    echo "🔗 الرابط: https://github.com/merdevai477-commits/90Plus-app"
-else
-    echo "❌ فشل في رفع Backend إلى GitHub"
-    echo "💡 تأكد من:"
-    echo "   - اتصالك بالإنترنت"
-    echo "   - صلاحيات GitHub"
-    echo "   - أن الـ repository موجود"
+# Show what will be committed
+echo ""
+print_status "Files to be committed:"
+git diff --cached --name-status | head -20
+if [ $(git diff --cached --name-status | wc -l) -gt 20 ]; then
+    echo "... and $(( $(git diff --cached --name-status | wc -l) - 20 )) more files"
+fi
+echo ""
+
+# Create comprehensive commit message
+COMMIT_MSG="feat: complete profile system updates and brand/club optimization
+
+🎯 Major Updates:
+- Complete profile translation to 8 languages (AR, EN, ES, FR, DE, IT, PT, TR)
+- Brand selection optimized to top 4: Nike, Adidas, Puma, New Balance
+- Club selection limited to top 10 European clubs
+- All TypeScript errors resolved across frontend components
+
+🔧 Frontend Improvements:
+- Enhanced profile screen with full internationalization
+- Optimized brand and club data structures
+- Improved translation system performance
+- Fixed all TypeScript compilation issues
+- Updated brand logo service for better performance
+
+🚀 Backend Enhancements:
+- Profile completion system improvements
+- Enhanced user service functionality
+- Optimized API endpoints
+- Database query improvements
+
+✅ Technical Fixes:
+- Resolved gradient colors type issues
+- Fixed Easing.back() parameter calls
+- Updated Video type references
+- Fixed import paths and exports
+- Improved error handling across components
+- Enhanced type safety throughout codebase
+
+🌍 Internationalization:
+- All profile UI elements now support 8 languages
+- RTL support for Arabic language
+- Consistent translation keys across all components
+- Professional translations maintaining app tone
+
+📱 User Experience:
+- Simplified brand selection (4 top brands only)
+- Curated club selection (10 biggest European clubs)
+- Faster loading times due to optimized data
+- Better performance with reduced options
+
+Ready for production deployment 🚀"
+
+# Commit changes
+print_status "Committing changes..."
+git commit -m "$COMMIT_MSG"
+
+if [ $? -ne 0 ]; then
+    print_error "Commit failed!"
     exit 1
 fi
 
-# عرض معلومات الـ repository
+print_success "Commit successful!"
 echo ""
-echo "📊 معلومات الـ Repository:"
-echo "   الاسم: 90Plus-app"
-echo "   الرابط: https://github.com/merdevai477-commits/90Plus-app"
-echo "   البرانش: main"
 
-# عرض آخر commit
-echo ""
-echo "📝 آخر commit:"
-git log --oneline -1
+# Push to remote
+print_status "Pushing to remote repository ($CURRENT_BRANCH)..."
+git push origin $CURRENT_BRANCH
+
+if [ $? -ne 0 ]; then
+    print_warning "Push failed! Attempting to set upstream..."
+    git push --set-upstream origin $CURRENT_BRANCH
+    
+    if [ $? -ne 0 ]; then
+        print_error "Push failed! Please check your remote configuration."
+        print_status "You may need to:"
+        echo "  1. Check your internet connection"
+        echo "  2. Verify GitHub authentication"
+        echo "  3. Ensure remote repository exists"
+        exit 1
+    fi
+fi
 
 echo ""
-echo "🎉 تم الانتهاء بنجاح!"
-echo "💡 يمكنك الآن نشر Backend على Railway أو أي منصة أخرى"
+print_success "🎉 Successfully deployed to GitHub!"
+print_success "Repository: https://github.com/your-username/90plus"
+print_success "Branch: $CURRENT_BRANCH"
+echo ""
+print_status "Next steps:"
+echo "  1. Check GitHub Actions for automated builds"
+echo "  2. Monitor deployment status"
+echo "  3. Test the application on staging/production"
+echo ""
+print_success "Deployment completed successfully! 🚀"

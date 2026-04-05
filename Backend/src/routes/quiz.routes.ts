@@ -186,12 +186,27 @@ const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
  * جلب قائمة الكاتيجوريز المتاحة
  * الكاتيجوري والأسئلة موجودة في الفرونت إند
  * يتم إدارة الكاتيجوري المفتوح محلياً في الفرونت إند
- * Public endpoint - no authentication required
+ * Requires authentication - guests cannot access quiz
  */
-router.get('/categories', async (req: Request, res: Response): Promise<void> => {
+router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
     logger.info(`📥 Quiz categories endpoint called - Path: ${req.path}, Method: ${req.method}`);
     try {
-        // Public endpoint - no auth required
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
         // جلب جميع الكاتيجوريز المتاحة
         const categories = await prisma.quizCategory.findMany({
             select: {

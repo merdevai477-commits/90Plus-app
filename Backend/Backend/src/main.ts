@@ -217,7 +217,6 @@ import appVersionRoutes from './routes/app-version.routes';
 import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
-import gdprRoutes from './routes/gdpr.routes';
 import path from 'path';
 
 // Import services
@@ -255,87 +254,46 @@ app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);
 app.use(`${API_PREFIX}/reports`, reportsRoutes);
-app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
-app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
 
 // Serve static files for privacy and terms (Apple compliance)
 // Determine public path based on environment
-// In production (Railway): /app/public (Railway copies Backend/public to /app/public)
+// In production (Railway): /app/dist/public
 // In development: Backend/public
 const publicPath = isProduction 
-    ? path.join(__dirname, '../../public')  // /app/public in Railway
-    : path.join(__dirname, '../../public'); // Backend/public in development
+    ? path.join(__dirname, '../public')  // dist/public
+    : path.join(__dirname, '../../public'); // Backend/public
 
 logger.info(`📁 Public path: ${publicPath}`);
-logger.info(`📁 Current directory: ${__dirname}`);
-logger.info(`📁 Production mode: ${isProduction}`);
-
-// Serve static files from public directory
 app.use(express.static(publicPath));
 
-// Serve legal pages with proper error handling and logging
-app.get('/privacy-policy.html', (req, res) => {
-    const filePath = path.join(publicPath, 'privacy-policy.html');
-    logger.info(`📄 Serving privacy policy from: ${filePath}`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send privacy-policy.html:', err);
-            res.status(404).json({ 
-                status: 'ERROR', 
-                message: 'Privacy policy not found',
-                path: filePath,
-                exists: require('fs').existsSync(filePath)
-            });
-        }
-    });
-});
-
-app.get('/terms-of-service.html', (req, res) => {
-    const filePath = path.join(publicPath, 'terms-of-service.html');
-    logger.info(`📄 Serving terms of service from: ${filePath}`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send terms-of-service.html:', err);
-            res.status(404).json({ 
-                status: 'ERROR', 
-                message: 'Terms of service not found',
-                path: filePath,
-                exists: require('fs').existsSync(filePath)
-            });
-        }
-    });
-});
-
-app.get('/support.html', (req, res) => {
-    const filePath = path.join(publicPath, 'support.html');
-    logger.info(`📄 Serving support page from: ${filePath}`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send support.html:', err);
-            res.status(404).json({ 
-                status: 'ERROR', 
-                message: 'Support page not found',
-                path: filePath,
-                exists: require('fs').existsSync(filePath)
-            });
-        }
-    });
-});
-
-// Legacy routes for backward compatibility
+// Serve privacy and terms pages directly
 app.get('/privacy', (req, res) => {
-    res.redirect('/privacy-policy.html');
+    const filePath = path.join(publicPath, 'privacy.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send privacy.html:', err);
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: err.message 
+            });
+        }
+    });
 });
 
 app.get('/terms', (req, res) => {
-    res.redirect('/terms-of-service.html');
-});
-
-app.get('/support', (req, res) => {
-    res.redirect('/support.html');
+    const filePath = path.join(publicPath, 'terms.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send terms.html:', err);
+            res.status(500).json({ 
+                status: 'ERROR', 
+                message: err.message 
+            });
+        }
+    });
 });
 
 // Register quiz routes with error handling
@@ -771,31 +729,6 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ Account Deletion Cron Job scheduled (daily at 2 AM)');
-                    
-                    // ✅ Setup GDPR Cron Jobs
-                    // 1. Check for scheduled deletions (every hour)
-                    cron.schedule('0 * * * *', async () => {
-                        logger.info('⏰ GDPR Cron: Checking scheduled deletions...');
-                        try {
-                            const { setupGDPRCronJobs } = await import('./services/data-anonymization.service');
-                            await setupGDPRCronJobs();
-                        } catch (error) {
-                            logger.error('❌ GDPR cron job failed:', error);
-                        }
-                    });
-                    logger.info('✅ GDPR Cron Jobs scheduled (hourly)');
-                    
-                    // 2. Cleanup expired export files (daily at 3 AM)
-                    cron.schedule('0 3 * * *', async () => {
-                        logger.info('⏰ GDPR Cron: Cleaning up expired export files...');
-                        try {
-                            const { cleanupOldExports } = await import('./services/data-anonymization.service');
-                            await cleanupOldExports();
-                        } catch (error) {
-                            logger.error('❌ Export cleanup cron job failed:', error);
-                        }
-                    });
-                    logger.info('✅ GDPR Export Cleanup Cron Job scheduled (daily at 3 AM)');
                     
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();

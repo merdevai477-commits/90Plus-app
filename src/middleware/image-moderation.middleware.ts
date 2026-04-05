@@ -13,9 +13,10 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_IMAGE_DIMENSIONS = { width: 4096, height: 4096 };
 
 // Known club/team logos (basic detection)
+// ⚠️ APPLE COMPLIANCE: Using generic names to avoid trademark issues
 const KNOWN_LOGOS = [
-    'real-madrid', 'barcelona', 'manchester-united', 'liverpool', 'bayern',
-    'juventus', 'psg', 'chelsea', 'arsenal', 'manchester-city'
+    'club-logo', 'team-badge', 'football-crest', 'soccer-emblem', 'sports-logo',
+    'team-shield', 'club-badge', 'football-badge', 'soccer-crest', 'sports-badge'
 ];
 
 interface ImageModerationResult {

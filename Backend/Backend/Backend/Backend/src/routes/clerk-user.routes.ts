@@ -896,10 +896,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
         const username = ensureString(req.params.username);
         const { limit = '20', offset = '0' } = req.query;
 
-        logger.info(`[GET /user/:username/reels] 🔍 Request for username: ${username}, limit: ${limit}, offset: ${offset}`);
-
         if (!username) {
-            logger.warn('[GET /user/:username/reels] ⚠️ No username provided');
             res.status(400).json({
                 status: 'ERROR',
                 message: 'Username is required',
