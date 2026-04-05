@@ -97,8 +97,10 @@ export const MatchEventStorage = {
             const DAY_MS = 24 * 60 * 60 * 1000;
 
             const cleaned = Object.entries(allSnapshots).reduce((acc, [id, snapshot]) => {
-                if (now - snapshot.lastChecked < DAY_MS) {
-                    acc[id] = snapshot;
+                // Type assertion to ensure TypeScript knows the type
+                const typedSnapshot = snapshot as EventSnapshot;
+                if (now - typedSnapshot.lastChecked < DAY_MS) {
+                    acc[id] = typedSnapshot;
                 }
                 return acc;
             }, {} as Record<string, EventSnapshot>);

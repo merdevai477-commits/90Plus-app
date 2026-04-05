@@ -6,6 +6,7 @@ import { COLORS } from '../components/reels/constants';
 import { globalState } from '../globalState';
 import { useHomeStore } from '../src/store/home.store';
 import { logger } from '../services/logger';
+import { getApiEndpoint } from '../config/api.config';
 
 export default function Index() {
   // ✅ FIXED: Hooks must always be called at the top level, never inside try/catch.
@@ -31,7 +32,7 @@ export default function Index() {
           return;
         }
 
-        const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/age-status`, {
+        const response = await fetch(getApiEndpoint('auth/age-status'), {
           headers: {
             'Authorization': `Bearer ${token}`,
           },

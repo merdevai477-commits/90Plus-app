@@ -30,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguageStore } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
+import { getApiEndpoint } from '../config/api.config';
 
 export default function WaitingConsentScreen() {
   const { getToken } = useAuth();
@@ -78,7 +79,7 @@ export default function WaitingConsentScreen() {
         const token = await getToken();
         if (!token) return;
 
-        const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/age-status`, {
+        const response = await fetch(getApiEndpoint('auth/age-status'), {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -110,7 +111,7 @@ export default function WaitingConsentScreen() {
       const token = await getToken();
       if (!token) throw new Error('Authentication token not found');
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/age-status`, {
+      const response = await fetch(getApiEndpoint('auth/age-status'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -139,7 +140,7 @@ export default function WaitingConsentScreen() {
       const token = await getToken();
       if (!token) throw new Error('Authentication token not found');
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/resend-parental-consent`, {
+      const response = await fetch(getApiEndpoint('auth/resend-parental-consent'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

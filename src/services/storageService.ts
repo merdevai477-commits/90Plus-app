@@ -45,13 +45,22 @@ export class StorageService {
             // Check response status first
             if (!response.ok) {
                 const errorText = await response.text();
-                logger.error('Upload avatar failed:', response.status, errorText);
                 let errorData;
                 try {
                     errorData = JSON.parse(errorText);
                 } catch {
                     errorData = { message: errorText || 'Upload failed' };
                 }
+                
+                // Handle specific error codes
+                if (response.status === 429 && errorData.code === 'COOLDOWN_ACTIVE') {
+                    // This is a cooldown error - return the Arabic message from backend
+                    // Don't log as error since this is expected behavior
+                    logger.info('Avatar upload cooldown active:', errorData.message);
+                    return { success: false, error: errorData.message };
+                }
+                
+                logger.error('Upload avatar failed:', response.status, errorText);
                 return { success: false, error: errorData.message || `Upload failed: ${response.status}` };
             }
             
@@ -115,13 +124,22 @@ export class StorageService {
             // Check response status first
             if (!response.ok) {
                 const errorText = await response.text();
-                logger.error('Upload cover failed:', response.status, errorText);
                 let errorData;
                 try {
                     errorData = JSON.parse(errorText);
                 } catch {
                     errorData = { message: errorText || 'Upload failed' };
                 }
+                
+                // Handle specific error codes
+                if (response.status === 429 && errorData.code === 'COOLDOWN_ACTIVE') {
+                    // This is a cooldown error - return the Arabic message from backend
+                    // Don't log as error since this is expected behavior
+                    logger.info('Cover upload cooldown active:', errorData.message);
+                    return { success: false, error: errorData.message };
+                }
+                
+                logger.error('Upload cover failed:', response.status, errorText);
                 return { success: false, error: errorData.message || `Upload failed: ${response.status}` };
             }
             
@@ -168,7 +186,13 @@ export class StorageService {
         onProgress?: (progress: number) => void
     ): Promise<UploadResult & { reelId?: string }> {
         try {
+            // ✅ Show "Preparing..." at the start
+            if (onProgress) onProgress(5);
+
             const formData = new FormData();
+            
+            // ✅ Show "Compressing video..."
+            if (onProgress) onProgress(10);
             
             // Add video
             const videoFilename = videoUri.split('/').pop() || 'reel.mp4';
@@ -177,6 +201,9 @@ export class StorageService {
                 name: videoFilename,
                 type: 'video/mp4',
             } as any);
+
+            // ✅ Show "Uploading..."
+            if (onProgress) onProgress(15);
 
             // Add thumbnail if provided
             if (thumbnailUri) {
@@ -193,6 +220,9 @@ export class StorageService {
             if (hashtags) formData.append('hashtags', JSON.stringify(hashtags));
             if (mentions) formData.append('mentions', JSON.stringify(mentions));
 
+            // ✅ Show "Uploading..."
+            if (onProgress) onProgress(20);
+
             // Get upload timeout from config (15 minutes)
             const { getAPIConfig } = require('../../config/api.config');
             const config = getAPIConfig();
@@ -202,26 +232,31 @@ export class StorageService {
             return new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 
-                // Track upload progress
-                xhr.upload.addEventListener('progress', (event) => {
+                // ✅ IMPROVED: Better progress tracking
+                const progressHandler = (event: ProgressEvent) => {
                     if (event.lengthComputable && onProgress) {
-                        // Start from 30% (after thumbnail generation) and go to 90%
-                        // Use Math.min to ensure we never exceed 90% during upload
-                        const uploadProgress = 30 + Math.min(event.loaded / event.total, 1) * 60;
-                        const progressValue = Math.min(Math.round(uploadProgress), 90); // Cap at 90%
+                        // 20% for preparation, 70% for upload, 10% for processing
+                        const uploadProgress = 20 + (event.loaded / event.total) * 70;
+                        const progressValue = Math.min(Math.round(uploadProgress), 90);
                         onProgress(progressValue);
+                        
+                        // ✅ Log for tracking
+                        logger.info(`Upload progress: ${progressValue}% (${event.loaded}/${event.total} bytes)`);
                     }
-                });
-
-                xhr.addEventListener('load', () => {
+                };
+                
+                const loadHandler = () => {
+                    cleanup();
                     if (xhr.status >= 200 && xhr.status < 300) {
                         try {
+                            // ✅ Show "Processing..."
+                            if (onProgress) onProgress(95);
+                            
                             const data = JSON.parse(xhr.responseText);
                             
                             logger.info('Upload reel response:', JSON.stringify(data));
                             
                             if (data.status === 'SUCCESS') {
-                                // Handle response format from upload.routes.ts
                                 const videoUrl = data.data?.videoUrl || data.data?.url || data.url;
                                 const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
                                 const reelId = data.data?.reelId || data.reelId;
@@ -234,6 +269,7 @@ export class StorageService {
                                 
                                 logger.info('Reel uploaded successfully:', { videoUrl, reelId });
                                 
+                                // ✅ Show "Upload complete!"
                                 if (onProgress) onProgress(100);
                                 
                                 resolve({
@@ -250,7 +286,6 @@ export class StorageService {
                             resolve({ success: false, error: 'Invalid response from server' });
                         }
                     } else {
-                        // Handle error response
                         let errorData;
                         try {
                             errorData = JSON.parse(xhr.responseText);
@@ -260,20 +295,38 @@ export class StorageService {
                         logger.error('Upload reel failed:', xhr.status, errorData);
                         resolve({ success: false, error: errorData.message || `Upload failed: ${xhr.status}` });
                     }
-                });
-
-                xhr.addEventListener('error', () => {
+                };
+                
+                const errorHandler = () => {
+                    cleanup();
                     logger.error('Upload reel network error');
                     resolve({ success: false, error: 'Network error during upload' });
-                });
-
-                xhr.addEventListener('abort', () => {
+                };
+                
+                const abortHandler = () => {
+                    cleanup();
                     logger.error('Upload reel aborted');
                     resolve({ success: false, error: 'Upload was cancelled' });
-                });
+                };
+                
+                // ✅ FIXED: Cleanup function to remove all listeners
+                const cleanup = () => {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    xhr.upload.removeEventListener('progress', progressHandler);
+                    xhr.removeEventListener('load', loadHandler);
+                    xhr.removeEventListener('error', errorHandler);
+                    xhr.removeEventListener('abort', abortHandler);
+                };
+                
+                // Add event listeners
+                xhr.upload.addEventListener('progress', progressHandler);
+                xhr.addEventListener('load', loadHandler);
+                xhr.addEventListener('error', errorHandler);
+                xhr.addEventListener('abort', abortHandler);
 
                 // Set timeout
-                const timeoutId = setTimeout(() => {
+                let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
+                    cleanup();
                     xhr.abort();
                     logger.error('Upload reel timeout:', uploadTimeout);
                     resolve({ success: false, error: 'Upload timeout - request took too long' });
@@ -281,7 +334,6 @@ export class StorageService {
 
                 xhr.open('POST', `${API_URL}/upload/reel`);
                 xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-                // Don't set Content-Type - let browser set it with boundary
                 
                 xhr.send(formData);
             });

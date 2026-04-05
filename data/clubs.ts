@@ -6,27 +6,23 @@ export interface Club {
     league: string;
     country: string;
     color: string;
-    apiId?: number; // API-Football team ID for fetching real logo
+    // Removed apiId - no longer fetching real logos
 }
 
-// الأندية الـ 10 الكبرى في العالم + الأندية العربية المشهورة
-// Top 10 biggest clubs in the world + popular Arab clubs
-// Logos will be fetched from API-Football using apiId
-
-// أكبر 10 أندية في أوروبا
-// Top 10 biggest clubs in Europe
-// Logos will be fetched from API-Football using apiId
+// أندية عامة مستوحاة من الأندية الكبرى (بدون استخدام أسماء أو شعارات محمية)
+// Generic clubs inspired by major clubs (without using protected names or logos)
+// Using generic names based on city/color to avoid trademark issues
 
 export const CLUBS: Club[] = [
-    // ============ TOP 10 BIGGEST CLUBS IN EUROPE ============
-    { id: 'real-madrid', name: 'Real Madrid', nameAr: 'ريال مدريد', logo: '', league: 'La Liga', country: 'Spain', color: '#FFFFFF', apiId: 541 },
-    { id: 'barcelona', name: 'FC Barcelona', nameAr: 'برشلونة', logo: '', league: 'La Liga', country: 'Spain', color: '#A50044', apiId: 529 },
-    { id: 'manchester-united', name: 'Manchester United', nameAr: 'مانشستر يونايتد', logo: '', league: 'Premier League', country: 'England', color: '#DA020E', apiId: 33 },
-    { id: 'liverpool', name: 'Liverpool FC', nameAr: 'ليفربول', logo: '', league: 'Premier League', country: 'England', color: '#C8102E', apiId: 40 },
-    { id: 'bayern-munich', name: 'Bayern Munich', nameAr: 'بايرن ميونخ', logo: '', league: 'Bundesliga', country: 'Germany', color: '#DC052D', apiId: 157 },
-    { id: 'juventus', name: 'Juventus', nameAr: 'يوفنتوس', logo: '', league: 'Serie A', country: 'Italy', color: '#000000', apiId: 496 },
-    { id: 'psg', name: 'Paris Saint-Germain', nameAr: 'باريس سان جيرمان', logo: '', league: 'Ligue 1', country: 'France', color: '#004170', apiId: 85 },
-    { id: 'manchester-city', name: 'Manchester City', nameAr: 'مانشستر سيتي', logo: '', league: 'Premier League', country: 'England', color: '#6CABDD', apiId: 50 },
-    { id: 'chelsea', name: 'Chelsea FC', nameAr: 'تشيلسي', logo: '', league: 'Premier League', country: 'England', color: '#034694', apiId: 49 },
-    { id: 'arsenal', name: 'Arsenal FC', nameAr: 'أرسنال', logo: '', league: 'Premier League', country: 'England', color: '#EF0107', apiId: 42 },
+    // ============ GENERIC EUROPEAN CLUBS ============
+    { id: 'royal-madrid', name: 'Royal Madrid FC', nameAr: 'رويال مدريد', logo: 'RM', league: 'Spanish League', country: 'Spain', color: '#FFFFFF' },
+    { id: 'barcelona-stars', name: 'Barcelona Stars', nameAr: 'نجوم برشلونة', logo: 'BS', league: 'Spanish League', country: 'Spain', color: '#A50044' },
+    { id: 'manchester-reds', name: 'Manchester Reds', nameAr: 'مانشستر الأحمر', logo: 'MR', league: 'English League', country: 'England', color: '#DA020E' },
+    { id: 'liverpool-reds', name: 'Liverpool Reds', nameAr: 'ليفربول الأحمر', logo: 'LR', league: 'English League', country: 'England', color: '#C8102E' },
+    { id: 'munich-giants', name: 'Munich Giants', nameAr: 'عمالقة ميونخ', logo: 'MG', league: 'German League', country: 'Germany', color: '#DC052D' },
+    { id: 'turin-stripes', name: 'Turin Stripes', nameAr: 'خطوط تورينو', logo: 'TS', league: 'Italian League', country: 'Italy', color: '#000000' },
+    { id: 'paris-fc', name: 'Paris FC', nameAr: 'باريس', logo: 'PFC', league: 'French League', country: 'France', color: '#004170' },
+    { id: 'manchester-blues', name: 'Manchester Blues', nameAr: 'مانشستر الأزرق', logo: 'MB', league: 'English League', country: 'England', color: '#6CABDD' },
+    { id: 'london-blues', name: 'London Blues', nameAr: 'لندن الأزرق', logo: 'LB', league: 'English League', country: 'England', color: '#034694' },
+    { id: 'north-london', name: 'North London FC', nameAr: 'شمال لندن', logo: 'NL', league: 'English League', country: 'England', color: '#EF0107' },
 ];

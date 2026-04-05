@@ -972,16 +972,12 @@ export default function ProfileScreen() {
             setVideoUploadMessage('تم الرفع بنجاح!');
           }
           
-          // Update the video with real progress
-          const updatedVideo = { 
+          // Update the video progress in-place (addVideo now handles upsert)
+          addVideo({ 
             ...tempVideo, 
             uploadProgress: progress,
             isUploading: true 
-          };
-          
-          // Remove old and add updated
-          removeVideo(newVideo.id);
-          addVideo(updatedVideo);
+          });
         }
       );
 
@@ -1005,7 +1001,7 @@ export default function ProfileScreen() {
         // Refresh data to get the real video from backend
         await refreshCache(true);
         if (userData?.username) {
-          await loadVideos(userData.username);
+          await loadVideos(userData.username, true);
         }
       } else {
         removeVideo(newVideo.id);

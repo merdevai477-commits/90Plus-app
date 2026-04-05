@@ -104,7 +104,7 @@ export interface UseProfileCacheResult {
   isCacheHit: boolean;
   error: string | null;
   refresh: (forceRefresh?: boolean) => Promise<void>;
-  loadVideos: (username: string) => Promise<void>;
+  loadVideos: (username: string, bustCache?: boolean) => Promise<void>;
   updateUserData: (updates: Partial<ProfileUserData>) => void;
   updateFollowStats: (stats: FollowStats) => void;
   invalidateCache: () => Promise<void>;
@@ -537,12 +537,12 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   /**
    * Load videos for a specific username
    */
-  const loadVideos = useCallback(async (username: string): Promise<void> => {
+  const loadVideos = useCallback(async (username: string, bustCache: boolean = false): Promise<void> => {
     try {
       const token = await getToken();
       if (!token) return;
 
-      const reels = await AuthService.getUserReels(token, username);
+      const reels = await AuthService.getUserReels(token, username, 20, 0, bustCache);
       const transformedVideos = transformReels(reels);
       setVideos(transformedVideos);
 

@@ -200,6 +200,14 @@ export function VideosProvider({ children }: { children: ReactNode }) {
 
     const addVideo = (video: UploadedVideo) => {
         setUploadedVideos(prev => {
+            // If video already exists, update it in place (for progress updates)
+            const existingIndex = prev.findIndex(v => v.id === video.id);
+            if (existingIndex !== -1) {
+                const newVideos = [...prev];
+                newVideos[existingIndex] = video;
+                saveVideos(newVideos);
+                return newVideos;
+            }
             const newVideos = [video, ...prev];
             saveVideos(newVideos);
             return newVideos;

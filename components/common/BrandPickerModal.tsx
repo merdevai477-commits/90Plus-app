@@ -43,7 +43,8 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
 
     const renderBrandItem = ({ item }: { item: typeof LOCAL_BRANDS[0] }) => {
         const isSelected = selectedBrandId === item.id;
-        const hasLogo = item.logo && item.logo.length > 0;
+        // Check if logo is a URL or an emoji
+        const isUrl = item.logo && (item.logo.startsWith('http') || item.logo.startsWith('/'));
         
         return (
             <TouchableOpacity
@@ -57,7 +58,7 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
                     onClose();
                 }}
             >
-                {hasLogo ? (
+                {isUrl ? (
                     <Image
                         source={{ uri: item.logo }}
                         style={styles.brandLogo}
@@ -65,12 +66,7 @@ export default function BrandPickerModal({ visible, onClose, onSelect, selectedB
                         transition={200}
                     />
                 ) : (
-                    <Text style={[
-                        styles.brandName,
-                        { color: item.color === '#000000' || item.color === '#000' ? '#FFF' : '#000' }
-                    ]}>
-                        {item.nameAr}
-                    </Text>
+                    <Text style={styles.brandEmoji}>{item.logo || item.nameAr}</Text>
                 )}
                 {isSelected && (
                     <View style={styles.checkmark}>
@@ -206,6 +202,11 @@ const styles = StyleSheet.create({
         width: 60,
         height: 40,
         marginBottom: 8,
+    },
+    brandEmoji: {
+        fontSize: 32,
+        marginBottom: 8,
+        textAlign: 'center',
     },
     brandName: {
         color: '#FFF',

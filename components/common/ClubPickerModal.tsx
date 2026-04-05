@@ -46,6 +46,7 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
 
     const renderClubItem = ({ item }: { item: TopClub }) => {
         const isSelected = selectedClubId === item.id || selectedClubId === item.apiId;
+        const isUrl = item.logo && (item.logo.startsWith('http') || item.logo.startsWith('/'));
 
         return (
             <TouchableOpacity
@@ -58,12 +59,16 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                     onClose();
                 }}
             >
-                <Image
-                    source={{ uri: item.logo }}
-                    style={styles.logo}
-                    contentFit="contain"
-                    transition={200}
-                />
+                {isUrl ? (
+                    <Image
+                        source={{ uri: item.logo }}
+                        style={styles.logo}
+                        contentFit="contain"
+                        transition={200}
+                    />
+                ) : (
+                    <Text style={styles.logoEmoji}>{item.logo}</Text>
+                )}
                 <Text style={styles.itemName} numberOfLines={2}>{item.nameAr}</Text>
                 <Text style={styles.leagueName} numberOfLines={1}>{getLeagueDisplayName(item.league)}</Text>
                 {isSelected && (
@@ -252,6 +257,14 @@ const styles = StyleSheet.create({
     logo: {
         width: 50,
         height: 50,
+        marginBottom: 8,
+    },
+    logoEmoji: {
+        fontSize: 30,
+        width: 50,
+        height: 50,
+        textAlign: 'center',
+        lineHeight: 50,
         marginBottom: 8,
     },
     logoFallback: {

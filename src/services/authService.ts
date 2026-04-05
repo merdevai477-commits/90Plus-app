@@ -581,47 +581,37 @@ export class AuthService {
         token: string,
         username: string,
         limit: number = 20,
-        offset: number = 0
+        offset: number = 0,
+        bustCache: boolean = false
     ): Promise<UserReel[]> {
         try {
-            // Debug logging
-            console.log('🔍 [getUserReels] Input params:', { username, limit, offset });
-            console.log('🔍 [getUserReels] API_URL:', API_URL);
-            
-            // Ensure username is clean (no extra characters)
             const cleanUsername = username?.trim();
             if (!cleanUsername) {
                 console.error('❌ [getUserReels] Invalid username:', username);
                 return [];
             }
             
-            const url = `${API_URL}/clerk/user/${cleanUsername}/reels?limit=${limit}&offset=${offset}`;
-            console.log('� [getUserReels] Final URL:', url);
+            // Add cache-busting timestamp when forced refresh is needed
+            const cacheBuster = bustCache ? `&_t=${Date.now()}` : '';
+            const url = `${API_URL}/clerk/user/${cleanUsername}/reels?limit=${limit}&offset=${offset}${cacheBuster}`;
             
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
+                    // Prevent 304 Not Modified when we need fresh data
+                    ...(bustCache && { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }),
                 },
             });
 
-            console.log('📡 [getUserReels] Response status:', response.status);
-            console.log('📡 [getUserReels] Response URL:', response.url);
-            
-            if (!response.ok) {
-                console.error('❌ [getUserReels] HTTP Error:', response.status, response.statusText);
-                return [];
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'SUCCESS') {
+                    return data.data.reels || [];
+                }
             }
             
-            const data = await response.json();
-            console.log('📦 [getUserReels] Response data:', data);
-            
-            if (data.status === 'SUCCESS') {
-                return data.data.reels || [];
-            }
-            
-            console.warn('⚠️ [getUserReels] API returned non-success status:', data.status);
             return [];
         } catch (error) {
             console.error('❌ [getUserReels] Error:', error);
@@ -692,16 +682,28 @@ export class AuthService {
 
             if (data.status === 'SUCCESS') {
                 logger.debug('✅ Profile updated successfully');
-                toastManager.showProfileUpdateSuccess();
+                // Don't show toast here - let the calling function handle it
                 return data;
             } else {
-                console.error('❌ Failed to update profile:', data.message);
-                toastManager.showError('فشل التحديث', data.message || 'فشل في تحديث الملف الشخصي');
+                // Don't log username cooldown errors as errors
+                if (data.message && (data.message.includes('يمكنك تغيير اسم المستخدم بعد') || 
+                    data.message.includes('يوم')) && updates.username) {
+                    logger.info('ℹ️ Username change cooldown:', data.message);
+                } else {
+                    console.error('❌ Failed to update profile:', data.message);
+                }
+                // Don't show toast here - let the calling function handle it
                 return data;
             }
         } catch (error: any) {
-            console.error('❌ Error updating profile:', error);
-            toastManager.showError('خطأ في الشبكة', error.message || 'فشل في الاتصال بالخادم');
+            // Don't log username cooldown errors as errors
+            if (error.message && (error.message.includes('يمكنك تغيير اسم المستخدم بعد') || 
+                error.message.includes('يوم')) && updates.username) {
+                logger.info('ℹ️ Username change cooldown:', error.message);
+            } else {
+                console.error('❌ Error updating profile:', error);
+            }
+            // Don't show toast here - let the calling function handle it
             return {
                 status: 'ERROR',
                 message: error.message || 'Network error'

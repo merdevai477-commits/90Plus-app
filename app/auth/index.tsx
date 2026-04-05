@@ -33,7 +33,7 @@ import {
     KeyRound,
 } from 'lucide-react-native';
 import { COLORS, GRADIENTS, EFFECTS } from '../../components/reels/constants';
-import { useSignIn, useSignUp, useOAuth, useAuth, useUser } from '@clerk/clerk-expo';
+import { useSignIn, useSignUp, useOAuth, useAuth, useUser, isClerkAPIResponseError } from '@clerk/clerk-expo';
 import { useTranslation } from '../../src/i18n';
 import { globalState } from '../../globalState';
 import { useHomeStore } from '../../src/store/home.store';
@@ -53,6 +53,17 @@ import { toastManager } from '../../services/toastManager';
 import { preloadManager } from '../../services/preloadManager';
 
 WebBrowser.maybeCompleteAuthSession();
+
+/** Prefer TOTP / backup codes, then SMS / email MFA (Clerk `supportedSecondFactors`). */
+function pickClerkSecondFactor(factors: any[] | null | undefined) {
+    if (!factors?.length) return null;
+    const order = ['totp', 'backup_code', 'phone_code', 'email_code'];
+    for (const s of order) {
+        const f = factors.find((x) => x?.strategy === s);
+        if (f) return f;
+    }
+    return factors[0];
+}
 
 // ✅ iPad Detection: Detect if device is iPad for responsive layout
 const { width, height } = Dimensions.get('window');
@@ -172,6 +183,18 @@ export default function AuthScreen() {
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
+    const [showMfaModal, setShowMfaModal] = useState(false);
+    const [mfaCode, setMfaCode] = useState('');
+    const [mfaPrepareLoading, setMfaPrepareLoading] = useState(false);
+    const [isMfaVerifying, setIsMfaVerifying] = useState(false);
+    const [mfaSubtitle, setMfaSubtitle] = useState('');
+    const [mfaStrategyUi, setMfaStrategyUi] = useState<string | null>(null);
+    const selectedSecondFactorRef = useRef<{
+        strategy: string;
+        phoneNumberId?: string;
+        emailAddressId?: string;
+        safeIdentifier?: string;
+    } | null>(null);
 
     // Logo animation values
     const logoScale = useRef(new Animated.Value(1)).current;
@@ -464,6 +487,223 @@ export default function AuthScreen() {
         }
     };
 
+    const subtitleForMfaFactor = (factor: any) => {
+        if (!factor) return '';
+        switch (factor.strategy) {
+            case 'totp':
+                return t.common.loginMfaTotpHint;
+            case 'backup_code':
+                return t.common.loginMfaBackupHint;
+            case 'phone_code':
+                return factor.safeIdentifier
+                    ? `${t.common.loginMfaSmsHint}\n${factor.safeIdentifier}`
+                    : t.common.loginMfaSmsHint;
+            case 'email_code':
+                return factor.safeIdentifier
+                    ? `${t.common.loginMfaEmailHint}\n${factor.safeIdentifier}`
+                    : t.common.loginMfaEmailHint;
+            default:
+                return t.common.loginMfaTotpHint;
+        }
+    };
+
+    const completeSignInWithSession = async (createdSessionId: string | null | undefined) => {
+        if (!createdSessionId) {
+            toastManager.showError(t.common.error, t.common.loginCouldNotComplete);
+            return;
+        }
+        const sessionIdForRetry = createdSessionId;
+        setLoadingMessage(t.common.loggingIn);
+        setShowLoadingScreen(true);
+        try {
+            await clearPreviousUserData();
+            console.log('🔑 Activating Clerk session...');
+            await setActiveSignIn({ session: sessionIdForRetry });
+            console.log('✅ Session activated successfully');
+            console.log('🔄 Syncing user with backend...');
+            const syncResult = await syncUserWithBackend();
+            if (!syncResult.success) {
+                console.error('❌ Sync failed after session activation');
+                await signOut?.();
+                setShowLoadingScreen(false);
+                throw new Error('Sync failed');
+            }
+            preloadManager.initialize(getToken).catch((err) => {
+                console.warn('[Auth] Preload initialization failed (non-critical):', err);
+            });
+            console.log('✅ Background preloading started');
+            globalState.setUserType('diamond');
+            useHomeStore.getState().setUserMode('diamond');
+            setTimeout(() => {
+                setShowLoadingScreen(false);
+                router.replace('/(tabs)/Home');
+            }, 500);
+        } catch (syncError: any) {
+            console.error('❌ Login sync error:', syncError);
+            try {
+                await signOut?.();
+                console.log('✅ Clerk session signed out after sync failure');
+            } catch (signOutError) {
+                console.warn('⚠️ Failed to sign out:', signOutError);
+            }
+            setShowLoadingScreen(false);
+            const isTimeoutError = syncError.name === 'SyncTimeoutError';
+            const errorTitle = syncError.title || 'خطأ';
+            const errorMessage =
+                syncError.message || 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.';
+            if (isTimeoutError) {
+                Alert.alert(errorTitle, errorMessage, [
+                    {
+                        text: 'إلغاء',
+                        style: 'cancel',
+                        onPress: () => {
+                            setEmail('');
+                            setPassword('');
+                        },
+                    },
+                    {
+                        text: 'إعادة المحاولة',
+                        onPress: () => {
+                            void completeSignInWithSession(sessionIdForRetry);
+                        },
+                    },
+                ]);
+            } else {
+                Alert.alert(errorTitle, errorMessage, [
+                    {
+                        text: 'حسناً',
+                        onPress: () => {},
+                    },
+                ]);
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (!showMfaModal || !signIn) return;
+        const factor = selectedSecondFactorRef.current;
+        if (!factor) return;
+        if (factor.strategy !== 'phone_code' && factor.strategy !== 'email_code') {
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                setMfaPrepareLoading(true);
+                if (factor.strategy === 'phone_code' && factor.phoneNumberId) {
+                    await signIn.prepareSecondFactor({
+                        strategy: 'phone_code',
+                        phoneNumberId: factor.phoneNumberId,
+                    });
+                    if (!cancelled) {
+                        toastManager.showInfo(t.common.success, t.common.loginMfaSmsSent);
+                    }
+                } else if (factor.strategy === 'email_code' && factor.emailAddressId) {
+                    await signIn.prepareSecondFactor({
+                        strategy: 'email_code',
+                        emailAddressId: factor.emailAddressId,
+                    });
+                    if (!cancelled) {
+                        toastManager.showInfo(t.common.success, t.common.loginMfaEmailSent);
+                    }
+                }
+            } catch (e: any) {
+                if (!cancelled) {
+                    const msg = isClerkAPIResponseError(e)
+                        ? e.errors?.[0]?.message || String(e)
+                        : e?.message || t.common.errorOccurred;
+                    toastManager.showError(t.common.error, msg);
+                    setShowMfaModal(false);
+                }
+            } finally {
+                if (!cancelled) setMfaPrepareLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [showMfaModal, signIn]);
+
+    const handleMfaSubmit = async () => {
+        if (!signIn || !mfaCode.trim()) {
+            toastManager.showError(t.common.error, t.common.fillAllFields);
+            return;
+        }
+        const factor = selectedSecondFactorRef.current;
+        if (!factor) return;
+        setIsMfaVerifying(true);
+        try {
+            const attemptParams: Record<string, string> = {
+                strategy: factor.strategy,
+                code: mfaCode.trim(),
+            };
+            const updated = await signIn.attemptSecondFactor(attemptParams as any);
+            if (updated.status === 'complete' && updated.createdSessionId) {
+                setShowMfaModal(false);
+                setMfaCode('');
+                setMfaStrategyUi(null);
+                selectedSecondFactorRef.current = null;
+                await completeSignInWithSession(updated.createdSessionId);
+            } else {
+                toastManager.showError(t.common.error, t.common.loginCouldNotComplete);
+            }
+        } catch (e: any) {
+            const msg = isClerkAPIResponseError(e)
+                ? e.errors?.[0]?.longMessage || e.errors?.[0]?.message || t.common.errorOccurred
+                : getArabicErrorMessage(e);
+            toastManager.showError(t.common.error, msg);
+        } finally {
+            setIsMfaVerifying(false);
+        }
+    };
+
+    const handleMfaResendSms = async () => {
+        const factor = selectedSecondFactorRef.current;
+        if (!signIn || factor?.strategy !== 'phone_code' || !factor.phoneNumberId) return;
+        try {
+            setMfaPrepareLoading(true);
+            await signIn.prepareSecondFactor({
+                strategy: 'phone_code',
+                phoneNumberId: factor.phoneNumberId,
+            });
+            toastManager.showInfo(t.common.success, t.common.loginMfaSmsSent);
+        } catch (e: any) {
+            const msg = isClerkAPIResponseError(e)
+                ? e.errors?.[0]?.message || String(e)
+                : e?.message || t.common.errorOccurred;
+            toastManager.showError(t.common.error, msg);
+        } finally {
+            setMfaPrepareLoading(false);
+        }
+    };
+
+    const handleMfaResendEmail = async () => {
+        const factor = selectedSecondFactorRef.current;
+        if (!signIn || factor?.strategy !== 'email_code' || !factor.emailAddressId) return;
+        try {
+            setMfaPrepareLoading(true);
+            await signIn.prepareSecondFactor({
+                strategy: 'email_code',
+                emailAddressId: factor.emailAddressId,
+            });
+            toastManager.showInfo(t.common.success, t.common.loginMfaEmailSent);
+        } catch (e: any) {
+            const msg = isClerkAPIResponseError(e)
+                ? e.errors?.[0]?.message || String(e)
+                : e?.message || t.common.errorOccurred;
+            toastManager.showError(t.common.error, msg);
+        } finally {
+            setMfaPrepareLoading(false);
+        }
+    };
+
+    const closeMfaModal = () => {
+        setShowMfaModal(false);
+        setMfaCode('');
+        setMfaStrategyUi(null);
+        selectedSecondFactorRef.current = null;
+    };
+
     // Animations
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const slideAnim = useRef(new Animated.Value(0)).current;
@@ -632,141 +872,66 @@ export default function AuthScreen() {
 
                 if (result.status === 'complete') {
                     console.log('✅ Clerk login status: complete');
-                    // Show loading screen
-                    setLoadingMessage(t.common.loggingIn);
-                    setShowLoadingScreen(true);
                     setIsLoading(false);
-
-                    try {
-                        // ✅ CRITICAL FIX: Clear data BEFORE activating session
-                        // This prevents race conditions with state management
-                        await clearPreviousUserData();
-                        
-                        // ✅ Activate session to get valid token
-                        console.log('🔑 Activating Clerk session...');
-                        await setActiveSignIn({ session: result.createdSessionId });
-                        console.log('✅ Session activated successfully');
-                        
-                        console.log('🔄 Syncing user with backend...');
-                        const syncResult = await syncUserWithBackend();
-
-                        // ✅ FIX: Check if sync was successful
-                        if (!syncResult.success) {
-                            console.error('❌ Sync failed after session activation');
-                            // Sign out to clean up the activated session
-                            await signOut?.();
-                            setShowLoadingScreen(false);
-                            throw new Error('Sync failed');
-                        }
-
-                        // ✅ Start background preloading immediately after login (non-blocking)
-                        preloadManager.initialize(getToken).catch(err => {
-                            console.warn('[Auth] Preload initialization failed (non-critical):', err);
-                        });
-                        console.log('✅ Background preloading started');
-
-                        // Set user as authenticated
-                        globalState.setUserType('diamond');
-                        useHomeStore.getState().setUserMode('diamond');
-
-                        // ✅ OPTIMIZATION: Skip onboarding, go directly to Home
-                        setTimeout(() => {
-                            setShowLoadingScreen(false);
-                            // Always go to Home (onboarding disabled)
-                            router.replace('/(tabs)/Home');
-                        }, 500); // ✅ Reduced to 500ms for faster navigation
-                    } catch (syncError: any) {
-                        console.error('❌ Login sync error:', syncError);
-                        
-                        // ✅ CRITICAL FIX: Sign out from Clerk if sync failed
-                        // This prevents the "already logged in" state
-                        try {
-                            await signOut?.();
-                            console.log('✅ Clerk session signed out after sync failure');
-                        } catch (signOutError) {
-                            console.warn('⚠️ Failed to sign out:', signOutError);
-                        }
-                        
-                        // Hide loading screen
-                        setShowLoadingScreen(false);
-                        
-                        // Determine if this is a timeout error for retry option
-                        const isTimeoutError = syncError.name === 'SyncTimeoutError';
-                        const errorTitle = syncError.title || 'خطأ';
-                        const errorMessage = syncError.message || 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.';
-                        
-                        if (isTimeoutError) {
-                            // Show retry/cancel options for timeout errors
-                            Alert.alert(
-                                errorTitle,
-                                errorMessage,
-                                [
-                                    {
-                                        text: 'إلغاء',
-                                        style: 'cancel',
-                                        onPress: () => {
-                                            setEmail('');
-                                            setPassword('');
-                                        }
-                                    },
-                                    {
-                                        text: 'إعادة المحاولة',
-                                        onPress: () => handleAuth()
-                                    }
-                                ]
-                            );
-                        } else {
-                            // Show single retry button for other errors
-                            Alert.alert(
-                                errorTitle,
-                                errorMessage,
-                                [
-                                    {
-                                        text: 'حسناً',
-                                        onPress: () => {
-                                            // Don't clear email/password to allow easy retry
-                                        }
-                                    }
-                                ]
-                            );
-                        }
+                    await completeSignInWithSession(result.createdSessionId);
+                } else if (result.status === 'needs_second_factor') {
+                    setIsLoading(false);
+                    setShowLoadingScreen(false);
+                    const factors =
+                        result.supportedSecondFactors ?? signIn.supportedSecondFactors ?? null;
+                    const raw = pickClerkSecondFactor(factors as any[] | null);
+                    console.log('[Auth] needs_second_factor - supported factors:', JSON.stringify(factors));
+                    if (!raw) {
+                        toastManager.showError(
+                            'التحقق بخطوتين مطلوب',
+                            'حسابك يتطلب التحقق بخطوتين ولكن لم يتم إعداده. يرجى التواصل مع الدعم أو إيقاف التحقق بخطوتين من إعدادات حسابك.'
+                        );
+                        return;
                     }
+                    selectedSecondFactorRef.current = {
+                        strategy: raw.strategy,
+                        phoneNumberId: raw.phoneNumberId,
+                        emailAddressId: raw.emailAddressId,
+                        safeIdentifier: raw.safeIdentifier,
+                    };
+                    setMfaSubtitle(subtitleForMfaFactor(raw));
+                    setMfaCode('');
+                    setMfaStrategyUi(raw.strategy);
+                    setShowMfaModal(true);
+                    console.log('[Auth] ✅ MFA modal opened for strategy:', raw.strategy);
+                } else if (result.status === 'needs_first_factor') {
+                    setIsLoading(false);
+                    setShowLoadingScreen(false);
+                    toastManager.showError(t.common.error, t.common.loginNeedsFirstFactor);
+                } else if (result.status === 'needs_verification') {
+                    setIsLoading(false);
+                    setShowLoadingScreen(false);
+                    toastManager.showError(t.common.error, t.common.verifyEmail);
                 } else {
-                    // ✅ CRITICAL: Log the actual status for debugging
-                    console.error('❌ Clerk login incomplete:', {
+                    console.warn('⚠️ Clerk login incomplete:', {
                         status: result.status,
                         identifier: email.substring(0, 3) + '***',
                     });
-                    
-                    // ✅ Send to Sentry for remote debugging
                     try {
                         const Sentry = require('@sentry/react-native');
                         Sentry.captureMessage(`Clerk login incomplete: ${result.status}`, {
-                            level: 'error',
+                            level: 'warning',
                             tags: {
                                 platform: Platform.OS,
-                                clerkStatus: result.status,
+                                clerkStatus: String(result.status),
                                 isTablet: String(isTablet),
                             },
                             extra: {
                                 email: email.substring(0, 3) + '***',
-                                device: {
-                                    width: Dimensions.get('window').width,
-                                    height: Dimensions.get('window').height,
-                                    platform: Platform.OS,
-                                    version: Platform.Version,
-                                },
                                 hasSessionId: !!result.createdSessionId,
-                            }
+                            },
                         });
                     } catch (e) {
                         console.warn('Failed to send to Sentry:', e);
                     }
-                    
                     setShowLoadingScreen(false);
-                    
-                    // ✅ Show actual status instead of generic error
-                    toastManager.showError('خطأ', `Login status: ${result.status}. Check Sentry for details.`);
+                    setIsLoading(false);
+                    toastManager.showError(t.common.error, t.common.loginCouldNotComplete);
                 }
             } else {
                 // Sign up - Check terms acceptance
@@ -1629,6 +1794,78 @@ export default function AuthScreen() {
                         <TouchableOpacity onPress={handleResendCode}>
                             <Text style={styles.resendText}>إعادة إرسال الرمز</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* MFA / 2FA (Clerk needs_second_factor) */}
+            <Modal
+                visible={showMfaModal}
+                transparent
+                animationType="fade"
+                onRequestClose={closeMfaModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={closeMfaModal}>
+                            <X color={COLORS.white} size={24} />
+                        </TouchableOpacity>
+
+                        <KeyRound color="#FFD700" size={48} style={{ marginBottom: 16 }} />
+                        <Text style={styles.modalTitle}>{t.common.loginMfaTitle}</Text>
+                        <Text style={styles.modalSubtitle}>{mfaSubtitle}</Text>
+
+                        {mfaPrepareLoading && (
+                            <ActivityIndicator
+                                color={COLORS.neonGreen}
+                                style={{ marginVertical: 12 }}
+                            />
+                        )}
+
+                        <View style={styles.codeInputWrapper}>
+                            <TextInput
+                                style={styles.codeInput}
+                                placeholder={t.common.loginMfaCodePlaceholder}
+                                placeholderTextColor={COLORS.textTertiary}
+                                value={mfaCode}
+                                onChangeText={setMfaCode}
+                                keyboardType="default"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                maxLength={16}
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.verifyButton}
+                            onPress={() => void handleMfaSubmit()}
+                            disabled={isMfaVerifying || mfaPrepareLoading}
+                        >
+                            <View style={styles.gradientButton}>
+                                {isMfaVerifying ? (
+                                    <ActivityIndicator color="#0A0514" />
+                                ) : (
+                                    <Text style={styles.submitText}>{t.common.confirm}</Text>
+                                )}
+                            </View>
+                        </TouchableOpacity>
+
+                        {mfaStrategyUi === 'phone_code' && (
+                            <TouchableOpacity
+                                onPress={() => void handleMfaResendSms()}
+                                disabled={mfaPrepareLoading || isMfaVerifying}
+                            >
+                                <Text style={styles.resendText}>{t.common.loginMfaResendSms}</Text>
+                            </TouchableOpacity>
+                        )}
+                        {mfaStrategyUi === 'email_code' && (
+                            <TouchableOpacity
+                                onPress={() => void handleMfaResendEmail()}
+                                disabled={mfaPrepareLoading || isMfaVerifying}
+                            >
+                                <Text style={styles.resendText}>{t.common.loginMfaResendSms}</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             </Modal>

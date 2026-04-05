@@ -28,6 +28,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../../src/i18n';
 import { logger } from '../../services/logger';
+import { getApiEndpoint } from '../../config/api.config';
 import { captureException } from '../../services/sentry.service';
 import { router } from 'expo-router';
 
@@ -64,7 +65,7 @@ export default function PrivacySettingsScreen() {
       
       if (!token) throw new Error('Authentication token not found');
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/gdpr/consent`, {
+      const response = await fetch(getApiEndpoint('gdpr/consent'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -88,7 +89,7 @@ export default function PrivacySettingsScreen() {
       const token = await getToken();
       if (!token) return;
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/gdpr/deletion-status`, {
+      const response = await fetch(getApiEndpoint('gdpr/deletion-status'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -119,7 +120,7 @@ export default function PrivacySettingsScreen() {
         dataSharing: 'DATA_SHARING',
       };
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/gdpr/consent`, {
+      const response = await fetch(getApiEndpoint('gdpr/consent'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,7 +170,7 @@ export default function PrivacySettingsScreen() {
               
               if (!token) throw new Error('Authentication token not found');
 
-              const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/gdpr/export-data`, {
+              const response = await fetch(getApiEndpoint('gdpr/export-data'), {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${token}`,
@@ -226,7 +227,7 @@ export default function PrivacySettingsScreen() {
               const token = await getToken();
               if (!token) throw new Error('Authentication token not found');
 
-              const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/gdpr/cancel-deletion`, {
+              const response = await fetch(getApiEndpoint('gdpr/cancel-deletion'), {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${token}`,

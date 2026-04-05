@@ -46,8 +46,8 @@ const CONFIG: Record<Environment, APIConfig> = {
     retryAttempts: 3,
   },
   production: {
-    baseUrl: 'https://90plus-app-production-26e9.up.railway.app/api',
-    wsUrl: 'wss://90plus-app-production-26e9.up.railway.app',
+    baseUrl: 'https://90plus-app-production-b28d.up.railway.app/api',
+    wsUrl: 'wss://90plus-app-production-b28d.up.railway.app',
     timeout: 30000, // ✅ CRITICAL: Increased to 30s
     uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
     retryAttempts: 3,
@@ -228,6 +228,16 @@ export function getApiUrl(): string {
   }
 
   return config.baseUrl;
+}
+
+/**
+ * Full URL for a path under the API base (getApiUrl() already ends with /api).
+ * Use this instead of `${EXPO_PUBLIC_API_URL}/api/...` to avoid /api/api/ duplicates.
+ */
+export function getApiEndpoint(suffix: string): string {
+  const base = getApiUrl().replace(/\/$/, '');
+  const s = suffix.startsWith('/') ? suffix.slice(1) : suffix;
+  return `${base}/${s}`;
 }
 
 /**

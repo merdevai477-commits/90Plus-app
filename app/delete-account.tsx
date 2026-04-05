@@ -28,6 +28,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguageStore } from '../src/i18n';
 import { logger } from '../services/logger';
+import { getApiEndpoint } from '../config/api.config';
 import { captureException } from '../services/sentry.service';
 
 const DELETION_REASONS = [
@@ -85,7 +86,7 @@ export default function DeleteAccountScreen() {
 
               const reason = selectedReason === 'other' ? otherReason : selectedReason;
 
-              const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/gdpr/delete-account`, {
+              const response = await fetch(getApiEndpoint('gdpr/delete-account'), {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',

@@ -33,6 +33,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguageStore } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
+import { getApiEndpoint } from '../config/api.config';
 
 export default function ParentalConsentScreen() {
   const { getToken } = useAuth();
@@ -70,7 +71,7 @@ export default function ParentalConsentScreen() {
       }
 
       // Call backend API
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/request-parental-consent`, {
+      const response = await fetch(getApiEndpoint('auth/request-parental-consent'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

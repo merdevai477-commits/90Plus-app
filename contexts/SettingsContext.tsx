@@ -51,7 +51,6 @@ export interface SettingsState {
   // App State
   isFirstLaunch: boolean;
   lastSyncTime: number;
-  biometricEnabled: boolean;
 }
 
 interface SettingsContextType {
@@ -77,7 +76,6 @@ interface SettingsContextType {
   resetSettings: () => Promise<void>;
   updateLastSync: () => Promise<void>;
   deleteAccount: () => Promise<void>;
-  toggleBiometric: (enabled: boolean) => Promise<void>;
 }
 
 // ============================================================================
@@ -99,7 +97,6 @@ const DEFAULT_SETTINGS: SettingsState = {
   favoriteLeagues: [],
   isFirstLaunch: true,
   lastSyncTime: Date.now(),
-  biometricEnabled: false,
 };
 
 const API_BASE_URL = getApiUrl();
@@ -422,11 +419,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const toggleBiometric = async (enabled: boolean) => {
-    const newSettings = { ...settings, biometricEnabled: enabled };
-    await saveSettings(newSettings);
-  };
-
   // ============================================================================
   // CONTEXT VALUE
   // ============================================================================
@@ -453,7 +445,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     resetSettings,
     updateLastSync,
     deleteAccount,
-    toggleBiometric,
   };
 
   return (

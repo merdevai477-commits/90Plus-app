@@ -18,6 +18,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
+import { getApiEndpoint } from '../config/api.config';
 
 interface AgeStatus {
   ageVerified: boolean;
@@ -62,7 +63,7 @@ export function useAgeVerification() {
         throw new Error('Authentication token not found');
       }
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/age-status`, {
+      const response = await fetch(getApiEndpoint('auth/age-status'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
