@@ -604,11 +604,14 @@ export default function ProfileScreen() {
 
   // Auto-refresh when app returns from background
   const appStateRef = useRef(AppState.currentState);
+  // ✅ FIX: Prevent refresh when image/video picker is open
+  const isPickerActiveRef = useRef(false);
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (
         appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active'
+        nextAppState === 'active' &&
+        !isPickerActiveRef.current // ← لا تعمل refresh لو الـ picker مفتوح
       ) {
         refreshCacheRef.current(false);
       }
@@ -672,24 +675,18 @@ export default function ProfileScreen() {
     }
 
     try {
+      isPickerActiveRef.current = true;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
       });
+      isPickerActiveRef.current = false;
 
       if (result.canceled) {
         return;
       }
-
-      const imageUri = result.assets[0]?.uri;
-      if (!imageUri) {
-        toastManager.showError('خطأ في الاختيار', 'لم يتم اختيار صورة صالحة للغلاف');
-        return;
-      }
-
-      let finalUri = imageUri;
       try {
         toastManager.showInfo('جاري المعالجة', 'جاري ضغط صورة الغلاف...');
         const compressed = await compressImage(imageUri, {
@@ -779,12 +776,14 @@ export default function ProfileScreen() {
     }
 
     try {
+      isPickerActiveRef.current = true;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
+      isPickerActiveRef.current = false;
 
       if (result.canceled) {
         return;
@@ -1090,7 +1089,7 @@ export default function ProfileScreen() {
   }
 
   // Loading state - show skeleton when loading and no cache
-  if (isLoading && !userData) {
+  if ((isLoading || !userData) && !cacheError) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
@@ -1100,7 +1099,8 @@ export default function ProfileScreen() {
   }
 
   // CRITICAL FIX: Show error state with retry button if data failed to load
-  if (!userData && (cacheError || !isLoading)) {
+  // Only show error if we have an explicit error AND no data - not just because loading finished
+  if (!userData && cacheError && !isLoading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
@@ -1761,6 +1761,8 @@ export default function ProfileScreen() {
       <ReelUploadModal
         visible={isUploadModalVisible}
         onClose={() => setIsUploadModalVisible(false)}
+        onPickerOpen={() => { isPickerActiveRef.current = true; }}
+        onPickerClose={() => { isPickerActiveRef.current = false; }}
         onUpload={(newVideo) => {
           addVideo(newVideo);
           setIsUploadModalVisible(false);

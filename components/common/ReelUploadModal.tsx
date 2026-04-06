@@ -18,9 +18,11 @@ interface ReelUploadModalProps {
     onUpload: (video: any) => void;
     canUploadVideo?: boolean;
     missingRequiredSteps?: string[];
+    onPickerOpen?: () => void;
+    onPickerClose?: () => void;
 }
 
-export default function ReelUploadModal({ visible, onClose, onUpload, canUploadVideo = true, missingRequiredSteps = [] }: ReelUploadModalProps) {
+export default function ReelUploadModal({ visible, onClose, onUpload, canUploadVideo = true, missingRequiredSteps = [], onPickerOpen, onPickerClose }: ReelUploadModalProps) {
     const { isSignedIn } = useAuth();
     const [videoAsset, setVideoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [caption, setCaption] = useState('');
@@ -71,12 +73,14 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
             return;
         }
 
+        onPickerOpen?.();
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-            allowsEditing: true, // Allows trimming in some OS
+            allowsEditing: true,
             quality: 1,
-            videoMaxDuration: 60,//tempt to limit via picker if supported
+            videoMaxDuration: 60,
         });
+        onPickerClose?.();
 
         if (!result.canceled) {
             const asset = result.assets[0];
