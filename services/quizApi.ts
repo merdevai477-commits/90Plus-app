@@ -1004,6 +1004,8 @@ export interface DailyQuizCache {
 // Cache keys
 const DAILY_QUIZ_CACHE_KEY = 'daily_quiz_complete';
 const DAILY_QUIZ_MEMORY_KEY = 'daily_quiz_memory';
+const getDailyQuizCacheKey = (lang: string) => `daily_quiz_complete_${lang}`;
+const getDailyQuizMemoryKey = (lang: string) => `daily_quiz_memory_${lang}`;
 
 /**
  * جلب الكويز اليومي الكامل (أسئلة + إجابات + صور)
@@ -1072,12 +1074,19 @@ export async function getDailyQuiz(
 
         // 3. جلب من الباك إند
         logger.debug('[DailyQuiz] Fetching from API');
+
+        // جلب اللغة الحالية
+        let currentLang = 'ar';
+        try {
+            const { useLanguageStore } = require('../src/i18n/store');
+            currentLang = useLanguageStore.getState().language || 'ar';
+        } catch { /* silent */ }
         
         const [quizResponse, answersResponse] = await Promise.all([
-            // جلب الأسئلة
+            // جلب الأسئلة مع اللغة
             fetchWithAuth('/quiz/daily', getToken, {
                 method: 'POST',
-                body: JSON.stringify({}),
+                body: JSON.stringify({ lang: currentLang }),
             }),
             // جلب الإجابات (بالتوازي للسرعة)
             null, // سنجلبها بعد الحصول على الأسئلة
