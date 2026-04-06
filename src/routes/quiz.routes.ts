@@ -853,6 +853,72 @@ router.post('/reset-daily', async (req: Request, res: Response): Promise<void> =
   }
 });
 
+/**
+ * POST /api/quiz/sync-questions
+ * مزامنة أسئلة legends-complete.ts مع قاعدة البيانات
+ * يحذف الأسئلة القديمة ويضيف الجديدة
+ * يتطلب X-API-Key header
+ */
+router.post('/sync-questions', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = req.headers['x-api-key'] as string;
+    const secretKey = process.env.QUIZ_RESET_SECRET_KEY || process.env.ADMIN_SECRET_KEY;
+
+    if (!secretKey || apiKey !== secretKey) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    // جلب أو إنشاء كاتيجوري الأساطير
+    let category = await prisma.quizCategory.findFirst({
+      where: { name: { contains: 'أساطير' } },
+    });
+
+    if (!category) {
+      category = await prisma.quizCategory.findFirst();
+    }
+
+    if (!category) {
+      res.status(404).json({ status: 'ERROR', message: 'No quiz category found' });
+      return;
+    }
+
+    // حذف الأسئلة القديمة
+    const deleted = await prisma.quizQuestion.deleteMany({
+      where: { categoryId: category.id },
+    });
+
+    // إضافة الأسئلة الجديدة
+    const created = await prisma.quizQuestion.createMany({
+      data: LEGENDS_COMPLETE_QUESTIONS.map(q => ({
+        id: q.id,
+        categoryId: category!.id,
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        difficulty: q.difficulty as any,
+        points: q.points,
+        imageType: q.imageType || null,
+        hint: q.hint || null,
+        timeLimit: q.timeLimit || 20,
+        displayMode: (q.displayMode?.replace('-', '_').toUpperCase() || 'AFTER_ANSWER') as any,
+      })),
+      skipDuplicates: true,
+    });
+
+    logger.info(`[sync-questions] Deleted ${deleted.count}, Created ${created.count} questions`);
+
+    res.json({
+      status: 'SUCCESS',
+      message: `Synced ${created.count} questions (deleted ${deleted.count} old)`,
+      data: { deleted: deleted.count, created: created.count, categoryId: category.id },
+    });
+  } catch (error: any) {
+    logger.error('Error syncing questions:', error);
+    res.status(500).json({ status: 'ERROR', message: error.message });
+  }
+});
+
 // ============================================
 // DYNAMIC ROUTES (يجب أن تكون بعد Static Routes)
 // ============================================
