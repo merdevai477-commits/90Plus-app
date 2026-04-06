@@ -695,7 +695,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
 });
 
 // Import comment limits from config
-import { COMMENT_LIMITS } from '../config/supabase.config';
+import { COMMENT_LIMITS } from '../config/app.config';
 
 /**
  * POST /api/reels/:id/comments

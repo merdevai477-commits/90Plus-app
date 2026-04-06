@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { StorageService } from '../utils/storage.service';
-import { STORAGE_BUCKETS } from '../config/supabase.config';
+import { STORAGE_BUCKETS } from '../config/app.config';
 import { logger } from '../utils/logger';
 
 export class StorageController {
