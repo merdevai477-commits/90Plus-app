@@ -386,7 +386,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       } else {
         console.error('[useProfileCache] ❌ No user data received from backend');
         
-        // ✅ FIX: Check if we have cached data to show
+        // ✅ FIX: Check if we have cached data to show - ALWAYS prefer cache over error screen
         const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
         if (cachedData && cachedData.userData) {
           logger.info('[useProfileCache] ✅ Using cached data as fallback');
@@ -396,7 +396,8 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setAnalytics(cachedData.analytics);
           setCooldowns(cachedData.cooldowns);
           hasLoadedRef.current = true;
-          setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+          // Don't set error - just show cached data silently
+          setError(null);
         } else {
           setError('Failed to load user data');
         }
@@ -443,7 +444,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setAnalytics(cachedData.analytics);
           setCooldowns(cachedData.cooldowns);
           hasLoadedRef.current = true;
-          setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+          setError(null); // Don't show error if we have cached data
         } else {
           setError(err.message || 'Failed to load profile data');
         }

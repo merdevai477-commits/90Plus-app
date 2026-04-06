@@ -125,6 +125,30 @@ export const globalState = {
     globalState.localAvatar = undefined;
     globalState.localCover = undefined;
     
+    // Clear AuthService memory cache
+    const { AuthService } = require('./src/services/authService');
+    AuthService.clearMemoryCache();
+    
+    // Clear local profile storage
+    const { localProfileStorage } = require('./services/localProfileStorage');
+    await localProfileStorage.clearAllUserData();
+    
+    // Clear all AsyncStorage keys related to user data
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const userKeys = keys.filter(key => 
+        key.includes('user') || 
+        key.includes('profile') || 
+        key.includes('cache') ||
+        key.includes('@90plus')
+      );
+      if (userKeys.length > 0) {
+        await AsyncStorage.multiRemove(userKeys);
+      }
+    } catch (error) {
+      console.error('Error clearing user-related AsyncStorage keys:', error);
+    }
+    
     // Save cleared state to ensure consistency
     await globalState.saveState();
   }

@@ -1,17 +1,40 @@
-/**
- * Jest Setup File
- * 
- * This file runs before each test file and sets up the test environment.
- */
+import '@testing-library/jest-native/extend-expect';
 
-// Define __DEV__ global for React Native compatibility
-global.__DEV__ = true;
+// Mock expo modules
+jest.mock('expo-router', () => ({
+  router: {
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+  },
+  useLocalSearchParams: jest.fn(() => ({})),
+  useRouter: jest.fn(() => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+  })),
+}));
 
-// Suppress console warnings during tests (optional)
-// Uncomment if you want cleaner test output
-// global.console.warn = jest.fn();
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  ImpactFeedbackStyle: {
+    Light: 'light',
+    Medium: 'medium',
+    Heavy: 'heavy',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+    Warning: 'warning',
+    Error: 'error',
+  },
+}));
 
-// Mock fetch globally if not already defined
-if (typeof global.fetch === 'undefined') {
-  global.fetch = jest.fn();
-}
+// Silence console warnings in tests
+global.console = {
+  ...console,
+  warn: jest.fn(),
+  error: jest.fn(),
+  debug: jest.fn(),
+  info: jest.fn(),
+};

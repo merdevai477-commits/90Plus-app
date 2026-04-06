@@ -9,3 +9,4 @@ node_modules
 
 # Sentry
 sentry.properties
+node_modules

@@ -37,14 +37,14 @@ export class SyncValidationError extends Error {
 }
 
 // ✅ OPTIMIZED: Balanced timeout for Railway cold starts
-const API_TIMEOUT = 30000; // ✅ Increased to 30 seconds for Railway cold start
+const API_TIMEOUT = 15000; // 15 seconds per request
 
-// Overall sync operation timeout (25 seconds)
-const SYNC_OPERATION_TIMEOUT = 25000; // ✅ Increased to 25 seconds for cold start
+// Overall sync operation timeout
+const SYNC_OPERATION_TIMEOUT = 12000; // 12 seconds total
 
 // Retry configuration
-const MAX_RETRY_ATTEMPTS = 3; // ✅ Increased to 3 for Railway cold start
-const RETRY_DELAY_MS = 1000; // ✅ Increased to 1 second between retries
+const MAX_RETRY_ATTEMPTS = 2; // 2 attempts max
+const RETRY_DELAY_MS = 500; // 500ms between retries
 
 // ✅ SUPER SPEED: In-memory cache for instant responses
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
@@ -245,10 +245,10 @@ export class AuthService {
                         headers: {
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json',
-                            'X-Request-Priority': 'high', // ✅ Signal priority to backend
-                            'X-Retry-Attempt': `${attempt}`, // ✅ Track retry attempts
+                            'X-Request-Priority': 'high',
+                            'X-Retry-Attempt': `${attempt}`,
                         },
-                    }, 30000); // ✅ 30 seconds timeout for Railway cold start
+                    }, 10000); // 10 seconds per request
 
                     // Handle non-OK responses
                     if (!response.ok) {

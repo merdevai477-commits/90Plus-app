@@ -3,12 +3,12 @@
     "name": "90Plus",
     "slug": "90plus",
     "version": "1.0.1",
-    "runtimeVersion": "1.0.1",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
@@ -19,12 +19,16 @@
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "NSCameraUsageDescription": "This app uses camera to upload videos for reels",
-        "NSMicrophoneUsageDescription": "This app uses microphone to record videos for reels",
-        "NSPhotoLibraryUsageDescription": "This app uses photo library to select images and videos",
+        "NSCameraUsageDescription": "90Plus needs access to your camera to capture photos and videos for your profile picture, cover image, and sharing football moments with the community.",
+        "NSMicrophoneUsageDescription": "90Plus needs access to your microphone to record audio when creating video content for reels and sharing your football commentary.",
+        "NSPhotoLibraryUsageDescription": "90Plus needs access to your photo library to select photos and videos for your profile, cover image, and sharing football content with other fans.",
+        "NSPhotoLibraryAddUsageDescription": "90Plus needs permission to save photos and videos to your library so you can keep your favorite football moments.",
         "ITSAppUsesNonExemptEncryption": false,
         "UIRequiredDeviceCapabilities": [],
-        "UIDeviceFamily": [1, 2]
+        "UIDeviceFamily": [
+          1,
+          2
+        ]
       }
     },
     "android": {
@@ -66,13 +70,13 @@
           "color": "#22c55e"
         }
       ],
-
       "expo-apple-authentication",
       [
         "expo-build-properties",
         {
           "ios": {
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
           },
           "android": {
             "compileSdkVersion": 35,
@@ -84,7 +88,8 @@
       ],
       "expo-font",
       "expo-localization",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@sentry/react-native/expo"
     ],
     "experiments": {
       "typedRoutes": true
@@ -97,8 +102,7 @@
       "fallbackToCacheTimeout": 0
     },
     "extra": {
-      "sportmonksToken": "mDAf5ClZwcEKXgFCkQoSpUtoumBDl4hT5FYzF8LtAYSNsZ0i19AdekwZQcSy",
-      "apiUrl": "https://90plus-app-production-26e9.up.railway.app/api",
+      "apiUrl": "https://90plus-app-production-b28d.up.railway.app/api",
       "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
       "router": {},
       "eas": {

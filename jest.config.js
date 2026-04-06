@@ -1,44 +1,30 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  roots: ['<rootDir>/services', '<rootDir>/hooks', '<rootDir>/utils', '<rootDir>/src', '<rootDir>/config', '<rootDir>/components', '<rootDir>'],
-  testMatch: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
-  transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: {
-        module: 'commonjs',
-        target: 'ES2020',
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        strict: false,
-        skipLibCheck: true,
-        types: ['jest', 'node'],
-      },
-      diagnostics: {
-        ignoreCodes: [2593, 2304, 2708, 2339, 2345, 2704, 2769],
-      },
-    }],
-  },
-  moduleNameMapper: {
-    '^react-native$': '<rootDir>/__mocks__/react-native.ts',
-    '^@react-native-async-storage/async-storage$': '<rootDir>/__mocks__/asyncStorage.ts',
-    '^expo-constants$': '<rootDir>/__mocks__/expo-constants.ts',
-    '^expo-file-system$': '<rootDir>/__mocks__/expo-file-system.ts',
-    '^expo-video-thumbnails$': '<rootDir>/__mocks__/expo-video-thumbnails.ts',
-    '^expo-image-manipulator$': '<rootDir>/__mocks__/expo-image-manipulator.ts',
-  },
-  collectCoverageFrom: [
-    'services/**/*.ts',
-    'hooks/**/*.ts',
-    'utils/**/*.ts',
-    '!**/*.d.ts',
-    '!**/node_modules/**',
-    '!**/__tests__/**',
+  preset: 'jest-expo',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@clerk/clerk-expo)',
   ],
-  globals: {
-    __DEV__: true,
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  collectCoverageFrom: [
+    '**/*.{ts,tsx}',
+    '!**/coverage/**',
+    '!**/node_modules/**',
+    '!**/babel.config.js',
+    '!**/jest.setup.js',
+  ],
+  testMatch: [
+    '**/__tests__/**/*.test.ts',
+    '**/__tests__/**/*.test.tsx',
+  ],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
   },
-  setupFiles: ['<rootDir>/jest.setup.js'],
+  testEnvironment: 'node',
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        jsx: 'react',
+      },
+    },
+  },
 };
