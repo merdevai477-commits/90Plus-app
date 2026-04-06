@@ -687,6 +687,14 @@ export default function ProfileScreen() {
       if (result.canceled) {
         return;
       }
+
+      const imageUri = result.assets[0]?.uri;
+      if (!imageUri) {
+        toastManager.showError('خطأ في الاختيار', 'لم يتم اختيار صورة صالحة للغلاف');
+        return;
+      }
+
+      let finalUri = imageUri;
       try {
         toastManager.showInfo('جاري المعالجة', 'جاري ضغط صورة الغلاف...');
         const compressed = await compressImage(imageUri, {
