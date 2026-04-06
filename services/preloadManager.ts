@@ -185,8 +185,8 @@ class PreloadManagerClass {
     logger.debug('[PreloadManager] Priority 4: Preloading other screens in parallel...');
     await Promise.allSettled([
       this.preloadScreen('notifications'),
-      this.preloadScreen('matches'),
       this.preloadScreen('rankings'),
+      // matches excluded from periodic refresh - data is cached per date and refreshed on demand
     ]);
     
     logger.info('[PreloadManager] ✅ All screens preloaded successfully');

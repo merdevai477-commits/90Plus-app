@@ -35,6 +35,10 @@ const getMatchesCacheKey = (dateString: string): string => {
 // Memory cache for instant access
 const memoryCache = new Map<string, { data: Match[]; timestamp: number }>();
 
+// ✅ Throttle background refresh - track last background fetch per date
+const lastBackgroundFetch = new Map<string, number>();
+const BACKGROUND_REFRESH_THROTTLE = 2 * 60 * 1000; // 2 minutes minimum between background refreshes
+
 /**
  * Groups matches by league
  */
@@ -276,6 +280,14 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     isPastFlag: boolean
   ) => {
     if (isPastFlag) return;
+
+    // ✅ Throttle: skip if refreshed recently
+    const lastFetch = lastBackgroundFetch.get(dateStr) || 0;
+    if (Date.now() - lastFetch < BACKGROUND_REFRESH_THROTTLE) {
+      logger.debug(`[useMatchesData] Background refresh throttled for ${dateStr}`);
+      return;
+    }
+    lastBackgroundFetch.set(dateStr, Date.now());
 
     try {
       const date = new Date(dateStr);
