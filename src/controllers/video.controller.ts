@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabaseStorage } from '../services/supabase-storage.service';
+import { r2MediaStorage as supabaseStorage } from '../services/r2-media-storage.service';
 import prisma from '../lib/prisma';
 import { validateFileSize, validateMimeType } from '../middleware/file-validation.middleware';
 import { logger } from '../utils/logger';
