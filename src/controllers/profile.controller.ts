@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { r2MediaStorage } from '../services/r2-media-storage.service';
+import { supabaseStorage } from '../services/supabase-storage.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
@@ -148,10 +148,10 @@ export class ProfileController {
       }
 
       if (user.avatarStoragePath) {
-        await r2MediaStorage.deleteFile(user.avatarStoragePath);
+        await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
       }
 
-      const result = await r2MediaStorage.uploadFile(
+      const result = await supabaseStorage.uploadFile(
         'avatars',
         req.file.buffer,
         `${user.id}/${Date.now()}.${req.file.mimetype.split('/')[1]}`,
@@ -209,10 +209,10 @@ export class ProfileController {
       const currentSettings = (user.settings as Record<string, any>) || {};
 
       if (currentSettings.coverStoragePath) {
-        await r2MediaStorage.deleteFile(currentSettings.coverStoragePath);
+        await supabaseStorage.deleteFile('covers', currentSettings.coverStoragePath);
       }
 
-      const result = await r2MediaStorage.uploadFile(
+      const result = await supabaseStorage.uploadFile(
         'covers',
         req.file.buffer,
         `${user.id}/${Date.now()}.${req.file.mimetype.split('/')[1]}`,

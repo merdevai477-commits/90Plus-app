@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { r2MediaStorage as supabaseStorage } from '../services/r2-media-storage.service';
+import { supabaseStorage } from '../services/supabase-storage.service';
 import prisma from '../lib/prisma';
 import { validateFileSize, validateMimeType } from '../middleware/file-validation.middleware';
 import { logger } from '../utils/logger';
@@ -412,13 +412,10 @@ export class VideoController {
         // 3. Relative path: "user123/file.mp4"
         
         // The path stored in DB is the full R2 key: "reels/userId/file.mp4"
-        // Try the stored path directly first
-        videoDeleted = await supabaseStorage.deleteFile(reel.videoStoragePath);
+        videoDeleted = await supabaseStorage.deleteFile('reels', reel.videoStoragePath);
         
-        // If that failed, try with 'reels/' prefix (backward compatibility)
         if (!videoDeleted && !reel.videoStoragePath.startsWith('reels/')) {
-          logger.info(`Trying with reels/ prefix`);
-          videoDeleted = await supabaseStorage.deleteFile(`reels/${reel.videoStoragePath}`);
+          videoDeleted = await supabaseStorage.deleteFile('videos', reel.videoStoragePath);
         }
         
         if (!videoDeleted) {
@@ -430,7 +427,7 @@ export class VideoController {
       
       if (reel.thumbnailStoragePath) {
         logger.info(`Attempting to delete thumbnail: ${reel.thumbnailStoragePath}`);
-        thumbnailDeleted = await supabaseStorage.deleteFile(reel.thumbnailStoragePath);
+        thumbnailDeleted = await supabaseStorage.deleteFile('thumbnails', reel.thumbnailStoragePath);
         if (!thumbnailDeleted) {
           logger.warn(`Failed to delete thumbnail file: ${reel.thumbnailStoragePath}`);
         } else {

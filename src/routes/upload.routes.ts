@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
 import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
 import { validateUploadedImage, optimizeUploadedImage as optimizeImage } from '../middleware/image-moderation.middleware';
-import { r2MediaStorage as supabaseStorage } from '../services/r2-media-storage.service';
+import { supabaseStorage } from '../services/supabase-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
 import prisma from '../lib/prisma';
@@ -95,7 +95,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
 
         // Delete old avatar if exists
         if (user.avatarStoragePath) {
-            await supabaseStorage.deleteFile(user.avatarStoragePath);
+            await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
         }
 
         // Validate file buffer is not empty
@@ -218,7 +218,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
 
         // Delete old cover if exists
         if (user.coverStoragePath) {
-            await supabaseStorage.deleteFile(user.coverStoragePath);
+            await supabaseStorage.deleteFile('covers', user.coverStoragePath);
         }
 
         // Upload new cover
@@ -527,7 +527,7 @@ router.post(
         // Clean up uploaded files if database operation failed
         if (videoUploaded && videoResult && videoResult.success && videoResult.path) {
             try {
-                await supabaseStorage.deleteFile(videoResult.path);
+                await supabaseStorage.deleteFile('reels', videoResult.path);
                 logger.info(`Cleaned up uploaded video file: ${videoResult.path}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup video file ${videoResult.path}:`, cleanupError?.message || cleanupError);
@@ -536,7 +536,7 @@ router.post(
         
         if (thumbnailUploaded && thumbnailPath) {
             try {
-                await supabaseStorage.deleteFile(thumbnailPath);
+                await supabaseStorage.deleteFile('thumbnails', thumbnailPath);
                 logger.info(`Cleaned up uploaded thumbnail file: ${thumbnailPath}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup thumbnail file ${thumbnailPath}:`, cleanupError?.message || cleanupError);
