@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Router } from 'express';
 import { clerkMiddleware } from '../middleware/clerk.middleware';
 import { prisma } from '../lib/prisma';

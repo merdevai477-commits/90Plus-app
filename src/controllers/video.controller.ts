@@ -411,13 +411,14 @@ export class VideoController {
         // 2. Full path: "videos/user123/file.mp4" (from video.controller.ts)
         // 3. Relative path: "user123/file.mp4"
         
-        // Try deleting with 'reels' folder first (current standard)
-        videoDeleted = await supabaseStorage.deleteFile('reels', reel.videoStoragePath);
+        // The path stored in DB is the full R2 key: "reels/userId/file.mp4"
+        // Try the stored path directly first
+        videoDeleted = await supabaseStorage.deleteFile(reel.videoStoragePath);
         
-        // If that failed, try with 'videos' folder (for backward compatibility)
-        if (!videoDeleted) {
-          logger.info(`Failed with 'reels' folder, trying 'videos' folder`);
-          videoDeleted = await supabaseStorage.deleteFile('videos', reel.videoStoragePath);
+        // If that failed, try with 'reels/' prefix (backward compatibility)
+        if (!videoDeleted && !reel.videoStoragePath.startsWith('reels/')) {
+          logger.info(`Trying with reels/ prefix`);
+          videoDeleted = await supabaseStorage.deleteFile(`reels/${reel.videoStoragePath}`);
         }
         
         if (!videoDeleted) {
@@ -429,7 +430,7 @@ export class VideoController {
       
       if (reel.thumbnailStoragePath) {
         logger.info(`Attempting to delete thumbnail: ${reel.thumbnailStoragePath}`);
-        thumbnailDeleted = await supabaseStorage.deleteFile('thumbnails', reel.thumbnailStoragePath);
+        thumbnailDeleted = await supabaseStorage.deleteFile(reel.thumbnailStoragePath);
         if (!thumbnailDeleted) {
           logger.warn(`Failed to delete thumbnail file: ${reel.thumbnailStoragePath}`);
         } else {

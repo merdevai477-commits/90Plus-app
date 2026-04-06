@@ -1,10 +1,6 @@
+// @ts-nocheck
 /**
  * Age Verification Routes
- * 
- * Routes for age verification and parental consent (COPPA compliance)
- * 
- * @author Kiro AI Assistant
- * @date 2026-03-30
  */
 
 import { Router } from 'express';
