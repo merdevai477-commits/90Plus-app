@@ -538,13 +538,23 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
             return;
         }
 
+        // جلب اللغة من الـ request (ar أو en، افتراضي ar)
+        const lang: 'ar' | 'en' = req.body?.lang === 'en' ? 'en' : 'ar';
+
         // جلب أو إنشاء الكويز اليومي
         const dailyQuiz = await getOrCreateDailyQuiz();
         
-        // جلب الأسئلة من قاعدة البيانات
+        // جلب الأسئلة من قاعدة البيانات مع فلترة حسب اللغة
+        // الأسئلة العربية IDs تنتهي بـ -ar والإنجليزية بـ -en
+        const langSuffix = `-${lang}`;
+        const langFilteredIds = dailyQuiz.questionIds.filter(id => id.endsWith(langSuffix));
+        
+        // لو مفيش أسئلة بالـ suffix ده (أسئلة قديمة بدون lang)، استخدم كل الأسئلة
+        const questionIdsToFetch = langFilteredIds.length > 0 ? langFilteredIds : dailyQuiz.questionIds;
+
         const questions = await prisma.quizQuestion.findMany({
             where: {
-                id: { in: dailyQuiz.questionIds },
+                id: { in: questionIdsToFetch },
                 categoryId: dailyQuiz.categoryId,
             },
             select: {
@@ -558,7 +568,6 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
                 hint: true,
                 timeLimit: true,
                 categoryId: true,
-                // لا نرسل correctAnswer للفرونت إند
             },
             orderBy: {
                 createdAt: 'asc',
@@ -569,7 +578,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
         const displayModeResults = await prisma.$queryRaw<Array<{id: string, displayMode: string}>>`
             SELECT id, "displayMode"::text as "displayMode" 
             FROM quiz_questions 
-            WHERE id = ANY(${dailyQuiz.questionIds})
+            WHERE id = ANY(${questionIdsToFetch})
         `;
 
         // تحويل إلى map للوصول السريع
@@ -581,7 +590,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
         );
 
         // ترتيب الأسئلة حسب questionIds في dailyQuiz (للحفاظ على الترتيب العشوائي)
-        const orderedQuestions = dailyQuiz.questionIds.map(id => {
+        const orderedQuestions = questionIdsToFetch.map(id => {
             const question = questions.find((q: any) => q.id === id);
             if (!question) return null;
             
@@ -595,6 +604,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
             dailyQuizId: dailyQuiz.id,
             categoryId: dailyQuiz.categoryId,
             questionCount: orderedQuestions.length,
+            lang,
             expiresAt: dailyQuiz.expiresAt.toISOString(),
         });
 
