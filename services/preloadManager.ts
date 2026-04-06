@@ -18,7 +18,7 @@
  * - 19.4: Continue preloading reels in the background
  */
 
-import { cacheService, CACHE_KEYS, CACHE_TTL } from './cacheService';
+import { cacheService, CACHE_KEYS, CACHE_TTL, getUserCacheKey } from './cacheService';
 import { 
   AuthService, 
   FollowService, 
@@ -282,6 +282,7 @@ class PreloadManagerClass {
         
         const profileData = {
           userData: {
+            id: userResult.id,
             displayName: userResult.displayName || userResult.username,
             username: userResult.username,
             bio: userResult.bio || '',
@@ -290,15 +291,20 @@ class PreloadManagerClass {
             isVerified: userResult.isVerified || false,
             isDeveloper: userResult.isDeveloper || false,
             favoriteTeam: userResult.favoriteTeam || '',
-            location: 'مصر',
+            location: (userResult as any).country || 'مصر',
             lastUsernameChange: userResult.lastUsernameChange ? new Date(userResult.lastUsernameChange) : null,
             socials: {},
+            socialLinks: (userResult as any).socialLinks || undefined,
             position: userResult.position,
             countryFlag: userResult.countryFlag,
             age: userResult.age,
             height: userResult.height,
             weight: userResult.weight,
             preferredFoot: userResult.preferredFoot,
+            clubLogo: (userResult as any).clubLogo || undefined,
+            brandLogo: (userResult as any).brandLogo || undefined,
+            coverImage: (userResult as any).coverImage || undefined,
+            consecutiveLoginDays: (userResult as any).consecutiveLoginDays || 0,
           },
           followStats: statsResult,
           videos: reels.map(r => ({
@@ -311,12 +317,14 @@ class PreloadManagerClass {
             duration: '0:00',
             createdAt: new Date(r.createdAt),
           })),
-          analytics: null, // Will be loaded separately if needed
-          cooldowns: null, // Will be loaded separately if needed
+          analytics: null,
+          cooldowns: null,
         };
 
-        await cacheService.set(PRELOAD_CACHE_KEYS.profile, profileData, CACHE_TTL.PROFILE);
-        logger.debug('[PreloadManager] Profile data preloaded successfully');
+        // ✅ Save with user-specific key (clerkUserId) so useProfileCache can find it directly
+        const userSpecificKey = getUserCacheKey(CACHE_KEYS.PROFILE_DATA, userResult.clerkUserId);
+        await cacheService.set(userSpecificKey, profileData, CACHE_TTL.PROFILE);
+        logger.debug('[PreloadManager] ✅ Profile preloaded with key:', userSpecificKey);
       }
     } catch (error: any) {
       logger.error('[PreloadManager] Failed to preload profile:', error);
