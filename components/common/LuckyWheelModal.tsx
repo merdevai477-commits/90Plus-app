@@ -139,7 +139,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     // بدء الدوران فوراً مع الجائزة المبدئية
     const startSpin = (prizeIndex: number) => {
       const targetAngle = 360 - (prizeIndex * segmentAngle) - (segmentAngle / 2);
-      const totalRotation = 360 * 3 + targetAngle; // 3 دورات كاملة كما طلب المستخدم
+      const totalRotation = 360 * 5 + targetAngle; // 5 دورات كاملة
 
       // إعادة تعيين الـ animation إلى الصفر قبل البدء
       spinAnim.setValue(0);
@@ -385,13 +385,11 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     );
   };
 
-  // Interpolation يدعم أي قيمة للدوران (حتى 3 دورات كاملة + زاوية إضافية)
-  // totalRotation = 360 * 3 + targetAngle (حيث targetAngle يمكن أن يكون حتى 360)
-  // إذن الحد الأقصى = 1080 + 360 = 1440
+  // Interpolation - يدعم أي قيمة للدوران بدون حد أقصى
   const spinRotation = spinAnim.interpolate({
-    inputRange: [0, 1440], // يدعم حتى 3 دورات كاملة + زاوية إضافية
-    outputRange: ['0deg', '1440deg'],
-    extrapolate: 'clamp', // منع القيم خارج النطاق
+    inputRange: [0, 360],
+    outputRange: ['0deg', '360deg'],
+    extrapolate: 'extend', // يسمح بالدوران بدون حد
   });
 
   const glowOpacity = glowAnim.interpolate({
@@ -614,7 +612,7 @@ const styles = StyleSheet.create({
   },
   pointerContainer: {
     position: 'absolute',
-    top: WHEEL_SIZE / 2 - 35,
+    top: 0,
     alignItems: 'center',
     zIndex: 10,
   },
