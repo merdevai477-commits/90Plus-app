@@ -46,7 +46,9 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
 
     const renderClubItem = ({ item }: { item: TopClub }) => {
         const isSelected = selectedClubId === item.id || selectedClubId === item.apiId;
-        const isUrl = item.logo && (item.logo.startsWith('http') || item.logo.startsWith('/'));
+        // ✅ Apple compliance: always show emoji, never real club logos (trademark issue)
+        const isEmoji = !item.logo?.startsWith('http') && !item.logo?.startsWith('/');
+        const displayLogo = isEmoji ? item.logo : null; // ignore real URLs
 
         return (
             <TouchableOpacity
@@ -59,15 +61,12 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                     onClose();
                 }}
             >
-                {isUrl ? (
-                    <Image
-                        source={{ uri: item.logo }}
-                        style={styles.logo}
-                        contentFit="contain"
-                        transition={200}
-                    />
+                {displayLogo ? (
+                    <Text style={styles.logoEmoji}>{displayLogo}</Text>
                 ) : (
-                    <Text style={styles.logoEmoji}>{item.logo}</Text>
+                    <View style={styles.logoFallback}>
+                        <Text style={styles.logoFallbackText}>{item.name.charAt(0)}</Text>
+                    </View>
                 )}
                 <Text style={styles.itemName} numberOfLines={2}>{item.nameAr}</Text>
                 <Text style={styles.leagueName} numberOfLines={1}>{getLeagueDisplayName(item.league)}</Text>
