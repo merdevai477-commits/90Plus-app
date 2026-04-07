@@ -464,7 +464,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
                 end={{ x: 1, y: 1 }}
               >
                 <Text style={styles.spinButtonText}>
-                  {isSpinning ? 'جاري اللف...' : 'لف العجلة!'}
+                  {isSpinning ? (t.luckyWheel?.spinning || 'جاري اللف...') : (t.luckyWheel?.spin ? t.luckyWheel.spin + ' العجلة!' : 'لف العجلة!')}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -480,7 +480,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
                 end={{ x: 1, y: 1 }}
               >
                 <Lock size={20} color="#888" />
-                <Text style={styles.lockedButtonText}>مقفولة</Text>
+                <Text style={styles.lockedButtonText}>{t.luckyWheel?.locked || 'مقفولة'}</Text>
               </LinearGradient>
             </View>
             
@@ -507,12 +507,12 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
               style={styles.resultContainer}
             >
               <Text style={styles.resultEmoji}>🎉</Text>
-              <Text style={styles.resultTitle}>مبروك!</Text>
+              <Text style={styles.resultTitle}>{t.luckyWheel?.congratulations || 'مبروك!'}</Text>
               <View style={styles.resultCoins}>
                 <Coins size={36} color="#ffd700" />
                 <Text style={styles.resultCoinsText}>+{wonPrize.coins}</Text>
               </View>
-              <Text style={styles.resultSubtext}>كسبت {wonPrize.coins} كوينز!</Text>
+              <Text style={styles.resultSubtext}>{t.luckyWheel?.youWon || 'كسبت'} {wonPrize.coins} {t.luckyWheel?.coins || 'كوينز'}!</Text>
               
               <TouchableOpacity 
                 onPress={() => { setShowResult(false); onClose(); }} 
@@ -522,7 +522,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
                   colors={['#22c55e', '#16a34a']}
                   style={styles.resultButtonGradient}
                 >
-                  <Text style={styles.resultButtonText}>رائع!</Text>
+                  <Text style={styles.resultButtonText}>{t.luckyWheel?.great || 'رائع!'}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </LinearGradient>

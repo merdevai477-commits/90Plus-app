@@ -106,6 +106,8 @@ export const ar = {
       noChanges: 'لا توجد تغييرات',
       videoSelected: 'تم اختيار الفيديو',
       refreshing: 'جاري التحديث',
+      uploadingInBackground: 'جاري الرفع في الخلفية',
+      processingRequest: 'جاري معالجة الطلب',
     }
   },
 
@@ -483,18 +485,19 @@ export const ar = {
     loading: 'جاري التحميل...',
   },
 
-  // Lucky Wheel
   luckyWheel: {
     title: 'عجلة الحظ اليومية',
     spinning: 'جاري اللف...',
     spin: 'لف',
-    youWon: 'لقد ربحت!',
-    coins: 'عملات',
+    locked: 'مقفولة',
+    youWon: 'كسبت',
+    coins: 'كوينز',
     congratulations: 'مبروك!',
     tryAgainTomorrow: 'حاول مرة أخرى غداً',
     availableIn: 'متاحة بعد',
     hours: 'ساعات',
     minutes: 'دقائق',
+    great: 'رائع!',
   },
 
   // Notifications Screen

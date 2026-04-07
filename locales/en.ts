@@ -453,14 +453,16 @@ export const en = {
   luckyWheel: {
     title: 'Daily Lucky Wheel',
     spinning: 'Spinning...',
-    spin: 'SPIN',
-    youWon: 'You Won!',
+    spin: 'Spin',
+    locked: 'Locked',
+    youWon: 'You won',
     coins: 'Coins',
     congratulations: 'Congratulations!',
     tryAgainTomorrow: 'Try again tomorrow',
     availableIn: 'Available in',
     hours: 'hours',
     minutes: 'minutes',
+    great: 'Awesome!',
   },
 
   // Notifications Screen
