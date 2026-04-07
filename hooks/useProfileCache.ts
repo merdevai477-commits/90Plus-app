@@ -159,7 +159,8 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
    */
   const loadFromCache = useCallback(async (): Promise<boolean> => {
     try {
-      const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+      // ✅ allowStale: true - show expired cache rather than nothing
+      const cachedData = await cacheService.get<ProfileCacheData>(cacheKey, true);
       
       if (cachedData) {
         // Validate cached data - ensure userData exists and has required fields
@@ -387,7 +388,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         console.error('[useProfileCache] ❌ No user data received from backend');
         
         // ✅ FIX: Check if we have cached data to show - ALWAYS prefer cache over error screen
-        const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+        const cachedData = await cacheService.get<ProfileCacheData>(cacheKey, true); // allowStale
         if (cachedData && cachedData.userData) {
           logger.info('[useProfileCache] ✅ Using cached data as fallback');
           setUserData(cachedData.userData);
@@ -435,7 +436,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       
       // ✅ FIX: Try to show cached data if available
       try {
-        const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+        const cachedData = await cacheService.get<ProfileCacheData>(cacheKey, true); // allowStale
         if (cachedData && cachedData.userData) {
           logger.info('[useProfileCache] ✅ Using cached data after error');
           setUserData(cachedData.userData);
@@ -488,7 +489,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       // ✅ CRITICAL FIX: If fetch fails, try to show cached data
       if (!userData) {
         try {
-          const cachedData = await cacheService.get<ProfileCacheData>(cacheKey);
+          const cachedData = await cacheService.get<ProfileCacheData>(cacheKey, true); // allowStale
           if (cachedData && cachedData.userData) {
             logger.info('[useProfileCache] ✅ Showing cached data after fetch error');
             setUserData(cachedData.userData);

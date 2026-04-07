@@ -1120,8 +1120,8 @@ export default function ProfileScreen() {
     );
   }
 
-  // CRITICAL FIX: Show error state with retry button if data failed to load
-  // Only show error if we have an explicit error AND no data - not just because loading finished
+  // CRITICAL FIX: Show error state ONLY if no data at all (not even stale cache)
+  // If we have cacheError but userData exists (stale), show the profile normally
   if (!userData && cacheError && !isLoading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
