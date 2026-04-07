@@ -206,6 +206,32 @@ export const requireAuth = async (
                 return;
             }
 
+            // ✅ APPLE COMPLIANCE: Check if user is banned (Guideline 1.2)
+            try {
+                const prisma = (await import('../lib/prisma')).default;
+                const user = await prisma.user.findUnique({
+                    where: { clerkUserId: verifiedToken.sub },
+                    select: { isBanned: true, banReason: true },
+                });
+
+                if (user?.isBanned) {
+                    logger.warn('requireAuth middleware - User is banned', {
+                        userId: verifiedToken.sub,
+                        path: req.path,
+                    });
+                    res.status(403).json({
+                        status: 'ERROR',
+                        message: 'Your account has been suspended for violating community guidelines.',
+                        code: 'ACCOUNT_BANNED',
+                        reason: user.banReason || 'Violation of community guidelines',
+                    });
+                    return;
+                }
+            } catch (dbError: any) {
+                logger.error('Error checking banned status:', dbError);
+                // Continue if DB check fails - don't block legitimate users
+            }
+
             // Attach user info to request
             req.auth = {
                 userId: verifiedToken.sub,

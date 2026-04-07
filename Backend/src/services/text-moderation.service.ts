@@ -7,15 +7,24 @@ import { logger } from '../utils/logger';
 
 // Bad words lists (Arabic + English)
 const ARABIC_BAD_WORDS = [
+    // Egyptian Arabic
     'كلب', 'حمار', 'غبي', 'احمق', 'خنزير', 'قذر', 'وسخ', 'عاهر', 'شرموط',
     'كس', 'زب', 'عرص', 'متناك', 'ابن الكلب', 'ابن الشرموطة', 'يا كلب',
-    'يا حمار', 'يا غبي', 'يا احمق', 'لعنة', 'تفو', 'قرف', 'حقير'
+    'يا حمار', 'يا غبي', 'يا احمق', 'لعنة', 'تفو', 'قرف', 'حقير',
+    // Egyptian specific
+    'خول', 'لوطي', 'نيك', 'منيوك', 'قحبة', 'زانية', 'فاجرة', 'وضيع',
+    'يبن الشرموطة', 'كس امك', 'ابن الزانية', 'نجس', 'خسيس', 'ذليل', 'بهيم',
+    // Gulf Arabic
+    'يلعن', 'ملعون', 'يخرب', 'حيوان', 'تبًا',
+    // Levantine
+    'يلعن دينك', 'يلعن ابوك', 'مجنون', 'حيوان',
 ];
 
 const ENGLISH_BAD_WORDS = [
     'fuck', 'shit', 'bitch', 'ass', 'asshole', 'bastard', 'damn', 'hell',
     'dick', 'cock', 'pussy', 'cunt', 'whore', 'slut', 'fag', 'nigger',
-    'retard', 'idiot', 'stupid', 'dumb', 'moron', 'piss', 'crap'
+    'retard', 'idiot', 'stupid', 'dumb', 'moron', 'piss', 'crap',
+    'motherfucker', 'mf', 'stfu', 'gtfo', 'kys', 'wtf',
 ];
 
 // Common bypass tricks patterns

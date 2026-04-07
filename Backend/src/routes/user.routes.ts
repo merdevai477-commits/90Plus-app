@@ -404,3 +404,65 @@ router.post('/report/:userId', requireAuth, validate({
 
 export default router;
 
+
+/**
+ * GET /api/users/:username
+ * Get user by username (public)
+ */
+router.get('/:username', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { username } = req.params;
+        const usernameStr = ensureString(username);
+        
+        const user = await prisma.user.findUnique({
+            where: { username: usernameStr },
+            select: {
+                id: true,
+                username: true,
+                displayName: true,
+                email: true,
+                avatar: true,
+                bio: true,
+                isVerified: true,
+                isDeveloper: true,
+                coins: true,
+                level: true,
+                xp: true,
+                createdAt: true,
+                _count: {
+                    select: {
+                        reels: true,
+                        followers: true,
+                        following: true,
+                    }
+                }
+            }
+        });
+        
+        if (!user) {
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'User not found'
+            });
+            return;
+        }
+        
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                user: {
+                    ...user,
+                    reelsCount: user._count.reels,
+                    followersCount: user._count.followers,
+                    followingCount: user._count.following,
+                }
+            }
+        });
+    } catch (error: any) {
+        logger.error('Get user by username error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message
+        });
+    }
+});

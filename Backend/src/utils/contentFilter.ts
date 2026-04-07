@@ -9,12 +9,26 @@ const Filter = require('bad-words');
 
 const filter = new Filter();
 
-// Add Arabic profanity words (basic list - expand as needed)
+// Add Arabic profanity words - Egyptian, Gulf, Levantine dialects + English
 const arabicBadWords = [
-  'كلب', 'حمار', 'غبي', 'احمق', 'وسخ'
+  // Egyptian Arabic
+  'كلب', 'حمار', 'غبي', 'احمق', 'وسخ', 'شرموط', 'عاهر', 'متناك',
+  'ابن الكلب', 'ابن الشرموطة', 'كس', 'زب', 'عرص', 'خول', 'لوطي',
+  'يلعن', 'نيك', 'منيوك', 'قحبة', 'زانية', 'فاجرة', 'حقير', 'وضيع',
+  // Gulf Arabic
+  'خنزير', 'قذر', 'تبًا', 'ملعون', 'يخرب', 'حيوان', 'كلب ابن كلب',
+  // Levantine
+  'يبن الشرموطة', 'كس امك', 'ابن الزانية', 'يلعن دينك', 'يلعن ابوك',
+  // Common insults
+  'تفو', 'قرف', 'نجس', 'خسيس', 'ذليل', 'مجنون', 'بهيم',
 ];
 
-filter.addWords(...arabicBadWords);
+// English bad words (common ones not covered by bad-words package)
+const extraEnglishBadWords = [
+  'motherfucker', 'mf', 'stfu', 'gtfo', 'kys',
+];
+
+filter.addWords(...arabicBadWords, ...extraEnglishBadWords);
 
 export interface FilterResult {
   clean: string;

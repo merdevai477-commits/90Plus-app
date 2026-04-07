@@ -252,3 +252,13 @@ router.get('/fixtures/rounds', FootballController.getLeagueRounds);
 
 export default router;
 
+
+// ============================================
+// GET /api/football/standings/:leagueId
+// Get standings for a league (path parameter version)
+// ============================================
+router.get('/standings/:leagueId', async (req, res) => {
+    // Forward to main standings endpoint with query params
+    req.query.league = req.params.leagueId;
+    return FootballController.getStandings(req, res);
+});

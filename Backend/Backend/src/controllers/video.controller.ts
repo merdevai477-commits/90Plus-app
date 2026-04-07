@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabaseStorage } from '../services/r2-storage.service';
+import { r2MediaStorage } from '../services/r2-media-storage.service';
 import prisma from '../lib/prisma';
 import { validateFileSize, validateMimeType } from '../middleware/file-validation.middleware';
 import { logger } from '../utils/logger';
@@ -261,8 +261,8 @@ export class VideoController {
       const { caption } = req.body;
       const timestamp = Date.now();
 
-      // Upload video to Supabase
-      const videoResult = await supabaseStorage.uploadFile(
+      // Upload video to R2
+      const videoResult = await r2MediaStorage.uploadFile(
         'videos',
         videoFile.buffer,
         `${user.id}/${timestamp}.${videoFile.mimetype.split('/')[1]}`,
@@ -279,7 +279,7 @@ export class VideoController {
       let thumbnailPath = null;
 
       if (thumbnailFile) {
-        const thumbResult = await supabaseStorage.uploadFile(
+        const thumbResult = await r2MediaStorage.uploadFile(
           'thumbnails',
           thumbnailFile.buffer,
           `${user.id}/${timestamp}_thumb.${thumbnailFile.mimetype.split('/')[1]}`,
@@ -406,22 +406,12 @@ export class VideoController {
       if (reel.videoStoragePath) {
         logger.info(`Attempting to delete video: ${reel.videoStoragePath}`);
         
-        // The path stored in DB might be:
-        // 1. Full path: "reels/user123/file.mp4" (from upload.routes.ts)
-        // 2. Full path: "videos/user123/file.mp4" (from video.controller.ts)
-        // 3. Relative path: "user123/file.mp4"
-        
-        // Try deleting with 'reels' folder first (current standard)
-        videoDeleted = await supabaseStorage.deleteFile('reels', reel.videoStoragePath);
-        
-        // If that failed, try with 'videos' folder (for backward compatibility)
-        if (!videoDeleted) {
-          logger.info(`Failed with 'reels' folder, trying 'videos' folder`);
-          videoDeleted = await supabaseStorage.deleteFile('videos', reel.videoStoragePath);
-        }
+        // The path stored in DB is the full R2 key (e.g. "reels/user123/file.mp4")
+        // r2MediaStorage.deleteFile takes the full key directly
+        videoDeleted = await r2MediaStorage.deleteFile(reel.videoStoragePath);
         
         if (!videoDeleted) {
-          logger.warn(`Failed to delete video file after trying both folders: ${reel.videoStoragePath}`);
+          logger.warn(`Failed to delete video file: ${reel.videoStoragePath}`);
         } else {
           logger.info(`Successfully deleted video file: ${reel.videoStoragePath}`);
         }
@@ -429,7 +419,7 @@ export class VideoController {
       
       if (reel.thumbnailStoragePath) {
         logger.info(`Attempting to delete thumbnail: ${reel.thumbnailStoragePath}`);
-        thumbnailDeleted = await supabaseStorage.deleteFile('thumbnails', reel.thumbnailStoragePath);
+        thumbnailDeleted = await r2MediaStorage.deleteFile(reel.thumbnailStoragePath);
         if (!thumbnailDeleted) {
           logger.warn(`Failed to delete thumbnail file: ${reel.thumbnailStoragePath}`);
         } else {

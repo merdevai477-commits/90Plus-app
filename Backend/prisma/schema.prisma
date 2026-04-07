@@ -163,6 +163,15 @@ model User {
   consentLogs             ConsentLog[]             @relation("UserConsentLogs")
   gdprAuditLogs           GDPRAuditLog[]           @relation("UserGDPRAuditLogs")
 
+  // Content Moderation
+  bannedWordsCreated  BannedWord[]      @relation("BannedWordCreator")
+  moderationLogs      ModerationLog[]   @relation("ModerationLogUser")
+  moderationReviews   ModerationLog[]   @relation("ModerationLogReviewer")
+  warnings            UserWarning[]     @relation("UserWarnings")
+  warningsIssued      UserWarning[]     @relation("WarningIssuer")
+  bans                UserBan[]         @relation("UserBans")
+  bansIssued          UserBan[]         @relation("BanIssuer")
+
   @@index([email])
   @@index([username])
   @@index([level])
@@ -1578,4 +1587,115 @@ enum GDPRAction {
   ACCOUNT_DELETION
   CONSENT_CHANGE
   DATA_ACCESS
+}
+
+// ============================================
+// CONTENT MODERATION SYSTEM
+// ============================================
+
+model BannedWord {
+  id        String   @id @default(uuid())
+  word      String   @unique
+  language  String   // 'ar' or 'en'
+  severity  WordSeverity @default(MEDIUM)
+  category  String?  // 'profanity', 'spam', 'offensive', etc.
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?  // Admin user ID who added this word
+
+  creator User? @relation("BannedWordCreator", fields: [createdBy], references: [id])
+
+  @@index([word])
+  @@index([language])
+  @@index([isActive])
+  @@map("banned_words")
+}
+
+model ModerationLog {
+  id          String   @id @default(uuid())
+  userId      String?  // User who triggered moderation
+  contentType String   // 'comment', 'reel', 'bio', 'username'
+  contentId   String?  // ID of the content
+  action      ModerationAction
+  reason      String   @db.Text
+  detectedWords String[] @default([])
+  severity    String   // 'low', 'medium', 'high'
+  isAutomatic Boolean  @default(true)
+  reviewedBy  String?  // Admin who reviewed (if manual)
+  reviewedAt  DateTime?
+  metadata    Json?    // Additional context
+  createdAt   DateTime @default(now())
+
+  user     User? @relation("ModerationLogUser", fields: [userId], references: [id])
+  reviewer User? @relation("ModerationLogReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([userId])
+  @@index([contentType])
+  @@index([action])
+  @@index([createdAt])
+  @@index([severity])
+  @@map("moderation_logs")
+}
+
+model UserWarning {
+  id        String   @id @default(uuid())
+  userId    String
+  reason    String   @db.Text
+  severity  WarningSeverity @default(MEDIUM)
+  issuedBy  String?  // Admin user ID
+  expiresAt DateTime?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user   User  @relation("UserWarnings", fields: [userId], references: [id], onDelete: Cascade)
+  issuer User? @relation("WarningIssuer", fields: [issuedBy], references: [id])
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("user_warnings")
+}
+
+model UserBan {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  reason    String   @db.Text
+  bannedBy  String?  // Admin user ID
+  bannedAt  DateTime @default(now())
+  expiresAt DateTime? // Null = permanent ban
+  isActive  Boolean  @default(true)
+
+  user   User  @relation("UserBans", fields: [userId], references: [id], onDelete: Cascade)
+  banner User? @relation("BanIssuer", fields: [bannedBy], references: [id])
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([bannedAt])
+  @@map("user_bans")
+}
+
+enum WordSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ModerationAction {
+  BLOCKED
+  CENSORED
+  FLAGGED
+  APPROVED
+  REMOVED
+  WARNING_ISSUED
+  USER_SUSPENDED
+  USER_BANNED
+}
+
+enum WarningSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }

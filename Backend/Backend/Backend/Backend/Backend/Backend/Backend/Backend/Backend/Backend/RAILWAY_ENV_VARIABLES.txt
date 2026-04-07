@@ -1,0 +1,95 @@
+# ========================================
+# Railway Environment Variables
+# نسخ والصق في Railway Dashboard → Variables → Raw Editor
+# ========================================
+
+# ⚠️ IMPORTANT: Replace values with your actual credentials
+# ⚠️ مهم: استبدل القيم بالبيانات الحقيقية الخاصة بك
+
+# ========================================
+# 1. DATABASE (سيتم ملؤها تلقائياً من PostgreSQL)
+# ========================================
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+
+# ========================================
+# 2. REDIS (Upstash) - REQUIRED ✅
+# ========================================
+REDIS_URL=rediss://default:AVLHAAIncDE5NjNkOThjMDdlNGY0NzI4YjA5OGZkZDcyODBjZDgzMHAxMjExOTE@firm-haddock-21191.upstash.io:6379
+UPSTASH_REDIS_REST_URL=https://firm-haddock-21191.upstash.io
+UPSTASH_REDIS_REST_TOKEN=AVLHAAIncDE5NjNkOThjMDdlNGY0NzI4YjA5OGZkZDcyODBjZDgzMHAxMjExOTE
+
+# ========================================
+# 3. CLERK AUTHENTICATION - REQUIRED ✅
+# ========================================
+CLERK_PUBLISHABLE_KEY=pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA
+CLERK_SECRET_KEY=sk_test_C91Stzsrdq7UXj9JFBrGcughjFONN6f8ioJEsxMIHJ
+
+# ========================================
+# 4. CLOUDFLARE R2 STORAGE - REQUIRED ✅
+# ========================================
+R2_ACCOUNT_ID=a93ccd793b50317cd2bcb3619abcb4ae
+R2_ACCESS_KEY_ID=b6c7e95c458929d3e576781a3115f53b
+R2_SECRET_ACCESS_KEY=ecd33caea1eaf95ac1cebafa0f089b315524691eb0284aae32eef1f1b47999f3
+R2_BUCKET_NAME=90plus-storage
+R2_PUBLIC_URL=https://pub-fd3cd2a4816949db809676f6b71c90f2.r2.dev
+
+# ========================================
+# 5. FOOTBALL APIs - REQUIRED ✅
+# ========================================
+FOOTBALL_API_KEY=dc557fd38cc77deea623e6d83b5baf9c
+SPORTMONKS_API_KEY=d06b124b9252ef31dd3863af61876b20
+
+# ========================================
+# 6. CLOUDINARY (Images) - OPTIONAL
+# ========================================
+CLOUDINARY_CLOUD_NAME=da0sdvzkj
+CLOUDINARY_API_KEY=431645398288352
+CLOUDINARY_API_SECRET=wwhyFzB8zbzCq5cAgY-dQbyrwxI
+
+# ========================================
+# 7. EMAIL (SMTP) - OPTIONAL
+# ========================================
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=resend
+SMTP_PASS=re_T7JwjiHU_HTtYzjieN4T9pSuzKUsZEsdM
+
+# ========================================
+# 8. APP CONFIGURATION - REQUIRED ✅
+# ========================================
+NODE_ENV=production
+PORT=3000
+API_PREFIX=/api
+
+# ========================================
+# 9. FRONTEND URLs - UPDATE AFTER DEPLOYMENT ⚠️
+# ========================================
+FRONTEND_URL=exp://your-expo-url
+MOBILE_FRONTEND_URL=footballproapp://
+CORS_ORIGIN=*
+
+# ========================================
+# 10. FILE SIZE LIMITS
+# ========================================
+MAX_AVATAR_SIZE=5242880
+MAX_REEL_SIZE=104857600
+MAX_THUMBNAIL_SIZE=2097152
+
+# ========================================
+# 11. JWT (Legacy/Backup)
+# ========================================
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_EXPIRES_IN=15m
+REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-key-change-this-in-production
+REFRESH_TOKEN_EXPIRES_IN=7d
+
+# ========================================
+# 12. GOOGLE OAUTH (Optional)
+# ========================================
+GOOGLE_CLIENT_ID=671939961568-0c4vu9gtiqmcjnu3hlb6pnaueffccpfk.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=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
+GOOGLE_CALLBACK_URL=https://your-railway-url.railway.app/api/auth/google/callback
+OAUTH_SUCCESS_REDIRECT=auth/success
+OAUTH_ERROR_REDIRECT=auth/error
+ALLOW_AUTO_VERIFY=true

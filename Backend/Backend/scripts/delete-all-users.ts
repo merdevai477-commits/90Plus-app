@@ -1,62 +1,69 @@
 /**
- * Delete All Users Script
+ * Delete ALL users and their data from the database
+ * ⚠️ DESTRUCTIVE - Cannot be undone
  * 
- * This script deletes all user accounts from the database.
- * WARNING: This is a destructive operation and cannot be undone.
- * 
- * Usage:
- *   npm run delete-all-users
- *   or
- *   ts-node scripts/delete-all-users.ts
+ * Run: npx ts-node scripts/delete-all-users.ts
  */
 
-import prisma from '../src/lib/prisma';
-import { logger } from '../src/utils/logger';
+import { PrismaClient } from '@prisma/client';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+const prisma = new PrismaClient();
 
 async function deleteAllUsers() {
-    try {
-        logger.info('🗑️  Starting deletion of all users...');
+  console.log('⚠️  Starting complete database cleanup...\n');
 
-        // Count users before deletion
-        const userCount = await prisma.user.count();
-        logger.info(`📊 Found ${userCount} users in database`);
+  try {
+    // Delete in order to respect foreign key constraints
+    const steps = [
+      { name: 'ReelViews',          fn: () => prisma.reelView.deleteMany() },
+      { name: 'CommentLikes',       fn: () => prisma.commentLike.deleteMany() },
+      { name: 'Comments',           fn: () => prisma.comment.deleteMany() },
+      { name: 'Likes',              fn: () => prisma.like.deleteMany() },
+      { name: 'SavedReels',         fn: () => prisma.savedReel.deleteMany() },
+      { name: 'ReelMentions',       fn: () => prisma.reelMention.deleteMany() },
+      { name: 'ReelHashtags',       fn: () => prisma.reelHashtag.deleteMany() },
+      { name: 'Reels',              fn: () => prisma.reel.deleteMany() },
+      { name: 'Hashtags',           fn: () => prisma.hashtag.deleteMany() },
+      { name: 'Predictions',        fn: () => prisma.prediction.deleteMany() },
+      { name: 'QuizAttempts',       fn: () => prisma.quizAttempt.deleteMany() },
+      { name: 'CoinTransactions',   fn: () => prisma.coinTransaction.deleteMany() },
+      { name: 'Notifications',      fn: () => prisma.notification.deleteMany() },
+      { name: 'Reports',            fn: () => prisma.report.deleteMany() },
+      { name: 'Follows',            fn: () => prisma.follow.deleteMany() },
+      { name: 'UserAchievements',   fn: () => prisma.userAchievement.deleteMany() },
+      { name: 'Strikes',            fn: () => (prisma as any).strike?.deleteMany() },
+      { name: 'RefreshTokens',      fn: () => (prisma as any).refreshTokens?.deleteMany() },
+      { name: 'Sessions',           fn: () => (prisma as any).session?.deleteMany() },
+      { name: 'Users',              fn: () => prisma.user.deleteMany() },
+    ];
 
-        if (userCount === 0) {
-            logger.info('✅ No users to delete');
-            await prisma.$disconnect();
-            return;
-        }
-
-        // Delete all users (cascade will handle related data)
-        const result = await prisma.user.deleteMany({});
-
-        logger.info(`✅ Successfully deleted ${result.count} users`);
-
-        // Verify deletion
-        const remainingCount = await prisma.user.count();
-        if (remainingCount === 0) {
-            logger.info('✅ All users deleted successfully');
+    for (const step of steps) {
+      try {
+        const result = await step.fn();
+        console.log(`✅ Deleted ${(result as any)?.count ?? '?'} ${step.name}`);
+      } catch (err: any) {
+        // Skip if table doesn't exist
+        if (err.code === 'P2021' || err.message?.includes('does not exist')) {
+          console.log(`⏭️  Skipped ${step.name} (table not found)`);
         } else {
-            logger.warn(`⚠️  Warning: ${remainingCount} users still remain in database`);
+          console.warn(`⚠️  ${step.name}: ${err.message}`);
         }
-
-        await prisma.$disconnect();
-        logger.info('✅ Database connection closed');
-    } catch (error: any) {
-        logger.error('❌ Error deleting users:', error);
-        await prisma.$disconnect();
-        process.exit(1);
+      }
     }
+
+    console.log('\n✅ Database cleanup complete!');
+    console.log('\n📋 Next step: Delete users from Clerk Dashboard');
+    console.log('   → https://dashboard.clerk.com → Users → Select All → Delete');
+
+  } catch (error) {
+    console.error('❌ Error during cleanup:', error);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-// Run the script
-deleteAllUsers()
-    .then(() => {
-        logger.info('✅ Script completed successfully');
-        process.exit(0);
-    })
-    .catch((error) => {
-        logger.error('❌ Script failed:', error);
-        process.exit(1);
-    });
-
+deleteAllUsers();

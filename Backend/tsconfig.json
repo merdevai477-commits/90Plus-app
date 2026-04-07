@@ -51,6 +51,13 @@
     ],
     "exclude": [
         "node_modules",
-        "dist"
+        "dist",
+        "test-*.ts",
+        "*.test.ts",
+        "check-*.ts",
+        "create-*.ts",
+        "reset-*.ts",
+        "seed-*.ts",
+        "verify-*.ts"
     ]
 }

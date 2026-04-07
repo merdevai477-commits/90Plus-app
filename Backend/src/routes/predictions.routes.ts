@@ -425,7 +425,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
  * POST /api/predictions/resolve/:matchId
  * Manually resolve predictions for a match (admin/debug)
  */
-router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<void> => {
+router.post('/resolve/:matchId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         // Ensure matchId is a string (handle array case)
         const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -450,7 +450,7 @@ router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<vo
  * POST /api/predictions/resolve-all
  * Trigger resolution check for all unresolved predictions (admin/debug)
  */
-router.post('/resolve-all', async (req: Request, res: Response): Promise<void> => {
+router.post('/resolve-all', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         // Import the service dynamically to avoid circular dependency
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');
@@ -489,7 +489,7 @@ router.post('/resolve-all', async (req: Request, res: Response): Promise<void> =
  * GET /api/predictions/unresolved
  * Get list of unresolved predictions (admin/debug)
  */
-router.get('/unresolved', async (req: Request, res: Response): Promise<void> => {
+router.get('/unresolved', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const unresolvedPredictions = await (prisma as any).prediction.findMany({
             where: { isCorrect: null },
@@ -667,11 +667,9 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
                     apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId,
                     predictionType,
                     coinsSpent: PREDICTION_COST,
-                    isCorrect: null, // ✅ Explicitly set to null (pending state)
-                    // Store the exact score prediction in a JSON field or separate columns
-                    // For now, using homeTeam/awayTeam fields to store scores
-                    homeTeam: `Score: ${home}`,
-                    awayTeam: `Score: ${away}`,
+                    isCorrect: null,
+                    homeTeam: `${home}`,
+                    awayTeam: `${away}`,
                 }
             }),
             prisma.user.update({
