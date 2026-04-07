@@ -675,6 +675,13 @@ export default function ProfileScreen() {
     }
 
     try {
+      // طلب الصلاحية قبل فتح الـ picker
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toastManager.showWarning('صلاحية مطلوبة', 'نحتاج إلى صلاحية الوصول للمعرض لتغيير صورة الغلاف.');
+        return;
+      }
+
       isPickerActiveRef.current = true;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -784,6 +791,13 @@ export default function ProfileScreen() {
     }
 
     try {
+      // طلب الصلاحية قبل فتح الـ picker
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toastManager.showWarning('صلاحية مطلوبة', 'نحتاج إلى صلاحية الوصول للمعرض لتغيير صورة البروفايل.');
+        return;
+      }
+
       isPickerActiveRef.current = true;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
