@@ -675,6 +675,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
 /**
  * GET /api/clerk/followers/:userId
+ * ✅ Optimized: No N+1 queries, single query with Prisma include
  */
 router.get('/followers/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -684,24 +685,72 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
         const offset = parseInt(ensureString(req.query.offset as any)) || 0;
 
         if (!userId) {
-            res.status(400).json({ status: 'ERROR', message: 'User ID is required' });
+            res.status(400).json({ status: 'ERROR', message: 'User ID is required', code: 'E001' });
             return;
         }
 
+        // Check cache first
+        const { FollowersCacheHelper } = await import('../services/cache-helpers.service');
+        const cacheKey = `${userId}:${offset}`;
+        
+        if (clerkUserId) {
+            const currentUser = await prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true },
+            });
+            
+            if (currentUser) {
+                const cached = await FollowersCacheHelper.get<any>(cacheKey);
+                if (cached) {
+                    // Recalculate isFollowing for current user
+                    const followersWithStatus = await Promise.all(
+                        cached.followers.map(async (follower: any) => {
+                            const isFollowing = await prisma.follow.findUnique({
+                                where: {
+                                    followerId_followingId: {
+                                        followerId: currentUser.id,
+                                        followingId: follower.id,
+                                    },
+                                },
+                            });
+                            return { ...follower, isFollowedByMe: !!isFollowing };
+                        })
+                    );
+                    
+                    res.json({
+                        status: 'SUCCESS',
+                        data: { ...cached, followers: followersWithStatus },
+                    });
+                    return;
+                }
+            }
+        }
+
+        // Get current user ID for follow status check
         const currentUser = clerkUserId ? await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true },
         }) : null;
 
+        // Single optimized query with all data
         const [followers, total] = await Promise.all([
             prisma.follow.findMany({
                 where: { followingId: userId },
                 select: {
+                    createdAt: true,
                     follower: {
                         select: {
-                            id: true, username: true, displayName: true,
-                            avatar: true, isVerified: true, isDeveloper: true,
-                            position: true, countryFlag: true, clubLogo: true,
+                            id: true,
+                            username: true,
+                            displayName: true,
+                            avatar: true,
+                            isVerified: true,
+                            isDeveloper: true,
+                            level: true,
+                            position: true,
+                            countryFlag: true,
+                            clubLogo: true,
+                            // Nested query to check if current user follows this follower
                             followers: currentUser ? {
                                 where: { followerId: currentUser.id },
                                 select: { id: true },
@@ -717,6 +766,7 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
             prisma.follow.count({ where: { followingId: userId } }),
         ]);
 
+        // Format response
         const formattedFollowers = followers.map((f: any) => ({
             id: f.follower.id,
             username: f.follower.username,
@@ -724,24 +774,38 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
             avatar: f.follower.avatar,
             isVerified: f.follower.isVerified,
             isDeveloper: f.follower.isDeveloper,
+            level: f.follower.level,
             position: f.follower.position,
             countryFlag: f.follower.countryFlag,
             clubLogo: f.follower.clubLogo,
-            isFollowing: Array.isArray(f.follower.followers) && f.follower.followers.length > 0,
+            isFollowedByMe: Array.isArray(f.follower.followers) && f.follower.followers.length > 0,
+            followedAt: f.createdAt,
         }));
+
+        const responseData = {
+            followers: formattedFollowers,
+            total,
+            hasMore: offset + limit < total,
+            limit,
+            offset,
+        };
+
+        // Cache the response
+        await FollowersCacheHelper.set(cacheKey, responseData, offset);
 
         res.json({
             status: 'SUCCESS',
-            data: { followers: formattedFollowers, total, hasMore: offset + limit < total },
+            data: responseData,
         });
     } catch (error: any) {
         logger.error('Get followers error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * GET /api/clerk/following/:userId
+ * ✅ Optimized: No N+1 queries, single query with Prisma include
  */
 router.get('/following/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -751,24 +815,72 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
         const offset = parseInt(ensureString(req.query.offset as any)) || 0;
 
         if (!userId) {
-            res.status(400).json({ status: 'ERROR', message: 'User ID is required' });
+            res.status(400).json({ status: 'ERROR', message: 'User ID is required', code: 'E001' });
             return;
         }
 
+        // Check cache first
+        const { FollowingCacheHelper } = await import('../services/cache-helpers.service');
+        const cacheKey = `${userId}:${offset}`;
+        
+        if (clerkUserId) {
+            const currentUser = await prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true },
+            });
+            
+            if (currentUser) {
+                const cached = await FollowingCacheHelper.get<any>(cacheKey);
+                if (cached) {
+                    // Recalculate isFollowing for current user
+                    const followingWithStatus = await Promise.all(
+                        cached.following.map(async (user: any) => {
+                            const isFollowing = await prisma.follow.findUnique({
+                                where: {
+                                    followerId_followingId: {
+                                        followerId: currentUser.id,
+                                        followingId: user.id,
+                                    },
+                                },
+                            });
+                            return { ...user, isFollowedByMe: !!isFollowing };
+                        })
+                    );
+                    
+                    res.json({
+                        status: 'SUCCESS',
+                        data: { ...cached, following: followingWithStatus },
+                    });
+                    return;
+                }
+            }
+        }
+
+        // Get current user ID for follow status check
         const currentUser = clerkUserId ? await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true },
         }) : null;
 
+        // Single optimized query with all data
         const [following, total] = await Promise.all([
             prisma.follow.findMany({
                 where: { followerId: userId },
                 select: {
+                    createdAt: true,
                     following: {
                         select: {
-                            id: true, username: true, displayName: true,
-                            avatar: true, isVerified: true, isDeveloper: true,
-                            position: true, countryFlag: true, clubLogo: true,
+                            id: true,
+                            username: true,
+                            displayName: true,
+                            avatar: true,
+                            isVerified: true,
+                            isDeveloper: true,
+                            level: true,
+                            position: true,
+                            countryFlag: true,
+                            clubLogo: true,
+                            // Nested query to check if current user follows this user
                             followers: currentUser ? {
                                 where: { followerId: currentUser.id },
                                 select: { id: true },
@@ -784,6 +896,7 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
             prisma.follow.count({ where: { followerId: userId } }),
         ]);
 
+        // Format response
         const formattedFollowing = following.map((f: any) => ({
             id: f.following.id,
             username: f.following.username,
@@ -791,19 +904,32 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
             avatar: f.following.avatar,
             isVerified: f.following.isVerified,
             isDeveloper: f.following.isDeveloper,
+            level: f.following.level,
             position: f.following.position,
             countryFlag: f.following.countryFlag,
             clubLogo: f.following.clubLogo,
-            isFollowing: Array.isArray(f.following.followers) && f.following.followers.length > 0,
+            isFollowedByMe: Array.isArray(f.following.followers) && f.following.followers.length > 0,
+            followedAt: f.createdAt,
         }));
+
+        const responseData = {
+            following: formattedFollowing,
+            total,
+            hasMore: offset + limit < total,
+            limit,
+            offset,
+        };
+
+        // Cache the response
+        await FollowingCacheHelper.set(cacheKey, responseData, offset);
 
         res.json({
             status: 'SUCCESS',
-            data: { following: formattedFollowing, total, hasMore: offset + limit < total },
+            data: responseData,
         });
     } catch (error: any) {
         logger.error('Get following error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
