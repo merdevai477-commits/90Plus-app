@@ -6,7 +6,6 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { userSyncLimiter } from '../middleware/rateLimit.middleware';
 import { getProfileCache, setProfileCache, invalidateProfileCache } from '../services/profile-cache.service';
-import { redisCacheService } from '../services/redis-cache.service';
 
 const router = Router();
 
@@ -297,7 +296,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
 
 /**
  * GET /api/clerk/search
- * ✅ Fixed: Redis cache بدل In-Memory
+ * ✅ Fixed: Using SearchCacheHelper with namespace tracking
  */
 router.get('/search', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -310,8 +309,9 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
             return;
         }
 
-        const cacheKey = `search:${searchQuery}:${searchLimit}`;
-        const cached = await redisCacheService.get<any>(cacheKey);
+        // Use SearchCacheHelper for efficient caching
+        const { SearchCacheHelper } = await import('../services/cache-helpers.service');
+        const cached = await SearchCacheHelper.get<any>(searchQuery, searchLimit);
         if (cached) {
             res.json(cached);
             return;
@@ -357,7 +357,10 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
             .map(({ _relevanceScore, ...user }: any) => user);
 
         const responseData = { status: 'SUCCESS', data: { users: rankedUsers } };
-        await redisCacheService.set(cacheKey, responseData, 120000); // 2 min TTL (in milliseconds)
+        
+        // Cache with SearchCacheHelper (includes namespace tracking)
+        await SearchCacheHelper.set(searchQuery, responseData, searchLimit);
+        
         res.json(responseData);
     } catch (error: any) {
         logger.error('Search users error:', error);
