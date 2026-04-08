@@ -2,10 +2,8 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { ClerkUserService } from '../services/clerk-user.service';
 import { ProfileCompletionService } from '../services/profile-completion.service';
-import { NotificationService } from '../services/notification.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { WebSocketService } from '../services/websocket.service';
 import { userSyncLimiter } from '../middleware/rateLimit.middleware';
 import { getProfileCache, setProfileCache, invalidateProfileCache } from '../services/profile-cache.service';
 import { redisCacheService } from '../services/redis-cache.service';
@@ -497,7 +495,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
 
 /**
  * POST /api/clerk/follow/:username
- * ✅ Fixed: NotificationService static import
+ * ✅ Race condition safe using FollowService
  */
 router.post('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -505,10 +503,11 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
+        // Get both users
         const [currentUser, targetUser] = await Promise.all([
             prisma.user.findUnique({
                 where: { clerkUserId },
@@ -516,73 +515,60 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
             }),
             prisma.user.findUnique({
                 where: { username },
-                select: { id: true, username: true },
+                select: { id: true, username: true, displayName: true, avatar: true },
             }),
         ]);
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
             return;
         }
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
-            return;
-        }
-        if (currentUser.id === targetUser.id) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself' });
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
             return;
         }
 
-        const existingFollow = await prisma.follow.findUnique({
-            where: { followerId_followingId: { followerId: currentUser.id, followingId: targetUser.id } },
-        });
+        // Use FollowService for race-condition-safe follow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.followUser(currentUser, targetUser);
 
-        if (existingFollow) {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
-            return;
+        // Return appropriate response based on action
+        if (result.action === 'already_following') {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Already following this user',
+                data: {
+                    action: 'already_following',
+                    isFollowing: true,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        } else {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Followed successfully',
+                data: {
+                    action: 'followed',
+                    isFollowing: true,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
         }
-
-        await prisma.follow.create({
-            data: { followerId: currentUser.id, followingId: targetUser.id },
-        });
-
-        await NotificationService.createSocialNotification({
-            userId: targetUser.id,
-            actorId: currentUser.id,
-            title: 'متابع جديد',
-            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
-            type: 'FOLLOW',
-            data: { followerId: currentUser.id },
-        });
-
-        WebSocketService.sendFollowUpdate(targetUser.id, {
-            followerId: currentUser.id,
-            followingId: targetUser.id,
-            followerUsername: currentUser.username,
-            action: 'follow',
-        });
-
-        const counts = await prisma.user.findUnique({
-            where: { id: targetUser.id },
-            select: { _count: { select: { followers: true, following: true } } },
-        });
-
-        res.json({
-            status: 'SUCCESS',
-            message: 'Followed successfully',
-            data: {
-                followersCount: counts?._count.followers || 0,
-                followingCount: counts?._count.following || 0,
-            },
-        });
     } catch (error: any) {
+        if (error.message === 'CANNOT_FOLLOW_SELF') {
+            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself', code: 'E001' });
+            return;
+        }
         logger.error('Follow error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * DELETE /api/clerk/follow/:username
+ * ✅ Race condition safe using FollowService
  */
 router.delete('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -590,51 +576,62 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
+        // Get both users
         const [currentUser, targetUser] = await Promise.all([
-            prisma.user.findUnique({ where: { clerkUserId }, select: { id: true, username: true } }),
-            prisma.user.findUnique({ where: { username }, select: { id: true } }),
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { username },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
         ]);
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
             return;
         }
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
             return;
         }
 
-        await prisma.follow.deleteMany({
-            where: { followerId: currentUser.id, followingId: targetUser.id },
-        });
+        // Use FollowService for race-condition-safe unfollow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.unfollowUser(currentUser, targetUser);
 
-        WebSocketService.sendFollowUpdate(targetUser.id, {
-            followerId: currentUser.id,
-            followingId: targetUser.id,
-            followerUsername: currentUser.username,
-            action: 'unfollow',
-        });
-
-        const counts = await prisma.user.findUnique({
-            where: { id: targetUser.id },
-            select: { _count: { select: { followers: true, following: true } } },
-        });
-
-        res.json({
-            status: 'SUCCESS',
-            message: 'Unfollowed successfully',
-            data: {
-                followersCount: counts?._count.followers || 0,
-                followingCount: counts?._count.following || 0,
-            },
-        });
+        // Return appropriate response based on action
+        if (result.action === 'not_following') {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Not following this user',
+                data: {
+                    action: 'not_following',
+                    isFollowing: false,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        } else {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Unfollowed successfully',
+                data: {
+                    action: 'unfollowed',
+                    isFollowing: false,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        }
     } catch (error: any) {
         logger.error('Unfollow error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
@@ -809,6 +806,7 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
 
 /**
  * POST /api/clerk/follow/id/:userId
+ * ✅ Race condition safe using FollowService
  */
 router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -816,65 +814,58 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
-        const currentUser = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, username: true, displayName: true, avatar: true },
-        });
+        // Get both users
+        const [currentUser, targetUser] = await Promise.all([
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { id: targetUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+        ]);
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
             return;
         }
-        if (currentUser.id === targetUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself' });
-            return;
-        }
-
-        const targetUser = await prisma.user.findUnique({
-            where: { id: targetUserId },
-            select: { id: true, username: true },
-        });
-
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
             return;
         }
 
-        const existingFollow = await prisma.follow.findUnique({
-            where: { followerId_followingId: { followerId: currentUser.id, followingId: targetUserId } },
+        // Use FollowService for race-condition-safe follow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.followUser(currentUser, targetUser);
+
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: result.action === 'followed' ? 'Followed successfully' : 'Already following this user',
+            data: {
+                action: result.action,
+                isFollowing: true,
+                followersCount: result.followersCount,
+                followingCount: result.followingCount,
+            },
         });
-
-        if (existingFollow) {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
-            return;
-        }
-
-        await prisma.follow.create({
-            data: { followerId: currentUser.id, followingId: targetUserId },
-        });
-
-        await NotificationService.createSocialNotification({
-            userId: targetUserId,
-            actorId: currentUser.id,
-            title: 'متابع جديد',
-            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
-            type: 'FOLLOW',
-            data: { followerId: currentUser.id },
-        });
-
-        res.json({ status: 'SUCCESS', message: 'Followed successfully' });
     } catch (error: any) {
+        if (error.message === 'CANNOT_FOLLOW_SELF') {
+            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself', code: 'E001' });
+            return;
+        }
         logger.error('Follow by ID error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * DELETE /api/clerk/follow/id/:userId
+ * ✅ Race condition safe using FollowService
  */
 router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -882,28 +873,48 @@ router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Respo
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
-        const currentUser = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true },
-        });
+        // Get both users
+        const [currentUser, targetUser] = await Promise.all([
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { id: targetUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+        ]);
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
+            return;
+        }
+        if (!targetUser) {
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
             return;
         }
 
-        await prisma.follow.deleteMany({
-            where: { followerId: currentUser.id, followingId: targetUserId },
-        });
+        // Use FollowService for race-condition-safe unfollow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.unfollowUser(currentUser, targetUser);
 
-        res.json({ status: 'SUCCESS', message: 'Unfollowed successfully' });
+        res.status(200).json({
+            status: 'SUCCESS',
+            message: result.action === 'unfollowed' ? 'Unfollowed successfully' : 'Not following this user',
+            data: {
+                action: result.action,
+                isFollowing: false,
+                followersCount: result.followersCount,
+                followingCount: result.followingCount,
+            },
+        });
     } catch (error: any) {
         logger.error('Unfollow by ID error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
