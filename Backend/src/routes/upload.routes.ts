@@ -2,14 +2,49 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
 import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
-import { validateUploadedImage, optimizeUploadedImage as optimizeImage } from '../middleware/image-moderation.middleware';
+import { validateUploadedImage } from '../middleware/image-moderation.middleware';
 import { supabaseStorage } from '../services/supabase-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
+import { cleanupFailedUpload } from '../services/upload-cleanup.service';
 import multer from 'multer';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
 const router = Router();
+
+/**
+ * GET /api/upload/health
+ * Diagnose R2 storage configuration
+ */
+router.get('/health', requireAuth, (_req: Request, res: Response) => {
+    const R2_ENDPOINT = process.env.R2_ENDPOINT;
+    const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+    const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+    const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+    const CDN_URL = process.env.CDN_URL;
+    const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
+
+    const configured = !!(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY);
+    const hasPublicUrl = !!(CDN_URL || R2_PUBLIC_URL);
+
+    res.json({
+        status: configured && hasPublicUrl ? 'OK' : 'MISCONFIGURED',
+        storage: {
+            r2Endpoint: R2_ENDPOINT ? '✅ set' : '❌ missing',
+            r2AccessKey: R2_ACCESS_KEY_ID ? '✅ set' : '❌ missing',
+            r2SecretKey: R2_SECRET_ACCESS_KEY ? '✅ set' : '❌ missing',
+            r2BucketName: R2_BUCKET_NAME || '⚠️ using default: 90plus-storage',
+            cdnUrl: CDN_URL ? `✅ ${CDN_URL}` : '❌ missing',
+            r2PublicUrl: R2_PUBLIC_URL ? `✅ ${R2_PUBLIC_URL}` : '❌ missing',
+            publicUrlResolved: CDN_URL || R2_PUBLIC_URL || '❌ no public URL - uploads will have broken URLs',
+        },
+        message: !configured
+            ? 'R2 credentials missing - uploads will fail'
+            : !hasPublicUrl
+            ? 'R2 configured but no public URL - files upload but URLs will be broken'
+            : 'Storage fully configured',
+    });
+});
 
 // Configure multer for memory storage
 const upload = multer({
@@ -129,15 +164,26 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
 
         logger.info(`Avatar uploaded successfully: ${result.url}, path: ${result.path}`);
 
-        // Update user
-        await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                avatar: result.url,
-                avatarStoragePath: result.path,
-                lastAvatarChange: new Date()
-            }
-        });
+        // Update user - wrapped to cleanup R2 on DB failure
+        try {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    avatar: result.url,
+                    avatarStoragePath: result.path,
+                    lastAvatarChange: new Date()
+                }
+            });
+        } catch (dbError: any) {
+            logger.error('DB save failed after avatar upload, cleaning up R2', {
+                storagePath: result.path,
+                error: dbError.message,
+                timestamp: new Date().toISOString(),
+            });
+            await cleanupFailedUpload(result.path!, 'avatars', dbError.message);
+            res.status(500).json({ status: 'ERROR', message: 'Failed to save profile picture. Please try again.' });
+            return;
+        }
 
         // Invalidate cache so /me returns fresh data
         invalidateUserCache(clerkUserId);
@@ -230,14 +276,26 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
             return;
         }
 
-        await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                coverImage: result.url,
-                coverStoragePath: result.path,
-                lastCoverChange: new Date()
-            }
-        });
+        // Update user - wrapped to cleanup R2 on DB failure
+        try {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    coverImage: result.url,
+                    coverStoragePath: result.path,
+                    lastCoverChange: new Date()
+                }
+            });
+        } catch (dbError: any) {
+            logger.error('DB save failed after cover upload, cleaning up R2', {
+                storagePath: result.path,
+                error: dbError.message,
+                timestamp: new Date().toISOString(),
+            });
+            await cleanupFailedUpload(result.path!, 'covers', dbError.message);
+            res.status(500).json({ status: 'ERROR', message: 'Failed to save cover image. Please try again.' });
+            return;
+        }
 
         // Invalidate cache so /me returns fresh data
         invalidateUserCache(clerkUserId);
@@ -430,7 +488,7 @@ router.post(
             logger.warn('Failed to parse metadata (hashtags/mentions), continuing with empty arrays:', parseError?.message);
         }
 
-        // Create reel in database
+        // Create reel in database - wrapped to cleanup R2 on DB failure
         if (!videoResult || !videoResult.url || !videoResult.path) {
             logger.error('Cannot create reel: videoResult is missing required fields');
             res.status(500).json({ 
@@ -441,16 +499,32 @@ router.post(
             return;
         }
 
-        const reel = await prisma.reel.create({
-            data: {
-                userId: user.id,
-                videoUrl: videoResult.url,
-                videoStoragePath: videoResult.path,
-                thumbnail: thumbnailUrl,
-                thumbnailStoragePath: thumbnailPath,
-                caption: caption || null,
+        let reel: any;
+        try {
+            reel = await prisma.reel.create({
+                data: {
+                    userId: user.id,
+                    videoUrl: videoResult.url,
+                    videoStoragePath: videoResult.path,
+                    thumbnail: thumbnailUrl,
+                    thumbnailStoragePath: thumbnailPath,
+                    caption: caption || null,
+                }
+            });
+        } catch (dbError: any) {
+            logger.error('DB save failed after reel upload, cleaning up R2', {
+                videoPath: videoResult.path,
+                thumbnailPath,
+                error: dbError.message,
+                timestamp: new Date().toISOString(),
+            });
+            await cleanupFailedUpload(videoResult.path, 'reels', dbError.message);
+            if (thumbnailPath) {
+                await cleanupFailedUpload(thumbnailPath, 'thumbnails', dbError.message);
             }
-        });
+            res.status(500).json({ status: 'ERROR', message: 'Failed to save video. Please try again.', code: 'DB_SAVE_FAILED' });
+            return;
+        }
 
         // Process hashtags
         for (const tag of hashtags) {
@@ -494,6 +568,15 @@ router.post(
             where: { id: user.id },
             data: { lastReelUpload: new Date() }
         });
+
+        // ✅ Invalidate reels feed cache so new reel appears immediately
+        try {
+            const { redisCacheService } = await import('../services/redis-cache.service');
+            await redisCacheService.delPattern('reels:feed:*');
+            logger.info(`[Upload] Reels feed cache invalidated after new reel upload`);
+        } catch (cacheErr) {
+            logger.warn('[Upload] Failed to invalidate reels cache (non-critical):', cacheErr);
+        }
 
         const totalTime = Date.now() - startTime;
         logger.info(`Reel upload completed successfully in ${totalTime}ms (${(totalTime/1000).toFixed(2)}s). Reel ID: ${reel.id}, User: ${user.id}, Hashtags: ${hashtags.length}, Mentions: ${mentions.length}`);

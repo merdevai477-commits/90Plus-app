@@ -1699,3 +1699,21 @@ enum WarningSeverity {
   HIGH
   CRITICAL
 }
+
+// ============================================
+// ORPHANED UPLOADS (Failed Upload Cleanup)
+// ============================================
+
+model OrphanedUpload {
+  id          String   @id @default(uuid())
+  storagePath String   // Full R2 key e.g. "avatars/userId/timestamp_file.jpg"
+  bucket      String   // "avatars" | "covers" | "reels" | "thumbnails"
+  error       String   @db.Text
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([resolved])
+  @@index([createdAt])
+  @@map("orphaned_uploads")
+}
