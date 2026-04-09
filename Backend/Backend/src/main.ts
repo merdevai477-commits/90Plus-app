@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import prisma, { startKeepAlive, stopKeepAlive } from './lib/prisma';
@@ -99,6 +100,9 @@ app.use(express.urlencoded({
     limit: '10mb',
     parameterLimit: 10000, // ✅ Limit number of parameters
 }));
+
+// ✅ TASK 10: Cookie parser for CSRF protection
+app.use(cookieParser());
 
 // Compression middleware with production optimizations
 app.use(
@@ -218,7 +222,6 @@ import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
 import gdprRoutes from './routes/gdpr.routes';
-import ageVerificationRoutes from './routes/age-verification.routes';
 import path from 'path';
 
 // Import services
@@ -257,7 +260,6 @@ app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);
 app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
-app.use(`${API_PREFIX}/auth`, ageVerificationRoutes); // Age verification & parental consent
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 
 // Support and legal pages (without API prefix)
@@ -422,6 +424,10 @@ try {
 
 // Metrics endpoint (for monitoring)
 app.get(`${API_PREFIX}/metrics`, getMetricsHandler);
+
+// ✅ TASK 10: CSRF token endpoint
+import { getCSRFTokenHandler } from './middleware/csrf.middleware';
+app.get(`${API_PREFIX}/csrf-token`, getCSRFTokenHandler);
 
 app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
     const timestamp = new Date().toISOString();

@@ -157,4 +157,95 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
   }
 });
 
+// POST /api/reports/user/:userId
+router.post('/user/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const userIdStr = ensureString(userId);
+    const { reason, additionalInfo } = req.body;
+    const clerkUserId = req.auth?.userId;
+
+    if (!clerkUserId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    const reporter = await prisma.user.findUnique({
+      where: { clerkUserId },
+      select: { id: true },
+    });
+
+    if (!reporter) {
+      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      return;
+    }
+
+    // Prevent self-reporting
+    if (reporter.id === userIdStr) {
+      res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+      return;
+    }
+
+    const reportedUser = await prisma.user.findUnique({
+      where: { id: userIdStr },
+      select: { id: true },
+    });
+
+    if (!reportedUser) {
+      res.status(404).json({ status: 'ERROR', message: 'Reported user not found' });
+      return;
+    }
+
+    // Check for duplicate report
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId: reporter.id,
+        reportedUserId: userIdStr,
+        reportedReelId: null,
+        reportedCommentId: null,
+      },
+    });
+
+    if (existing) {
+      res.status(409).json({ status: 'ERROR', message: 'You have already reported this user' });
+      return;
+    }
+
+    const reasonToType: Record<string, string> = {
+      'spam': 'SPAM',
+      'harassment': 'HARASSMENT',
+      'inappropriate': 'INAPPROPRIATE',
+      'violence': 'INAPPROPRIATE',
+      'hate': 'HARASSMENT',
+      'copyright': 'COPYRIGHT',
+      'other': 'OTHER',
+    };
+
+    const reportType = reasonToType[reason] || 'OTHER';
+
+    await prisma.report.create({
+      data: {
+        reporterId: reporter.id,
+        reportedUserId: userIdStr,
+        type: reportType as any,
+        reason: additionalInfo || reason,
+        status: 'PENDING',
+      },
+    });
+
+    logger.info(`User ${reporter.id} reported user ${userIdStr} for: ${reason}`);
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Report submitted successfully',
+    });
+  } catch (error: any) {
+    logger.error('Report user error:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
 export default router;

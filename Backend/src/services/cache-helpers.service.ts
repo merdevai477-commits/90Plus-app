@@ -51,18 +51,18 @@ export class SearchCacheHelper {
   private static namespace = CacheNamespace.SEARCH;
   private static TTL = 2 * 60 * 1000; // 2 minutes
 
-  static async get<T>(query: string, limit?: number): Promise<T | null> {
-    const key = `search:${query}${limit ? `:${limit}` : ''}`;
+  static async get<T>(cacheKey: string): Promise<T | null> {
+    const key = `search:${cacheKey}`;
     return await redisCacheService.get<T>(key);
   }
 
-  static async set<T>(query: string, data: T, limit?: number, ttl?: number): Promise<void> {
-    const key = `search:${query}${limit ? `:${limit}` : ''}`;
+  static async set<T>(cacheKey: string, data: T, limit?: number, ttl?: number): Promise<void> {
+    const key = `search:${cacheKey}`;
     await redisCacheService.set(key, data, ttl || this.TTL, this.namespace);
   }
 
-  static async del(query: string, limit?: number): Promise<void> {
-    const key = `search:${query}${limit ? `:${limit}` : ''}`;
+  static async del(cacheKey: string): Promise<void> {
+    const key = `search:${cacheKey}`;
     await redisCacheService.del(key, this.namespace);
   }
 
@@ -240,6 +240,42 @@ export class ReelsCacheHelper {
   static async clear(): Promise<number> {
     logger.info('Clearing all reels cache');
     return await redisCacheService.delNamespace(this.namespace);
+  }
+
+  static async count(): Promise<number> {
+    return await redisCacheService.getNamespaceSize(this.namespace);
+  }
+}
+
+/**
+ * Profile Completion Cache Helpers
+ */
+export class ProfileCompletionCacheHelper {
+  private static namespace = CacheNamespace.PROFILE_COMPLETION;
+  private static TTL = 30 * 60 * 1000; // 30 minutes
+
+  static async get<T>(userId: string): Promise<T | null> {
+    const key = `completion:${userId}`;
+    return await redisCacheService.get<T>(key);
+  }
+
+  static async set<T>(userId: string, data: T, ttl?: number): Promise<void> {
+    const key = `completion:${userId}`;
+    await redisCacheService.set(key, data, ttl || this.TTL, this.namespace);
+  }
+
+  static async del(userId: string): Promise<void> {
+    const key = `completion:${userId}`;
+    await redisCacheService.del(key, this.namespace);
+  }
+
+  static async clear(): Promise<number> {
+    logger.info('Clearing all profile completion cache');
+    return await redisCacheService.delNamespace(this.namespace);
+  }
+
+  static async getAll(): Promise<string[]> {
+    return await redisCacheService.getNamespaceKeys(this.namespace);
   }
 
   static async count(): Promise<number> {

@@ -186,27 +186,12 @@ const QUIZ_CATEGORIES_CACHE_TTL = 5 * 60 * 1000;
  * جلب قائمة الكاتيجوريز المتاحة
  * الكاتيجوري والأسئلة موجودة في الفرونت إند
  * يتم إدارة الكاتيجوري المفتوح محلياً في الفرونت إند
- * Requires authentication - guests cannot access quiz
+ * Public endpoint - no authentication required
  */
-router.get('/categories', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/categories', async (req: Request, res: Response): Promise<void> => {
     logger.info(`📥 Quiz categories endpoint called - Path: ${req.path}, Method: ${req.method}`);
     try {
-        const clerkUserId = req.auth?.userId;
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true },
-        });
-
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
+        // Public endpoint - no auth required
         // جلب جميع الكاتيجوريز المتاحة
         const categories = await prisma.quizCategory.findMany({
             select: {
@@ -553,13 +538,23 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
             return;
         }
 
+        // جلب اللغة من الـ request (ar أو en، افتراضي ar)
+        const lang: 'ar' | 'en' = req.body?.lang === 'en' ? 'en' : 'ar';
+
         // جلب أو إنشاء الكويز اليومي
         const dailyQuiz = await getOrCreateDailyQuiz();
         
-        // جلب الأسئلة من قاعدة البيانات
+        // جلب الأسئلة من قاعدة البيانات مع فلترة حسب اللغة
+        // الأسئلة العربية IDs تنتهي بـ -ar والإنجليزية بـ -en
+        const langSuffix = `-${lang}`;
+        const langFilteredIds = dailyQuiz.questionIds.filter(id => id.endsWith(langSuffix));
+        
+        // لو مفيش أسئلة بالـ suffix ده (أسئلة قديمة بدون lang)، استخدم كل الأسئلة
+        const questionIdsToFetch = langFilteredIds.length > 0 ? langFilteredIds : dailyQuiz.questionIds;
+
         const questions = await prisma.quizQuestion.findMany({
             where: {
-                id: { in: dailyQuiz.questionIds },
+                id: { in: questionIdsToFetch },
                 categoryId: dailyQuiz.categoryId,
             },
             select: {
@@ -573,7 +568,6 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
                 hint: true,
                 timeLimit: true,
                 categoryId: true,
-                // لا نرسل correctAnswer للفرونت إند
             },
             orderBy: {
                 createdAt: 'asc',
@@ -584,7 +578,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
         const displayModeResults = await prisma.$queryRaw<Array<{id: string, displayMode: string}>>`
             SELECT id, "displayMode"::text as "displayMode" 
             FROM quiz_questions 
-            WHERE id = ANY(${dailyQuiz.questionIds})
+            WHERE id = ANY(${questionIdsToFetch})
         `;
 
         // تحويل إلى map للوصول السريع
@@ -596,7 +590,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
         );
 
         // ترتيب الأسئلة حسب questionIds في dailyQuiz (للحفاظ على الترتيب العشوائي)
-        const orderedQuestions = dailyQuiz.questionIds.map(id => {
+        const orderedQuestions = questionIdsToFetch.map(id => {
             const question = questions.find((q: any) => q.id === id);
             if (!question) return null;
             
@@ -610,6 +604,7 @@ router.post('/daily', requireAuth, async (req: Request, res: Response): Promise<
             dailyQuizId: dailyQuiz.id,
             categoryId: dailyQuiz.categoryId,
             questionCount: orderedQuestions.length,
+            lang,
             expiresAt: dailyQuiz.expiresAt.toISOString(),
         });
 
@@ -865,6 +860,72 @@ router.post('/reset-daily', async (req: Request, res: Response): Promise<void> =
       status: 'ERROR',
       message: error.message || 'Failed to reset daily quiz',
     });
+  }
+});
+
+/**
+ * POST /api/quiz/sync-questions
+ * مزامنة أسئلة legends-complete.ts مع قاعدة البيانات
+ * يحذف الأسئلة القديمة ويضيف الجديدة
+ * يتطلب X-API-Key header
+ */
+router.post('/sync-questions', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = req.headers['x-api-key'] as string;
+    const secretKey = process.env.QUIZ_RESET_SECRET_KEY || process.env.ADMIN_SECRET_KEY;
+
+    if (!secretKey || apiKey !== secretKey) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    // جلب أو إنشاء كاتيجوري الأساطير
+    let category = await prisma.quizCategory.findFirst({
+      where: { name: { contains: 'أساطير' } },
+    });
+
+    if (!category) {
+      category = await prisma.quizCategory.findFirst();
+    }
+
+    if (!category) {
+      res.status(404).json({ status: 'ERROR', message: 'No quiz category found' });
+      return;
+    }
+
+    // حذف الأسئلة القديمة
+    const deleted = await prisma.quizQuestion.deleteMany({
+      where: { categoryId: category.id },
+    });
+
+    // إضافة الأسئلة الجديدة
+    const created = await prisma.quizQuestion.createMany({
+      data: LEGENDS_COMPLETE_QUESTIONS.map(q => ({
+        id: q.id,
+        categoryId: category!.id,
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        difficulty: q.difficulty as any,
+        points: q.points,
+        imageType: q.imageType || null,
+        hint: q.hint || null,
+        timeLimit: q.timeLimit || 20,
+        displayMode: (q.displayMode?.replace('-', '_').toUpperCase() || 'AFTER_ANSWER') as any,
+      })),
+      skipDuplicates: true,
+    });
+
+    logger.info(`[sync-questions] Deleted ${deleted.count}, Created ${created.count} questions`);
+
+    res.json({
+      status: 'SUCCESS',
+      message: `Synced ${created.count} questions (deleted ${deleted.count} old)`,
+      data: { deleted: deleted.count, created: created.count, categoryId: category.id },
+    });
+  } catch (error: any) {
+    logger.error('Error syncing questions:', error);
+    res.status(500).json({ status: 'ERROR', message: error.message });
   }
 });
 

@@ -24,12 +24,15 @@ const r2Client = R2_ENDPOINT ? new S3Client({
 /**
  * Delete a file from R2 by its full storage key
  */
-export async function deleteFromR2(storagePath: string): Promise<boolean> {
+export async function deleteFromR2(
+    storagePath: string,
+    bucket: string = R2_BUCKET_NAME
+): Promise<boolean> {
     if (!r2Client || !storagePath) return false;
 
     try {
         await r2Client.send(new DeleteObjectCommand({
-            Bucket: R2_BUCKET_NAME,
+            Bucket: bucket,
             Key: storagePath,
         }));
         logger.info(`[UploadCleanup] ✅ Deleted from R2: ${storagePath}`);
@@ -37,6 +40,7 @@ export async function deleteFromR2(storagePath: string): Promise<boolean> {
     } catch (err: any) {
         logger.error('[UploadCleanup] ❌ R2 delete failed', {
             storagePath,
+            bucket,
             error: err.message,
             timestamp: new Date().toISOString(),
         });
@@ -49,12 +53,11 @@ export async function deleteFromR2(storagePath: string): Promise<boolean> {
  */
 async function logOrphanedUpload(storagePath: string, bucket: string, error: string): Promise<void> {
     try {
-        await prisma.orphanedUpload.create({
+        await (prisma as any).orphanedUpload.create({
             data: { storagePath, bucket, error },
         });
         logger.warn('[UploadCleanup] ⚠️ Orphaned upload logged to DB', { storagePath, bucket });
     } catch (dbErr: any) {
-        // Last resort - just log it, never crash
         logger.error('[UploadCleanup] ❌ Failed to log orphan to DB', {
             storagePath,
             bucket,
@@ -75,11 +78,12 @@ export async function cleanupFailedUpload(
 ): Promise<void> {
     logger.warn('[UploadCleanup] Starting cleanup for failed upload', {
         storagePath,
+        bucket,
         error: originalError,
         timestamp: new Date().toISOString(),
     });
 
-    const deleted = await deleteFromR2(storagePath);
+    const deleted = await deleteFromR2(storagePath, bucket);
 
     if (!deleted) {
         await logOrphanedUpload(storagePath, bucket, originalError);

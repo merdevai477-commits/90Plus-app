@@ -1,10 +1,16 @@
 /**
  * Profile Completion Service
  * Tracks and calculates user profile completion percentage
+ * 
+ * ✅ Optimized with Redis caching:
+ * - Cache TTL: 30 minutes (rarely changes)
+ * - Auto-invalidation on profile updates
+ * - Fallback to calculation if cache miss
  */
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { redisCacheService, CacheNamespace } from './redis-cache.service';
 
 export interface ProfileCompletionStep {
   id: string;
@@ -35,11 +41,115 @@ const PROFILE_STEPS = {
   socialLinks: { label: 'روابط السوشيال ميديا', required: false, weight: 5 },
 };
 
+// Cache configuration
+const CACHE_CONFIG = {
+  TTL: 30 * 60 * 1000, // 30 minutes (profile completion rarely changes)
+  NAMESPACE: 'profile_completion' as const,
+  KEY_PREFIX: 'completion:' as const,
+};
+
 export class ProfileCompletionService {
   /**
-   * Calculate profile completion status for a user
+   * Get cache key for a user
    */
-  static async getCompletionStatus(clerkUserId: string): Promise<ProfileCompletionStatus> {
+  private static getCacheKey(clerkUserId: string): string {
+    return `${CACHE_CONFIG.KEY_PREFIX}${clerkUserId}`;
+  }
+
+  /**
+   * Get completion status from cache
+   */
+  private static async getFromCache(clerkUserId: string): Promise<ProfileCompletionStatus | null> {
+    try {
+      const cacheKey = this.getCacheKey(clerkUserId);
+      const cached = await redisCacheService.get<ProfileCompletionStatus>(cacheKey);
+      
+      if (cached) {
+        logger.debug(`✅ Profile completion cache HIT for user: ${clerkUserId}`);
+        return cached;
+      }
+      
+      logger.debug(`❌ Profile completion cache MISS for user: ${clerkUserId}`);
+      return null;
+    } catch (error) {
+      logger.warn('Error getting profile completion from cache:', error);
+      return null; // Fallback to calculation
+    }
+  }
+
+  /**
+   * Set completion status in cache
+   */
+  private static async setInCache(
+    clerkUserId: string,
+    status: ProfileCompletionStatus
+  ): Promise<void> {
+    try {
+      const cacheKey = this.getCacheKey(clerkUserId);
+      await redisCacheService.set(
+        cacheKey,
+        status,
+        CACHE_CONFIG.TTL,
+        CACHE_CONFIG.NAMESPACE
+      );
+      logger.debug(`✅ Profile completion cached for user: ${clerkUserId}`);
+    } catch (error) {
+      logger.warn('Error setting profile completion in cache:', error);
+      // Non-critical error, continue without caching
+    }
+  }
+
+  /**
+   * Invalidate cache for a user
+   */
+  static async invalidateCache(clerkUserId: string): Promise<void> {
+    try {
+      const cacheKey = this.getCacheKey(clerkUserId);
+      await redisCacheService.del(cacheKey, CACHE_CONFIG.NAMESPACE);
+      logger.info(`🗑️ Profile completion cache invalidated for user: ${clerkUserId}`);
+    } catch (error) {
+      logger.warn('Error invalidating profile completion cache:', error);
+      // Non-critical error
+    }
+  }
+
+  /**
+   * Calculate profile completion status for a user
+   * ✅ Now with Redis caching
+   */
+  static async getCompletionStatus(
+    clerkUserId: string,
+    forceRecalculate: boolean = false
+  ): Promise<ProfileCompletionStatus> {
+    try {
+      // Check cache first (unless force recalculate)
+      if (!forceRecalculate) {
+        const cached = await this.getFromCache(clerkUserId);
+        if (cached) {
+          return cached;
+        }
+      }
+
+      // Cache miss or force recalculate - calculate from database
+      logger.debug(`🔄 Calculating profile completion for user: ${clerkUserId}`);
+      
+      const status = await this.calculateCompletionStatus(clerkUserId);
+      
+      // Cache the result
+      await this.setInCache(clerkUserId, status);
+      
+      return status;
+    } catch (error) {
+      logger.error('Error getting profile completion status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate profile completion status from database
+   * (Internal method - use getCompletionStatus instead)
+   */
+  private static async calculateCompletionStatus(clerkUserId: string): Promise<ProfileCompletionStatus> {
     try {
       // Find user by clerkUserId instead of id
       let user = await prisma.user.findUnique({
@@ -272,6 +382,7 @@ export class ProfileCompletionService {
 
   /**
    * Mark a step as completed
+   * ✅ Invalidates cache automatically
    */
   static async markStepCompleted(clerkUserId: string, stepId: string): Promise<void> {
     try {
@@ -312,11 +423,28 @@ export class ProfileCompletionService {
         });
       }
 
-      // Recalculate completion percentage
-      await this.getCompletionStatus(clerkUserId);
+      // Invalidate cache
+      await this.invalidateCache(clerkUserId);
+
+      // Recalculate completion percentage (will cache the new result)
+      await this.getCompletionStatus(clerkUserId, true);
     } catch (error) {
       logger.error('Error marking step completed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Recalculate and update cache for a user
+   * Use this after profile updates
+   */
+  static async recalculate(clerkUserId: string): Promise<ProfileCompletionStatus> {
+    logger.info(`🔄 Recalculating profile completion for user: ${clerkUserId}`);
+    
+    // Invalidate cache first
+    await this.invalidateCache(clerkUserId);
+    
+    // Force recalculation (will cache the new result)
+    return await this.getCompletionStatus(clerkUserId, true);
   }
 }

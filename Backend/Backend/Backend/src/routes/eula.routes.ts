@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { clerkMiddleware } from '../middleware/clerk.middleware';
+import { requireAuth as clerkMiddleware } from '../middleware/clerk.middleware';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 

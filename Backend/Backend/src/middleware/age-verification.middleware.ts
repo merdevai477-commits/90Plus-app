@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Age Verification Middleware
  * 

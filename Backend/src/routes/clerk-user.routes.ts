@@ -20,7 +20,7 @@ export const invalidateUserCache = (clerkUserId: string) => {
 
 const recalculateProfileCompletion = async (clerkUserId: string) => {
     try {
-        await ProfileCompletionService.getCompletionStatus(clerkUserId);
+        await ProfileCompletionService.recalculate(clerkUserId);
     } catch (err) {
         logger.error('Failed to recalculate profile completion:', err);
     }
@@ -296,13 +296,14 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
 
 /**
  * GET /api/clerk/search
- * ✅ Fixed: Using SearchCacheHelper with namespace tracking
+ * ✅ Optimized: Using PostgreSQL Full-Text Search with database-level ranking
  */
 router.get('/search', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { q, limit = '10' } = req.query;
-        const searchQuery = (q as string || '').trim().toLowerCase();
+        const { q, limit = '10', offset = '0' } = req.query;
+        const searchQuery = (q as string || '').trim();
         const searchLimit = Math.min(parseInt(limit as string) || 10, 20);
+        const searchOffset = parseInt(offset as string) || 0;
 
         if (!searchQuery || searchQuery.length < 1) {
             res.json({ status: 'SUCCESS', data: { users: [] } });
@@ -311,60 +312,30 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
 
         // Use SearchCacheHelper for efficient caching
         const { SearchCacheHelper } = await import('../services/cache-helpers.service');
-        const cached = await SearchCacheHelper.get<any>(searchQuery, searchLimit);
+        const cacheKey = `${searchQuery}:${searchLimit}:${searchOffset}`;
+        const cached = await SearchCacheHelper.get<any>(cacheKey);
         if (cached) {
             res.json(cached);
             return;
         }
 
-        const users = await prisma.user.findMany({
-            where: {
-                OR: [
-                    { username: { contains: searchQuery, mode: 'insensitive' } },
-                    { displayName: { contains: searchQuery, mode: 'insensitive' } },
-                ],
-            },
-            select: {
-                id: true, username: true, displayName: true,
-                avatar: true, bio: true, isVerified: true,
-                isDeveloper: true, level: true, favoriteTeam: true,
-            },
-            take: searchLimit * 2,
+        // Use UserSearchService with PostgreSQL Full-Text Search
+        const { UserSearchService } = await import('../services/user-search.service');
+        const users = await UserSearchService.searchUsers({
+            query: searchQuery,
+            limit: searchLimit,
+            offset: searchOffset,
         });
 
-        const searchQueryLower = searchQuery.toLowerCase();
-        const rankedUsers = users
-            .map((user: any) => {
-                const usernameLower = (user.username || '').toLowerCase();
-                const displayNameLower = (user.displayName || '').toLowerCase();
-                let score = 0;
-
-                if (usernameLower === searchQueryLower) score += 1000;
-                else if (usernameLower.startsWith(searchQueryLower)) score += 500;
-                else if (usernameLower.includes(searchQueryLower)) score += 200;
-
-                if (displayNameLower === searchQueryLower) score += 800;
-                else if (displayNameLower.startsWith(searchQueryLower)) score += 400;
-                else if (displayNameLower.includes(searchQueryLower)) score += 150;
-
-                if (user.isVerified) score += 100;
-                score += user.level || 0;
-
-                return { ...user, _relevanceScore: score };
-            })
-            .sort((a: any, b: any) => b._relevanceScore - a._relevanceScore)
-            .slice(0, searchLimit)
-            .map(({ _relevanceScore, ...user }: any) => user);
-
-        const responseData = { status: 'SUCCESS', data: { users: rankedUsers } };
+        const responseData = { status: 'SUCCESS', data: { users } };
         
         // Cache with SearchCacheHelper (includes namespace tracking)
-        await SearchCacheHelper.set(searchQuery, responseData, searchLimit);
+        await SearchCacheHelper.set(cacheKey, responseData, searchLimit);
         
         res.json(responseData);
     } catch (error: any) {
         logger.error('Search users error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 

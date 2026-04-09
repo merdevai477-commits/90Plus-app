@@ -4,82 +4,64 @@ import { ClerkUserService } from '../services/clerk-user.service';
 import { ProfileCompletionService } from '../services/profile-completion.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { WebSocketService } from '../services/websocket.service';
 import { userSyncLimiter } from '../middleware/rateLimit.middleware';
+import { getProfileCache, setProfileCache, invalidateProfileCache } from '../services/profile-cache.service';
 
 const router = Router();
 
-// Helper function to ensure string from params (handles string | string[])
 function ensureString(param: string | string[] | undefined): string {
-  if (Array.isArray(param)) return param[0] || '';
-  return param || '';
+    if (Array.isArray(param)) return param[0] || '';
+    return param || '';
 }
 
-// Simple in-memory cache for user profiles (5 minutes TTL - increased for better performance)
-const userCache = new Map<string, { data: any; timestamp: number }>();
-const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Helper to invalidate user cache
 export const invalidateUserCache = (clerkUserId: string) => {
-    userCache.delete(clerkUserId);
+    invalidateProfileCache(clerkUserId).catch(() => {});
+};
+
+const recalculateProfileCompletion = async (clerkUserId: string) => {
+    try {
+        await ProfileCompletionService.getCompletionStatus(clerkUserId);
+    } catch (err) {
+        logger.error('Failed to recalculate profile completion:', err);
+    }
 };
 
 /**
  * GET /api/clerk/me
- * Get current user profile (protected) - WITH CACHING
- * Uses userSyncLimiter for more lenient rate limiting
  */
 router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            logger.warn('[/clerk/me] ⚠️ No clerkUserId in request');
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-                code: 'E002',
-            });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
-        logger.info(`[/clerk/me] 🔄 Fetching user data for: ${clerkUserId}`);
-
-        // Check cache first
-        const cached = userCache.get(clerkUserId);
-        if (cached && Date.now() - cached.timestamp < USER_CACHE_TTL) {
-            logger.info(`[/clerk/me] ⚡ Returning cached data for: ${clerkUserId}`);
-            res.json({ status: 'SUCCESS', data: { user: cached.data } });
+        const cached = await getProfileCache<any>(clerkUserId);
+        if (cached) {
+            res.json({ status: 'SUCCESS', data: { user: cached } });
             return;
         }
 
-        logger.info(`[/clerk/me] 📡 Cache miss, fetching from database for: ${clerkUserId}`);
-
-        // Find or create user in our database with better error handling and retry logic
         let user;
         let retryCount = 0;
         const maxRetries = 3;
-        
+
         while (retryCount < maxRetries) {
             try {
                 user = await ClerkUserService.findOrCreateUser(clerkUserId);
-                if (user) break; // Success, exit retry loop
-                
-                // If user is null but no error thrown, retry
+                if (user) break;
                 retryCount++;
                 if (retryCount < maxRetries) {
-                    logger.warn(`[/clerk/me] ⚠️ User creation returned null, retrying (${retryCount}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 500 * retryCount)); // Exponential backoff
+                    await new Promise(resolve => setTimeout(resolve, 500 * retryCount));
                 }
             } catch (dbError: any) {
                 retryCount++;
-                logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId} (attempt ${retryCount}/${maxRetries}):`, {
+                logger.error(`[/clerk/me] DB error (attempt ${retryCount}/${maxRetries}):`, {
                     error: dbError.message,
                     code: dbError.code,
-                    stack: dbError.stack?.split('\n').slice(0, 3).join('\n'), // First 3 lines of stack
                 });
-                
-                // If last retry, return error
                 if (retryCount >= maxRetries) {
                     res.status(500).json({
                         status: 'ERROR',
@@ -89,14 +71,11 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
                     });
                     return;
                 }
-                
-                // Wait before retry with exponential backoff
                 await new Promise(resolve => setTimeout(resolve, 500 * retryCount));
             }
         }
 
         if (!user) {
-            logger.error(`[/clerk/me] ❌ Failed to find or create user after ${maxRetries} attempts: ${clerkUserId}`);
             res.status(500).json({
                 status: 'ERROR',
                 message: 'Failed to load user profile. Please try logging out and back in.',
@@ -104,8 +83,6 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             });
             return;
         }
-
-        logger.info(`[/clerk/me] ✅ User data loaded: ${user.username} (${user.id})`);
 
         const userData = {
             id: user.id,
@@ -137,40 +114,27 @@ router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Respon
             updatedAt: user.updatedAt,
         };
 
-        // Save to cache
-        userCache.set(clerkUserId, { data: userData, timestamp: Date.now() });
-
-        logger.info(`[/clerk/me] ✅ Returning user data for: ${user.username}`);
+        await setProfileCache(clerkUserId, userData);
         res.json({ status: 'SUCCESS', data: { user: userData } });
     } catch (error: any) {
-        logger.error('[/clerk/me] ❌ Unexpected error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error',
-            code: 'E010',
-        });
+        logger.error('[/clerk/me] Unexpected error:', error);
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * PUT /api/clerk/profile
- * Update user profile (protected)
  */
 router.put('/profile', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
         }
 
         const { username, displayName, bio, favoriteTeam } = req.body;
 
-        // Validate username if provided
         if (username) {
             const usernameRegex = /^[a-z0-9_]+$/;
             if (!usernameRegex.test(username)) {
@@ -181,15 +145,12 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
                 return;
             }
 
-            // Check if username is taken
             const existingUser = await ClerkUserService.getUserByClerkId(clerkUserId);
             if (existingUser && existingUser.username !== username) {
-                // Check 15-day restriction for username changes
                 if (existingUser.lastUsernameChange) {
                     const daysSinceLastChange = Math.floor(
                         (Date.now() - existingUser.lastUsernameChange.getTime()) / (1000 * 60 * 60 * 24)
                     );
-                    
                     if (daysSinceLastChange < 15) {
                         const daysRemaining = 15 - daysSinceLastChange;
                         res.status(400).json({
@@ -205,71 +166,38 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
                     }
                 }
 
-                const userWithUsername = await prisma.user.findUnique({
-                    where: { username },
-                });
+                const userWithUsername = await prisma.user.findUnique({ where: { username } });
                 if (userWithUsername) {
-                    res.status(400).json({
-                        status: 'ERROR',
-                        message: 'Username already taken',
-                    });
+                    res.status(400).json({ status: 'ERROR', message: 'Username already taken' });
                     return;
                 }
             }
         }
 
-        // Update user
-        const user = await ClerkUserService.updateUser(clerkUserId, {
-            username,
-            displayName,
-            bio,
-            favoriteTeam,
-        });
-
-        // Invalidate cache so /me returns fresh data
+        const user = await ClerkUserService.updateUser(clerkUserId, { username, displayName, bio, favoriteTeam });
         invalidateUserCache(clerkUserId);
-        
-        // ✅ CRITICAL: Recalculate profile completion after profile update
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after profile update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+        await recalculateProfileCompletion(clerkUserId);
 
-        res.json({
-            status: 'SUCCESS',
-            message: 'Profile updated successfully',
-            data: { user },
-        });
+        res.json({ status: 'SUCCESS', message: 'Profile updated successfully', data: { user } });
     } catch (error: any) {
         logger.error('Update profile error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * POST /api/clerk/preferences
- * Save user onboarding preferences (protected)
  */
 router.post('/preferences', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
         }
 
         const { favoriteTeam, favoriteBrand, country, favoriteLeagues, clubLogo, brandLogo, countryFlag } = req.body;
 
-        // Update user preferences
         const user = await prisma.user.update({
             where: { clerkUserId },
             data: {
@@ -277,84 +205,53 @@ router.post('/preferences', requireAuth, async (req: Request, res: Response): Pr
                 favoriteBrand,
                 country,
                 favoriteLeagues: favoriteLeagues || [],
-                // Save logos for profile card
                 clubLogo: clubLogo || undefined,
                 brandLogo: brandLogo || undefined,
                 countryFlag: countryFlag || undefined,
             },
         });
 
-        // Invalidate cache
         invalidateUserCache(clerkUserId);
-        
-        // ✅ CRITICAL: Recalculate profile completion after preferences update
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after preferences update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+        await recalculateProfileCompletion(clerkUserId);
 
-        logger.info('✅ User preferences saved:', clerkUserId);
-
-        res.json({
-            status: 'SUCCESS',
-            message: 'Preferences saved successfully',
-            data: { user },
-        });
+        res.json({ status: 'SUCCESS', message: 'Preferences saved successfully', data: { user } });
     } catch (error: any) {
         logger.error('Save preferences error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * PUT /api/clerk/card-profile
- * Update FIFA card profile fields (protected)
  */
 router.put('/card-profile', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
         }
 
         const { position, countryFlag, age, height, weight, preferredFoot, clubLogo, brandLogo, favoriteTeam, country } = req.body;
 
-        // Validate fields
         const validPositions = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'];
         if (position && !validPositions.includes(position)) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Invalid position',
-            });
+            res.status(400).json({ status: 'ERROR', message: 'Invalid position' });
             return;
         }
 
         const validFeet = ['R', 'L', 'B'];
         if (preferredFoot && !validFeet.includes(preferredFoot)) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Invalid preferred foot (R, L, or B)',
-            });
+            res.status(400).json({ status: 'ERROR', message: 'Invalid preferred foot (R, L, or B)' });
             return;
         }
 
-        // Update user card profile
         const user = await prisma.user.update({
             where: { clerkUserId },
             data: {
                 position: position || undefined,
                 countryFlag: countryFlag || undefined,
-                country: country || undefined, // ✅ NEW
+                country: country || undefined,
                 age: age ? parseInt(age) : undefined,
                 height: height ? parseInt(height) : undefined,
                 weight: weight ? parseInt(weight) : undefined,
@@ -364,83 +261,42 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
                 favoriteTeam: favoriteTeam || undefined,
             },
             select: {
-                position: true,
-                countryFlag: true,
-                country: true, // ✅ NEW
-                age: true,
-                height: true,
-                weight: true,
-                preferredFoot: true,
-                clubLogo: true,
-                brandLogo: true,
-                favoriteTeam: true,
+                position: true, countryFlag: true, country: true,
+                age: true, height: true, weight: true,
+                preferredFoot: true, clubLogo: true, brandLogo: true, favoriteTeam: true,
             },
         });
 
-        // ✅ Invalidate Backend Cache to force refresh on next request
         invalidateUserCache(clerkUserId);
-        
-        // ✅ CRITICAL: Invalidate profile completion cache to force recalculation
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after card profile update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+        await recalculateProfileCompletion(clerkUserId);
 
-        res.json({
-            status: 'SUCCESS',
-            message: 'Card profile updated successfully',
-            data: { cardProfile: user },
-        });
+        res.json({ status: 'SUCCESS', message: 'Card profile updated successfully', data: { cardProfile: user } });
     } catch (error: any) {
         logger.error('Update card profile error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
-
 /**
  * POST /api/clerk/sync
- * Sync user data from Clerk (protected)
  */
 router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
         }
-
         const user = await ClerkUserService.syncUserFromClerk(clerkUserId);
-
-        res.json({
-            status: 'SUCCESS',
-            message: 'User synced successfully',
-            data: { user },
-        });
+        res.json({ status: 'SUCCESS', message: 'User synced successfully', data: { user } });
     } catch (error: any) {
         logger.error('Sync user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
-// Search cache (2 minutes TTL)
-const searchCacheBackend = new Map<string, { data: any; timestamp: number }>();
-const SEARCH_CACHE_TTL_BACKEND = 2 * 60 * 1000;
-
 /**
  * GET /api/clerk/search
- * Search users by username or displayName (protected) - WITH CACHING
+ * ✅ Fixed: Using SearchCacheHelper with namespace tracking
  */
 router.get('/search', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -449,23 +305,18 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
         const searchLimit = Math.min(parseInt(limit as string) || 10, 20);
 
         if (!searchQuery || searchQuery.length < 1) {
-            res.json({
-                status: 'SUCCESS',
-                data: { users: [] },
-            });
+            res.json({ status: 'SUCCESS', data: { users: [] } });
             return;
         }
 
-        // Check cache first
-        const cacheKey = `search_${searchQuery}_${searchLimit}`;
-        const cached = searchCacheBackend.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL_BACKEND) {
-            res.json(cached.data);
+        // Use SearchCacheHelper for efficient caching
+        const { SearchCacheHelper } = await import('../services/cache-helpers.service');
+        const cached = await SearchCacheHelper.get<any>(searchQuery, searchLimit);
+        if (cached) {
+            res.json(cached);
             return;
         }
 
-        // Search by username and displayName (case-insensitive)
-        // Use OR condition to search both fields
         const users = await prisma.user.findMany({
             where: {
                 OR: [
@@ -474,196 +325,102 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
                 ],
             },
             select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                bio: true,
-                isVerified: true,
-                isDeveloper: true,
-                level: true,
-                favoriteTeam: true,
+                id: true, username: true, displayName: true,
+                avatar: true, bio: true, isVerified: true,
+                isDeveloper: true, level: true, favoriteTeam: true,
             },
-            take: searchLimit * 2, // Get more results for ranking
+            take: searchLimit * 2,
         });
 
-        // Apply relevance scoring and ranking
-        // Priority: exact username match > exact displayName match > partial match
         const searchQueryLower = searchQuery.toLowerCase();
         const rankedUsers = users
             .map((user: any) => {
                 const usernameLower = (user.username || '').toLowerCase();
                 const displayNameLower = (user.displayName || '').toLowerCase();
-                
                 let score = 0;
-                
-                // Exact username match gets highest priority
-                if (usernameLower === searchQueryLower) {
-                    score += 1000;
-                }
-                // Username starts with query
-                else if (usernameLower.startsWith(searchQueryLower)) {
-                    score += 500;
-                }
-                // Username contains query
-                else if (usernameLower.includes(searchQueryLower)) {
-                    score += 200;
-                }
-                
-                // Exact displayName match
-                if (displayNameLower === searchQueryLower) {
-                    score += 800;
-                }
-                // displayName starts with query
-                else if (displayNameLower.startsWith(searchQueryLower)) {
-                    score += 400;
-                }
-                // displayName contains query
-                else if (displayNameLower.includes(searchQueryLower)) {
-                    score += 150;
-                }
-                
-                // Boost verified users
-                if (user.isVerified) {
-                    score += 100;
-                }
-                
-                // Boost by level
+
+                if (usernameLower === searchQueryLower) score += 1000;
+                else if (usernameLower.startsWith(searchQueryLower)) score += 500;
+                else if (usernameLower.includes(searchQueryLower)) score += 200;
+
+                if (displayNameLower === searchQueryLower) score += 800;
+                else if (displayNameLower.startsWith(searchQueryLower)) score += 400;
+                else if (displayNameLower.includes(searchQueryLower)) score += 150;
+
+                if (user.isVerified) score += 100;
                 score += user.level || 0;
-                
+
                 return { ...user, _relevanceScore: score };
             })
-            .sort((a: any, b: any) => {
-                // Sort by relevance score first, then by verified status, then by level
-                if (b._relevanceScore !== a._relevanceScore) {
-                    return b._relevanceScore - a._relevanceScore;
-                }
-                if (b.isVerified !== a.isVerified) {
-                    return b.isVerified ? 1 : -1;
-                }
-                return (b.level || 0) - (a.level || 0);
-            })
-            .slice(0, searchLimit) // Take top results
-            .map(({ _relevanceScore, ...user }: any) => user); // Remove score from response
+            .sort((a: any, b: any) => b._relevanceScore - a._relevanceScore)
+            .slice(0, searchLimit)
+            .map(({ _relevanceScore, ...user }: any) => user);
 
-        const responseData = {
-            status: 'SUCCESS',
-            data: { users: rankedUsers },
-        };
-
-        // Save to cache
-        searchCacheBackend.set(cacheKey, { data: responseData, timestamp: Date.now() });
-
+        const responseData = { status: 'SUCCESS', data: { users: rankedUsers } };
+        
+        // Cache with SearchCacheHelper (includes namespace tracking)
+        await SearchCacheHelper.set(searchQuery, responseData, searchLimit);
+        
         res.json(responseData);
     } catch (error: any) {
         logger.error('Search users error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * GET /api/clerk/user/:username
- * Get public profile by username (protected)
  */
 router.get('/user/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const username = ensureString(req.params.username);
         const currentClerkUserId = req.auth?.userId;
 
-        logger.info(`[/clerk/user/:username] 🔍 Fetching profile for: ${username}`);
-
         if (!username) {
-            logger.warn('[/clerk/user/:username] ⚠️ No username provided');
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Username is required',
-                code: 'E001',
-            });
+            res.status(400).json({ status: 'ERROR', message: 'Username is required', code: 'E001' });
             return;
         }
 
         const user = await prisma.user.findUnique({
             where: { username },
             select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                bio: true,
-                isVerified: true,
-                isDeveloper: true,
-                level: true,
-                favoriteTeam: true,
-                createdAt: true,
-                position: true,
-                countryFlag: true,
-                country: true,
-                age: true,
-                height: true,
-                weight: true,
-                preferredFoot: true,
-                clubLogo: true,
-                brandLogo: true,
-                socialLinks: true,
-                _count: {
-                    select: {
-                        followers: true,
-                        following: true,
-                        reels: true,
-                    },
-                },
+                id: true, username: true, displayName: true, avatar: true,
+                bio: true, isVerified: true, isDeveloper: true, level: true,
+                favoriteTeam: true, createdAt: true, position: true,
+                countryFlag: true, country: true, age: true, height: true,
+                weight: true, preferredFoot: true, clubLogo: true,
+                brandLogo: true, socialLinks: true,
+                _count: { select: { followers: true, following: true, reels: true } },
             },
         });
 
         if (!user) {
-            logger.warn(`[/clerk/user/:username] ⚠️ User not found: ${username}`);
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found',
-                code: 'E004',
-            });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
             return;
         }
 
-        logger.info(`[/clerk/user/:username] ✅ User found: ${user.username} (${user.id})`);
-
-        // Check if current user is following this user AND if this user is following current user
         let isFollowing = false;
         let isFollowingMe = false;
+
         if (currentClerkUserId) {
             const currentUser = await prisma.user.findUnique({
                 where: { clerkUserId: currentClerkUserId },
                 select: { id: true },
             });
             if (currentUser) {
-                // Check if I'm following them
-                const follow = await prisma.follow.findUnique({
-                    where: {
-                        followerId_followingId: {
-                            followerId: currentUser.id,
-                            followingId: user.id,
-                        },
-                    },
-                });
+                const [follow, followBack] = await Promise.all([
+                    prisma.follow.findUnique({
+                        where: { followerId_followingId: { followerId: currentUser.id, followingId: user.id } },
+                    }),
+                    prisma.follow.findUnique({
+                        where: { followerId_followingId: { followerId: user.id, followingId: currentUser.id } },
+                    }),
+                ]);
                 isFollowing = !!follow;
-                
-                // Check if they're following me (for "Follow Back" button)
-                const followBack = await prisma.follow.findUnique({
-                    where: {
-                        followerId_followingId: {
-                            followerId: user.id,
-                            followingId: currentUser.id,
-                        },
-                    },
-                });
                 isFollowingMe = !!followBack;
             }
         }
 
-        logger.info(`[/clerk/user/:username] ✅ Returning profile data for: ${username}`);
         res.json({
             status: 'SUCCESS',
             data: {
@@ -680,270 +437,47 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
             },
         });
     } catch (error: any) {
-        logger.error('[/clerk/user/:username] ❌ Error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error',
-            code: 'E010',
-        });
-    }
-});
-
-/**
- * POST /api/clerk/follow/:username
- * Follow a user (protected)
- */
-router.post('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const username = ensureString(req.params.username);
-        const clerkUserId = req.auth?.userId;
-
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
-
-        // Get current user
-        const currentUser = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, username: true, displayName: true, avatar: true },
-        });
-
-        if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        // Get target user
-        const targetUser = await prisma.user.findUnique({
-            where: { username },
-            select: { id: true, username: true },
-        });
-
-        if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
-            return;
-        }
-
-        // Can't follow yourself
-        if (currentUser.id === targetUser.id) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself' });
-            return;
-        }
-
-        // Check if already following
-        const existingFollow = await prisma.follow.findUnique({
-            where: {
-                followerId_followingId: {
-                    followerId: currentUser.id,
-                    followingId: targetUser.id,
-                },
-            },
-        });
-
-        if (existingFollow) {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
-            return;
-        }
-
-        // Create follow relationship
-        await prisma.follow.create({
-            data: {
-                followerId: currentUser.id,
-                followingId: targetUser.id,
-            },
-        });
-
-        // Create notification for the followed user
-        const { NotificationService } = await import('../services/notification.service');
-        await NotificationService.createSocialNotification({
-            userId: targetUser.id,
-            actorId: currentUser.id,
-            title: 'متابع جديد',
-            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
-            type: 'FOLLOW',
-            data: {
-                followerId: currentUser.id,
-            },
-        });
-
-        // Send WebSocket follow event (Requirements: 21.4)
-        WebSocketService.sendFollowUpdate(targetUser.id, {
-            followerId: currentUser.id,
-            followingId: targetUser.id,
-            followerUsername: currentUser.username,
-            action: 'follow',
-        });
-
-        // Get updated counts
-        const counts = await prisma.user.findUnique({
-            where: { id: targetUser.id },
-            select: {
-                _count: {
-                    select: { followers: true, following: true },
-                },
-            },
-        });
-
-        res.json({
-            status: 'SUCCESS',
-            message: 'Followed successfully',
-            data: {
-                followersCount: counts?._count.followers || 0,
-                followingCount: counts?._count.following || 0,
-            },
-        });
-    } catch (error: any) {
-        logger.error('Follow error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
-    }
-});
-
-/**
- * DELETE /api/clerk/follow/:username
- * Unfollow a user (protected)
- */
-router.delete('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const username = ensureString(req.params.username);
-        const clerkUserId = req.auth?.userId;
-
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
-
-        // Get current user
-        const currentUser = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true },
-        });
-
-        if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        // Get target user
-        const targetUser = await prisma.user.findUnique({
-            where: { username },
-            select: { id: true },
-        });
-
-        if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
-            return;
-        }
-
-        // Get current user's username for WebSocket event
-        const currentUserWithUsername = await prisma.user.findUnique({
-            where: { id: currentUser.id },
-            select: { username: true },
-        });
-
-        // Delete follow relationship
-        await prisma.follow.deleteMany({
-            where: {
-                followerId: currentUser.id,
-                followingId: targetUser.id,
-            },
-        });
-
-        // Send WebSocket unfollow event (Requirements: 21.4)
-        WebSocketService.sendFollowUpdate(targetUser.id, {
-            followerId: currentUser.id,
-            followingId: targetUser.id,
-            followerUsername: currentUserWithUsername?.username || '',
-            action: 'unfollow',
-        });
-
-        // Get updated counts
-        const counts = await prisma.user.findUnique({
-            where: { id: targetUser.id },
-            select: {
-                _count: {
-                    select: { followers: true, following: true },
-                },
-            },
-        });
-
-        res.json({
-            status: 'SUCCESS',
-            message: 'Unfollowed successfully',
-            data: {
-                followersCount: counts?._count.followers || 0,
-                followingCount: counts?._count.following || 0,
-            },
-        });
-    } catch (error: any) {
-        logger.error('Unfollow error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        logger.error('[/clerk/user/:username] Error:', error);
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * GET /api/clerk/user/:username/reels
- * Get user's reels/videos by username (protected)
+ * ✅ Fixed: مش بيقبل clerkId كـ username
  */
 router.get('/user/:username/reels', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const username = ensureString(req.params.username);
         const { limit = '20', offset = '0' } = req.query;
 
-        logger.info(`[GET /user/:username/reels] 🔍 Request for username: ${username}, limit: ${limit}, offset: ${offset}`);
-
         if (!username) {
-            logger.warn('[GET /user/:username/reels] ⚠️ No username provided');
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Username is required',
-            });
+            res.status(400).json({ status: 'ERROR', message: 'Username is required' });
             return;
         }
 
-        // Find user by username
         const user = await prisma.user.findUnique({
             where: { username },
             select: { id: true },
         });
 
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found',
-            });
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
             return;
         }
 
-        // Get user's reels
         const reels = await prisma.reel.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, isDeleted: false },
             select: {
-                id: true,
-                videoUrl: true,
-                thumbnail: true,
-                caption: true,
-                views: true,
-                createdAt: true,
-                _count: {
-                    select: {
-                        likes: true,
-                        comments: true,
-                    },
-                },
+                id: true, videoUrl: true, thumbnail: true,
+                caption: true, views: true, createdAt: true,
+                _count: { select: { likes: true, comments: true } },
             },
             orderBy: { createdAt: 'desc' },
             take: parseInt(limit as string),
             skip: parseInt(offset as string),
         });
 
-        // Format response
         const formattedReels = reels.map((reel: any) => ({
             id: reel.id,
             uri: reel.videoUrl,
@@ -955,27 +489,161 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
             createdAt: reel.createdAt,
         }));
 
-        res.json({
-            status: 'SUCCESS',
-            data: { reels: formattedReels },
-        });
+        res.json({ status: 'SUCCESS', data: { reels: formattedReels } });
     } catch (error: any) {
         logger.error('Get user reels error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/clerk/follow/:username
+ * ✅ Race condition safe using FollowService
+ */
+router.post('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const username = ensureString(req.params.username);
+        const clerkUserId = req.auth?.userId;
+
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
+            return;
+        }
+
+        // Get both users
+        const [currentUser, targetUser] = await Promise.all([
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { username },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+        ]);
+
+        if (!currentUser) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
+            return;
+        }
+        if (!targetUser) {
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
+            return;
+        }
+
+        // Use FollowService for race-condition-safe follow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.followUser(currentUser, targetUser);
+
+        // Return appropriate response based on action
+        if (result.action === 'already_following') {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Already following this user',
+                data: {
+                    action: 'already_following',
+                    isFollowing: true,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        } else {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Followed successfully',
+                data: {
+                    action: 'followed',
+                    isFollowing: true,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        }
+    } catch (error: any) {
+        if (error.message === 'CANNOT_FOLLOW_SELF') {
+            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself', code: 'E001' });
+            return;
+        }
+        logger.error('Follow error:', error);
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
+    }
+});
+
+/**
+ * DELETE /api/clerk/follow/:username
+ * ✅ Race condition safe using FollowService
+ */
+router.delete('/follow/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const username = ensureString(req.params.username);
+        const clerkUserId = req.auth?.userId;
+
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
+            return;
+        }
+
+        // Get both users
+        const [currentUser, targetUser] = await Promise.all([
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { username },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+        ]);
+
+        if (!currentUser) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
+            return;
+        }
+        if (!targetUser) {
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
+            return;
+        }
+
+        // Use FollowService for race-condition-safe unfollow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.unfollowUser(currentUser, targetUser);
+
+        // Return appropriate response based on action
+        if (result.action === 'not_following') {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Not following this user',
+                data: {
+                    action: 'not_following',
+                    isFollowing: false,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        } else {
+            res.status(200).json({
+                status: 'SUCCESS',
+                message: 'Unfollowed successfully',
+                data: {
+                    action: 'unfollowed',
+                    isFollowing: false,
+                    followersCount: result.followersCount,
+                    followingCount: result.followingCount,
+                },
+            });
+        }
+    } catch (error: any) {
+        logger.error('Unfollow error:', error);
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * GET /api/clerk/stats
- * Get current user's follow stats (protected)
  */
 router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-
         if (!clerkUserId) {
             res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
             return;
@@ -983,15 +651,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
-            select: {
-                _count: {
-                    select: {
-                        followers: true,
-                        following: true,
-                        reels: true,
-                    },
-                },
-            },
+            select: { _count: { select: { followers: true, following: true, reels: true } } },
         });
 
         if (!user) {
@@ -1009,66 +669,104 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Get stats error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * GET /api/clerk/followers/:userId
- * Get followers list for a user (protected)
+ * ✅ Optimized: No N+1 queries, single query with Prisma include
  */
 router.get('/followers/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = ensureString(req.params.userId);
         const clerkUserId = req.auth?.userId;
+        const limit = Math.min(parseInt(ensureString(req.query.limit as any)) || 50, 100);
+        const offset = parseInt(ensureString(req.query.offset as any)) || 0;
 
         if (!userId) {
-            res.status(400).json({ status: 'ERROR', message: 'User ID is required' });
+            res.status(400).json({ status: 'ERROR', message: 'User ID is required', code: 'E001' });
             return;
         }
 
-        // Get current user to check follow status
-        const currentUser = await prisma.user.findUnique({
+        // Check cache first
+        const { FollowersCacheHelper } = await import('../services/cache-helpers.service');
+        const cacheKey = `${userId}:${offset}`;
+        
+        if (clerkUserId) {
+            const currentUser = await prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true },
+            });
+            
+            if (currentUser) {
+                const cached = await FollowersCacheHelper.get<any>(cacheKey);
+                if (cached) {
+                    // Recalculate isFollowing for current user
+                    const followersWithStatus = await Promise.all(
+                        cached.followers.map(async (follower: any) => {
+                            const isFollowing = await prisma.follow.findUnique({
+                                where: {
+                                    followerId_followingId: {
+                                        followerId: currentUser.id,
+                                        followingId: follower.id,
+                                    },
+                                },
+                            });
+                            return { ...follower, isFollowedByMe: !!isFollowing };
+                        })
+                    );
+                    
+                    res.json({
+                        status: 'SUCCESS',
+                        data: { ...cached, followers: followersWithStatus },
+                    });
+                    return;
+                }
+            }
+        }
+
+        // Get current user ID for follow status check
+        const currentUser = clerkUserId ? await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true },
-        });
+        }) : null;
 
-        // Get followers with their details
-        const followers = await prisma.follow.findMany({
-            where: { followingId: userId },
-            select: {
-                follower: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatar: true,
-                        isVerified: true,
-                        isDeveloper: true,
-                        position: true,
-                        countryFlag: true,
-                        clubLogo: true,
+        // Single optimized query with all data
+        const [followers, total] = await Promise.all([
+            prisma.follow.findMany({
+                where: { followingId: userId },
+                select: {
+                    createdAt: true,
+                    follower: {
+                        select: {
+                            id: true,
+                            username: true,
+                            displayName: true,
+                            avatar: true,
+                            isVerified: true,
+                            isDeveloper: true,
+                            level: true,
+                            position: true,
+                            countryFlag: true,
+                            clubLogo: true,
+                            // Nested query to check if current user follows this follower
+                            followers: currentUser ? {
+                                where: { followerId: currentUser.id },
+                                select: { id: true },
+                                take: 1,
+                            } : false,
+                        },
                     },
                 },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 100,
-        });
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                skip: offset,
+            }),
+            prisma.follow.count({ where: { followingId: userId } }),
+        ]);
 
-        // Check if current user is following each follower
-        const followerIds = followers.map((f: any) => f.follower.id);
-        const myFollows = currentUser ? await prisma.follow.findMany({
-            where: {
-                followerId: currentUser.id,
-                followingId: { in: followerIds },
-            },
-            select: { followingId: true },
-        }) : [];
-        const myFollowingSet = new Set(myFollows.map((f: any) => f.followingId));
-
+        // Format response
         const formattedFollowers = followers.map((f: any) => ({
             id: f.follower.id,
             username: f.follower.username,
@@ -1076,78 +774,129 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
             avatar: f.follower.avatar,
             isVerified: f.follower.isVerified,
             isDeveloper: f.follower.isDeveloper,
+            level: f.follower.level,
             position: f.follower.position,
             countryFlag: f.follower.countryFlag,
             clubLogo: f.follower.clubLogo,
-            isFollowing: myFollowingSet.has(f.follower.id),
+            isFollowedByMe: Array.isArray(f.follower.followers) && f.follower.followers.length > 0,
+            followedAt: f.createdAt,
         }));
+
+        const responseData = {
+            followers: formattedFollowers,
+            total,
+            hasMore: offset + limit < total,
+            limit,
+            offset,
+        };
+
+        // Cache the response
+        await FollowersCacheHelper.set(cacheKey, responseData, offset);
 
         res.json({
             status: 'SUCCESS',
-            data: { followers: formattedFollowers },
+            data: responseData,
         });
     } catch (error: any) {
         logger.error('Get followers error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * GET /api/clerk/following/:userId
- * Get following list for a user (protected)
+ * ✅ Optimized: No N+1 queries, single query with Prisma include
  */
 router.get('/following/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = ensureString(req.params.userId);
         const clerkUserId = req.auth?.userId;
+        const limit = Math.min(parseInt(ensureString(req.query.limit as any)) || 50, 100);
+        const offset = parseInt(ensureString(req.query.offset as any)) || 0;
 
         if (!userId) {
-            res.status(400).json({ status: 'ERROR', message: 'User ID is required' });
+            res.status(400).json({ status: 'ERROR', message: 'User ID is required', code: 'E001' });
             return;
         }
 
-        // Get current user to check follow status
-        const currentUser = await prisma.user.findUnique({
+        // Check cache first
+        const { FollowingCacheHelper } = await import('../services/cache-helpers.service');
+        const cacheKey = `${userId}:${offset}`;
+        
+        if (clerkUserId) {
+            const currentUser = await prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true },
+            });
+            
+            if (currentUser) {
+                const cached = await FollowingCacheHelper.get<any>(cacheKey);
+                if (cached) {
+                    // Recalculate isFollowing for current user
+                    const followingWithStatus = await Promise.all(
+                        cached.following.map(async (user: any) => {
+                            const isFollowing = await prisma.follow.findUnique({
+                                where: {
+                                    followerId_followingId: {
+                                        followerId: currentUser.id,
+                                        followingId: user.id,
+                                    },
+                                },
+                            });
+                            return { ...user, isFollowedByMe: !!isFollowing };
+                        })
+                    );
+                    
+                    res.json({
+                        status: 'SUCCESS',
+                        data: { ...cached, following: followingWithStatus },
+                    });
+                    return;
+                }
+            }
+        }
+
+        // Get current user ID for follow status check
+        const currentUser = clerkUserId ? await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true },
-        });
+        }) : null;
 
-        // Get following with their details
-        const following = await prisma.follow.findMany({
-            where: { followerId: userId },
-            select: {
-                following: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatar: true,
-                        isVerified: true,
-                        isDeveloper: true,
-                        position: true,
-                        countryFlag: true,
-                        clubLogo: true,
+        // Single optimized query with all data
+        const [following, total] = await Promise.all([
+            prisma.follow.findMany({
+                where: { followerId: userId },
+                select: {
+                    createdAt: true,
+                    following: {
+                        select: {
+                            id: true,
+                            username: true,
+                            displayName: true,
+                            avatar: true,
+                            isVerified: true,
+                            isDeveloper: true,
+                            level: true,
+                            position: true,
+                            countryFlag: true,
+                            clubLogo: true,
+                            // Nested query to check if current user follows this user
+                            followers: currentUser ? {
+                                where: { followerId: currentUser.id },
+                                select: { id: true },
+                                take: 1,
+                            } : false,
+                        },
                     },
                 },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 100,
-        });
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                skip: offset,
+            }),
+            prisma.follow.count({ where: { followerId: userId } }),
+        ]);
 
-        // Check if current user is following each user
-        const followingIds = following.map((f: any) => f.following.id);
-        const myFollows = currentUser ? await prisma.follow.findMany({
-            where: {
-                followerId: currentUser.id,
-                followingId: { in: followingIds },
-            },
-            select: { followingId: true },
-        }) : [];
-        const myFollowingSet = new Set(myFollows.map((f: any) => f.followingId));
-
+        // Format response
         const formattedFollowing = following.map((f: any) => ({
             id: f.following.id,
             username: f.following.username,
@@ -1155,28 +904,38 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
             avatar: f.following.avatar,
             isVerified: f.following.isVerified,
             isDeveloper: f.following.isDeveloper,
+            level: f.following.level,
             position: f.following.position,
             countryFlag: f.following.countryFlag,
             clubLogo: f.following.clubLogo,
-            isFollowing: myFollowingSet.has(f.following.id),
+            isFollowedByMe: Array.isArray(f.following.followers) && f.following.followers.length > 0,
+            followedAt: f.createdAt,
         }));
+
+        const responseData = {
+            following: formattedFollowing,
+            total,
+            hasMore: offset + limit < total,
+            limit,
+            offset,
+        };
+
+        // Cache the response
+        await FollowingCacheHelper.set(cacheKey, responseData, offset);
 
         res.json({
             status: 'SUCCESS',
-            data: { following: formattedFollowing },
+            data: responseData,
         });
     } catch (error: any) {
         logger.error('Get following error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * POST /api/clerk/follow/id/:userId
- * Follow a user by ID (protected)
+ * ✅ Race condition safe using FollowService
  */
 router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1184,90 +943,58 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
-        // Get current user
-        const currentUser = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, username: true, displayName: true, avatar: true },
-        });
+        // Get both users
+        const [currentUser, targetUser] = await Promise.all([
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { id: targetUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+        ]);
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
             return;
         }
-
-        // Can't follow yourself
-        if (currentUser.id === targetUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself' });
-            return;
-        }
-
-        // Check if target user exists
-        const targetUser = await prisma.user.findUnique({
-            where: { id: targetUserId },
-            select: { id: true, username: true },
-        });
-
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
             return;
         }
 
-        // Check if already following
-        const existingFollow = await prisma.follow.findUnique({
-            where: {
-                followerId_followingId: {
-                    followerId: currentUser.id,
-                    followingId: targetUserId,
-                },
-            },
-        });
+        // Use FollowService for race-condition-safe follow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.followUser(currentUser, targetUser);
 
-        if (existingFollow) {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
-            return;
-        }
-
-        // Create follow relationship
-        await prisma.follow.create({
-            data: {
-                followerId: currentUser.id,
-                followingId: targetUserId,
-            },
-        });
-
-        // Create notification
-        const { NotificationService } = await import('../services/notification.service');
-        await NotificationService.createSocialNotification({
-            userId: targetUserId,
-            actorId: currentUser.id,
-            title: 'متابع جديد',
-            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
-            type: 'FOLLOW',
-            data: {
-                followerId: currentUser.id,
-            },
-        });
-
-        res.json({
+        res.status(200).json({
             status: 'SUCCESS',
-            message: 'Followed successfully',
+            message: result.action === 'followed' ? 'Followed successfully' : 'Already following this user',
+            data: {
+                action: result.action,
+                isFollowing: true,
+                followersCount: result.followersCount,
+                followingCount: result.followingCount,
+            },
         });
     } catch (error: any) {
+        if (error.message === 'CANNOT_FOLLOW_SELF') {
+            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself', code: 'E001' });
+            return;
+        }
         logger.error('Follow by ID error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * DELETE /api/clerk/follow/id/:userId
- * Unfollow a user by ID (protected)
+ * ✅ Race condition safe using FollowService
  */
 router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1275,45 +1002,53 @@ router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Respo
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
-        // Get current user
-        const currentUser = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true },
-        });
+        // Get both users
+        const [currentUser, targetUser] = await Promise.all([
+            prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+            prisma.user.findUnique({
+                where: { id: targetUserId },
+                select: { id: true, username: true, displayName: true, avatar: true },
+            }),
+        ]);
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
+            return;
+        }
+        if (!targetUser) {
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found', code: 'E004' });
             return;
         }
 
-        // Delete follow relationship
-        await prisma.follow.deleteMany({
-            where: {
-                followerId: currentUser.id,
-                followingId: targetUserId,
-            },
-        });
+        // Use FollowService for race-condition-safe unfollow
+        const { FollowService } = await import('../services/follow.service');
+        const result = await FollowService.unfollowUser(currentUser, targetUser);
 
-        res.json({
+        res.status(200).json({
             status: 'SUCCESS',
-            message: 'Unfollowed successfully',
+            message: result.action === 'unfollowed' ? 'Unfollowed successfully' : 'Not following this user',
+            data: {
+                action: result.action,
+                isFollowing: false,
+                followersCount: result.followersCount,
+                followingCount: result.followingCount,
+            },
         });
     } catch (error: any) {
         logger.error('Unfollow by ID error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 
 /**
  * PUT /api/clerk/social-links
- * Update user's social media links (protected)
  */
 router.put('/social-links', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1325,72 +1060,44 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
             return;
         }
 
-        // Validate social links array
         if (!Array.isArray(socialLinks)) {
             res.status(400).json({ status: 'ERROR', message: 'Social links must be an array' });
             return;
         }
 
-        // Validate max 5 links
         if (socialLinks.length > 5) {
             res.status(400).json({ status: 'ERROR', message: 'Maximum 5 social links allowed' });
             return;
         }
 
-        // Validate and normalize each link
-        const validLinks = [];
         const allowedPlatforms = ['instagram', 'twitter', 'facebook', 'youtube', 'tiktok', 'website', 'linkedin', 'snapchat'];
-        
-        for (const link of socialLinks) {
-            if (!link || typeof link !== 'object') {
-                continue;
-            }
+        const validLinks = [];
 
+        for (const link of socialLinks) {
+            if (!link || typeof link !== 'object') continue;
             const platform = link.platform?.toLowerCase();
             const url = link.url?.trim();
+            if (!url || url === '') continue;
 
-            // Skip empty links
-            if (!url || url === '') {
-                continue;
-            }
-
-            // Validate platform
-            if (!platform || !allowedPlatforms.includes(platform)) {
-                logger.warn(`Invalid platform: ${platform}, defaulting to website`);
-                link.platform = 'website';
-            } else {
-                link.platform = platform;
-            }
-
-            // Normalize URL - ensure it starts with http:// or https://
             let normalizedUrl = url;
             if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
                 normalizedUrl = `https://${normalizedUrl}`;
             }
 
             validLinks.push({
-                platform: link.platform,
+                platform: platform && allowedPlatforms.includes(platform) ? platform : 'website',
                 url: normalizedUrl,
                 username: link.username || undefined,
             });
         }
 
-        // Update user's social links
         const user = await prisma.user.update({
             where: { clerkUserId },
             data: { socialLinks: validLinks } as any,
         });
 
-        // Invalidate cache
         invalidateUserCache(clerkUserId);
-        
-        // ✅ CRITICAL: Recalculate profile completion after social links update
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after social links update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+        await recalculateProfileCompletion(clerkUserId);
 
         res.json({
             status: 'SUCCESS',
@@ -1399,64 +1106,39 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Update social links error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * GET /api/clerk/username-change-status
- * Check if user can change username (15-day restriction)
  */
 router.get('/username-change-status', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-                code: 'E002',
-            });
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized', code: 'E002' });
             return;
         }
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
-            select: { lastUsernameChange: true }
+            select: { lastUsernameChange: true },
         });
 
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found',
-                code: 'E004',
-            });
+            res.status(404).json({ status: 'ERROR', message: 'User not found', code: 'E004' });
             return;
         }
 
-        const now = new Date();
         const lastChange = user.lastUsernameChange;
-        
-        // If never changed, allow change
         if (!lastChange) {
-            res.json({
-                status: 'SUCCESS',
-                data: {
-                    canChange: true,
-                    lastChange: null,
-                    nextAllowedChange: null
-                }
-            });
+            res.json({ status: 'SUCCESS', data: { canChange: true, lastChange: null, nextAllowedChange: null } });
             return;
         }
 
-        // Check if 15 days have passed
-        const daysSinceLastChange = Math.floor((now.getTime() - lastChange.getTime()) / (1000 * 60 * 60 * 24));
+        const daysSinceLastChange = Math.floor((Date.now() - lastChange.getTime()) / (1000 * 60 * 60 * 24));
         const canChange = daysSinceLastChange >= 15;
-        
         const nextAllowedChange = new Date(lastChange.getTime() + (15 * 24 * 60 * 60 * 1000));
 
         res.json({
@@ -1465,17 +1147,12 @@ router.get('/username-change-status', requireAuth, async (req: Request, res: Res
                 canChange,
                 lastChange: lastChange.toISOString(),
                 nextAllowedChange: nextAllowedChange.toISOString(),
-                daysRemaining: canChange ? 0 : 15 - daysSinceLastChange
-            }
+                daysRemaining: canChange ? 0 : 15 - daysSinceLastChange,
+            },
         });
-
     } catch (error) {
         logger.error('[/clerk/username-change-status] Error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error',
-            code: 'E010',
-        });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error', code: 'E010' });
     }
 });
 

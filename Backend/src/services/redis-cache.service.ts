@@ -21,6 +21,7 @@ interface CacheEntry<T> {
  */
 export enum CacheNamespace {
   PROFILE = 'profile',
+  PROFILE_COMPLETION = 'profile_completion',
   SEARCH = 'search',
   STATS = 'stats',
   FOLLOWERS = 'followers',

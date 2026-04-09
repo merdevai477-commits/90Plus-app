@@ -31,25 +31,32 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const notifications = await prisma.notification.findMany({
-            where: { userId: user.id },
-            orderBy: { createdAt: 'desc' },
-            take: parseInt(limit as string),
-            skip: parseInt(offset as string),
-            select: {
-                id: true,
-                type: true,
-                title: true,
-                message: true,
-                isRead: true,
-                data: true,
-                createdAt: true,
-            }
-        });
+        const [notifications, total] = await Promise.all([
+            prisma.notification.findMany({
+                where: { userId: user.id },
+                orderBy: { createdAt: 'desc' },
+                take: parseInt(limit as string),
+                skip: parseInt(offset as string),
+                select: {
+                    id: true,
+                    type: true,
+                    title: true,
+                    message: true,
+                    isRead: true,
+                    data: true,
+                    createdAt: true,
+                }
+            }),
+            prisma.notification.count({ where: { userId: user.id } }),
+        ]);
 
         res.json({
             status: 'SUCCESS',
-            data: { notifications }
+            data: {
+                notifications,
+                total,
+                hasMore: parseInt(offset as string) + parseInt(limit as string) < total,
+            }
         });
     } catch (error: any) {
         logger.error('Get notifications error:', error);

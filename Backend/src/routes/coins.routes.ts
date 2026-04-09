@@ -11,10 +11,11 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 const INITIAL_COINS = 50;
+const MAX_TRANSACTION_AMOUNT = 1000;
+const MAX_BALANCE = 99999;
 
 /**
  * GET /api/coins/balance
- * Get current user's coin balance
  */
 router.get('/balance', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -31,44 +32,22 @@ router.get('/balance', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (!user) {
-            // Create user if doesn't exist
-            const newUser = await prisma.user.create({
-                data: {
-                    clerkUserId,
-                    email: `temp_${clerkUserId}@temp.com`, // Will be updated by Clerk webhook
-                    username: `user_${clerkUserId.slice(-8)}`,
-                    coins: INITIAL_COINS,
-                    level: 1,
-                },
-                select: { id: true, coins: true }
-            });
-
-            res.json({
-                status: 'SUCCESS',
-                data: {
-                    coins: newUser.coins,
-                    userId: newUser.id
-                }
-            });
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
             return;
         }
 
         res.json({
             status: 'SUCCESS',
-            data: {
-                coins: user.coins,
-                userId: user.id
-            }
+            data: { coins: user.coins, userId: user.id }
         });
     } catch (error: any) {
         logger.error('Get coins balance error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * POST /api/coins/add
- * Add coins to user's balance
  */
 router.post('/add', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -85,6 +64,11 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
             return;
         }
 
+        if (amount > MAX_TRANSACTION_AMOUNT) {
+            res.status(400).json({ status: 'ERROR', message: 'Amount exceeds maximum allowed (1000)' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true, coins: true }
@@ -95,11 +79,19 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        // Validate and set transaction type
+        if (user.coins + amount > MAX_BALANCE) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'Adding this amount would exceed maximum balance (99999)',
+                current: user.coins,
+                maxBalance: MAX_BALANCE
+            });
+            return;
+        }
+
         const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'SPEND', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
         const transactionType = (type && validTypes.includes(type)) ? type : 'QUIZ_REWARD';
 
-        // Update coins in transaction
         const [updatedUser] = await prisma.$transaction([
             prisma.user.update({
                 where: { id: user.id },
@@ -118,20 +110,16 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
 
         res.json({
             status: 'SUCCESS',
-            data: {
-                coins: updatedUser.coins,
-                added: amount
-            }
+            data: { coins: updatedUser.coins, added: amount }
         });
     } catch (error: any) {
         logger.error('Add coins error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 /**
  * POST /api/coins/subtract
- * Subtract coins from user's balance
  */
 router.post('/subtract', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -148,6 +136,11 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
+        if (amount > MAX_TRANSACTION_AMOUNT) {
+            res.status(400).json({ status: 'ERROR', message: 'Amount exceeds maximum allowed (1000)' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true, coins: true }
@@ -158,7 +151,6 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Check if user has enough coins
         if (user.coins < amount) {
             res.status(400).json({
                 status: 'ERROR',
@@ -169,11 +161,9 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Validate and set transaction type
         const validTypes = ['QUIZ_REWARD', 'DAILY_LOGIN', 'ACHIEVEMENT', 'SPEND', 'ADMIN_GRANT', 'REEL_REWARD', 'PREDICTION'];
         const transactionType = (type && validTypes.includes(type)) ? type : 'SPEND';
 
-        // Update coins in transaction
         const [updatedUser] = await prisma.$transaction([
             prisma.user.update({
                 where: { id: user.id },
@@ -192,52 +182,12 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
 
         res.json({
             status: 'SUCCESS',
-            data: {
-                coins: updatedUser.coins,
-                subtracted: amount
-            }
+            data: { coins: updatedUser.coins, subtracted: amount }
         });
     } catch (error: any) {
         logger.error('Subtract coins error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
-    }
-});
-
-/**
- * POST /api/coins/sync
- * Sync coins from backend to frontend (for manual sync)
- */
-router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const clerkUserId = req.auth?.userId;
-
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, coins: true }
-        });
-
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        res.json({
-            status: 'SUCCESS',
-            data: {
-                coins: user.coins,
-                userId: user.id
-            }
-        });
-    } catch (error: any) {
-        logger.error('Sync coins error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
 export default router;
-

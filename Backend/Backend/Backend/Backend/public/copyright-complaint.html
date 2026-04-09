@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copyright Complaint - DMCA Notice - 90Plus</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            margin-bottom: 10px;
+        }
+        .intro {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        h2 {
+            color: #1a73e8;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        ul {
+            margin-left: 30px;
+            margin-bottom: 15px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .form-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="url"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .checkbox-group {
+            margin: 15px 0;
+        }
+        .checkbox-group label {
+            display: inline;
+            font-weight: normal;
+            margin-left: 5px;
+        }
+        button {
+            background: #1a73e8;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #1557b0;
+        }
+        .contact-info {
+            background: #d1ecf1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 30px;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Copyright Complaint - DMCA Notice</h1>
+        
+        <div class="intro">
+            <p><strong>90Plus respects intellectual property rights.</strong></p>
+            <p>If you believe that content on our platform infringes your copyright, you may submit a DMCA takedown notice using this form.</p>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ Important:</strong> Submitting a false DMCA notice may result in legal consequences. Please ensure your claim is legitimate before proceeding.
+        </div>
+
+        <h2>What is DMCA?</h2>
+        <p>The Digital Millennium Copyright Act (DMCA) is a United States copyright law that provides a process for copyright holders to request removal of infringing content from online platforms.</p>
+
+        <h2>Before You Submit</h2>
+        <p>Please ensure:</p>
+        <ul>
+            <li>You are the copyright owner or authorized to act on their behalf</li>
+            <li>The content in question actually infringes your copyright</li>
+            <li>You have identified the specific content that needs to be removed</li>
+            <li>You understand that false claims may have legal consequences</li>
+        </ul>
+
+        <h2>DMCA Takedown Notice Form</h2>
+        
+        <div class="form-section">
+            <form id="dmcaForm" action="/api/dmca/submit" method="POST">
+                
+                <div class="form-group">
+                    <label for="fullName">Your Full Name *</label>
+                    <input type="text" id="fullName" name="fullName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Your Email Address *</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number (Optional)</label>
+                    <input type="text" id="phone" name="phone">
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Mailing Address *</label>
+                    <textarea id="address" name="address" required></textarea>
+                </div>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Copyright Information</h3>
+
+                <div class="form-group">
+                    <label for="copyrightWork">Description of Copyrighted Work *</label>
+                    <textarea id="copyrightWork" name="copyrightWork" placeholder="Describe the original work that you own the copyright to..." required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="copyrightUrl">URL of Original Work (if applicable)</label>
+                    <input type="url" id="copyrightUrl" name="copyrightUrl" placeholder="https://...">
+                </div>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Infringing Content</h3>
+
+                <div class="form-group">
+                    <label for="infringingUrl">URL of Infringing Content on 90Plus *</label>
+                    <input type="url" id="infringingUrl" name="infringingUrl" placeholder="https://90plus.app/..." required>
+                </div>
+
+                <div class="form-group">
+                    <label for="infringingDescription">Description of Infringement *</label>
+                    <textarea id="infringingDescription" name="infringingDescription" placeholder="Explain how the content infringes your copyright..." required></textarea>
+                </div>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Statements</h3>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="goodFaith" name="goodFaith" required>
+                    <label for="goodFaith">I have a good faith belief that use of the copyrighted material described above is not authorized by the copyright owner, its agent, or the law. *</label>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="accuracy" name="accuracy" required>
+                    <label for="accuracy">I swear, under penalty of perjury, that the information in this notification is accurate and that I am the copyright owner or authorized to act on behalf of the owner. *</label>
+                </div>
+
+                <div class="form-group" style="margin-top: 30px;">
+                    <label for="signature">Electronic Signature (Type your full name) *</label>
+                    <input type="text" id="signature" name="signature" placeholder="Your Full Name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="date">Date *</label>
+                    <input type="text" id="date" name="date" readonly>
+                </div>
+
+                <button type="submit">Submit DMCA Notice</button>
+            </form>
+        </div>
+
+        <h2>What Happens Next?</h2>
+        <ol>
+            <li><strong>Review:</strong> We will review your notice within 2-3 business days</li>
+            <li><strong>Verification:</strong> We may contact you for additional information</li>
+            <li><strong>Action:</strong> If valid, we will remove the infringing content</li>
+            <li><strong>Notification:</strong> The user who posted the content will be notified</li>
+            <li><strong>Counter-Notice:</strong> The user may file a counter-notice if they believe the claim is invalid</li>
+        </ol>
+
+        <h2>Counter-Notification Process</h2>
+        <p>If your content was removed due to a DMCA notice and you believe it was removed in error, you may file a counter-notification. The counter-notification must include:</p>
+        <ul>
+            <li>Your contact information</li>
+            <li>Identification of the removed content</li>
+            <li>A statement under penalty of perjury that the content was removed by mistake</li>
+            <li>Consent to jurisdiction of federal court</li>
+            <li>Your physical or electronic signature</li>
+        </ul>
+
+        <div class="contact-info">
+            <h3>Alternative Contact Methods</h3>
+            <p>You may also submit your DMCA notice via:</p>
+            <p><strong>Email:</strong> dmca@90plus.app</p>
+            <p><strong>Mail:</strong><br>
+            90Plus DMCA Agent<br>
+            [Company Address]<br>
+            [City, State, ZIP]</p>
+        </div>
+
+        <div class="warning" style="margin-top: 30px;">
+            <strong>Legal Notice:</strong> This form is for copyright infringement claims only. For other issues (harassment, spam, inappropriate content), please use the in-app reporting feature or contact support@90plus.app.
+        </div>
+    </div>
+
+    <script>
+        // Set current date
+        document.getElementById('date').value = new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        // Form submission (placeholder - implement actual submission)
+        document.getElementById('dmcaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('DMCA notice submission is currently being processed. Please send your notice to dmca@90plus.app for immediate processing.');
+        });
+    </script>
+</body>
+</html>

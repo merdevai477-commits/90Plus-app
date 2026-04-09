@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ProfileController } from '../controllers/profile.controller';
+import { moderateBio } from '../middleware/content-moderation.middleware';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/me', requireAuth, ProfileController.getMyProfile);
  * PATCH /api/profile/me
  * Update current user profile
  */
-router.patch('/me', requireAuth, ProfileController.updateMyProfile);
+router.patch('/me', requireAuth, moderateBio, ProfileController.updateMyProfile);
 
 // Constants - Strict Cooldown Rules
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;   // صورة البروفايل: مرة كل 7 أيام (Requirement 10)
