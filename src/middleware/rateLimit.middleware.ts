@@ -7,6 +7,8 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import RedisStore from 'rate-limit-redis';
+import { getRedisClient, isRedisConnected } from '../lib/redis';
 
 function getClientIp(req: Request): string {
     const xff = req.headers['x-forwarded-for'];
@@ -56,6 +58,20 @@ function isSkippablePath(req: Request): boolean {
     return false;
 }
 
+function getRedisRateLimitStore(): RedisStore | undefined {
+    try {
+        if (!isRedisConnected()) return undefined;
+        const redis = getRedisClient();
+        if (!redis) return undefined;
+
+        return new RedisStore({
+            sendCommand: (...args: string[]) => (redis as any).call(...args),
+        });
+    } catch {
+        return undefined;
+    }
+}
+
 /**
  * Skip rate limiting for certain conditions
  * Must be defined before use in rate limiters
@@ -74,6 +90,7 @@ export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean =
  * 5000 requests per 15 minutes in production, 2000 per minute in development
  */
 export const generalLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
     max: process.env.NODE_ENV === 'production' ? 5000 : 2000, // 5000 prod (was 2000), 2000 dev
     message: {
@@ -83,6 +100,7 @@ export const generalLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;
@@ -104,6 +122,7 @@ export const generalLimiter = rateLimit({
  * 10000 requests per 15 minutes in production for endpoints like feed, rankings, live matches
  */
 export const lenientLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
     max: process.env.NODE_ENV === 'production' ? 10000 : 5000, // 10000 prod (was 5000), 5000 dev
     message: {
@@ -113,6 +132,7 @@ export const lenientLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;
@@ -128,6 +148,7 @@ export const lenientLimiter = rateLimit({
  * 500 requests per 15 minutes
  */
 export const writeLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
     max: process.env.NODE_ENV === 'production' ? 500 : 200, // 500 prod, 200 dev
     message: {
@@ -137,6 +158,7 @@ export const writeLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;
@@ -152,6 +174,7 @@ export const writeLimiter = rateLimit({
  * 5 requests per minute (stricter for auth)
  */
 export const authLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: 60 * 1000, // 1 minute
     max: 5, // limit each IP to 5 requests per minute
     message: {
@@ -161,6 +184,7 @@ export const authLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;
@@ -173,6 +197,7 @@ export const authLimiter = rateLimit({
  * 50 requests per minute (Clerk may send bursts)
  */
 export const webhookLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: 60 * 1000, // 1 minute
     max: 50,
     message: {
@@ -181,6 +206,7 @@ export const webhookLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         // Never skip based on path here; webhooks route already scoped.
@@ -193,6 +219,7 @@ export const webhookLimiter = rateLimit({
  * 50 requests per 15 minutes (more reasonable than 3/min)
  */
 export const strictLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
     max: process.env.NODE_ENV === 'production' ? 50 : 20, // 50 prod (was 3/min), 20 dev
     message: {
@@ -202,6 +229,7 @@ export const strictLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;
@@ -215,6 +243,7 @@ export const strictLimiter = rateLimit({
  * 500 requests per 15 minutes in production, 2000 per minute in development
  */
 export const userSyncLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
     max: process.env.NODE_ENV === 'production' ? 500 : 2000, // 500 prod (was 200), 2000 dev
     message: {
@@ -224,6 +253,7 @@ export const userSyncLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req: Request, res: Response) => {
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;

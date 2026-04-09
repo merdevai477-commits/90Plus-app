@@ -376,8 +376,17 @@ router.post('/', requireAuth, filterUGCContent, moderateReelCaption, async (req:
         });
 
         // Invalidate cache for feed
-        await clearResponseCache('/reels/feed');
-        await redisCacheService.delPattern('reels:feed:*');
+        {
+            const results = await Promise.allSettled([
+                clearResponseCache('/reels/feed'),
+                redisCacheService.delPattern('reels:feed:*'),
+            ]);
+            results.forEach((r, i) => {
+                if (r.status === 'rejected') {
+                    logger.warn(`Reels cache invalidation failed [upload] index=${i}:`, r.reason);
+                }
+            });
+        }
 
         res.status(201).json({
             status: 'SUCCESS',
@@ -559,9 +568,18 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
         });
 
         // Invalidate cache for feed and this reel
-        await clearResponseCache('/reels/feed');
-        await redisCacheService.delPattern('reels:feed:*');
-        await redisCacheService.del(`reel:${idStr}`);
+        {
+            const results = await Promise.allSettled([
+                clearResponseCache('/reels/feed'),
+                redisCacheService.delPattern('reels:feed:*'),
+                redisCacheService.del(`reel:${idStr}`),
+            ]);
+            results.forEach((r, i) => {
+                if (r.status === 'rejected') {
+                    logger.warn(`Reels cache invalidation failed [like] index=${i}:`, r.reason);
+                }
+            });
+        }
 
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
@@ -926,10 +944,19 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
         }
 
         // Invalidate cache for feed, this reel, and comments
-        await clearResponseCache('/reels/feed');
-        await redisCacheService.delPattern('reels:feed:*');
-        await redisCacheService.del(`reel:${idStr}`);
-        await redisCacheService.del(`reel:${idStr}:comments`);
+        {
+            const results = await Promise.allSettled([
+                clearResponseCache('/reels/feed'),
+                redisCacheService.delPattern('reels:feed:*'),
+                redisCacheService.del(`reel:${idStr}`),
+                redisCacheService.del(`reel:${idStr}:comments`),
+            ]);
+            results.forEach((r, i) => {
+                if (r.status === 'rejected') {
+                    logger.warn(`Reels cache invalidation failed [comment] index=${i}:`, r.reason);
+                }
+            });
+        }
 
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
@@ -1328,8 +1355,17 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
         });
 
         // Invalidate cache
-        await clearResponseCache(`/reels/${comment.reelId}/comments`);
-        await redisCacheService.del(`reel:${comment.reelId}:comments`);
+        {
+            const results = await Promise.allSettled([
+                clearResponseCache(`/reels/${comment.reelId}/comments`),
+                redisCacheService.del(`reel:${comment.reelId}:comments`),
+            ]);
+            results.forEach((r, i) => {
+                if (r.status === 'rejected') {
+                    logger.warn(`Reels cache invalidation failed [deleteComment] index=${i}:`, r.reason);
+                }
+            });
+        }
 
         res.json({ status: 'SUCCESS', message: 'Comment deleted successfully' });
     } catch (error: any) {

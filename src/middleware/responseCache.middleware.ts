@@ -19,6 +19,9 @@ interface CacheEntry {
 class ResponseCache {
     private memoryCache = new Map<string, CacheEntry>(); // Fallback in-memory cache
     private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+    private pending = new Map<string, Promise<CacheEntry>>(); // stampede protection per key
+    private pendingResolvers = new Map<string, (entry: CacheEntry) => void>();
+    private pendingRejectors = new Map<string, (err: unknown) => void>();
 
     /**
      * Generate cache key from request
@@ -54,6 +57,19 @@ class ResponseCache {
         // Fallback to memory cache
         const entry = this.memoryCache.get(key);
         if (!entry) {
+            // If another request is already populating this key, wait briefly.
+            const pending = this.pending.get(key);
+            if (pending) {
+                try {
+                    const filled = await Promise.race([
+                        pending,
+                        new Promise<CacheEntry>((_, reject) => setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 2000)),
+                    ]);
+                    return filled;
+                } catch {
+                    return null;
+                }
+            }
             return null;
         }
 
@@ -64,6 +80,56 @@ class ResponseCache {
         }
 
         return entry;
+    }
+
+    /**
+     * Register an in-flight cache fill for stampede protection.
+     * Returns false if another fill is already in progress.
+     */
+    beginFill(req: Request): boolean {
+        const key = this.getCacheKey(req);
+        if (this.pending.has(key)) return false;
+
+        let resolveFn!: (entry: CacheEntry) => void;
+        let rejectFn!: (err: unknown) => void;
+        const p = new Promise<CacheEntry>((resolve, reject) => {
+            resolveFn = resolve;
+            rejectFn = reject;
+        });
+
+        this.pending.set(key, p);
+        this.pendingResolvers.set(key, resolveFn);
+        this.pendingRejectors.set(key, rejectFn);
+
+        // Safety cleanup: don't hold pending forever.
+        setTimeout(() => {
+            if (this.pending.has(key)) {
+                this.pendingRejectors.get(key)?.(new Error('PENDING_STALE'));
+                this.pending.delete(key);
+                this.pendingResolvers.delete(key);
+                this.pendingRejectors.delete(key);
+            }
+        }, 15000).unref?.();
+
+        return true;
+    }
+
+    endFill(req: Request, entry: CacheEntry): void {
+        const key = this.getCacheKey(req);
+        const resolve = this.pendingResolvers.get(key);
+        if (resolve) resolve(entry);
+        this.pending.delete(key);
+        this.pendingResolvers.delete(key);
+        this.pendingRejectors.delete(key);
+    }
+
+    failFill(req: Request, err: unknown): void {
+        const key = this.getCacheKey(req);
+        const reject = this.pendingRejectors.get(key);
+        if (reject) reject(err);
+        this.pending.delete(key);
+        this.pendingResolvers.delete(key);
+        this.pendingRejectors.delete(key);
     }
 
     /**
@@ -85,6 +151,9 @@ class ResponseCache {
 
         // Also store in memory cache as fallback
         this.memoryCache.set(key, entry);
+
+        // Resolve any waiters.
+        this.endFill(req, entry);
 
         return etag;
     }
@@ -167,6 +236,19 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             return res.json(cached.data);
         }
 
+        // Cache miss: register a fill so concurrent requests can wait instead of stampeding downstream.
+        const isLeader = responseCache.beginFill(req);
+        if (!isLeader) {
+            const filled = await responseCache.get(req);
+            if (filled) {
+                res.setHeader('ETag', `"${filled.etag}"`);
+                res.setHeader('X-Cache', 'HIT');
+                res.setHeader('Cache-Control', `private, max-age=${Math.floor((filled.ttl || 0) / 1000)}`);
+                return res.json(filled.data);
+            }
+            // If still not available (timeout), proceed normally.
+        }
+
         // Store original json method
         const originalJson = res.json.bind(res);
 
@@ -180,9 +262,15 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
                 res.setHeader('Cache-Control', `private, max-age=${Math.floor(effectiveTtl / 1000)}`);
             }).catch(() => {
                 // Ignore cache errors, don't block response
+                responseCache.failFill(req, new Error('CACHE_SET_FAILED'));
             });
             return originalJson(body);
         };
+
+        res.on('close', () => {
+            // If the connection drops before we cache anything, release waiters.
+            responseCache.failFill(req, new Error('RESPONSE_CLOSED'));
+        });
 
         next();
     };

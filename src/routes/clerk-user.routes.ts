@@ -7,6 +7,8 @@ import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
 import { userSyncLimiter } from '../middleware/rateLimit.middleware';
 import { clearResponseCache, responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { enqueueSocialNotification } from '../queues/notification.queue';
+import { getOrSetWithLock } from '../lib/cache-mutex';
 
 const router = Router();
 
@@ -445,7 +447,6 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
 });
 
 // Search cache (2 minutes TTL)
-const searchCacheBackend = new Map<string, { data: any; timestamp: number }>();
 const SEARCH_CACHE_TTL_BACKEND = 2 * 60 * 1000;
 
 /**
@@ -454,115 +455,81 @@ const SEARCH_CACHE_TTL_BACKEND = 2 * 60 * 1000;
  */
 router.get('/search', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { q, limit = '10' } = req.query;
-        const searchQuery = (q as string || '').trim().toLowerCase();
+        const { q, limit = '10', offset = '0' } = req.query;
+        const rawQuery = (q as string || '');
+        const sanitized = rawQuery
+            .trim()
+            .toLowerCase()
+            .replace(/[%_\\]/g, '\\$&')
+            .replace(/'/g, "''");
+
         const searchLimit = Math.min(parseInt(limit as string) || 10, 20);
+        const searchOffset = Math.max(parseInt(offset as string) || 0, 0);
 
-        if (!searchQuery || searchQuery.length < 1) {
-            res.json({
-                status: 'SUCCESS',
-                data: { users: [] },
+        if (!sanitized || sanitized.length < 2) {
+            res.status(400).json({ status: 'ERROR', error: 'Search query too short' });
+            return;
+        }
+
+        const cacheKey = `search:${sanitized}:${searchLimit}:${searchOffset}`;
+        const responseData = await getOrSetWithLock(cacheKey, async () => {
+            // Search by username and displayName (case-insensitive)
+            const users = await prisma.user.findMany({
+                where: {
+                    OR: [
+                        { username: { contains: sanitized, mode: 'insensitive' } },
+                        { displayName: { contains: sanitized, mode: 'insensitive' } },
+                    ],
+                },
+                select: {
+                    id: true,
+                    username: true,
+                    displayName: true,
+                    avatar: true,
+                    bio: true,
+                    isVerified: true,
+                    isDeveloper: true,
+                    level: true,
+                    favoriteTeam: true,
+                },
+                take: searchLimit * 2,
+                skip: searchOffset,
             });
-            return;
-        }
 
-        // Check cache first
-        const cacheKey = `search_${searchQuery}_${searchLimit}`;
-        const cached = searchCacheBackend.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL_BACKEND) {
-            res.json(cached.data);
-            return;
-        }
+            const searchQueryLower = sanitized.toLowerCase();
+            const rankedUsers = users
+                .map((user: any) => {
+                    const usernameLower = (user.username || '').toLowerCase();
+                    const displayNameLower = (user.displayName || '').toLowerCase();
 
-        // Search by username and displayName (case-insensitive)
-        // Use OR condition to search both fields
-        const users = await prisma.user.findMany({
-            where: {
-                OR: [
-                    { username: { contains: searchQuery, mode: 'insensitive' } },
-                    { displayName: { contains: searchQuery, mode: 'insensitive' } },
-                ],
-            },
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                bio: true,
-                isVerified: true,
-                isDeveloper: true,
-                level: true,
-                favoriteTeam: true,
-            },
-            take: searchLimit * 2, // Get more results for ranking
-        });
+                    let score = 0;
 
-        // Apply relevance scoring and ranking
-        // Priority: exact username match > exact displayName match > partial match
-        const searchQueryLower = searchQuery.toLowerCase();
-        const rankedUsers = users
-            .map((user: any) => {
-                const usernameLower = (user.username || '').toLowerCase();
-                const displayNameLower = (user.displayName || '').toLowerCase();
-                
-                let score = 0;
-                
-                // Exact username match gets highest priority
-                if (usernameLower === searchQueryLower) {
-                    score += 1000;
-                }
-                // Username starts with query
-                else if (usernameLower.startsWith(searchQueryLower)) {
-                    score += 500;
-                }
-                // Username contains query
-                else if (usernameLower.includes(searchQueryLower)) {
-                    score += 200;
-                }
-                
-                // Exact displayName match
-                if (displayNameLower === searchQueryLower) {
-                    score += 800;
-                }
-                // displayName starts with query
-                else if (displayNameLower.startsWith(searchQueryLower)) {
-                    score += 400;
-                }
-                // displayName contains query
-                else if (displayNameLower.includes(searchQueryLower)) {
-                    score += 150;
-                }
-                
-                // Boost verified users
-                if (user.isVerified) {
-                    score += 100;
-                }
-                
-                // Boost by level
-                score += user.level || 0;
-                
-                return { ...user, _relevanceScore: score };
-            })
-            .sort((a: any, b: any) => {
-                // Sort by relevance score first, then by verified status, then by level
-                if (b._relevanceScore !== a._relevanceScore) {
-                    return b._relevanceScore - a._relevanceScore;
-                }
-                if (b.isVerified !== a.isVerified) {
-                    return b.isVerified ? 1 : -1;
-                }
-                return (b.level || 0) - (a.level || 0);
-            })
-            .slice(0, searchLimit) // Take top results
-            .map(({ _relevanceScore, ...user }: any) => user); // Remove score from response
+                    if (usernameLower === searchQueryLower) score += 1000;
+                    else if (usernameLower.startsWith(searchQueryLower)) score += 500;
+                    else if (usernameLower.includes(searchQueryLower)) score += 200;
 
-        const responseData = {
-            status: 'SUCCESS',
-            data: { users: rankedUsers },
-        };
+                    if (displayNameLower === searchQueryLower) score += 800;
+                    else if (displayNameLower.startsWith(searchQueryLower)) score += 400;
+                    else if (displayNameLower.includes(searchQueryLower)) score += 150;
 
-        // Save to cache
-        searchCacheBackend.set(cacheKey, { data: responseData, timestamp: Date.now() });
+                    if (user.isVerified) score += 100;
+                    score += user.level || 0;
+
+                    return { ...user, _relevanceScore: score };
+                })
+                .sort((a: any, b: any) => {
+                    if (b._relevanceScore !== a._relevanceScore) return b._relevanceScore - a._relevanceScore;
+                    if (b.isVerified !== a.isVerified) return b.isVerified ? 1 : -1;
+                    return (b.level || 0) - (a.level || 0);
+                })
+                .slice(0, searchLimit)
+                .map(({ _relevanceScore, ...user }: any) => user);
+
+            return {
+                status: 'SUCCESS',
+                data: { users: rankedUsers },
+            };
+        }, SEARCH_CACHE_TTL_BACKEND);
 
         res.json(responseData);
     } catch (error: any) {
@@ -741,40 +708,49 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
             return;
         }
 
-        // Check if already following
-        const existingFollow = await prisma.follow.findUnique({
-            where: {
-                followerId_followingId: {
+        await prisma.$transaction(async (tx) => {
+            // Following limit guard
+            const followingCount = await tx.follow.count({
+                where: { followerId: currentUser.id },
+            });
+            if (followingCount >= 5000) {
+                const err: any = new Error('FOLLOWING_LIMIT_REACHED');
+                err.statusCode = 400;
+                throw err;
+            }
+
+            // Check if already following
+            const existingFollow = await tx.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUser.id,
+                        followingId: targetUser.id,
+                    },
+                },
+            });
+
+            if (existingFollow) {
+                const err: any = new Error('ALREADY_FOLLOWING');
+                err.statusCode = 400;
+                throw err;
+            }
+
+            await tx.follow.create({
+                data: {
                     followerId: currentUser.id,
                     followingId: targetUser.id,
                 },
-            },
+            });
         });
 
-        if (existingFollow) {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
-            return;
-        }
-
-        // Create follow relationship
-        await prisma.follow.create({
-            data: {
-                followerId: currentUser.id,
-                followingId: targetUser.id,
-            },
-        });
-
-        // Create notification for the followed user
-        const { NotificationService } = await import('../services/notification.service');
-        await NotificationService.createSocialNotification({
+        // Create notification asynchronously (off request path)
+        await enqueueSocialNotification({
             userId: targetUser.id,
             actorId: currentUser.id,
             title: 'متابع جديد',
             message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
             type: 'FOLLOW',
-            data: {
-                followerId: currentUser.id,
-            },
+            data: { followerId: currentUser.id },
         });
 
         // Send WebSocket follow event (Requirements: 21.4)
@@ -805,10 +781,15 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         });
     } catch (error: any) {
         logger.error('Follow error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        if (error?.message === 'FOLLOWING_LIMIT_REACHED') {
+            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            return;
+        }
+        if (error?.message === 'ALREADY_FOLLOWING') {
+            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+            return;
+        }
+        res.status(500).json({ status: 'ERROR', message: error.message || 'Internal server error' });
     }
 });
 
@@ -1226,40 +1207,46 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             return;
         }
 
-        // Check if already following
-        const existingFollow = await prisma.follow.findUnique({
-            where: {
-                followerId_followingId: {
+        await prisma.$transaction(async (tx) => {
+            const followingCount = await tx.follow.count({
+                where: { followerId: currentUser.id },
+            });
+            if (followingCount >= 5000) {
+                const err: any = new Error('FOLLOWING_LIMIT_REACHED');
+                err.statusCode = 400;
+                throw err;
+            }
+
+            const existingFollow = await tx.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUser.id,
+                        followingId: targetUserId,
+                    },
+                },
+            });
+
+            if (existingFollow) {
+                const err: any = new Error('ALREADY_FOLLOWING');
+                err.statusCode = 400;
+                throw err;
+            }
+
+            await tx.follow.create({
+                data: {
                     followerId: currentUser.id,
                     followingId: targetUserId,
                 },
-            },
+            });
         });
 
-        if (existingFollow) {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
-            return;
-        }
-
-        // Create follow relationship
-        await prisma.follow.create({
-            data: {
-                followerId: currentUser.id,
-                followingId: targetUserId,
-            },
-        });
-
-        // Create notification
-        const { NotificationService } = await import('../services/notification.service');
-        await NotificationService.createSocialNotification({
+        await enqueueSocialNotification({
             userId: targetUserId,
             actorId: currentUser.id,
             title: 'متابع جديد',
             message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
             type: 'FOLLOW',
-            data: {
-                followerId: currentUser.id,
-            },
+            data: { followerId: currentUser.id },
         });
 
         res.json({
@@ -1268,10 +1255,15 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         });
     } catch (error: any) {
         logger.error('Follow by ID error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        if (error?.message === 'FOLLOWING_LIMIT_REACHED') {
+            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            return;
+        }
+        if (error?.message === 'ALREADY_FOLLOWING') {
+            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+            return;
+        }
+        res.status(500).json({ status: 'ERROR', message: error.message || 'Internal server error' });
     }
 });
 

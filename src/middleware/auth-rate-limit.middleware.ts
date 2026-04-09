@@ -5,12 +5,28 @@
 
 import rateLimit from 'express-rate-limit';
 import { logger } from '../utils/logger';
+import RedisStore from 'rate-limit-redis';
+import { getRedisClient, isRedisConnected } from '../lib/redis';
+
+function getRedisRateLimitStore(): RedisStore | undefined {
+    try {
+        if (!isRedisConnected()) return undefined;
+        const redis = getRedisClient();
+        if (!redis) return undefined;
+        return new RedisStore({
+            sendCommand: (...args: string[]) => (redis as any).call(...args),
+        });
+    } catch {
+        return undefined;
+    }
+}
 
 /**
  * Standard auth rate limiter
  * 5 attempts per 15 minutes
  */
 export const authRateLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 5, // 5 attempts
     message: {
@@ -20,6 +36,7 @@ export const authRateLimiter = rateLimit({
     },
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers
+    passOnStoreError: true,
     handler: (req, res) => {
         logger.warn('Auth rate limit exceeded', {
             ip: req.ip,
@@ -44,6 +61,7 @@ export const authRateLimiter = rateLimit({
  * 3 attempts per 1 hour
  */
 export const strictAuthRateLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: 60 * 60 * 1000, // 1 hour
     max: 3, // 3 attempts
     message: {
@@ -53,6 +71,7 @@ export const strictAuthRateLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     handler: (req, res) => {
         logger.error('Strict auth rate limit exceeded - Account locked', {
             ip: req.ip,
@@ -76,6 +95,7 @@ export const strictAuthRateLimiter = rateLimit({
  * 100 requests per minute (for Clerk webhooks)
  */
 export const webhookRateLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: 60 * 1000, // 1 minute
     max: 100, // 100 requests
     message: {
@@ -85,6 +105,7 @@ export const webhookRateLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     skip: (req) => {
         // Skip if request has valid Svix signature
         return !!req.headers['svix-signature'];
@@ -96,6 +117,7 @@ export const webhookRateLimiter = rateLimit({
  * 1 attempt per 24 hours
  */
 export const accountDeletionRateLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
     windowMs: 24 * 60 * 60 * 1000, // 24 hours
     max: 1, // 1 attempt
     message: {
@@ -105,6 +127,7 @@ export const accountDeletionRateLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    passOnStoreError: true,
     handler: (req, res) => {
         logger.warn('Account deletion rate limit exceeded', {
             userId: req.auth?.userId,
