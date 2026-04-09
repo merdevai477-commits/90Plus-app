@@ -16,6 +16,7 @@ tsconfig.tsbuildinfo
 
 # Local tests/notes
 __tests__/iosBuild.*
+__tests__/*.test.ts
 
 # Sentry
 sentry.properties
