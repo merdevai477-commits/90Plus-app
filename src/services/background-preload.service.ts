@@ -20,11 +20,28 @@ class BackgroundPreloadService {
     private intervalId: NodeJS.Timeout | null = null;
     private readonly PRELOAD_INTERVAL = 30 * 60 * 1000; // Run every 30 minutes
     private readonly MAX_TEAMS_PER_BATCH = 20; // Preload up to 20 teams at a time
+    private disabledUntilMs = 0;
+    private lastQuotaLogAtMs = 0;
+
+    private isFreePlan(): boolean {
+        return process.env.FOOTBALL_API_PLAN === 'free' || !process.env.FOOTBALL_API_PLAN;
+    }
+
+    private isQuotaError(error: any): boolean {
+        const msg = String(error?.message || error || '').toLowerCase();
+        return msg.includes('reached the request limit') || msg.includes('request limit for the day');
+    }
 
     /**
      * Start background preloading service
      */
     start(): void {
+        if (this.isFreePlan()) {
+            logger.warn('[BackgroundPreload] ⚠️ Service DISABLED - Free Plan detected (API-Football daily limit)');
+            logger.info('[BackgroundPreload] 💡 Set FOOTBALL_API_PLAN=pro to enable background preloading');
+            return;
+        }
+
         if (this.isRunning) {
             logger.warn('[BackgroundPreload] Service already running');
             return;
@@ -67,6 +84,11 @@ class BackgroundPreloadService {
         if (!this.isRunning) return;
 
         try {
+            // If we've hit API quota recently, back off to avoid log spam / wasted work
+            if (Date.now() < this.disabledUntilMs) {
+                return;
+            }
+
             logger.debug('[BackgroundPreload] 🔄 Starting team preload cycle...');
 
             // Get teams to preload from multiple sources
@@ -94,12 +116,32 @@ class BackgroundPreloadService {
                     // Small delay between batches to respect rate limits
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 } catch (error) {
+                    // If quota is exhausted, disable for a while (don't spam logs)
+                    if (this.isQuotaError(error)) {
+                        const now = Date.now();
+                        this.disabledUntilMs = now + 6 * 60 * 60 * 1000; // 6 hours backoff
+                        if (now - this.lastQuotaLogAtMs > 5 * 60 * 1000) {
+                            this.lastQuotaLogAtMs = now;
+                            logger.warn('[BackgroundPreload] ⚠️ API-Football quota exhausted. Disabling team preload temporarily.');
+                        }
+                        return;
+                    }
+
                     logger.error(`[BackgroundPreload] Failed to preload batch:`, error);
                 }
             }
 
             logger.info(`[BackgroundPreload] ✅ Completed preloading ${teamIdsToPreload.length} teams`);
         } catch (error) {
+            if (this.isQuotaError(error)) {
+                const now = Date.now();
+                this.disabledUntilMs = now + 6 * 60 * 60 * 1000; // 6 hours backoff
+                if (now - this.lastQuotaLogAtMs > 5 * 60 * 1000) {
+                    this.lastQuotaLogAtMs = now;
+                    logger.warn('[BackgroundPreload] ⚠️ API-Football quota exhausted. Disabling team preload temporarily.');
+                }
+                return;
+            }
             logger.error('[BackgroundPreload] Preload cycle failed:', error);
         }
     }
@@ -141,6 +183,9 @@ class BackgroundPreloadService {
                     if (match.teams?.away?.id) teamIds.add(match.teams.away.id);
                 }
             } catch (error) {
+                if (this.isQuotaError(error)) {
+                    throw error;
+                }
                 logger.warn('[BackgroundPreload] Failed to fetch upcoming matches:', error);
             }
 
