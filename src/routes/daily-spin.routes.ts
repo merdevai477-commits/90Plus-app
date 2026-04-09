@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { enqueueNotification } from '../queues/notification.queue';
 
 const router = Router();
 
@@ -191,14 +192,12 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
     ]);
 
     // Create notification for the win
-    await prisma.notification.create({
-      data: {
-        userId: user.id,
-        title: '🎉 مبروك!',
-        message: `ربحت ${prize.coins} كوين من عجلة الحظ اليومية!`,
-        type: 'GENERAL',
-        data: { coinsWon: prize.coins, spinDate: now.toISOString() }
-      }
+    await enqueueNotification({
+      userId: user.id,
+      title: '🎉 مبروك!',
+      message: `ربحت ${prize.coins} كوين من عجلة الحظ اليومية!`,
+      type: 'GENERAL',
+      data: { coinsWon: prize.coins, spinDate: now.toISOString(), action: 'DAILY_SPIN' },
     });
 
     res.json({

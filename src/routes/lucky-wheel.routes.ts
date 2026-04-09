@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { enqueueNotification } from '../queues/notification.queue';
 
 const router = Router();
 
@@ -278,11 +279,18 @@ router.post('/send-daily-notification', async (req: Request, res: Response): Pro
             data: { action: 'LUCKY_WHEEL' }
         }));
 
+        // Store in DB in bulk (fast)
         if (notifications.length > 0) {
-            await prisma.notification.createMany({
-                data: notifications
-            });
+            await prisma.notification.createMany({ data: notifications });
         }
+
+        // Also send push notifications asynchronously (queue handles token+consent).
+        // Run in background (do not block cron response).
+        setImmediate(() => {
+            for (const n of notifications) {
+                enqueueNotification(n).catch(() => {});
+            }
+        });
 
         res.json({
             status: 'SUCCESS',

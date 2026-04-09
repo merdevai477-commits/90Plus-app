@@ -8,6 +8,7 @@ import { lenientLimiter, writeLimiter, strictLimiter } from '../middleware/rateL
 import { redisCacheService } from '../services/redis-cache.service';
 import { moderateReelCaption, moderateComment } from '../middleware/content-moderation.middleware';
 import { filterUGCContent } from '../middleware/filter-content.middleware';
+import { enqueueNotification, enqueueSocialNotification } from '../queues/notification.queue';
 
 const router = Router();
 
@@ -350,20 +351,16 @@ router.post('/', requireAuth, filterUGCContent, moderateReelCaption, async (req:
                     await prisma.reelMention.create({
                         data: { reelId: reel.id, mentionedUserId: mentionedUser.id }
                     });
-                    // Create notification
-                    await prisma.notification.create({
+                    await enqueueSocialNotification({
+                        userId: mentionedUser.id,
+                        actorId: user.id,
+                        title: 'تم الإشارة إليك',
+                        message: `قام ${uploader?.displayName || uploader?.username || 'شخص'} بالإشارة إليك في فيديو`,
+                        type: 'MENTION',
                         data: {
-                            userId: mentionedUser.id,
-                            title: 'تم الإشارة إليك',
-                            message: `قام ${uploader?.displayName || uploader?.username || 'شخص'} بالإشارة إليك في فيديو`,
-                            type: 'MENTION',
-                            data: { 
-                                reelId: reel.id,
-                                userId: user.id,
-                                username: uploader?.username,
-                                avatar: uploader?.avatar
-                            }
-                        }
+                            reelId: reel.id,
+                            mentionedUserId: mentionedUser.id,
+                        },
                     });
                 }
             }
@@ -545,9 +542,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
                 select: { username: true, displayName: true, avatar: true }
             });
             
-            // Use NotificationService for standardized actor info
-            const { NotificationService } = await import('../services/notification.service');
-            await NotificationService.createSocialNotification({
+            await enqueueSocialNotification({
                 userId: reel.userId,
                 actorId: user.id,
                 title: 'إعجاب جديد',
@@ -841,8 +836,6 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
 
         // Process mentions in comments
         if (parsedMentions && parsedMentions.length > 0) {
-            const { NotificationService } = await import('../services/notification.service');
-            
             for (const username of parsedMentions) {
                 const mentionedUser = await prisma.user.findUnique({
                     where: { username: username.replace(/^@/, '') },
@@ -858,8 +851,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                         }
                     });
 
-                    // Create notification using NotificationService
-                    await NotificationService.createSocialNotification({
+                    await enqueueSocialNotification({
                         userId: mentionedUser.id,
                         actorId: user.id,
                         title: 'تم الإشارة إليك في تعليق',
@@ -883,8 +875,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
 
         if (parentComment && parentComment.userId !== user.id) {
             // This is a reply - notify the parent comment owner
-            const { NotificationService } = await import('../services/notification.service');
-            await NotificationService.createSocialNotification({
+            await enqueueSocialNotification({
                 userId: parentComment.userId,
                 actorId: user.id,
                 title: 'رد جديد',
@@ -914,8 +905,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
             });
         } else if (reel && reel.userId !== user.id && !parentId) {
             // This is a top-level comment - notify reel owner
-            const { NotificationService } = await import('../services/notification.service');
-            await NotificationService.createSocialNotification({
+            await enqueueSocialNotification({
                 userId: reel.userId,
                 actorId: user.id,
                 title: 'تعليق جديد',
@@ -1252,10 +1242,9 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
 
         const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
 
-        // Notify comment owner (if not self) using NotificationService
+        // Notify comment owner (if not self)
         if (comment.userId !== user.id) {
-            const { NotificationService } = await import('../services/notification.service');
-            await NotificationService.createSocialNotification({
+            await enqueueSocialNotification({
                 userId: comment.userId,
                 actorId: user.id,
                 title: 'إعجاب على تعليقك',
@@ -2672,14 +2661,12 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
             // Create notification for top 3
             if (user.rank <= 3) {
                 const medalName = user.rank === 1 ? 'ذهبية 🥇' : user.rank === 2 ? 'فضية 🥈' : 'برونزية 🥉';
-                await prisma.notification.create({
-                    data: {
-                        userId: user.userId,
-                        title: 'مبروك! حصلت على ميدالية',
-                        message: `حصلت على ميدالية ${medalName} في تصنيف ${category}`,
-                        type: 'ACHIEVEMENT',
-                        data: { badgeType, category, rank: user.rank }
-                    }
+                await enqueueNotification({
+                    userId: user.userId,
+                    title: 'مبروك! حصلت على ميدالية',
+                    message: `حصلت على ميدالية ${medalName} في تصنيف ${category}`,
+                    type: 'ACHIEVEMENT',
+                    data: { badgeType, category, rank: user.rank },
                 });
             }
         }
@@ -2816,15 +2803,12 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
                             }
                         });
 
-                        // Notification
-                        await prisma.notification.create({
-                            data: {
-                                userId: user.userId,
-                                title: '💎 مبروك! حصلت على ميدالية الدايموند!',
-                                message: 'أنت بطل! ظهرت في تشكيلة الشهر 3 شهور متتالية. حصلت على 1000 كوين هدية!',
-                                type: 'ACHIEVEMENT',
-                                data: { badgeType: 'diamond', coinsAwarded: 1000 }
-                            }
+                        await enqueueNotification({
+                            userId: user.userId,
+                            title: '💎 مبروك! حصلت على ميدالية الدايموند!',
+                            message: 'أنت بطل! ظهرت في تشكيلة الشهر 3 شهور متتالية. حصلت على 1000 كوين هدية!',
+                            type: 'ACHIEVEMENT',
+                            data: { badgeType: 'diamond', coinsAwarded: 1000 },
                         });
 
                         diamondAwards.push(user.userId);
@@ -2853,14 +2837,12 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
             // Notification for top 3
             if (rank <= 3) {
                 const medalName = rank === 1 ? 'ذهبية 🥇' : rank === 2 ? 'فضية 🥈' : 'برونزية 🥉';
-                await prisma.notification.create({
-                    data: {
-                        userId: user.userId,
-                        title: 'مبروك! أنت في تشكيلة الشهر',
-                        message: `حصلت على ميدالية ${medalName} في تشكيلة الشهر`,
-                        type: 'ACHIEVEMENT',
-                        data: { badgeType, category: 'team_of_month', rank }
-                    }
+                await enqueueNotification({
+                    userId: user.userId,
+                    title: 'مبروك! أنت في تشكيلة الشهر',
+                    message: `حصلت على ميدالية ${medalName} في تشكيلة الشهر`,
+                    type: 'ACHIEVEMENT',
+                    data: { badgeType, category: 'team_of_month', rank },
                 });
             }
         }

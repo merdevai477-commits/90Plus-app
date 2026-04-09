@@ -71,10 +71,25 @@ export class NotificationService {
                 data: notificationData,
             });
 
-            // 3. Send push notification if token available
-            if (pushToken) {
+            // 3. Send push notification (auto-resolve token + consent if not provided)
+            let effectivePushToken = pushToken ?? null;
+            if (!effectivePushToken) {
+                try {
+                    const user = await prisma.user.findUnique({
+                        where: { id: userId },
+                        select: { expoPushToken: true, pushNotificationsConsent: true },
+                    });
+                    if (user?.pushNotificationsConsent && user.expoPushToken) {
+                        effectivePushToken = user.expoPushToken;
+                    }
+                } catch (err) {
+                    logger.warn('Failed to resolve push token for user:', { userId, err });
+                }
+            }
+
+            if (effectivePushToken) {
                 await PushNotificationService.sendNotification({
-                    to: pushToken,
+                    to: effectivePushToken,
                     title,
                     body: message,
                     data: {
