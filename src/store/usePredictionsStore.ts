@@ -100,7 +100,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                 timeout: 15000, // 15 seconds
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-clerk-user-id': token,
+                    'Authorization': `Bearer ${token}`,
                 },
             });
 
@@ -129,7 +129,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                 timeout: 15000,
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-clerk-user-id': token,
+                    'Authorization': `Bearer ${token}`,
                 },
             });
 
@@ -190,7 +190,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                 timeout: 20000, // 20 seconds for submission
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-clerk-user-id': token,
+                    'Authorization': `Bearer ${token}`,
                 },
                 body: JSON.stringify({
                     apiMatchId: matchId,
