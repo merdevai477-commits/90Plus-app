@@ -930,9 +930,9 @@ export class FollowService {
     /**
      * Get followers list for a user
      */
-    static async getFollowers(token: string, userId: string): Promise<any[]> {
+    static async getFollowers(token: string, userId: string, limit = 50, offset = 0): Promise<any[]> {
         try {
-            const response = await fetch(`${API_URL}/clerk/followers/${userId}`, {
+            const response = await fetch(`${API_URL}/clerk/followers/${userId}?limit=${limit}&offset=${offset}`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -954,9 +954,9 @@ export class FollowService {
     /**
      * Get following list for a user
      */
-    static async getFollowing(token: string, userId: string): Promise<any[]> {
+    static async getFollowing(token: string, userId: string, limit = 50, offset = 0): Promise<any[]> {
         try {
-            const response = await fetch(`${API_URL}/clerk/following/${userId}`, {
+            const response = await fetch(`${API_URL}/clerk/following/${userId}?limit=${limit}&offset=${offset}`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
