@@ -870,11 +870,15 @@ export default function AuthScreen() {
                     });
                 } catch (e) {}
 
-                if (result.status === 'complete') {
+                // Clerk's `result.status` is a string union that can vary by SDK/version.
+                // We normalize it to `string` for safe comparisons across environments.
+                const status = result.status as unknown as string;
+
+                if (status === 'complete') {
                     console.log('✅ Clerk login status: complete');
                     setIsLoading(false);
                     await completeSignInWithSession(result.createdSessionId);
-                } else if (result.status === 'needs_second_factor') {
+                } else if (status === 'needs_second_factor') {
                     setIsLoading(false);
                     setShowLoadingScreen(false);
                     const factors =
@@ -899,26 +903,26 @@ export default function AuthScreen() {
                     setMfaStrategyUi(raw.strategy);
                     setShowMfaModal(true);
                     console.log('[Auth] ✅ MFA modal opened for strategy:', raw.strategy);
-                } else if (result.status === 'needs_first_factor') {
+                } else if (status === 'needs_first_factor') {
                     setIsLoading(false);
                     setShowLoadingScreen(false);
                     toastManager.showError(t.common.error, t.common.loginNeedsFirstFactor);
-                } else if (result.status === 'needs_verification') {
+                } else if (status === 'needs_verification') {
                     setIsLoading(false);
                     setShowLoadingScreen(false);
                     toastManager.showError(t.common.error, t.common.verifyEmail);
                 } else {
                     console.warn('⚠️ Clerk login incomplete:', {
-                        status: result.status,
+                        status,
                         identifier: email.substring(0, 3) + '***',
                     });
                     try {
                         const Sentry = require('@sentry/react-native');
-                        Sentry.captureMessage(`Clerk login incomplete: ${result.status}`, {
+                        Sentry.captureMessage(`Clerk login incomplete: ${status}`, {
                             level: 'warning',
                             tags: {
                                 platform: Platform.OS,
-                                clerkStatus: String(result.status),
+                                clerkStatus: String(status),
                                 isTablet: String(isTablet),
                             },
                             extra: {

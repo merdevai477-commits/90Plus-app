@@ -3,7 +3,7 @@
  * Performance optimized with faster loading and smooth scrolling
  */
 
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, Suspense } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,6 +15,7 @@ import {
   Text,
   ActivityIndicator,
 } from 'react-native';
+import type { FlatListProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -33,8 +34,6 @@ import QuickIndicators from '../../components/Matches/QuickIndicators';
 import MatchTabs, { MatchTabType } from '../../components/Matches/MatchTabs';
 import LeagueSection from '../../components/Matches/LeagueSection';
 import MatchCardSkeleton from '../../components/Matches/MatchCardSkeleton';
-import TransfersSection from '../../components/Matches/TransfersSection';
-import PredictionsSection from '../../components/Matches/PredictionsSection';
 import EmptyState from '../../components/Matches/EmptyState';
 import { MATCH_DETAILS_COLORS } from '../../constants/matchDetailsColors';
 
@@ -48,6 +47,10 @@ import ApiFootballService, { Transfer, MAJOR_LEAGUES } from '../../services/apiF
 import { useTranslation } from '../../src/i18n/useTranslation';
 import { transfersCacheService } from '../../services/transfersCache.service';
 
+// Lazy-load heavy tab sections to improve initial load
+const LazyTransfersSection = React.lazy(() => import('../../components/Matches/TransfersSection'));
+const LazyPredictionsSection = React.lazy(() => import('../../components/Matches/PredictionsSection'));
+
 // Define GroupedMatches type
 type GroupedMatches = {
   leagueId: number;
@@ -56,7 +59,9 @@ type GroupedMatches = {
   matches: Match[];
 };
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<GroupedMatches>);
+const AnimatedFlatList = Animated.createAnimatedComponent(
+  FlatList as unknown as React.ComponentType<FlatListProps<GroupedMatches>>
+);
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 /**
@@ -83,9 +88,13 @@ const MatchesScreen = () => {
   const [timeRange, setTimeRange] = useState<'1month' | '3months' | '6months' | '1year'>('1year');
   const [availableLeagues, setAvailableLeagues] = useState<Array<{ id: number; name: string; logo?: string }>>([]);
 
+  // Incremental rendering for long match lists (infinite scroll over leagues)
+  const INITIAL_LEAGUES_TO_RENDER = 8;
+  const LEAGUES_PER_PAGE = 6;
+  const [visibleLeaguesCount, setVisibleLeaguesCount] = useState(INITIAL_LEAGUES_TO_RENDER);
+
   // Scroll position for sticky header
   const scrollY = useSharedValue(0);
-  const flatListRef = useRef<FlatList>(null);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -201,9 +210,15 @@ const MatchesScreen = () => {
       setTransfersError(null);
 
       // ✅ استخدام refs بدلاً من state
-      // Get transfers from all leagues (كل الدوريات) if no selection
-      // If leagues are selected, use them; otherwise fetch from all leagues
-      const leaguesToFetch = currentSelectedLeagues.length > 0 ? currentSelectedLeagues : [];
+      // Default (when none selected) should be Top 5 leagues for speed (matches UI label).
+      const defaultTop5Leagues = [
+        MAJOR_LEAGUES.PREMIER_LEAGUE,
+        MAJOR_LEAGUES.LA_LIGA,
+        MAJOR_LEAGUES.BUNDESLIGA,
+        MAJOR_LEAGUES.SERIE_A,
+        MAJOR_LEAGUES.LIGUE_1,
+      ];
+      const leaguesToFetch = currentSelectedLeagues.length > 0 ? currentSelectedLeagues : defaultTop5Leagues;
 
       const dateRange = getDateRange(currentTimeRange);
       // Get transfers from last year (السنة الفاتت) - the completed season
@@ -219,8 +234,7 @@ const MatchesScreen = () => {
       logger.debug(`🔍 Loading transfers - Year: ${currentYear}, Last Year: ${lastYear}, Date Range: ALL (no restrictions), Leagues: ${leaguesToFetch.length > 0 ? leaguesToFetch.join(',') : 'ALL'}`);
 
       // Try cache first for zero-delay display - prioritize last year (السنة الفاتت)
-      // For all leagues, use empty array as key
-      const cacheKey = leaguesToFetch.length > 0 ? leaguesToFetch : [];
+      const cacheKey = leaguesToFetch;
       // Try last year first (السنة الفاتت) since it's the completed season
       let cached = await transfersCacheService.getCachedTransfers(lastYear, cacheKey);
       // If not found and we're not early in the year, try current year
@@ -603,6 +617,24 @@ const MatchesScreen = () => {
     return groups;
   }, [filteredMatches, favoriteLeaguesSet]);
 
+  // Reset incremental rendering when list basis changes
+  useEffect(() => {
+    setVisibleLeaguesCount(INITIAL_LEAGUES_TO_RENDER);
+  }, [selectedDate, activeTab]);
+
+  const paginatedGroupedMatches = useMemo(() => {
+    return filteredGroupedMatches.slice(0, visibleLeaguesCount);
+  }, [filteredGroupedMatches, visibleLeaguesCount]);
+
+  const hasMoreLeagues = filteredGroupedMatches.length > paginatedGroupedMatches.length;
+
+  const loadMoreLeagues = useCallback(() => {
+    if (!hasMoreLeagues) return;
+    setVisibleLeaguesCount((prev) =>
+      Math.min(prev + LEAGUES_PER_PAGE, filteredGroupedMatches.length)
+    );
+  }, [hasMoreLeagues, filteredGroupedMatches.length]);
+
   // Calculate filtered counts for indicators
   const filteredCounts = useMemo(() => ({
     matchesCount: filteredMatches.length,
@@ -899,20 +931,28 @@ const MatchesScreen = () => {
                   />
                 </View>
               ) : (
-                <TransfersSection
-                  transfers={transfers}
-                  loading={transfersLoading}
-                  error={transfersError}
-                  selectedLeagues={selectedLeagues}
-                  onSelectedLeaguesChange={setSelectedLeagues}
-                  transferType={transferType}
-                  onTransferTypeChange={setTransferType}
-                  timeRange={timeRange}
-                  onTimeRangeChange={setTimeRange}
-                  availableLeagues={availableLeagues}
-                  onPlayerPress={handlePlayerPress}
-                  onRefresh={loadTransfers} // ✅ إضافة onRefresh للتحديث التلقائي
-                />
+                <Suspense
+                  fallback={
+                    <View style={styles.skeletonContainer}>
+                      <ActivityIndicator size="large" color={MATCH_DETAILS_COLORS.accent} />
+                    </View>
+                  }
+                >
+                  <LazyTransfersSection
+                    transfers={transfers}
+                    loading={transfersLoading}
+                    error={transfersError}
+                    selectedLeagues={selectedLeagues}
+                    onSelectedLeaguesChange={setSelectedLeagues}
+                    transferType={transferType}
+                    onTransferTypeChange={setTransferType}
+                    timeRange={timeRange}
+                    onTimeRangeChange={setTimeRange}
+                    availableLeagues={availableLeagues}
+                    onPlayerPress={handlePlayerPress}
+                    onRefresh={loadTransfers} // ✅ إضافة onRefresh للتحديث التلقائي
+                  />
+                </Suspense>
               )}
             </AnimatedScrollView>
           )}
@@ -937,10 +977,18 @@ const MatchesScreen = () => {
           scrollEventThrottle={16}
           accessibilityLabel="Predictions list"
         >
-          <PredictionsSection
-            matches={filteredMatches}
-            onMatchPress={handleMatchPress}
-          />
+          <Suspense
+            fallback={
+              <View style={styles.skeletonContainer}>
+                <ActivityIndicator size="large" color={MATCH_DETAILS_COLORS.accent} />
+              </View>
+            }
+          >
+            <LazyPredictionsSection
+              matches={filteredMatches}
+              onMatchPress={handleMatchPress}
+            />
+          </Suspense>
         </AnimatedScrollView>
       ) : filteredGroupedMatches.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -952,8 +1000,7 @@ const MatchesScreen = () => {
         </View>
       ) : (
         <AnimatedFlatList
-          ref={flatListRef}
-          data={filteredGroupedMatches}
+          data={paginatedGroupedMatches}
           renderItem={renderLeagueSection}
           keyExtractor={keyExtractor}
           contentContainerStyle={[
@@ -977,6 +1024,15 @@ const MatchesScreen = () => {
           updateCellsBatchingPeriod={100}
           initialNumToRender={2}
           windowSize={3}
+          onEndReached={loadMoreLeagues}
+          onEndReachedThreshold={0.6}
+          ListFooterComponent={
+            hasMoreLeagues ? (
+              <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={MATCH_DETAILS_COLORS.accent} />
+              </View>
+            ) : null
+          }
           accessibilityLabel="Matches list"
           // Remove getItemLayout as item heights vary significantly
         />

@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ImageStyle, TextStyle, ViewStyle } from 'react-native';
 import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity } from 'react-native';
 import { COLORS } from '../reels/constants';
 import { Player } from '../../src/store/home.store';
@@ -237,7 +238,36 @@ export const TeamPitch: React.FC<TeamPitchProps> = ({ players, onPlayerPress }) 
     );
 };
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<{
+    container: ViewStyle;
+    header: ViewStyle;
+    headerLeft: ViewStyle;
+    title: TextStyle;
+    formationBadge: ViewStyle;
+    formationText: TextStyle;
+    emptyBanner: ViewStyle;
+    emptyBannerText: TextStyle;
+    emptyBannerSubtext: TextStyle;
+    pitchContainer: ViewStyle;
+    pitch: ViewStyle;
+    centerCircle: ViewStyle;
+    centerLine: ViewStyle;
+    penaltyAreaTop: ViewStyle;
+    penaltyAreaBottom: ViewStyle;
+    gkRow: ViewStyle;
+    row: ViewStyle;
+    playerNode: ViewStyle;
+    nodeContent: ViewStyle;
+    nodeImage: ImageStyle;
+    emptyNodeImage: ViewStyle;
+    nodeRating: ViewStyle;
+    emptyNodeRating: ViewStyle;
+    nodeRatingText: TextStyle;
+    emptyNodeRatingText: TextStyle;
+    nodeName: TextStyle;
+    emptyNodeNameContainer: ViewStyle;
+    emptyNodePosition: TextStyle;
+}>({
     container: {
         marginBottom: 40,
         paddingHorizontal: 16,

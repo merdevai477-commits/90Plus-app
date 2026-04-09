@@ -182,7 +182,7 @@ describe('API Configuration Property Tests', () => {
     it('should return development when __DEV__ is true', () => {
       (global as any).__DEV__ = true;
       const { EXPO_PUBLIC_ENV, NODE_ENV, ...restEnv } = process.env;
-      process.env = restEnv;
+      process.env = restEnv as NodeJS.ProcessEnv;
 
       // Re-import to get fresh module
       jest.resetModules();

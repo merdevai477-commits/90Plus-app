@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ViewStyle } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -85,13 +85,19 @@ export default function CustomToast({
         }
     }, [visible]);
 
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
+    const animatedStyle = useAnimatedStyle<ViewStyle>(() => {
+        // Reanimated's Transform type is very strict and TS sometimes infers a union for arrays of transforms.
+        // Casting to ViewStyle['transform'] keeps it typed correctly without affecting runtime.
+        const transform = [
             { translateY: translateY.value },
             { scale: scale.value },
-        ],
-        opacity: opacity.value,
-    }));
+        ] as unknown as ViewStyle['transform'];
+
+        return {
+            transform,
+            opacity: opacity.value,
+        };
+    });
 
     if (!visible) return null;
 

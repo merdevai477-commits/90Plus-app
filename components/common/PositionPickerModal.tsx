@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TextStyle, ViewStyle } from 'react-native';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, DimensionValue } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -91,7 +92,25 @@ export default function PositionPickerModal({ visible, onClose, onSelect, select
     );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<{
+    container: ViewStyle;
+    content: ViewStyle;
+    header: ViewStyle;
+    title: TextStyle;
+    closeButton: ViewStyle;
+    pitchContainer: ViewStyle;
+    pitch: ViewStyle;
+    pitchBorder: ViewStyle;
+    centerLine: ViewStyle;
+    centerCircle: ViewStyle;
+    penaltyArea: ViewStyle;
+    topPenalty: ViewStyle;
+    bottomPenalty: ViewStyle;
+    positionDot: ViewStyle;
+    dotInner: ViewStyle;
+    selectedDot: ViewStyle;
+    positionText: TextStyle;
+}>({
     container: {
         flex: 1,
         justifyContent: 'flex-end',

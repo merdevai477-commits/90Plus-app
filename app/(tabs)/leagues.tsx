@@ -23,6 +23,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import type { FlashListProps } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -78,7 +79,9 @@ const DEFAULT_SORT: SortState = {
   type: 'status_priority',
 };
 
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList<Match>);
+const AnimatedFlashList = Animated.createAnimatedComponent(
+  FlashList as unknown as React.ComponentType<FlashListProps<Match>>
+);
 
 /**
  * Leagues Screen - 365 Days Style

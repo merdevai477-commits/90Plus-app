@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
+  ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -113,14 +114,18 @@ const BackgroundParticles: React.FC<{ color: string }> = ({ color }) => {
       );
     }, []);
 
-    const style = useAnimatedStyle(() => ({
-      opacity: interpolate(anim.value, [0, 0.5, 1], [0.1, 0.4, 0.1]),
-      transform: [
+    const style = useAnimatedStyle<ViewStyle>(() => {
+      const transform = [
         { translateY: interpolate(anim.value, [0, 1], [0, -30 - i * 10]) },
         { translateX: interpolate(anim.value, [0, 0.5, 1], [0, (i % 2 === 0 ? 10 : -10), 0]) },
         { scale: interpolate(anim.value, [0, 0.5, 1], [0.5, 1, 0.5]) },
-      ],
-    }));
+      ] as unknown as ViewStyle['transform'];
+
+      return {
+        opacity: interpolate(anim.value, [0, 0.5, 1], [0.1, 0.4, 0.1]),
+        transform,
+      };
+    });
 
     return (
       <Animated.View

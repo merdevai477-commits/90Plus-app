@@ -65,7 +65,7 @@ jest.mock('../../services/logger', () => ({
 
 describe('Sentry Service Unit Tests', () => {
   const originalEnv = process.env;
-  const originalDev = global.__DEV__;
+  const originalDev = (global as any).__DEV__ as boolean | undefined;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -79,7 +79,7 @@ describe('Sentry Service Unit Tests', () => {
     (Sentry.setContext as jest.Mock).mockImplementation(() => {});
     
     process.env = { ...originalEnv };
-    global.__DEV__ = false;
+    (global as any).__DEV__ = false;
     
     // Reset Constants mock
     (Constants as any).expoConfig = {
@@ -95,7 +95,7 @@ describe('Sentry Service Unit Tests', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    global.__DEV__ = originalDev;
+    (global as any).__DEV__ = originalDev;
   });
 
   describe('Requirement 1.3: Initialize with valid DSN from environment variables', () => {
@@ -190,7 +190,7 @@ describe('Sentry Service Unit Tests', () => {
 
   describe('Requirement 1.5: Configure with environment detection', () => {
     test('should set environment to "production" when not in dev mode', () => {
-      global.__DEV__ = false;
+      (global as any).__DEV__ = false;
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();
@@ -203,7 +203,7 @@ describe('Sentry Service Unit Tests', () => {
     });
 
     test('should set environment to "development" when in dev mode', () => {
-      global.__DEV__ = true;
+      (global as any).__DEV__ = true;
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();
@@ -216,7 +216,7 @@ describe('Sentry Service Unit Tests', () => {
     });
 
     test('should set tracesSampleRate to 1.0 in development', () => {
-      global.__DEV__ = true;
+      (global as any).__DEV__ = true;
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();
@@ -229,7 +229,7 @@ describe('Sentry Service Unit Tests', () => {
     });
 
     test('should set tracesSampleRate to 0.2 in production', () => {
-      global.__DEV__ = false;
+      (global as any).__DEV__ = false;
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();
@@ -242,7 +242,7 @@ describe('Sentry Service Unit Tests', () => {
     });
 
     test('should disable Sentry in development mode', () => {
-      global.__DEV__ = true;
+      (global as any).__DEV__ = true;
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();
@@ -255,7 +255,7 @@ describe('Sentry Service Unit Tests', () => {
     });
 
     test('should enable Sentry in production mode', () => {
-      global.__DEV__ = false;
+      (global as any).__DEV__ = false;
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();

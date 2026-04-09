@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     useSharedValue,
@@ -128,12 +128,14 @@ export default function AuthLoadingScreen({ message = 'جاري تسجيل ال�
         );
     }, []);
 
-    const logoStyle = useAnimatedStyle(() => ({
-        transform: [
+    const logoStyle = useAnimatedStyle<ViewStyle>(() => {
+        const transform = [
             { scale: logoScale.value },
             { rotate: `${logoRotate.value}deg` },
-        ],
-    }));
+        ] as unknown as ViewStyle['transform'];
+
+        return { transform };
+    });
 
     const textStyle = useAnimatedStyle(() => ({
         opacity: textOpacity.value,

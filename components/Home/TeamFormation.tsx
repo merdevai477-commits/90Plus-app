@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ImageStyle, TextStyle, ViewStyle } from 'react-native';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Team } from './types';
 import { styles } from './homeStyles'; // Updated with team formation styles
@@ -11,29 +12,47 @@ interface TeamFormationProps {
 import TeamBadge from '../common/TeamBadge';
 
 export const TeamFormation: React.FC<TeamFormationProps> = ({ team, onPlayerPress }) => {
+  // homeStyles exports an untyped StyleSheet; narrow the keys we use here
+  const s = styles as unknown as {
+    fullWidthTeamCard: ViewStyle;
+    teamHeader: ViewStyle;
+    teamInfo: ViewStyle;
+    teamName: TextStyle;
+    teamFormation: TextStyle;
+    largeFootballField: ViewStyle;
+    fieldBackground: ViewStyle;
+    centerCircle: ViewStyle;
+    centerLine: ViewStyle;
+    goalArea: ViewStyle;
+    penaltyArea: ViewStyle;
+    playerDot: ViewStyle;
+    playerDotImage: ImageStyle;
+    playerDotName: TextStyle;
+  };
+
   return (
-    <View style={styles.fullWidthTeamCard}>
-      <View style={styles.teamHeader}>
+    <View style={s.fullWidthTeamCard}>
+      <View style={s.teamHeader}>
         <TeamBadge name={team.name} size={50} color="transparent" />
-        <View style={styles.teamInfo}>
-          <Text style={styles.teamName}>{team.name}</Text>
-          <Text style={styles.teamFormation}>Formation: {team.formation}</Text>
+        <View style={s.teamInfo}>
+          <Text style={s.teamName}>{team.name}</Text>
+          <Text style={s.teamFormation}>Formation: {team.formation}</Text>
         </View>
       </View>
 
-      <View style={styles.largeFootballField}>
-        <View style={styles.fieldBackground}>
-          <View style={styles.centerCircle} />
-          <View style={styles.centerLine} />
-          <View style={styles.goalArea} />
-          <View style={styles.penaltyArea} />
+      <View style={s.largeFootballField}>
+        <View style={s.fieldBackground}>
+          <View style={s.centerCircle} />
+          <View style={s.centerLine} />
+          <View style={s.goalArea} />
+          <View style={s.penaltyArea} />
         </View>
 
         {team.players.map((player) => (
           <TouchableOpacity
             key={player.id}
             style={[
-              styles.playerDot,
+              s.playerDot,
               {
                 left: `${player.x}%`,
                 top: `${player.y}%`,
@@ -41,8 +60,8 @@ export const TeamFormation: React.FC<TeamFormationProps> = ({ team, onPlayerPres
             ]}
             onPress={onPlayerPress}
           >
-            <Image source={{ uri: player.image }} style={styles.playerDotImage} />
-            <Text style={styles.playerDotName}>{player.name.split(' ')[0]}</Text>
+            <Image source={{ uri: player.image }} style={s.playerDotImage} />
+            <Text style={s.playerDotName}>{player.name.split(' ')[0]}</Text>
           </TouchableOpacity>
         ))}
       </View>

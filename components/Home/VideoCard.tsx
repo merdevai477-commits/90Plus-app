@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import type { ImageStyle, TextStyle, ViewStyle } from 'react-native';
 import { View, Text, TouchableOpacity, Image, Animated } from 'react-native';
 import { Play, Eye, Heart } from 'lucide-react-native';
 import { Video } from './types';
@@ -19,6 +20,20 @@ export const VideoCard = React.memo<VideoCardProps>(({
   onImageError 
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  // homeStyles exports an untyped StyleSheet; narrow the keys we use here
+  const s = styles as unknown as {
+    videoCard: ViewStyle;
+    videoThumbnailContainer: ViewStyle;
+    videoThumbnail: ViewStyle | ImageStyle; // used on both <View> (placeholder) and <Image>
+    errorPlaceholder: ViewStyle;
+    playButton: ViewStyle;
+    videoDuration: TextStyle;
+    videoTitle: TextStyle;
+    videoStats: ViewStyle;
+    statItem: ViewStyle;
+    statText: TextStyle;
+  };
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
@@ -43,41 +58,41 @@ export const VideoCard = React.memo<VideoCardProps>(({
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={styles.videoCard}
+        style={s.videoCard}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
         activeOpacity={0.9}
       >
-        <View style={styles.videoThumbnailContainer}>
+        <View style={s.videoThumbnailContainer}>
           {imageError || !isValidThumbnail(item.thumbnail) ? (
-            <View style={[styles.videoThumbnail, styles.errorPlaceholder, { backgroundColor: VIDEO_THUMBNAIL_PLACEHOLDER.backgroundColor }]}>
+            <View style={[s.videoThumbnail as ViewStyle, s.errorPlaceholder, { backgroundColor: VIDEO_THUMBNAIL_PLACEHOLDER.backgroundColor }]}>
               <Play color="#666" size={24} />
               <Text style={{ color: '#999', fontSize: 10, marginTop: 4 }}>No Preview</Text>
             </View>
           ) : (
             <Image
               source={{ uri: item.thumbnail }}
-              style={styles.videoThumbnail}
+              style={s.videoThumbnail as ImageStyle}
               onError={onImageError}
             />
           )}
-          <View style={styles.playButton}>
+          <View style={s.playButton}>
             <Play color="#fff" size={16} fill="#fff" />
           </View>
-          <Text style={styles.videoDuration}>{item.duration}</Text>
+          <Text style={s.videoDuration}>{item.duration}</Text>
         </View>
-        <Text style={styles.videoTitle} numberOfLines={2}>
+        <Text style={s.videoTitle} numberOfLines={2}>
           {item.title}
         </Text>
-        <View style={styles.videoStats}>
-          <View style={styles.statItem}>
+        <View style={s.videoStats}>
+          <View style={s.statItem}>
             <Eye color="#666" size={12} />
-            <Text style={styles.statText}>{formatNumber(item.views)}</Text>
+            <Text style={s.statText}>{formatNumber(item.views)}</Text>
           </View>
-          <View style={styles.statItem}>
+          <View style={s.statItem}>
             <Heart color="#666" size={12} />
-            <Text style={styles.statText}>{formatNumber(item.likes)}</Text>
+            <Text style={s.statText}>{formatNumber(item.likes)}</Text>
           </View>
         </View>
       </TouchableOpacity>

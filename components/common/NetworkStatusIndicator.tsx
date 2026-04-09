@@ -62,10 +62,11 @@ export default function NetworkStatusIndicator({
     };
 
     const getStatusIcon = () => {
-        if (!networkState.isConnected) return 'wifi-off';
-        if (!networkState.isInternetReachable) return 'warning';
-        if (!networkState.isServerReachable) return 'server';
-        return 'wifi';
+        // Use Ionicons names that exist in the current icon set
+        if (!networkState.isConnected) return 'cloud-offline-outline' as const;
+        if (!networkState.isInternetReachable) return 'warning' as const;
+        if (!networkState.isServerReachable) return 'server' as const;
+        return 'wifi' as const;
     };
 
     const handleRefresh = async () => {

@@ -57,6 +57,8 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
   const glowAnim = useRef(new Animated.Value(0)).current;
   const resultScaleAnim = useRef(new Animated.Value(0)).current;
   const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+  const spinValueRef = useRef(0);
+  const spinListenerRef = useRef<string | null>(null);
   
   const { getToken } = useAuth();
   const { coins: currentCoins, addCoins } = useCoins();
@@ -106,6 +108,23 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     }
   }, [visible, fetchStatus]);
 
+  // Track current spin value for multi-phase animation
+  useEffect(() => {
+    if (spinListenerRef.current) {
+      spinAnim.removeListener(spinListenerRef.current);
+      spinListenerRef.current = null;
+    }
+    spinListenerRef.current = spinAnim.addListener(({ value }) => {
+      spinValueRef.current = value;
+    });
+    return () => {
+      if (spinListenerRef.current) {
+        spinAnim.removeListener(spinListenerRef.current);
+        spinListenerRef.current = null;
+      }
+    };
+  }, [spinAnim]);
+
   // لف العجلة - يبدأ فوراً عند الضغط
   const spinWheel = async () => {
     if (isSpinning || !canSpin) return;
@@ -130,58 +149,26 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       }),
     ]).start();
 
-    // اختيار جائزة عشوائية مبدئية للبدء فوراً
-    const randomIndex = Math.floor(Math.random() * PRIZES.length);
-    let finalPrizeIndex = randomIndex;
-    let finalPrize = PRIZES[randomIndex];
+    // We'll fetch the real prize, but start a short "anticipation" spin immediately.
+    let finalPrizeIndex = 0;
+    let finalPrize = PRIZES[0];
     const segmentAngle = 360 / PRIZES.length;
 
-    // بدء الدوران فوراً مع الجائزة المبدئية
-    const startSpin = (prizeIndex: number) => {
-      const targetAngle = 360 - (prizeIndex * segmentAngle) - (segmentAngle / 2);
-      const totalRotation = 360 * 5 + targetAngle; // 5 دورات كاملة
+    // Reset spin state
+    spinAnim.setValue(0);
+    spinValueRef.current = 0;
 
-      // إعادة تعيين الـ animation إلى الصفر قبل البدء
-      spinAnim.setValue(0);
-      
-      // بدء الـ animation بعد تأكيد إعادة التعيين
+    // Phase 1: short anticipation spin (slow → faster)
+    await new Promise<void>((resolve) => {
       Animated.timing(spinAnim, {
-        toValue: totalRotation,
-        duration: 5000, // 5 ثواني ليكون أبطأ وأوضح - يمكن رؤية اللفات
-        easing: Easing.out(Easing.cubic), // Easing أفضل للدوران
+        toValue: 360 * 1.25, // ~1.25 turns
+        duration: 900,
+        easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
-      }).start(async () => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        if (Platform.OS === 'android') {
-          Vibration.vibrate([0, 100, 50, 100, 50, 200]);
-        }
+      }).start(() => resolve());
+    });
 
-        setWonPrize({ coins: finalPrize.coins });
-        setCanSpin(false);
-        setIsSpinning(false);
-
-        await addCoins(finalPrize.coins);
-
-        setTimeout(() => {
-          setShowResult(true);
-          Animated.spring(resultScaleAnim, {
-            toValue: 1,
-            friction: 4,
-            tension: 40,
-            useNativeDriver: true,
-          }).start();
-
-          if (onCoinsWon) {
-            onCoinsWon(finalPrize.coins, currentCoins + finalPrize.coins);
-          }
-        }, 300);
-      });
-    };
-
-    // بدء الدوران فوراً
-    startSpin(finalPrizeIndex);
-
-    // استدعاء API في الخلفية لتحديث الجائزة الحقيقية
+    // Fetch prize (prefer real result; fallback deterministic random if needed)
     try {
       const token = await getToken();
       if (token) {
@@ -198,11 +185,60 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
           finalPrize = data.data.prize;
           finalPrizeIndex = PRIZES.findIndex(p => p.coins === finalPrize.coins);
           if (finalPrizeIndex === -1) finalPrizeIndex = 0;
+        } else {
+          // Fallback if API returns unexpected response
+          finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
+          finalPrize = PRIZES[finalPrizeIndex];
         }
+      } else {
+        finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
+        finalPrize = PRIZES[finalPrizeIndex];
       }
     } catch (error) {
       console.error('Spin API error:', error);
+      finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
+      finalPrize = PRIZES[finalPrizeIndex];
     }
+
+    // Phase 2: main spin with gradual deceleration to exact target
+    const targetAngle = 360 - (finalPrizeIndex * segmentAngle) - (segmentAngle / 2);
+    const current = spinValueRef.current;
+
+    // More turns + longer duration = more natural on iOS/Android
+    const extraTurns = 6; // controls perceived speed
+    const totalRotation = current + 360 * extraTurns + targetAngle;
+
+    Animated.timing(spinAnim, {
+      toValue: totalRotation,
+      duration: 6500,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start(async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS === 'android') {
+        Vibration.vibrate([0, 100, 50, 100, 50, 200]);
+      }
+
+      setWonPrize({ coins: finalPrize.coins });
+      setCanSpin(false);
+      setIsSpinning(false);
+
+      await addCoins(finalPrize.coins);
+
+      setTimeout(() => {
+        setShowResult(true);
+        Animated.spring(resultScaleAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 40,
+          useNativeDriver: true,
+        }).start();
+
+        if (onCoinsWon) {
+          onCoinsWon(finalPrize.coins, currentCoins + finalPrize.coins);
+        }
+      }, 300);
+    });
   };
 
   // رسم العجلة بالتصميم الجديد (مع السلاسل لو مقفولة)

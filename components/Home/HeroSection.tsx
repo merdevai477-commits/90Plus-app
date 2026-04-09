@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import type { ImageStyle, TextStyle, ViewStyle } from 'react-native';
 import { View, Text, Image, Animated, Dimensions, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { styles } from './homeStyles';
@@ -46,15 +47,29 @@ export const HeroSection: React.FC = () => {
     const scrollX = useRef(new Animated.Value(0)).current;
     const { t, isRTL } = useLanguage();
 
+    // homeStyles exports an untyped StyleSheet, which TS may widen to ViewStyle|TextStyle|ImageStyle.
+    // Locally narrow the specific keys we use so component props get the right style types.
+    const s = styles as unknown as {
+        heroContainer: ViewStyle;
+        heroScrollContent: ViewStyle;
+        heroCard: ViewStyle;
+        heroImage: ImageStyle;
+        heroOverlay: ViewStyle;
+        heroTag: ViewStyle;
+        heroTagText: TextStyle;
+        heroTitle: TextStyle;
+        heroSubtitle: TextStyle;
+    };
+
     return (
-        <View style={styles.heroContainer}>
+        <View style={s.heroContainer}>
             <Animated.ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 snapToInterval={SNAP_INTERVAL}
                 decelerationRate="fast"
                 contentContainerStyle={[
-                    styles.heroScrollContent,
+                    s.heroScrollContent,
                     { paddingRight: SCREEN_WIDTH - CARD_WIDTH - 20 } // Add padding to end
                 ]}
                 onScroll={Animated.event(
@@ -86,7 +101,7 @@ export const HeroSection: React.FC = () => {
                         <TouchableOpacity key={item.id} activeOpacity={0.9}>
                             <Animated.View
                                 style={[
-                                    styles.heroCard,
+                                    s.heroCard,
                                     {
                                         transform: [{ scale }],
                                         opacity,
@@ -94,20 +109,20 @@ export const HeroSection: React.FC = () => {
                                     },
                                 ]}
                             >
-                                <Image source={{ uri: item.image }} style={styles.heroImage} resizeMode="cover" />
+                                <Image source={{ uri: item.image }} style={s.heroImage} resizeMode="cover" />
 
                                 <LinearGradient
                                     colors={['transparent', 'rgba(0,0,0,0.8)', COLORS.deepBlack]}
-                                    style={styles.heroOverlay}
+                                    style={s.heroOverlay}
                                 />
 
-                                <View style={styles.heroTag}>
-                                    <Text style={styles.heroTagText}>{item.tag}</Text>
+                                <View style={s.heroTag}>
+                                    <Text style={s.heroTagText}>{item.tag}</Text>
                                 </View>
 
-                                <View style={styles.heroOverlay}>
-                                    <Text style={styles.heroTitle} numberOfLines={2}>{item.title}</Text>
-                                    <Text style={styles.heroSubtitle}>{item.subtitle}</Text>
+                                <View style={s.heroOverlay}>
+                                    <Text style={s.heroTitle} numberOfLines={2}>{item.title}</Text>
+                                    <Text style={s.heroSubtitle}>{item.subtitle}</Text>
                                 </View>
                             </Animated.View>
                         </TouchableOpacity>

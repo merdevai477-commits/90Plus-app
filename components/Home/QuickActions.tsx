@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TextStyle, ViewStyle } from 'react-native';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { styles } from './homeStyles';
@@ -18,6 +19,16 @@ interface QuickActionItem {
 export const QuickActions: React.FC = () => {
     const { t } = useLanguage();
     const router = useRouter();
+
+    // homeStyles exports an untyped StyleSheet; narrow the keys we use here
+    const s = styles as unknown as {
+        actionsGrid: ViewStyle;
+        actionCard: ViewStyle;
+        actionGradient: ViewStyle;
+        actionIconBox: ViewStyle;
+        actionArrow: ViewStyle;
+        actionTitle: TextStyle;
+    };
 
     const actions: QuickActionItem[] = [
         {
@@ -51,11 +62,11 @@ export const QuickActions: React.FC = () => {
     ];
 
     return (
-        <View style={styles.actionsGrid}>
+        <View style={s.actionsGrid}>
             {actions.map((action) => (
                 <TouchableOpacity
                     key={action.id}
-                    style={styles.actionCard}
+                    style={s.actionCard}
                     activeOpacity={0.8}
                     onPress={() => router.push(action.route as any)}
                 >
@@ -63,15 +74,15 @@ export const QuickActions: React.FC = () => {
                         colors={action.gradient}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={styles.actionGradient}
+                        style={s.actionGradient}
                     >
-                        <View style={styles.actionIconBox}>
+                        <View style={s.actionIconBox}>
                             <action.icon size={20} color={COLORS.white} />
                         </View>
 
-                        <ArrowUpRight size={16} color={COLORS.white} style={styles.actionArrow} />
+                        <ArrowUpRight size={16} color={COLORS.white} style={s.actionArrow} />
 
-                        <Text style={styles.actionTitle}>{action.title}</Text>
+                        <Text style={s.actionTitle}>{action.title}</Text>
                     </LinearGradient>
                 </TouchableOpacity>
             ))}

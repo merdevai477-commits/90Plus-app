@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TextStyle, ViewStyle } from 'react-native';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { VideoCard } from './VideoCard';
@@ -23,16 +24,26 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
   onVideoPress,
   onViewAllPress,
 }) => {
+  // homeStyles exports an untyped StyleSheet; narrow the keys we use here
+  const s = styles as unknown as {
+    section: ViewStyle;
+    sectionHeader: ViewStyle;
+    sectionTitle: TextStyle;
+    viewAllText: TextStyle;
+    skeletonContainer: ViewStyle;
+    horizontalList: ViewStyle;
+  };
+
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Best Videos</Text>
+    <View style={s.section}>
+      <View style={s.sectionHeader}>
+        <Text style={s.sectionTitle}>Best Videos</Text>
         <TouchableOpacity onPress={onViewAllPress}>
-          <Text style={styles.viewAllText}>View All</Text>
+          <Text style={s.viewAllText}>View All</Text>
         </TouchableOpacity>
       </View>
       {isLoading ? (
-        <View style={styles.skeletonContainer}>
+        <View style={s.skeletonContainer}>
           <SkeletonLoader width={160} height={140} style={{ marginRight: 16 }} />
           <SkeletonLoader width={160} height={140} />
         </View>
@@ -50,7 +61,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
           keyExtractor={(item) => item.id}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalList}
+          contentContainerStyle={s.horizontalList}
           // @ts-ignore - estimatedItemSize is valid but TypeScript definitions may be outdated
           estimatedItemSize={120}
         />

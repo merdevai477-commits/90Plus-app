@@ -45,7 +45,9 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
     };
 
     const renderClubItem = ({ item }: { item: TopClub }) => {
-        const isSelected = selectedClubId === item.id || selectedClubId === item.apiId;
+        // TopClub is a local (fictional) club model; it only has `id`.
+        // `selectedClubId` can be string|number, so normalize to string for comparison.
+        const isSelected = String(selectedClubId ?? '') === String(item.id);
         // ✅ Apple compliance: always show emoji, never real club logos (trademark issue)
         const isEmoji = !item.logo?.startsWith('http') && !item.logo?.startsWith('/');
         const displayLogo = isEmoji ? item.logo : null; // ignore real URLs

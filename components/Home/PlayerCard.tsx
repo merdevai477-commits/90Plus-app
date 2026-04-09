@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import type { TextStyle, ViewStyle } from 'react-native';
 import { View, Text, TouchableOpacity, Image, Animated } from 'react-native';
 import { Star, Users } from 'lucide-react-native';
 import { Player } from './types';
@@ -21,6 +22,17 @@ export const PlayerCard = React.memo<PlayerCardProps>(({
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  // homeStyles exports an untyped StyleSheet; narrow the keys we use here
+  const s = styles as unknown as {
+    playerCard: ViewStyle;
+    playerInfo: ViewStyle;
+    playerName: TextStyle;
+    playerPosition: TextStyle;
+    playerTeam: TextStyle;
+    ratingContainer: ViewStyle;
+    rating: TextStyle;
+  };
+
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
       toValue: 0.95,
@@ -38,7 +50,7 @@ export const PlayerCard = React.memo<PlayerCardProps>(({
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={styles.playerCard}
+        style={s.playerCard}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
@@ -47,17 +59,17 @@ export const PlayerCard = React.memo<PlayerCardProps>(({
         <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%', height: 120 }}>
           <TeamBadge name={item.name} logo={item.image} size={80} color="transparent" />
         </View>
-        <View style={styles.playerInfo}>
-          <Text style={styles.playerName} numberOfLines={1}>
+        <View style={s.playerInfo}>
+          <Text style={s.playerName} numberOfLines={1}>
             {item.name}
           </Text>
-          <Text style={styles.playerPosition}>{item.position}</Text>
-          <Text style={styles.playerTeam} numberOfLines={1}>
+          <Text style={s.playerPosition}>{item.position}</Text>
+          <Text style={s.playerTeam} numberOfLines={1}>
             {item.team}
           </Text>
-          <View style={styles.ratingContainer}>
+          <View style={s.ratingContainer}>
             <Star color="#FFD700" size={12} fill="#FFD700" />
-            <Text style={styles.rating}>{item.rating}</Text>
+            <Text style={s.rating}>{item.rating}</Text>
           </View>
         </View>
       </TouchableOpacity>

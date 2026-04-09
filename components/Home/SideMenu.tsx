@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TextStyle, ViewStyle } from 'react-native';
 import { View, Text, TouchableOpacity, Modal, Animated, Dimensions } from 'react-native';
 import { X, Info, Settings, Shield, Mail, LogOut } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -21,6 +22,20 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   onLogout,
   onMenuItemPress,
 }) => {
+  // homeStyles exports an untyped StyleSheet; narrow the keys we use here
+  const s = styles as unknown as {
+    modalOverlay: ViewStyle;
+    sideMenu: ViewStyle;
+    sideMenuHeader: ViewStyle;
+    sideMenuTitle: TextStyle;
+    sideMenuItems: ViewStyle;
+    sideMenuItem: ViewStyle;
+    sideMenuItemText: TextStyle;
+    logoutButton: ViewStyle;
+    logoutText: TextStyle;
+    sideMenuFooter: ViewStyle;
+    versionText: TextStyle;
+  };
   
   const handleMenuItemPress = (item: string) => {
     onClose(); // إغلاق القائمة أولاً
@@ -52,64 +67,64 @@ export const SideMenu: React.FC<SideMenuProps> = ({
       onRequestClose={onClose}
     >
       <TouchableOpacity
-        style={styles.modalOverlay}
+        style={s.modalOverlay}
         activeOpacity={1}
         onPress={onClose}
       >
         <Animated.View
           style={[
-            styles.sideMenu,
+            s.sideMenu,
             { transform: [{ translateX: animValue }] },
           ]}
         >
-          <View style={styles.sideMenuHeader}>
-            <Text style={styles.sideMenuTitle}>Menu</Text>
+          <View style={s.sideMenuHeader}>
+            <Text style={s.sideMenuTitle}>Menu</Text>
           </View>
 
-          <View style={styles.sideMenuItems}>
+          <View style={s.sideMenuItems}>
             <TouchableOpacity 
-              style={styles.sideMenuItem} 
+              style={s.sideMenuItem} 
               onPress={() => handleMenuItemPress('about')}
             >
               <Info color="#22c55e" size={24} />
-              <Text style={styles.sideMenuItemText}>About Us</Text>
+              <Text style={s.sideMenuItemText}>About Us</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.sideMenuItem} 
+              style={s.sideMenuItem} 
               onPress={() => handleMenuItemPress('privacy')}
             >
               <Shield color="#22c55e" size={24} />
-              <Text style={styles.sideMenuItemText}>Privacy Policy</Text>
+              <Text style={s.sideMenuItemText}>Privacy Policy</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.sideMenuItem} 
+              style={s.sideMenuItem} 
               onPress={() => handleMenuItemPress('settings')}
             >
               <Settings color="#22c55e" size={24} />
-              <Text style={styles.sideMenuItemText}>Settings</Text>
+              <Text style={s.sideMenuItemText}>Settings</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.sideMenuItem} 
+              style={s.sideMenuItem} 
               onPress={() => handleMenuItemPress('contact')}
             >
               <Mail color="#22c55e" size={24} />
-              <Text style={styles.sideMenuItemText}>Contact Us</Text>
+              <Text style={s.sideMenuItemText}>Contact Us</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity 
-            style={[styles.sideMenuItem, styles.logoutButton]} 
+            style={[s.sideMenuItem, s.logoutButton]} 
             onPress={onLogout}
           >
             <LogOut color="#ff3b30" size={24} />
-            <Text style={[styles.sideMenuItemText, styles.logoutText]}>LogOut</Text>
+            <Text style={[s.sideMenuItemText, s.logoutText]}>LogOut</Text>
           </TouchableOpacity>
 
-          <View style={styles.sideMenuFooter}>
-            <Text style={styles.versionText}>Version 1.0.0</Text>
+          <View style={s.sideMenuFooter}>
+            <Text style={s.versionText}>Version 1.0.0</Text>
           </View>
         </Animated.View>
       </TouchableOpacity>
