@@ -9,7 +9,7 @@
 
 import { Router, Request, Response } from 'express';
 import { Webhook } from 'svix';
-import { clerkClient } from '@clerk/clerk-sdk-node';
+import { clerkClient } from '@clerk/express';
 import { generateUsername } from '../utils/username.utils';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';

@@ -116,7 +116,9 @@ export function initializeSentry(app: Application): void {
   
   // Validate DSN
   if (!isValidDSN(dsn)) {
-    logger.warn('Sentry DSN not configured or invalid - error tracking disabled');
+    // Not an app failure; Sentry is optional.
+    // Keep as info to avoid alarming production logs.
+    logger.info('Sentry DSN not configured or invalid - error tracking disabled');
     return;
   }
   

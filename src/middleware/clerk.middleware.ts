@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { clerkClient } from '@clerk/clerk-sdk-node';
+import { clerkClient, clerkMiddleware, getAuth, requireAuth as clerkRequireAuth } from '@clerk/express';
 import { logger } from '../utils/logger';
 import { AuditService, AuditAction } from '../services/audit.service';
 import { TokenRevocationService } from '../services/token-revocation.service';
@@ -26,6 +26,9 @@ interface CachedUser {
 
 const userCache = new Map<string, CachedUser>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
+const clerkMiddlewareMw = clerkMiddleware();
+const clerkRequireAuthMw = clerkRequireAuth();
 
 /**
  * Get cached user or verify with Clerk API
@@ -93,27 +96,26 @@ export const requireAuth = async (
 ): Promise<void> => {
     const startTime = Date.now();
     try {
-        // Get token from Authorization header
-        const authHeader = req.headers.authorization;
+        // Let @clerk/express validate the request token & populate auth
+        clerkRequireAuthMw(req, res, async () => {
+          const auth = getAuth(req);
+          const userId = auth.userId;
+          const sessionId = auth.sessionId || '';
+          const sessionClaims = (auth as any).sessionClaims;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            logger.warn('requireAuth middleware - No token provided', {
-                path: req.path,
-                method: req.method,
-                originalUrl: req.originalUrl,
-                ip: req.ip,
-            });
+          if (!userId) {
             res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized - No token provided',
+              status: 'ERROR',
+              message: 'Unauthorized - Invalid token',
             });
             return;
-        }
-
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+          }
 
         // ✅ ENTERPRISE IMMUNITY: Check if token is revoked
-        if (TokenRevocationService.isTokenRevoked(token)) {
+        const token = req.headers.authorization?.startsWith('Bearer ')
+          ? req.headers.authorization.substring(7)
+          : null;
+        if (token && TokenRevocationService.isTokenRevoked(token)) {
             const revokedInfo = TokenRevocationService.getRevokedTokenInfo(token);
             logger.warn('requireAuth middleware - Token revoked', {
                 path: req.path,
@@ -127,121 +129,98 @@ export const requireAuth = async (
             return;
         }
 
-        try {
-            // ✅ SECURE: Verify JWT signature using Clerk SDK
-            // Clerk automatically verifies the token signature using JWKS
-            const verifiedToken = await clerkClient.verifyToken(token);
+          logger.debug('requireAuth middleware - Token verified', {
+            userId,
+            path: req.path,
+            method: req.method,
+          });
 
-            if (!verifiedToken || !verifiedToken.sub) {
-                logger.warn('requireAuth middleware - Invalid token', {
-                    path: req.path,
-                    method: req.method,
-                    originalUrl: req.originalUrl,
-                });
-                
-                // ✅ ENTERPRISE IMMUNITY: Track failed auth
-                AbuseDetectionService.trackFailedAuth(null, req.ip || 'unknown');
-                
-                res.status(401).json({
-                    status: 'ERROR',
-                    message: 'Unauthorized - Invalid token',
-                });
-                return;
-            }
-            
-            logger.debug('requireAuth middleware - Token verified', {
-                userId: verifiedToken.sub,
-                path: req.path,
-                method: req.method,
+          // ✅ ENTERPRISE IMMUNITY: Check if user is blocked for abuse
+          if (AbuseDetectionService.isUserBlocked(userId)) {
+            logger.warn('requireAuth middleware - User blocked for abuse', {
+              userId,
+              path: req.path,
+            });
+            res.status(429).json({
+              status: 'ERROR',
+              message: 'Too many requests - Please try again later',
+              code: 'USER_BLOCKED',
+            });
+            return;
+          }
+
+          // ✅ ENTERPRISE IMMUNITY: Check if IP is blocked
+          const clientIP = req.ip || 'unknown';
+          if (AbuseDetectionService.isIPBlocked(clientIP)) {
+            logger.warn('requireAuth middleware - IP blocked for abuse', {
+              ip: clientIP,
+              path: req.path,
+            });
+            res.status(429).json({
+              status: 'ERROR',
+              message: 'Too many requests - Please try again later',
+              code: 'IP_BLOCKED',
+            });
+            return;
+          }
+
+          // ✅ ENTERPRISE IMMUNITY: Track request
+          const allowed = AbuseDetectionService.trackUserRequest(userId);
+          if (!allowed) {
+            res.status(429).json({
+              status: 'ERROR',
+              message: 'Too many requests - Please slow down',
+              code: 'RATE_LIMIT_EXCEEDED',
+            });
+            return;
+          }
+
+          // Optional: Verify user exists in Clerk (with caching) for extra security
+          const userExists = await getVerifiedUser(userId);
+          if (!userExists) {
+            res.status(401).json({
+              status: 'ERROR',
+              message: 'Unauthorized - User not found',
+            });
+            return;
+          }
+
+          // ✅ APPLE COMPLIANCE: Check if user is banned (Guideline 1.2)
+          try {
+            const prisma = (await import('../lib/prisma')).default;
+            const user = await prisma.user.findUnique({
+              where: { clerkUserId: userId },
+              select: { isBanned: true, banReason: true },
             });
 
-            // ✅ ENTERPRISE IMMUNITY: Check if user is blocked for abuse
-            if (AbuseDetectionService.isUserBlocked(verifiedToken.sub)) {
-                logger.warn('requireAuth middleware - User blocked for abuse', {
-                    userId: verifiedToken.sub,
-                    path: req.path,
-                });
-                res.status(429).json({
-                    status: 'ERROR',
-                    message: 'Too many requests - Please try again later',
-                    code: 'USER_BLOCKED',
-                });
-                return;
+            if (user?.isBanned) {
+              logger.warn('requireAuth middleware - User is banned', {
+                userId,
+                path: req.path,
+              });
+              res.status(403).json({
+                status: 'ERROR',
+                message: 'Your account has been suspended for violating community guidelines.',
+                code: 'ACCOUNT_BANNED',
+                reason: user.banReason || 'Violation of community guidelines',
+              });
+              return;
             }
+          } catch (dbError: any) {
+            logger.error('Error checking banned status:', dbError);
+            // Continue if DB check fails - don't block legitimate users
+          }
 
-            // ✅ ENTERPRISE IMMUNITY: Check if IP is blocked
-            const clientIP = req.ip || 'unknown';
-            if (AbuseDetectionService.isIPBlocked(clientIP)) {
-                logger.warn('requireAuth middleware - IP blocked for abuse', {
-                    ip: clientIP,
-                    path: req.path,
-                });
-                res.status(429).json({
-                    status: 'ERROR',
-                    message: 'Too many requests - Please try again later',
-                    code: 'IP_BLOCKED',
-                });
-                return;
-            }
-
-            // ✅ ENTERPRISE IMMUNITY: Track request
-            const allowed = AbuseDetectionService.trackUserRequest(verifiedToken.sub);
-            if (!allowed) {
-                res.status(429).json({
-                    status: 'ERROR',
-                    message: 'Too many requests - Please slow down',
-                    code: 'RATE_LIMIT_EXCEEDED',
-                });
-                return;
-            }
-
-            // Optional: Verify user exists in Clerk (with caching) for extra security
-            const userExists = await getVerifiedUser(verifiedToken.sub);
-
-            if (!userExists) {
-                res.status(401).json({
-                    status: 'ERROR',
-                    message: 'Unauthorized - User not found',
-                });
-                return;
-            }
-
-            // ✅ APPLE COMPLIANCE: Check if user is banned (Guideline 1.2)
-            try {
-                const prisma = (await import('../lib/prisma')).default;
-                const user = await prisma.user.findUnique({
-                    where: { clerkUserId: verifiedToken.sub },
-                    select: { isBanned: true, banReason: true },
-                });
-
-                if (user?.isBanned) {
-                    logger.warn('requireAuth middleware - User is banned', {
-                        userId: verifiedToken.sub,
-                        path: req.path,
-                    });
-                    res.status(403).json({
-                        status: 'ERROR',
-                        message: 'Your account has been suspended for violating community guidelines.',
-                        code: 'ACCOUNT_BANNED',
-                        reason: user.banReason || 'Violation of community guidelines',
-                    });
-                    return;
-                }
-            } catch (dbError: any) {
-                logger.error('Error checking banned status:', dbError);
-                // Continue if DB check fails - don't block legitimate users
-            }
-
-            // Attach user info to request
-            req.auth = {
-                userId: verifiedToken.sub,
-                sessionId: verifiedToken.sid || '',
-                sessionClaims: verifiedToken,
-            };
+          // Attach user info to request (keep existing shape used across backend)
+          req.auth = {
+            userId,
+            sessionId,
+            sessionClaims,
+          };
 
             const duration = Date.now() - startTime;
             logger.debug('requireAuth middleware - Authentication successful', {
-                userId: verifiedToken.sub,
+                userId,
                 path: req.path,
                 duration: `${duration}ms`,
             });
@@ -249,7 +228,7 @@ export const requireAuth = async (
             // Log successful authentication (non-blocking)
             AuditService.logAuth({
                 action: AuditAction.LOGIN,
-                userId: verifiedToken.sub,
+                userId,
                 req,
                 metadata: {
                     path: req.path,
@@ -259,37 +238,7 @@ export const requireAuth = async (
             }).catch(err => logger.error('Audit log error:', err));
 
             next();
-        } catch (verifyError: any) {
-            const duration = Date.now() - startTime;
-            logger.error('Token verification error', {
-                error: verifyError.message,
-                stack: verifyError.stack,
-                path: req.path,
-                method: req.method,
-                originalUrl: req.originalUrl,
-                duration: `${duration}ms`,
-            });
-            
-            // ✅ ENTERPRISE IMMUNITY: Track failed auth
-            AbuseDetectionService.trackFailedAuth(null, req.ip || 'unknown');
-            
-            // Log failed authentication attempt (non-blocking)
-            AuditService.logAuth({
-                action: AuditAction.LOGIN_FAILED,
-                req,
-                metadata: {
-                    error: verifyError.message,
-                    path: req.path,
-                    method: req.method,
-                },
-            }).catch(err => logger.error('Audit log error:', err));
-            
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized - Token verification failed',
-            });
-            return;
-        }
+        });
     } catch (error: any) {
         const duration = Date.now() - startTime;
         logger.error('Auth middleware error', {
@@ -317,38 +266,23 @@ export const optionalAuth = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const authHeader = req.headers.authorization;
-
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            // No token, continue without auth
+        clerkMiddlewareMw(req, res, async () => {
+          const auth = getAuth(req);
+          if (!auth.userId) {
             next();
             return;
-        }
+          }
 
-        const token = authHeader.substring(7);
-
-        try {
-            // ✅ SECURE: Verify JWT signature using Clerk SDK
-            const verifiedToken = await clerkClient.verifyToken(token);
-
-            if (verifiedToken && verifiedToken.sub) {
-                // Verify user exists (with caching)
-                const userExists = await getVerifiedUser(verifiedToken.sub);
-
-                if (userExists) {
-                    req.auth = {
-                        userId: verifiedToken.sub,
-                        sessionId: verifiedToken.sid || '',
-                        sessionClaims: verifiedToken,
-                    };
-                }
-            }
-        } catch (verifyError) {
-            // Token invalid, continue without auth
-            logger.debug('Optional auth - token verification failed');
-        }
-
-        next();
+          const userExists = await getVerifiedUser(auth.userId);
+          if (userExists) {
+            req.auth = {
+              userId: auth.userId,
+              sessionId: auth.sessionId || '',
+              sessionClaims: (auth as any).sessionClaims,
+            };
+          }
+          next();
+        });
     } catch (error) {
         logger.error('Optional auth middleware error:', error);
         next();

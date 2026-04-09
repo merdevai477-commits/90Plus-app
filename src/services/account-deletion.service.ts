@@ -1,6 +1,6 @@
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { clerkClient } from '@clerk/clerk-sdk-node';
+import { clerkClient } from '@clerk/express';
 
 export class AccountDeletionService {
   /**
