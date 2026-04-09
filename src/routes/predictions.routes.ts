@@ -716,8 +716,6 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
     }
 });
 
-export default router;
-
 /**
  * GET /api/predictions/leaderboard
  * Get top predictors leaderboard
@@ -727,62 +725,76 @@ router.get('/leaderboard', async (req: Request, res: Response): Promise<void> =>
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
         
-        // Get users with best prediction accuracy
-        const users = await prisma.user.findMany({
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                isVerified: true,
-                predictions: {
-                    select: {
-                        isCorrect: true,
-                        coinsWon: true,
-                    }
-                }
-            }
+        // Efficient leaderboard: aggregate in DB instead of loading every user's predictions.
+        const countsByUserAndState = await (prisma as any).prediction.groupBy({
+            by: ['userId', 'isCorrect'],
+            _count: true,
         });
-        
-        // Calculate stats for each user
-        const leaderboard = users.map(user => {
-            const total = user.predictions.length;
-            const correct = user.predictions.filter((p: any) => p.isCorrect === true).length;
-            const incorrect = user.predictions.filter((p: any) => p.isCorrect === false).length;
-            const pending = user.predictions.filter((p: any) => p.isCorrect === null).length;
-            const totalCoinsWon = user.predictions
-                .filter((p: any) => p.isCorrect === true)
-                .reduce((sum, p: any) => sum + (p.coinsWon || 0), 0);
-            
-            const resolved = correct + incorrect;
-            const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
-            
-            return {
-                id: user.id,
-                username: user.username,
-                displayName: user.displayName,
-                avatar: user.avatar,
-                isVerified: user.isVerified,
-                stats: {
-                    total,
-                    correct,
-                    incorrect,
-                    pending,
-                    accuracy,
-                    totalCoinsWon,
-                    resolved
-                }
-            };
-        })
-        .filter(u => u.stats.resolved > 0) // Only users with resolved predictions
-        .sort((a, b) => {
-            // Sort by accuracy first, then by total correct
-            if (b.stats.accuracy !== a.stats.accuracy) {
-                return b.stats.accuracy - a.stats.accuracy;
+
+        const coinsWonByUser = await (prisma as any).prediction.groupBy({
+            by: ['userId'],
+            where: { isCorrect: true },
+            _sum: { coinsWon: true },
+        });
+
+        const statsByUser: Record<
+            string,
+            { total: number; correct: number; incorrect: number; pending: number; resolved: number; accuracy: number; totalCoinsWon: number }
+        > = {};
+
+        for (const row of countsByUserAndState) {
+            const userId: string = row.userId;
+            if (!statsByUser[userId]) {
+                statsByUser[userId] = { total: 0, correct: 0, incorrect: 0, pending: 0, resolved: 0, accuracy: 0, totalCoinsWon: 0 };
             }
-            return b.stats.correct - a.stats.correct;
-        })
-        .slice(0, take);
+            const c = row._count as number;
+            statsByUser[userId].total += c;
+            if (row.isCorrect === true) statsByUser[userId].correct += c;
+            else if (row.isCorrect === false) statsByUser[userId].incorrect += c;
+            else statsByUser[userId].pending += c;
+        }
+
+        for (const row of coinsWonByUser) {
+            const userId: string = row.userId;
+            if (!statsByUser[userId]) continue;
+            statsByUser[userId].totalCoinsWon = row._sum?.coinsWon || 0;
+        }
+
+        const candidates = Object.entries(statsByUser)
+            .map(([userId, s]) => {
+                const resolved = s.correct + s.incorrect;
+                const accuracy = resolved > 0 ? Math.round((s.correct / resolved) * 100) : 0;
+                return { userId, stats: { ...s, resolved, accuracy } };
+            })
+            .filter((x) => x.stats.resolved > 0)
+            .sort((a, b) => {
+                if (b.stats.accuracy !== a.stats.accuracy) return b.stats.accuracy - a.stats.accuracy;
+                return b.stats.correct - a.stats.correct;
+            })
+            .slice(0, take);
+
+        const userIds = candidates.map((c) => c.userId);
+        const users = await prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, username: true, displayName: true, avatar: true, isVerified: true },
+        });
+
+        const usersById = new Map(users.map((u) => [u.id, u]));
+
+        const leaderboard = candidates
+            .map((c) => {
+                const u = usersById.get(c.userId);
+                if (!u) return null;
+                return {
+                    id: u.id,
+                    username: u.username,
+                    displayName: u.displayName,
+                    avatar: u.avatar,
+                    isVerified: u.isVerified,
+                    stats: c.stats,
+                };
+            })
+            .filter(Boolean);
         
         res.json({
             success: true,
@@ -793,3 +805,5 @@ router.get('/leaderboard', async (req: Request, res: Response): Promise<void> =>
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+export default router;

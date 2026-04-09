@@ -1076,6 +1076,7 @@ model FavoriteMatch {
   @@index([userId])
   @@index([apiMatchId])
   @@index([matchDate])
+  @@index([notifiedEnd, matchDate])
   @@map("favorite_matches")
 }
 
@@ -1310,6 +1311,7 @@ model Prediction {
   @@index([userId])
   @@index([apiMatchId])
   @@index([createdAt])
+  @@index([userId, createdAt])
   @@index([isCorrect]) // ✅ OPTIMIZATION 3: Index for top predictions ranking
   @@index([userId, isCorrect]) // ✅ OPTIMIZATION 3: Compound index for user predictions stats
   @@map("predictions")

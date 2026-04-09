@@ -195,17 +195,21 @@ export const validateVideoDuration = async (
         // Create temporary file to extract duration
         // get-video-duration requires a file path, not a buffer
         const tempDir = os.tmpdir();
-        const tempFilePath = path.join(tempDir, `temp_video_${Date.now()}_${videoFile.originalname}`);
+        const safeOriginal = path
+            .basename(videoFile.originalname || 'video')
+            .replace(/[^a-zA-Z0-9._-]+/g, '_')
+            .slice(0, 80);
+        const tempFilePath = path.join(tempDir, `temp_video_${Date.now()}_${safeOriginal}`);
         
         try {
             // Write buffer to temporary file
-            fs.writeFileSync(tempFilePath, videoFile.buffer);
+            await fs.promises.writeFile(tempFilePath, videoFile.buffer);
             
             // Extract video duration
             const duration = await getVideoDurationInSeconds(tempFilePath);
-            
+
             // Clean up temporary file
-            fs.unlinkSync(tempFilePath);
+            await fs.promises.unlink(tempFilePath).catch(() => undefined);
             
             // Validate duration
             if (duration < 5) {
@@ -260,9 +264,7 @@ export const validateVideoDuration = async (
             next();
         } catch (fileError: any) {
             // Clean up temporary file if it exists
-            if (fs.existsSync(tempFilePath)) {
-                fs.unlinkSync(tempFilePath);
-            }
+            await fs.promises.unlink(tempFilePath).catch(() => undefined);
             throw fileError;
         }
     } catch (error: any) {

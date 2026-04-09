@@ -2,20 +2,60 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
 import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
-import { validateUploadedImage, optimizeUploadedImage as optimizeImage } from '../middleware/image-moderation.middleware';
+import { validateUploadedImage } from '../middleware/image-moderation.middleware';
 import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import path from 'path';
 
 const router = Router();
 
-// Configure multer for memory storage
-const upload = multer({
+function sanitizeOriginalName(name: string | undefined, fallback: string): string {
+    const base = path.basename(name || fallback);
+    return base.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120);
+}
+
+function sendError(
+    res: Response,
+    httpStatus: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>
+): void {
+    res.status(httpStatus).json({
+        status: 'ERROR',
+        code,
+        message,
+        details,
+        timestamp: new Date().toISOString(),
+    });
+}
+
+// Configure multer for memory storage (images)
+const uploadImage = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 100 * 1024 * 1024, // 100MB max
+        fileSize: 15 * 1024 * 1024, // 15MB max for images
+    },
+    fileFilter: (_req, file, cb) => {
+        if (file.mimetype?.startsWith('image/')) return cb(null, true);
+        cb(null, false);
+    },
+});
+
+// Configure multer for memory storage (reels)
+const uploadReel = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        // Keep strict: backend should reject >50MB fast, and avoid holding bigger buffers in memory
+        fileSize: 55 * 1024 * 1024,
+    },
+    fileFilter: (_req, file, cb) => {
+        const mt = (file.mimetype || '').toLowerCase();
+        const ok = mt.startsWith('video/') || mt.startsWith('image/');
+        cb(null, ok);
     },
 });
 
@@ -28,31 +68,31 @@ const REEL_UPLOAD_COOLDOWN_DAYS = 3;
  * POST /api/upload/avatar
  * Upload avatar image to R2 Storage
  */
-router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage, optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
+router.post('/avatar', requireAuth, uploadImage.single('file'), validateUploadedImage, optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized');
             return;
         }
 
         const file = req.file;
         if (!file) {
             logger.error('No file received in avatar upload request');
-            res.status(400).json({ status: 'ERROR', message: 'No file provided' });
+            sendError(res, 400, 'NO_FILE', 'No file provided');
             return;
         }
 
         // Validate file properties
         if (!file.buffer) {
             logger.error('File buffer is missing in avatar upload');
-            res.status(400).json({ status: 'ERROR', message: 'File buffer is missing' });
+            sendError(res, 400, 'INVALID_FILE', 'File buffer is missing');
             return;
         }
 
         if (!file.mimetype || !file.mimetype.startsWith('image/')) {
             logger.error(`Invalid file type in avatar upload: ${file.mimetype}`);
-            res.status(400).json({ status: 'ERROR', message: 'Invalid file type. Only images are allowed.' });
+            sendError(res, 400, 'INVALID_FILE_TYPE', 'Invalid file type. Only images are allowed.', { mimetype: file.mimetype });
             return;
         }
 
@@ -62,7 +102,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
             return;
         }
 
@@ -82,12 +122,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
                     }
                 });
                 
-                res.status(429).json({
-                    status: 'ERROR',
-                    code: 'COOLDOWN_ACTIVE',
-                    message: `يمكنك تغيير صورة البروفايل بعد ${daysRemaining} يوم`,
-                    daysRemaining
-                });
+                sendError(res, 429, 'COOLDOWN_ACTIVE', `يمكنك تغيير صورة البروفايل بعد ${daysRemaining} يوم`, { daysRemaining });
                 return;
             }
         }
@@ -101,28 +136,25 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
         // Validate file buffer is not empty
         if (file.buffer.length === 0) {
             logger.error('Empty file buffer received');
-            res.status(400).json({ status: 'ERROR', message: 'File is empty or corrupted' });
+            sendError(res, 400, 'EMPTY_FILE', 'File is empty or corrupted');
             return;
         }
 
         logger.info(`Uploading avatar: ${file.originalname}, size: ${file.buffer.length} bytes, type: ${file.mimetype}`);
 
         // Upload new avatar
-        const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await r2MediaStorage.uploadPublic('avatars', user.id, file.buffer, fileName, file.mimetype);
+        const safeName = sanitizeOriginalName(file.originalname, 'avatar');
+        const result = await r2MediaStorage.uploadPublic('avatars', user.id, file.buffer, safeName, file.mimetype);
 
         if (!result.success) {
             logger.error('R2 upload error:', result.error);
-            res.status(500).json({ status: 'ERROR', message: result.error || 'Failed to upload file' });
+            sendError(res, 500, 'STORAGE_UPLOAD_FAILED', result.error || 'Failed to upload file');
             return;
         }
 
         if (!result.url || !result.key) {
             logger.error('R2 upload succeeded but missing url/key. Check R2_MEDIA_PUBLIC_URL / R2_PUBLIC_URL configuration.');
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'File uploaded but public URL not available. Please check server configuration.',
-            });
+            sendError(res, 500, 'STORAGE_URL_MISSING', 'File uploaded but public URL not available. Please check server configuration.');
             return;
         }
 
@@ -157,7 +189,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
         });
     } catch (error: any) {
         logger.error('Upload avatar error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Upload failed');
     }
 });
 
@@ -165,17 +197,17 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
  * POST /api/upload/cover
  * Upload cover image to R2 Storage
  */
-router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage, optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
+router.post('/cover', requireAuth, uploadImage.single('file'), validateUploadedImage, optimizeUploadedImage, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized');
             return;
         }
 
         const file = req.file;
         if (!file) {
-            res.status(400).json({ status: 'ERROR', message: 'No file provided' });
+            sendError(res, 400, 'NO_FILE', 'No file provided');
             return;
         }
 
@@ -185,7 +217,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
             return;
         }
 
@@ -205,12 +237,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
                     }
                 });
                 
-                res.status(429).json({
-                    status: 'ERROR',
-                    code: 'COOLDOWN_ACTIVE',
-                    message: `يمكنك تغيير صورة الغلاف بعد ${daysRemaining} يوم`,
-                    daysRemaining
-                });
+                sendError(res, 429, 'COOLDOWN_ACTIVE', `يمكنك تغيير صورة الغلاف بعد ${daysRemaining} يوم`, { daysRemaining });
                 return;
             }
         }
@@ -221,15 +248,15 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
         }
 
         // Upload new cover
-        const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await r2MediaStorage.uploadPublic('covers', user.id, file.buffer, fileName, file.mimetype);
+        const safeName = sanitizeOriginalName(file.originalname, 'cover');
+        const result = await r2MediaStorage.uploadPublic('covers', user.id, file.buffer, safeName, file.mimetype);
 
         if (!result.success) {
-            res.status(500).json({ status: 'ERROR', message: 'Failed to upload file' });
+            sendError(res, 500, 'STORAGE_UPLOAD_FAILED', result.error || 'Failed to upload file');
             return;
         }
         if (!result.url || !result.key) {
-            res.status(500).json({ status: 'ERROR', message: 'File uploaded but public URL not available. Please check server configuration.' });
+            sendError(res, 500, 'STORAGE_URL_MISSING', 'File uploaded but public URL not available. Please check server configuration.');
             return;
         }
 
@@ -252,7 +279,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
         });
     } catch (error: any) {
         logger.error('Upload cover error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Upload failed');
     }
 });
 
@@ -264,7 +291,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
 router.post(
     '/reel', 
     requireAuth, 
-    upload.fields([
+    uploadReel.fields([
         { name: 'video', maxCount: 1 },
         { name: 'thumbnail', maxCount: 1 }
     ]), 
@@ -285,7 +312,7 @@ router.post(
         
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized');
             return;
         }
 
@@ -294,16 +321,13 @@ router.post(
         const thumbnailFile = files['thumbnail']?.[0];
 
         if (!videoFile) {
-            res.status(400).json({ status: 'ERROR', message: 'No video provided' });
+            sendError(res, 400, 'NO_FILE', 'No video provided');
             return;
         }
 
         // Validate file size early
         if (videoFile.buffer.length > 50 * 1024 * 1024) { // 50MB
-            res.status(413).json({ 
-                status: 'ERROR', 
-                message: 'Video file is too large. Maximum size is 50MB.' 
-            });
+            sendError(res, 413, 'FILE_TOO_LARGE', 'Video file is too large. Maximum size is 50MB.', { maxBytes: 50 * 1024 * 1024 });
             return;
         }
 
@@ -313,7 +337,7 @@ router.post(
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
             return;
         }
 
@@ -327,8 +351,9 @@ router.post(
                 );
                 res.status(429).json({
                     status: 'ERROR',
+                    code: 'COOLDOWN_ACTIVE',
                     message: `يمكنك رفع فيديو جديد بعد ${hoursRemaining} ساعة`,
-                    hoursRemaining
+                    hoursRemaining,
                 });
                 return;
             }
@@ -337,7 +362,7 @@ router.post(
         // Upload video with timeout protection
         // Railway gateway timeout is 60s, so we need to complete upload + response within that time
         // Reduce upload timeout to 45s to leave buffer for response processing
-        const videoFileName = `${user.id}/${Date.now()}_${videoFile.originalname}`;
+        const videoFileName = sanitizeOriginalName(videoFile.originalname, 'reel');
         const fileSizeMB = (videoFile.buffer.length / (1024 * 1024)).toFixed(2);
         logger.info(`Starting video upload: ${videoFileName}, size: ${fileSizeMB}MB (${videoFile.buffer.length} bytes), type: ${videoFile.mimetype}`);
         
@@ -364,11 +389,7 @@ router.post(
         if (!videoResult || !videoResult.success) {
             const elapsed = Date.now() - uploadStartTime;
             logger.error(`Video upload failed after ${elapsed}ms. File: ${videoFileName}, Size: ${fileSizeMB}MB, Error: ${videoResult?.error || 'Unknown error'}`);
-            res.status(500).json({ 
-                status: 'ERROR', 
-                message: videoResult?.error || 'Failed to upload video to storage. Please try again or use a smaller file.',
-                code: 'UPLOAD_FAILED'
-            });
+            sendError(res, 500, 'UPLOAD_FAILED', videoResult?.error || 'Failed to upload video to storage. Please try again or use a smaller file.');
             return;
         }
         
@@ -429,11 +450,7 @@ router.post(
         // Create reel in database
         if (!videoResult || !videoResult.success) {
             logger.error('Cannot create reel: videoResult is missing required fields');
-            res.status(500).json({ 
-                status: 'ERROR', 
-                message: 'Video upload completed but required data is missing',
-                code: 'MISSING_DATA'
-            });
+            sendError(res, 500, 'MISSING_DATA', 'Video upload completed but required data is missing');
             return;
         }
 
@@ -541,11 +558,7 @@ router.post(
 
         // Check if response was already sent
         if (!res.headersSent) {
-            res.status(500).json({ 
-                status: 'ERROR', 
-                message: errorMessage || 'Failed to upload reel. Please try again.',
-                code: 'UPLOAD_ERROR'
-            });
+            sendError(res, 500, 'UPLOAD_ERROR', errorMessage || 'Failed to upload reel. Please try again.');
         }
     }
 });

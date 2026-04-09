@@ -230,12 +230,18 @@ import { LeagueMatchWatcherService } from './services/league-match-watcher.servi
 import { PredictionWatcherService } from './services/prediction-watcher.service';
 
 // Import rate limiters
-import { generalLimiter, lenientLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
+import { generalLimiter, lenientLimiter, userSyncLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
 
 // Apply lenient rate limiting to high-frequency endpoints (must be before generalLimiter)
 app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
 app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
+// User/profile-related endpoints are called frequently by the app shell.
+app.use(`${API_PREFIX}/clerk/me`, userSyncLimiter);
+app.use(`${API_PREFIX}/clerk/stats`, userSyncLimiter);
+app.use(`${API_PREFIX}/coins/balance`, userSyncLimiter);
+app.use(`${API_PREFIX}/profile/completion`, userSyncLimiter);
+app.use(`${API_PREFIX}/predictions/remaining`, userSyncLimiter);
 
 // Apply general rate limiting to all API routes (skips the endpoints above inside middleware)
 app.use(`${API_PREFIX}`, generalLimiter);
@@ -736,9 +742,16 @@ async function startServer() {
 
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {
-                    MatchWatcherService.start();
-                    PredictionWatcherService.start(); // ✅ Start prediction watcher
-                    LeagueMatchWatcherService.start(); // ✅ Start league match watcher
+                    const plan = (process.env.FOOTBALL_API_PLAN || '').toLowerCase();
+                    const isFreePlan = !plan || plan === 'free';
+
+                    if (isFreePlan) {
+                        logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined - disabling match watchers to avoid quota exhaustion');
+                    } else {
+                        MatchWatcherService.start();
+                        PredictionWatcherService.start(); // ✅ Start prediction watcher
+                        LeagueMatchWatcherService.start(); // ✅ Start league match watcher
+                    }
                     
                     // ✅ Start football background service for API optimization
                     const { footballBackgroundService } = await import('./services/football-background.service');
