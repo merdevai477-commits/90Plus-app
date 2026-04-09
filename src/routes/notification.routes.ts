@@ -20,6 +20,8 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
         }
 
         const { limit = '20', offset = '0' } = req.query;
+        const take = Number.parseInt(limit as string, 10);
+        const skip = Number.parseInt(offset as string, 10);
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
@@ -31,25 +33,38 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const notifications = await prisma.notification.findMany({
-            where: { userId: user.id },
-            orderBy: { createdAt: 'desc' },
-            take: parseInt(limit as string),
-            skip: parseInt(offset as string),
-            select: {
-                id: true,
-                type: true,
-                title: true,
-                message: true,
-                isRead: true,
-                data: true,
-                createdAt: true,
-            }
-        });
+        const [notifications, total] = await Promise.all([
+            prisma.notification.findMany({
+                where: { userId: user.id },
+                orderBy: { createdAt: 'desc' },
+                take: Number.isFinite(take) ? take : 20,
+                skip: Number.isFinite(skip) ? skip : 0,
+                select: {
+                    id: true,
+                    type: true,
+                    title: true,
+                    message: true,
+                    isRead: true,
+                    data: true,
+                    createdAt: true,
+                }
+            }),
+            prisma.notification.count({
+                where: { userId: user.id }
+            })
+        ]);
 
         res.json({
             status: 'SUCCESS',
-            data: { notifications }
+            data: {
+                notifications,
+                pagination: {
+                    total,
+                    limit: Number.isFinite(take) ? take : 20,
+                    offset: Number.isFinite(skip) ? skip : 0,
+                    hasMore: (Number.isFinite(skip) ? skip : 0) + notifications.length < total,
+                },
+            }
         });
     } catch (error: any) {
         logger.error('Get notifications error:', error);
@@ -151,28 +166,6 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
 });
 
 /**
- * DELETE /api/notifications/:id
- * Delete a single notification
- * ✅ ZERO TRUST: Ownership verified by middleware
- */
-router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
-    try {
-        // Ensure id is a string (handle array case)
-        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-
-        // Ownership already verified by middleware
-        await prisma.notification.delete({
-            where: { id }
-        });
-
-        res.json({ status: 'SUCCESS', message: 'تم حذف الإشعار' });
-    } catch (error: any) {
-        logger.error('Delete notification error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
-    }
-});
-
-/**
  * DELETE /api/notifications/clear-all
  * Delete all notifications for user
  */
@@ -201,6 +194,28 @@ router.delete('/clear-all', requireAuth, async (req: Request, res: Response): Pr
         res.json({ status: 'SUCCESS', message: 'تم مسح جميع الإشعارات' });
     } catch (error: any) {
         logger.error('Clear all notifications error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * DELETE /api/notifications/:id
+ * Delete a single notification
+ * ✅ ZERO TRUST: Ownership verified by middleware
+ */
+router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Ensure id is a string (handle array case)
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+        // Ownership already verified by middleware
+        await prisma.notification.delete({
+            where: { id }
+        });
+
+        res.json({ status: 'SUCCESS', message: 'تم حذف الإشعار' });
+    } catch (error: any) {
+        logger.error('Delete notification error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
