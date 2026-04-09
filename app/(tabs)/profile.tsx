@@ -1689,13 +1689,33 @@ export default function ProfileScreen() {
           setIsStatsModalVisible(false);
           
           toastManager.showInfo('جاري التحديث', 'جاري تحديث إحصائيات اللاعب...');
+
+          // Persist locally + update cached profile immediately so values don't "disappear" on refetch/navigation
+          const ageNum = parseInt(newStats.age);
+          const heightNum = parseInt(newStats.height);
+          const weightNum = parseInt(newStats.weight);
+          const preferredFoot = newStats.foot || undefined;
+
+          await localProfileStorage.saveProfileData({
+            age: Number.isFinite(ageNum) ? ageNum : undefined,
+            height: Number.isFinite(heightNum) ? heightNum : undefined,
+            weight: Number.isFinite(weightNum) ? weightNum : undefined,
+            preferredFoot,
+          });
+
+          await updateCachedUserData({
+            age: Number.isFinite(ageNum) ? ageNum : undefined,
+            height: Number.isFinite(heightNum) ? heightNum : undefined,
+            weight: Number.isFinite(weightNum) ? weightNum : undefined,
+            preferredFoot,
+          });
           
           // Send to backend with optimistic updates
           const result = await updateFIFACard({
-            age: parseInt(newStats.age) || undefined,
-            height: parseInt(newStats.height) || undefined,
-            weight: parseInt(newStats.weight) || undefined,
-            preferredFoot: newStats.foot || undefined
+            age: Number.isFinite(ageNum) ? ageNum : undefined,
+            height: Number.isFinite(heightNum) ? heightNum : undefined,
+            weight: Number.isFinite(weightNum) ? weightNum : undefined,
+            preferredFoot
           });
           
           if (result.success) {

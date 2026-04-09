@@ -11,6 +11,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { extractDurationFromUrl } from '../../utils/videoDuration';
 import { toastManager } from '../../services/toastManager';
+import { usePhotoPermission } from '../../hooks/usePhotoPermission';
 
 interface ReelUploadModalProps {
     visible: boolean;
@@ -29,6 +30,7 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
     const [isUploading, setIsUploading] = useState(false);
     const [uploadStage, setUploadStage] = useState<'idle' | 'preparing' | 'uploading' | 'done'>('idle');
     const uploadProgress = useSharedValue(0);
+    const { permissionState, requestLibraryPermission } = usePhotoPermission();
 
     const progressStyle = useAnimatedStyle(() => ({
         width: `${uploadProgress.value}%`,
@@ -62,25 +64,29 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
     }
 
     const pickVideo = async () => {
-        // Request media library permissions (required for iOS App Store)
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        
-        if (status !== 'granted') {
-            toastManager.showWarning(
-                'صلاحية مطلوبة',
-                'نحتاج إلى صلاحية الوصول للمعرض لرفع الفيديوهات.'
+        // Request media library permission (iOS + Android). If denied/blocked, hook will guide user to Settings.
+        const hasPermission = await requestLibraryPermission();
+        if (!hasPermission) return;
+        // Informative hint for iOS "Limited" access (user can still pick, but may not see all items).
+        if (permissionState.library === 'limited') {
+            toastManager.showInfo(
+                'وصول محدود للمعرض',
+                'يمكنك اختيار فيديو، لكن قد لا تظهر كل العناصر. يمكنك توسيع الوصول من الإعدادات.'
             );
-            return;
         }
 
         onPickerOpen?.();
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-            allowsEditing: true,
-            quality: 1,
-            videoMaxDuration: 60,
-        });
-        onPickerClose?.();
+        let result: ImagePicker.ImagePickerResult;
+        try {
+            result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+                allowsEditing: true,
+                quality: 1,
+                videoMaxDuration: 60,
+            });
+        } finally {
+            onPickerClose?.();
+        }
 
         if (!result.canceled) {
             const asset = result.assets[0];

@@ -27,6 +27,8 @@ import { ActionSheetIOS } from 'react-native';
 import { router } from 'expo-router';
 import { toastManager } from '../../services/toastManager';
 import { BlockService } from '../../services/blockService';
+import { ReportSystem } from './ReportSystem';
+import { useCommentReport } from '../../hooks/useReportSystem';
 
 const MAX_COMMENTS_DISPLAY = 10;
 // Requirements 15.1, 15.2: Separate limits for comments and replies
@@ -114,6 +116,20 @@ export default function CommentsModal({
     const commentsListRef = useRef<FlatList>(null);
     const haptic = useHaptic();
     const { getToken, userId: sessionUserId } = useAuth();
+
+    // Unified report system for comments/replies
+    const {
+        isVisible: isReportVisible,
+        reportConfig,
+        reportComment,
+        closeReport,
+        handleSuccess,
+        getToken: reportGetToken,
+    } = useCommentReport({
+        onSuccess: () => {
+            toastManager.showReportSuccess();
+        }
+    });
 
     // Parse mentions from text
     const parseMentions = useCallback((text: string): string[] => {
@@ -638,22 +654,19 @@ export default function CommentsModal({
 
         if (Platform.OS === 'ios') {
             const options = [
-                'محتوى غير لائق',
-                'سبام أو إعلانات',
-                'خطاب كراهية',
-                'أخرى',
+                'إبلاغ',
                 'إلغاء'
             ];
 
             // Add Block option if not own comment
             if (!isOwnComment && authorId && authorName) {
-                options.splice(4, 0, `حظر ${authorName}`);
+                options.splice(1, 0, `حظر ${authorName}`);
             }
 
             ActionSheetIOS.showActionSheetWithOptions(
                 {
                     options,
-                    destructiveButtonIndex: !isOwnComment ? 4 : undefined, // Block button index
+                    destructiveButtonIndex: !isOwnComment ? 1 : undefined, // Block button index
                     cancelButtonIndex: options.length - 1,
                 },
                 async (buttonIndex) => {
@@ -661,43 +674,19 @@ export default function CommentsModal({
                     if (buttonIndex === options.length - 1) return;
 
                     // Handle Block
-                    if (!isOwnComment && buttonIndex === 4 && authorId && authorName) {
+                    if (!isOwnComment && buttonIndex === 1 && authorId && authorName) {
                         handleBlockUser(authorId, authorName);
                         return;
                     }
 
                     // Handle Report
-                    const reasons = [
-                        'محتوى غير لائق',
-                        'سبام أو إعلانات',
-                        'خطاب كراهية',
-                        'أخرى'
-                    ];
-                    const reason = reasons[buttonIndex];
-
-                    if (reason) {
-                        try {
-                            const token = await getToken();
-                            if (!token) return;
-
-                            const result = await ReelsService.reportComment(token, commentId, reason);
-                            if (result.success) {
-                                toastManager.showReportSuccess();
-                            } else {
-                                Alert.alert('Error', result.message || 'Failed to report comment');
-                            }
-                        } catch (error: any) {
-                            console.error('Error reporting comment:', error);
-                            Alert.alert('Error', 'Failed to report comment');
-                        }
-                    }
+                    // Use unified ReportSystem UI for reason selection + submission
+                    reportComment(commentId);
                 }
             );
         } else {
             // Android implementation
-            const options = [
-                { text: 'إبلاغ', onPress: () => showReportDialog(commentId) }
-            ];
+            const options = [{ text: 'إبلاغ', onPress: () => reportComment(commentId) }];
 
             if (!isOwnComment && authorId && authorName) {
                 options.push({
@@ -714,40 +703,7 @@ export default function CommentsModal({
                 options
             );
         }
-    }, [haptic, getToken, currentUserId, handleBlockUser]);
-
-    // Helper for Android report dialog
-    const showReportDialog = (commentId: string) => {
-        Alert.prompt(
-            'Report Comment',
-            'Please provide a reason',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Report',
-                    onPress: async (reason: string | undefined) => {
-                        if (reason) {
-                            try {
-                                const token = await getToken();
-                                if (!token) return;
-
-                                const result = await ReelsService.reportComment(token, commentId, reason);
-                                if (result.success) {
-                                    toastManager.showReportSuccess();
-                                } else {
-                                    Alert.alert('Error', result.message || 'Failed to report comment');
-                                }
-                            } catch (error: any) {
-                                console.error('Error reporting comment:', error);
-                                Alert.alert('Error', 'Failed to report comment');
-                            }
-                        }
-                    }
-                }
-            ],
-            'plain-text'
-        );
-    };
+    }, [haptic, currentUserId, handleBlockUser, reportComment]);
 
     // Load replies for a comment - Requirements 14.4
     const loadReplies = useCallback(async (commentId: string) => {
@@ -1332,6 +1288,18 @@ export default function CommentsModal({
                     </Animated.View>
                 </Animated.View>
             </View>
+
+            {/* Unified Report System */}
+            {reportConfig && (
+                <ReportSystem
+                    visible={isReportVisible}
+                    onClose={closeReport}
+                    contentType={reportConfig.contentType}
+                    contentId={reportConfig.contentId}
+                    getToken={reportGetToken}
+                    onSuccess={handleSuccess}
+                />
+            )}
         </Modal>
     );
 }

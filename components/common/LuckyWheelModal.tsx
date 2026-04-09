@@ -158,47 +158,48 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     spinAnim.setValue(0);
     spinValueRef.current = 0;
 
-    // Phase 1: short anticipation spin (slow → faster)
+    // Fetch prize (prefer real result; fallback random if needed) - start in parallel with phase 1
+    const prizePromise = (async (): Promise<{ prizeIndex: number; prize: typeof PRIZES[number] }> => {
+      try {
+        const token = await getToken();
+        if (token) {
+          const response = await fetch(`${API_URL}/daily-spin/spin`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          const data = await response.json();
+
+          if (data?.status === 'SUCCESS') {
+            const coins = (data.data?.prize?.coins as number | undefined) ?? undefined;
+            let idx = typeof coins === 'number' ? PRIZES.findIndex(p => p.coins === coins) : -1;
+            if (idx === -1) idx = 0;
+            return { prizeIndex: idx, prize: PRIZES[idx] };
+          }
+        }
+      } catch (error) {
+        console.error('Spin API error:', error);
+      }
+
+      const idx = Math.floor(Math.random() * PRIZES.length);
+      return { prizeIndex: idx, prize: PRIZES[idx] };
+    })();
+
+    // Phase 1: immediate fast spin (fast from start)
     await new Promise<void>((resolve) => {
       Animated.timing(spinAnim, {
-        toValue: 360 * 1.25, // ~1.25 turns
-        duration: 900,
-        easing: Easing.in(Easing.cubic),
+        toValue: 360 * 2.25, // ~2.25 turns
+        duration: 650,
+        easing: Easing.linear,
         useNativeDriver: true,
       }).start(() => resolve());
     });
 
-    // Fetch prize (prefer real result; fallback deterministic random if needed)
-    try {
-      const token = await getToken();
-      if (token) {
-        const response = await fetch(`${API_URL}/daily-spin/spin`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        const data = await response.json();
-        
-        if (data?.status === 'SUCCESS') {
-          finalPrize = data.data.prize;
-          finalPrizeIndex = PRIZES.findIndex(p => p.coins === finalPrize.coins);
-          if (finalPrizeIndex === -1) finalPrizeIndex = 0;
-        } else {
-          // Fallback if API returns unexpected response
-          finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
-          finalPrize = PRIZES[finalPrizeIndex];
-        }
-      } else {
-        finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
-        finalPrize = PRIZES[finalPrizeIndex];
-      }
-    } catch (error) {
-      console.error('Spin API error:', error);
-      finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
-      finalPrize = PRIZES[finalPrizeIndex];
-    }
+    const prizeResult = await prizePromise;
+    finalPrizeIndex = prizeResult.prizeIndex;
+    finalPrize = prizeResult.prize;
 
     // Phase 2: main spin with gradual deceleration to exact target
     const targetAngle = 360 - (finalPrizeIndex * segmentAngle) - (segmentAngle / 2);

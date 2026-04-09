@@ -6,6 +6,7 @@ import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StatusBar, I18nManager, ActivityIndicator, Linking } from 'react-native';
+import * as Updates from 'expo-updates';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
 import { CoinsProvider } from "../contexts/CoinsContext";
@@ -246,6 +247,7 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useLanguageStore(state => state.initialize);
   const isInitialized = useLanguageStore(state => state.isInitialized);
   const isRTL = useLanguageStore(state => state.isRTL);
+  const didRequestReloadRef = React.useRef(false);
 
   useEffect(() => {
     initialize();
@@ -256,9 +258,24 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
       if (I18nManager.isRTL !== isRTL) {
         I18nManager.allowRTL(isRTL);
         I18nManager.forceRTL(isRTL);
+        // Applying RTL/LTR requires a full reload for stable layout.
+        // Without reload, the UI may "shake" during startup as layout direction changes.
+        if (!didRequestReloadRef.current) {
+          didRequestReloadRef.current = true;
+          Updates.reloadAsync().catch(() => {});
+        }
       }
     }
   }, [isInitialized, isRTL]);
+
+  // While direction is mismatched (or we just asked for reload), keep a stable loading screen.
+  if (!isInitialized || I18nManager.isRTL !== isRTL || didRequestReloadRef.current) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#22c55e" />
+      </View>
+    );
+  }
 
   if (!isInitialized) {
     return (

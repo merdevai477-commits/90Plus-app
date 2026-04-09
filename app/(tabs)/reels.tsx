@@ -80,6 +80,9 @@ import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
 import { SkeletonLoader } from '../../components/common/SkeletonLoader';
 import { ErrorDisplay } from '../../components/common/ErrorDisplay';
+import { toastManager } from '../../services/toastManager';
+import { ReportSystem } from '../../components/common/ReportSystem';
+import { useReelReport } from '../../hooks/useReportSystem';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -311,226 +314,11 @@ const DoubleTapLikeAnimation: React.FC<{
 
 
 
-// Report Modal Enhanced
-const ReportModal: React.FC<{
-  visible: boolean;
-  onClose: () => void;
-  reelId: string;
-  onReport: (reason: string) => void;
-}> = ({ visible, onClose, reelId, onReport }) => {
-  const [selectedReason, setSelectedReason] = useState('');
-  const [customReason, setCustomReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const haptic = useHaptic();
-  const { t } = useTranslation();
-
-  const reasons = [
-    t.reels.reasons.inappropriate,
-    t.reels.reasons.spam,
-    t.reels.reasons.hateSpeech,
-    t.reels.reasons.violence,
-    t.reels.reasons.copyright,
-    t.reels.reasons.adult,
-    t.reels.reasons.misinfo,
-    t.reels.reasons.other
-  ];
-
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        ...ANIMATIONS.spring
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        ...ANIMATIONS.timing
-      }).start(() => {
-        setSelectedReason('');
-        setCustomReason('');
-        setIsSubmitted(false);
-      });
-    }
-  }, [visible]);
-
-  const handleSubmit = async () => {
-    if (!selectedReason || isSubmitting) return;
-
-    haptic.trigger('medium');
-    setIsSubmitting(true);
-
-    try {
-      const finalReason = selectedReason === t.reels.reasons.other ? customReason : selectedReason;
-
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      onReport(finalReason);
-      setIsSubmitted(true);
-
-      setTimeout(() => {
-        onClose();
-        setIsSubmitting(false);
-      }, 2000);
-    } catch (error) {
-      // Medium Priority #6 - Fix report modal error messages
-      const errorMessage = (error as Error)?.message || 'حدث خطأ أثناء إرسال البلاغ';
-      Alert.alert(t.common.error, errorMessage);
-      setIsSubmitting(false);
-      logger.error('[ReportModal] Error submitting report:', error);
-    }
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="none"
-      transparent={true}
-      onRequestClose={onClose}
-      statusBarTranslucent
-      accessible={true}
-      accessibilityViewIsModal={true}
-    >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => !isSubmitting && !isSubmitted && onClose()}
-        />
-
-        <Animated.View
-          style={[
-            styles.reportContainer,
-            { transform: [{ translateY: slideAnim }] }
-          ]}
-        >
-          {isSubmitted ? (
-            <View style={styles.reportSuccess}>
-              <Animated.View style={styles.successIcon}>
-                <CheckCircle size={48} color={COLORS.success} />
-              </Animated.View>
-              <Text style={styles.successTitle}>{t.reels.reportSuccessTitle}</Text>
-              <Text style={styles.successMessage}>
-                {t.reels.reportSuccessMessage}
-              </Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.dragHandle} />
-
-              <Text style={styles.reportTitle}>{t.reels.reportTitle}</Text>
-              <Text style={styles.reportSubtitle}>
-                {t.reels.reportSubtitle}
-              </Text>
-
-              <ScrollView
-                style={styles.reasonsList}
-                showsVerticalScrollIndicator={false}
-              >
-                {reasons.map((reason) => (
-                  <TouchableOpacity
-                    key={reason}
-                    style={[
-                      styles.reasonItem,
-                      selectedReason === reason && styles.reasonItemSelected
-                    ]}
-                    onPress={() => {
-                      haptic.trigger('light');
-                      setSelectedReason(reason);
-                    }}
-                    disabled={isSubmitting}
-                    accessible={true}
-                    accessibilityRole="radio"
-                    accessibilityLabel={reason}
-                    accessibilityState={{
-                      selected: selectedReason === reason,
-                      disabled: isSubmitting
-                    }}
-                    accessibilityHint="اضغط للاختيار"
-                  >
-                    <View style={[
-                      styles.radio,
-                      selectedReason === reason && styles.radioSelected
-                    ]}>
-                      {selectedReason === reason && (
-                        <View style={styles.radioInner} />
-                      )}
-                    </View>
-                    <Text style={[
-                      styles.reasonText,
-                      selectedReason === reason && styles.reasonTextSelected
-                    ]}>
-                      {reason}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-
-                {selectedReason === t.reels.reasons.other && (
-                  <TextInput
-                    style={styles.customReasonInput}
-                    placeholder={t.reels.writeReason}
-                    placeholderTextColor="#999"
-                    value={customReason}
-                    onChangeText={setCustomReason}
-                    multiline
-                    maxLength={200}
-                  />
-                )}
-              </ScrollView>
-
-              <View style={styles.reportButtons}>
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={[styles.reportButton, styles.cancelButton]}
-                  disabled={isSubmitting}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel="إلغاء البلاغ"
-                  accessibilityHint="اضغط لإلغاء البلاغ والعودة"
-                  accessibilityState={{ disabled: isSubmitting }}
-                >
-                  <Text style={styles.cancelButtonText}>{t.reels.cancelReport}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleSubmit}
-                  disabled={!selectedReason || isSubmitting || (selectedReason === 'أخرى' && !customReason)}
-                  style={[
-                    styles.reportButton,
-                    styles.submitButton,
-                    (!selectedReason || isSubmitting) && styles.submitButtonDisabled
-                  ]}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel="إرسال البلاغ"
-                  accessibilityHint="اضغط لإرسال البلاغ عن هذا المحتوى"
-                  accessibilityState={{
-                    disabled: !selectedReason || isSubmitting || (selectedReason === 'أخرى' && !customReason)
-                  }}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>{t.reels.submitReport}</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-};
-
 // Main Reels Feed Component
 const ReelsFeed: React.FC = () => {
   const params = useLocalSearchParams<{ reelId?: string; commentId?: string; autoOpenComments?: string }>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
-  const [showReport, setShowReport] = useState(false);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -561,6 +349,20 @@ const ReelsFeed: React.FC = () => {
   const { t } = useTranslation();
   const { getToken } = useAuth();
   const { uploadedVideos, userVideoData, reelComments, addComment, toggleCommentLike, likedReelIds, toggleReelLike } = useVideos();
+
+  // Unified report system for reels
+  const {
+    isVisible: isReportVisible,
+    reportConfig,
+    reportReel,
+    closeReport,
+    handleSuccess,
+    getToken: reportGetToken,
+  } = useReelReport({
+    onSuccess: () => {
+      toastManager.showReportSuccess();
+    }
+  });
 
   // ✅ Ref to track previous comments for each reel to prevent unnecessary re-renders
   const commentsRef = useRef<Record<string, Comment[]>>({});
@@ -1183,21 +985,6 @@ const ReelsFeed: React.FC = () => {
     setSelectedHashtag(null);
   }, [haptic]);
 
-  // Handle Report - with Backend sync
-  const handleReport = useCallback(async (reason: string) => {
-    try {
-      const token = await getToken();
-      if (token && selectedReelId) {
-        const result = await ReelsService.reportReel(token, selectedReelId, reason);
-        if (result.success) {
-          logger.info('Report submitted successfully');
-        }
-      }
-    } catch (error) {
-      logger.error('Error submitting report:', error);
-    }
-  }, [getToken, selectedReelId]);
-
   // Handle Share - with Backend tracking and deep links
   const handleShareReel = useCallback(async (reel: ReelData) => {
     haptic.trigger('light');
@@ -1243,8 +1030,8 @@ const ReelsFeed: React.FC = () => {
   // Open Report
   const openReport = useCallback((reelId: string) => {
     haptic.trigger('light');
-    setSelectedReelId(reelId);
-    setShowReport(true);
+    setSelectedReelId(reelId); // keep for context in UI if needed
+    reportReel(reelId);
   }, [haptic]);
 
   // ✅ Get comments for modal with stable reference - only updates when IDs actually change
@@ -1565,13 +1352,17 @@ const ReelsFeed: React.FC = () => {
         highlightCommentId={highlightCommentId}
       />
 
-      {/* Report Modal */}
-      <ReportModal
-        visible={showReport}
-        onClose={() => setShowReport(false)}
-        reelId={selectedReelId}
-        onReport={handleReport}
-      />
+      {/* Unified Report System */}
+      {reportConfig && (
+        <ReportSystem
+          visible={isReportVisible}
+          onClose={closeReport}
+          contentType={reportConfig.contentType}
+          contentId={reportConfig.contentId}
+          getToken={reportGetToken}
+          onSuccess={handleSuccess}
+        />
+      )}
     </View>
   );
 };
