@@ -6,6 +6,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
 import { userSyncLimiter } from '../middleware/rateLimit.middleware';
+import { clearResponseCache, responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
 const router = Router();
 
@@ -22,6 +23,10 @@ const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 // Helper to invalidate user cache
 export const invalidateUserCache = (clerkUserId: string) => {
     userCache.delete(clerkUserId);
+    // Also clear response cache for endpoints that are cached by auth userId
+    // (req.path is used in cache key, so patterns must match path-only)
+    clearResponseCache('/me').catch(() => {});
+    clearResponseCache('/stats').catch(() => {});
 };
 
 /**
@@ -29,7 +34,12 @@ export const invalidateUserCache = (clerkUserId: string) => {
  * Get current user profile (protected) - WITH CACHING
  * Uses userSyncLimiter for more lenient rate limiting
  */
-router.get('/me', requireAuth, userSyncLimiter, async (req: Request, res: Response): Promise<void> => {
+router.get(
+  '/me',
+  requireAuth,
+  userSyncLimiter,
+  responseCacheMiddleware({ ttl: 60 * 1000 }),
+  async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
 
@@ -972,7 +982,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
  * GET /api/clerk/stats
  * Get current user's follow stats (protected)
  */
-router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
 

@@ -155,6 +155,7 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             // Check ETag
             const ifNoneMatch = req.headers['if-none-match'];
             if (ifNoneMatch === cached.etag || ifNoneMatch === `"${cached.etag}"` || ifNoneMatch === `W/"${cached.etag}"`) {
+                res.setHeader('Cache-Control', `private, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
                 res.status(304).end();
                 return;
             }
@@ -162,6 +163,7 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             // Return cached data
             res.setHeader('ETag', `"${cached.etag}"`);
             res.setHeader('X-Cache', 'HIT');
+            res.setHeader('Cache-Control', `private, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
             return res.json(cached.data);
         }
 
@@ -174,6 +176,8 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             responseCache.set(req, body, ttl).then((etag) => {
                 res.setHeader('ETag', `"${etag}"`);
                 res.setHeader('X-Cache', 'MISS');
+                const effectiveTtl = ttl || 5 * 60 * 1000;
+                res.setHeader('Cache-Control', `private, max-age=${Math.floor(effectiveTtl / 1000)}`);
             }).catch(() => {
                 // Ignore cache errors, don't block response
             });
