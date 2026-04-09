@@ -38,6 +38,25 @@ export interface PredictionRemaining {
 
 export const PredictionsService = {
   /**
+   * Best-effort error parsing for non-OK responses.
+   * Handles JSON and non-JSON bodies (e.g., 502 HTML).
+   */
+  _parseError: async (response: Response): Promise<string> => {
+    const contentType = response.headers.get('content-type') || '';
+    try {
+      if (contentType.includes('application/json')) {
+        const data: any = await response.json();
+        return data?.message || data?.error || data?.statusText || response.statusText || `HTTP ${response.status}`;
+      }
+      const text = await response.text();
+      if (text) return text.slice(0, 500);
+    } catch {
+      // ignore parsing errors
+    }
+    return response.statusText || `HTTP ${response.status}`;
+  },
+
+  /**
    * Get remaining daily predictions
    */
   getRemainingPredictions: async (token: string): Promise<PredictionRemaining> => {
@@ -50,7 +69,8 @@ export const PredictionsService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to get remaining predictions: ${response.statusText}`);
+        const msg = await PredictionsService._parseError(response);
+        throw new Error(msg || `Failed to get remaining predictions: ${response.statusText}`);
       }
 
       const result = await response.json();
@@ -93,8 +113,8 @@ export const PredictionsService = {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to submit prediction: ${response.statusText}`);
+        const msg = await PredictionsService._parseError(response);
+        throw new Error(msg || `Failed to submit prediction: ${response.statusText}`);
       }
 
       const result = await response.json();
@@ -123,7 +143,8 @@ export const PredictionsService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to get user predictions: ${response.statusText}`);
+        const msg = await PredictionsService._parseError(response);
+        throw new Error(msg || `Failed to get user predictions: ${response.statusText}`);
       }
 
       const result = await response.json();
@@ -157,7 +178,8 @@ export const PredictionsService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to get match prediction count: ${response.statusText}`);
+        const msg = await PredictionsService._parseError(response);
+        throw new Error(msg || `Failed to get match prediction count: ${response.statusText}`);
       }
 
       const result = await response.json();

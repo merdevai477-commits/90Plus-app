@@ -424,7 +424,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         
         toastManager.showError(
           'خطأ',
-          'حدث خطأ أثناء إرسال التوقع. حاول مرة أخرى.'
+          errorMessage || 'حدث خطأ أثناء إرسال التوقع. حاول مرة أخرى.'
         );
       }
     },
