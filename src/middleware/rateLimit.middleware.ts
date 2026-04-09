@@ -6,6 +6,7 @@
 
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 
 function getClientIp(req: Request): string {
     const xff = req.headers['x-forwarded-for'];
@@ -16,6 +17,33 @@ function getClientIp(req: Request): string {
         req.socket.remoteAddress ||
         '';
     return raw || 'unknown';
+}
+
+function getBearerToken(req: Request): string | null {
+    const auth = req.headers['authorization'];
+    const raw = Array.isArray(auth) ? auth[0] : auth;
+    if (!raw) return null;
+    const m = raw.match(/^Bearer\s+(.+)$/i);
+    return m?.[1]?.trim() || null;
+}
+
+function tokenKey(token: string): string {
+    // Hash token to avoid storing/logging raw tokens.
+    const hash = crypto.createHash('sha256').update(token).digest('hex').slice(0, 24);
+    return `token:${hash}`;
+}
+
+function rateLimitKey(req: Request): string {
+    // Prefer authenticated userId if already present (some routes may have auth earlier).
+    const userId = (req as any).auth?.userId;
+    if (userId) return `user:${userId}`;
+
+    // Otherwise, fall back to bearer token hash to avoid grouping all mobile users behind one proxy IP.
+    const token = getBearerToken(req);
+    if (token) return tokenKey(token);
+
+    // Finally, fall back to IP.
+    return getClientIp(req);
 }
 
 function isSkippablePath(req: Request): boolean {
@@ -67,9 +95,7 @@ export const generalLimiter = rateLimit({
     },
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
     keyGenerator: (req: Request) => {
-        // If user is authenticated, use their ID to allow more requests per user
-        const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : getClientIp(req);
+        return rateLimitKey(req);
     },
 });
 
@@ -93,8 +119,7 @@ export const lenientLimiter = rateLimit({
         return false;
     },
     keyGenerator: (req: Request) => {
-        const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : getClientIp(req);
+        return rateLimitKey(req);
     },
 });
 
@@ -118,8 +143,7 @@ export const writeLimiter = rateLimit({
         return false;
     },
     keyGenerator: (req: Request) => {
-        const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : getClientIp(req);
+        return rateLimitKey(req);
     },
 });
 
@@ -207,8 +231,7 @@ export const userSyncLimiter = rateLimit({
     },
     // Use user ID for key generation
     keyGenerator: (req: Request) => {
-        const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : getClientIp(req);
+        return rateLimitKey(req);
     },
 });
 
