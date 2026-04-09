@@ -42,14 +42,14 @@ const CONFIG: Record<Environment, APIConfig> = {
     baseUrl: 'https://staging-api.90plus.app/api',
     wsUrl: 'wss://staging-api.90plus.app',
     timeout: 30000, // ✅ CRITICAL: Increased to 30s
-    uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
+    uploadTimeout: 55 * 1000, // Railway-like gateway limits (keep under 60s)
     retryAttempts: 3,
   },
   production: {
     baseUrl: 'https://90plus-app-production-b28d.up.railway.app/api',
     wsUrl: 'wss://90plus-app-production-b28d.up.railway.app',
     timeout: 30000, // ✅ CRITICAL: Increased to 30s
-    uploadTimeout: 15 * 60 * 1000, // 15 minutes for uploads
+    uploadTimeout: 55 * 1000, // Railway gateway limits (keep under 60s)
     retryAttempts: 3,
   },
 };

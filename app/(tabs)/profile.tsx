@@ -24,6 +24,7 @@ import { useVideos, Comment } from '../../contexts/VideosContext';
 import { globalState } from '../../globalState';
 import { AuthService, CardProfileService, ProfileService, ReelsService } from '../../src/services/authService';
 import { StorageService } from '../../src/services/storageService';
+import { useImageUpload } from '../../hooks/useImageUpload';
 import { toastManager } from '../../services/toastManager';
 import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
@@ -394,6 +395,9 @@ export default function ProfileScreen() {
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [videoUploadMessage, setVideoUploadMessage] = useState('جاري الرفع...');
 
+  // Unified image upload (progress + retries + timeout) for iOS/Android
+  const { upload: uploadImage } = useImageUpload();
+
   // New modals for profile features
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
@@ -759,7 +763,13 @@ export default function ProfileScreen() {
         return;
       }
 
-      const uploadResult = await StorageService.uploadCover(token, finalUri);
+      setIsCoverUploading(true);
+      const uploadResult = await uploadImage(finalUri, {
+        endpoint: '/upload/cover',
+        fieldName: 'file',
+        maxRetries: 2,
+        timeoutMs: 55_000,
+      });
 
       if (uploadResult.success && uploadResult.url) {
         const newCoverUrl = uploadResult.url;
@@ -797,6 +807,8 @@ export default function ProfileScreen() {
         logger.error('Cover upload error:', error);
         toastManager.showUploadError('image');
       }
+    } finally {
+      setIsCoverUploading(false);
     }
   };
   const handleImageUpload = async () => {
@@ -877,7 +889,12 @@ export default function ProfileScreen() {
         return;
       }
 
-      const uploadResult = await StorageService.uploadAvatar(token, finalUri);
+      const uploadResult = await uploadImage(finalUri, {
+        endpoint: '/upload/avatar',
+        fieldName: 'file',
+        maxRetries: 2,
+        timeoutMs: 55_000,
+      });
 
       if (uploadResult.success && uploadResult.url) {
         const newAvatarUrl = uploadResult.url;

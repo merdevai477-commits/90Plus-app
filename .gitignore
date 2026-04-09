@@ -7,6 +7,16 @@ expo-env.d.ts
 node_modules
 .expo/
 
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Local scripts/tools (do not commit)
+*.ps1
+*.sh
+
+# Local tests/notes
+__tests__/iosBuild.*
+
 # Sentry
 sentry.properties
 node_modules

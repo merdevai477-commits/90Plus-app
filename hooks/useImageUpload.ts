@@ -25,6 +25,7 @@ export interface UploadOptions {
   additionalData?: Record<string, any>;
   onProgress?: (progress: number) => void;
   maxRetries?: number;
+  timeoutMs?: number;
 }
 
 export interface UploadResult {
@@ -68,6 +69,7 @@ export const useImageUpload = (): UseImageUploadReturn => {
           additionalData = {},
           onProgress,
           maxRetries = 3,
+          timeoutMs = 55_000,
         } = options;
 
         // Get auth token
@@ -106,6 +108,7 @@ export const useImageUpload = (): UseImageUploadReturn => {
             logger.info(`Upload attempt ${attempt + 1}/${maxRetries + 1}`);
 
             const xhr = new XMLHttpRequest();
+            xhr.timeout = timeoutMs;
 
             // Track progress
             xhr.upload.addEventListener('progress', (event) => {
@@ -134,12 +137,29 @@ export const useImageUpload = (): UseImageUploadReturn => {
                     });
                   }
                 } else {
-                  reject(new Error(`Upload failed with status ${xhr.status}`));
+                  // Parse backend error shape when possible (cooldown / validation / etc.)
+                  try {
+                    const parsed = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+                    const message =
+                      parsed?.message ||
+                      parsed?.error ||
+                      `Upload failed with status ${xhr.status}`;
+                    resolve({ success: false, error: message, data: parsed });
+                  } catch {
+                    resolve({
+                      success: false,
+                      error: xhr.responseText || `Upload failed with status ${xhr.status}`,
+                    });
+                  }
                 }
               };
 
               xhr.onerror = () => {
                 reject(new Error(isRTL ? 'فشل الرفع' : 'Upload failed'));
+              };
+
+              xhr.ontimeout = () => {
+                reject(new Error(isRTL ? 'انتهت مهلة الرفع' : 'Upload timed out'));
               };
 
               xhr.onabort = () => {
@@ -158,6 +178,10 @@ export const useImageUpload = (): UseImageUploadReturn => {
             });
 
             const result = await uploadPromise;
+            if (!result.success) {
+              // Server responded but with an app-level error (e.g. cooldown)
+              return result;
+            }
 
             // Success!
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
