@@ -10,6 +10,7 @@
  */
 
 import { logger } from './logger';
+import * as Sentry from '@sentry/react-native';
 
 // Type-safe event names
 export enum AnalyticsEvent {
@@ -122,6 +123,14 @@ class AnalyticsService {
       // await analytics().logEvent(eventName, params);
       
       logger.debug(`[Analytics] Event: ${eventName}`, params);
+
+      // Also store as breadcrumb for production debugging
+      Sentry.addBreadcrumb({
+        category: 'user_action',
+        message: String(eventName),
+        data: params,
+        level: 'info',
+      });
     } catch (error) {
       logger.error('Failed to log event:', error);
     }
@@ -134,6 +143,17 @@ class AnalyticsService {
     await this.logEvent(AnalyticsEvent.SCREEN_VIEW, {
       screen_name: screenName,
       screen_class: screenClass || screenName,
+    });
+  }
+
+  /**
+   * Track performance metric (simple duration in ms)
+   */
+  async trackPerformance(metricName: string, durationMs: number, params?: Record<string, any>) {
+    await this.logEvent('performance_metric', {
+      metric: metricName,
+      duration_ms: durationMs,
+      ...params,
     });
   }
   
@@ -217,6 +237,10 @@ export const trackEvent = (
 
 export const trackUserAction = (action: string, data?: Record<string, any>) => {
   analytics.logEvent(action, data);
+};
+
+export const trackPerformance = (metricName: string, durationMs: number, params?: Record<string, any>) => {
+  analytics.trackPerformance(metricName, durationMs, params);
 };
 
 /**

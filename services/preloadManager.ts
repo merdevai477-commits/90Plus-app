@@ -535,13 +535,7 @@ class PreloadManagerClass {
    */
   private async preloadNotifications(token: string): Promise<void> {
     const notifications = await NotificationService.getNotifications(token, 20, 0);
-    
-    const notificationsData = {
-      notifications,
-      cachedAt: Date.now(),
-    };
-
-    await cacheService.set(PRELOAD_CACHE_KEYS.notifications, notificationsData, CACHE_TTL.NOTIFICATIONS);
+    await cacheService.set(PRELOAD_CACHE_KEYS.notifications, notifications, CACHE_TTL.NOTIFICATIONS);
   }
 
   /**
