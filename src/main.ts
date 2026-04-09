@@ -232,13 +232,13 @@ import { PredictionWatcherService } from './services/prediction-watcher.service'
 // Import rate limiters
 import { generalLimiter, lenientLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
 
-// Apply general rate limiting to all API routes
-app.use(`${API_PREFIX}`, generalLimiter);
-
-// Apply lenient rate limiting to high-frequency endpoints (before route registration)
+// Apply lenient rate limiting to high-frequency endpoints (must be before generalLimiter)
 app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
 app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
+
+// Apply general rate limiting to all API routes (skips the endpoints above inside middleware)
+app.use(`${API_PREFIX}`, generalLimiter);
 
 // Register routes
 app.use(`${API_PREFIX}/users`, userRoutes);
@@ -562,16 +562,15 @@ app.get(`${API_PREFIX}/users`, async (_req: Request, res: Response) => {
                         ],
                     },
                     {
-                        title: 'Option 2: Use Supabase (Free Cloud Database)',
+                        title: 'Option 2: Use a managed PostgreSQL (Cloud Database)',
                         steps: [
-                            '1. Go to: https://supabase.com/dashboard',
-                            '2. Create a new project',
-                            '3. Copy the connection string',
-                            '4. Update DATABASE_URL in .env file',
-                            '5. Run: npm run prisma:migrate',
-                            '6. Then run: npm run prisma:seed',
+                            '1. Create a database on your provider (e.g. Neon, Railway, Render, etc.)',
+                            '2. Copy the connection string',
+                            '3. Update DATABASE_URL in .env file',
+                            '4. Run: npm run prisma:migrate',
+                            '5. Then run: npm run prisma:seed',
                         ],
-                        note: 'See SUPABASE_SETUP.md for detailed instructions',
+                        note: 'See your provider docs for connection strings and IP allowlists',
                     },
                 ],
                 quickCheck: [

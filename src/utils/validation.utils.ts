@@ -33,10 +33,14 @@ export function sanitizeString(input: string): string {
         return '';
     }
 
-    // Remove control characters and trim
-    return input
-        .replace(/[\x00-\x1F\x7F]/g, '')
-        .trim();
+    // Remove control characters and trim (avoid control-char regex)
+    let out = '';
+    for (let i = 0; i < input.length; i++) {
+        const code = input.charCodeAt(i);
+        if (code < 32 || code === 127) continue;
+        out += input[i];
+    }
+    return out.trim();
 }
 
 /**

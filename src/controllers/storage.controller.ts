@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { StorageService } from '../utils/storage.service';
-import { STORAGE_BUCKETS } from '../config/supabase.config';
+import { r2MediaStorage } from '../services/r2-media-storage.service';
+import { STORAGE_BUCKETS } from '../config/storage.config';
 import { logger } from '../utils/logger';
 
 export class StorageController {
@@ -14,16 +14,20 @@ export class StorageController {
                 return;
             }
 
-            // Assuming user ID is attached to request by auth middleware
-            // If not, we might need to get it from body or param, but usually it's req.user.id
-            const userId = (req as any).user?.id || req.body.userId;
+            const userId = req.auth?.userId;
 
             if (!userId) {
-                res.status(401).json({ message: 'User ID not found' });
+                res.status(401).json({ message: 'Unauthorized' });
                 return;
             }
 
-            const result = await StorageService.uploadAvatar(userId, req.file);
+            const result = await r2MediaStorage.uploadPublic(
+                'avatars',
+                userId,
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype
+            );
 
             res.status(200).json({
                 message: 'Avatar uploaded successfully',
@@ -45,14 +49,20 @@ export class StorageController {
                 return;
             }
 
-            const userId = (req as any).user?.id || req.body.userId;
+            const userId = req.auth?.userId;
 
             if (!userId) {
-                res.status(401).json({ message: 'User ID not found' });
+                res.status(401).json({ message: 'Unauthorized' });
                 return;
             }
 
-            const result = await StorageService.uploadReel(userId, req.file);
+            const result = await r2MediaStorage.uploadPublic(
+                'reels',
+                userId,
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype
+            );
 
             res.status(200).json({
                 message: 'Reel uploaded successfully',
@@ -74,14 +84,20 @@ export class StorageController {
                 return;
             }
 
-            const userId = (req as any).user?.id || req.body.userId;
+            const userId = req.auth?.userId;
 
             if (!userId) {
-                res.status(401).json({ message: 'User ID not found' });
+                res.status(401).json({ message: 'Unauthorized' });
                 return;
             }
 
-            const result = await StorageService.uploadThumbnail(userId, req.file);
+            const result = await r2MediaStorage.uploadPublic(
+                'thumbnails',
+                userId,
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype
+            );
 
             res.status(200).json({
                 message: 'Thumbnail uploaded successfully',
@@ -108,11 +124,13 @@ export class StorageController {
                 return;
             }
 
-            // Ownership verification is done by middleware before reaching here
-
             // Ensure path is a string
             const filePath = Array.isArray(path) ? path[0] : path;
-            await StorageService.deleteFile(filePath, bucket as 'image' | 'video');
+            const ok = await r2MediaStorage.deleteObject(filePath);
+            if (!ok) {
+                res.status(500).json({ message: 'Failed to delete file' });
+                return;
+            }
 
             res.status(200).json({ message: 'File deleted successfully' });
         } catch (error: any) {

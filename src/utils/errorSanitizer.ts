@@ -21,8 +21,8 @@ const SENSITIVE_PATTERNS = [
   /postgresql:\/\/[^@]+@/gi, // Database connection strings
   /mongodb:\/\/[^@]+@/gi,
   /redis:\/\/[^@]+@/gi,
-  /\/home\/[^\/]+/gi, // Home directories
-  /\/Users\/[^\/]+/gi,
+  /\/home\/[^/]+/gi, // Home directories
+  /\/Users\/[^/]+/gi,
   /C:\\Users\\[^\\]+/gi,
 ];
 

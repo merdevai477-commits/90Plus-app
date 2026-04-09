@@ -25,7 +25,6 @@ const CONNECTION_POOL_SIZE = process.env.DATABASE_CONNECTION_POOL_SIZE
   : 10;
 
 const CONNECTION_TIMEOUT = 10000; // 10 seconds
-const POOL_TIMEOUT = 5000; // 5 seconds
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 

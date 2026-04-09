@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import { validateVideoDuration } from '../middleware/file-validation.middleware';
 import { optimizeUploadedImage } from '../middleware/image-optimization.middleware';
 import { validateUploadedImage, optimizeUploadedImage as optimizeImage } from '../middleware/image-moderation.middleware';
-import { supabaseStorage } from '../services/supabase-storage.service';
+import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import multer from 'multer';
 import prisma from '../lib/prisma';
@@ -95,7 +95,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
 
         // Delete old avatar if exists
         if (user.avatarStoragePath) {
-            await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
+            await r2MediaStorage.deleteObject(user.avatarStoragePath);
         }
 
         // Validate file buffer is not empty
@@ -109,7 +109,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
 
         // Upload new avatar
         const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await supabaseStorage.uploadFile('avatars', file.buffer, fileName, file.mimetype);
+        const result = await r2MediaStorage.uploadPublic('avatars', user.id, file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             logger.error('R2 upload error:', result.error);
@@ -117,24 +117,23 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
             return;
         }
 
-        // Check if URL was generated (R2_PUBLIC_URL must be configured)
-        if (!result.url) {
-            logger.error('R2 upload succeeded but no public URL returned. Check R2_PUBLIC_URL configuration.');
-            res.status(500).json({ 
-                status: 'ERROR', 
-                message: 'File uploaded but public URL not available. Please check server configuration.' 
+        if (!result.url || !result.key) {
+            logger.error('R2 upload succeeded but missing url/key. Check R2_MEDIA_PUBLIC_URL / R2_PUBLIC_URL configuration.');
+            res.status(500).json({
+                status: 'ERROR',
+                message: 'File uploaded but public URL not available. Please check server configuration.',
             });
             return;
         }
 
-        logger.info(`Avatar uploaded successfully: ${result.url}, path: ${result.path}`);
+        logger.info(`Avatar uploaded successfully: ${result.url}, key: ${result.key}`);
 
         // Update user
         await prisma.user.update({
             where: { id: user.id },
             data: {
                 avatar: result.url,
-                avatarStoragePath: result.path,
+                avatarStoragePath: result.key,
                 lastAvatarChange: new Date()
             }
         });
@@ -154,7 +153,7 @@ router.post('/avatar', requireAuth, upload.single('file'), validateUploadedImage
         res.json({
             status: 'SUCCESS',
             message: 'تم رفع صورة البروفايل بنجاح',
-            data: { url: result.url, storagePath: result.path }
+            data: { url: result.url, storagePath: result.key }
         });
     } catch (error: any) {
         logger.error('Upload avatar error:', error);
@@ -218,15 +217,19 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
 
         // Delete old cover if exists
         if (user.coverStoragePath) {
-            await supabaseStorage.deleteFile('covers', user.coverStoragePath);
+            await r2MediaStorage.deleteObject(user.coverStoragePath);
         }
 
         // Upload new cover
         const fileName = `${user.id}/${Date.now()}_${file.originalname}`;
-        const result = await supabaseStorage.uploadFile('covers', file.buffer, fileName, file.mimetype);
+        const result = await r2MediaStorage.uploadPublic('covers', user.id, file.buffer, fileName, file.mimetype);
 
         if (!result.success) {
             res.status(500).json({ status: 'ERROR', message: 'Failed to upload file' });
+            return;
+        }
+        if (!result.url || !result.key) {
+            res.status(500).json({ status: 'ERROR', message: 'File uploaded but public URL not available. Please check server configuration.' });
             return;
         }
 
@@ -234,7 +237,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
             where: { id: user.id },
             data: {
                 coverImage: result.url,
-                coverStoragePath: result.path,
+                coverStoragePath: result.key,
                 lastCoverChange: new Date()
             }
         });
@@ -245,7 +248,7 @@ router.post('/cover', requireAuth, upload.single('file'), validateUploadedImage,
         res.json({
             status: 'SUCCESS',
             message: 'تم رفع صورة الغلاف بنجاح',
-            data: { url: result.url, storagePath: result.path }
+            data: { url: result.url, storagePath: result.key }
         });
     } catch (error: any) {
         logger.error('Upload cover error:', error);
@@ -270,7 +273,10 @@ router.post(
     const startTime = Date.now();
     let videoUploaded = false;
     let thumbnailUploaded = false;
-    let videoResult: { success: boolean; url?: string; path?: string; error?: string } | null = null;
+    type UploadOk = { success: true; url: string; key: string };
+    type UploadFail = { success: false; error: string };
+    type UploadResult = UploadOk | UploadFail;
+    let videoResult: UploadResult | null = null;
     let thumbnailPath: string | null = null;
     
     try {
@@ -337,14 +343,11 @@ router.post(
         
         const uploadStartTime = Date.now();
         
-        const uploadPromise = supabaseStorage.uploadFile(
-            'reels', 
-            videoFile.buffer, 
-            videoFileName, 
-            videoFile.mimetype
-        );
+        const uploadPromise: Promise<UploadResult> = r2MediaStorage
+            .uploadPublic('reels', user.id, videoFile.buffer, videoFileName, videoFile.mimetype)
+            .then((r) => (r.success && r.url && r.key ? { success: true, url: r.url, key: r.key } : { success: false, error: r.error || 'Upload failed' }));
         
-        const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
+        const timeoutPromise: Promise<UploadFail> = new Promise((resolve) => {
             setTimeout(() => {
                 const elapsed = Date.now() - uploadStartTime;
                 logger.error(`R2 upload timeout after ${elapsed}ms for file: ${videoFileName}`);
@@ -356,7 +359,7 @@ router.post(
             }, 45 * 1000); // 45 seconds - leaving 15s buffer for response
         });
 
-        videoResult = await Promise.race([uploadPromise, timeoutPromise]) as any;
+        videoResult = await Promise.race([uploadPromise, timeoutPromise]);
 
         if (!videoResult || !videoResult.success) {
             const elapsed = Date.now() - uploadStartTime;
@@ -369,16 +372,7 @@ router.post(
             return;
         }
         
-        if (!videoResult.url) {
-            const elapsed = Date.now() - uploadStartTime;
-            logger.error(`Video uploaded but no public URL returned after ${elapsed}ms. File: ${videoFileName}. Check R2_PUBLIC_URL configuration.`);
-            res.status(500).json({ 
-                status: 'ERROR', 
-                message: 'Video uploaded but public URL not available. Please check server configuration.',
-                code: 'NO_PUBLIC_URL'
-            });
-            return;
-        }
+        // At this point UploadResult must be UploadOk
         
         videoUploaded = true;
         const uploadTime = Date.now() - uploadStartTime;
@@ -393,8 +387,10 @@ router.post(
                 logger.info(`Starting thumbnail upload: ${thumbFileName}, size: ${thumbSizeMB}MB`);
                 const thumbStartTime = Date.now();
                 
-                const thumbUploadPromise = supabaseStorage.uploadFile('thumbnails', thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype);
-                const thumbTimeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
+                const thumbUploadPromise: Promise<UploadResult> = r2MediaStorage
+                    .uploadPublic('thumbnails', user.id, thumbnailFile.buffer, thumbFileName, thumbnailFile.mimetype)
+                    .then((r) => (r.success && r.url && r.key ? { success: true, url: r.url, key: r.key } : { success: false, error: r.error || 'Thumbnail upload failed' }));
+                const thumbTimeoutPromise: Promise<UploadFail> = new Promise((resolve) => {
                     setTimeout(() => {
                         const elapsed = Date.now() - thumbStartTime;
                         logger.warn(`Thumbnail upload timeout after ${elapsed}ms: ${thumbFileName}`);
@@ -402,10 +398,10 @@ router.post(
                     }, 10 * 1000); // 10 seconds for thumbnail
                 });
 
-                const thumbResult = await Promise.race([thumbUploadPromise, thumbTimeoutPromise]);
+                const thumbResult: UploadResult = await Promise.race([thumbUploadPromise, thumbTimeoutPromise]);
                 if (thumbResult.success) {
-                    thumbnailUrl = thumbResult.url || null;
-                    thumbnailPath = thumbResult.path || null;
+                    thumbnailUrl = thumbResult.url;
+                    thumbnailPath = thumbResult.key;
                     thumbnailUploaded = true;
                     const thumbTime = Date.now() - thumbStartTime;
                     logger.info(`Thumbnail uploaded successfully in ${thumbTime}ms: ${thumbFileName}`);
@@ -431,7 +427,7 @@ router.post(
         }
 
         // Create reel in database
-        if (!videoResult || !videoResult.url || !videoResult.path) {
+        if (!videoResult || !videoResult.success) {
             logger.error('Cannot create reel: videoResult is missing required fields');
             res.status(500).json({ 
                 status: 'ERROR', 
@@ -445,7 +441,7 @@ router.post(
             data: {
                 userId: user.id,
                 videoUrl: videoResult.url,
-                videoStoragePath: videoResult.path,
+                videoStoragePath: videoResult.key,
                 thumbnail: thumbnailUrl,
                 thumbnailStoragePath: thumbnailPath,
                 caption: caption || null,
@@ -508,7 +504,7 @@ router.post(
                 reelId: reel.id,
                 videoUrl: videoResult.url,
                 thumbnailUrl,
-                storagePath: videoResult.path
+                storagePath: videoResult.key
             }
         });
     } catch (error: any) {
@@ -520,23 +516,23 @@ router.post(
             stack: errorStack,
             videoUploaded,
             thumbnailUploaded,
-            videoPath: videoResult?.path,
+            videoKey: videoResult && videoResult.success ? videoResult.key : undefined,
             thumbnailPath
         });
         
         // Clean up uploaded files if database operation failed
-        if (videoUploaded && videoResult && videoResult.success && videoResult.path) {
+        if (videoUploaded && videoResult && videoResult.success) {
             try {
-                await supabaseStorage.deleteFile('reels', videoResult.path);
-                logger.info(`Cleaned up uploaded video file: ${videoResult.path}`);
+                await r2MediaStorage.deleteObject(videoResult.key);
+                logger.info(`Cleaned up uploaded video file: ${videoResult.key}`);
             } catch (cleanupError: any) {
-                logger.error(`Failed to cleanup video file ${videoResult.path}:`, cleanupError?.message || cleanupError);
+                logger.error(`Failed to cleanup video file ${videoResult.key}:`, cleanupError?.message || cleanupError);
             }
         }
         
         if (thumbnailUploaded && thumbnailPath) {
             try {
-                await supabaseStorage.deleteFile('thumbnails', thumbnailPath);
+                await r2MediaStorage.deleteObject(thumbnailPath);
                 logger.info(`Cleaned up uploaded thumbnail file: ${thumbnailPath}`);
             } catch (cleanupError: any) {
                 logger.error(`Failed to cleanup thumbnail file ${thumbnailPath}:`, cleanupError?.message || cleanupError);

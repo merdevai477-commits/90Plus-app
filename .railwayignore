@@ -11,3 +11,7 @@ coverage/
 *.test.ts
 *.spec.ts
 __tests__/
+Backend/
+Backend/**
+profile-completion-backup/
+profile-completion-backup/**

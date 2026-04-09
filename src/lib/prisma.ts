@@ -6,10 +6,6 @@ const CONNECTION_POOL_SIZE = process.env.DATABASE_CONNECTION_POOL_SIZE
   ? parseInt(process.env.DATABASE_CONNECTION_POOL_SIZE, 10) 
   : 10; // Increased to 10 for Railway PostgreSQL
 
-const CONNECTION_TIMEOUT = 10000; // Reduced to 10 seconds
-const POOL_TIMEOUT = 5000; // Reduced to 5 seconds
-const QUERY_TIMEOUT = 5000; // Added query timeout
-
 // Singleton pattern for Prisma Client
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

@@ -1,12 +1,12 @@
 # Football App Backend
 
-Backend API for Football App using Express.js, Prisma, and PostgreSQL/Supabase.
+Backend API for Football App using Express.js, Prisma, and PostgreSQL.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ installed
-- PostgreSQL 14+ OR Supabase account (free)
+- PostgreSQL 14+ (or a managed Postgres like Neon)
 - npm or yarn package manager
 
 ### Installation
@@ -21,24 +21,25 @@ Create `.env` file with:
 ```env
 # Database (choose one)
 DATABASE_URL="postgresql://postgres:password@localhost:5432/football_app"
-# OR use Supabase:
-# DATABASE_URL="postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres"
+# Or use a managed Postgres provider connection string.
 
 # JWT (if using JWT auth)
 JWT_SECRET="your-secret-key-change-in-production"
 JWT_ACCESS_EXPIRY="15m"
 JWT_REFRESH_EXPIRY="7d"
 
-# Supabase (if using Supabase Auth)
-SUPABASE_URL="https://xxxxx.supabase.co"
-SUPABASE_ANON_KEY="your-anon-key"
-SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
-
 # Server
 PORT=3000
 API_PREFIX="/api"
 NODE_ENV="development"
 CORS_ORIGIN="http://localhost:8081"
+
+# Cloudflare R2 (media uploads)
+R2_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
+R2_ACCESS_KEY_ID="..."
+R2_SECRET_ACCESS_KEY="..."
+R2_BUCKET_NAME="your-bucket"
+R2_MEDIA_PUBLIC_URL="https://media.yourdomain.com"
 
 # OAuth (if using Google OAuth)
 GOOGLE_CLIENT_ID="your-google-client-id"
@@ -89,29 +90,16 @@ The server will be running at `http://localhost:3000`
 2. Create database: `createdb football_app`
 3. Update `DATABASE_URL` in `.env`
 
-### Option 2: Supabase (Recommended - Free)
-1. Go to https://supabase.com/dashboard
-2. Create new project
-3. Copy connection string from Settings → Database
-4. Update `DATABASE_URL` in `.env`
-
-See `SUPABASE_SETUP.md` for detailed instructions.
+### Option 2: Managed PostgreSQL (Recommended)
+1. Create a database on your provider (e.g. Neon, Railway, Render, etc.)
+2. Copy the connection string
+3. Update `DATABASE_URL` in `.env`
 
 ## 🔐 Authentication
 
-### Current System: JWT + Passport
-- Email/Password authentication
-- Google OAuth
-- JWT tokens (access + refresh)
-
-### Alternative: Supabase Auth (Available)
-- Email/Password authentication
-- OAuth providers (Google, Facebook, Apple)
-- Magic Links
-- Phone Authentication
-- Automatic session management
-
-To switch to Supabase Auth, see `HOW_TO_USE_SUPABASE_AUTH.md`
+### Current System
+- Clerk authentication for API routes that require login
+- JWT (where applicable)
 
 ## 🗄️ Database Schema
 
@@ -187,9 +175,9 @@ After running `npm run prisma:seed`, you'll have:
 - **Runtime:** Node.js
 - **Framework:** Express.js
 - **Language:** TypeScript
-- **Database:** PostgreSQL / Supabase
+- **Database:** PostgreSQL
 - **ORM:** Prisma
-- **Authentication:** JWT + Passport (or Supabase Auth)
+- **Authentication:** Clerk + JWT (where applicable)
 - **Validation:** class-validator
 - **Security:** Helmet, CORS
 - **Logging:** Morgan, Winston
@@ -197,7 +185,7 @@ After running `npm run prisma:seed`, you'll have:
 ## 📁 Project Structure
 
 ```
-Backend/
+src/
 ├── prisma/
 │   ├── schema.prisma      # Database schema
 │   ├── seed.ts            # Seed data script
@@ -206,13 +194,11 @@ Backend/
 │   ├── main.ts            # Application entry point
 │   ├── config/            # Configuration files
 │   │   ├── auth.config.ts
-│   │   └── supabase.config.ts
+│   │   └── storage.config.ts
 │   ├── controllers/       # Route controllers
 │   │   ├── auth.controller.ts
-│   │   └── auth.controller.supabase.ts
 │   ├── middleware/        # Express middleware
 │   │   ├── auth.middleware.ts
-│   │   └── auth.middleware.supabase.ts
 │   ├── routes/           # API routes
 │   │   └── auth.routes.ts
 │   ├── strategies/       # Passport strategies
@@ -237,9 +223,7 @@ Opens at `http://localhost:5555`
 
 ## 📖 Documentation
 
-- `SUPABASE_SETUP.md` - Setup Supabase database
-- `SUPABASE_AUTH_SETUP.md` - Setup Supabase Auth
-- `HOW_TO_USE_SUPABASE_AUTH.md` - Switch to Supabase Auth
+- Media uploads use Cloudflare R2 (avatars/covers/reels/thumbnails)
 - `AUTH_ENDPOINTS.md` - Authentication endpoints documentation
 
 ## 🤝 Contributing

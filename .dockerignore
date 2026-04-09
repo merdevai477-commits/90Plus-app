@@ -41,6 +41,14 @@ tmp/
 temp/
 .cache/
 
+# Legacy duplicated backends (not used)
+Backend/
+Backend/**
+
+# Frontend (deploy separately)
+front/
+front/**
+
 # Git
 .git/
 .gitignore

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabaseStorage } from '../services/supabase-storage.service';
+import { r2MediaStorage } from '../services/r2-media-storage.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
@@ -148,18 +148,19 @@ export class ProfileController {
       }
 
       if (user.avatarStoragePath) {
-        await supabaseStorage.deleteFile('avatars', user.avatarStoragePath);
+        await r2MediaStorage.deleteObject(user.avatarStoragePath);
       }
 
-      const result = await supabaseStorage.uploadFile(
+      const result = await r2MediaStorage.uploadPublic(
         'avatars',
+        user.id,
         req.file.buffer,
         `${user.id}/${Date.now()}.${req.file.mimetype.split('/')[1]}`,
         req.file.mimetype
       );
 
-      if (!result.success) {
-        res.status(500).json({ status: 'ERROR', message: result.error });
+      if (!result.success || !result.url || !result.key) {
+        res.status(500).json({ status: 'ERROR', message: result.error || 'Upload failed' });
         return;
       }
 
@@ -167,7 +168,7 @@ export class ProfileController {
         where: { clerkUserId },
         data: {
           avatar: result.url,
-          avatarStoragePath: result.path,
+          avatarStoragePath: result.key,
         },
       });
 
@@ -209,18 +210,19 @@ export class ProfileController {
       const currentSettings = (user.settings as Record<string, any>) || {};
 
       if (currentSettings.coverStoragePath) {
-        await supabaseStorage.deleteFile('covers', currentSettings.coverStoragePath);
+        await r2MediaStorage.deleteObject(currentSettings.coverStoragePath);
       }
 
-      const result = await supabaseStorage.uploadFile(
+      const result = await r2MediaStorage.uploadPublic(
         'covers',
+        user.id,
         req.file.buffer,
         `${user.id}/${Date.now()}.${req.file.mimetype.split('/')[1]}`,
         req.file.mimetype
       );
 
-      if (!result.success) {
-        res.status(500).json({ status: 'ERROR', message: result.error });
+      if (!result.success || !result.url || !result.key) {
+        res.status(500).json({ status: 'ERROR', message: result.error || 'Upload failed' });
         return;
       }
 
@@ -230,7 +232,7 @@ export class ProfileController {
           settings: {
             ...currentSettings,
             coverUrl: result.url,
-            coverStoragePath: result.path,
+            coverStoragePath: result.key,
           },
         },
       });
@@ -334,7 +336,10 @@ export class ProfileController {
       }
 
       // ✅ استبعاد الحقول الحساسة قبل الإرسال
-      const { email, clerkUserId: _, avatarStoragePath, ...publicData } = user as any;
+      const { email: _email, clerkUserId: _clerkUserId, avatarStoragePath: _avatarStoragePath, ...publicData } = user as any;
+      void _email;
+      void _clerkUserId;
+      void _avatarStoragePath;
 
       res.json({
         status: 'SUCCESS',

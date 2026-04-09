@@ -65,7 +65,7 @@ function getProfilesSampleRate(): number {
  * 
  * Requirements: 1.8
  */
-function beforeSendHook(event: Sentry.ErrorEvent, hint?: Sentry.EventHint): Sentry.ErrorEvent | null {
+function beforeSendHook(event: Sentry.ErrorEvent, _hint?: Sentry.EventHint): Sentry.ErrorEvent | null {
   // Filter sensitive headers
   if (event.request?.headers) {
     const headers = event.request.headers;

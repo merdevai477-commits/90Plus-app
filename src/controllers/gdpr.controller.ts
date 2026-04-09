@@ -14,7 +14,6 @@
 import { Request, Response } from 'express';
 import { getPrisma } from '../lib/prisma-lazy';
 import { logger } from '../utils/logger';
-import crypto from 'crypto';
 
 const prisma = getPrisma();
 

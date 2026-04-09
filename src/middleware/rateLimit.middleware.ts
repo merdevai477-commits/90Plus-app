@@ -7,6 +7,27 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
+function getClientIp(req: Request): string {
+    const xff = req.headers['x-forwarded-for'];
+    const raw =
+        (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim() ||
+        req.headers['x-real-ip']?.toString()?.trim() ||
+        req.ip ||
+        req.socket.remoteAddress ||
+        '';
+    return raw || 'unknown';
+}
+
+function isSkippablePath(req: Request): boolean {
+    const path = req.path || '';
+    // Don't rate limit preflight and obvious health/metrics endpoints.
+    if (req.method === 'OPTIONS') return true;
+    if (path === '/health' || path === '/metrics' || path === '/csrf-token') return true;
+    // Socket.IO lives outside /api in this app, but keep it safe if proxied under /api.
+    if (path.startsWith('/socket.io')) return true;
+    return false;
+}
+
 /**
  * Skip rate limiting for certain conditions
  * Must be defined before use in rate limiters
@@ -14,7 +35,7 @@ import { Request, Response } from 'express';
 export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean => {
     // Skip for internal requests or trusted IPs
     const trustedIPs = process.env.TRUSTED_IPS?.split(',') || [];
-    const clientIP = req.ip || req.socket.remoteAddress || '';
+    const clientIP = getClientIp(req);
 
     return trustedIPs.includes(clientIP);
 };
@@ -34,11 +55,21 @@ export const generalLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        if (isSkippablePath(req)) return true;
+        // These endpoints are intentionally high-frequency and have their own limiter.
+        const p = req.path || '';
+        if (p.startsWith('/football/fixtures/live')) return true;
+        if (p.startsWith('/notifications')) return true;
+        if (p.startsWith('/reels/rankings')) return true;
+        return false;
+    },
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
     keyGenerator: (req: Request) => {
         // If user is authenticated, use their ID to allow more requests per user
         const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : req.ip || 'unknown';
+        return userId ? `user:${userId}` : getClientIp(req);
     },
 });
 
@@ -56,9 +87,14 @@ export const lenientLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        if (isSkippablePath(req)) return true;
+        return false;
+    },
     keyGenerator: (req: Request) => {
         const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : req.ip || 'unknown';
+        return userId ? `user:${userId}` : getClientIp(req);
     },
 });
 
@@ -76,9 +112,14 @@ export const writeLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        if (isSkippablePath(req)) return true;
+        return false;
+    },
     keyGenerator: (req: Request) => {
         const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : req.ip || 'unknown';
+        return userId ? `user:${userId}` : getClientIp(req);
     },
 });
 
@@ -96,6 +137,11 @@ export const authLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        if (isSkippablePath(req)) return true;
+        return false;
+    },
 });
 
 /**
@@ -111,6 +157,11 @@ export const webhookLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        // Never skip based on path here; webhooks route already scoped.
+        return false;
+    },
 });
 
 /**
@@ -127,6 +178,11 @@ export const strictLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        if (isSkippablePath(req)) return true;
+        return false;
+    },
 });
 
 /**
@@ -144,11 +200,15 @@ export const userSyncLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    skip: skipRateLimitForTrusted,
+    skip: (req: Request, res: Response) => {
+        if (skipRateLimitForTrusted(req, res)) return true;
+        if (isSkippablePath(req)) return true;
+        return false;
+    },
     // Use user ID for key generation
     keyGenerator: (req: Request) => {
         const userId = (req as any).auth?.userId;
-        return userId ? `user:${userId}` : req.ip || 'unknown';
+        return userId ? `user:${userId}` : getClientIp(req);
     },
 });
 

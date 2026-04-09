@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { FILE_SIZE_LIMITS } from '../config/supabase.config';
+import { FILE_SIZE_LIMITS } from '../config/storage.config';
 import { getVideoDurationInSeconds } from 'get-video-duration';
 import { logger } from '../utils/logger';
 import fs from 'fs';
