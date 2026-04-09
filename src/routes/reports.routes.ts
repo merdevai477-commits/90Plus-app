@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { strictLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ const ensureString = (param: string | string[] | undefined): string => {
 };
 
 // POST /api/reports/reel/:reelId
-router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { reelId } = req.params;
     const reelIdStr = ensureString(reelId);
@@ -59,6 +60,21 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
     const reportType = reasonToType[reason] || 'OTHER';
 
     // Create report
+    // Duplicate detection: allow re-report after 24 hours only
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId: user.id,
+        reportedReelId: reelIdStr,
+        createdAt: { gte: twentyFourHoursAgo },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      res.status(409).json({ status: 'ERROR', message: 'You have already reported this content recently' });
+      return;
+    }
+
     await prisma.report.create({
       data: {
         reporterId: user.id,
@@ -86,7 +102,7 @@ router.post('/reel/:reelId', requireAuth, async (req: Request, res: Response): P
 });
 
 // POST /api/reports/comment/:commentId
-router.post('/comment/:commentId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { commentId } = req.params;
     const commentIdStr = ensureString(commentId);
@@ -131,6 +147,21 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
 
     const reportType = reasonToType[reason] || 'OTHER';
 
+    // Duplicate detection: allow re-report after 24 hours only
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId: user.id,
+        reportedCommentId: commentIdStr,
+        createdAt: { gte: twentyFourHoursAgo },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      res.status(409).json({ status: 'ERROR', message: 'You have already reported this content recently' });
+      return;
+    }
+
     await prisma.report.create({
       data: {
         reporterId: user.id,
@@ -150,6 +181,98 @@ router.post('/comment/:commentId', requireAuth, async (req: Request, res: Respon
     });
   } catch (error: any) {
     logger.error('Report comment error:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+// POST /api/reports/user/:userId
+router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const targetUserId = ensureString(req.params.userId);
+    const { reason, additionalInfo } = req.body;
+    const clerkUserId = req.auth?.userId;
+
+    if (!clerkUserId) {
+      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      return;
+    }
+
+    if (!reason || String(reason).trim().length === 0) {
+      res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { clerkUserId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      return;
+    }
+
+    if (user.id === targetUserId) {
+      res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+      return;
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true },
+    });
+
+    if (!target) {
+      res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+      return;
+    }
+
+    // Duplicate detection: allow re-report after 24 hours only
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId: user.id,
+        reportedUserId: targetUserId,
+        createdAt: { gte: twentyFourHoursAgo },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      res.status(409).json({ status: 'ERROR', message: 'You have already reported this content recently' });
+      return;
+    }
+
+    const reasonToType: Record<string, string> = {
+      spam: 'SPAM',
+      harassment: 'HARASSMENT',
+      inappropriate: 'INAPPROPRIATE',
+      fake: 'HARASSMENT',
+      other: 'OTHER',
+    };
+
+    const reportType = reasonToType[reason] || 'OTHER';
+
+    await prisma.report.create({
+      data: {
+        reporterId: user.id,
+        reportedUserId: targetUserId,
+        type: reportType as any,
+        reason: (additionalInfo || reason).trim(),
+        status: 'PENDING',
+      },
+    });
+
+    logger.info(`User ${user.id} reported user ${targetUserId} for: ${reason}`);
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Report submitted successfully',
+    });
+  } catch (error: any) {
+    logger.error('Report user error:', error);
     res.status(500).json({
       status: 'ERROR',
       message: error.message || 'Internal server error',

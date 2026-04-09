@@ -23,6 +23,122 @@ router.patch('/settings', requireAuth, UserController.updateSettings);
 router.delete('/me', requireAuth, accountDeletionRateLimiter, UserController.deleteAccount);
 
 /**
+ * POST /api/users/report/:userId
+ * Report a user (protected)
+ *
+ * Note: Frontend uses this endpoint from `front/components/profile/BlockReportModal.tsx`.
+ */
+router.post('/report/:userId', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const targetUserId = ensureString(req.params.userId);
+        const clerkUserId = req.auth?.userId;
+        const { reason, additionalInfo } = req.body as { reason?: string; additionalInfo?: string };
+
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        if (!reason || reason.trim().length === 0) {
+            res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+            return;
+        }
+
+        const reporter = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+
+        if (!reporter) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        if (reporter.id === targetUserId) {
+            res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({
+            where: { id: targetUserId },
+            select: { id: true },
+        });
+
+        if (!target) {
+            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            return;
+        }
+
+        const { calculateReportPriority, processReport } = await import('../services/moderation.service');
+
+        // Duplicate detection: only allow re-report after 24 hours (align with reels report behavior)
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const existing = await prisma.report.findFirst({
+            where: {
+                reporterId: reporter.id,
+                reportedUserId: targetUserId,
+                createdAt: { gte: twentyFourHoursAgo },
+            },
+            select: { id: true },
+        });
+
+        if (existing) {
+            res.status(409).json({
+                status: 'ERROR',
+                message: 'تم الإبلاغ عن هذا المستخدم مسبقاً. يمكنك الإبلاغ مرة أخرى بعد 24 ساعة',
+            });
+            return;
+        }
+
+        // Map common UI reasons → ReportType enum
+        const reasonToType: Record<string, string> = {
+            spam: 'SPAM',
+            harassment: 'HARASSMENT',
+            inappropriate: 'INAPPROPRIATE',
+            fake: 'HARASSMENT',
+            other: 'OTHER',
+        };
+
+        const reportType = reasonToType[reason] || 'OTHER';
+
+        const priority = await calculateReportPriority({
+            reportType,
+            reportedUserId: targetUserId,
+        });
+
+        const report = await prisma.report.create({
+            data: {
+                reporterId: reporter.id,
+                reportedUserId: targetUserId,
+                type: reportType as any,
+                reason: (additionalInfo || reason).trim(),
+                status: 'PENDING',
+                priority: priority as any,
+                isDuplicate: false,
+            },
+        });
+
+        await processReport(report.id);
+
+        // Audit log (best-effort)
+        try {
+            const { AuditService, AuditTargetType } = await import('../services/audit.service');
+            await AuditService.logReportCreated(report.id, reporter.id, targetUserId, AuditTargetType.USER);
+        } catch (err) {
+            logger.warn('Audit log failed [user report]:', err);
+        }
+
+        res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
+    } catch (error: any) {
+        logger.error('Report user error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            message: error.message || 'Internal server error',
+        });
+    }
+});
+
+/**
  * POST /api/users/block/:userId
  * Block a user (protected)
  * Note: Requires running prisma migrate after adding Block model

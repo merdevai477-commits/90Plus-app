@@ -31,6 +31,29 @@ const FEED_CACHE_TTL = 30 * 1000; // 30 seconds
 const userIdCache = new Map<string, { id: string; timestamp: number }>();
 const USER_ID_CACHE_TTL = 5 * 60 * 1000;
 
+async function getBlockedUserIdsForUser(userId: string): Promise<string[]> {
+    try {
+        // Exclude both directions:
+        // - users I blocked
+        // - users who blocked me
+        const rows = await prisma.$queryRaw<{ otherId: string }[]>`
+            SELECT
+                CASE
+                    WHEN b."blockerId" = ${userId} THEN b."blockedId"
+                    ELSE b."blockerId"
+                END AS "otherId"
+            FROM blocks b
+            WHERE b."blockerId" = ${userId} OR b."blockedId" = ${userId}
+        `;
+        return rows.map(r => r.otherId).filter(Boolean);
+    } catch (err: any) {
+        // Table may not exist yet in some deployments
+        if (err?.code === '42P01') return [];
+        logger.warn('[Reels] Failed to load blocked users (non-critical):', err);
+        return [];
+    }
+}
+
 /**
  * GET /api/reels/feed
  * Get reels feed with pagination (5 reels per request) - WITH CACHING
@@ -66,8 +89,13 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             }
         }
 
+        const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
+
         const reels = await prisma.reel.findMany({
-            where: { isDeleted: false }, // Exclude deleted reels
+            where: {
+                isDeleted: false,
+                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+            }, // Exclude deleted reels + blocked users
             take: take + 1, // Get one extra to check if there's more
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
             orderBy: { createdAt: 'desc' },
@@ -107,7 +135,10 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
                     }
                 },
                 comments: {
-                    where: { isDeleted: false },
+                    where: {
+                        isDeleted: false,
+                        ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+                    },
                     take: MAX_COMMENTS_PREVIEW,
                     orderBy: { createdAt: 'desc' },
                     select: {
@@ -646,9 +677,20 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
         const idStr = ensureString(id);
         const { limit = '20' } = req.query;
 
+        const clerkUserId = req.auth?.userId;
+        const currentUser = clerkUserId
+            ? await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
+            : null;
+        const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
+
         // Get top-level comments (no parentId, not deleted)
         const comments = await prisma.comment.findMany({
-            where: { reelId: idStr, parentId: null, isDeleted: false },
+            where: {
+                reelId: idStr,
+                parentId: null,
+                isDeleted: false,
+                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+            },
             take: Math.min(parseInt(limit as string), 50),
             orderBy: { createdAt: 'desc' },
             select: {
@@ -665,7 +707,10 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
                     }
                 },
                 replies: {
-                    where: { isDeleted: false },
+                    where: {
+                        isDeleted: false,
+                        ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+                    },
                     take: 3,
                     orderBy: { createdAt: 'asc' },
                     select: {
@@ -689,7 +734,14 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
             }
         });
 
-        const totalCount = await prisma.comment.count({ where: { reelId: idStr, parentId: null, isDeleted: false } });
+        const totalCount = await prisma.comment.count({
+            where: {
+                reelId: idStr,
+                parentId: null,
+                isDeleted: false,
+                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+            }
+        });
 
         // Format response
         const formattedComments = comments.map((c: any) => ({
