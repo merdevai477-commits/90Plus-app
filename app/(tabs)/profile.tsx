@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import ReelUploadModal from '../../components/common/ReelUploadModal';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
@@ -238,6 +239,7 @@ const styles = StyleSheet.create({
 
 export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('videos');
+  const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
   
@@ -312,8 +314,12 @@ export default function ProfileScreen() {
   }, [isLoading, cachedUserData, isCacheHit, cacheError]);
 
   // CRITICAL FIX: Auto-retry when backend is down (502 error)
+  const lastAutoRetryAtRef = useRef<number>(0);
   useEffect(() => {
-    if (cacheError && cacheError.includes('المحفوظة') && !isLoading) {
+    const now = Date.now();
+    const isGatewayError = !!cacheError && /502|bad gateway|gateway/i.test(cacheError);
+    if (isGatewayError && !isLoading && now - lastAutoRetryAtRef.current > 60_000) {
+      lastAutoRetryAtRef.current = now;
       const retryTimeout = setTimeout(() => {
         console.log('[ProfileScreen] 🔄 Auto-retry after backend cold start (8s delay)');
         refreshCache(true).catch(err => {
@@ -326,16 +332,18 @@ export default function ProfileScreen() {
   }, [cacheError, isLoading, refreshCache]);
 
   // CRITICAL FIX: Timeout fallback if loading takes too long
+  const hasForcedRefreshRef = useRef(false);
   useEffect(() => {
-    if (isLoading && !cachedUserData) {
+    if (isLoading && !cachedUserData && !hasForcedRefreshRef.current) {
       const timeout = setTimeout(() => {
         console.error('[ProfileScreen] ⏰ Loading timeout - forcing refresh');
         logger.error('Profile loading timeout - forcing refresh');
+        hasForcedRefreshRef.current = true;
         refreshCache(true).catch(err => {
           console.error('[ProfileScreen] ❌ Refresh failed:', err);
           toastManager.showError('خطأ', 'فشل تحديث البيانات. يرجى المحاولة مرة أخرى');
         });
-      }, 15000);
+      }, 30000);
 
       return () => clearTimeout(timeout);
     }
@@ -491,14 +499,15 @@ export default function ProfileScreen() {
 
     const allVideos = [...uploaded, ...cached];
 
-    const uniqueVideos = allVideos.reduce((acc, video) => {
-      if (!acc.find(v => v.id === video.id)) {
-        acc.push(video);
-      }
-      return acc;
-    }, [] as any[]);
+    // O(n) deduplication using Map instead of O(n²) reduce+find
+    const seen = new Map<string, boolean>();
+    const uniqueVideos = allVideos.filter(video => {
+      if (seen.has(video.id)) return false;
+      seen.set(video.id, true);
+      return true;
+    });
 
-    return uniqueVideos.map(video => ({
+    return uniqueVideos.map((video: any) => ({
       id: video.id,
       thumbnail: video.thumbnail || video.uri,
       views: video.views || '0',
@@ -595,11 +604,24 @@ export default function ProfileScreen() {
   const refreshCacheRef = useRef(refreshCache);
   refreshCacheRef.current = refreshCache;
 
+  // Throttle refresh calls to prevent request storms (iOS/Android focus + AppState + preload)
+  const lastUiRefreshAtRef = useRef<number>(0);
+  const MIN_UI_REFRESH_MS = 15_000;
+  const maybeRefreshProfile = useCallback((reason: 'focus' | 'app_active') => {
+    const now = Date.now();
+    if (isOffline) return;
+    if (isLoading || isRefreshing) return;
+    if (now - lastUiRefreshAtRef.current < MIN_UI_REFRESH_MS) return;
+    lastUiRefreshAtRef.current = now;
+    logger.debug(`[ProfileScreen] Refresh triggered (${reason})`);
+    refreshCacheRef.current(false);
+  }, [isOffline, isLoading, isRefreshing]);
+
   // Refresh on focus - use cache hook's refresh
   useFocusEffect(
     useCallback(() => {
-      refreshCacheRef.current(false);
-    }, [])
+      maybeRefreshProfile('focus');
+    }, [maybeRefreshProfile])
   );
 
   // Auto-refresh when app returns from background
@@ -613,13 +635,21 @@ export default function ProfileScreen() {
         nextAppState === 'active' &&
         !isPickerActiveRef.current // ← لا تعمل refresh لو الـ picker مفتوح
       ) {
-        refreshCacheRef.current(false);
+        maybeRefreshProfile('app_active');
       }
       appStateRef.current = nextAppState;
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
+  }, [maybeRefreshProfile]);
+
+  // Offline detection
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOffline(!(state.isConnected ?? true));
+    });
+    return () => unsubscribe();
   }, []);
 
   // Optimization: Memoize cover press handler
@@ -1195,6 +1225,15 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+
+      {/* Offline Banner */}
+      {isOffline && (
+        <View style={{ backgroundColor: '#FF4444', paddingVertical: 6, paddingHorizontal: 16, alignItems: 'center' }}>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+            {t.matches.networkOffline}
+          </Text>
+        </View>
+      )}
 
       {/* Coins Badge */}
       <View style={styles.coinsBadgeContainer}>

@@ -45,7 +45,7 @@ export interface PreloadConfig {
 const DEFAULT_CONFIG: PreloadConfig = {
   screens: ['home', 'profile', 'reels', 'notifications', 'matches', 'rankings'],
   reelsCount: 5,
-  refreshInterval: 3 * 60 * 1000, // 3 minutes (was 5)
+  refreshInterval: 10 * 60 * 1000, // 10 minutes (reduce background traffic)
 };
 
 // Video preloading configuration
@@ -627,7 +627,11 @@ class PreloadManagerClass {
 
     this.refreshIntervalId = setInterval(() => {
       logger.debug('[PreloadManager] Periodic refresh triggered');
-      this.preloadAllScreens();
+      // Keep periodic refresh lightweight: avoid profile + aggressive reels video preloading.
+      Promise.allSettled([
+        this.preloadScreen('notifications'),
+        this.preloadScreen('rankings'),
+      ]).catch(() => {});
     }, this.config.refreshInterval);
   }
 
