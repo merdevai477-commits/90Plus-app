@@ -47,19 +47,10 @@ export function useAgeVerification() {
   const hasCheckedRef = useRef(false);
 
   useEffect(() => {
-    if (!isLoaded) return;
-    
-    if (!isSignedIn) {
-      setLoading(false);
-      return;
-    }
-
-    // ✅ FIX: Only run once per session
-    if (hasCheckedRef.current) return;
-    hasCheckedRef.current = true;
-
-    checkAgeStatus();
-  }, [isSignedIn, isLoaded]); // ✅ FIX: Removed getToken from deps
+    // ⛔ DISABLED: age-status endpoint not deployed yet - causes infinite 404 loop
+    // Re-enable when backend endpoint is ready
+    setLoading(false);
+  }, []);
 
   const checkAgeStatus = async () => {
     try {
