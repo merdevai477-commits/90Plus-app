@@ -254,16 +254,28 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
 
         // Override json to cache response
         res.json = function (body: any) {
-            // Cache asynchronously without blocking response
-            responseCache.set(req, body, ttl).then((etag) => {
-                res.setHeader('ETag', `"${etag}"`);
-                res.setHeader('X-Cache', 'MISS');
-                const effectiveTtl = ttl || 5 * 60 * 1000;
-                res.setHeader('Cache-Control', `private, max-age=${Math.floor(effectiveTtl / 1000)}`);
-            }).catch(() => {
-                // Ignore cache errors, don't block response
-                responseCache.failFill(req, new Error('CACHE_SET_FAILED'));
-            });
+            // IMPORTANT: Never cache error responses.
+            // Caching 4xx/5xx (or non-success payloads) can lock clients into retry loops.
+            const shouldCache = res.statusCode >= 200 &&
+                res.statusCode < 300 &&
+                body?.status === 'SUCCESS';
+
+            if (shouldCache) {
+                // Cache asynchronously without blocking response
+                responseCache.set(req, body, ttl).then((etag) => {
+                    res.setHeader('ETag', `"${etag}"`);
+                    res.setHeader('X-Cache', 'MISS');
+                    const effectiveTtl = ttl || 5 * 60 * 1000;
+                    res.setHeader('Cache-Control', `private, max-age=${Math.floor(effectiveTtl / 1000)}`);
+                }).catch(() => {
+                    // Ignore cache errors, don't block response
+                    responseCache.failFill(req, new Error('CACHE_SET_FAILED'));
+                });
+            } else {
+                // Release waiters for this key if leader request ended with non-cacheable response.
+                responseCache.failFill(req, new Error('RESPONSE_NOT_CACHEABLE'));
+                res.setHeader('X-Cache', 'SKIP');
+            }
             return originalJson(body);
         };
 
