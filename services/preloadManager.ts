@@ -163,17 +163,12 @@ class PreloadManagerClass {
       return;
     }
 
-    // Priority 1: Home data (most important - user sees it first)
-    logger.debug('[PreloadManager] Priority 1: Preloading home data...');
-    await this.preloadScreen('home').catch(err => {
-      logger.error('[PreloadManager] Home preload failed:', err);
-    });
-
-    // Priority 2: Profile (user might check it immediately)
-    logger.debug('[PreloadManager] Priority 2: Preloading profile...');
-    await this.preloadScreen('profile').catch(err => {
-      logger.error('[PreloadManager] Profile preload failed:', err);
-    });
+    // Profile + home in parallel: account tab must feel instant; home is visible first
+    logger.debug('[PreloadManager] Priority 1: Preloading profile + home in parallel...');
+    await Promise.allSettled([
+      this.preloadScreen('profile'),
+      this.preloadScreen('home'),
+    ]);
 
     // Priority 3: Reels (popular feature - preload first 7)
     logger.debug('[PreloadManager] Priority 3: Preloading reels...');

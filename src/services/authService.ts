@@ -43,7 +43,7 @@ const API_TIMEOUT = 15000; // 15 seconds per request
 const SYNC_OPERATION_TIMEOUT = 12000; // 12 seconds total
 
 // Retry configuration
-const MAX_RETRY_ATTEMPTS = 2; // 2 attempts max
+const MAX_RETRY_ATTEMPTS = 4; // Clerk/me + cold DB: extra retries for transient 5xx
 const RETRY_DELAY_MS = 500; // 500ms between retries
 
 // ✅ SUPER SPEED: In-memory cache for instant responses

@@ -85,10 +85,54 @@ export interface ProfileCacheData {
   cooldowns: CooldownsResponse | null;
 }
 
+/** When /clerk/me fails, build a usable profile from Clerk until the API recovers */
+export interface ClerkFallbackProfile {
+  clerkUserId: string;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  imageUrl?: string | null;
+  primaryEmail?: string | null;
+}
+
+export function buildClerkFallbackUserData(
+  cf: ClerkFallbackProfile,
+  imageFallback?: string | null
+): ProfileUserData {
+  const emailLocal =
+    cf.primaryEmail
+      ?.split('@')[0]
+      ?.toLowerCase()
+      .replace(/[^a-z0-9_]/g, '') || '';
+  let username = (cf.username || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!username && emailLocal) username = emailLocal;
+  if (!username) username = `user_${cf.clerkUserId.slice(-8)}`;
+  const displayName =
+    [cf.firstName, cf.lastName].filter(Boolean).join(' ').trim() || username;
+  return {
+    id: cf.clerkUserId,
+    displayName,
+    username,
+    bio: '',
+    avatar: imageFallback || cf.imageUrl || null,
+    createdAt: new Date(),
+    isVerified: false,
+    isDeveloper: false,
+    favoriteTeam: '',
+    location: '',
+    lastUsernameChange: null,
+    socials: { instagram: undefined, twitter: undefined, facebook: undefined },
+    socialLinks: undefined,
+    consecutiveLoginDays: 0,
+  };
+}
+
 export interface UseProfileCacheOptions {
   getToken: () => Promise<string | null>;
   clerkUserImageUrl?: string;
   clerkUserId?: string; // Add user ID for cache key
+  /** If API returns 5xx, still open profile using Clerk session data */
+  clerkFallback?: ClerkFallbackProfile | null;
   onCacheHit?: () => void;
   onFreshDataLoaded?: () => void;
 }
@@ -122,7 +166,7 @@ export interface UseProfileCacheResult {
  *   in cache with a valid timestamp for future retrieval.
  */
 export function useProfileCache(options: UseProfileCacheOptions): UseProfileCacheResult {
-  const { getToken, clerkUserImageUrl, clerkUserId, onCacheHit, onFreshDataLoaded } = options;
+  const { getToken, clerkUserImageUrl, clerkUserId, clerkFallback, onCacheHit, onFreshDataLoaded } = options;
   
   // Generate user-specific cache key
   const cacheKey = useMemo(() => {
@@ -399,6 +443,22 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           hasLoadedRef.current = true;
           // Don't set error - just show cached data silently
           setError(null);
+        } else if (clerkFallback?.clerkUserId) {
+          const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
+          setUserData(fd);
+          setFollowStats(null);
+          setVideos([]);
+          setAnalytics(null);
+          setCooldowns(null);
+          hasLoadedRef.current = true;
+          setError(null);
+          await saveToCache({
+            userData: fd,
+            followStats: null,
+            videos: [],
+            analytics: null,
+            cooldowns: null,
+          });
         } else {
           setError('Failed to load user data');
         }
@@ -446,18 +506,52 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setCooldowns(cachedData.cooldowns);
           hasLoadedRef.current = true;
           setError(null); // Don't show error if we have cached data
+        } else if (clerkFallback?.clerkUserId) {
+          const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
+          setUserData(fd);
+          setFollowStats(null);
+          setVideos([]);
+          setAnalytics(null);
+          setCooldowns(null);
+          hasLoadedRef.current = true;
+          setError(null);
+          await saveToCache({
+            userData: fd,
+            followStats: null,
+            videos: [],
+            analytics: null,
+            cooldowns: null,
+          });
         } else {
           setError(err.message || 'Failed to load profile data');
         }
       } catch (cacheErr) {
-        setError(err.message || 'Failed to load profile data');
+        if (clerkFallback?.clerkUserId) {
+          const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
+          setUserData(fd);
+          setFollowStats(null);
+          setVideos([]);
+          setAnalytics(null);
+          setCooldowns(null);
+          hasLoadedRef.current = true;
+          setError(null);
+          await saveToCache({
+            userData: fd,
+            followStats: null,
+            videos: [],
+            analytics: null,
+            cooldowns: null,
+          });
+        } else {
+          setError(err.message || 'Failed to load profile data');
+        }
       }
       
       setIsLoading(false);
     } finally {
       isLoadingRef.current = false;
     }
-  }, [getToken, clerkUserImageUrl, transformUserProfile, transformReels, saveToCache]); // Removed onFreshDataLoaded - uses ref
+  }, [getToken, clerkUserImageUrl, clerkFallback, transformUserProfile, transformReels, saveToCache]); // Removed onFreshDataLoaded - uses ref
 
   /**
    * Main refresh function - implements cache-first pattern
@@ -499,12 +593,46 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
             setCooldowns(cachedData.cooldowns);
             hasLoadedRef.current = true;
             setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+          } else if (clerkFallback?.clerkUserId) {
+            const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
+            setUserData(fd);
+            setFollowStats(null);
+            setVideos([]);
+            setAnalytics(null);
+            setCooldowns(null);
+            hasLoadedRef.current = true;
+            setError(null);
+            await saveToCache({
+              userData: fd,
+              followStats: null,
+              videos: [],
+              analytics: null,
+              cooldowns: null,
+            });
           } else {
             setError(err.message || 'Failed to refresh profile');
           }
         } catch (cacheErr) {
           logger.error('[useProfileCache] Failed to load cached data:', cacheErr);
-          setError(err.message || 'Failed to refresh profile');
+          if (clerkFallback?.clerkUserId) {
+            const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
+            setUserData(fd);
+            setFollowStats(null);
+            setVideos([]);
+            setAnalytics(null);
+            setCooldowns(null);
+            hasLoadedRef.current = true;
+            setError(null);
+            await saveToCache({
+              userData: fd,
+              followStats: null,
+              videos: [],
+              analytics: null,
+              cooldowns: null,
+            });
+          } else {
+            setError(err.message || 'Failed to refresh profile');
+          }
         }
       } else {
         setError(err.message || 'Failed to refresh profile');
@@ -513,7 +641,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [loadFromCache, fetchFreshData, userData, cacheKey]);
+  }, [loadFromCache, fetchFreshData, userData, cacheKey, clerkFallback, clerkUserImageUrl, saveToCache]);
 
   /**
    * Retry with exponential backoff
@@ -601,10 +729,11 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     setIsCacheHit(false);
   }, [cacheKey]);
 
-  // Initial load on mount
+  // Initial load + when Clerk user id appears (session hydrated after first paint)
   useEffect(() => {
     refresh();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh is stable enough; re-run when clerk id changes
+  }, [clerkUserId]);
 
   return {
     userData,

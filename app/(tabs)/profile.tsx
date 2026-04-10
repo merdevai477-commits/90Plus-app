@@ -297,6 +297,16 @@ export default function ProfileScreen() {
     getToken,
     clerkUserImageUrl: clerkUser?.imageUrl,
     clerkUserId: clerkUser?.id,
+    clerkFallback: clerkUser
+      ? {
+          clerkUserId: clerkUser.id,
+          username: clerkUser.username,
+          firstName: clerkUser.firstName,
+          lastName: clerkUser.lastName,
+          imageUrl: clerkUser.imageUrl,
+          primaryEmail: clerkUser.primaryEmailAddress?.emailAddress,
+        }
+      : undefined,
   });
 
   // ✅ FIXED: Profile completion hook with infinite loop protection
@@ -1461,8 +1471,8 @@ export default function ProfileScreen() {
           onEditPress={handleEditProfile}
         />
 
-        {/* Badges Display */}
-        {userData?.id && (
+        {/* Badges need backend user UUID; Clerk-only fallback uses user_* id */}
+        {userData?.id && !String(userData.id).startsWith('user_') && (
           <View style={styles.badgesContainer}>
             <BadgesDisplay
               userId={userData.id}

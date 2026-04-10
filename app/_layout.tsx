@@ -6,7 +6,7 @@ import '../services/notificationForegroundSetup';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, I18nManager, ActivityIndicator, Linking } from 'react-native';
+import { View, StatusBar, I18nManager, Linking } from 'react-native';
 import * as Updates from 'expo-updates';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
@@ -22,10 +22,12 @@ import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { logger } from "../services/logger";
 import { preloadManager } from "../services/preloadManager";
+import { AuthService } from "../src/services/authService";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { initSentry, captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
+import { AppSplashScreen } from "../components/splash/AppSplashScreen";
 
 // Lazy load websocket client to avoid bundling issues with socket.io-client
 let websocketClient: any = null;
@@ -63,19 +65,31 @@ const tokenCache = {
   },
 };
 
-function RootLayoutNav() {
+function ClerkGate({ children }: { children: React.ReactNode }) {
   const { isLoaded } = useAuth();
-  
-  // Track navigation changes for Sentry breadcrumbs
-  useNavigationTracking();
+  const didHideNativeRef = React.useRef(false);
+
+  useEffect(() => {
+    if (didHideNativeRef.current) return;
+    didHideNativeRef.current = true;
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        SplashScreen.hideAsync().catch(() => {});
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   if (!isLoaded) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#22c55e" />
-      </View>
-    );
+    return <AppSplashScreen />;
   }
+
+  return <>{children}</>;
+}
+
+function RootLayoutNav() {
+  // Track navigation changes for Sentry breadcrumbs
+  useNavigationTracking();
 
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
@@ -187,54 +201,64 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
 
-    // Wake up server on app start (Railway cold start fix)
-    const wakeupServer = async () => {
+    let cancelled = false;
+
+    const run = async () => {
       try {
         const { serverWakeupService } = await import('../services/serverWakeup.service');
         await serverWakeupService.ensureServerAwake();
-        logger.debug('[PreloadInitializer] Server wakeup complete');
+        if (!cancelled) logger.debug('[PreloadInitializer] Server wakeup complete');
       } catch (err) {
         logger.warn('[PreloadInitializer] Server wakeup failed (non-critical):', err);
       }
-    };
 
-    wakeupServer();
+      if (cancelled) return;
 
-    // One-time profile cache clear to fix shared data bug
-    const clearOldProfileCache = async () => {
+      // Prime /clerk/me memory cache before tabs mount — faster profile tab
+      if (isSignedIn && getToken) {
+        try {
+          const token = await getToken();
+          if (token && !cancelled) {
+            await AuthService.syncUserWithBackend(token).catch((e) =>
+              logger.warn('[PreloadInitializer] Early profile sync failed (non-critical):', e)
+            );
+          }
+        } catch (e) {
+          logger.warn('[PreloadInitializer] Early profile sync error:', e);
+        }
+      }
+
+      if (cancelled) return;
+
       try {
         const CACHE_CLEAR_FLAG = 'profile_cache_cleared_v1';
         const alreadyCleared = await cacheService.get(CACHE_CLEAR_FLAG);
-        
+
         if (!alreadyCleared) {
           logger.info('[PreloadInitializer] Clearing old profile cache (one-time fix)');
-          
-          // Clear old shared profile cache
           await cacheService.invalidate('PROFILE_DATA');
-          
-          // Mark as cleared
-          await cacheService.set(CACHE_CLEAR_FLAG, true, 365 * 24 * 60 * 60); // 1 year
-          
+          await cacheService.set(CACHE_CLEAR_FLAG, true, 365 * 24 * 60 * 60);
           logger.info('[PreloadInitializer] ✅ Old profile cache cleared');
         }
       } catch (err) {
         logger.warn('[PreloadInitializer] Failed to clear old profile cache (non-critical):', err);
       }
+
+      cacheService.cleanup().catch(err => {
+        logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
+      });
+
+      if (isSignedIn && getToken) {
+        preloadManager.initialize(getToken).catch(err => {
+          logger.warn('[PreloadInitializer] Failed to initialize preloading:', err);
+        });
+      }
     };
 
-    clearOldProfileCache();
-
-    cacheService.cleanup().catch(err => {
-      logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
-    });
-
-    if (isSignedIn && getToken) {
-      preloadManager.initialize(getToken).catch(err => {
-        logger.warn('[PreloadInitializer] Failed to initialize preloading:', err);
-      });
-    }
+    void run();
 
     return () => {
+      cancelled = true;
       if (!isSignedIn) {
         preloadManager.cleanup();
       }
@@ -269,21 +293,9 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
     }
   }, [isInitialized, isRTL]);
 
-  // While direction is mismatched (or we just asked for reload), keep a stable loading screen.
+  // Keep native splash visible until language/direction is stable (avoids black flash + layout “shake”).
   if (!isInitialized || I18nManager.isRTL !== isRTL || didRequestReloadRef.current) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#22c55e" />
-      </View>
-    );
-  }
-
-  if (!isInitialized) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#22c55e" />
-      </View>
-    );
+    return null;
   }
 
   return <>{children}</>;
@@ -396,8 +408,7 @@ export default function RootLayout() {
       console.warn('[RootLayout] Search cache clear failed:', err);
     });
 
-    SplashScreen.setOptions({ duration: 500, fade: true });
-    SplashScreen.hideAsync().catch(() => {});
+       SplashScreen.setOptions({ duration: 450, fade: true });
   }, []);
 
   const handleError = (error: Error, errorInfo: ErrorInfo) => {
@@ -447,14 +458,16 @@ export default function RootLayout() {
                       <VideosProvider>
                         <ToastProvider>
                           <ProfessionalToastProvider>
-                            <GestureHandlerRootView>
+                            <GestureHandlerRootView style={{ flex: 1 }}>
                               <SafeAreaProvider>
                                 <View style={{ flex: 1, backgroundColor: '#000' }}>
                                   <StatusBar
                                     barStyle="light-content"
                                     backgroundColor="#000"
                                   />
-                                  <RootLayoutNav />
+                                  <ClerkGate>
+                                    <RootLayoutNav />
+                                  </ClerkGate>
                                 </View>
                               </SafeAreaProvider>
                             </GestureHandlerRootView>
