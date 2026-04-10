@@ -234,6 +234,7 @@ import {
     generalLimiter,
     lenientLimiter,
     lenientShellLimiter,
+    lenientPredictionsReadLimiter,
     userSyncLimiterClerkMe,
     userSyncLimiterClerkStats,
     userSyncLimiterCoinsBalance,
@@ -247,7 +248,8 @@ app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
 app.use(`${API_PREFIX}/daily-spin`, lenientShellLimiter);
 app.use(`${API_PREFIX}/quiz/daily-status`, lenientShellLimiter);
-app.use(`${API_PREFIX}/predictions/remaining`, lenientShellLimiter);
+// All /predictions routes (GET-heavy from multiple tabs); POST still passes generalLimiter after.
+app.use(`${API_PREFIX}/predictions`, lenientPredictionsReadLimiter);
 // User/profile-related endpoints are called frequently by the app shell.
 // Separate limiter instances so one noisy endpoint cannot exhaust the quota for all others.
 app.use(`${API_PREFIX}/clerk/me`, userSyncLimiterClerkMe);

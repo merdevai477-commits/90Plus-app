@@ -35,6 +35,21 @@ function tokenKey(token: string): string {
     return `token:${hash}`;
 }
 
+/**
+ * Normalized path under /api for skip rules.
+ * Express sometimes exposes `req.path` as mount-relative or full; combining baseUrl + path
+ * and stripping /api avoids misses that re-apply the strict general limiter.
+ */
+function apiRelativePath(req: Request): string {
+    const joined = `${req.baseUrl || ''}${req.path || ''}`.split('?')[0] || '/';
+    const pathname = joined.startsWith('/') ? joined : `/${joined}`;
+    if (pathname === '/api' || pathname.startsWith('/api/')) {
+        const rest = pathname.length > 4 ? pathname.slice(4) : '/';
+        return rest.startsWith('/') ? rest : `/${rest}`;
+    }
+    return pathname;
+}
+
 function rateLimitKey(req: Request): string {
     // Prefer authenticated userId if already present (some routes may have auth earlier).
     const userId = (req as any).auth?.userId;
@@ -49,12 +64,12 @@ function rateLimitKey(req: Request): string {
 }
 
 function isSkippablePath(req: Request): boolean {
-    const path = req.path || '';
+    const p = apiRelativePath(req);
     // Don't rate limit preflight and obvious health/metrics endpoints.
     if (req.method === 'OPTIONS') return true;
-    if (path === '/health' || path === '/metrics' || path === '/csrf-token') return true;
+    if (p === '/health' || p === '/metrics' || p === '/csrf-token') return true;
     // Socket.IO lives outside /api in this app, but keep it safe if proxied under /api.
-    if (path.startsWith('/socket.io')) return true;
+    if (p.startsWith('/socket.io')) return true;
     return false;
 }
 
@@ -105,13 +120,14 @@ export const generalLimiter = rateLimit({
         if (skipRateLimitForTrusted(req, res)) return true;
         if (isSkippablePath(req)) return true;
         // These endpoints are intentionally high-frequency and have their own limiter.
-        const p = req.path || '';
+        const p = apiRelativePath(req);
         if (p.startsWith('/football/fixtures/live')) return true;
         if (p.startsWith('/notifications')) return true;
         if (p.startsWith('/reels/rankings')) return true;
-        if (p.startsWith('/predictions/remaining')) return true;
         if (p.startsWith('/daily-spin')) return true;
         if (p.startsWith('/quiz/daily-status')) return true;
+        // All prediction GETs are polled from multiple screens — use lenientShellLimiter only.
+        if (req.method === 'GET' && p.startsWith('/predictions')) return true;
         return false;
     },
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
@@ -156,8 +172,11 @@ function createLenientLimiter(policyId: string) {
 /** Feed-style endpoints (live fixtures, notifications list, rankings) */
 export const lenientLimiter = createLenientLimiter('lenient-feed-and-rankings');
 
-/** Home shell reads: predictions remaining, daily spin, quiz status */
+/** Home shell reads: predictions (all GET routes), daily spin, quiz status */
 export const lenientShellLimiter = createLenientLimiter('lenient-home-shell-reads');
+
+/** Dedicated bucket for prediction reads so spin/quiz cannot starve match polling */
+export const lenientPredictionsReadLimiter = createLenientLimiter('lenient-predictions-reads');
 
 /**
  * Write rate limiter for write operations (like, comment, follow)
@@ -302,6 +321,7 @@ export default {
     generalLimiter,
     lenientLimiter,
     lenientShellLimiter,
+    lenientPredictionsReadLimiter,
     writeLimiter,
     authLimiter,
     webhookLimiter,
