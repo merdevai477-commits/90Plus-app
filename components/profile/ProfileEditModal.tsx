@@ -16,6 +16,7 @@ import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useTranslation } from '../../src/i18n';
 
 interface SocialLink {
     platform: 'instagram' | 'twitter' | 'facebook' | 'youtube' | 'tiktok' | 'website' | 'linkedin' | 'snapchat';
@@ -57,6 +58,7 @@ const SOCIAL_PLATFORMS = [
 
 // ✅ PERFORMANCE: Memoize modal to prevent unnecessary re-renders
 const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, initialData, onSave, usernameCooldown }: ProfileEditModalProps) {
+    const { t } = useTranslation();
     const [name, setName] = useState(initialData.name);
     const [bio, setBio] = useState(initialData.bio);
     const [username, setUsername] = useState(initialData.username);
@@ -101,33 +103,33 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
     // ✅ NEW: Real-time validation for username
     const validateUsername = useCallback((text: string): string => {
         if (!text.trim()) {
-            return 'اسم المستخدم مطلوب';
+            return t.profile.usernameRequired;
         }
         if (text.length < 3) {
-            return 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل';
+            return t.profile.usernameMinLength;
         }
         if (text.length > 20) {
-            return 'اسم المستخدم طويل جداً (الحد الأقصى 20 حرف)';
+            return t.profile.usernameMaxLength;
         }
         if (!/^[a-zA-Z0-9_]+$/.test(text)) {
-            return 'اسم المستخدم يجب أن يحتوي على حروف وأرقام و _ فقط';
+            return t.profile.usernamePatternError;
         }
         return '';
-    }, []);
+    }, [t.profile.usernameRequired, t.profile.usernameMinLength, t.profile.usernameMaxLength, t.profile.usernamePatternError]);
 
     // ✅ NEW: Real-time validation for name
     const validateName = useCallback((text: string): string => {
         if (!text.trim()) {
-            return 'الاسم مطلوب';
+            return t.profile.nameRequired;
         }
         if (text.length < 2) {
-            return 'الاسم قصير جداً';
+            return t.profile.nameTooShort;
         }
         if (text.length > 30) {
-            return 'الاسم طويل جداً (الحد الأقصى 30 حرف)';
+            return t.profile.nameMaxLength;
         }
         return '';
-    }, []);
+    }, [t.profile.nameRequired, t.profile.nameTooShort, t.profile.nameMaxLength]);
 
     // ✅ IMPROVED: Enhanced save handler with validation
     const handleSave = useCallback(() => {
@@ -140,13 +142,13 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
         
         if (nameValidationError) {
             setNameError(nameValidationError);
-            Alert.alert('خطأ', nameValidationError);
+            Alert.alert(t.common.error, nameValidationError);
             return;
         }
         
         if (usernameValidationError) {
             setUsernameError(usernameValidationError);
-            Alert.alert('خطأ', usernameValidationError);
+            Alert.alert(t.common.error, usernameValidationError);
             return;
         }
 
@@ -161,7 +163,7 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
 
         onSave(updatedData);
         onClose();
-    }, [name, bio, username, socials, initialData, validateName, validateUsername, onSave, onClose]);
+    }, [name, bio, username, socials, initialData, validateName, validateUsername, onSave, onClose, t.common.error]);
 
     // ✅ OPTIMIZATION: Memoize callbacks
     const handleAddSocial = useCallback(() => {
@@ -219,7 +221,7 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                 >
                     <View style={styles.content}>
                         <View style={styles.header}>
-                            <Text style={styles.title}>تعديل الملف الشخصي ✏️</Text>
+                            <Text style={styles.title}>{t.profile.editProfileTitle}</Text>
                             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                                 <Ionicons name="close" size={24} color="#FFF" />
                             </TouchableOpacity>
@@ -232,13 +234,13 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                         >
                             {/* Name */}
                             <View style={styles.fieldContainer}>
-                                <Text style={styles.label}>الاسم</Text>
+                                <Text style={styles.label}>{t.profile.nameLabel}</Text>
                                 <TextInput
                                     ref={nameInputRef}
                                     style={[styles.input, nameError ? styles.inputError : null]}
                                     value={name}
                                     onChangeText={handleNameChange}
-                                    placeholder="الاسم الظاهر"
+                                    placeholder={t.profile.namePlaceholder}
                                     placeholderTextColor="#666"
                                     returnKeyType="next"
                                     onSubmitEditing={() => usernameInputRef.current?.focus()}
@@ -252,14 +254,14 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                             {/* Username */}
                             <View style={styles.fieldContainer}>
                                 <View style={styles.labelRow}>
-                                    <Text style={styles.label}>اسم المستخدم</Text>
+                                    <Text style={styles.label}>{t.profile.usernameLabel}</Text>
                                     {!canEditUsername && (
                                         <View style={styles.cooldownBadge}>
                                             <Ionicons name="time-outline" size={12} color="#FFA500" />
                                             <Text style={styles.cooldownBadgeText}>
                                                 {daysRemaining > 0 
-                                                    ? `${daysRemaining} يوم ${hoursRemaining > 0 ? `و ${hoursRemaining} ساعة` : ''}`
-                                                    : `${hoursRemaining} ساعة`
+                                                    ? `${daysRemaining} ${t.common.days} ${hoursRemaining > 0 ? `${t.common.and} ${hoursRemaining} ${t.common.hours}` : ''}`
+                                                    : `${hoursRemaining} ${t.common.hours}`
                                                 }
                                             </Text>
                                         </View>
@@ -287,20 +289,20 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                                     <Text style={styles.errorText}>⚠️ {usernameError}</Text>
                                 ) : !canEditUsername ? (
                                     <Text style={styles.warningText}>
-                                        ⏳ يمكنك تغيير اسم المستخدم بعد {daysRemaining > 0 ? `${daysRemaining} يوم` : ''} {hoursRemaining > 0 ? `${hoursRemaining} ساعة` : ''}
+                                        {`⏳ ${t.profile.usernameChangeAfter} ${daysRemaining > 0 ? `${daysRemaining} ${t.common.days}` : ''} ${hoursRemaining > 0 ? `${hoursRemaining} ${t.common.hours}` : ''}`}
                                     </Text>
                                 ) : null}
                             </View>
 
                             {/* Bio */}
                             <View style={styles.fieldContainer}>
-                                <Text style={styles.label}>البايو (السيرة الذاتية)</Text>
+                                <Text style={styles.label}>{t.profile.bioLabel}</Text>
                                 <TextInput
                                     ref={bioInputRef}
                                     style={[styles.input, styles.textArea]}
                                     value={bio}
                                     onChangeText={setBio}
-                                    placeholder="اكتب شيئاً عن نفسك..."
+                                    placeholder={t.profile.bioPlaceholder}
                                     placeholderTextColor="#666"
                                     multiline
                                     maxLength={150}
@@ -315,10 +317,10 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                             {/* Social Links */}
                             <View style={styles.fieldContainer}>
                                 <View style={styles.sectionHeader}>
-                                    <Text style={styles.label}>روابط التواصل الاجتماعي</Text>
+                                    <Text style={styles.label}>{t.profile.socialLinks}</Text>
                                     <TouchableOpacity onPress={handleAddSocial} style={styles.addButton}>
                                         <Ionicons name="add" size={16} color="#FFF" />
-                                        <Text style={styles.addButtonText}>إضافة</Text>
+                                        <Text style={styles.addButtonText}>{t.profile.addSocialAction}</Text>
                                     </TouchableOpacity>
                                 </View>
 
@@ -355,7 +357,7 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                                                 style={styles.socialUrlInput}
                                                 value={social.url}
                                                 onChangeText={(text) => updateSocial(index, 'url', text)}
-                                                placeholder="الرابط..."
+                                                placeholder={t.profile.socialUrlPlaceholder}
                                                 placeholderTextColor="#666"
                                                 autoCapitalize="none"
                                             />
@@ -378,7 +380,7 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             >
-                                <Text style={styles.saveButtonText}>حفظ التغييرات</Text>
+                                <Text style={styles.saveButtonText}>{t.profile.saveChanges}</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
