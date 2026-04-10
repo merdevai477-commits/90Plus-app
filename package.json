@@ -38,7 +38,12 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test:r2": "ts-node test-r2-reels.ts",
+    "test:r2:reels": "ts-node test-r2-reels.ts",
+    "test:r2:service": "ts-node test-r2-service.ts",
+    "test:r2:quick": "ts-node quick-test-r2.ts",
+    "check:r2": "ts-node check-r2-bucket.ts"
   },
   "keywords": [
     "football",
