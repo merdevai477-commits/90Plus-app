@@ -63,6 +63,88 @@ const uploadReel = multer({
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;
 const COVER_CHANGE_COOLDOWN_DAYS = 15;
 const REEL_UPLOAD_COOLDOWN_DAYS = 3;
+/** يمنع عدة طلبات رفع متزامنة لنفس المستخدم (حتى لا يتجاوز الجميع فحص الـ cooldown قبل تحديث lastReelUpload) */
+const REEL_UPLOAD_LOCK_MS = 25 * 60 * 1000;
+
+type BeginReelUploadResult =
+    | { ok: true; userId: string }
+    | { ok: false; status: number; payload: Record<string, unknown> };
+
+async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginReelUploadResult> {
+    try {
+        return await prisma.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT 1 FROM "users" WHERE "clerkUserId" = ${clerkUserId} FOR UPDATE`;
+            const user = await tx.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, lastReelUpload: true, reelUploadLockedUntil: true },
+            });
+            if (!user) {
+                return {
+                    ok: false,
+                    status: 404,
+                    payload: {
+                        status: 'ERROR',
+                        code: 'USER_NOT_FOUND',
+                        message: 'User not found',
+                        timestamp: new Date().toISOString(),
+                    },
+                };
+            }
+            const now = Date.now();
+            if (user.reelUploadLockedUntil && user.reelUploadLockedUntil.getTime() > now) {
+                return {
+                    ok: false,
+                    status: 429,
+                    payload: {
+                        status: 'ERROR',
+                        code: 'REEL_UPLOAD_IN_PROGRESS',
+                        message: 'يتم رفع فيديو بالفعل. انتظر حتى يكتمل ثم حاول مجدداً.',
+                        timestamp: new Date().toISOString(),
+                    },
+                };
+            }
+            if (user.lastReelUpload) {
+                const daysSince = Math.floor(
+                    (now - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60 * 24)
+                );
+                if (daysSince < REEL_UPLOAD_COOLDOWN_DAYS) {
+                    const hoursRemaining = Math.ceil(
+                        REEL_UPLOAD_COOLDOWN_DAYS * 24 -
+                            (now - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60)
+                    );
+                    return {
+                        ok: false,
+                        status: 429,
+                        payload: {
+                            status: 'ERROR',
+                            code: 'COOLDOWN_ACTIVE',
+                            message: `يمكنك رفع فيديو جديد بعد ${hoursRemaining} ساعة`,
+                            hoursRemaining,
+                            timestamp: new Date().toISOString(),
+                        },
+                    };
+                }
+            }
+            await tx.user.update({
+                where: { id: user.id },
+                data: { reelUploadLockedUntil: new Date(now + REEL_UPLOAD_LOCK_MS) },
+            });
+            return { ok: true, userId: user.id };
+        });
+    } catch (e: any) {
+        logger.error('[upload/reel] beginReelUploadForClerkUser:', e);
+        return {
+            ok: false,
+            status: 500,
+            payload: {
+                status: 'ERROR',
+                code: 'LOCK_ERROR',
+                message: 'تعذّر بدء الرفع. حاول مرة أخرى.',
+                timestamp: new Date().toISOString(),
+            },
+        };
+    }
+}
 
 /**
  * POST /api/upload/avatar
@@ -305,7 +387,10 @@ router.post(
     type UploadResult = UploadOk | UploadFail;
     let videoResult: UploadResult | null = null;
     let thumbnailPath: string | null = null;
-    
+    let reelSlotHeld = false;
+    let reelUploadCommitted = false;
+    let heldUserId: string | null = null;
+
     try {
         // Note: Timeout is handled by middleware in main.ts (req.setTimeout)
         // Railway gateway has a 60s timeout, so we must complete within that time
@@ -331,33 +416,14 @@ router.post(
             return;
         }
 
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, lastReelUpload: true }
-        });
-
-        if (!user) {
-            sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
+        const begin = await beginReelUploadForClerkUser(clerkUserId);
+        if (!begin.ok) {
+            res.status(begin.status).json(begin.payload);
             return;
         }
-
-        // Check cooldown
-        if (user.lastReelUpload) {
-            const daysSince = Math.floor((Date.now() - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60 * 24));
-            if (daysSince < REEL_UPLOAD_COOLDOWN_DAYS) {
-                const hoursRemaining = Math.ceil(
-                    (REEL_UPLOAD_COOLDOWN_DAYS * 24) - 
-                    ((Date.now() - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60))
-                );
-                res.status(429).json({
-                    status: 'ERROR',
-                    code: 'COOLDOWN_ACTIVE',
-                    message: `يمكنك رفع فيديو جديد بعد ${hoursRemaining} ساعة`,
-                    hoursRemaining,
-                });
-                return;
-            }
-        }
+        reelSlotHeld = true;
+        heldUserId = begin.userId;
+        const user = { id: begin.userId };
 
         // Upload video with timeout protection
         // Railway gateway timeout is 60s, so we need to complete upload + response within that time
@@ -502,11 +568,12 @@ router.post(
             }
         }
 
-        // Update user's lastReelUpload
+        // Update cooldown + release concurrent-upload lock
         await prisma.user.update({
             where: { id: user.id },
-            data: { lastReelUpload: new Date() }
+            data: { lastReelUpload: new Date(), reelUploadLockedUntil: null },
         });
+        reelUploadCommitted = true;
 
         const totalTime = Date.now() - startTime;
         logger.info(`Reel upload completed successfully in ${totalTime}ms (${(totalTime/1000).toFixed(2)}s). Reel ID: ${reel.id}, User: ${user.id}, Hashtags: ${hashtags.length}, Mentions: ${mentions.length}`);
@@ -559,6 +626,17 @@ router.post(
         // Check if response was already sent
         if (!res.headersSent) {
             sendError(res, 500, 'UPLOAD_ERROR', errorMessage || 'Failed to upload reel. Please try again.');
+        }
+    } finally {
+        if (reelSlotHeld && !reelUploadCommitted && heldUserId) {
+            try {
+                await prisma.user.update({
+                    where: { id: heldUserId },
+                    data: { reelUploadLockedUntil: null },
+                });
+            } catch (unlockErr: any) {
+                logger.warn('[upload/reel] Failed to clear reelUploadLockedUntil:', unlockErr?.message || unlockErr);
+            }
         }
     }
 });

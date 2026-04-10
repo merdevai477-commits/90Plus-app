@@ -66,6 +66,8 @@ model User {
   // Profile analytics
   profileViews    Int       @default(0)
   lastReelUpload  DateTime?
+  /// منع رفعات متزامنة: يُضبط عند بدء الرفع ويُمسح عند النجاح/الفشل (انتهاء تلقائي بعد المدة)
+  reelUploadLockedUntil DateTime?
   reelDeleteCount Int       @default(0) // عدد مرات مسح الفيديو (حد أقصى 3)
 
   // Daily Spin Wheel
