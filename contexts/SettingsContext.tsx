@@ -18,6 +18,7 @@ import { useLanguageStore, Language } from '../src/i18n';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
 import { logger } from '../services/logger';
+import { ensureNotificationForegroundHandler } from '../services/notificationForegroundSetup';
 
 // Conditionally import notifications only if not in Expo Go
 let Notifications: any = null;
@@ -229,14 +230,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
 
     try {
-      // Configure notification handler
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-        }),
-      });
+      ensureNotificationForegroundHandler();
 
       // Request permissions
       if (Platform.OS !== 'web') {

@@ -6,17 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import FollowedMatchesStorage, { FollowedMatch } from './followedMatchesStorage';
 import PredictionStorage from './predictionStorage';
-
-// Configure notifications
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+import './notificationForegroundSetup';
 
 class MatchNotificationsService {
   /**

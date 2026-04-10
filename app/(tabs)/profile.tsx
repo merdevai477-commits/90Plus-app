@@ -26,6 +26,7 @@ import { AuthService, CardProfileService, ProfileService, ReelsService } from '.
 import { StorageService } from '../../src/services/storageService';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { toastManager } from '../../services/toastManager';
+import { reelUploadNotification } from '../../services/reelUploadNotification';
 import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
 import { useProfileCache } from '../../hooks/useProfileCache';
@@ -256,7 +257,18 @@ export default function ProfileScreen() {
   } = useProfileFieldUpdate();
 
   // Performance: Memoize these to prevent re-creation
-  const { uploadedVideos, addVideo, setUserVideoData, removeVideo, reelComments, addComment, toggleCommentLike } = useVideos();
+  const {
+    uploadedVideos,
+    addVideo,
+    setUserVideoData,
+    removeVideo,
+    reelComments,
+    addComment,
+    toggleCommentLike,
+    reelUploadUi,
+    setReelUploadUi,
+    resetReelUploadUi,
+  } = useVideos();
   const { t } = useTranslation();
 
   // Optimization: Prevent guest access - redirect to auth
@@ -632,6 +644,7 @@ export default function ProfileScreen() {
   const appStateRef = useRef(AppState.currentState);
   // ✅ FIX: Prevent refresh when image/video picker is open
   const isPickerActiveRef = useRef(false);
+  const reelUploadInFlightRef = useRef(false);
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (
@@ -977,6 +990,13 @@ export default function ProfileScreen() {
       }
     }
 
+    if (reelUploadInFlightRef.current) {
+      toastManager.showWarning('انتظر قليلاً', 'يتم رفع فيديو حالياً. انتظر حتى يكتمل.');
+      return;
+    }
+    reelUploadInFlightRef.current = true;
+
+    try {
     setUserVideoData({
       username: userData?.username || 'user',
       avatar: localImage || userData?.avatar || null,
@@ -1018,6 +1038,20 @@ export default function ProfileScreen() {
       const hashtags = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
       const mentions = caption.match(/@[\w]+/g) || [];
 
+      const syncReelProgress = (progress: number) => {
+        let label = 'جاري التحضير...';
+        if (progress >= 20 && progress < 90) label = 'جاري الرفع...';
+        else if (progress >= 90 && progress < 100) label = 'جاري المعالجة...';
+        else if (progress >= 100) label = 'تم الرفع بنجاح!';
+        setVideoUploadProgress(progress);
+        setVideoUploadMessage(label);
+        setReelUploadUi({ active: true, progress, phaseLabel: label });
+        void reelUploadNotification.updateProgress(progress, label);
+      };
+
+      setReelUploadUi({ active: true, progress: 0, phaseLabel: 'جاري التحضير...' });
+      await reelUploadNotification.begin();
+
       const uploadResult = await StorageService.uploadReel(
         token,
         newVideo.uri,
@@ -1026,47 +1060,27 @@ export default function ProfileScreen() {
         hashtags.map((h: string) => h.replace('#', '')),
         mentions.map((m: string) => m.replace('@', '')),
         (progress: number) => {
-          // ✅ Update progress modal
-          setVideoUploadProgress(progress);
-          
-          // Update message based on progress
-          if (progress < 20) {
-            setVideoUploadMessage('جاري التحضير...');
-          } else if (progress < 90) {
-            setVideoUploadMessage('جاري الرفع...');
-          } else if (progress < 100) {
-            setVideoUploadMessage('جاري المعالجة...');
-          } else {
-            setVideoUploadMessage('تم الرفع بنجاح!');
-          }
-          
-          // Update the video progress in-place (addVideo now handles upsert)
-          addVideo({ 
-            ...tempVideo, 
+          syncReelProgress(progress);
+          addVideo({
+            ...tempVideo,
             uploadProgress: progress,
-            isUploading: true 
+            isUploading: true,
           });
         }
       );
 
       if (uploadResult.success) {
-        // ✅ Show success message
         setVideoUploadMessage('تم الرفع بنجاح!');
         setVideoUploadProgress(100);
-        
-        // Wait a moment to show success
+        setReelUploadUi({ active: true, progress: 100, phaseLabel: 'تم الرفع بنجاح!' });
+        await reelUploadNotification.success();
+
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Remove the temporary video
+
         removeVideo(newVideo.id);
-        
-        // Hide modal
         setIsVideoUploading(false);
-        
-        // Show success toast
         toastManager.showUploadSuccess('video');
-        
-        // Refresh data to get the real video from backend
+
         await refreshCache(true);
         if (userData?.username) {
           await loadVideos(userData.username, true);
@@ -1074,13 +1088,30 @@ export default function ProfileScreen() {
       } else {
         removeVideo(newVideo.id);
         setIsVideoUploading(false);
-        toastManager.showUploadError('video');
+        const errMsg = uploadResult.error || '';
+        await reelUploadNotification.failure(
+          errMsg || 'تعذّر رفع الفيديو. تحقق من الاتصال وحجم الملف.'
+        );
+        if (errMsg.includes('يتم رفع فيديو') || errMsg.includes('بالفعل')) {
+          toastManager.showWarning('انتظر قليلاً', errMsg);
+        } else if (errMsg.includes('يمكنك رفع فيديو جديد بعد')) {
+          toastManager.showWarning('انتظر قليلاً', errMsg);
+        } else {
+          toastManager.showError('فشل الرفع', errMsg || 'تعذّر رفع الفيديو. تحقق من الاتصال وإعدادات التخزين.');
+        }
       }
     } catch (error: any) {
       logger.error('Video upload error:', error);
       removeVideo(newVideo.id);
       setIsVideoUploading(false);
-      toastManager.showError('خطأ في الرفع', error.message || 'حدث خطأ غير متوقع أثناء رفع الفيديو');
+      const msg = error.message || 'حدث خطأ غير متوقع أثناء رفع الفيديو';
+      await reelUploadNotification.failure(msg);
+      toastManager.showError('خطأ في الرفع', msg);
+    }
+    } finally {
+      reelUploadInFlightRef.current = false;
+      resetReelUploadUi();
+      void reelUploadNotification.clear();
     }
   };
 
@@ -1390,7 +1421,13 @@ export default function ProfileScreen() {
         )}
 
         <ActionButtons
-          onEditPress={() => setIsUploadModalVisible(true)}
+          onEditPress={() => {
+            if (reelUploadUi.active) {
+              toastManager.showWarning('جاري الرفع', reelUploadUi.phaseLabel || 'يتم رفع الفيديو حالياً.');
+              return;
+            }
+            setIsUploadModalVisible(true);
+          }}
           onSharePress={async () => {
             try {
               await Share.share({
@@ -1404,6 +1441,8 @@ export default function ProfileScreen() {
           }}
           onQRPress={() => setIsQRModalVisible(true)}
           uploadCooldown={cooldowns?.reelUpload}
+          reelUploadActive={reelUploadUi.active}
+          reelUploadProgress={reelUploadUi.progress}
         />
 
         <StatsRow
@@ -1861,13 +1900,12 @@ export default function ProfileScreen() {
         onClose={() => setIsUploadModalVisible(false)}
         onPickerOpen={() => { isPickerActiveRef.current = true; }}
         onPickerClose={() => { isPickerActiveRef.current = false; }}
+        uploadLocked={reelUploadUi.active}
         onUpload={(newVideo) => {
-          addVideo(newVideo);
           setIsUploadModalVisible(false);
           
           toastManager.showSuccess('تم اختيار الفيديو', 'تم إضافة الفيديو وجاري الرفع...');
           
-          // Call the upload handler
           handleUploadVideo(newVideo);
         }}
         canUploadVideo={true}

@@ -21,9 +21,20 @@ interface ReelUploadModalProps {
     missingRequiredSteps?: string[];
     onPickerOpen?: () => void;
     onPickerClose?: () => void;
+    /** رفع ساري من الشاشة الرئيسية — يمنع اختيار/نشر فيديو آخر */
+    uploadLocked?: boolean;
 }
 
-export default function ReelUploadModal({ visible, onClose, onUpload, canUploadVideo = true, missingRequiredSteps = [], onPickerOpen, onPickerClose }: ReelUploadModalProps) {
+export default function ReelUploadModal({
+    visible,
+    onClose,
+    onUpload,
+    canUploadVideo = true,
+    missingRequiredSteps = [],
+    onPickerOpen,
+    onPickerClose,
+    uploadLocked = false,
+}: ReelUploadModalProps) {
     const { isSignedIn } = useAuth();
     const [videoAsset, setVideoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [caption, setCaption] = useState('');
@@ -64,6 +75,13 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
     }
 
     const pickVideo = async () => {
+        if (uploadLocked) {
+            toastManager.showWarning(
+                'جاري رفع فيديو',
+                'انتظر حتى يكتمل الرفع الحالي أو يظهر خطأ، ثم يمكنك رفع فيديو جديد.'
+            );
+            return;
+        }
         // Request media library permission (iOS + Android). If denied/blocked, hook will guide user to Settings.
         const hasPermission = await requestLibraryPermission();
         if (!hasPermission) return;
@@ -135,6 +153,10 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
 
     const handleUpload = async () => {
         if (!videoAsset) return;
+        if (uploadLocked) {
+            toastManager.showWarning('جاري رفع فيديو', 'انتظر حتى يكتمل الرفع الحالي.');
+            return;
+        }
 
         setIsUploading(true);
         setUploadStage('preparing');
@@ -224,11 +246,21 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
                         </TouchableOpacity>
                     </View>
 
+                    {uploadLocked && (
+                        <View style={styles.lockedBanner}>
+                            <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                            <Text style={styles.lockedBannerText}>
+                                يتم رفع فيديو حالياً — لن يُقبل فيديو جديد حتى يكتمل الرفع أو يفشل.
+                            </Text>
+                        </View>
+                    )}
+
                     {/* Video Preview / Picker */}
                     <TouchableOpacity
-                        style={styles.uploadArea}
+                        style={[styles.uploadArea, uploadLocked && styles.uploadAreaDisabled]}
                         onPress={pickVideo}
-                        activeOpacity={0.8}
+                        activeOpacity={uploadLocked ? 1 : 0.8}
+                        disabled={uploadLocked}
                     >
                         {videoAsset ? (
                             <View style={styles.previewContainer}>
@@ -252,13 +284,14 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
 
                     {/* Meta Fields */}
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, uploadLocked && styles.inputDisabled]}
                         placeholder="اكتب وصفاً للفيديو... #هاشتاج"
                         placeholderTextColor="#aaa"
                         value={caption}
                         onChangeText={setCaption}
                         multiline
                         maxLength={100}
+                        editable={!uploadLocked}
                     />
 
                     {/* Progress Bar */}
@@ -271,8 +304,8 @@ export default function ReelUploadModal({ visible, onClose, onUpload, canUploadV
                     {/* Submit Button */}
                     <TouchableOpacity
                         onPress={handleUpload}
-                        disabled={!videoAsset || isUploading}
-                        style={{ opacity: (!videoAsset || isUploading) ? 0.5 : 1 }}
+                        disabled={!videoAsset || isUploading || uploadLocked}
+                        style={{ opacity: !videoAsset || isUploading || uploadLocked ? 0.5 : 1 }}
                     >
                         <LinearGradient
                             colors={[ProfileTheme.colors.neonGreen, '#15803d']}
@@ -408,5 +441,28 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+    },
+    lockedBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: 'rgba(34,197,94,0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(34,197,94,0.35)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 16,
+    },
+    lockedBannerText: {
+        flex: 1,
+        color: '#E8FFE8',
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    uploadAreaDisabled: {
+        opacity: 0.45,
+    },
+    inputDisabled: {
+        opacity: 0.5,
     },
 });

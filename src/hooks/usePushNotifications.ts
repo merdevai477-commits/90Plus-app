@@ -6,17 +6,7 @@ import Constants from 'expo-constants';
 import { useAuth } from '@clerk/clerk-expo';
 import { MatchesService } from '../services/authService';
 import { logger } from '../services/logger';
-
-// Configure notification handler
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
+import '../../services/notificationForegroundSetup';
 
 export interface PushNotificationState {
     expoPushToken: string | null;

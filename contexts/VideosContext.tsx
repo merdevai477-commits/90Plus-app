@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@clerk/clerk-expo';
 
@@ -42,6 +42,13 @@ interface UserVideoData {
     displayName: string;
 }
 
+/** حالة رفع الريلز على مستوى التطبيق (زر الرفع، المودال، إلخ) */
+export interface ReelUploadUiState {
+    active: boolean;
+    progress: number;
+    phaseLabel: string;
+}
+
 interface VideosContextType {
     uploadedVideos: UploadedVideo[];
     addVideo: (video: UploadedVideo) => void;
@@ -55,9 +62,14 @@ interface VideosContextType {
     likedReelIds: string[];
     toggleReelLike: (reelId: string) => void;
     isLoaded: boolean;
+    reelUploadUi: ReelUploadUiState;
+    setReelUploadUi: (patch: Partial<ReelUploadUiState>) => void;
+    resetReelUploadUi: () => void;
 }
 
 const VideosContext = createContext<VideosContextType | undefined>(undefined);
+
+const DEFAULT_REEL_UPLOAD_UI: ReelUploadUiState = { active: false, progress: 0, phaseLabel: '' };
 
 export function VideosProvider({ children }: { children: ReactNode }) {
     const { userId } = useAuth();
@@ -66,6 +78,15 @@ export function VideosProvider({ children }: { children: ReactNode }) {
     const [reelComments, setReelComments] = useState<Record<string, Comment[]>>({});
     const [likedReelIds, setLikedReelIds] = useState<string[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [reelUploadUi, setReelUploadUiState] = useState<ReelUploadUiState>(DEFAULT_REEL_UPLOAD_UI);
+
+    const setReelUploadUi = useCallback((patch: Partial<ReelUploadUiState>) => {
+        setReelUploadUiState((prev) => ({ ...prev, ...patch }));
+    }, []);
+
+    const resetReelUploadUi = useCallback(() => {
+        setReelUploadUiState(DEFAULT_REEL_UPLOAD_UI);
+    }, []);
 
     // Get storage keys based on current user ID
     const storageKeys = useMemo(() => getStorageKeys(userId), [userId]);
@@ -136,6 +157,7 @@ export function VideosProvider({ children }: { children: ReactNode }) {
         setUserVideoDataState(null);
         setReelComments({});
         setLikedReelIds([]);
+        setReelUploadUiState(DEFAULT_REEL_UPLOAD_UI);
         setIsLoaded(true);
         
         // Clear AsyncStorage for current user's keys (if userId exists)
@@ -301,6 +323,9 @@ export function VideosProvider({ children }: { children: ReactNode }) {
                 likedReelIds,
                 toggleReelLike,
                 isLoaded,
+                reelUploadUi,
+                setReelUploadUi,
+                resetReelUploadUi,
             }}
         >
             {children}

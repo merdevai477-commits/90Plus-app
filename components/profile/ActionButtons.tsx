@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -17,6 +17,9 @@ interface ActionButtonsProps {
     onSharePress: () => void;
     onQRPress?: () => void;
     uploadCooldown?: CooldownInfo | null;
+    /** رفع جارٍ — لا يفتح المودال حتى ينتهي */
+    reelUploadActive?: boolean;
+    reelUploadProgress?: number;
 }
 
 /**
@@ -41,7 +44,14 @@ function getCooldownMessage(cooldown: CooldownInfo): string {
     return `يمكنك رفع فيديو جديد بعد ${cooldown.hoursRemaining} ساعة`;
 }
 
-export default function ActionButtons({ onEditPress, onSharePress, onQRPress, uploadCooldown }: ActionButtonsProps) {
+export default function ActionButtons({
+    onEditPress,
+    onSharePress,
+    onQRPress,
+    uploadCooldown,
+    reelUploadActive = false,
+    reelUploadProgress = 0,
+}: ActionButtonsProps) {
     const isOnCooldown = uploadCooldown && !uploadCooldown.canChange;
     const { t } = useTranslation();
 
@@ -50,6 +60,18 @@ export default function ActionButtons({ onEditPress, onSharePress, onQRPress, up
      * Requirements: 13.2, 13.3 - Show remaining time on tap when on cooldown
      */
     const handleUploadPress = () => {
+        if (reelUploadActive) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            const pct = Math.round(reelUploadProgress);
+            Alert.alert(
+                'جاري رفع الريلز',
+                pct > 0
+                    ? `يتم رفع الفيديو (${pct}٪). انتظر حتى يكتمل أو يظهر خطأ.`
+                    : 'يتم رفع الفيديو حالياً. انتظر حتى يكتمل أو يظهر خطأ.',
+                [{ text: 'حسناً', style: 'default' }]
+            );
+            return;
+        }
         if (isOnCooldown && uploadCooldown) {
             // Haptic feedback for warning
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -70,15 +92,31 @@ export default function ActionButtons({ onEditPress, onSharePress, onQRPress, up
             <View style={styles.buttonsContainer}>
                 <TouchableOpacity onPress={handleUploadPress} activeOpacity={0.8}>
                     <LinearGradient
-                        colors={isOnCooldown 
-                            ? ['rgba(239,68,68,0.8)', 'rgba(220,38,38,0.6)'] // Red gradient when on cooldown
-                            : [ProfileTheme.colors.glassWhite, 'transparent']
+                        colors={
+                            reelUploadActive
+                                ? ['rgba(34,197,94,0.35)', 'rgba(22,163,74,0.2)']
+                                : isOnCooldown
+                                  ? ['rgba(239,68,68,0.8)', 'rgba(220,38,38,0.6)'] // Red gradient when on cooldown
+                                  : [ProfileTheme.colors.glassWhite, 'transparent']
                         }
-                        style={[styles.actionButton, isOnCooldown && styles.cooldownButton]}
+                        style={[
+                            styles.actionButton,
+                            isOnCooldown && styles.cooldownButton,
+                            reelUploadActive && styles.uploadingButton,
+                        ]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                     >
-                        {isOnCooldown && uploadCooldown ? (
+                        {reelUploadActive ? (
+                            <>
+                                <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                <Text style={[styles.buttonText, styles.uploadingText]} numberOfLines={1}>
+                                    {reelUploadProgress > 0
+                                        ? `جاري الرفع ${Math.round(reelUploadProgress)}٪`
+                                        : 'جاري الرفع…'}
+                                </Text>
+                            </>
+                        ) : isOnCooldown && uploadCooldown ? (
                             <>
                                 <Ionicons name="time-outline" size={18} color="#FF4444" />
                                 <Text style={[styles.buttonText, styles.cooldownText]}>
@@ -172,5 +210,14 @@ const styles = StyleSheet.create({
         minWidth: 42,
         paddingHorizontal: 0,
         width: 42,
+    },
+    uploadingButton: {
+        borderColor: 'rgba(34,197,94,0.45)',
+    },
+    uploadingText: {
+        color: ProfileTheme.colors.neonGreen,
+        fontSize: 12,
+        fontWeight: '700',
+        maxWidth: 120,
     },
 });
