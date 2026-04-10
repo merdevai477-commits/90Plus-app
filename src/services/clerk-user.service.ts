@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { clerkClient } from '@clerk/express';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
@@ -35,6 +36,57 @@ const clerkApiWithTimeout = async <T>(
 };
 
 export class ClerkUserService {
+    /**
+     * Create a DB user when Clerk is down or the account has no usable email yet.
+     * Uses deterministic email/username from clerkUserId so retries stay idempotent.
+     */
+    private static async createMinimalClerkUser(clerkUserId: string) {
+        const minimalEmail = `${clerkUserId}@clerk.temp`;
+        const baseUser = `user_${clerkUserId.replace(/[^a-zA-Z0-9_]/g, '').slice(-12) || clerkUserId.slice(-8)}`;
+
+        const tryCreate = async (username: string) => {
+            return prisma.user.create({
+                data: {
+                    clerkUserId,
+                    email: minimalEmail,
+                    username,
+                    displayName: username,
+                    emailVerified: false,
+                    coins: 50,
+                    level: 1,
+                    xp: 0,
+                },
+            });
+        };
+
+        try {
+            const user = await tryCreate(baseUser);
+            logger.info(`[createMinimalClerkUser] ✅ Minimal user created: ${user.username}`);
+            return user;
+        } catch (createError: any) {
+            if (createError.code === 'P2002') {
+                const byClerk = await prisma.user.findUnique({ where: { clerkUserId } });
+                if (byClerk) return byClerk;
+                const byEmail = await prisma.user.findUnique({ where: { email: minimalEmail } });
+                if (byEmail) return byEmail;
+                // Rare: username unique clash with another row — retry with random suffix
+                const altUsername = `${baseUser}_${randomBytes(3).toString('hex')}`;
+                try {
+                    const user = await tryCreate(altUsername);
+                    logger.info(`[createMinimalClerkUser] ✅ Minimal user created (alt username): ${user.username}`);
+                    return user;
+                } catch (e2: any) {
+                    if (e2.code === 'P2002') {
+                        const again = await prisma.user.findUnique({ where: { clerkUserId } });
+                        if (again) return again;
+                    }
+                    throw e2;
+                }
+            }
+            throw createError;
+        }
+    }
+
     /**
      * Find or create user from Clerk ID
      * This syncs Clerk user data with our database
@@ -99,64 +151,51 @@ export class ClerkUserService {
                     });
                 } catch (clerkError: any) {
                     logger.error(`[findOrCreateUser] ❌ Failed to fetch from Clerk after retries:`, clerkError);
-                    
-                    // ✅ If Clerk API fails, create user with minimal data
                     logger.warn(`[findOrCreateUser] ⚠️ Creating user with minimal data (Clerk unavailable)`);
-                    
-                    // Create user with clerkUserId only
-                    const minimalUsername = `user_${clerkUserId.slice(-8)}`;
-                    const minimalEmail = `${clerkUserId}@clerk.temp`;
-                    
-                    try {
-                        user = await prisma.user.create({
-                            data: {
-                                clerkUserId,
-                                email: minimalEmail,
-                                username: minimalUsername,
-                                displayName: minimalUsername,
-                                emailVerified: false,
-                                coins: 50,
-                                level: 1,
-                                xp: 0,
-                            },
-                        });
-                        
-                        logger.info(`[findOrCreateUser] ✅ Minimal user created: ${user.username}`);
-                        return user;
-                    } catch (createError: any) {
-                        // If user already exists, fetch it
-                        if (createError.code === 'P2002') {
-                            user = await prisma.user.findUnique({ where: { clerkUserId } });
-                            if (user) return user;
-                        }
-                        throw createError;
-                    }
+                    return await this.createMinimalClerkUser(clerkUserId);
                 }
             }
 
-            // Get primary email
-            const primaryEmail = clerkUser.emailAddresses.find(
+            // Primary email: prefer Clerk's primary id, else first verified, else any address
+            const addresses = clerkUser.emailAddresses || [];
+            let primaryEmail = addresses.find(
                 (email: any) => email.id === clerkUser.primaryEmailAddressId
             );
+            if (!primaryEmail) {
+                primaryEmail = addresses.find(
+                    (e: any) => e.verification?.status === 'verified'
+                );
+            }
+            if (!primaryEmail && addresses.length > 0) {
+                primaryEmail = addresses[0];
+            }
 
             if (!primaryEmail) {
-                logger.error(`[findOrCreateUser] ❌ No email found for user ${clerkUserId}`);
-                throw new Error('No email found for user');
+                logger.warn(
+                    `[findOrCreateUser] ⚠️ No email addresses on Clerk user ${clerkUserId}; using minimal profile`
+                );
+                return await this.createMinimalClerkUser(clerkUserId);
             }
 
             logger.info(`[findOrCreateUser] 📧 Primary email: ${primaryEmail.emailAddress}`);
 
-            // ✅ OPTIMIZED: Simplified email generation
-            const emailParts = primaryEmail.emailAddress.split('@');
             const shortId = clerkUserId.replace('user_', '').slice(-8);
-            const finalEmail = `${emailParts[0]}+${shortId}@${emailParts[1]}`;
+            const rawAddr = (primaryEmail.emailAddress || '').trim();
+            const at = rawAddr.indexOf('@');
+            const localPart =
+                at > 0 ? rawAddr.slice(0, at) : rawAddr || 'user';
+            const domain =
+                at > 0 && at < rawAddr.length - 1
+                    ? rawAddr.slice(at + 1)
+                    : 'placeholder.invalid';
+            const finalEmail = `${localPart}+${shortId}@${domain}`;
 
             logger.info(`[findOrCreateUser] 📧 Using email: ${finalEmail}`);
 
-            // ✅ OPTIMIZED: Simplified username generation
-            const baseUsername = clerkUser.username || 
-                primaryEmail.emailAddress.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
-            
+            let baseUsername =
+                (clerkUser.username && String(clerkUser.username)) ||
+                localPart.toLowerCase().replace(/[^a-z0-9_]/g, '');
+            if (!baseUsername) baseUsername = 'user';
             const username = `${baseUsername}_${shortId}`;
 
             logger.info(`[findOrCreateUser] 👤 Using username: ${username}`);

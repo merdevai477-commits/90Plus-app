@@ -5,6 +5,7 @@
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { ClerkUserService } from './clerk-user.service';
 
 export interface ProfileCompletionStep {
   id: string;
@@ -62,19 +63,12 @@ export class ProfileCompletionService {
         },
       });
 
-      // If user doesn't exist, create a basic profile
+      // If user doesn't exist, sync via ClerkUserService (unique email/username; never use empty email)
       if (!user) {
-        logger.warn(`User not found for clerkUserId: ${clerkUserId}, creating basic profile`);
-        
-        // Create user with minimal data
-        user = await prisma.user.create({
-          data: {
-            clerkUserId: clerkUserId,
-            username: `user_${clerkUserId.slice(0, 8)}`, // Temporary username
-            email: '', // Will be updated by webhook
-            profileCompletionSteps: {},
-            profileCompletionPercentage: 0,
-          },
+        logger.warn(`User not found for clerkUserId: ${clerkUserId}, syncing from Clerk`);
+        await ClerkUserService.findOrCreateUser(clerkUserId);
+        user = await prisma.user.findUnique({
+          where: { clerkUserId },
           select: {
             id: true,
             avatar: true,
@@ -92,6 +86,9 @@ export class ProfileCompletionService {
             profileCompletionSteps: true,
           },
         });
+        if (!user) {
+          throw new Error('User sync failed after findOrCreateUser');
+        }
       }
 
       // Check each step
