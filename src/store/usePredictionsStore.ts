@@ -7,6 +7,9 @@ import { create } from 'zustand';
 import { getApiUrl } from '../../config/api.config';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
+/** Coalesce parallel remaining-count fetches (multiple screens mount at once). */
+let fetchUserDataInFlight: Promise<void> | null = null;
+
 interface PredictionData {
     type: 'home' | 'draw' | 'away';
     homeScore?: number;
@@ -93,32 +96,41 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     fetchUserData: async (token: string | null) => {
         if (!token) return;
 
-        try {
-            set({ isLoading: true });
-
-            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/remaining`, {
-                timeout: 15000, // 15 seconds
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success) {
-                    set({
-                        userCoins: data.data.coins,
-                        remainingPredictions: data.data.remaining,
-                        totalDailyPredictions: data.data.total,
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching user data:', error);
-        } finally {
-            set({ isLoading: false });
+        if (fetchUserDataInFlight) {
+            return fetchUserDataInFlight;
         }
+
+        fetchUserDataInFlight = (async () => {
+            try {
+                set({ isLoading: true });
+
+                const response = await fetchWithTimeout(`${getApiUrl()}/predictions/remaining`, {
+                    timeout: 15000, // 15 seconds
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        set({
+                            userCoins: data.data.coins,
+                            remainingPredictions: data.data.remaining,
+                            totalDailyPredictions: data.data.total,
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching user data:', error);
+            } finally {
+                set({ isLoading: false });
+                fetchUserDataInFlight = null;
+            }
+        })();
+
+        return fetchUserDataInFlight;
     },
 
     fetchUserPredictions: async (token: string | null) => {

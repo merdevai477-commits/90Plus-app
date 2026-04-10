@@ -51,7 +51,7 @@ const LeagueCenterScreen: React.FC<LeagueCenterScreenProps> = ({
     const router = useRouter();
     const params = useLocalSearchParams();
     const insets = useSafeAreaInsets();
-    const { userId } = useAuth();
+    const { userId, getToken } = useAuth();
 
     // Predictions store
     const {
@@ -64,13 +64,20 @@ const LeagueCenterScreen: React.FC<LeagueCenterScreenProps> = ({
         submitPrediction,
     } = usePredictionsStore();
 
-    // Fetch predictions data on mount
+    // Fetch predictions data on mount (Bearer token — not Clerk userId)
     useEffect(() => {
-        if (userId) {
-            fetchUserData(userId);
-            fetchUserPredictions(userId);
-        }
-    }, [userId]);
+        let cancelled = false;
+        (async () => {
+            if (!userId) return;
+            const token = await getToken();
+            if (cancelled || !token) return;
+            await fetchUserData(token);
+            await fetchUserPredictions(token);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [userId, getToken, fetchUserData, fetchUserPredictions]);
 
     // State
     const [activeTab, setActiveTab] = useState<'matches' | 'predictions'>('matches');
@@ -176,8 +183,19 @@ const LeagueCenterScreen: React.FC<LeagueCenterScreenProps> = ({
         }));
 
         try {
+            const token = await getToken();
+            if (!token) {
+                usePredictionsStore.setState({
+                    userPredictions: previousState.userPredictions,
+                    userCoins: previousState.userCoins,
+                    remainingPredictions: previousState.remainingPredictions,
+                });
+                Alert.alert('خطأ', 'يجب تسجيل الدخول لحفظ التوقع');
+                return;
+            }
+
             const result = await submitPrediction(
-                userId,
+                token,
                 parseInt(matchId),
                 { type: prediction.type },
                 {
@@ -209,7 +227,7 @@ const LeagueCenterScreen: React.FC<LeagueCenterScreenProps> = ({
             logger.error('Prediction error:', error);
             Alert.alert('خطأ', 'حدث خطأ أثناء حفظ التوقعات');
         }
-    }, [userId, matches, submitPrediction, storePredictions]);
+    }, [userId, getToken, matches, submitPrediction, storePredictions]);
 
     // Handlers
     const handleFilterPress = useCallback(() => {
