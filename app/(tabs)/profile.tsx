@@ -326,23 +326,65 @@ export default function ProfileScreen() {
     });
   }, [isLoading, cachedUserData, isCacheHit, cacheError]);
 
-  // CRITICAL FIX: Auto-retry when backend is down (502 error)
+  // CRITICAL FIX: Auto-retry on ANY error (not just 502)
   const lastAutoRetryAtRef = useRef<number>(0);
+  const autoRetryCountRef = useRef<number>(0);
+  const MAX_AUTO_RETRIES = 3; // defined here for use in render
   useEffect(() => {
     const now = Date.now();
-    const isGatewayError = !!cacheError && /502|bad gateway|gateway/i.test(cacheError);
-    if (isGatewayError && !isLoading && now - lastAutoRetryAtRef.current > 60_000) {
+    const hasError = !!cacheError && !cachedUserData;
+    const isGatewayError = hasError && /502|bad gateway|gateway/i.test(cacheError!);
+    // Retry delay: 5s for gateway errors (cold start), 3s for other errors
+    const retryDelay = isGatewayError ? 8000 : 3000;
+    // Minimum gap between retries: 10s
+    const minGap = 10_000;
+
+    if (hasError && !isLoading && autoRetryCountRef.current < MAX_AUTO_RETRIES && now - lastAutoRetryAtRef.current > minGap) {
       lastAutoRetryAtRef.current = now;
+      autoRetryCountRef.current += 1;
       const retryTimeout = setTimeout(() => {
-        console.log('[ProfileScreen] 🔄 Auto-retry after backend cold start (8s delay)');
+        console.log(`[ProfileScreen] 🔄 Auto-retry #${autoRetryCountRef.current} after error (${retryDelay}ms delay)`);
         refreshCache(true).catch(err => {
           console.error('[ProfileScreen] ❌ Auto-retry failed:', err);
         });
-      }, 8000);
+      }, retryDelay);
 
       return () => clearTimeout(retryTimeout);
     }
-  }, [cacheError, isLoading, refreshCache]);
+  }, [cacheError, cachedUserData, isLoading, refreshCache]);
+
+  // Reset retry counter when error clears
+  useEffect(() => {
+    if (!cacheError) {
+      autoRetryCountRef.current = 0;
+    }
+  }, [cacheError]);
+
+  // Countdown timer for error screen - shows user when next retry will happen
+  useEffect(() => {
+    if (!cacheError || !!cachedUserData || isLoading) {
+      setRetryCountdown(null);
+      return;
+    }
+    if (autoRetryCountRef.current >= MAX_AUTO_RETRIES) {
+      setRetryCountdown(null);
+      return;
+    }
+    // Show countdown: 3s for normal errors, 8s for gateway errors
+    const isGatewayError = /502|bad gateway|gateway/i.test(cacheError);
+    const totalSeconds = isGatewayError ? 8 : 3;
+    setRetryCountdown(totalSeconds);
+    const interval = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cacheError, cachedUserData, isLoading]);
 
   // CRITICAL FIX: Timeout fallback if loading takes too long
   const hasForcedRefreshRef = useRef(false);
@@ -425,6 +467,9 @@ export default function ProfileScreen() {
 
   // Video Management State
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+
+  // Auto-retry countdown for error screen
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   // Optimization: Token state for BadgesDisplay
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -1201,16 +1246,22 @@ export default function ProfileScreen() {
   // CRITICAL FIX: Show error state ONLY if no data at all (not even stale cache)
   // If we have cacheError but userData exists (stale), show the profile normally
   if (!userData && cacheError && !isLoading) {
+    const isAutoRetrying = retryCountdown !== null && autoRetryCountRef.current < MAX_AUTO_RETRIES;
     return (
       <View style={[styles.container, styles.centerContent]}>
         <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
         <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
         <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
-          {cacheError || t.profile.profileLoadFailed}
+          {t.profile.profileLoadFailed}
         </Text>
         <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
           {cacheError?.includes('المحفوظة') ? t.profile.serverDown : t.profile.checkConnection}
         </Text>
+        {isAutoRetrying && (
+          <Text style={[styles.loadingText, { fontSize: 13, marginTop: 12, textAlign: 'center', color: ProfileTheme.colors.neonGreen }]}>
+            {`إعادة المحاولة خلال ${retryCountdown}s...`}
+          </Text>
+        )}
         <View style={{ marginTop: 24, paddingHorizontal: 40, width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' }}>
           <TouchableOpacity 
             style={{
@@ -1223,6 +1274,7 @@ export default function ProfileScreen() {
             }}
             onPress={async () => {
               console.log('[ProfileScreen] 🔄 Manual retry triggered');
+              autoRetryCountRef.current = 0; // Reset counter on manual retry
               try {
                 await refreshCache(true);
                 toastManager.showInfo('جاري التحديث', 'جاري إعادة تحميل البيانات...');

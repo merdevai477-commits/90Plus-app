@@ -13,7 +13,7 @@
  * @date 2026-03-30
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { logger } from '../services/logger';
@@ -41,6 +41,10 @@ export function useAgeVerification() {
   const [loading, setLoading] = useState(true);
   const [ageStatus, setAgeStatus] = useState<AgeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // ✅ FIX: Use ref to prevent re-running when getToken reference changes
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  const hasCheckedRef = useRef(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -50,15 +54,19 @@ export function useAgeVerification() {
       return;
     }
 
+    // ✅ FIX: Only run once per session
+    if (hasCheckedRef.current) return;
+    hasCheckedRef.current = true;
+
     checkAgeStatus();
-  }, [isSignedIn, isLoaded]);
+  }, [isSignedIn, isLoaded]); // ✅ FIX: Removed getToken from deps
 
   const checkAgeStatus = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) {
         throw new Error('Authentication token not found');
       }

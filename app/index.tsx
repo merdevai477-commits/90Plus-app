@@ -16,15 +16,23 @@ export default function Index() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const [checkingAge, setCheckingAge] = useState(false);
   const [ageVerified, setAgeVerified] = useState<boolean | null>(null);
+  // ✅ FIX: Use ref to prevent re-running the effect when getToken reference changes
+  const getTokenRef = React.useRef(getToken);
+  getTokenRef.current = getToken;
+  // ✅ FIX: Track if age check has already run to prevent duplicate calls
+  const hasCheckedRef = React.useRef(false);
 
   // Check age verification status when signed in
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
+    // ✅ FIX: Only run once per session - getToken changes on every render
+    if (hasCheckedRef.current) return;
+    hasCheckedRef.current = true;
 
     const checkAgeStatus = async () => {
       try {
         setCheckingAge(true);
-        const token = await getToken();
+        const token = await getTokenRef.current();
         
         if (!token) {
           logger.warn('[Index] No auth token, skipping age check');
@@ -48,7 +56,7 @@ export default function Index() {
             return;
           }
           
-          // Other errors - allow access (fail open for now)
+          // Other errors (including 404 - endpoint not deployed yet) - allow access
           logger.warn('[Index] Age check failed, allowing access:', data.message);
           setAgeVerified(true);
           return;
@@ -79,7 +87,7 @@ export default function Index() {
     };
 
     checkAgeStatus();
-  }, [isSignedIn, isLoaded, getToken]);
+  }, [isSignedIn, isLoaded]); // ✅ FIX: Removed getToken from deps - use ref instead
 
   // Wait for Clerk to finish loading
   if (!isLoaded || (isSignedIn && checkingAge)) {
