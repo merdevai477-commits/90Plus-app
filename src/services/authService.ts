@@ -637,12 +637,11 @@ export class AuthService {
             favoriteTeam?: string;
             favoriteClub?: string;
             favoriteBrand?: string;
-            socialLinks?: {
-                instagram?: string;
-                twitter?: string;
-                tiktok?: string;
-                youtube?: string;
-            };
+            socialLinks?: Array<{
+                platform: string;
+                url: string;
+                username?: string;
+            }>;
         }
     ): Promise<AuthResponse> {
         try {
@@ -660,13 +659,12 @@ export class AuthService {
                 endpoint = `${API_URL}/clerk/card-profile`;
             }
 
-            // If updating social links, merge with existing data
+            // Social links use a dedicated endpoint that expects an array payload
             if (updates.socialLinks) {
+                endpoint = `${API_URL}/clerk/social-links`;
                 body = {
-                    ...updates,
-                    ...updates.socialLinks // Flatten social links
+                    socialLinks: updates.socialLinks,
                 };
-                delete body.socialLinks;
             }
 
             const response = await fetch(endpoint, {

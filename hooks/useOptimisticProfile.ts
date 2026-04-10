@@ -133,11 +133,10 @@ export const useProfileFieldUpdate = () => {
   }, [updateProfile, showUpdateResult]);
 
   const updateSocialLinks = useCallback(async (socialLinks: {
-    instagram?: string;
-    twitter?: string;
-    tiktok?: string;
-    youtube?: string;
-  }) => {
+    platform: string;
+    url: string;
+    username?: string;
+  }[]) => {
     const result = await updateProfile({ socialLinks });
     showUpdateResult(result);
     return result;

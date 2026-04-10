@@ -148,17 +148,17 @@ class LocalProfileStorageService {
     return {
       ...serverData,
       // Local data overrides server data for UI elements
-      countryFlag: localData.countryFlag || serverData.countryFlag,
-      country: localData.country || serverData.country,
-      clubLogo: localData.clubLogo || serverData.clubLogo,
-      favoriteTeam: localData.favoriteTeam || serverData.favoriteTeam,
-      brandLogo: localData.brandLogo || serverData.brandLogo,
-      favoriteBrand: localData.favoriteBrand || serverData.favoriteBrand,
-      position: localData.position || serverData.position,
-      age: localData.age || serverData.age,
-      height: localData.height || serverData.height,
-      weight: localData.weight || serverData.weight,
-      preferredFoot: localData.preferredFoot || serverData.preferredFoot,
+      countryFlag: localData.countryFlag ?? serverData.countryFlag,
+      country: localData.country ?? serverData.country,
+      clubLogo: localData.clubLogo ?? serverData.clubLogo,
+      favoriteTeam: localData.favoriteTeam ?? serverData.favoriteTeam,
+      brandLogo: localData.brandLogo ?? serverData.brandLogo,
+      favoriteBrand: localData.favoriteBrand ?? serverData.favoriteBrand,
+      position: localData.position ?? serverData.position,
+      age: localData.age ?? serverData.age,
+      height: localData.height ?? serverData.height,
+      weight: localData.weight ?? serverData.weight,
+      preferredFoot: localData.preferredFoot ?? serverData.preferredFoot,
     };
   }
 }

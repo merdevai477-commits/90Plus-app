@@ -1825,7 +1825,7 @@ export default function ProfileScreen() {
           name: userData?.displayName || userData?.username || 'User',
           username: userData?.username || 'user',
           bio: userData?.bio || '',
-          socials: [],
+          socials: socialLinks as any,
           lastUsernameChange: userData?.lastUsernameChange || undefined
         }}
         onSave={async (newData) => {
@@ -1835,29 +1835,36 @@ export default function ProfileScreen() {
           // Prepare updates object
           const updates: any = {};
           
-          if (newData.name !== userData?.displayName) {
+          const currentName = userData?.displayName || userData?.username || 'User';
+          const currentUsername = userData?.username || 'user';
+          const currentBio = userData?.bio || '';
+
+          if (newData.name !== currentName) {
             updates.displayName = newData.name;
           }
           
-          if (newData.username !== userData?.username) {
+          if (newData.username !== currentUsername) {
             updates.username = newData.username;
           }
           
-          if (newData.bio !== userData?.bio) {
+          if (newData.bio !== currentBio) {
             updates.bio = newData.bio;
           }
           
-          // Handle social links if they exist
-          if (newData.socials && newData.socials.length > 0) {
-            const socialLinks: any = {};
-            newData.socials.forEach((social: any) => {
-              if (social.platform && social.url) {
-                socialLinks[social.platform.toLowerCase()] = social.url;
-              }
-            });
-            if (Object.keys(socialLinks).length > 0) {
-              updates.socialLinks = socialLinks;
-            }
+          // Handle social links (including clearing all links)
+          const normalizeLinks = (links: Array<any>) =>
+            links
+              .filter((social: any) => social?.platform && social?.url)
+              .map((social: any) => ({
+                platform: String(social.platform).toLowerCase(),
+                url: String(social.url).trim(),
+              }))
+              .sort((a: any, b: any) => a.platform.localeCompare(b.platform));
+
+          const incomingSocialLinks = normalizeLinks(newData.socials || []);
+          const currentSocialLinks = normalizeLinks((socialLinks as any[]) || []);
+          if (JSON.stringify(incomingSocialLinks) !== JSON.stringify(currentSocialLinks)) {
+            updates.socialLinks = incomingSocialLinks;
           }
           
           // Send updates if there are any changes
@@ -1902,7 +1909,7 @@ export default function ProfileScreen() {
               delete updates.displayName;
             }
             
-            if (updates.bio) {
+            if (Object.prototype.hasOwnProperty.call(updates, 'bio')) {
               // Update UI immediately before sending to backend
               updateCachedUserData({ bio: updates.bio });
               const result = await updateBio(updates.bio);
@@ -1914,12 +1921,12 @@ export default function ProfileScreen() {
               delete updates.bio;
             }
             
-            if (updates.socialLinks) {
+            if (Object.prototype.hasOwnProperty.call(updates, 'socialLinks')) {
               // Update UI immediately before sending to backend
-              const newSocialLinks = Object.entries(updates.socialLinks).map(([platform, url]) => ({
-                platform,
-                url: url as string,
-                username: typeof url === 'string' ? url.replace(/.*\//, '').replace('@', '') : undefined // Extract username from URL
+              const newSocialLinks = (updates.socialLinks as Array<{ platform: string; url: string }>).map((link) => ({
+                platform: link.platform,
+                url: link.url,
+                username: typeof link.url === 'string' ? link.url.replace(/.*\//, '').replace('@', '') : undefined
               }));
               
               // Update cached data immediately (synchronous now)
@@ -1933,7 +1940,7 @@ export default function ProfileScreen() {
                 });
               }
               
-              const result = await updateSocialLinks(updates.socialLinks);
+              const result = await updateSocialLinks(newSocialLinks);
               if (result.success) {
                 toastManager.showSuccess('تم التحديث', 'تم تحديث الروابط الاجتماعية بنجاح');
                 // Mark socialLinks step as completed

@@ -26,12 +26,11 @@ export interface ProfileUpdateData {
   favoriteBrand?: string;
   clubLogo?: string;
   brandLogo?: string;
-  socialLinks?: {
-    instagram?: string;
-    twitter?: string;
-    tiktok?: string;
-    youtube?: string;
-  };
+  socialLinks?: Array<{
+    platform: string;
+    url: string;
+    username?: string;
+  }>;
 }
 
 export interface OptimisticUpdateResult {
@@ -44,6 +43,8 @@ export interface OptimisticUpdateResult {
 class OptimisticProfileService {
   private pendingUpdates = new Map<string, any>(); // Track pending updates
   private rollbackData = new Map<string, any>(); // Store original data for rollback
+  private readonly MAX_RETRY_ATTEMPTS = 3;
+  private readonly RETRY_DELAYS_MS = [400, 900];
 
   /**
    * Update profile with optimistic UI updates
@@ -132,8 +133,8 @@ class OptimisticProfileService {
     Object.keys(updates).forEach(key => {
       const value = (updates as any)[key];
       if (value !== undefined) {
-        if (key === 'socialLinks' && updatedProfile.socialLinks) {
-          updatedProfile.socialLinks = { ...updatedProfile.socialLinks, ...value };
+        if (key === 'socialLinks' && Array.isArray(value)) {
+          updatedProfile.socialLinks = value;
         } else {
           (updatedProfile as any)[key] = value;
         }
@@ -171,8 +172,7 @@ class OptimisticProfileService {
         }
       }
 
-      // Send update request
-      const response = await AuthService.updateUserProfile(token, updates);
+      const response = await this.sendToBackendWithRetry(token, updates);
       
       if (response.status === 'SUCCESS') {
         return {
@@ -235,6 +235,62 @@ class OptimisticProfileService {
         canRetry: true
       };
     }
+  }
+
+  /**
+   * Send profile updates with lightweight retry for transient failures.
+   * Keeps UX stable on flaky mobile networks without changing UI design.
+   */
+  private async sendToBackendWithRetry(token: string, updates: ProfileUpdateData): Promise<any> {
+    let lastResponse: any = null;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= this.MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const response = await AuthService.updateUserProfile(token, updates);
+        lastResponse = response;
+
+        if (response?.status === 'SUCCESS') {
+          return response;
+        }
+
+        const message = String(response?.message || '').toLowerCase();
+        const retryableResponse =
+          message.includes('network') ||
+          message.includes('timeout') ||
+          message.includes('temporar') ||
+          message.includes('fetch') ||
+          message.includes('connection') ||
+          message.includes('خادم') ||
+          message.includes('الاتصال');
+
+        if (!retryableResponse || attempt === this.MAX_RETRY_ATTEMPTS) {
+          return response;
+        }
+
+        const delay = this.RETRY_DELAYS_MS[attempt - 1] ?? 1400;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } catch (error: any) {
+        lastError = error;
+
+        const message = String(error?.message || '').toLowerCase();
+        const retryableError =
+          message.includes('network') ||
+          message.includes('timeout') ||
+          message.includes('fetch') ||
+          message.includes('connection');
+
+        if (!retryableError || attempt === this.MAX_RETRY_ATTEMPTS) {
+          throw error;
+        }
+
+        const delay = this.RETRY_DELAYS_MS[attempt - 1] ?? 1400;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    if (lastResponse) return lastResponse;
+    throw lastError || new Error('Failed to sync profile update');
   }
 
   /**
