@@ -9,6 +9,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 /** Coalesce parallel remaining-count fetches (multiple screens mount at once). */
 let fetchUserDataInFlight: Promise<void> | null = null;
+let fetchUserPredictionsInFlight: Promise<void> | null = null;
 
 interface PredictionData {
     type: 'home' | 'draw' | 'away';
@@ -136,24 +137,34 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     fetchUserPredictions: async (token: string | null) => {
         if (!token) return;
 
-        try {
-            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/user`, {
-                timeout: 15000,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success) {
-                    set({ userPredictions: data.data.predictionsMap || {} });
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching user predictions:', error);
+        if (fetchUserPredictionsInFlight) {
+            return fetchUserPredictionsInFlight;
         }
+
+        fetchUserPredictionsInFlight = (async () => {
+            try {
+                const response = await fetchWithTimeout(`${getApiUrl()}/predictions/user`, {
+                    timeout: 15000,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        set({ userPredictions: data.data.predictionsMap || {} });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching user predictions:', error);
+            } finally {
+                fetchUserPredictionsInFlight = null;
+            }
+        })();
+
+        return fetchUserPredictionsInFlight;
     },
 
     fetchPredictionStats: async (token: string | null) => {
