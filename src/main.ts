@@ -230,18 +230,30 @@ import { LeagueMatchWatcherService } from './services/league-match-watcher.servi
 import { PredictionWatcherService } from './services/prediction-watcher.service';
 
 // Import rate limiters
-import { generalLimiter, lenientLimiter, userSyncLimiter, webhookLimiter } from './middleware/rateLimit.middleware';
+import {
+    generalLimiter,
+    lenientLimiter,
+    lenientShellLimiter,
+    userSyncLimiterClerkMe,
+    userSyncLimiterClerkStats,
+    userSyncLimiterCoinsBalance,
+    userSyncLimiterProfileCompletion,
+    webhookLimiter,
+} from './middleware/rateLimit.middleware';
 
 // Apply lenient rate limiting to high-frequency endpoints (must be before generalLimiter)
 app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
 app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
+app.use(`${API_PREFIX}/daily-spin`, lenientShellLimiter);
+app.use(`${API_PREFIX}/quiz/daily-status`, lenientShellLimiter);
+app.use(`${API_PREFIX}/predictions/remaining`, lenientShellLimiter);
 // User/profile-related endpoints are called frequently by the app shell.
-app.use(`${API_PREFIX}/clerk/me`, userSyncLimiter);
-app.use(`${API_PREFIX}/clerk/stats`, userSyncLimiter);
-app.use(`${API_PREFIX}/coins/balance`, userSyncLimiter);
-app.use(`${API_PREFIX}/profile/completion`, userSyncLimiter);
-app.use(`${API_PREFIX}/predictions/remaining`, userSyncLimiter);
+// Separate limiter instances so one noisy endpoint cannot exhaust the quota for all others.
+app.use(`${API_PREFIX}/clerk/me`, userSyncLimiterClerkMe);
+app.use(`${API_PREFIX}/clerk/stats`, userSyncLimiterClerkStats);
+app.use(`${API_PREFIX}/coins/balance`, userSyncLimiterCoinsBalance);
+app.use(`${API_PREFIX}/profile/completion`, userSyncLimiterProfileCompletion);
 
 // Apply general rate limiting to all API routes (skips the endpoints above inside middleware)
 app.use(`${API_PREFIX}`, generalLimiter);

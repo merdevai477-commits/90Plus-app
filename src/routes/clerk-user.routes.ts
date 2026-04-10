@@ -5,7 +5,6 @@ import { ProfileCompletionService } from '../services/profile-completion.service
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
-import { userSyncLimiter } from '../middleware/rateLimit.middleware';
 import { clearResponseCache, responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import { enqueueSocialNotification } from '../queues/notification.queue';
 import { getOrSetWithLock } from '../lib/cache-mutex';
@@ -34,12 +33,11 @@ export const invalidateUserCache = (clerkUserId: string) => {
 /**
  * GET /api/clerk/me
  * Get current user profile (protected) - WITH CACHING
- * Uses userSyncLimiter for more lenient rate limiting
+ * Rate limiting is applied in main.ts on /api/clerk/me (avoid double-counting per request).
  */
 router.get(
   '/me',
   requireAuth,
-  userSyncLimiter,
   responseCacheMiddleware({ ttl: 60 * 1000 }),
   async (req: Request, res: Response): Promise<void> => {
     try {

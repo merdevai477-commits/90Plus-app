@@ -109,6 +109,9 @@ export const generalLimiter = rateLimit({
         if (p.startsWith('/football/fixtures/live')) return true;
         if (p.startsWith('/notifications')) return true;
         if (p.startsWith('/reels/rankings')) return true;
+        if (p.startsWith('/predictions/remaining')) return true;
+        if (p.startsWith('/daily-spin')) return true;
+        if (p.startsWith('/quiz/daily-status')) return true;
         return false;
     },
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
@@ -117,31 +120,44 @@ export const generalLimiter = rateLimit({
     },
 });
 
+const lenientWindowMs =
+    process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000;
+const lenientMax =
+    process.env.NODE_ENV === 'production' ? 10000 : 5000;
+
 /**
- * Lenient rate limiter for high-frequency endpoints
- * 10000 requests per 15 minutes in production for endpoints like feed, rankings, live matches
+ * Lenient buckets for high-frequency reads. Separate identifiers so predictions/spin/quiz
+ * traffic cannot starve feed/notifications/rankings (and vice versa).
  */
-export const lenientLimiter = rateLimit({
-    store: getRedisRateLimitStore(),
-    windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
-    max: process.env.NODE_ENV === 'production' ? 10000 : 5000, // 10000 prod (was 5000), 5000 dev
-    message: {
-        status: 'ERROR',
-        message: 'Too many requests, please try again later',
-        retryAfter: process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    passOnStoreError: true,
-    skip: (req: Request, res: Response) => {
-        if (skipRateLimitForTrusted(req, res)) return true;
-        if (isSkippablePath(req)) return true;
-        return false;
-    },
-    keyGenerator: (req: Request) => {
-        return rateLimitKey(req);
-    },
-});
+function createLenientLimiter(policyId: string) {
+    return rateLimit({
+        store: getRedisRateLimitStore(),
+        windowMs: lenientWindowMs,
+        max: lenientMax,
+        identifier: policyId,
+        message: {
+            status: 'ERROR',
+            message: 'Too many requests, please try again later',
+            retryAfter:
+                process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+        passOnStoreError: true,
+        skip: (req: Request, res: Response) => {
+            if (skipRateLimitForTrusted(req, res)) return true;
+            if (isSkippablePath(req)) return true;
+            return false;
+        },
+        keyGenerator: (req: Request) => rateLimitKey(req),
+    });
+}
+
+/** Feed-style endpoints (live fixtures, notifications list, rankings) */
+export const lenientLimiter = createLenientLimiter('lenient-feed-and-rankings');
+
+/** Home shell reads: predictions remaining, daily spin, quiz status */
+export const lenientShellLimiter = createLenientLimiter('lenient-home-shell-reads');
 
 /**
  * Write rate limiter for write operations (like, comment, follow)
@@ -237,41 +253,63 @@ export const strictLimiter = rateLimit({
     },
 });
 
+const userSyncWindowMs =
+    process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000;
+const userSyncMaxPerRoute =
+    process.env.NODE_ENV === 'production' ? 2000 : 5000;
+
 /**
- * User sync rate limiter (for /clerk/me endpoint)
- * More lenient than general limiter since this is called frequently during app usage
- * 500 requests per 15 minutes in production, 2000 per minute in development
+ * Per-route user sync limiters. Never reuse one `rateLimit()` instance on multiple URL prefixes:
+ * Express would share a single hit counter across all of them and trigger 429s across the app.
+ * Each call here is a separate quota bucket (same user can hit /clerk/me and /coins/balance
+ * independently).
  */
-export const userSyncLimiter = rateLimit({
-    store: getRedisRateLimitStore(),
-    windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
-    max: process.env.NODE_ENV === 'production' ? 500 : 2000, // 500 prod (was 200), 2000 dev
-    message: {
-        status: 'ERROR',
-        message: 'Too many requests, please try again later',
-        retryAfter: process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    passOnStoreError: true,
-    skip: (req: Request, res: Response) => {
-        if (skipRateLimitForTrusted(req, res)) return true;
-        if (isSkippablePath(req)) return true;
-        return false;
-    },
-    // Use user ID for key generation
-    keyGenerator: (req: Request) => {
-        return rateLimitKey(req);
-    },
-});
+function createUserSyncLimiter(policyId: string) {
+    return rateLimit({
+        store: getRedisRateLimitStore(),
+        windowMs: userSyncWindowMs,
+        max: userSyncMaxPerRoute,
+        identifier: policyId,
+        message: {
+            status: 'ERROR',
+            message: 'Too many requests, please try again later',
+            retryAfter:
+                process.env.NODE_ENV === 'production' ? '15 minutes' : '1 minute',
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+        passOnStoreError: true,
+        skip: (req: Request, res: Response) => {
+            if (skipRateLimitForTrusted(req, res)) return true;
+            if (isSkippablePath(req)) return true;
+            return false;
+        },
+        keyGenerator: (req: Request) => rateLimitKey(req),
+    });
+}
+
+export const userSyncLimiterClerkMe = createUserSyncLimiter('user-sync-clerk-me');
+export const userSyncLimiterClerkStats = createUserSyncLimiter('user-sync-clerk-stats');
+export const userSyncLimiterCoinsBalance = createUserSyncLimiter('user-sync-coins-balance');
+export const userSyncLimiterProfileCompletion = createUserSyncLimiter(
+    'user-sync-profile-completion'
+);
+
+/** @deprecated Prefer userSyncLimiterClerkMe; kept for clerk-user.routes imports */
+export const userSyncLimiter = userSyncLimiterClerkMe;
 
 export default {
     generalLimiter,
     lenientLimiter,
+    lenientShellLimiter,
     writeLimiter,
     authLimiter,
     webhookLimiter,
     strictLimiter,
     userSyncLimiter,
+    userSyncLimiterClerkMe,
+    userSyncLimiterClerkStats,
+    userSyncLimiterCoinsBalance,
+    userSyncLimiterProfileCompletion,
     skipRateLimitForTrusted,
 };
