@@ -104,7 +104,7 @@ export class ClerkUserService {
                         where: { clerkUserId },
                     }),
                     new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Database query timeout')), 10000)
+                        setTimeout(() => reject(new Error('Database query timeout')), 3000) // ✅ Reduced from 10000ms to 3000ms to fail fast
                     )
                 ]) as any;
             } catch (dbError: any) {
@@ -217,7 +217,7 @@ export class ClerkUserService {
                         },
                     }),
                     new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Database create timeout')), 10000)
+                        setTimeout(() => reject(new Error('Database create timeout')), 3000) // ✅ Reduced from 10000ms
                     )
                 ]) as any;
 
@@ -238,7 +238,7 @@ export class ClerkUserService {
                                 where: { clerkUserId },
                             }),
                             new Promise((_, reject) =>
-                                setTimeout(() => reject(new Error('Database query timeout')), 10000)
+                                setTimeout(() => reject(new Error('Database query timeout')), 3000) // ✅ Reduced from 10000ms
                             )
                         ]) as any;
                         if (user) return user;
@@ -438,14 +438,33 @@ export class ClerkUserService {
                 throw new Error('No email found for user');
             }
 
+            // Fetch existing first to check its current fields
+            const existingUser = await prisma.user.findUnique({
+                where: { clerkUserId }
+            });
+
+            const updateData: any = {
+                email: primaryEmail.emailAddress,
+                emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
+            };
+
+            if (existingUser) {
+                // Protect custom displayName
+                if (!existingUser.displayName && clerkUser.firstName) {
+                    updateData.displayName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+                }
+                // Protect custom avatar
+                if (!existingUser.avatar || existingUser.avatar.includes('clerk.com')) {
+                    updateData.avatar = clerkUser.imageUrl || undefined;
+                }
+            } else {
+                updateData.displayName = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+                updateData.avatar = clerkUser.imageUrl || undefined;
+            }
+
             const user = await prisma.user.upsert({
                 where: { clerkUserId },
-                update: {
-                    email: primaryEmail.emailAddress,
-                    displayName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim(),
-                    avatar: clerkUser.imageUrl || undefined,
-                    emailVerified: clerkUser.emailAddresses[0]?.verification?.status === 'verified',
-                },
+                update: updateData,
                 create: {
                     clerkUserId,
                     email: primaryEmail.emailAddress,

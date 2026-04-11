@@ -411,6 +411,12 @@ router.post(
         }
 
         // Validate file size early
+        if (videoFile.buffer.length === 0) {
+            logger.error('Empty file buffer received for reel');
+            sendError(res, 400, 'EMPTY_FILE', 'ملف الفيديو فارغ أو معطوب. يرجى التأكد من تحميل الفيديو بالكامل واختياره مجدداً.');
+            return;
+        }
+
         if (videoFile.buffer.length > 50 * 1024 * 1024) { // 50MB
             sendError(res, 413, 'FILE_TOO_LARGE', 'Video file is too large. Maximum size is 50MB.', { maxBytes: 50 * 1024 * 1024 });
             return;

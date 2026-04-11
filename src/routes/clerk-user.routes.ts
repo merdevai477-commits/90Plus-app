@@ -65,50 +65,27 @@ router.get(
 
         logger.info(`[/clerk/me] 📡 Cache miss, fetching from database for: ${clerkUserId}`);
 
-        // Find or create user in our database with better error handling and retry logic
+        // Find or create user in our database
+        // ✅ OPTIMIZED: Removed slow heavy retry loops. If DB is struggling, we fail fast 
+        // to free up connections rather than holding HTTP requests open for 4-7 seconds.
         let user;
-        let retryCount = 0;
-        const maxRetries = 3;
-        
-        while (retryCount < maxRetries) {
-            try {
-                user = await ClerkUserService.findOrCreateUser(clerkUserId);
-                if (user) break; // Success, exit retry loop
-                
-                // If user is null but no error thrown, retry
-                retryCount++;
-                if (retryCount < maxRetries) {
-                    logger.warn(`[/clerk/me] ⚠️ User creation returned null, retrying (${retryCount}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                }
-            } catch (dbError: any) {
-                retryCount++;
-                logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId} (attempt ${retryCount}/${maxRetries}):`, {
-                    error: dbError.message,
-                    code: dbError.code,
-                    stack: dbError.stack?.split('\n').slice(0, 3).join('\n'),
-                });
-                
-                // If last retry, return error
-                if (retryCount >= maxRetries) {
-                    res.status(500).json({
-                        status: 'ERROR',
-                        message: 'Database error while loading user. Please try again.',
-                        code: 'E009',
-                        details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
-                    });
-                    return;
-                }
-                
-                // Cold start: wait longer on first retry (DB connection warming up)
-                const delay = retryCount === 1 ? 2000 : 1000 * retryCount;
-                logger.warn(`[/clerk/me] ⏳ Waiting ${delay}ms before retry ${retryCount}/${maxRetries}...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
+        try {
+            user = await ClerkUserService.findOrCreateUser(clerkUserId);
+        } catch (dbError: any) {
+            logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId}:`, {
+                error: dbError.message,
+                code: dbError.code,
+            });
+            res.status(500).json({
+                status: 'ERROR',
+                message: 'Database error while loading user. Please try again.',
+                code: 'E009',
+            });
+            return;
         }
 
         if (!user) {
-            logger.error(`[/clerk/me] ❌ Failed to find or create user after ${maxRetries} attempts: ${clerkUserId}`);
+            logger.error(`[/clerk/me] ❌ Failed to find or create user: ${clerkUserId}`);
             res.status(500).json({
                 status: 'ERROR',
                 message: 'Failed to load user profile. Please try logging out and back in.',
@@ -708,40 +685,32 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
             return;
         }
 
-        await prisma.$transaction(async (tx) => {
-            // Following limit guard
-            const followingCount = await tx.follow.count({
-                where: { followerId: currentUser.id },
-            });
-            if (followingCount >= 5000) {
-                const err: any = new Error('FOLLOWING_LIMIT_REACHED');
-                err.statusCode = 400;
-                throw err;
-            }
+        // ✅ OPTIMIZED: Removed $transaction lock to free up connections instantly.
+        // 1. Following limit guard (Non-blocking check)
+        const followingCount = await prisma.follow.count({
+            where: { followerId: currentUser.id },
+        });
 
-            // Check if already following
-            const existingFollow = await tx.follow.findUnique({
-                where: {
-                    followerId_followingId: {
-                        followerId: currentUser.id,
-                        followingId: targetUser.id,
-                    },
-                },
-            });
+        if (followingCount >= 5000) {
+            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            return;
+        }
 
-            if (existingFollow) {
-                const err: any = new Error('ALREADY_FOLLOWING');
-                err.statusCode = 400;
-                throw err;
-            }
-
-            await tx.follow.create({
+        // 2. Try to follow. If already following, Database will throw P2002 (Unique Constraint)
+        try {
+            await prisma.follow.create({
                 data: {
                     followerId: currentUser.id,
                     followingId: targetUser.id,
                 },
             });
-        });
+        } catch (createError: any) {
+            if (createError.code === 'P2002') {
+                res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+                return;
+            }
+            throw createError;
+        }
 
         // Create notification asynchronously (off request path)
         await enqueueSocialNotification({
@@ -1207,38 +1176,32 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             return;
         }
 
-        await prisma.$transaction(async (tx) => {
-            const followingCount = await tx.follow.count({
-                where: { followerId: currentUser.id },
-            });
-            if (followingCount >= 5000) {
-                const err: any = new Error('FOLLOWING_LIMIT_REACHED');
-                err.statusCode = 400;
-                throw err;
-            }
+        // ✅ OPTIMIZED: Removed $transaction lock to free up connections instantly.
+        // 1. Following limit guard (Non-blocking check)
+        const followingCount = await prisma.follow.count({
+            where: { followerId: currentUser.id },
+        });
 
-            const existingFollow = await tx.follow.findUnique({
-                where: {
-                    followerId_followingId: {
-                        followerId: currentUser.id,
-                        followingId: targetUserId,
-                    },
-                },
-            });
+        if (followingCount >= 5000) {
+            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            return;
+        }
 
-            if (existingFollow) {
-                const err: any = new Error('ALREADY_FOLLOWING');
-                err.statusCode = 400;
-                throw err;
-            }
-
-            await tx.follow.create({
+        // 2. Try to follow. If already following, Database will throw P2002 (Unique Constraint)
+        try {
+            await prisma.follow.create({
                 data: {
                     followerId: currentUser.id,
                     followingId: targetUserId,
                 },
             });
-        });
+        } catch (createError: any) {
+            if (createError.code === 'P2002') {
+                res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+                return;
+            }
+            throw createError;
+        }
 
         await enqueueSocialNotification({
             userId: targetUserId,

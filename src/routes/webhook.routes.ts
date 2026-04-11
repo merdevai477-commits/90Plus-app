@@ -170,15 +170,41 @@ async function handleUserUpdated(data: ClerkWebhookEvent['data']): Promise<void>
 
     const email = getPrimaryEmail(data);
 
+    // Fetch existing user to ensure we don't overwrite custom app data
+    const existingUser = await prisma.user.findUnique({
+        where: { clerkUserId: data.id }
+    });
+
+    // Determine what to update without wiping custom avatars or display names
+    const updateData: any = {
+        email: email || undefined,
+        emailVerified: data.email_addresses?.[0]?.verification?.status === 'verified',
+    };
+
+    if (existingUser) {
+        // Only update displayName if the user hasn't customized it (i.e. it matches their old Clerk name or is missing)
+        // Or if you prefer, just never overwrite it from Clerk after creation.
+        // Let's protect it: if they already have a displayName, we leave it alone.
+        if (!existingUser.displayName && data.first_name) {
+            updateData.displayName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+        }
+
+        // Only update avatar if they don't have one, OR if they are still using the Clerk avatar.
+        // If they uploaded a custom one to media.90plus.app, it won't contain 'clerk.com'.
+        // This ensures reinstalling/logging-in doesn't wipe their custom uploaded picture.
+        if (!existingUser.avatar || existingUser.avatar.includes('clerk.com')) {
+            updateData.avatar = data.image_url;
+        }
+    } else {
+        // Fallback if they don't exist yet (though they should)
+        updateData.displayName = `${data.first_name || ''} ${data.last_name || ''}`.trim() || undefined;
+        updateData.avatar = data.image_url;
+    }
+
     // Update user in database
     const updatedUser = await prisma.user.update({
         where: { clerkUserId: data.id },
-        data: {
-            email: email || undefined,
-            displayName: `${data.first_name || ''} ${data.last_name || ''}`.trim() || undefined,
-            avatar: data.image_url,
-            emailVerified: data.email_addresses?.[0]?.verification?.status === 'verified',
-        },
+        data: updateData,
     });
 
     logger.info('✅ User updated in database:', updatedUser.id);

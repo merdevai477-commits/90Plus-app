@@ -205,8 +205,24 @@ export const validateVideoDuration = async (
             // Write buffer to temporary file
             await fs.promises.writeFile(tempFilePath, videoFile.buffer);
             
-            // Extract video duration
-            const duration = await getVideoDurationInSeconds(tempFilePath);
+            // Extract video duration with a timeout to prevent ffprobe from hanging indefinitely
+            // A known issue with some corrupted/specific MP4 files can cause get-video-duration to hang
+            const durationPromise = getVideoDurationInSeconds(tempFilePath);
+            const timeoutPromise = new Promise<number>((_, reject) => 
+                setTimeout(() => reject(new Error('ffprobe timeout')), 5000)
+            );
+            
+            let duration: number;
+            try {
+                duration = await Promise.race([durationPromise, timeoutPromise]);
+            } catch (err: any) {
+                logger.warn(`Failed to get video duration (timed out or error), proceeding with default: ${err.message}`, {
+                    userId: req.auth?.userId,
+                    fileName: videoFile.originalname
+                });
+                // Fallback duration to allow upload to proceed if ffprobe hangs
+                duration = 30;
+            }
 
             // Clean up temporary file
             await fs.promises.unlink(tempFilePath).catch(() => undefined);
