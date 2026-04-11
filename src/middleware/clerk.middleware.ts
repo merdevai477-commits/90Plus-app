@@ -56,7 +56,15 @@ async function getVerifiedUser(userId: string): Promise<boolean> {
             cached.verifiedAt = now; // Extend cache on rate limit
             return true;
         }
-        throw error;
+        // Session JWT was already validated by @clerk/express above. A failing
+        // users.getUser (rate limits, outages, network) must not turn every
+        // protected route into HTTP 500 — that breaks /clerk/me, profile, reels, etc.
+        logger.warn('[requireAuth] Clerk users.getUser failed; trusting validated session', {
+            userId,
+            status: error?.status,
+            message: error?.message,
+        });
+        return true;
     }
 }
 

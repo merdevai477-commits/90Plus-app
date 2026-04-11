@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { redisCacheService } from '../services/redis-cache.service';
+import { logger } from '../utils/logger';
 
 interface CacheEntry {
     data: any;
@@ -218,8 +219,15 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             return next();
         }
 
-        // Check cache (async)
-        const cached = await responseCache.get(req);
+        let cached: CacheEntry | null = null;
+        try {
+            cached = await responseCache.get(req);
+        } catch (err) {
+            logger.warn('responseCache.get failed; continuing without cache', {
+                path: req.path,
+                message: err instanceof Error ? err.message : String(err),
+            });
+        }
         if (cached) {
             // Check ETag
             const ifNoneMatch = req.headers['if-none-match'];
@@ -239,7 +247,15 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
         // Cache miss: register a fill so concurrent requests can wait instead of stampeding downstream.
         const isLeader = responseCache.beginFill(req);
         if (!isLeader) {
-            const filled = await responseCache.get(req);
+            let filled: CacheEntry | null = null;
+            try {
+                filled = await responseCache.get(req);
+            } catch (err) {
+                logger.warn('responseCache.get (follower) failed; proceeding uncached', {
+                    path: req.path,
+                    message: err instanceof Error ? err.message : String(err),
+                });
+            }
             if (filled) {
                 res.setHeader('ETag', `"${filled.etag}"`);
                 res.setHeader('X-Cache', 'HIT');

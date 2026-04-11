@@ -333,7 +333,15 @@ export class FootballController {
         cached: false,
       });
     } catch (error) {
-      FootballController.handleError(res, error);
+      logger.warn('getLiveFixtures: upstream error, returning empty list for client stability', error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        cached: false,
+        degraded: true,
+        message: 'Live fixtures temporarily unavailable',
+      });
     }
   }
 
@@ -1825,9 +1833,8 @@ export class FootballController {
    * Uses permanent database storage for finished matches
    */
   static async getCachedMatchesByDate(req: Request, res: Response): Promise<void> {
+    const dateString = ensureString(req.params.date);
     try {
-      const dateString = ensureString(req.params.date);
-
       // Validate date format
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
         res.status(400).json({
@@ -1849,7 +1856,18 @@ export class FootballController {
         },
       });
     } catch (error) {
-      FootballController.handleError(res, error);
+      logger.warn(`getCachedMatchesByDate(${dateString}): error, returning empty`, error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        _meta: {
+          date: dateString,
+          cached: true,
+        },
+        degraded: true,
+        message: 'Cached matches temporarily unavailable',
+      });
     }
   }
 

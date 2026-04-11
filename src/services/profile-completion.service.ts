@@ -299,33 +299,29 @@ export class ProfileCompletionService {
         },
       });
 
-      // If user doesn't exist, create basic profile first
+      // Never insert email: '' — violates @unique and breaks a second user; use same path as /clerk/me
       if (!user) {
-        logger.warn(`User not found for clerkUserId: ${clerkUserId}, creating basic profile`);
-        
-        user = await prisma.user.create({
-          data: {
-            clerkUserId: clerkUserId,
-            username: `user_${clerkUserId.slice(0, 8)}`,
-            email: '',
-            profileCompletionSteps: { [stepId]: true },
-            profileCompletionPercentage: 0,
-          },
-          select: { 
+        logger.warn(`User not found for clerkUserId: ${clerkUserId}, syncing via ClerkUserService`);
+        await ClerkUserService.findOrCreateUser(clerkUserId);
+        user = await prisma.user.findUnique({
+          where: { clerkUserId: clerkUserId },
+          select: {
             id: true,
-            profileCompletionSteps: true 
+            profileCompletionSteps: true,
           },
-        });
-      } else {
-        // Update existing user
-        const steps = (user.profileCompletionSteps as Record<string, boolean>) || {};
-        steps[stepId] = true;
-
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { profileCompletionSteps: steps },
         });
       }
+
+      if (!user) {
+        throw new Error('User could not be loaded after sync');
+      }
+
+      const steps = (user.profileCompletionSteps as Record<string, boolean>) || {};
+      steps[stepId] = true;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { profileCompletionSteps: steps },
+      });
 
       // Recalculate completion percentage
       await this.getCompletionStatus(clerkUserId);
