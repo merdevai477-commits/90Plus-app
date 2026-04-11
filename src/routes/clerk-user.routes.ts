@@ -79,14 +79,14 @@ router.get(
                 retryCount++;
                 if (retryCount < maxRetries) {
                     logger.warn(`[/clerk/me] ⚠️ User creation returned null, retrying (${retryCount}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 500 * retryCount)); // Exponential backoff
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
                 }
             } catch (dbError: any) {
                 retryCount++;
                 logger.error(`[/clerk/me] ❌ Database error for ${clerkUserId} (attempt ${retryCount}/${maxRetries}):`, {
                     error: dbError.message,
                     code: dbError.code,
-                    stack: dbError.stack?.split('\n').slice(0, 3).join('\n'), // First 3 lines of stack
+                    stack: dbError.stack?.split('\n').slice(0, 3).join('\n'),
                 });
                 
                 // If last retry, return error
@@ -100,8 +100,10 @@ router.get(
                     return;
                 }
                 
-                // Wait before retry with exponential backoff
-                await new Promise(resolve => setTimeout(resolve, 500 * retryCount));
+                // Cold start: wait longer on first retry (DB connection warming up)
+                const delay = retryCount === 1 ? 2000 : 1000 * retryCount;
+                logger.warn(`[/clerk/me] ⏳ Waiting ${delay}ms before retry ${retryCount}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
 

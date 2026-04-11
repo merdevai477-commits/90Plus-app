@@ -575,10 +575,9 @@ app.get(`${API_PREFIX}/users`, async (_req: Request, res: Response) => {
                     {
                         title: 'Option 1: Install PostgreSQL Locally',
                         steps: [
-                            '1. Run: .\\install-postgres.ps1 (in Backend folder)',
-                            '2. Or download from: https://www.postgresql.org/download/windows/',
-                            '3. After installation, run: npm run prisma:migrate',
-                            '4. Then run: npm run prisma:seed',
+                            '1. Install PostgreSQL locally (Windows): https://www.postgresql.org/download/windows/',
+                            '2. After installation, run: npm run prisma:migrate',
+                            '3. Then run: npm run prisma:seed',
                         ],
                     },
                     {
