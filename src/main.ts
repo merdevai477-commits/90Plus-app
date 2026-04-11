@@ -683,6 +683,50 @@ httpServer.headersTimeout = 11 * 60 * 1000; // 11 minutes (must be > keepAliveTi
 
 async function startServer() {
     try {
+        const allowStartWithoutDb = process.env.ALLOW_START_WITHOUT_DATABASE === 'true';
+
+        logger.info('Connecting to Database...');
+        let databaseConnected = false;
+        try {
+            await prisma.$connect();
+            databaseConnected = true;
+            logger.info('✅ Database connected successfully');
+        } catch (connectErr) {
+            logger.error('❌ FATAL: Failed to connect to database on startup:', connectErr);
+            if (allowStartWithoutDb) {
+                logger.warn(
+                    '⚠️ ALLOW_START_WITHOUT_DATABASE=true — HTTP will start without a working DB (development only).'
+                );
+            } else {
+                logger.error('Exiting: set ALLOW_START_WITHOUT_DATABASE=true only for local debugging without Postgres.');
+                process.exit(1);
+                return;
+            }
+        }
+
+        if (databaseConnected) {
+            try {
+                startKeepAlive();
+                logger.info('✅ Database keep-alive started');
+
+                const { TokenRevocationService } = await import('./services/token-revocation.service');
+                const { AbuseDetectionService } = await import('./services/abuse-detection.service');
+
+                await TokenRevocationService.loadFromDatabase();
+                TokenRevocationService.startCleanup();
+                AbuseDetectionService.startCleanup();
+
+                logger.info('✅ Enterprise Immunity services started');
+                logger.info('   - Token Revocation System: Active');
+                logger.info('   - Abuse Detection Engine: Active');
+                logger.info('   - Tamper-Proof Audit: Active');
+            } catch (postConnectErr) {
+                logger.error('❌ Failed to initialize database-dependent services after connect:', postConnectErr);
+                process.exit(1);
+                return;
+            }
+        }
+
         // Initialize WebSocket server (Requirements: 21.1)
         WebSocketService.initialize(httpServer);
 
@@ -729,29 +773,6 @@ async function startServer() {
             } catch (error: any) {
                 logger.error(`❌ Quiz routes file not found: ${error.message}`);
             }
-
-            try {
-                await prisma.$connect();
-                logger.info('✅ Database connected successfully');
-                // Start keep-alive ping to prevent Neon connection timeout
-                startKeepAlive();
-                logger.info('✅ Database keep-alive started');
-
-                // ✅ ENTERPRISE IMMUNITY: Initialize security services
-                const { TokenRevocationService } = await import('./services/token-revocation.service');
-                const { AbuseDetectionService } = await import('./services/abuse-detection.service');
-                
-                // Load revoked tokens from database
-                await TokenRevocationService.loadFromDatabase();
-                
-                // Start cleanup intervals
-                TokenRevocationService.startCleanup();
-                AbuseDetectionService.startCleanup();
-                
-                logger.info('✅ Enterprise Immunity services started');
-                logger.info('   - Token Revocation System: Active');
-                logger.info('   - Abuse Detection Engine: Active');
-                logger.info('   - Tamper-Proof Audit: Active');
 
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {
@@ -851,13 +872,9 @@ async function startServer() {
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
                 }
-            } catch (error) {
-                logger.warn('⚠️  Database connection failed. Please check your DATABASE_URL in .env');
-                logger.warn('   The server will still run, but database features will not work.');
-                logger.warn('   Make sure PostgreSQL is running and DATABASE_URL is correct.');
-                logger.error('Database error:', error);
-            }
         });
+
+
 
         // Handle server errors
         httpServer.on('error', (error: NodeJS.ErrnoException) => {

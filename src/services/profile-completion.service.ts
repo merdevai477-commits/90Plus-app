@@ -36,6 +36,23 @@ const PROFILE_STEPS = {
   socialLinks: { label: 'روابط السوشيال ميديا', required: false, weight: 5 },
 };
 
+function buildFallbackCompletionStatus(): ProfileCompletionStatus {
+  return {
+    percentage: 0,
+    completedSteps: 0,
+    totalSteps: Object.keys(PROFILE_STEPS).length,
+    steps: Object.keys(PROFILE_STEPS).map(id => ({
+      id,
+      label: (PROFILE_STEPS as Record<string, { label: string; required: boolean; weight: number }>)[id].label,
+      completed: false,
+      required: (PROFILE_STEPS as Record<string, { label: string; required: boolean; weight: number }>)[id].required,
+      weight: (PROFILE_STEPS as Record<string, { label: string; required: boolean; weight: number }>)[id].weight,
+    })),
+    canUploadVideo: false,
+    missingRequiredSteps: Object.values(PROFILE_STEPS).filter(s => s.required).map(s => s.label),
+  };
+}
+
 export class ProfileCompletionService {
   /**
    * Calculate profile completion status for a user
@@ -66,28 +83,24 @@ export class ProfileCompletionService {
       // If user doesn't exist, sync via ClerkUserService (unique email/username; never use empty email)
       if (!user) {
         logger.warn(`User not found for clerkUserId: ${clerkUserId}, syncing from Clerk`);
-        await ClerkUserService.findOrCreateUser(clerkUserId);
-        user = await prisma.user.findUnique({
-          where: { clerkUserId },
-          select: {
-            id: true,
-            avatar: true,
-            countryFlag: true,
-            country: true,
-            clubLogo: true,
-            bio: true,
-            position: true,
-            age: true,
-            height: true,
-            weight: true,
-            preferredFoot: true,
-            brandLogo: true,
-            socialLinks: true,
-            profileCompletionSteps: true,
-          },
-        });
+        try {
+          await ClerkUserService.findOrCreateUser(clerkUserId);
+          user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: {
+              id: true, avatar: true, countryFlag: true, country: true, clubLogo: true,
+              bio: true, position: true, age: true, height: true, weight: true,
+              preferredFoot: true, brandLogo: true, socialLinks: true, profileCompletionSteps: true,
+            },
+          });
+        } catch (syncError) {
+          logger.error(`Error syncing user ${clerkUserId} during profile completion:`, syncError);
+        }
+
+        // If user still doesn't exist, fallback to an empty/default response to avoid 500 errors crashing frontend
         if (!user) {
-          throw new Error('User sync failed after findOrCreateUser');
+          logger.warn(`Fallback: Returning empty profile completion for ${clerkUserId}`);
+          return buildFallbackCompletionStatus();
         }
       }
 
@@ -239,13 +252,18 @@ export class ProfileCompletionService {
       }, {} as Record<string, boolean>);
 
       // Update user's completion percentage in database using internal ID
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          profileCompletionPercentage: Math.round(totalPercentage),
-          profileCompletionSteps: completionStepsObj,
-        },
-      });
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            profileCompletionPercentage: Math.round(totalPercentage),
+            profileCompletionSteps: completionStepsObj,
+          },
+        });
+      } catch (persistErr) {
+        logger.error(`Profile completion DB persist failed for ${clerkUserId}:`, persistErr);
+        // Still return computed status so clients are not stuck on 500
+      }
 
       logger.info(`Profile completion updated for user ${clerkUserId}:`, {
         percentage: Math.round(totalPercentage),
@@ -263,7 +281,7 @@ export class ProfileCompletionService {
       };
     } catch (error) {
       logger.error('Error calculating profile completion:', error);
-      throw error;
+      return buildFallbackCompletionStatus();
     }
   }
 
