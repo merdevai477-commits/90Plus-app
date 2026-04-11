@@ -91,6 +91,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     flexDirection: 'row',
+    alignItems: 'stretch',
   },
   tab: {
     flex: 1,
@@ -101,12 +102,12 @@ const styles = StyleSheet.create({
   },
   tabGradient: {
     width: '100%',
-    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 12,
     flexDirection: 'row',
     gap: 6,
+    minHeight: 44,
   },
   tabActive: {
     shadowColor: COLORS.neonGreen,

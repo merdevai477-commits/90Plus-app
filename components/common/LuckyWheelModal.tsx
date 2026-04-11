@@ -149,7 +149,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       }),
     ]).start();
 
-    // We'll fetch the real prize, but start a short "anticipation" spin immediately.
+    // Fetch real prize in parallel with a long visual spin (see phases below).
     let finalPrizeIndex = 0;
     let finalPrize = PRIZES[0];
     const segmentAngle = 360 / PRIZES.length;
@@ -187,32 +187,51 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       return { prizeIndex: idx, prize: PRIZES[idx] };
     })();
 
-    // Phase 1: immediate fast spin (fast from start)
+    // Phase 1: fixed minimum spin, then keep turning until the API returns (no dead stop on slow network)
+    let apiSettled = false;
+    prizePromise.finally(() => {
+      apiSettled = true;
+    });
+
     await new Promise<void>((resolve) => {
       Animated.timing(spinAnim, {
-        toValue: 360 * 2.25, // ~2.25 turns
-        duration: 650,
+        toValue: 360 * 4.75,
+        duration: 3200,
         easing: Easing.linear,
         useNativeDriver: true,
       }).start(() => resolve());
     });
 
+    const spinChunk = () =>
+      new Promise<void>((resolve) => {
+        const c = spinValueRef.current;
+        Animated.timing(spinAnim, {
+          toValue: c + 360,
+          duration: 500,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }).start(() => resolve());
+      });
+
+    while (!apiSettled) {
+      await spinChunk();
+    }
+
     const prizeResult = await prizePromise;
     finalPrizeIndex = prizeResult.prizeIndex;
     finalPrize = prizeResult.prize;
 
-    // Phase 2: main spin with gradual deceleration to exact target
+    // Phase 2: long deceleration — cubic-out keeps visible motion longer than quad-out
     const targetAngle = 360 - (finalPrizeIndex * segmentAngle) - (segmentAngle / 2);
     const current = spinValueRef.current;
 
-    // More turns + longer duration = more natural on iOS/Android
-    const extraTurns = 6; // controls perceived speed
+    const extraTurns = 9;
     const totalRotation = current + 360 * extraTurns + targetAngle;
 
     Animated.timing(spinAnim, {
       toValue: totalRotation,
-      duration: 6500,
-      easing: Easing.out(Easing.quad),
+      duration: 9800,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(async () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

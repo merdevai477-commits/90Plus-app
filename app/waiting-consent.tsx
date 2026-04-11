@@ -31,6 +31,8 @@ import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
 import { getApiEndpoint } from '../config/api.config';
+import { useParentalConsentPoll } from '../hooks/useParentalConsentPoll';
+import { fetchParentalConsentStatus } from '../hooks/useAgeVerification';
 
 export default function WaitingConsentScreen() {
   const { getToken } = useAuth();
@@ -45,6 +47,19 @@ export default function WaitingConsentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const { lastError: pollError, stopReason } = useParentalConsentPoll({
+    getToken,
+    expiresAt: expiresAt || undefined,
+    fastIntervalMs: 30_000,
+    maxFastPolls: 12,
+    slowIntervalMs: 120_000,
+    maxTotalChecks: 40,
+    onConsentGranted: () => {
+      logger.info('[WaitingConsent] Consent confirmed (poll)!');
+      router.replace('/(tabs)/Home');
+    },
+  });
 
   // Calculate time remaining
   useEffect(() => {
@@ -72,37 +87,6 @@ export default function WaitingConsentScreen() {
     return () => clearInterval(interval);
   }, [expiresAt, t]);
 
-  // Auto-check status every 30 seconds
-  useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const response = await fetch(getApiEndpoint('auth/age-status'), {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.parentalConsent) {
-          logger.info('[WaitingConsent] Consent confirmed!');
-          router.replace('/(tabs)/Home');
-        }
-      } catch (err) {
-        // Silent fail - will retry
-        logger.debug('[WaitingConsent] Status check failed:', err);
-      }
-    };
-
-    checkStatus();
-    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [getToken]);
-
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
@@ -111,17 +95,12 @@ export default function WaitingConsentScreen() {
       const token = await getToken();
       if (!token) throw new Error('Authentication token not found');
 
-      const response = await fetch(getApiEndpoint('auth/age-status'), {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const { ok, parentalConsent } = await fetchParentalConsentStatus(token);
 
-      const data = await response.json();
-
-      if (response.ok && data.parentalConsent) {
+      if (ok && parentalConsent) {
         logger.info('[WaitingConsent] Consent confirmed!');
         router.replace('/(tabs)/Home');
+        return;
       }
     } catch (err: any) {
       logger.error('[WaitingConsent] Refresh failed:', err);
@@ -280,10 +259,23 @@ export default function WaitingConsentScreen() {
           </View>
         </View>
 
+        {stopReason === 'cap' && (
+          <Text style={styles.pullHint}>
+            {t('waitingConsent.autoPollPaused') ||
+              'Automatic checks paused to save data. Pull down to check status anytime.'}
+          </Text>
+        )}
+
         {/* Pull to Refresh Hint */}
         <Text style={styles.pullHint}>
           {t('waitingConsent.pullToRefresh') || 'Pull down to check status'}
         </Text>
+
+        {pollError ? (
+          <Text style={[styles.pullHint, { color: '#f87171', marginTop: 8 }]}>
+            {pollError}
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

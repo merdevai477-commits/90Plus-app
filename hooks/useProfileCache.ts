@@ -16,8 +16,7 @@ import { cacheService, CACHE_KEYS, CACHE_TTL, getUserCacheKey } from '../service
 import { 
   AuthService, 
   FollowService, 
-  // TEMPORARILY DISABLED: ProfileService causing infinite loop
-  // ProfileService,
+  ProfileService,
   UserProfile,
   FollowStats,
   UserReel,
@@ -341,7 +340,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
       // FULLY PARALLEL: Fetch ALL data at once including videos
       // We get username from cache or use 'me' endpoint pattern
-      const [userResult, statsResult] = await Promise.all([
+      const [userResult, statsResult, analyticsResult, cooldownsResult] = await Promise.all([
         AuthService.syncUserWithBackend(token).catch(err => {
           console.error('[useProfileCache] ❌ Error fetching user:', err);
           return null;
@@ -350,23 +349,21 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           console.error('[useProfileCache] ⚠️ Error fetching stats:', err);
           return null;
         }),
-        // TEMPORARILY DISABLED: ProfileService causing infinite loop
-        // ProfileService.getAnalytics(token).catch(err => {
-        //   console.error('[useProfileCache] ⚠️ Error fetching analytics:', err);
-        //   return null;
-        // }),
-        // ProfileService.getCooldowns(token).catch(err => {
-        //   console.error('[useProfileCache] ⚠️ Error fetching cooldowns:', err);
-        //   return null;
-        // }),
+        ProfileService.getAnalytics(token).catch(err => {
+          console.error('[useProfileCache] ⚠️ Error fetching analytics:', err);
+          return null;
+        }),
+        ProfileService.getCooldowns(token).catch(err => {
+          console.error('[useProfileCache] ⚠️ Error fetching cooldowns:', err);
+          return null;
+        }),
       ]);
 
       logger.debug('[useProfileCache] Data fetched:', {
         hasUser: !!userResult,
         hasStats: !!statsResult,
-        // TEMPORARILY DISABLED: Analytics and cooldowns
-        // hasAnalytics: !!analyticsResult,
-        // hasCooldowns: !!cooldownsResult,
+        hasAnalytics: !!analyticsResult,
+        hasCooldowns: !!cooldownsResult,
       });
 
       let newUserData: ProfileUserData | null = null;
@@ -393,13 +390,12 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         if (statsResult) {
           setFollowStats(statsResult);
         }
-        // TEMPORARILY DISABLED: Analytics and cooldowns
-        // if (analyticsResult) {
-        //   setAnalytics(analyticsResult);
-        // }
-        // if (cooldownsResult) {
-        //   setCooldowns(cooldownsResult);
-        // }
+        if (analyticsResult) {
+          setAnalytics(analyticsResult);
+        }
+        if (cooldownsResult) {
+          setCooldowns(cooldownsResult);
+        }
         
         // Mark as loaded IMMEDIATELY so UI shows
         hasLoadedRef.current = true;
@@ -420,8 +416,8 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
               userData: newUserData,
               followStats: statsResult,
               videos: newVideos,
-              analytics: null, // TEMPORARILY DISABLED
-              cooldowns: null, // TEMPORARILY DISABLED
+              analytics: analyticsResult,
+              cooldowns: cooldownsResult,
             };
             saveToCache(cacheData);
           })
@@ -444,6 +440,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           // Don't set error - just show cached data silently
           setError(null);
         } else if (clerkFallback?.clerkUserId) {
+          logger.warn('[useProfileCache] ⚠️ Backend failed, but using blank Clerk fallback for UI. This will NOT overwrite cache.');
           const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
           setUserData(fd);
           setFollowStats(null);
@@ -452,13 +449,10 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setCooldowns(null);
           hasLoadedRef.current = true;
           setError(null);
-          await saveToCache({
-            userData: fd,
-            followStats: null,
-            videos: [],
-            analytics: null,
-            cooldowns: null,
-          });
+          
+          // 🚨 CRITICAL FIX: DO NOT call saveToCache() here!
+          // We must NOT overwrite the user's permanent cache with an empty fallback profile
+          // when the backend is merely timing out due to cold start.
         } else {
           setError('Failed to load user data');
         }
@@ -466,31 +460,6 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         setIsLoading(false);
         return;
       }
-
-      if (statsResult) {
-        setFollowStats(statsResult);
-      }
-
-      // TEMPORARILY DISABLED: Analytics and cooldowns
-      // if (analyticsResult) {
-      //   setAnalytics(analyticsResult);
-      // }
-      // if (cooldownsResult) {
-      //   setCooldowns(cooldownsResult);
-      // }
-
-      // Save to cache (Requirement 2.5)
-      const cacheData: ProfileCacheData = {
-        userData: newUserData,
-        followStats: statsResult,
-        videos: newVideos,
-        analytics: null, // TEMPORARILY DISABLED
-        cooldowns: null, // TEMPORARILY DISABLED
-      };
-      await saveToCache(cacheData);
-      
-      hasLoadedRef.current = true;
-      onFreshDataLoadedRef.current?.();
     } catch (err: any) {
       console.error('[useProfileCache] ❌ Error fetching fresh data:', err);
       
@@ -559,7 +528,9 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   const refresh = useCallback(async (forceRefresh = false): Promise<void> => {
     if (forceRefresh) {
       setIsRefreshing(true);
-    } else {
+    } else if (!hasLoadedRef.current) {
+      // ✅ FIX #6: Only show skeleton if we have NO cached data yet.
+      // If hasLoadedRef is true, the user already sees data — don't flash a skeleton.
       setIsLoading(true);
     }
 

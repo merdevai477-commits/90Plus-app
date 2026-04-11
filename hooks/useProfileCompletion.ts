@@ -164,6 +164,8 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     
+    let willRetry = false;
+
     try {
       isFetchingRef.current = true;
       setIsLoading(true);
@@ -218,21 +220,25 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
       
       logger.error('[useProfileCompletion] ❌ Error fetching completion status:', err);
       
-      // Retry logic
+      // Advanced Retry logic to prevent DDOSing backend
       if (retryCount < CONFIG.MAX_RETRIES && isMountedRef.current) {
+        willRetry = true;
         setRetryCount(prev => prev + 1);
         logger.info('[useProfileCompletion] Retrying... Attempt', retryCount + 1, 'of', CONFIG.MAX_RETRIES);
-        
+
+        const backoffDelay = CONFIG.RETRY_DELAY * Math.pow(2, retryCount);
+
         setTimeout(() => {
           if (isMountedRef.current) {
             fetchCompletionStatus(true);
           }
-        }, CONFIG.RETRY_DELAY);
+        }, backoffDelay);
       } else {
         setError(err.message || 'Failed to load profile completion status');
+        setIsLoading(false);
       }
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && !willRetry) {
         setIsLoading(false);
       }
       isFetchingRef.current = false;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -32,6 +32,7 @@ import { getDailyQuizStatus, DailyQuizStatus } from '../../services/quizApi';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
 import { ProfileCompletionService } from '../../services/profileCompletion.service';
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
+import { AuthService } from '../../src/services/authService';
 
 const API_URL = getApiUrl();
 
@@ -121,50 +122,46 @@ export default function HomeScreen() {
 
   // جلب بيانات المستخدم من الباك إند (username, avatar, login streak)
   const fetchUserProfile = useCallback(async () => {
+    const applyClerkHomeFallback = () => {
+      if (!user) return;
+      const emailUsername =
+        user.primaryEmailAddress?.emailAddress?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9_]/g, '') || '';
+      const display =
+        [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+        globalState.userProfile?.displayName ||
+        globalState.userProfile?.username ||
+        emailUsername;
+      if (display) setCurrentUsername(display);
+      setUserAvatar(user.imageUrl || user.externalAccounts?.[0]?.imageUrl || null);
+    };
+
     try {
       const token = await getToken();
       if (!token || !isSignedIn) return;
 
-      const response = await fetch(`${API_URL}/clerk/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'SUCCESS' && data.data?.user) {
-          const userData = data.data.user;
-          
-          // تحديث username
-          if (userData.username) {
-            setCurrentUsername(userData.username);
-            // تحديث globalState أيضاً
-            if (globalState.userProfile) {
-              globalState.userProfile.username = userData.username;
-            }
-          }
-          
-          // تحديث avatar
-          if (userData.avatar) {
-            setUserAvatar(userData.avatar);
-            if (globalState.userProfile) {
-              globalState.userProfile.avatar = userData.avatar;
-            }
-          }
-          
-          // تحديث login streak
-          if (userData.consecutiveLoginDays !== undefined) {
-            setLoginStreak(userData.consecutiveLoginDays || 0);
+      try {
+        const userData = await AuthService.syncUserWithBackend(token);
+        if (userData.username) {
+          setCurrentUsername(userData.username);
+          if (globalState.userProfile) {
+            globalState.userProfile.username = userData.username;
           }
         }
+        if (userData.avatar) {
+          setUserAvatar(userData.avatar);
+          if (globalState.userProfile) {
+            globalState.userProfile.avatar = userData.avatar;
+          }
+        }
+        if (userData.consecutiveLoginDays !== undefined) {
+          setLoginStreak(userData.consecutiveLoginDays || 0);
+        }
+      } catch {
+        applyClerkHomeFallback();
       }
     } catch (error) {
       logger.error('Error fetching user profile:', error);
-      // Fallback to Clerk user data
-      if (user?.primaryEmailAddress?.emailAddress) {
-        const emailUsername = user.primaryEmailAddress.emailAddress.split('@')[0];
-        setCurrentUsername(globalState.userProfile?.username || emailUsername);
-        setUserAvatar(user.imageUrl || null);
-      }
+      applyClerkHomeFallback();
     }
   }, [getToken, isSignedIn, user]);
 
@@ -293,7 +290,7 @@ export default function HomeScreen() {
   const getTokenRef = useRef(getToken);
   const setUserModeRef = useRef(setUserMode);
   const lastLoadTimeRef = useRef(0);
-  const LOAD_THROTTLE_MS = 5000; // 5 seconds minimum between loads
+  const LOAD_THROTTLE_MS = 2500; // Faster revisits while avoiding hammering the API
   
   // Update refs when functions change
   useEffect(() => {
@@ -309,15 +306,22 @@ export default function HomeScreen() {
     setUserModeRef.current = setUserMode;
   }, [fetchUserProfile, fetchSpinWheelStatus, fetchDailyQuizStatus, fetchUserRank, fetchPredictionsData, fetchHomeData, fetchRankingsData, preloadProfileData, getToken, setUserMode]);
 
-  // Sync userMode separately to avoid re-render loop
+  // Before paint: signed-in users must not stay on store "guest" (avoids UI flash)
+  useLayoutEffect(() => {
+    if (isSignedIn) {
+      setUserMode('user');
+    }
+  }, [isSignedIn, setUserMode]);
+
+  // Sync userMode: normal accounts keep userType "guest" in globalState — still signed in via Clerk
   useEffect(() => {
-    const shouldBeUser = globalState.userType !== 'guest';
+    const shouldBeUser = Boolean(isSignedIn) || globalState.userType !== 'guest';
     if (shouldBeUser && userMode !== 'user') {
       setUserMode('user');
     } else if (!shouldBeUser && userMode !== 'guest') {
       setUserMode('guest');
     }
-  }, [userMode, setUserMode]);
+  }, [userMode, setUserMode, isSignedIn]);
 
   // Auto-refresh when screen comes into focus - FIXED: No infinite loop
   useFocusEffect(

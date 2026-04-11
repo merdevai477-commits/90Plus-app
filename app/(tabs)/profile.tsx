@@ -29,7 +29,7 @@ import { toastManager } from '../../services/toastManager';
 import { reelUploadNotification } from '../../services/reelUploadNotification';
 import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
-import { useProfileCache } from '../../hooks/useProfileCache';
+import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCache';
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
@@ -52,6 +52,9 @@ import { TopClub } from '../../data/top5LeaguesClubs';
 import { DiamondProfile } from '../../types/profile';
 
 const API_URL = getApiUrl();
+
+/** Minimum gap between automatic profile API refreshes (tab focus / app resume) */
+const PROFILE_UI_REFRESH_INTERVAL_MS = 120_000;
 
 // Get screen dimensions for responsive design
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -420,20 +423,6 @@ export default function ProfileScreen() {
     globalState.setLocalAvatar(image || undefined);
   };
 
-  const [countryFlag, setCountryFlag] = useState<string>(DEFAULT_COUNTRY_FLAG);
-  const [location, setLocation] = useState<string>('');
-  const [position, setPosition] = useState<string>(DEFAULT_POSITION);
-  const [club, setClub] = useState<string | undefined>(undefined);
-  const [brand, setBrand] = useState<string | undefined>(undefined);
-
-  // Stats State - MUST be defined before useEffect that uses it
-  const [stats, setStats] = useState({
-    age: DEFAULT_STATS.age,
-    height: DEFAULT_STATS.height,
-    weight: DEFAULT_STATS.weight,
-    foot: DEFAULT_STATS.foot
-  });
-
   // Modal visibility states
   const [isCountryModalVisible, setIsCountryModalVisible] = useState(false);
   const [isPositionModalVisible, setIsPositionModalVisible] = useState(false);
@@ -506,6 +495,39 @@ export default function ProfileScreen() {
   const followStats = useMemo(() =>
     cachedFollowStats || DEFAULT_FOLLOW_STATS,
     [cachedFollowStats]
+  );
+
+  const displayCountryFlag = useMemo(
+    () => (userData?.countryFlag?.trim() ? userData.countryFlag! : DEFAULT_COUNTRY_FLAG),
+    [userData?.countryFlag]
+  );
+  const displayLocation = useMemo(
+    () => (userData?.country || userData?.location || '').trim(),
+    [userData?.country, userData?.location]
+  );
+  const displayPosition = useMemo(
+    () => (userData?.position?.trim() ? userData.position! : DEFAULT_POSITION),
+    [userData?.position]
+  );
+  const displayClubLogo = userData?.clubLogo;
+  const displayBrandLogo = userData?.brandLogo;
+  const displayStats = useMemo(
+    () => ({
+      age:
+        userData?.age != null && userData.age > 0
+          ? String(userData.age)
+          : DEFAULT_STATS.age,
+      height:
+        userData?.height != null && userData.height > 0
+          ? String(userData.height)
+          : DEFAULT_STATS.height,
+      weight:
+        userData?.weight != null && userData.weight > 0
+          ? String(userData.weight)
+          : DEFAULT_STATS.weight,
+      foot: (userData?.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
+    }),
+    [userData?.age, userData?.height, userData?.weight, userData?.preferredFoot]
   );
 
   // Helper function to validate and get token
@@ -610,56 +632,90 @@ export default function ProfileScreen() {
     loadPredictionStats();
     return () => { isMounted = false; };
   }, []);
-  // Optimization: Sync local state with cached data (reduced re-renders)
-  const prevUserDataRef = useRef(userData);
+  const lastMergedServerSigRef = useRef<string>('');
+  const lastClerkIdForMergeRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (clerkUser?.id !== lastClerkIdForMergeRef.current) {
+      lastMergedServerSigRef.current = '';
+      lastClerkIdForMergeRef.current = clerkUser?.id;
+    }
+  }, [clerkUser?.id]);
+
   useEffect(() => {
     if (!userData) return;
 
-    // Load local profile data and merge with server data
-    const loadLocalData = async () => {
+    const serverSig = [
+      clerkUser?.id ?? '',
+      userData.username,
+      userData.avatar ?? '',
+      userData.coverImage ?? '',
+      userData.countryFlag ?? '',
+      userData.country ?? '',
+      userData.position ?? '',
+      userData.clubLogo ?? '',
+      userData.brandLogo ?? '',
+      userData.age ?? '',
+      userData.height ?? '',
+      userData.weight ?? '',
+      userData.preferredFoot ?? '',
+    ].join('|');
+
+    if (serverSig === lastMergedServerSigRef.current) {
+      return;
+    }
+    lastMergedServerSigRef.current = serverSig;
+
+    let cancelled = false;
+    (async () => {
       try {
-        const mergedData = await localProfileStorage.mergeWithServerData(userData);
-        
-        // Update state with merged data
-        if (mergedData.position) setPosition(mergedData.position);
-        if (mergedData.countryFlag) setCountryFlag(mergedData.countryFlag);
-        if (mergedData.country) setLocation(mergedData.country);
-        if (mergedData.clubLogo) setClub(mergedData.clubLogo);
-        if (mergedData.brandLogo) setBrand(mergedData.brandLogo);
-        
-        // Update stats
-        if (mergedData.age || mergedData.height || mergedData.weight || mergedData.preferredFoot) {
-          setStats({
-            age: mergedData.age?.toString() || DEFAULT_STATS.age,
-            height: mergedData.height?.toString() || DEFAULT_STATS.height,
-            weight: mergedData.weight?.toString() || DEFAULT_STATS.weight,
-            foot: (mergedData.preferredFoot as 'R' | 'L' | 'B') || DEFAULT_STATS.foot,
-          });
+        const merged = await localProfileStorage.mergeWithServerData(userData);
+        if (cancelled) return;
+
+        const patch: Partial<ProfileUserData> = {};
+        if (merged.countryFlag != null && merged.countryFlag !== userData.countryFlag) {
+          patch.countryFlag = merged.countryFlag;
+        }
+        if (merged.country != null && merged.country !== userData.country) {
+          patch.country = merged.country;
+          patch.location = merged.country;
+        }
+        if (merged.position != null && merged.position !== userData.position) {
+          patch.position = merged.position;
+        }
+        if (merged.clubLogo != null && merged.clubLogo !== userData.clubLogo) {
+          patch.clubLogo = merged.clubLogo;
+        }
+        if (merged.favoriteTeam != null && merged.favoriteTeam !== userData.favoriteTeam) {
+          patch.favoriteTeam = merged.favoriteTeam;
+        }
+        if (merged.brandLogo != null && merged.brandLogo !== userData.brandLogo) {
+          patch.brandLogo = merged.brandLogo;
+        }
+        if (merged.favoriteBrand != null && merged.favoriteBrand !== userData.favoriteBrand) {
+          patch.favoriteBrand = merged.favoriteBrand;
+        }
+        if (merged.age != null && merged.age !== userData.age) patch.age = merged.age;
+        if (merged.height != null && merged.height !== userData.height) patch.height = merged.height;
+        if (merged.weight != null && merged.weight !== userData.weight) patch.weight = merged.weight;
+        if (merged.preferredFoot != null && merged.preferredFoot !== userData.preferredFoot) {
+          patch.preferredFoot = merged.preferredFoot;
+        }
+
+        if (Object.keys(patch).length > 0) {
+          updateCachedUserData(patch);
         }
       } catch (error) {
-        logger.error('Error loading local profile data:', error);
+        logger.error('Error merging local profile into cache:', error);
       }
+    })();
+
+    return () => {
+      cancelled = true;
     };
+  }, [userData, clerkUser?.id, updateCachedUserData]);
 
-    const prev = prevUserDataRef.current;
-    const hasChanged = !prev ||
-      prev.position !== userData.position ||
-      prev.countryFlag !== userData.countryFlag ||
-      prev.avatar !== userData.avatar ||
-      prev.coverImage !== userData.coverImage ||
-      prev.clubLogo !== userData.clubLogo ||
-      prev.brandLogo !== userData.brandLogo ||
-      prev.age !== userData.age ||
-      prev.height !== userData.height ||
-      prev.weight !== userData.weight ||
-      prev.preferredFoot !== userData.preferredFoot;
-
-    if (!hasChanged) return;
-
-    prevUserDataRef.current = userData;
-
-    // Load local data first, then fallback to server data
-    loadLocalData();
+  useEffect(() => {
+    if (!userData) return;
     if (userData.avatar) {
       setLocalImage(userData.avatar);
       globalState.setLocalAvatar(userData.avatar);
@@ -667,9 +723,8 @@ export default function ProfileScreen() {
     if (userData.coverImage) {
       setCoverImage(userData.coverImage);
     }
-
     globalState.username = userData.username;
-  }, [userData, updateCachedUserData]);
+  }, [userData?.avatar, userData?.coverImage, userData?.username]);
 
   // Ref to store refreshCache to avoid dependency issues
   const refreshCacheRef = useRef(refreshCache);
@@ -677,12 +732,11 @@ export default function ProfileScreen() {
 
   // Throttle refresh calls to prevent request storms (iOS/Android focus + AppState + preload)
   const lastUiRefreshAtRef = useRef<number>(0);
-  const MIN_UI_REFRESH_MS = 15_000;
   const maybeRefreshProfile = useCallback((reason: 'focus' | 'app_active') => {
     const now = Date.now();
     if (isOffline) return;
     if (isLoading || isRefreshing) return;
-    if (now - lastUiRefreshAtRef.current < MIN_UI_REFRESH_MS) return;
+    if (now - lastUiRefreshAtRef.current < PROFILE_UI_REFRESH_INTERVAL_MS) return;
     lastUiRefreshAtRef.current = now;
     logger.debug(`[ProfileScreen] Refresh triggered (${reason})`);
     refreshCacheRef.current(false);
@@ -1376,18 +1430,18 @@ export default function ProfileScreen() {
             scale={0.60}
             onImageUpload={handleImageUpload}
             uploadedImage={localImage || userData?.avatar || null}
-            countryFlag={countryFlag}
+            countryFlag={displayCountryFlag}
             onCountryPress={() => setIsCountryModalVisible(true)}
-            position={position}
+            position={displayPosition}
             onPositionPress={() => setIsPositionModalVisible(true)}
-            age={stats.age}
-            height={stats.height}
-            weight={stats.weight}
-            foot={stats.foot}
+            age={displayStats.age}
+            height={displayStats.height}
+            weight={displayStats.weight}
+            foot={displayStats.foot}
             onStatsPress={() => setIsStatsModalVisible(true)}
-            clubLogo={club}
+            clubLogo={displayClubLogo}
             onClubPress={() => setIsClubModalVisible(true)}
-            brandLogo={brand}
+            brandLogo={displayBrandLogo}
             onBrandPress={() => setIsBrandModalVisible(true)}
             isAvatarUploading={isAvatarUploading}
             isCountryUpdating={isCountryUpdating}
@@ -1401,13 +1455,13 @@ export default function ProfileScreen() {
           name={userData?.displayName || userData?.username || 'User'}
           username={userData?.username || 'user'}
           bio={userData?.bio}
-          location={location}
+          location={displayLocation}
           team={userData?.favoriteTeam || ''}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
           onBioLongPress={() => setIsEditProfileModalVisible(true)}
           onNameLongPress={() => setIsEditProfileModalVisible(true)}
-          clubLogo={club}
+          clubLogo={displayClubLogo}
           onEditPress={handleEditProfile}
           socials={userData?.socials}
           consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
@@ -1635,20 +1689,15 @@ export default function ProfileScreen() {
         visible={isCountryModalVisible}
         onClose={() => setIsCountryModalVisible(false)}
         onSelect={async (country) => {
-          // Optimistic update - UI changes immediately
-          setCountryFlag(country.flag);
-          setLocation(country.nameAr);
-          
-          // Save locally immediately
           await localProfileStorage.saveProfileData({
             countryFlag: country.flag,
             country: country.nameAr
           });
-          
-          // Update cached data immediately
-          await updateCachedUserData({ 
+
+          updateCachedUserData({
             countryFlag: country.flag,
-            country: country.nameAr 
+            country: country.nameAr,
+            location: country.nameAr,
           });
           
           setIsCountryModalVisible(false);
@@ -1666,20 +1715,20 @@ export default function ProfileScreen() {
             await markStepCompleted('country');
           }
         }}
-        selectedCountryId={countryFlag}
+        selectedCountryId={displayCountryFlag}
       />
 
       <PositionPickerModal
         visible={isPositionModalVisible}
         onClose={() => setIsPositionModalVisible(false)}
         onSelect={async (pos) => {
-          // Optimistic update - UI changes immediately
-          setPosition(pos);
           setIsPositionModalVisible(false);
-          
+
+          await localProfileStorage.saveProfileData({ position: pos });
+          updateCachedUserData({ position: pos });
+
           toastManager.showInfo(t.profile.updating, t.profile.updatingPosition.replace('{position}', pos));
-          
-          // Send to backend with optimistic updates
+
           const result = await updateFIFACard({ position: pos });
           
           if (result.success) {
@@ -1688,7 +1737,7 @@ export default function ProfileScreen() {
             await markStepCompleted('position');
           }
         }}
-        selectedPosition={position}
+        selectedPosition={displayPosition}
       />
 
       <ClubPickerModal
@@ -1697,19 +1746,14 @@ export default function ProfileScreen() {
         onSelect={async (selectedClub) => {
           console.log('🏆 [ClubPicker] Selected club:', selectedClub.nameAr);
           
-          // Optimistic update - UI changes immediately
-          setClub(selectedClub.logo);
-          
-          // Save locally immediately
           await localProfileStorage.saveProfileData({
             clubLogo: selectedClub.logo,
             favoriteTeam: selectedClub.nameAr
           });
-          
-          // Update cached data immediately (synchronous now)
-          updateCachedUserData({ 
+
+          updateCachedUserData({
             clubLogo: selectedClub.logo,
-            favoriteTeam: selectedClub.nameAr 
+            favoriteTeam: selectedClub.nameAr
           });
           
           // Update global state for immediate UI refresh
@@ -1748,17 +1792,12 @@ export default function ProfileScreen() {
         visible={isBrandModalVisible}
         onClose={() => setIsBrandModalVisible(false)}
         onSelect={async (selectedBrand) => {
-          // Optimistic update - UI changes immediately
-          setBrand(selectedBrand.logo);
-          
-          // Save locally immediately
           await localProfileStorage.saveProfileData({
             brandLogo: selectedBrand.logo,
             favoriteBrand: selectedBrand.nameAr
           });
-          
-          // Update cached data immediately
-          await updateCachedUserData({ 
+
+          updateCachedUserData({
             brandLogo: selectedBrand.logo,
             favoriteBrand: selectedBrand.nameAr
           });
@@ -1785,13 +1824,10 @@ export default function ProfileScreen() {
         visible={isStatsModalVisible}
         onClose={() => setIsStatsModalVisible(false)}
         onSave={async (newStats) => {
-          // Optimistic update - UI changes immediately
-          setStats(newStats);
           setIsStatsModalVisible(false);
-          
+
           toastManager.showInfo(t.profile.updating, t.profile.updatingPlayerStats);
 
-          // Persist locally + update cached profile immediately so values don't "disappear" on refetch/navigation
           const ageNum = parseInt(newStats.age);
           const heightNum = parseInt(newStats.height);
           const weightNum = parseInt(newStats.weight);
@@ -1804,7 +1840,7 @@ export default function ProfileScreen() {
             preferredFoot,
           });
 
-          await updateCachedUserData({
+          updateCachedUserData({
             age: Number.isFinite(ageNum) ? ageNum : undefined,
             height: Number.isFinite(heightNum) ? heightNum : undefined,
             weight: Number.isFinite(weightNum) ? weightNum : undefined,
@@ -1825,7 +1861,7 @@ export default function ProfileScreen() {
             await markStepCompleted('cardData');
           }
         }}
-        initialStats={stats}
+        initialStats={displayStats}
       />
 
       <ProfileEditModal

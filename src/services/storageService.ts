@@ -228,9 +228,10 @@ export class StorageService {
             const config = getAPIConfig();
             const uploadTimeout = config.uploadTimeout || 15 * 60 * 1000; // Default 15 minutes
 
-            // Use XMLHttpRequest for progress tracking
-            return new Promise((resolve, reject) => {
+            // Use XMLHttpRequest for progress tracking (single retry on transport failure)
+            const sendOnce = (): Promise<UploadResult & { reelId?: string }> => new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
+                xhr.timeout = uploadTimeout;
                 
                 // ✅ IMPROVED: Better progress tracking
                 const progressHandler = (event: ProgressEvent) => {
@@ -309,34 +310,42 @@ export class StorageService {
                     resolve({ success: false, error: 'Upload was cancelled' });
                 };
                 
-                // ✅ FIXED: Cleanup function to remove all listeners
                 const cleanup = () => {
-                    if (timeoutId) clearTimeout(timeoutId);
                     xhr.upload.removeEventListener('progress', progressHandler);
                     xhr.removeEventListener('load', loadHandler);
                     xhr.removeEventListener('error', errorHandler);
                     xhr.removeEventListener('abort', abortHandler);
                 };
-                
-                // Add event listeners
+
                 xhr.upload.addEventListener('progress', progressHandler);
                 xhr.addEventListener('load', loadHandler);
                 xhr.addEventListener('error', errorHandler);
                 xhr.addEventListener('abort', abortHandler);
-
-                // Set timeout
-                let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
+                xhr.ontimeout = () => {
                     cleanup();
-                    xhr.abort();
-                    logger.error('Upload reel timeout:', uploadTimeout);
+                    logger.error('Upload reel timeout (XHR):', uploadTimeout);
                     resolve({ success: false, error: 'Upload timeout - request took too long' });
-                }, uploadTimeout);
+                };
 
                 xhr.open('POST', `${API_URL}/upload/reel`);
                 xhr.setRequestHeader('Authorization', `Bearer ${token}`);
                 
                 xhr.send(formData);
             });
+
+            const first = await sendOnce();
+            if (
+                !first.success &&
+                first.error &&
+                (first.error.includes('Network') ||
+                    first.error.includes('timeout') ||
+                    first.error.includes('Upload timeout'))
+            ) {
+                logger.warn('Reel upload: retrying once after transport error');
+                await new Promise(r => setTimeout(r, 1500));
+                return sendOnce();
+            }
+            return first;
         } catch (error: any) {
             logger.error('Upload reel error:', error);
             return { success: false, error: error.message };

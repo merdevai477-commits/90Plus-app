@@ -7,6 +7,7 @@ import {
   Dimensions,
   Platform,
   ViewStyle,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,10 +28,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { COLORS } from '../reels/constants';
-import { useHomeStore } from '../../src/store/home.store';
 import { globalState } from '../../globalState';
 import { Ionicons } from '@expo/vector-icons';
-import { useUser } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
 import { DailyQuizStatus } from '../../services/quizApi';
@@ -164,9 +164,12 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   loginStreak = 0,
   dailyQuizStatus = null,
 }) => {
-  const { userMode } = useHomeStore();
+  const { isSignedIn, isLoaded: clerkAuthLoaded } = useAuth();
   const { t } = useTranslation();
   const { user: clerkUser } = useUser();
+
+  /** Signed-in UI must follow Clerk — userMode can stay "guest" until Zustand catches up */
+  const showSignedInWelcome = clerkAuthLoaded && isSignedIn;
   
   const [currentSlide, setCurrentSlide] = useState(0);
   const [countdown, setCountdown] = useState('');
@@ -357,10 +360,10 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     },
   ];
 
-  // Auto scroll
+  // Auto scroll (only for signed-in carousel)
   useEffect(() => {
-    if (userMode === 'guest') return;
-    
+    if (!showSignedInWelcome) return;
+
     autoScrollRef.current = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
     }, AUTO_SCROLL_INTERVAL);
@@ -368,7 +371,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     return () => {
       if (autoScrollRef.current) clearInterval(autoScrollRef.current);
     };
-  }, [userMode, slides.length]);
+  }, [showSignedInWelcome, slides.length]);
 
   const handleCardPress = useCallback(() => {
     Haptics.selectionAsync();
@@ -407,8 +410,19 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     transform: [{ scale: cardScale.value }],
   }));
 
-  // GUEST MODE
-  if (userMode === 'guest') {
+  // Clerk still hydrating — avoid flashing "guest" card while session is restoring
+  if (!clerkAuthLoaded) {
+    return (
+      <View style={styles.container} accessibilityLabel="Loading welcome">
+        <View style={[styles.card, styles.welcomeSkeletonCard]}>
+          <ActivityIndicator size="small" color={COLORS.neonGreen} />
+        </View>
+      </View>
+    );
+  }
+
+  // GUEST MODE (Clerk finished loading and there is no session)
+  if (!isSignedIn) {
     return (
       <Animated.View
         entering={FadeInDown.delay(200).springify().damping(14)}
@@ -599,6 +613,11 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 24,
     marginHorizontal: 16,
+  },
+  welcomeSkeletonCard: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   card: {
     height: CARD_HEIGHT,

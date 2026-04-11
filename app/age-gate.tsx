@@ -33,7 +33,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
-import { getApiEndpoint } from '../config/api.config';
+import { verifyAgeWithBackend } from '../hooks/useAgeVerification';
 
 export default function AgeGateScreen() {
   const { getToken } = useAuth();
@@ -89,42 +89,25 @@ export default function AgeGateScreen() {
         throw new Error('Authentication token not found');
       }
 
-      // Call backend API
-      const response = await fetch(getApiEndpoint('auth/verify-age'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          dateOfBirth: dateOfBirth.toISOString().split('T')[0], // YYYY-MM-DD
-        }),
-      });
+      const ymd = dateOfBirth.toISOString().split('T')[0];
+      const result = await verifyAgeWithBackend(token, ymd);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Handle age restriction (under 13)
-        if (data.code === 'AGE_RESTRICTED' || data.ageTier === 'BLOCKED') {
+      if (result.ok === false) {
+        if (result.code === 'AGE_RESTRICTED' || result.ageTier === 'BLOCKED') {
           logger.info('[AgeGate] User blocked (under 13)');
           router.replace('/blocked');
           return;
         }
-
-        throw new Error(data.message || 'Failed to verify age');
+        throw new Error(result.message || 'Failed to verify age');
       }
 
-      logger.info('[AgeGate] Age verified:', data.ageTier);
+      logger.info('[AgeGate] Age verified:', result.ageTier);
 
-      // Route based on age tier
-      if (data.ageTier === 'TEEN' && data.requiresParentalConsent) {
-        // 13-17: Requires parental consent
+      if (result.ageTier === 'TEEN' && result.requiresParentalConsent) {
         router.replace('/parental-consent');
-      } else if (data.ageTier === 'ADULT') {
-        // 18+: Continue to app
+      } else if (result.ageTier === 'ADULT') {
         router.replace('/(tabs)/Home');
       } else {
-        // Unexpected tier
         throw new Error('Unexpected age tier');
       }
 

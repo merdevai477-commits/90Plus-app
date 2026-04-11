@@ -48,11 +48,11 @@ const RETRY_DELAY_MS = 500; // 500ms between retries
 
 // ✅ SUPER SPEED: In-memory cache for instant responses
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
-const MEMORY_CACHE_TTL = 60 * 1000; // 1 minute for memory cache
+const MEMORY_CACHE_TTL = 2 * 60 * 1000; // 2 minutes — fewer repeat calls while switching tabs
 
-// Debouncing for syncUserWithBackend to prevent multiple simultaneous calls
+// Debouncing for syncUserWithBackend to prevent stampedes (short delay — first paint stays fast)
 const syncDebounceTimers = new Map<string, NodeJS.Timeout>();
-const SYNC_DEBOUNCE_MS = 500; // Wait 500ms before calling, cancel previous if new call comes
+const SYNC_DEBOUNCE_MS = 120;
 
 // Helper function to get from memory cache
 const getFromMemoryCache = (key: string): any | null => {
@@ -119,7 +119,11 @@ export interface UserProfile {
     preferredFoot: string | null;
     createdAt: string;
     updatedAt: string;
+    consecutiveLoginDays?: number;
 }
+
+/** In-flight dedupe: Home + Profile + others share one /clerk/me per user */
+const pendingUserSync = new Map<string, Promise<UserProfile>>();
 
 export interface AuthResponse {
     status: 'SUCCESS' | 'ERROR';
@@ -193,37 +197,43 @@ export class AuthService {
     static async syncUserWithBackend(token: string): Promise<UserProfile | null> {
         const startTime = Date.now();
         
-        // ✅ SUPER SPEED: Check memory cache first
-        const cacheKey = `user_${token.substring(0, 20)}`;
+        // ✅ STABLE KEY: Use clerkUserId from JWT instead of token substring.
+        // Tokens rotate every hour; userId is stable → cache survives token refresh.
+        let stableUserId: string | null = null;
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            stableUserId = payload.sub || null;
+        } catch (_) { /* malformed token – fall through to network */ }
+
+        const cacheKey = stableUserId ? `user_${stableUserId}` : `user_${token.substring(0, 20)}`;
         const cached = getFromMemoryCache(cacheKey);
         if (cached) {
-            logger.debug('⚡ User from memory cache');
+            logger.debug('⚡ User from memory cache (stable key)');
             return cached;
         }
 
-        // ✅ DEBOUNCING: Cancel previous call if new one comes within 500ms
+        const inflight = pendingUserSync.get(cacheKey);
+        if (inflight) {
+            logger.debug('🔗 Reusing in-flight /clerk/me sync');
+            return inflight;
+        }
+
+        const runSync = async (): Promise<UserProfile> => {
+        // ✅ DEBOUNCING: Cancel previous call if a burst of navigations fires sync
         const existingTimer = syncDebounceTimers.get(cacheKey);
         if (existingTimer) {
             clearTimeout(existingTimer);
         }
 
-        // Check if we're already close to timeout threshold - skip debounce if so
-        const shouldSkipDebounce = false; // Always apply debounce for first call
-
         // Wait for debounce if needed (but don't count it against timeout)
-        if (!shouldSkipDebounce) {
-            await new Promise<void>((resolve) => {
-                const timer = setTimeout(() => {
-                    syncDebounceTimers.delete(cacheKey);
-                    resolve();
-                }, SYNC_DEBOUNCE_MS);
-                syncDebounceTimers.set(cacheKey, timer);
-            });
-        }
+        await new Promise<void>((resolve) => {
+            const timer = setTimeout(() => {
+                syncDebounceTimers.delete(cacheKey);
+                resolve();
+            }, SYNC_DEBOUNCE_MS);
+            syncDebounceTimers.set(cacheKey, timer);
+        });
 
-        // NOW start the timeout - after debounce completes
-        const syncStartTime = Date.now();
-        
         // Create timeout promise that rejects after 15 seconds FROM NOW
         const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(() => {
@@ -338,6 +348,13 @@ export class AuthService {
             // Re-throw the error for UI layer to handle
             throw error;
         }
+        };
+
+        const flight = runSync().finally(() => {
+            pendingUserSync.delete(cacheKey);
+        });
+        pendingUserSync.set(cacheKey, flight);
+        return flight;
     }
 
     /**
@@ -349,6 +366,7 @@ export class AuthService {
         // Also clear any pending debounce timers
         syncDebounceTimers.forEach(timer => clearTimeout(timer));
         syncDebounceTimers.clear();
+        pendingUserSync.clear();
         logger.debug('🧹 AuthService memory cache cleared');
     }
 
