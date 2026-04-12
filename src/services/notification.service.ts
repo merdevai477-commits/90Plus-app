@@ -19,6 +19,7 @@ export enum NotificationType {
     VIDEO_PROCESSED = 'VIDEO_PROCESSED',
     REPORT_RESOLVED = 'REPORT_RESOLVED',
     MILESTONE = 'MILESTONE',
+    COIN_MILESTONE = 'COIN_MILESTONE',
     GENERAL = 'GENERAL'
 }
 
@@ -37,7 +38,8 @@ export interface CreateNotificationParams {
     data?: any;
     actor?: NotificationActor;
     pushToken?: string | null;
-    threadId?: string; // iOS notification grouping
+    threadId?: string;
+    channelId?: string; // Android notification channel
 }
 
 /**
@@ -63,7 +65,7 @@ export class NotificationService {
      */
     static async createNotification(params: CreateNotificationParams) {
         try {
-            const { userId, title, message, type, data, actor, pushToken, threadId } = params;
+            const { userId, title, message, type, data, actor, pushToken, threadId, channelId } = params;
 
             // Ensure actor info is included in data
             const notificationData = {
@@ -115,6 +117,7 @@ export class NotificationService {
                     title,
                     body: message,
                     ...(threadId ? { threadId } : {}),
+                    ...(channelId ? { channelId } : {}),
                     data: {
                         ...notificationData,
                         notificationId: notification.id,
@@ -202,6 +205,7 @@ export class NotificationService {
             title,
             message,
             type: NotificationType.MATCH_UPDATE,
+            channelId: 'match-updates',
             data: {
                 type: 'MATCH_GOAL',
                 matchId,

@@ -135,8 +135,9 @@ export interface PushNotificationPayload {
     data?: Record<string, any>;
     sound?: 'default' | null;
     badge?: number;
-    threadId?: string;   // iOS notification grouping
-    silent?: boolean;    // silent background notification
+    threadId?: string;
+    silent?: boolean;
+    channelId?: string; // Android notification channel
 }
 
 /**
@@ -206,6 +207,7 @@ export class PushNotificationService {
                     data: payload.data || {},
                     badge: payload.badge,
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
+                    ...(payload.channelId ? { channelId: payload.channelId } : {}),
                 };
             }
 

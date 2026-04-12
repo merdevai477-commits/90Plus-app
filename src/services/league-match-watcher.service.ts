@@ -288,8 +288,8 @@ export class LeagueMatchWatcherService {
                 // Match starting soon
                 const matchDate = new Date(fixture.fixture.date);
                 const minutesUntil = Math.round((matchDate.getTime() - Date.now()) / (60 * 1000));
-                title = '⚽ مباراة قادمة في دوريك المفضل!';
-                message = `${homeTeam} vs ${awayTeam}\n${leagueName}\nتبدأ خلال ${minutesUntil} دقيقة`;
+                title = '⏰ مباراة قريباً!';
+                message = `${homeTeam} vs ${awayTeam} - بعد ${minutesUntil} دقيقة`;
             } else {
                 // Match just started
                 title = '🚀 بدأت المباراة!';
@@ -303,8 +303,9 @@ export class LeagueMatchWatcherService {
                 message,
                 type: NotificationType.MATCH_START,
                 data: {
-                    type: 'LEAGUE_MATCH_START',
+                    type: status === 'NS' ? 'MATCH_REMINDER' : 'LEAGUE_MATCH_START',
                     matchId,
+                    fixtureId: matchId,
                     leagueId,
                     homeTeam,
                     awayTeam,

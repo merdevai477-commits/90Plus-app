@@ -1209,7 +1209,10 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             title: 'متابع جديد',
             message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
             type: 'FOLLOW',
-            data: { followerId: currentUser.id },
+            data: {
+                followerId: currentUser.id,
+                actorUsername: currentUser.username,
+            },
         });
 
         // Check follower milestone

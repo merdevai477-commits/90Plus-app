@@ -196,9 +196,24 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
       userId: user.id,
       title: '🎉 مبروك!',
       message: `ربحت ${prize.coins} كوين من عجلة الحظ اليومية!`,
-      type: 'GENERAL',
-      data: { coinsWon: prize.coins, spinDate: now.toISOString(), action: 'DAILY_SPIN' },
+      type: 'GIFT',
+      data: { type: 'GIFT', coinsWon: prize.coins, spinDate: now.toISOString(), screen: '/(tabs)/profile', tab: 'wallet' },
     });
+
+    // Check coin milestone
+    const COIN_MILESTONES = [100, 500, 1000, 5000, 10000];
+    const oldBalance = user.coins;
+    const newBalance = updatedUser.coins;
+    const hitMilestone = COIN_MILESTONES.find(m => newBalance >= m && oldBalance < m);
+    if (hitMilestone) {
+      await enqueueNotification({
+        userId: user.id,
+        title: '🪙 إنجاز جديد!',
+        message: `وصلت لـ ${hitMilestone.toLocaleString()} عملة! استمر 💪`,
+        type: 'COIN_MILESTONE',
+        data: { type: 'COIN_MILESTONE', milestone: hitMilestone, screen: '/(tabs)/profile', tab: 'wallet' },
+      });
+    }
 
     res.json({
       status: 'SUCCESS',
