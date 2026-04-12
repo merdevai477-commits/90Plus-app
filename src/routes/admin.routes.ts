@@ -548,6 +548,50 @@ router.get('/audit', requireAdmin, async (req: Request, res: Response): Promise<
 });
 
 /**
+ * GET /api/admin/notifications/stats
+ * Get notification analytics (last 7 days)
+ */
+router.get('/notifications/stats', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+        const [sentByType, openedByType, totalSent, totalOpened] = await Promise.all([
+            prisma.notification.groupBy({
+                by: ['type'],
+                where: { createdAt: { gte: since } },
+                _count: { id: true },
+            }),
+            prisma.notificationEvent.groupBy({
+                by: ['event'],
+                where: { event: 'OPENED', createdAt: { gte: since } },
+                _count: { id: true },
+            }),
+            prisma.notification.count({ where: { createdAt: { gte: since } } }),
+            prisma.notificationEvent.count({ where: { event: 'OPENED', createdAt: { gte: since } } }),
+        ]);
+
+        const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0';
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                period: '7 days',
+                totalSent,
+                totalOpened,
+                openRate: `${openRate}%`,
+                byType: sentByType.map((t: { type: string; _count: { id: number } }) => ({
+                    type: t.type,
+                    sent: t._count.id,
+                })),
+            },
+        });
+    } catch (error: any) {
+        logger.error('Notification stats error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
  * POST /api/admin/test-notification
  * Send a test push notification to a specific user (by username or userId)
  * Developer/Admin only

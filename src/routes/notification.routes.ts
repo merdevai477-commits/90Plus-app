@@ -220,4 +220,106 @@ router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Requ
     }
 });
 
+/**
+ * POST /api/notifications/:id/opened
+ * Track notification open event
+ */
+router.post('/:id/opened', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+
+        await prisma.notificationEvent.create({
+            data: {
+                notificationId: id,
+                userId: user.id,
+                event: 'OPENED',
+            },
+        });
+
+        res.json({ status: 'SUCCESS' });
+    } catch (error: any) {
+        logger.error('Track notification open error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * GET /api/notifications/preferences
+ * Get notification preferences for current user
+ */
+router.get('/preferences', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+
+        // Get or create default preferences
+        const prefs = await prisma.notificationPreferences.upsert({
+            where: { userId: user.id },
+            create: { userId: user.id },
+            update: {},
+        });
+
+        res.json({ status: 'SUCCESS', data: { preferences: prefs } });
+    } catch (error: any) {
+        logger.error('Get notification preferences error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * PUT /api/notifications/preferences
+ * Update notification preferences
+ */
+router.put('/preferences', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+
+        const allowedFields = [
+            'matchGoals', 'matchStart', 'matchEnd', 'matchHalftime', 'leagueMatches',
+            'socialFollow', 'socialLike', 'socialComment', 'socialReply', 'socialMention',
+            'predictionResults', 'luckyWheel', 'gifts',
+        ];
+
+        const updateData: Record<string, boolean> = {};
+        for (const field of allowedFields) {
+            if (typeof req.body[field] === 'boolean') {
+                updateData[field] = req.body[field];
+            }
+        }
+
+        const prefs = await prisma.notificationPreferences.upsert({
+            where: { userId: user.id },
+            create: { userId: user.id, ...updateData },
+            update: updateData,
+        });
+
+        res.json({ status: 'SUCCESS', data: { preferences: prefs } });
+    } catch (error: any) {
+        logger.error('Update notification preferences error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 export default router;

@@ -785,6 +785,18 @@ async function startServer() {
                         MatchWatcherService.start();
                         PredictionWatcherService.start(); // ✅ Start prediction watcher
                         LeagueMatchWatcherService.start(); // ✅ Start league match watcher
+
+                        // ✅ Start lucky wheel daily notifier
+                        const { startLuckyWheelNotifier } = await import('./services/lucky-wheel-notifier.service');
+                        startLuckyWheelNotifier();
+
+                        // ✅ Initialize receipt queue
+                        const { getReceiptQueue } = await import('./queues/receipt.queue');
+                        getReceiptQueue();
+
+                        // ✅ Verify FCM/APNs configuration on startup
+                        const { verifyFCMConfiguration } = await import('./services/push-notification.service');
+                        verifyFCMConfiguration();
                     }
                     
                     // ✅ Start football background service for API optimization

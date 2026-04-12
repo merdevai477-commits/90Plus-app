@@ -33,6 +33,22 @@ export interface CreateNotificationParams {
     data?: any;
     actor?: NotificationActor;
     pushToken?: string | null;
+    threadId?: string; // iOS notification grouping
+}
+
+/**
+ * Get notification preferences for a user (with defaults if not set)
+ */
+async function getUserPreferences(userId: string) {
+    try {
+        return await prisma.notificationPreferences.upsert({
+            where: { userId },
+            create: { userId },
+            update: {},
+        });
+    } catch {
+        return null; // fail open - send notification if prefs unavailable
+    }
 }
 
 export class NotificationService {
@@ -41,7 +57,7 @@ export class NotificationService {
      */
     static async createNotification(params: CreateNotificationParams) {
         try {
-            const { userId, title, message, type, data, actor, pushToken } = params;
+            const { userId, title, message, type, data, actor, pushToken, threadId } = params;
 
             // Ensure actor info is included in data
             const notificationData = {
@@ -92,6 +108,7 @@ export class NotificationService {
                     to: effectivePushToken,
                     title,
                     body: message,
+                    ...(threadId ? { threadId } : {}),
                     data: {
                         ...notificationData,
                         notificationId: notification.id,
@@ -135,8 +152,15 @@ export class NotificationService {
                 return null;
             }
 
+            // Build threadId for iOS notification grouping
+            const reelId = params.data?.reelId;
+            const threadId = reelId
+                ? `${params.userId}-${reelId}`
+                : `${params.userId}-social`;
+
             return this.createNotification({
                 ...params,
+                threadId,
                 actor: {
                     id: actor.id,
                     username: actor.username,
@@ -149,10 +173,6 @@ export class NotificationService {
             return null;
         }
     }
-
-    /**
-     * Create goal notification
-     */
     static async createGoalNotification(
         userId: string,
         pushToken: string | null,
@@ -163,6 +183,9 @@ export class NotificationService {
         scoringTeam: 'home' | 'away',
         matchId: number
     ) {
+        const prefs = await getUserPreferences(userId);
+        if (prefs && !prefs.matchGoals) return null;
+
         const scorer = scoringTeam === 'home' ? homeTeam : awayTeam;
         const title = '⚽ هدف!';
         const message = `${scorer} سجل! ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`;
@@ -195,6 +218,9 @@ export class NotificationService {
         awayTeam: string,
         matchId: number
     ) {
+        const prefs = await getUserPreferences(userId);
+        if (prefs && !prefs.matchStart) return null;
+
         const title = '🏟️ بدأت المباراة!';
         const message = `${homeTeam} vs ${awayTeam} - المباراة بدأت الآن`;
 
@@ -225,6 +251,9 @@ export class NotificationService {
         awayScore: number,
         matchId: number
     ) {
+        const prefs = await getUserPreferences(userId);
+        if (prefs && !prefs.matchHalftime) return null;
+
         const title = '⏸️ نهاية الشوط الأول';
         const message = `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam} (HT)`;
 
@@ -257,6 +286,9 @@ export class NotificationService {
         awayScore: number,
         matchId: number
     ) {
+        const prefs = await getUserPreferences(userId);
+        if (prefs && !prefs.matchEnd) return null;
+
         const title = '🏁 انتهت المباراة!';
         let result = 'تعادل';
         if (homeScore > awayScore) result = `فوز ${homeTeam}`;
@@ -292,11 +324,15 @@ export class NotificationService {
         coinsWon: number
     ) {
         try {
-            // Get user's push token + consent
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { expoPushToken: true, pushNotificationsConsent: true },
-            });
+            const [user, prefs] = await Promise.all([
+                prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { expoPushToken: true, pushNotificationsConsent: true },
+                }),
+                getUserPreferences(userId),
+            ]);
+
+            if (prefs && !prefs.predictionResults) return null;
 
             const title = isCorrect ? '🎯 توقع صحيح!' : '❌ توقع خاطئ';
             const message = isCorrect
