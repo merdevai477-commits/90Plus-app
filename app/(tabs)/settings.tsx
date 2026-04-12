@@ -659,6 +659,12 @@ export default function SettingsScreen() {
                 handleTogglePredictionReminders,
                 'time-outline'
               )}
+              {renderActionItem(
+                'إعدادات الإشعارات التفصيلية',
+                'تحكم في كل نوع من الإشعارات',
+                () => router.push('/notification-preferences'),
+                'options-outline'
+              )}
             </View>
           </View>
 

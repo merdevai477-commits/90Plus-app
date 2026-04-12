@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { useAuth } from '@clerk/clerk-expo';
+import { useQueryClient } from '@tanstack/react-query';
 import { MatchesService } from '../services/authService';
 import { logger } from '../services/logger';
+import { useRouter } from 'expo-router';
 import '../../services/notificationForegroundSetup';
 
 export interface PushNotificationState {
@@ -14,7 +16,7 @@ export interface PushNotificationState {
     error: string | null;
 }
 
-export function usePushNotifications() {
+export function usePushNotifications(): PushNotificationState {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
     const [notification, setNotification] = useState<Notifications.Notification | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -22,79 +24,185 @@ export function usePushNotifications() {
     const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
     const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
     
-    const auth = useAuth({} as any);
-    const { getToken, isSignedIn } = auth;
+    // Correctly using useAuth without hacks
+    const { getToken, isSignedIn, isLoaded } = useAuth();
+    const router = useRouter();
+    const queryClient = useQueryClient();
+
+    // Use refs to avoid stale closures in event listeners
+    const getTokenRef = useRef(getToken);
+    const isSignedInRef = useRef(isSignedIn);
+    const routerRef = useRef(router);
+    const queryClientRef = useRef(queryClient);
+    getTokenRef.current = getToken;
+    isSignedInRef.current = isSignedIn;
+    routerRef.current = router;
+    queryClientRef.current = queryClient;
+
+    const syncTokenWithBackendWithRetry = useRef(async (pushToken: string, attempt: number = 0) => {
+        try {
+            const authToken = await getTokenRef.current();
+            if (authToken) {
+                const success = await MatchesService.registerPushToken(authToken, pushToken);
+                if (success) {
+                    logger.debug('✅ Push token synced successfully with backend');
+                } else {
+                    throw new Error('Backend rejected token sync');
+                }
+            }
+        } catch (err: any) {
+            logger.error(`❌ Push token sync failed (attempt ${attempt}):`, err);
+            if (attempt < 3) {
+                const delay = Math.pow(2, attempt) * 2000;
+                setTimeout(() => syncTokenWithBackendWithRetry.current(pushToken, attempt + 1), delay);
+            }
+        }
+    });
+
+    const trackNotificationOpen = useRef(async (notificationId: string) => {
+        try {
+            const authToken = await getTokenRef.current();
+            if (!authToken) return;
+            await fetch(`${require('../../config/api.config').getApiUrl()}/notifications/${notificationId}/opened`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            });
+        } catch (err) {
+            logger.warn('Failed to track notification open:', err);
+        }
+    }).current;
+
+    const handleSilentNotification = useRef((data: Record<string, any>) => {
+        try {
+            switch (data.type) {
+                case 'MATCH_UPDATE':
+                    queryClientRef.current.invalidateQueries({ queryKey: ['matches', 'live'] });
+                    break;
+                case 'SCORE_UPDATE':
+                    if (data.matchId) {
+                        queryClientRef.current.invalidateQueries({ queryKey: ['matches', data.matchId] });
+                    }
+                    queryClientRef.current.invalidateQueries({ queryKey: ['matches', 'live'] });
+                    break;
+                case 'NOTIFICATION_COUNT':
+                    queryClientRef.current.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+                    break;
+                default:
+                    break;
+            }
+        } catch (err) {
+            logger.error('Failed to handle silent notification:', err);
+        }
+    }).current;
+
+    const handleDeepLinking = useRef((data: Record<string, any>) => {
+        if (!data) return;
+        try {
+            const type = data.type as string | undefined;
+            const r = routerRef.current;
+            if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type?.includes('MATCH')) {
+                r.push('/(tabs)/matches');
+            } else if (type === 'FOLLOW') {
+                const username = data.actorUsername || data.followerUsername || data.username;
+                if (username) {
+                    r.push({ pathname: '/user/[username]', params: { username } });
+                } else {
+                    r.push('/notifications');
+                }
+            } else if (type === 'LIKE' || type === 'COMMENT' || type === 'REPLY' || type === 'MENTION') {
+                if (data.commentId && data.reelId) {
+                    r.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId, commentId: data.commentId, autoOpenComments: 'true' } });
+                } else if (data.reelId) {
+                    r.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId } });
+                } else {
+                    r.push('/notifications');
+                }
+            } else if (type === 'PREDICTION_RESULT') {
+                r.push('/(tabs)/matches');
+            } else if (data.screen) {
+                r.push(data.screen as any);
+            } else if (data.url) {
+                r.push(data.url as any);
+            } else {
+                r.push('/notifications');
+            }
+        } catch (err) {
+            logger.error('Failed to handle notification deep link:', err);
+        }
+    }).current;
 
     useEffect(() => {
-        // Register for push notifications
-        registerForPushNotificationsAsync()
-            .then(token => {
-                if (token) {
-                    setExpoPushToken(token);
-                    // Send token to backend
-                    sendTokenToBackend(token);
-                }
-            })
-            .catch(err => {
-                setError(err.message);
-            });
+        // Only run after authentication is definitively loaded
+        if (!isLoaded) return;
 
-        // Listen for incoming notifications
+        let isMounted = true;
+
+        const initializePushTokens = async () => {
+            try {
+                const token = await registerForPushNotificationsAsync();
+                if (token && isMounted) {
+                    setExpoPushToken(token);
+                    
+                    // If user is signed in, send the token to the backend immediately
+                    if (isSignedIn) {
+                        await syncTokenWithBackendWithRetry.current(token, 0);
+                    }
+                }
+            } catch (err: any) {
+                if (isMounted) setError(err.message);
+            }
+        };
+
+        initializePushTokens();
+
+        // Re-sync token when user signs in (handles case where user logs in after app launch)
+        if (isSignedIn && expoPushToken) {
+            syncTokenWithBackendWithRetry.current(expoPushToken, 0);
+        }
+
+        // 1. Foreground Notification arrives
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+            const data = notification.request.content.data as Record<string, any>;
+
+            // Handle silent background notifications - invalidate cache, no UI
+            if (data?.silent === true) {
+                logger.debug('🔕 Silent notification received, invalidating cache:', data.type);
+                handleSilentNotification(data);
+                return;
+            }
+
+            logger.debug('🔔 Notification received in foreground:', notification.request.identifier);
             setNotification(notification);
         });
 
-        // Listen for notification responses (when user taps notification)
+        // 2. User taps a notification (Background / Terminated -> Foreground)
         responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            const data = response.notification.request.content.data;
-            console.log('Notification tapped:', data);
-            // Handle navigation based on notification type
-            handleNotificationResponse(data);
+            const data = response.notification.request.content.data as Record<string, any>;
+            logger.debug('📲 Notification tapped. Payload:', data);
+
+            Notifications.setBadgeCountAsync(0);
+
+            if (data?.notificationId && isSignedInRef.current) {
+                trackNotificationOpen(data.notificationId);
+            }
+
+            handleDeepLinking(data);
+        });
+
+        // Handle AppState changes (e.g. tracking when they come from background, resolving badges)
+        const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active') {
+                Notifications.setBadgeCountAsync(0);
+            }
         });
 
         return () => {
-            if (notificationListener.current) {
-                notificationListener.current.remove();
-            }
-            if (responseListener.current) {
-                responseListener.current.remove();
-            }
+            isMounted = false;
+            if (notificationListener.current) notificationListener.current.remove();
+            if (responseListener.current) responseListener.current.remove();
+            appStateSubscription.remove();
         };
-    }, []);
-
-    // Re-register token when user signs in
-    useEffect(() => {
-        if (isSignedIn && expoPushToken) {
-            sendTokenToBackend(expoPushToken);
-        }
-    }, [isSignedIn, expoPushToken]);
-
-    const sendTokenToBackend = async (pushToken: string) => {
-        try {
-            const authToken = await getToken({ template: undefined });
-            if (authToken) {
-                await MatchesService.registerPushToken(authToken, pushToken);
-                logger.debug('✅ Push token registered with backend');
-            }
-        } catch (err) {
-            console.error('Failed to register push token:', err);
-        }
-    };
-
-    const handleNotificationResponse = (data: any) => {
-        // Handle different notification types
-        switch (data?.type) {
-            case 'MATCH_GOAL':
-            case 'MATCH_START':
-            case 'MATCH_END':
-            case 'MATCH_HALFTIME':
-                // Navigate to match details or home screen
-                // router.push('/matches');
-                break;
-            default:
-                break;
-        }
-    };
+    }, [isLoaded, isSignedIn]);
 
     return {
         expoPushToken,
@@ -106,52 +214,68 @@ export function usePushNotifications() {
 async function registerForPushNotificationsAsync(): Promise<string | null> {
     let token: string | null = null;
 
-    // Must be a physical device
     if (!Device.isDevice) {
         logger.debug('Push notifications require a physical device');
         return null;
     }
 
-    // Check/request permissions
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-        logger.debug('Push notification permission not granted');
-        return null;
-    }
-
-    // Get Expo push token
     try {
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+
+        if (finalStatus !== 'granted') {
+            logger.debug('🚫 Push notification permission not granted by user');
+            return null;
+        }
+
+        // Safely extract the project ID for EAS
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+        if (!projectId) {
+            logger.warn('Project ID missing for Expo push token setup.');
+        }
         
         const pushTokenData = await Notifications.getExpoPushTokenAsync({
             projectId,
         });
         
         token = pushTokenData.data;
-        logger.debug('📱 Expo Push Token:', token);
+        logger.debug('📱 Expo Push Token successfully extracted:', token);
+
     } catch (error) {
         logger.error('Error getting push token:', error);
     }
 
     // Android-specific channel setup
     if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('match-updates', {
-            name: 'تحديثات المباريات',
+        await Notifications.setNotificationChannelAsync('default', {
+            name: 'إشعارات عامة',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
             lightColor: '#32cd32',
             sound: 'default',
         });
+        
+        await Notifications.setNotificationChannelAsync('match-updates', {
+            name: 'تحديثات المباريات',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 500, 250, 500],
+            lightColor: '#22c55e',
+            sound: 'default',
+        });
     }
 
     return token;
+}
+
+// Global Injection Component
+export function PushNotificationSetup() {
+    usePushNotifications();
+    return null;
 }
 
 export default usePushNotifications;
