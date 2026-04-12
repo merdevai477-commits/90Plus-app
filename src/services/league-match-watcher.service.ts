@@ -222,13 +222,13 @@ export class LeagueMatchWatcherService {
                         const alreadyNotified = await prisma.notification.findFirst({
                             where: {
                                 userId: user.id,
-                                type: 'MATCH_START',
+                                type: NotificationType.MATCH_START as any,
                                 data: {
                                     path: ['matchId'],
                                     equals: matchId,
                                 },
                                 createdAt: {
-                                    gte: new Date(Date.now() - 2 * 60 * 60 * 1000), // within last 2 hours
+                                    gte: new Date(Date.now() - 2 * 60 * 60 * 1000),
                                 },
                             },
                             select: { id: true },
