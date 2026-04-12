@@ -547,5 +547,67 @@ router.get('/audit', requireAdmin, async (req: Request, res: Response): Promise<
     }
 });
 
+/**
+ * POST /api/admin/test-notification
+ * Send a test push notification to a specific user (by username or userId)
+ * Developer/Admin only
+ */
+router.post('/test-notification', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { username, title, body } = req.body;
+
+        if (!username) {
+            res.status(400).json({ status: 'ERROR', message: 'username is required' });
+            return;
+        }
+
+        // Find user
+        const user = await prisma.user.findFirst({
+            where: { username },
+            select: { id: true, username: true, expoPushToken: true, pushNotificationsConsent: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: `User "${username}" not found` });
+            return;
+        }
+
+        if (!user.expoPushToken) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: `User "${username}" has no push token registered. Make sure the app is installed and opened on a physical device.`,
+            });
+            return;
+        }
+
+        const notifTitle = title || '🔔 إشعار تجريبي';
+        const notifBody = body || 'الإشعارات تعمل بشكل صحيح على جهازك ✅';
+
+        const notification = await NotificationService.createNotification({
+            userId: user.id,
+            title: notifTitle,
+            message: notifBody,
+            type: 'GENERAL',
+            pushToken: user.expoPushToken,
+            data: { type: 'TEST', test: true },
+        });
+
+        logger.info(`✅ Test notification sent to user: ${username} (token: ${user.expoPushToken.substring(0, 30)}...)`);
+
+        res.json({
+            status: 'SUCCESS',
+            message: `Test notification sent to ${username}`,
+            data: {
+                notificationId: notification?.id,
+                pushToken: user.expoPushToken.substring(0, 30) + '...',
+                hasConsent: user.pushNotificationsConsent,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Test notification error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 export default router;
 
