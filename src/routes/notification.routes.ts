@@ -237,7 +237,7 @@ router.post('/:id/opened', requireAuth, async (req: Request, res: Response): Pro
         });
         if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
 
-        await prisma.notificationEvent.create({
+        await (prisma as any).notificationEvent.create({
             data: {
                 notificationId: id,
                 userId: user.id,
@@ -268,7 +268,7 @@ router.get('/preferences', requireAuth, async (req: Request, res: Response): Pro
         if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
 
         // Get or create default preferences
-        const prefs = await prisma.notificationPreferences.upsert({
+        const prefs = await (prisma as any).notificationPreferences.upsert({
             where: { userId: user.id },
             create: { userId: user.id },
             update: {},
@@ -309,7 +309,7 @@ router.put('/preferences', requireAuth, async (req: Request, res: Response): Pro
             }
         }
 
-        const prefs = await prisma.notificationPreferences.upsert({
+        const prefs = await (prisma as any).notificationPreferences.upsert({
             where: { userId: user.id },
             create: { userId: user.id, ...updateData },
             update: updateData,

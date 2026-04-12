@@ -561,13 +561,13 @@ router.get('/notifications/stats', requireAdmin, async (req: Request, res: Respo
                 where: { createdAt: { gte: since } },
                 _count: { id: true },
             }),
-            prisma.notificationEvent.groupBy({
+            (prisma as any).notificationEvent.groupBy({
                 by: ['event'],
                 where: { event: 'OPENED', createdAt: { gte: since } },
                 _count: { id: true },
             }),
             prisma.notification.count({ where: { createdAt: { gte: since } } }),
-            prisma.notificationEvent.count({ where: { event: 'OPENED', createdAt: { gte: since } } }),
+            (prisma as any).notificationEvent.count({ where: { event: 'OPENED', createdAt: { gte: since } } }),
         ]);
 
         const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0';

@@ -141,15 +141,17 @@ export interface PushNotificationPayload {
  */
 async function scheduleReceiptCheck(receiptIds: string[]): Promise<void> {
     try {
-        const { getReceiptQueue } = await import('../queues/receipt.queue');
-        const q = getReceiptQueue();
+        // Dynamic import to avoid circular dependency
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const receiptModule = require('../queues/receipt.queue');
+        const q = receiptModule.getReceiptQueue();
         if (q) {
             await q.add(
                 { receiptIds },
                 {
-                    delay: 30 * 1000, // 30 seconds
+                    delay: 30 * 1000,
                     attempts: 3,
-                    backoff: { type: 'exponential', delay: 60000 }, // 60s on MessageRateExceeded
+                    backoff: { type: 'exponential', delay: 60000 },
                     removeOnComplete: true,
                     removeOnFail: 100,
                 }

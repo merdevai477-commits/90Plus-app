@@ -107,23 +107,27 @@ async function runDailyLuckyWheelNotifier(): Promise<void> {
                     { lastDailySpin: null },
                     { lastDailySpin: { lt: startOfToday } },
                 ],
-                OR: [
-                    { notificationPreferences: null },
-                    { notificationPreferences: { luckyWheel: true } },
-                ],
             },
             select: { id: true },
         });
 
-        if (eligibleUsers.length === 0) {
+        // Filter by luckyWheel preference (post-query to avoid Prisma type issues)
+        const prefs = await (prisma as any).notificationPreferences.findMany({
+            where: { userId: { in: eligibleUsers.map((u: { id: string }) => u.id), }, luckyWheel: false },
+            select: { userId: true },
+        });
+        const optedOutIds = new Set(prefs.map((p: { userId: string }) => p.userId));
+        const filteredUsers = eligibleUsers.filter((u: { id: string }) => !optedOutIds.has(u.id));
+
+        if (filteredUsers.length === 0) {
             logger.info('🎡 No eligible users for lucky wheel notification');
             return;
         }
 
-        logger.info(`🎡 Found ${eligibleUsers.length} eligible users`);
+        logger.info(`🎡 Found ${filteredUsers.length} eligible users`);
 
         const q = getLuckyWheelQueue();
-        const userIds = eligibleUsers.map(u => u.id);
+        const userIds = filteredUsers.map((u: { id: string }) => u.id);
 
         // Batch into groups of BATCH_SIZE
         for (let i = 0; i < userIds.length; i += BATCH_SIZE) {

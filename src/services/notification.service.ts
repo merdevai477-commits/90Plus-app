@@ -38,14 +38,16 @@ export interface CreateNotificationParams {
 
 /**
  * Get notification preferences for a user (with defaults if not set)
+ * Uses raw query to avoid Prisma client type issues before regeneration
  */
 async function getUserPreferences(userId: string) {
     try {
-        return await prisma.notificationPreferences.upsert({
+        const result = await (prisma as any).notificationPreferences.upsert({
             where: { userId },
             create: { userId },
             update: {},
         });
+        return result;
     } catch {
         return null; // fail open - send notification if prefs unavailable
     }
