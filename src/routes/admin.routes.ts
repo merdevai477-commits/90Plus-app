@@ -609,5 +609,76 @@ router.post('/test-notification', requireAdmin, async (req: Request, res: Respon
     }
 });
 
+/**
+ * POST /api/admin/send-test-push
+ * Send a test push notification using Clerk Secret Key as auth (no JWT needed)
+ * Used for quick testing from terminal
+ */
+router.post('/send-test-push', async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Auth via Clerk Secret Key in header
+        const internalKey = req.headers['x-internal-key'] as string;
+        const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+
+        if (!internalKey || !clerkSecretKey || internalKey !== clerkSecretKey) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const { username, title, body } = req.body;
+
+        if (!username) {
+            res.status(400).json({ status: 'ERROR', message: 'username is required' });
+            return;
+        }
+
+        const user = await prisma.user.findFirst({
+            where: { username },
+            select: { id: true, username: true, expoPushToken: true, pushNotificationsConsent: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: `User "${username}" not found` });
+            return;
+        }
+
+        if (!user.expoPushToken) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: `No push token for "${username}". Open the app on a physical device first.`,
+                data: { username: user.username, hasPushToken: false },
+            });
+            return;
+        }
+
+        const notifTitle = title || '🔔 إشعار تجريبي';
+        const notifBody = body || 'الإشعارات تعمل بشكل صحيح ✅';
+
+        const notification = await NotificationService.createNotification({
+            userId: user.id,
+            title: notifTitle,
+            message: notifBody,
+            type: 'GENERAL',
+            pushToken: user.expoPushToken,
+            data: { type: 'TEST', test: true },
+        });
+
+        logger.info(`✅ Test push sent to: ${username}`);
+
+        res.json({
+            status: 'SUCCESS',
+            message: `Push notification sent to ${username}`,
+            data: {
+                notificationId: notification?.id,
+                pushTokenPreview: user.expoPushToken.substring(0, 35) + '...',
+                hasConsent: user.pushNotificationsConsent,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Send test push error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 export default router;
 
