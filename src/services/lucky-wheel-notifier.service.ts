@@ -107,15 +107,14 @@ function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
  * Uses Redis per-user dedup key (TTL 23h) to prevent double-send.
  */
 async function runHourlyLuckyWheelNotifier(): Promise<void> {
-    const { getRedisClient } = await import('../lib/redis');
-    const redis = getRedisClient();
-
     const utcOffsets = getUTCOffsetsFor9AM();
     const dateKey = new Date().toISOString().split('T')[0];
 
     logger.info(`🎡 Lucky wheel hourly check - targeting UTC offsets: ${utcOffsets.join(', ')}`);
 
     try {
+        const { getRedisClient } = await import('../lib/redis');
+        const redis = getRedisClient();
         // Get timezones that match current 9 AM window
         const targetTimezones: string[] = [];
         for (const offset of utcOffsets) {

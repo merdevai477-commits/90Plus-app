@@ -7,7 +7,6 @@ import { getRedisClient } from '../lib/redis';
 const expo = new Expo();
 
 const RECEIPT_TTL_SECONDS = 60 * 35; // 35 min (Expo receipts available for ~30 min)
-const RECEIPT_QUEUE_KEY = 'expo:receipt:ids';
 
 /**
  * Handle invalid/expired push tokens by clearing them from DB
@@ -27,17 +26,16 @@ async function handleInvalidToken(token: string): Promise<void> {
 /**
  * Store receipt IDs in Redis for later checking
  */
-async function storeReceiptIds(receiptIds: string[]): Promise<void> {
+async function storeReceiptIds(receiptIds: string[], tokenMap?: Map<string, string>): Promise<void> {
     const redis = getRedisClient();
     if (!redis || receiptIds.length === 0) return;
     try {
         const pipeline = redis.pipeline();
         for (const id of receiptIds) {
-            pipeline.setex(`expo:receipt:${id}`, RECEIPT_TTL_SECONDS, '1');
+            // Store receipt ID with optional token mapping for cleanup on DeviceNotRegistered
+            const value = tokenMap?.get(id) || '1';
+            pipeline.setex(`expo:receipt:${id}`, RECEIPT_TTL_SECONDS, value);
         }
-        // Also push to a list for batch processing
-        pipeline.rpush(RECEIPT_QUEUE_KEY, ...receiptIds);
-        pipeline.expire(RECEIPT_QUEUE_KEY, RECEIPT_TTL_SECONDS);
         await pipeline.exec();
     } catch (err) {
         logger.warn('Failed to store receipt IDs in Redis:', err);
@@ -66,13 +64,18 @@ export async function checkPushReceipts(receiptIds: string[]): Promise<void> {
                         logger.warn(`Receipt error [${receiptId}]: ${receipt.message} (${errCode})`);
 
                         if (errCode === 'DeviceNotRegistered') {
-                            // Token is stale - find and clear it
-                            // We don't have the token here, but we can log for manual cleanup
-                            logger.warn(`DeviceNotRegistered receipt: ${receiptId} - token may need cleanup`);
+                            // Retrieve the push token stored with this receipt ID
+                            const redis = getRedisClient();
+                            if (redis) {
+                                const storedToken = await redis.get(`expo:receipt:${receiptId}`);
+                                if (storedToken && storedToken !== '1') {
+                                    await handleInvalidToken(storedToken);
+                                } else {
+                                    logger.warn(`DeviceNotRegistered receipt: ${receiptId} - no token stored for cleanup`);
+                                }
+                            }
                         } else if (errCode === 'MessageRateExceeded') {
-                            // Re-queue this receipt check after 60s
                             logger.warn(`MessageRateExceeded for receipt ${receiptId} - will retry`);
-                            // The Bull job handles retry via backoff
                             throw new Error('MessageRateExceeded');
                         } else if (errCode === 'InvalidCredentials') {
                             logger.error('CRITICAL: Invalid Expo push credentials. Check FCM/APNs setup in Expo Dashboard.', {
@@ -187,6 +190,7 @@ export class PushNotificationService {
 
             const chunks = expo.chunkPushNotifications([message]);
             const receiptIds: string[] = [];
+            const receiptTokenMap = new Map<string, string>(); // receiptId → pushToken
 
             for (const chunk of chunks) {
                 try {
@@ -202,9 +206,10 @@ export class PushNotificationService {
                             }
                             return false;
                         }
-                        // Collect receipt IDs for later verification
                         if ((ticket as ExpoPushSuccessTicket).id) {
-                            receiptIds.push((ticket as ExpoPushSuccessTicket).id);
+                            const rid = (ticket as ExpoPushSuccessTicket).id;
+                            receiptIds.push(rid);
+                            receiptTokenMap.set(rid, payload.to);
                         }
                     }
                 } catch (error) {
@@ -213,9 +218,8 @@ export class PushNotificationService {
                 }
             }
 
-            // Store receipt IDs for async verification (30s later via Bull job)
             if (receiptIds.length > 0) {
-                await storeReceiptIds(receiptIds);
+                await storeReceiptIds(receiptIds, receiptTokenMap);
                 await scheduleReceiptCheck(receiptIds);
             }
 
@@ -259,26 +263,29 @@ export class PushNotificationService {
         const chunks = expo.chunkPushNotifications(messages);
         let success = 0;
         const allReceiptIds: string[] = [];
+        const allReceiptTokenMap = new Map<string, string>();
 
         for (const chunk of chunks) {
             try {
                 const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
                 
-                for (const ticket of ticketChunk) {
+                for (let i = 0; i < ticketChunk.length; i++) {
+                    const ticket = ticketChunk[i];
+                    const originalToken = (chunk[i] as ExpoPushMessage).to as string;
+
                     if ((ticket as any).status === 'ok') {
                         success++;
                         if ((ticket as ExpoPushSuccessTicket).id) {
-                            allReceiptIds.push((ticket as ExpoPushSuccessTicket).id);
+                            const rid = (ticket as ExpoPushSuccessTicket).id;
+                            allReceiptIds.push(rid);
+                            allReceiptTokenMap.set(rid, originalToken);
                         }
                     } else {
                         failed++;
                         const errCode = (ticket as any).details?.error;
                         logger.error('Push error:', (ticket as any).message, errCode);
-
-                        // Clear invalid tokens from DB
                         if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidCredentials') {
-                            const tokenForTicket = (ticket as any).to;
-                            if (tokenForTicket) await handleInvalidToken(tokenForTicket);
+                            if (originalToken) await handleInvalidToken(originalToken);
                         }
                     }
                 }
@@ -288,9 +295,8 @@ export class PushNotificationService {
             }
         }
 
-        // Schedule receipt check for all successful sends
         if (allReceiptIds.length > 0) {
-            await storeReceiptIds(allReceiptIds);
+            await storeReceiptIds(allReceiptIds, allReceiptTokenMap);
             await scheduleReceiptCheck(allReceiptIds);
         }
 

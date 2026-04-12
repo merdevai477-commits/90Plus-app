@@ -3,7 +3,6 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import { verifyNotificationOwnership } from '../middleware/ownership.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { WebSocketService } from '../services/websocket.service';
 
 const router = Router();
 
@@ -223,8 +222,9 @@ router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Requ
 /**
  * POST /api/notifications/:id/opened
  * Track notification open event
+ * ✅ ZERO TRUST: Ownership verified by middleware
  */
-router.post('/:id/opened', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/opened', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }

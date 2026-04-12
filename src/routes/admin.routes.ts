@@ -4,7 +4,6 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { StrikeService } from '../services/strike.service';
 import { AuditService, AuditAction, AuditTargetType } from '../services/audit.service';
-import { AdminNotificationService } from '../services/admin-notification.service';
 import { suspendUser, autoDeleteContent } from '../services/moderation.service';
 import { NotificationService } from '../services/notification.service';
 
@@ -555,15 +554,10 @@ router.get('/notifications/stats', requireAdmin, async (req: Request, res: Respo
     try {
         const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-        const [sentByType, openedByType, totalSent, totalOpened] = await Promise.all([
+        const [sentByType, totalSent, totalOpened] = await Promise.all([
             prisma.notification.groupBy({
                 by: ['type'],
                 where: { createdAt: { gte: since } },
-                _count: { id: true },
-            }),
-            (prisma as any).notificationEvent.groupBy({
-                by: ['event'],
-                where: { event: 'OPENED', createdAt: { gte: since } },
                 _count: { id: true },
             }),
             prisma.notification.count({ where: { createdAt: { gte: since } } }),
