@@ -177,16 +177,37 @@ export class PushNotificationService {
                 return false;
             }
 
-            const message: ExpoPushMessage = {
-                to: payload.to,
-                sound: payload.sound || 'default',
-                title: payload.title,
-                body: payload.body,
-                data: payload.data || {},
-                badge: payload.badge,
-                ...(payload.threadId ? { threadId: payload.threadId } : {}),
-                ...(payload.silent ? { sound: null, badge: 0, contentAvailable: true } : {}),
-            };
+            let message: ExpoPushMessage;
+
+            if (payload.silent) {
+                // Silent / data-only notification
+                // iOS: contentAvailable:true wakes the app in background, no alert shown
+                // Android: omit title & body entirely → FCM treats it as data-only message
+                message = {
+                    to: payload.to,
+                    // No title, no body, no sound → pure data message on both platforms
+                    data: {
+                        ...(payload.data || {}),
+                        silent: 'true', // string 'true' for Android FCM data payload compatibility
+                    },
+                    // iOS-specific: wake app in background
+                    _contentAvailable: true,
+                    // Suppress all UI
+                    sound: null,
+                    badge: 0,
+                    priority: 'normal', // Android: normal priority = no heads-up notification
+                };
+            } else {
+                message = {
+                    to: payload.to,
+                    sound: payload.sound || 'default',
+                    title: payload.title,
+                    body: payload.body,
+                    data: payload.data || {},
+                    badge: payload.badge,
+                    ...(payload.threadId ? { threadId: payload.threadId } : {}),
+                };
+            }
 
             const chunks = expo.chunkPushNotifications([message]);
             const receiptIds: string[] = [];
