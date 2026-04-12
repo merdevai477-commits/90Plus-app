@@ -572,17 +572,38 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
                 where: { id: user.id },
                 select: { username: true, displayName: true, avatar: true }
             });
-            
-            await enqueueSocialNotification({
-                userId: reel.userId,
-                actorId: user.id,
-                title: 'إعجاب جديد',
-                message: `أعجب ${liker?.displayName || liker?.username || 'شخص'} بفيديوك`,
-                type: 'LIKE',
-                data: { 
-                    reelId: id,
-                },
-            });
+
+            // Redis-based like batching: group likes within 5-minute windows
+            let likeCount = 1;
+            try {
+                const { getRedisClient } = await import('../lib/redis');
+                const redis = getRedisClient();
+                if (redis) {
+                    const batchKey = `likes:pending:${reel.userId}:${idStr}`;
+                    likeCount = await redis.incr(batchKey);
+                    await redis.expire(batchKey, 5 * 60); // 5 min TTL
+                }
+            } catch {
+                likeCount = 1; // fallback: send immediately
+            }
+
+            // Send on first like OR every 10 likes
+            if (likeCount === 1 || likeCount % 10 === 0) {
+                const likerName = liker?.displayName || liker?.username || 'شخص';
+                const title = likeCount === 1 ? '❤️ أعجب بمقطعك' : `❤️ ${likeCount} إعجاب على مقطعك`;
+                const message = likeCount === 1
+                    ? `${likerName} أعجب بمقطعك`
+                    : `${likerName} و${likeCount - 1} آخرين أعجبوا بمقطعك`;
+
+                await enqueueSocialNotification({
+                    userId: reel.userId,
+                    actorId: user.id,
+                    title,
+                    message,
+                    type: 'LIKE',
+                    data: { reelId: id, likeCount },
+                });
+            }
         }
 
         // Send WebSocket like update (Requirements: 21.8)
@@ -931,7 +952,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                 userId: parentComment.userId,
                 actorId: user.id,
                 title: 'رد جديد',
-                message: `رد ${user.displayName || user.username} على تعليقك`,
+                message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
                 type: 'REPLY',
                 data: { 
                     reelId: idStr, 
@@ -961,7 +982,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                 userId: reel.userId,
                 actorId: user.id,
                 title: 'تعليق جديد',
-                message: `علق ${user.displayName || user.username} على فيديوك`,
+                message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
                 type: 'COMMENT',
                 data: { 
                     reelId: idStr, 

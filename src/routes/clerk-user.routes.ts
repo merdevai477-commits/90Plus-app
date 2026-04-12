@@ -1212,6 +1212,24 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             data: { followerId: currentUser.id },
         });
 
+        // Check follower milestone
+        try {
+            const MILESTONES = [10, 50, 100, 500, 1000, 5000, 10000];
+            const followerCount = await prisma.follow.count({ where: { followingId: targetUserId } });
+            if (MILESTONES.includes(followerCount)) {
+                const { NotificationService } = await import('../services/notification.service');
+                await NotificationService.createNotification({
+                    userId: targetUserId,
+                    title: '🎉 إنجاز جديد!',
+                    message: `وصلت لـ ${followerCount.toLocaleString()} متابع!`,
+                    type: 'MILESTONE',
+                    data: { type: 'MILESTONE', milestone: followerCount, screen: '/(tabs)/profile' },
+                });
+            }
+        } catch (milestoneErr) {
+            logger.warn('Failed to check follower milestone:', milestoneErr);
+        }
+
         res.json({
             status: 'SUCCESS',
             message: 'Followed successfully',

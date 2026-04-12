@@ -81,7 +81,7 @@ function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
                 to: u.expoPushToken!,
                 title: '🎡 عجلة الحظ جاهزة!',
                 body: 'حظك النهارده ينتظرك، العب دلوقتي!',
-                data: { type: 'LUCKY_WHEEL', screen: '/notifications' },
+                data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
             }));
 
         if (payloads.length > 0) {
@@ -213,7 +213,7 @@ async function runHourlyLuckyWheelNotifier(): Promise<void> {
                     to: u.expoPushToken!,
                     title: '🎡 عجلة الحظ جاهزة!',
                     body: 'حظك النهارده ينتظرك، العب دلوقتي!',
-                    data: { type: 'LUCKY_WHEEL', screen: '/notifications' },
+                    data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
                 }));
                 if (payloads.length > 0) await PushNotificationService.sendBulkNotifications(payloads);
             }

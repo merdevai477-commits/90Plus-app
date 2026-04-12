@@ -254,6 +254,18 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
             metadata: { action, reportId: report.id },
         });
 
+        // Notify the REPORTER about the outcome
+        const actionTaken = action !== 'NO_ACTION';
+        await NotificationService.createNotification({
+            userId: report.reporterId,
+            title: actionTaken ? '✅ تم مراجعة بلاغك' : 'بلاغك اتراجع',
+            message: actionTaken
+                ? 'شكراً، تم اتخاذ الإجراء المناسب بناءً على بلاغك'
+                : 'بعد المراجعة، المحتوى لم يخالف قواعد المجتمع',
+            type: 'REPORT_RESOLVED',
+            data: { type: 'REPORT_RESOLVED', reportId: report.id, action },
+        });
+
         res.json({
             status: 'SUCCESS',
             message: 'Report reviewed successfully',

@@ -581,6 +581,20 @@ router.post(
         });
         reelUploadCommitted = true;
 
+        // Notify uploader that video is live
+        try {
+            const { NotificationService } = await import('../services/notification.service');
+            await NotificationService.createNotification({
+                userId: user.id,
+                title: '✅ تم رفع الفيديو',
+                message: 'فيديوهك جاهز دلوقتي وبيظهر للناس!',
+                type: 'VIDEO_PROCESSED',
+                data: { type: 'VIDEO_PROCESSED', reelId: reel.id },
+            });
+        } catch (notifErr) {
+            logger.warn('Failed to send video upload notification:', notifErr);
+        }
+
         const totalTime = Date.now() - startTime;
         logger.info(`Reel upload completed successfully in ${totalTime}ms (${(totalTime/1000).toFixed(2)}s). Reel ID: ${reel.id}, User: ${user.id}, Hashtags: ${hashtags.length}, Mentions: ${mentions.length}`);
         

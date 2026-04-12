@@ -15,6 +15,10 @@ export enum NotificationType {
     COMMENT = 'COMMENT',
     REPLY = 'REPLY',
     MENTION = 'MENTION',
+    GIFT = 'GIFT',
+    VIDEO_PROCESSED = 'VIDEO_PROCESSED',
+    REPORT_RESOLVED = 'REPORT_RESOLVED',
+    MILESTONE = 'MILESTONE',
     GENERAL = 'GENERAL'
 }
 
@@ -201,6 +205,7 @@ export class NotificationService {
             data: {
                 type: 'MATCH_GOAL',
                 matchId,
+                fixtureId: matchId,
                 homeTeam,
                 awayTeam,
                 homeScore,
@@ -235,6 +240,7 @@ export class NotificationService {
             data: {
                 type: 'MATCH_START',
                 matchId,
+                fixtureId: matchId,
                 homeTeam,
                 awayTeam
             }
@@ -268,6 +274,7 @@ export class NotificationService {
             data: {
                 type: 'MATCH_HALFTIME',
                 matchId,
+                fixtureId: matchId,
                 homeTeam,
                 awayTeam,
                 homeScore,
@@ -307,6 +314,7 @@ export class NotificationService {
             data: {
                 type: 'MATCH_END',
                 matchId,
+                fixtureId: matchId,
                 homeTeam,
                 awayTeam,
                 homeScore,
@@ -339,7 +347,7 @@ export class NotificationService {
             const title = isCorrect ? '🎯 توقع صحيح!' : '❌ توقع خاطئ';
             const message = isCorrect
                 ? `تهانينا! توقعك كان صحيحاً 🎉\n${matchInfo}\n+${coinsWon} تذاكر`
-                : `للأسف، توقعك لم يكن صحيحاً\n${matchInfo}\nحظ أفضل المرة القادمة!`;
+                : `للأسف توقعك كان خاطئاً\n${matchInfo}\nجرب حظك في المباراة الجاية! 🎯`;
 
             return this.createNotification({
                 userId,
@@ -352,6 +360,7 @@ export class NotificationService {
                     isCorrect,
                     matchInfo,
                     coinsWon,
+                    screen: '/(tabs)/matches',
                 }
             });
         } catch (error) {
