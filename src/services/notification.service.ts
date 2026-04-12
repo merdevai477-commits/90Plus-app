@@ -292,16 +292,11 @@ export class NotificationService {
         coinsWon: number
     ) {
         try {
-            // Get user's push token
+            // Get user's push token + consent
             const user = await prisma.user.findUnique({
                 where: { id: userId },
-                select: { expoPushToken: true },
+                select: { expoPushToken: true, pushNotificationsConsent: true },
             });
-
-            if (!user || !user.expoPushToken) {
-                logger.debug(`No push token for user ${userId}, skipping notification`);
-                return null;
-            }
 
             const title = isCorrect ? '🎯 توقع صحيح!' : '❌ توقع خاطئ';
             const message = isCorrect
@@ -310,7 +305,7 @@ export class NotificationService {
 
             return this.createNotification({
                 userId,
-                pushToken: user.expoPushToken,
+                pushToken: (user?.pushNotificationsConsent && user?.expoPushToken) ? user.expoPushToken : null,
                 title,
                 message,
                 type: NotificationType.PREDICTION_RESULT,

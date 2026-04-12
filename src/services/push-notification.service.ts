@@ -1,8 +1,24 @@
-import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
+import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import { logger } from '../utils/logger';
+import prisma from '../lib/prisma';
 
 // Create a new Expo SDK client
 const expo = new Expo();
+
+/**
+ * Handle invalid/expired push tokens by clearing them from DB
+ */
+async function handleInvalidToken(token: string): Promise<void> {
+    try {
+        await prisma.user.updateMany({
+            where: { expoPushToken: token },
+            data: { expoPushToken: null },
+        });
+        logger.info(`Cleared invalid push token from DB: ${token.substring(0, 20)}...`);
+    } catch (err) {
+        logger.warn('Failed to clear invalid push token from DB:', err);
+    }
+}
 
 export interface PushNotificationPayload {
     to: string; // Expo Push Token
@@ -41,10 +57,16 @@ export class PushNotificationService {
                     const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
                     logger.info('Push notification sent:', ticketChunk);
                     
-                    // Check for errors
+                    // Check for errors in tickets
                     for (const ticket of ticketChunk) {
                         if ((ticket as any).status === 'error') {
-                            logger.error('Push notification error:', (ticket as any).message);
+                            const errCode = (ticket as any).details?.error;
+                            logger.error('Push notification error:', (ticket as any).message, errCode);
+
+                            // Token is no longer valid - clear it from DB
+                            if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidCredentials') {
+                                await handleInvalidToken(payload.to);
+                            }
                             return false;
                         }
                     }
@@ -103,7 +125,14 @@ export class PushNotificationService {
                         success++;
                     } else {
                         failed++;
-                        logger.error('Push error:', (ticket as any).message);
+                        const errCode = (ticket as any).details?.error;
+                        logger.error('Push error:', (ticket as any).message, errCode);
+
+                        // Clear invalid tokens from DB
+                        if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidCredentials') {
+                            const tokenForTicket = (ticket as any).to;
+                            if (tokenForTicket) await handleInvalidToken(tokenForTicket);
+                        }
                     }
                 }
             } catch (error) {

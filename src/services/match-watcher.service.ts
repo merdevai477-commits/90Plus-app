@@ -86,6 +86,7 @@ export class MatchWatcherService {
                     user: {
                         select: {
                             expoPushToken: true,
+                            pushNotificationsConsent: true,
                         },
                     },
                 },
@@ -170,7 +171,9 @@ export class MatchWatcherService {
 
         for (const favorite of matchFavorites) {
             const pushToken = favorite.user?.expoPushToken;
-            if (!pushToken) continue;
+            const hasConsent = favorite.user?.pushNotificationsConsent ?? true;
+            // Pass null if no consent so notification.service skips push but still saves in-app
+            const effectivePushToken = (hasConsent && pushToken) ? pushToken : null;
 
             const lastHomeScore = favorite.lastHomeScore ?? 0;
             const lastAwayScore = favorite.lastAwayScore ?? 0;
@@ -184,7 +187,7 @@ export class MatchWatcherService {
                 logger.info(`📢 Sending match start notification for match ${matchId}`);
                 await NotificationService.createMatchStartNotification(
                     favorite.userId,
-                    pushToken,
+                    effectivePushToken,
                     favorite.homeTeam,
                     favorite.awayTeam,
                     matchId
@@ -201,7 +204,7 @@ export class MatchWatcherService {
                 logger.info(`⚽ Home team scored! Match ${matchId}`);
                 await NotificationService.createGoalNotification(
                     favorite.userId,
-                    pushToken,
+                    effectivePushToken,
                     favorite.homeTeam,
                     favorite.awayTeam,
                     homeScore,
@@ -215,7 +218,7 @@ export class MatchWatcherService {
                 logger.info(`⚽ Away team scored! Match ${matchId}`);
                 await NotificationService.createGoalNotification(
                     favorite.userId,
-                    pushToken,
+                    effectivePushToken,
                     favorite.homeTeam,
                     favorite.awayTeam,
                     homeScore,
@@ -230,7 +233,7 @@ export class MatchWatcherService {
                 logger.info(`⏸️ Halftime for match ${matchId}`);
                 await NotificationService.createHalftimeNotification(
                     favorite.userId,
-                    pushToken,
+                    effectivePushToken,
                     favorite.homeTeam,
                     favorite.awayTeam,
                     homeScore,
@@ -244,7 +247,7 @@ export class MatchWatcherService {
                 logger.info(`🏁 Match ended: ${matchId}`);
                 await NotificationService.createMatchEndNotification(
                     favorite.userId,
-                    pushToken,
+                    effectivePushToken,
                     favorite.homeTeam,
                     favorite.awayTeam,
                     homeScore,

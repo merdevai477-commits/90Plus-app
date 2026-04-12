@@ -244,6 +244,13 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             return;
         }
 
+        // Validate Expo push token format before saving
+        const { Expo } = await import('expo-server-sdk');
+        if (!Expo.isExpoPushToken(token)) {
+            res.status(400).json({ status: 'ERROR', message: 'Invalid Expo push token format' });
+            return;
+        }
+
         // Update user's push token
         await prisma.user.update({
             where: { clerkUserId },

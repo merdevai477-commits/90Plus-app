@@ -98,6 +98,7 @@ export class LeagueMatchWatcherService {
                     expoPushToken: {
                         not: null,
                     },
+                    pushNotificationsConsent: true,
                 },
                 select: {
                     id: true,
@@ -212,8 +213,29 @@ export class LeagueMatchWatcherService {
                     for (const user of users) {
                         const notificationKey = `${user.id}:${matchId}`;
                         
-                        // Skip if already notified
+                        // Skip if already notified (check DB to survive server restarts)
                         if (this.notifiedMatches.has(notificationKey)) {
+                            continue;
+                        }
+
+                        // Also check DB for persistence across restarts
+                        const alreadyNotified = await prisma.notification.findFirst({
+                            where: {
+                                userId: user.id,
+                                type: 'MATCH_START',
+                                data: {
+                                    path: ['matchId'],
+                                    equals: matchId,
+                                },
+                                createdAt: {
+                                    gte: new Date(Date.now() - 2 * 60 * 60 * 1000), // within last 2 hours
+                                },
+                            },
+                            select: { id: true },
+                        });
+
+                        if (alreadyNotified) {
+                            this.notifiedMatches.add(notificationKey); // cache in memory too
                             continue;
                         }
 
