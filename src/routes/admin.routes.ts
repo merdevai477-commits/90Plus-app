@@ -625,15 +625,15 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
             return;
         }
 
-        const { username, title, body } = req.body;
+        const { username, clerkUserId, title, body } = req.body;
 
-        if (!username) {
-            res.status(400).json({ status: 'ERROR', message: 'username is required' });
+        if (!username && !clerkUserId) {
+            res.status(400).json({ status: 'ERROR', message: 'username or clerkUserId is required' });
             return;
         }
 
         const user = await prisma.user.findFirst({
-            where: { username },
+            where: clerkUserId ? { clerkUserId } : { username },
             select: { id: true, username: true, expoPushToken: true, pushNotificationsConsent: true },
         });
 
