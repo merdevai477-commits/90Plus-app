@@ -95,6 +95,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         const reels = await prisma.reel.findMany({
             where: {
                 isDeleted: false,
+                status: 'READY', // Fix 7: exclude PROCESSING/FAILED reels from feed
                 ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
             }, // Exclude deleted reels + blocked users
             take: take + 1, // Get one extra to check if there's more
@@ -291,139 +292,87 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
 });
 
 /**
- * POST /api/reels
- * Upload a new reel (3 days cooldown)
- * Apple UGC Compliance: Content filtering applied
+ * POST /api/reels — REMOVED
+ * This legacy route accepted arbitrary videoUrl strings and was a security risk.
+ * All reel creation now goes through POST /api/upload/reel (Mux pipeline).
  */
-router.post('/', requireAuth, filterUGCContent, moderateReelCaption, async (req: Request, res: Response): Promise<void> => {
+
+// ============================================
+// POST /api/reels/:id/retry  (Feature 5)
+// Retry Mux processing for a FAILED reel
+// ============================================
+router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
+        const reelId = ensureString(req.params.id);
         const clerkUserId = req.auth?.userId;
-        if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-            return;
-        }
 
         const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, lastReelUpload: true }
+            where: { clerkUserId: clerkUserId! },
+            select: { id: true },
+        });
+        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+
+        const reel = await prisma.reel.findUnique({
+            where: { id: reelId },
+            select: { id: true, userId: true, status: true, videoStoragePath: true, muxAssetId: true },
         });
 
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        if (!reel) { res.status(404).json({ status: 'ERROR', message: 'Reel not found' }); return; }
+        if (reel.userId !== user.id) { res.status(403).json({ status: 'ERROR', message: 'Not authorized' }); return; }
+        if (reel.status !== 'FAILED') {
+            res.status(400).json({ status: 'ERROR', message: 'يمكن إعادة المحاولة فقط للفيديوهات الفاشلة' });
+            return;
+        }
+        if (!reel.videoStoragePath) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'انتهت صلاحية الفيديو الأصلي (أكثر من 24 ساعة). يرجى رفع الفيديو من جديد.',
+            });
             return;
         }
 
-        // Check 3 days cooldown
-        if (user.lastReelUpload) {
-            const daysSinceLastUpload = Math.floor(
-                (Date.now() - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60 * 24)
+        // Delete old Mux asset if it exists
+        if (reel.muxAssetId) {
+            const { deleteAsset } = await import('../services/mux.service');
+            await deleteAsset(reel.muxAssetId).catch((err: any) =>
+                logger.warn(`[reels/retry] Mux asset delete failed: ${err?.message}`),
             );
-            if (daysSinceLastUpload < REEL_UPLOAD_COOLDOWN_DAYS) {
-                const hoursRemaining = Math.ceil(
-                    (REEL_UPLOAD_COOLDOWN_DAYS * 24) - 
-                    ((Date.now() - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60))
-                );
-                res.status(429).json({
-                    status: 'ERROR',
-                    message: `يمكنك رفع فيديو جديد بعد ${hoursRemaining} ساعة`,
-                    hoursRemaining
-                });
-                return;
-            }
         }
 
-        const { videoUrl, thumbnail, caption, hashtags, mentions } = req.body;
+        // Download raw video from R2
+        const { r2MediaStorage } = await import('../services/r2-media-storage.service');
+        const signedUrl = await r2MediaStorage.generateSignedUrl(reel.videoStoragePath, 300);
 
-        if (!videoUrl) {
-            res.status(400).json({ status: 'ERROR', message: 'Video URL is required' });
+        const videoResponse = await fetch(signedUrl);
+        if (!videoResponse.ok) {
+            res.status(502).json({ status: 'ERROR', message: 'فشل تحميل الفيديو الأصلي من التخزين' });
+            return;
+        }
+        const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+
+        // Create new Mux upload URL
+        const muxService = await import('../services/mux.service');
+        const { uploadId, uploadUrl } = await muxService.createUploadUrl(user.id, reel.id);
+
+        // PUT to Mux
+        const muxRes = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'video/mp4' },
+            body: videoBuffer,
+        });
+        if (!muxRes.ok) {
+            res.status(502).json({ status: 'ERROR', message: 'فشل رفع الفيديو إلى خادم المعالجة' });
             return;
         }
 
-        // Create reel
-        const reel = await prisma.reel.create({
-            data: {
-                userId: user.id,
-                videoUrl,
-                thumbnail,
-                caption,
-            }
+        await prisma.reel.update({
+            where: { id: reel.id },
+            data: { status: 'PROCESSING', muxUploadId: uploadId, muxAssetId: null, muxPlaybackId: null, videoUrl: '' },
         });
 
-        // Process hashtags
-        if (hashtags && Array.isArray(hashtags)) {
-            for (const tag of hashtags) {
-                const cleanTag = tag.toLowerCase().replace(/^#/, '');
-                if (cleanTag) {
-                    const hashtag = await prisma.hashtag.upsert({
-                        where: { name: cleanTag },
-                        create: { name: cleanTag, reelCount: 1 },
-                        update: { reelCount: { increment: 1 } }
-                    });
-                    await prisma.reelHashtag.create({
-                        data: { reelId: reel.id, hashtagId: hashtag.id }
-                    });
-                }
-            }
-        }
-
-        // Process mentions
-        if (mentions && Array.isArray(mentions)) {
-            // Get uploader info for notification
-            const uploader = await prisma.user.findUnique({
-                where: { id: user.id },
-                select: { username: true, displayName: true, avatar: true }
-            });
-            
-            for (const username of mentions) {
-                const mentionedUser = await prisma.user.findUnique({
-                    where: { username: username.replace(/^@/, '') },
-                    select: { id: true }
-                });
-                if (mentionedUser) {
-                    await prisma.reelMention.create({
-                        data: { reelId: reel.id, mentionedUserId: mentionedUser.id }
-                    });
-                    await enqueueSocialNotification({
-                        userId: mentionedUser.id,
-                        actorId: user.id,
-                        title: 'تم الإشارة إليك',
-                        message: `قام ${uploader?.displayName || uploader?.username || 'شخص'} بالإشارة إليك في فيديو`,
-                        type: 'MENTION',
-                        data: {
-                            reelId: reel.id,
-                            mentionedUserId: mentionedUser.id,
-                        },
-                    });
-                }
-            }
-        }
-
-        // Update user's lastReelUpload
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { lastReelUpload: new Date() }
-        });
-
-        // Invalidate cache for feed
-        {
-            const results = await Promise.allSettled([
-                clearResponseCache('/reels/feed'),
-                redisCacheService.delPattern('reels:feed:*'),
-            ]);
-            results.forEach((r, i) => {
-                if (r.status === 'rejected') {
-                    logger.warn(`Reels cache invalidation failed [upload] index=${i}:`, r.reason);
-                }
-            });
-        }
-
-        res.status(201).json({
-            status: 'SUCCESS',
-            message: 'تم رفع الفيديو بنجاح',
-            data: { reel }
-        });
+        res.json({ status: 'SUCCESS', message: 'جاري إعادة معالجة الفيديو', data: { reelId, muxUploadId: uploadId } });
     } catch (error: any) {
-        logger.error('Upload reel error:', error);
+        logger.error('Retry reel error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
@@ -3120,7 +3069,10 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
         }
 
         const reels = await prisma.reel.findMany({
-            where: { isDeleted: false },
+            where: {
+                isDeleted: false,
+                status: 'READY', // Fix 7: exclude PROCESSING/FAILED reels from feed
+            },
             take: take + 1,
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
             orderBy: { createdAt: 'desc' },

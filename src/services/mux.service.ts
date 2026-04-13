@@ -60,7 +60,7 @@ export async function createUploadUrl(
     cors_origin: '*',
     new_asset_settings: {
       playback_policy: ['public'],
-      video_quality: 'basic',
+      video_quality: 'plus', // Upgraded from 'basic' — better quality for sports content with fast motion
       passthrough: JSON.stringify({ userId, reelId }),
     },
   });

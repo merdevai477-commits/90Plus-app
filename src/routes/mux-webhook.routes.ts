@@ -124,6 +124,22 @@ async function handleAssetReady(event: any): Promise<void> {
     },
   });
 
+  // Feature 5: Delete the raw video from R2 now that Mux has processed it
+  const reelWithRaw = await prisma.reel.findUnique({
+    where: { id: reel.id },
+    select: { videoStoragePath: true },
+  });
+  if (reelWithRaw?.videoStoragePath) {
+    const { r2MediaStorage } = await import('../services/r2-media-storage.service');
+    r2MediaStorage.deleteObject(reelWithRaw.videoStoragePath).catch((err: any) =>
+      logger.warn(`[MuxWebhook] Raw video R2 delete failed for reel ${reel.id}:`, err?.message),
+    );
+    await prisma.reel.update({
+      where: { id: reel.id },
+      data: { videoStoragePath: null },
+    });
+  }
+
   logger.info(`[MuxWebhook] Reel ${reel.id} is READY — playbackId: ${playbackId}`);
 
   await NotificationService.createNotification({

@@ -38,7 +38,9 @@ export const invalidateUserCache = (clerkUserId: string) => {
 router.get(
   '/me',
   requireAuth,
-  responseCacheMiddleware({ ttl: 60 * 1000 }),
+  // UX Fix 10: Removed redundant responseCacheMiddleware (60s) — in-memory userCache (5min)
+  // already handles caching and is invalidated on every mutation via invalidateUserCache().
+  // Double-caching caused up to 6-minute stale data after profile updates.
   async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;

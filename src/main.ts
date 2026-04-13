@@ -893,6 +893,18 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ R2 Orphan Cleanup Cron Job scheduled (daily at 03:00 Cairo)');
+
+                    // ✅ Fix 2: Stuck PROCESSING reel cleanup – every hour
+                    cron.schedule('0 * * * *', async () => {
+                        logger.info('⏰ Cron: Running stuck reel cleanup...');
+                        try {
+                            const { runStuckReelCleanup } = await import('./services/r2-cleanup.service');
+                            await runStuckReelCleanup();
+                        } catch (error) {
+                            logger.error('❌ Stuck reel cleanup cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ Stuck Reel Cleanup Cron Job scheduled (every hour)');
                     
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();

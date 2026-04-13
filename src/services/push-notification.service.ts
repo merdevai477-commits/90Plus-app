@@ -82,6 +82,20 @@ export async function checkPushReceipts(receiptIds: string[]): Promise<void> {
                                 receiptId,
                                 error: receipt.message,
                             });
+                            // Fix 9: Capture to Sentry so the team is alerted immediately
+                            try {
+                                const Sentry = await import('@sentry/node');
+                                Sentry.captureException(
+                                    new Error(`Expo push InvalidCredentials: ${receipt.message}`),
+                                    {
+                                        level: 'fatal',
+                                        tags: { service: 'push-notifications', errorCode: 'InvalidCredentials' },
+                                        extra: { receiptId, message: receipt.message },
+                                    },
+                                );
+                            } catch (sentryErr) {
+                                logger.warn('Failed to send InvalidCredentials alert to Sentry:', sentryErr);
+                            }
                         }
                     }
                 }
@@ -226,6 +240,18 @@ export class PushNotificationService {
                             logger.error('Push notification error:', (ticket as any).message, errCode);
                             if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidCredentials') {
                                 await handleInvalidToken(payload.to);
+                            }
+                            if (errCode === 'InvalidCredentials') {
+                                try {
+                                    const Sentry = await import('@sentry/node');
+                                    Sentry.captureException(
+                                        new Error(`Expo push InvalidCredentials (ticket): ${(ticket as any).message}`),
+                                        {
+                                            level: 'fatal',
+                                            tags: { service: 'push-notifications', errorCode: 'InvalidCredentials' },
+                                        },
+                                    );
+                                } catch { /* non-fatal */ }
                             }
                             return false;
                         }

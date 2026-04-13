@@ -43,8 +43,49 @@ export const optimizeUploadedImage = async (
     // Determine quality + dimensions based on upload type
     // req.originalUrl is reliable; req.path inside a sub-router is '/'
     const isCover = (req.originalUrl || '').includes('cover');
+    const isThumbnail = (req.originalUrl || '').includes('thumbnail') ||
+      (req.file.fieldname === 'thumbnail');
     const quality = isCover ? 80 : 85;
     const maxWidth = isCover ? 1920 : 500;
+
+    // Feature 9: Auto-crop thumbnails to 9:16 aspect ratio
+    if (isThumbnail) {
+      try {
+        const meta = await sharp(req.file.buffer).metadata();
+        const w = meta.width ?? 0;
+        const h = meta.height ?? 0;
+        if (w > 0 && h > 0) {
+          const targetRatio = 9 / 16;
+          const currentRatio = w / h;
+          let cropW = w;
+          let cropH = h;
+          if (Math.abs(currentRatio - targetRatio) > 0.01) {
+            // Crop to 9:16 from center
+            if (currentRatio > targetRatio) {
+              cropW = Math.round(h * targetRatio);
+            } else {
+              cropH = Math.round(w / targetRatio);
+            }
+            const left = Math.round((w - cropW) / 2);
+            const top = Math.round((h - cropH) / 2);
+            const cropped = await sharp(req.file.buffer)
+              .extract({ left, top, width: cropW, height: cropH })
+              .resize(720, 1280, { fit: 'fill' })
+              .webp({ quality: 85 })
+              .toBuffer();
+            req.file.buffer = cropped;
+            req.file.size = cropped.length;
+            req.file.mimetype = 'image/webp';
+            req.file.originalname = req.file.originalname.replace(/\.(jpe?g|png|heic|heif)$/i, '.webp');
+            logger.info(`[Sharp/Thumbnail] Auto-cropped to 9:16 (${cropW}x${cropH} → 720x1280)`);
+            next();
+            return;
+          }
+        }
+      } catch (thumbErr: any) {
+        logger.warn('[Sharp/Thumbnail] Crop failed, continuing with original:', thumbErr.message);
+      }
+    }
 
     let webpBuffer: Buffer;
     try {

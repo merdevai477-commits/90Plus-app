@@ -59,6 +59,36 @@ async function getUserPreferences(userId: string) {
     }
 }
 
+/**
+ * Feature 6: Auto-assign Android channelId based on notification type.
+ * This enables Android notification grouping per category.
+ */
+function resolveChannelId(type: string, explicitChannelId?: string): string {
+    if (explicitChannelId) return explicitChannelId;
+    switch (type) {
+        case 'LIKE':
+        case 'COMMENT':
+        case 'REPLY':
+        case 'MENTION':
+        case 'FOLLOW':
+            return 'social';
+        case 'MATCH_UPDATE':
+        case 'MATCH_GOAL':
+        case 'MATCH_START':
+        case 'MATCH_END':
+        case 'MATCH_HALFTIME':
+            return 'match-updates';
+        case 'VIDEO_PROCESSED':
+            return 'general';
+        case 'GIFT':
+        case 'COIN_MILESTONE':
+        case 'MILESTONE':
+            return 'general';
+        default:
+            return 'general';
+    }
+}
+
 export class NotificationService {
     /**
      * Create a notification and optionally send a push notification
@@ -117,7 +147,7 @@ export class NotificationService {
                     title,
                     body: message,
                     ...(threadId ? { threadId } : {}),
-                    ...(channelId ? { channelId } : {}),
+                    channelId: resolveChannelId(type, channelId),
                     data: {
                         ...notificationData,
                         notificationId: notification.id,

@@ -1,33 +1,22 @@
-# Build artifacts
-dist/
-*.tsbuildinfo
-.tsbuildinfo
-**/.tsbuildinfo
-
-# Nixpacks generated files
-.nixpacks/
-
 # Dependencies
 node_modules/
+*/node_modules/
 
 # Environment
 .env
-.env.local
-.env.*.local
+*.env.local
 
-# Logs
-*.log
-logs/
+# Build
+dist/
+build/
+
+# Expo
+.expo/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Test
-coverage/
-**/__tests__/
-**/*.test.ts
-**/*.spec.ts
-
+# OS
+.DS_Store
+Thumbs.db
