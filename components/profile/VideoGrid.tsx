@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, Image, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -48,7 +49,9 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                 <Image
                     source={typeof item.thumbnail === 'string' ? { uri: item.thumbnail } : item.thumbnail}
                     style={styles.thumbnail}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={item.id}
                 />
             ) : (
                 <View style={[styles.thumbnail, styles.placeholderContainer]}>
@@ -112,6 +115,7 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
             numColumns={COLUMN_COUNT}
             scrollEnabled={false}
             contentContainerStyle={styles.grid}
+            estimatedItemSize={Math.round(ITEM_SIZE * 1.5)}
         />
     );
 });

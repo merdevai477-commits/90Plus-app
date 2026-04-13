@@ -103,8 +103,9 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const scaleAnim = useRef(new RNAnimated.Value(1)).current;
 
     useEffect(() => {
+        let animation: RNAnimated.CompositeAnimation | null = null;
         if (isActive) {
-            RNAnimated.loop(
+            animation = RNAnimated.loop(
                 RNAnimated.sequence([
                     RNAnimated.timing(glowAnim, {
                         toValue: 1,
@@ -117,11 +118,15 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         useNativeDriver: true,
                     }),
                 ])
-            ).start();
+            );
+            animation.start();
         } else {
             // Reset pause state when not active
             setIsPaused(false);
         }
+        return () => {
+            animation?.stop();
+        };
     }, [isActive, glowAnim]);
 
     // Handle tap (single for pause, double for like)

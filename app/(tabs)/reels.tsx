@@ -712,35 +712,38 @@ const ReelsFeed: React.FC = () => {
 
   // Handle deep link navigation to specific reel and comment
   useEffect(() => {
-    if (params.reelId && reels.length > 0 && flatListRef.current) {
-      const reelIndex = reels.findIndex(r => r.id === params.reelId);
-      if (reelIndex >= 0) {
-        // Scroll to the specific reel
-        setTimeout(() => {
-          try {
-            flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
-            setCurrentIndex(reelIndex);
-            setSelectedReelId(params.reelId!);
+    if (!params.reelId || reels.length === 0) return;
 
-            // If commentId exists and autoOpenComments is true, open comments modal
-            if (params.commentId && params.autoOpenComments === 'true') {
-              setHighlightCommentId(params.commentId);
-              setShowComments(true);
-            }
-          } catch (error) {
-            // Fallback to scrollToOffset if scrollToIndex fails
-            const itemHeight = SCREEN_HEIGHT;
-            flatListRef.current?.scrollToOffset({ offset: reelIndex * itemHeight, animated: true });
-            setCurrentIndex(reelIndex);
-            setSelectedReelId(params.reelId!);
+    const reelIndex = reels.findIndex(r => r.id === params.reelId);
 
-            if (params.commentId && params.autoOpenComments === 'true') {
-              setHighlightCommentId(params.commentId);
-              setShowComments(true);
-            }
+    if (reelIndex >= 0) {
+      // Reel found - scroll to it
+      setTimeout(() => {
+        try {
+          flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
+          setCurrentIndex(reelIndex);
+          setSelectedReelId(params.reelId!);
+
+          if (params.commentId && params.autoOpenComments === 'true') {
+            setHighlightCommentId(params.commentId);
+            setShowComments(true);
           }
-        }, 500); // Small delay to ensure list is rendered
-      }
+        } catch {
+          const itemHeight = SCREEN_HEIGHT;
+          flatListRef.current?.scrollToOffset({ offset: reelIndex * itemHeight, animated: true });
+          setCurrentIndex(reelIndex);
+          setSelectedReelId(params.reelId!);
+
+          if (params.commentId && params.autoOpenComments === 'true') {
+            setHighlightCommentId(params.commentId);
+            setShowComments(true);
+          }
+        }
+      }, 500);
+    } else if (reels.length > 0) {
+      // Reel not found in current feed - it may be deleted or not loaded yet
+      // Show toast and stay on reels screen
+      toastManager.showError('المقطع غير موجود', 'المقطع مش موجود أو اتحذف');
     }
   }, [params.reelId, params.commentId, params.autoOpenComments, reels]);
 

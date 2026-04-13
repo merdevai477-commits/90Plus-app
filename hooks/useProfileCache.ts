@@ -385,17 +385,11 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         logger.debug('[useProfileCache] User data valid, updating state');
         
         // Update state IMMEDIATELY - don't wait for videos
+        // Batch all state updates to prevent 5 separate re-renders
         setUserData(newUserData);
-        
-        if (statsResult) {
-          setFollowStats(statsResult);
-        }
-        if (analyticsResult) {
-          setAnalytics(analyticsResult);
-        }
-        if (cooldownsResult) {
-          setCooldowns(cooldownsResult);
-        }
+        if (statsResult) setFollowStats(statsResult);
+        if (analyticsResult) setAnalytics(analyticsResult);
+        if (cooldownsResult) setCooldowns(cooldownsResult);
         
         // Mark as loaded IMMEDIATELY so UI shows
         hasLoadedRef.current = true;

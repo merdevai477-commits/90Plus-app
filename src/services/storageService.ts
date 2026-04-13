@@ -293,15 +293,24 @@ export class StorageService {
                         } catch {
                             errorData = { message: xhr.responseText || `Upload failed: ${xhr.status}` };
                         }
+                        // Arabic messages for common HTTP errors
+                        let userMessage = errorData.message;
+                        if (xhr.status === 413) {
+                            userMessage = 'حجم الفيديو كبير جداً. الحد الأقصى 50MB.';
+                        } else if (xhr.status === 429) {
+                            userMessage = errorData.message || 'يرجى الانتظار قبل رفع فيديو جديد.';
+                        } else if (xhr.status >= 500) {
+                            userMessage = errorData.message || 'خطأ في الخادم. حاول مرة أخرى.';
+                        }
                         logger.error('Upload reel failed:', xhr.status, errorData);
-                        resolve({ success: false, error: errorData.message || `Upload failed: ${xhr.status}` });
+                        resolve({ success: false, error: userMessage || `Upload failed: ${xhr.status}` });
                     }
                 };
                 
                 const errorHandler = () => {
                     cleanup();
                     logger.error('Upload reel network error');
-                    resolve({ success: false, error: 'Network error during upload' });
+                    resolve({ success: false, error: 'فشل الاتصال بالشبكة. تحقق من اتصالك وحاول مرة أخرى.' });
                 };
                 
                 const abortHandler = () => {
@@ -324,7 +333,7 @@ export class StorageService {
                 xhr.ontimeout = () => {
                     cleanup();
                     logger.error('Upload reel timeout (XHR):', uploadTimeout);
-                    resolve({ success: false, error: 'Upload timeout - request took too long' });
+                    resolve({ success: false, error: 'انتهت مهلة الرفع. الفيديو كبير جداً أو الاتصال بطيء. حاول مرة أخرى.' });
                 };
 
                 xhr.open('POST', `${API_URL}/upload/reel`);

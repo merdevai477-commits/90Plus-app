@@ -26,7 +26,7 @@ class ServerWakeupService {
   private lastWakeupAttempt = 0;
   private readonly WAKEUP_COOLDOWN = 30000; // 30 seconds between wakeup attempts
   private readonly QUEUE_TIMEOUT = 15000; // 15 seconds max wait in queue
-  private readonly WAKEUP_TIMEOUT = 20000; // 20 seconds to wake up (Railway needs time)
+  private readonly WAKEUP_TIMEOUT = 8000; // Fix 4: reduced from 20s to 8s
 
   /**
    * Check if server is awake, wake it up if needed

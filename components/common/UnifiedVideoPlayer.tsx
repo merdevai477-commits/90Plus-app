@@ -21,11 +21,13 @@ try {
 }
 import { Play } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
 import { VIDEO_DEFAULTS } from '../../utils/videoConfig';
 import { VideoErrorBoundary } from './VideoErrorBoundary';
 import { logger } from '../../utils/logger';
+import { getApiUrl } from '../../config/api.config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -90,8 +92,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  // Q3 Fix: track the active video URL (may be refreshed if signed URL expires)
+  const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
+  const signedUrlRefreshAttempts = useRef(0);
+  const MAX_SIGNED_URL_REFRESHES = 2;
+
   const videoRef = useRef<any>(null);
   const { t } = useLanguage();
+  const { getToken } = useAuth();
   
   // Determine muted state: override > prop > default
   const isMuted = overrideMuted !== undefined 
@@ -119,6 +127,12 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       onVideoRef(null, reel.id);
     };
   }, [reel.id, onVideoRef]);
+
+  // Sync activeVideoUrl when reel.videoUrl changes (e.g. after processing → processedVideoUrl)
+  useEffect(() => {
+    setActiveVideoUrl(reel.videoUrl);
+    signedUrlRefreshAttempts.current = 0;
+  }, [reel.videoUrl]);
 
   // Reset replay count when video becomes inactive (scrolled away)
   useEffect(() => {
@@ -211,18 +225,59 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const handleLoad = () => {
     setIsLoading(false);
     setIsVideoLoaded(true);
+    signedUrlRefreshAttempts.current = 0; // reset on successful load
   };
 
-  const handleError = () => {
+  /**
+   * Q3 Fix: On video error, attempt to refresh the signed URL.
+   * expo-av doesn't expose HTTP status codes, so we try a HEAD request
+   * to detect 403 before showing the error UI.
+   */
+  const handleError = useCallback(async () => {
+    // Check if this might be a 403 (expired signed URL)
+    if (
+      signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES &&
+      activeVideoUrl.includes('X-Amz-Signature') // is a signed URL
+    ) {
+      signedUrlRefreshAttempts.current += 1;
+      logger.info(`[VideoPlayer] Attempting signed URL refresh (attempt ${signedUrlRefreshAttempts.current}) for reel ${reel.id}`);
+
+      try {
+        const token = await getToken();
+        if (token) {
+          const res = await fetch(`${getApiUrl()}/reels/${reel.id}/signed-url`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const newUrl: string = data?.data?.signedUrl;
+            if (newUrl) {
+              logger.info(`[VideoPlayer] Signed URL refreshed for reel ${reel.id}`);
+              setActiveVideoUrl(newUrl);
+              setError(false);
+              setIsLoading(true);
+              setIsVideoLoaded(false);
+              return; // Don't show error — retry with new URL
+            }
+          }
+        }
+      } catch (refreshErr) {
+        logger.warn('[VideoPlayer] Signed URL refresh failed:', refreshErr);
+      }
+    }
+
+    // Fallback: show error UI
     setError(true);
     setIsLoading(false);
     setIsVideoLoaded(false);
-  };
+  }, [activeVideoUrl, reel.id, getToken]);
 
   const handleRetry = () => {
+    signedUrlRefreshAttempts.current = 0;
     setError(false);
     setIsLoading(true);
     setIsVideoLoaded(false);
+    setActiveVideoUrl(reel.videoUrl); // reset to original URL on manual retry
   };
 
   /**
@@ -306,7 +361,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     <View style={[styles.videoContainer, style]}>
       <Video
         ref={videoRef}
-        source={{ uri: reel.videoUrl }}
+        source={{ uri: activeVideoUrl }}
         style={styles.video}
         resizeMode={VIDEO_DEFAULTS.resizeMode}
         shouldPlay={isActive && isVideoLoaded && !isPausedByLimit && VIDEO_DEFAULTS.shouldPlay}
@@ -317,6 +372,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         progressUpdateIntervalMillis={VIDEO_DEFAULTS.progressUpdateIntervalMillis}
         positionMillis={0}
+        // HLS support: expo-av handles .m3u8 natively on iOS.
+        // On Android, expo-av uses ExoPlayer which also supports HLS.
+        // No extra config needed for Mux HLS URLs.
+        useNativeControls={false}
       />
 
       {/* Loading/Buffering Indicator */}

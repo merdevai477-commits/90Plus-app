@@ -126,52 +126,46 @@ export const useImagePicker = (): UseImagePickerReturn => {
     }
   };
 
-  // Compress image
+  // Compress image — always outputs JPEG regardless of input format (handles HEIC on iOS)
   const compressImage = async (
     uri: string,
     options: ImagePickerOptions
-  ): Promise<string> => {
+  ): Promise<{ uri: string; type: string }> => {
     try {
       const quality = options.quality || DEFAULT_OPTIONS.quality!;
-      
-      // Manipulate image
+      const targetWidth = options.type === 'avatar' ? 500 : 1080;
+
       const manipResult = await manipulateAsync(
         uri,
-        [
-          // Resize if needed
-          { resize: { width: options.type === 'avatar' ? 500 : 1080 } },
-        ],
+        [{ resize: { width: targetWidth } }],
         {
           compress: quality,
-          format: SaveFormat.JPEG,
+          format: SaveFormat.JPEG, // Always JPEG — converts HEIC/PNG/WebP
         }
       );
 
-      return manipResult.uri;
+      return { uri: manipResult.uri, type: 'image/jpeg' };
     } catch (error) {
       console.error('Error compressing image:', error);
-      return uri; // Return original if compression fails
+      // Fallback: return original but force type to image/jpeg so multer accepts it
+      // The backend sharp middleware will handle any remaining format issues
+      return { uri, type: 'image/jpeg' };
     }
   };
 
   // Pick from gallery
   const pickFromGallery = useCallback(
     async (options: ImagePickerOptions = DEFAULT_OPTIONS): Promise<PickedImage | null> => {
+      // UX Fix 9: always reset loading in finally so crashes don't permanently lock the picker
       try {
         setIsLoading(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        // Request permission
         const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) {
-          setIsLoading(false);
-          return null;
-        }
+        if (!hasPermission) return null;
 
-        // Merge options
         const finalOptions = { ...DEFAULT_OPTIONS, ...getOptionsForType(options.type), ...options };
 
-        // Launch image picker
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: finalOptions.allowsEditing,
@@ -180,50 +174,34 @@ export const useImagePicker = (): UseImagePickerReturn => {
           base64: false,
         });
 
-        if (result.canceled) {
-          setIsLoading(false);
-          return null;
-        }
+        if (result.canceled) return null;
 
         const asset = result.assets[0];
-
-        // Validate image
         const validation = await validateImage(asset.uri, finalOptions);
         if (!validation.valid) {
-          Alert.alert(
-            isRTL ? 'خطأ' : 'Error',
-            validation.error || (isRTL ? 'صورة غير صالحة' : 'Invalid image')
-          );
-          setIsLoading(false);
+          Alert.alert(isRTL ? 'خطأ' : 'Error', validation.error || (isRTL ? 'صورة غير صالحة' : 'Invalid image'));
           return null;
         }
 
-        // Compress image
-        const compressedUri = await compressImage(asset.uri, finalOptions);
-
-        // Get final file info
-        const response = await fetch(compressedUri);
+        const compressed = await compressImage(asset.uri, finalOptions);
+        const response = await fetch(compressed.uri);
         const blob = await response.blob();
 
-        const pickedImage: PickedImage = {
-          uri: compressedUri,
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return {
+          uri: compressed.uri,
           width: asset.width,
           height: asset.height,
           size: blob.size,
-          type: blob.type,
+          type: compressed.type,
         };
-
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setIsLoading(false);
-        return pickedImage;
       } catch (error: any) {
         console.error('Error picking from gallery:', error);
-        Alert.alert(
-          isRTL ? 'خطأ' : 'Error',
-          error.message || (isRTL ? 'فشل اختيار الصورة' : 'Failed to pick image')
-        );
-        setIsLoading(false);
+        Alert.alert(isRTL ? 'خطأ' : 'Error', error.message || (isRTL ? 'فشل اختيار الصورة' : 'Failed to pick image'));
         return null;
+      } finally {
+        // UX Fix 9: always reset — prevents permanent lock if picker crashes
+        setIsLoading(false);
       }
     },
     [requestLibraryPermission, isRTL]
@@ -232,21 +210,16 @@ export const useImagePicker = (): UseImagePickerReturn => {
   // Pick from camera
   const pickFromCamera = useCallback(
     async (options: ImagePickerOptions = DEFAULT_OPTIONS): Promise<PickedImage | null> => {
+      // UX Fix 9: always reset loading in finally
       try {
         setIsLoading(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        // Request permission
         const hasPermission = await requestCameraPermission();
-        if (!hasPermission) {
-          setIsLoading(false);
-          return null;
-        }
+        if (!hasPermission) return null;
 
-        // Merge options
         const finalOptions = { ...DEFAULT_OPTIONS, ...getOptionsForType(options.type), ...options };
 
-        // Launch camera
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: finalOptions.allowsEditing,
@@ -255,50 +228,34 @@ export const useImagePicker = (): UseImagePickerReturn => {
           base64: false,
         });
 
-        if (result.canceled) {
-          setIsLoading(false);
-          return null;
-        }
+        if (result.canceled) return null;
 
         const asset = result.assets[0];
-
-        // Validate image
         const validation = await validateImage(asset.uri, finalOptions);
         if (!validation.valid) {
-          Alert.alert(
-            isRTL ? 'خطأ' : 'Error',
-            validation.error || (isRTL ? 'صورة غير صالحة' : 'Invalid image')
-          );
-          setIsLoading(false);
+          Alert.alert(isRTL ? 'خطأ' : 'Error', validation.error || (isRTL ? 'صورة غير صالحة' : 'Invalid image'));
           return null;
         }
 
-        // Compress image
-        const compressedUri = await compressImage(asset.uri, finalOptions);
-
-        // Get final file info
-        const response = await fetch(compressedUri);
+        const compressed = await compressImage(asset.uri, finalOptions);
+        const response = await fetch(compressed.uri);
         const blob = await response.blob();
 
-        const pickedImage: PickedImage = {
-          uri: compressedUri,
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return {
+          uri: compressed.uri,
           width: asset.width,
           height: asset.height,
           size: blob.size,
-          type: blob.type,
+          type: compressed.type,
         };
-
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setIsLoading(false);
-        return pickedImage;
       } catch (error: any) {
         console.error('Error picking from camera:', error);
-        Alert.alert(
-          isRTL ? 'خطأ' : 'Error',
-          error.message || (isRTL ? 'فشل التقاط الصورة' : 'Failed to capture image')
-        );
-        setIsLoading(false);
+        Alert.alert(isRTL ? 'خطأ' : 'Error', error.message || (isRTL ? 'فشل التقاط الصورة' : 'Failed to capture image'));
         return null;
+      } finally {
+        // UX Fix 9: always reset — prevents permanent lock if camera crashes
+        setIsLoading(false);
       }
     },
     [requestCameraPermission, isRTL]

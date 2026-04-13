@@ -100,8 +100,15 @@ export function usePushNotifications(): PushNotificationState {
         try {
             const type = data.type as string | undefined;
             const r = routerRef.current;
-            if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type?.includes('MATCH')) {
-                r.push('/(tabs)/matches');
+
+            if (type === 'LUCKY_WHEEL') {
+                r.push({ pathname: '/(tabs)/Home', params: { openLuckyWheel: 'true' } });
+            } else if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type === 'MATCH_START' || type === 'MATCH_END' || type === 'MATCH_HALFTIME' || type?.includes('MATCH')) {
+                if (data.matchId || data.fixtureId) {
+                    r.push({ pathname: '/(tabs)/matches', params: { matchId: String(data.matchId || data.fixtureId) } });
+                } else {
+                    r.push('/(tabs)/matches');
+                }
             } else if (type === 'FOLLOW') {
                 const username = data.actorUsername || data.followerUsername || data.username;
                 if (username) {
@@ -119,6 +126,23 @@ export function usePushNotifications(): PushNotificationState {
                 }
             } else if (type === 'PREDICTION_RESULT') {
                 r.push('/(tabs)/matches');
+            } else if (type === 'VIDEO_PROCESSED') {
+                if (data.reelId) {
+                    r.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId } });
+                } else {
+                    r.push('/(tabs)/reels');
+                }
+            } else if (type === 'GIFT') {
+                r.push({ pathname: '/(tabs)/profile', params: { tab: 'wallet' } });
+            } else if (type === 'COIN_MILESTONE') {
+                r.push({ pathname: '/(tabs)/profile', params: { tab: 'wallet' } });
+            } else if (type === 'MILESTONE' || type === 'REPORT_RESOLVED') {
+                const screen = data.screen;
+                if (screen) {
+                    r.push(screen as any);
+                } else {
+                    r.push('/notifications');
+                }
             } else if (data.screen) {
                 r.push(data.screen as any);
             } else if (data.url) {
@@ -182,8 +206,17 @@ export function usePushNotifications(): PushNotificationState {
 
             Notifications.setBadgeCountAsync(0);
 
+            // Feature 10: Auto mark-as-read when user taps a notification
             if (data?.notificationId && isSignedInRef.current) {
                 trackNotificationOpen(data.notificationId);
+                // Also mark as read (trackNotificationOpen only records the open event)
+                getTokenRef.current().then(token => {
+                    if (!token) return;
+                    fetch(`${require('../../config/api.config').getApiUrl()}/notifications/${data.notificationId}/read`, {
+                        method: 'PUT',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    }).catch(err => logger.warn('Auto mark-as-read failed:', err));
+                }).catch(() => {});
             }
 
             handleDeepLinking(data);

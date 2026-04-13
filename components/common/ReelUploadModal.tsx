@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
@@ -9,9 +9,11 @@ import { ProfileTheme } from '../../constants/ProfileTheme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { extractDurationFromUrl } from '../../utils/videoDuration';
 import { toastManager } from '../../services/toastManager';
 import { usePhotoPermission } from '../../hooks/usePhotoPermission';
+import { logger } from '../../utils/logger';
 
 interface ReelUploadModalProps {
     visible: boolean;
@@ -43,6 +45,11 @@ export default function ReelUploadModal({
     const uploadProgress = useSharedValue(0);
     const { permissionState, requestLibraryPermission } = usePhotoPermission();
 
+    // UX Fix 8 + Feature 2: Thumbnail state
+    const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+    const [frameOptions, setFrameOptions] = useState<string[]>([]);
+    const [isGeneratingFrames, setIsGeneratingFrames] = useState(false);
+
     const progressStyle = useAnimatedStyle(() => ({
         width: `${uploadProgress.value}%`,
     }));
@@ -73,6 +80,38 @@ export default function ReelUploadModal({
     if (!isSignedIn || !canUploadVideo) {
         return null;
     }
+
+    // Feature 2: Generate 5 frame thumbnails from the video
+    const generateFrames = useCallback(async (uri: string, durationSec: number) => {
+        setIsGeneratingFrames(true);
+        setFrameOptions([]);
+        try {
+            const times = [
+                0,
+                Math.floor(durationSec * 0.25),
+                Math.floor(durationSec * 0.5),
+                Math.floor(durationSec * 0.75),
+                Math.max(0, Math.floor(durationSec) - 1),
+            ];
+            const results = await Promise.allSettled(
+                times.map(t =>
+                    VideoThumbnails.getThumbnailAsync(uri, { time: t * 1000 })
+                        .then(r => r.uri)
+                        .catch(() => null),
+                ),
+            );
+            const uris = results
+                .map(r => (r.status === 'fulfilled' ? r.value : null))
+                .filter(Boolean) as string[];
+            setFrameOptions(uris);
+            // Auto-select first frame as default thumbnail
+            if (uris.length > 0 && !thumbnailUri) setThumbnailUri(uris[0]);
+        } catch (err) {
+            logger.warn('[ReelUploadModal] Frame generation failed:', err);
+        } finally {
+            setIsGeneratingFrames(false);
+        }
+    }, [thumbnailUri]);
 
     const pickVideo = async () => {
         if (uploadLocked) {
@@ -148,6 +187,9 @@ export default function ReelUploadModal({
             }
 
             setVideoAsset(asset);
+            // Feature 2: Generate frame thumbnails after video selection
+            const durationSec = duration ?? (asset.duration ? asset.duration / 1000 : 30);
+            generateFrames(asset.uri, durationSec);
         }
     };
 
@@ -163,49 +205,40 @@ export default function ReelUploadModal({
         uploadProgress.value = withTiming(10, { duration: 300 });
 
         try {
-            // ✅ SDK 52: Thumbnail generation disabled (expo-video-thumbnails deprecated)
-            // Use a placeholder or skip thumbnail for now
-            const thumbnailUri = null; // TODO: Re-enable with expo-video later
-
             uploadProgress.value = withTiming(30, { duration: 300 });
             setUploadStage('uploading');
 
-            // Create video object immediately for optimistic update
             const newVideo = {
                 id: `temp_${Date.now()}`,
                 uri: videoAsset.uri,
                 caption: caption,
                 likes: 0,
                 views: 0,
+                // UX Fix 8: Use selected thumbnail (from frame selector or gallery)
                 thumbnail: thumbnailUri,
-                isUploading: true, // Flag for UI to show uploading state
+                isUploading: true,
             };
 
-            // Close modal and show video immediately (optimistic)
-            // The actual upload will happen in parent component with proper progress tracking
             uploadProgress.value = withTiming(30, { duration: 200 });
-            
-            // Pass to parent - parent will handle actual upload
             onUpload(newVideo);
-            
-            // Reset state immediately after passing to parent
+
             setIsUploading(false);
             setUploadStage('idle');
             uploadProgress.value = 0;
             setVideoAsset(null);
             setCaption('');
+            setThumbnailUri(null);
+            setFrameOptions([]);
             onClose();
 
         } catch (error) {
-            console.error('Error generating thumbnail:', error);
-            // Fallback - still upload without thumbnail
             const newVideo = {
                 id: `temp_${Date.now()}`,
                 uri: videoAsset.uri,
                 caption: caption,
                 likes: 0,
                 views: 0,
-                thumbnail: videoAsset.uri,
+                thumbnail: thumbnailUri || videoAsset.uri,
                 isUploading: true,
             };
 
@@ -215,6 +248,8 @@ export default function ReelUploadModal({
             uploadProgress.value = 0;
             setVideoAsset(null);
             setCaption('');
+            setThumbnailUri(null);
+            setFrameOptions([]);
             onClose();
         }
     };
@@ -281,6 +316,71 @@ export default function ReelUploadModal({
                             </View>
                         )}
                     </TouchableOpacity>
+
+                    {/* UX Fix 8 + Feature 2: Thumbnail selector */}
+                    {videoAsset && (
+                        <View style={styles.thumbnailSection}>
+                            <Text style={styles.thumbnailLabel}>الصورة المصغرة</Text>
+
+                            {isGeneratingFrames ? (
+                                <View style={styles.framesLoading}>
+                                    <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                    <Text style={styles.framesLoadingText}>جاري توليد الإطارات...</Text>
+                                </View>
+                            ) : frameOptions.length > 0 ? (
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.framesRow}>
+                                    {frameOptions.map((uri, idx) => (
+                                        <TouchableOpacity
+                                            key={idx}
+                                            onPress={() => setThumbnailUri(uri)}
+                                            style={[
+                                                styles.frameThumb,
+                                                thumbnailUri === uri && styles.frameThumbSelected,
+                                            ]}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Image source={{ uri }} style={styles.frameThumbImage} contentFit="cover" />
+                                            {thumbnailUri === uri && (
+                                                <View style={styles.frameSelectedOverlay}>
+                                                    <Ionicons name="checkmark-circle" size={20} color="#FFD700" />
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                    {/* Gallery pick option */}
+                                    <TouchableOpacity
+                                        style={[styles.frameThumb, styles.frameThumbGallery]}
+                                        onPress={async () => {
+                                            const res = await ImagePicker.launchImageLibraryAsync({
+                                                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                                                allowsEditing: true,
+                                                aspect: [9, 16],
+                                                quality: 0.8,
+                                            });
+                                            if (!res.canceled) setThumbnailUri(res.assets[0].uri);
+                                        }}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="images-outline" size={24} color={ProfileTheme.colors.neonGreen} />
+                                        <Text style={styles.frameGalleryText}>معرض</Text>
+                                    </TouchableOpacity>
+                                    {/* Remove thumbnail option */}
+                                    {thumbnailUri && (
+                                        <TouchableOpacity
+                                            style={[styles.frameThumb, styles.frameThumbRemove]}
+                                            onPress={() => setThumbnailUri(null)}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
+                                            <Text style={styles.frameRemoveText}>إزالة</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </ScrollView>
+                            ) : (
+                                <Text style={styles.thumbnailAutoText}>سيتم إنشاء صورة مصغرة تلقائياً</Text>
+                            )}
+                        </View>
+                    )}
 
                     {/* Meta Fields */}
                     <TextInput
@@ -464,5 +564,80 @@ const styles = StyleSheet.create({
     },
     inputDisabled: {
         opacity: 0.5,
+    },
+    // UX Fix 8 + Feature 2: Thumbnail styles
+    thumbnailSection: {
+        marginBottom: 16,
+    },
+    thumbnailLabel: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 13,
+        fontWeight: '600',
+        marginBottom: 8,
+    },
+    framesLoading: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 8,
+    },
+    framesLoadingText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+    },
+    framesRow: {
+        flexDirection: 'row',
+    },
+    frameThumb: {
+        width: 60,
+        height: 100,
+        borderRadius: 8,
+        marginRight: 8,
+        overflow: 'hidden',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.15)',
+        position: 'relative',
+    },
+    frameThumbSelected: {
+        borderColor: '#FFD700',
+        borderWidth: 2,
+    },
+    frameThumbImage: {
+        width: '100%',
+        height: '100%',
+    },
+    frameSelectedOverlay: {
+        position: 'absolute',
+        top: 4,
+        right: 4,
+    },
+    frameThumbGallery: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        gap: 4,
+    },
+    frameGalleryText: {
+        color: ProfileTheme.colors.neonGreen,
+        fontSize: 10,
+        fontWeight: '600',
+    },
+    frameThumbRemove: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,59,48,0.1)',
+        borderColor: 'rgba(255,59,48,0.3)',
+        gap: 4,
+    },
+    frameRemoveText: {
+        color: '#FF3B30',
+        fontSize: 10,
+        fontWeight: '600',
+    },
+    thumbnailAutoText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 12,
+        fontStyle: 'italic',
+        paddingVertical: 8,
     },
 });

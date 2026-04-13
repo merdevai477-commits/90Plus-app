@@ -50,6 +50,11 @@ import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOpti
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { TopClub } from '../../data/top5LeaguesClubs';
 import { DiamondProfile } from '../../types/profile';
+import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
+import { ProfileSavedGrid } from '../../components/profile/ProfileVideoGrid';
+import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from '../../components/common/ImagePreviewModal';
+import { CooldownBlockModal } from '../../components/common/CooldownBlockModal';
+import { useReelStatusPoller } from '../../hooks/useReelStatusPoller';
 
 const API_URL = getApiUrl();
 
@@ -189,51 +194,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: ProfileTheme.colors.textSecondary,
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: ProfileTheme.colors.neonBlue,
-  },
-  achievementBadge: {
-    width: '30%',
-    aspectRatio: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    opacity: 0.4,
-  },
-  achievementUnlocked: {
-    opacity: 1,
-    borderColor: '#FFD700',
-    backgroundColor: 'rgba(255,215,0,0.1)',
-  },
-  achievementLabel: {
-    fontSize: 11,
-    color: ProfileTheme.colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  coinsSummaryCard: {
-    backgroundColor: 'rgba(255,215,0,0.1)',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.3)',
   },
   badgesContainer: {
     alignItems: 'center',
@@ -435,6 +395,22 @@ export default function ProfileScreen() {
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
 
+  // UX Fix 1+2: Image preview + cross-platform action sheet state
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<'avatar' | 'cover'>('avatar');
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+  const [pendingUploadFn, setPendingUploadFn] = useState<(() => void) | null>(null);
+  const [androidSheetVisible, setAndroidSheetVisible] = useState(false);
+  const [androidSheetOptions, setAndroidSheetOptions] = useState<any>(null);
+
+  // UX Fix 3: Cooldown block modal state
+  const [cooldownBlockVisible, setCooldownBlockVisible] = useState(false);
+  const [cooldownBlockType, setCooldownBlockType] = useState<'avatar' | 'cover' | 'reel'>('avatar');
+
+  // UX Fix 4: Reel status polling
+  const [pollingReelId, setPollingReelId] = useState<string | null>(null);
+  const reelStatus = useReelStatusPoller(pollingReelId, getToken, !!pollingReelId);
+
   // Loading states for profile operations
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
@@ -544,47 +520,8 @@ export default function ProfileScreen() {
     return token;
   };
 
-  // Saved videos state
-  const [savedVideos, setSavedVideos] = useState<any[]>([]);
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
-  const [savedVideosCursor, setSavedVideosCursor] = useState<string | null>(null);
-  const [hasMoreSaved, setHasMoreSaved] = useState(true);
-
-  // Optimization: Load saved videos (with cancellation support)
-  const loadSavedVideos = useCallback(async (cursor?: string) => {
-    setIsLoadingSaved(true);
-    try {
-      const token = await getToken();
-      if (!token) {
-        setIsLoadingSaved(false);
-        return;
-      }
-
-      const result = await ReelsService.getSavedReels(token, cursor);
-      if (result) {
-        if (cursor) {
-          setSavedVideos(prev => [...prev, ...result.savedReels]);
-        } else {
-          setSavedVideos(result.savedReels);
-        }
-        setSavedVideosCursor(result.nextCursor);
-        setHasMoreSaved(result.hasMore);
-      }
-    } catch (error) {
-      logger.error('Error loading saved videos:', error);
-    } finally {
-      setIsLoadingSaved(false);
-    }
-  }, []);
-
-  // Optimization: Load saved videos when saved tab is active
-  const hasLoadedSavedRef = useRef(false);
-  useEffect(() => {
-    if (activeTab === 'saved' && !hasLoadedSavedRef.current && !isLoadingSaved) {
-      hasLoadedSavedRef.current = true;
-      loadSavedVideos();
-    }
-  }, [activeTab, isLoadingSaved, loadSavedVideos]);
+  // Saved videos state — now managed by ProfileSavedGrid component
+  // (removed from this component to reduce re-render surface)
 
   const myVideos = React.useMemo(() => {
     const cached = cachedVideos || [];
@@ -815,120 +752,124 @@ export default function ProfileScreen() {
       return;
     }
 
-    // Show loading toast immediately
-    toastManager.showInfo(t.profile.preparing, t.profile.preparingCoverUpload);
-
-    // Check cooldown first
+    // UX Fix 3: Check cooldown BEFORE opening picker
     if (cooldowns && !cooldowns.cover.canChange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      const days = cooldowns.cover.daysRemaining;
-      const hours = cooldowns.cover.hoursRemaining;
-      const timeText = days > 0 ? `${days} ${t.common.days} ${t.common.and} ${hours} ${t.common.hours}` : `${hours} ${t.common.hours}`;
-
-      toastManager.showWarning(t.profile.waitABit, t.profile.canChangeCoverAfter.replace('{time}', timeText));
+      setCooldownBlockType('cover');
+      setCooldownBlockVisible(true);
       return;
     }
 
-    try {
-      // طلب الصلاحية قبل فتح الـ picker
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        toastManager.showWarning(t.profile.permissionRequired, t.profile.coverPermissionRequired);
-        return;
-      }
+    // UX Fix 6: Check permission FIRST, then show toast
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      toastManager.showWarning(t.profile.permissionRequired, t.profile.coverPermissionRequired);
+      return;
+    }
 
-      isPickerActiveRef.current = true;
+    // UX Fix 2: Cross-platform action sheet
+    showImageSourceSheet(
+      {
+        title: 'صورة الغلاف',
+        hasExistingImage: !!userData.coverImage,
+        onGallery: () => _pickCoverFromGallery(),
+        onCamera: () => _pickCoverFromCamera(),
+      },
+      setAndroidSheetVisible,
+      setAndroidSheetOptions,
+    );
+  };
+
+  const _pickCoverFromGallery = async () => {
+    isPickerActiveRef.current = true;
+    try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
       });
-      isPickerActiveRef.current = false;
-
-      if (result.canceled) {
-        return;
-      }
-
+      if (result.canceled) return;
       const imageUri = result.assets[0]?.uri;
-      if (!imageUri) {
-        toastManager.showError(t.profile.selectionError, t.profile.noValidCoverSelected);
-        return;
-      }
+      if (!imageUri) return;
+      await _prepareCoverPreview(imageUri);
+    } finally {
+      isPickerActiveRef.current = false;
+    }
+  };
 
-      let finalUri = imageUri;
-      try {
-        toastManager.showInfo(t.profile.processing, t.profile.compressingCoverImage);
-        const compressed = await compressImage(imageUri, {
-          maxWidth: 1920,
-          maxHeight: 1080,
-          quality: 0.8,
-        });
-        finalUri = compressed.uri;
-        console.log(`Cover compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
-      } catch (error) {
-        console.warn('Cover compression failed, using original:', error);
-        finalUri = imageUri;
-      }
+  const _pickCoverFromCamera = async () => {
+    isPickerActiveRef.current = true;
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (result.canceled) return;
+      const imageUri = result.assets[0]?.uri;
+      if (!imageUri) return;
+      await _prepareCoverPreview(imageUri);
+    } finally {
+      isPickerActiveRef.current = false;
+    }
+  };
 
-      const originalCover = userData.coverImage;
-      setCoverImage(finalUri);
+  const _prepareCoverPreview = async (imageUri: string) => {
+    let finalUri = imageUri;
+    try {
+      toastManager.showInfo(t.profile.processing, t.profile.compressingCoverImage);
+      const compressed = await compressImage(imageUri, { maxWidth: 1920, maxHeight: 1080, quality: 0.8 });
+      finalUri = compressed.uri;
+    } catch {
+      finalUri = imageUri;
+    }
+    // UX Fix 1: Show preview before uploading
+    setPreviewUri(finalUri);
+    setPreviewType('cover');
+    setPendingUploadFn(() => () => _executeCoverUpload(finalUri));
+    setIsPreviewVisible(true);
+  };
 
-      // Show upload start toast
-      toastManager.showInfo(t.profile.uploading, t.profile.uploadingCoverImage);
-
+  const _executeCoverUpload = async (finalUri: string) => {
+    if (!userData) return;
+    const originalCover = userData.coverImage;
+    setCoverImage(finalUri);
+    toastManager.showInfo(t.profile.uploading, t.profile.uploadingCoverImage);
+    setIsCoverUploading(true);
+    try {
       const token = await getToken();
       if (!token) {
         setCoverImage(originalCover || null);
         toastManager.showAuthError();
         return;
       }
-
-      setIsCoverUploading(true);
       const uploadResult = await uploadImage(finalUri, {
         endpoint: '/upload/cover',
         fieldName: 'file',
         maxRetries: 2,
         timeoutMs: 55_000,
       });
-
       if (uploadResult.success && uploadResult.url) {
-        const newCoverUrl = uploadResult.url;
-        setCoverImage(newCoverUrl);
-        globalState.setLocalCover(newCoverUrl);
-        await updateCachedUserData({ coverImage: newCoverUrl });
+        setCoverImage(uploadResult.url);
+        globalState.setLocalCover(uploadResult.url);
+        await updateCachedUserData({ coverImage: uploadResult.url });
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         toastManager.showUploadSuccess('image');
       } else {
         setCoverImage(originalCover || null);
-        
-        // Handle specific error cases
         const errorMessage = uploadResult.error || t.profile.coverUploadFailed;
-        
-        // Check if it's a cooldown error
         if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
           toastManager.showWarning(t.profile.waitABit, errorMessage);
         } else {
           toastManager.showUploadError('image');
         }
       }
-    } catch (error: any) {
-      setCoverImage(userData?.coverImage || null);
-      
-      // Handle specific error cases
-      const errorMessage = error.message || t.common.errorOccurred;
-      
-      // Check if it's a cooldown error
-      if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
-        // Don't log cooldown errors as errors since they're expected behavior
-        logger.info('Cover upload cooldown:', errorMessage);
-        toastManager.showCooldownError(errorMessage);
-      } else {
-        // Log actual errors
-        logger.error('Cover upload error:', error);
-        toastManager.showUploadError('image');
-      }
+    } catch (err: any) {
+      logger.error('Cover upload exception:', err);
+      setCoverImage(originalCover || null);
+      toastManager.showError(t.common.error, t.profile.coverUploadFailed || 'فشل رفع صورة الغلاف');
     } finally {
       setIsCoverUploading(false);
     }
@@ -939,129 +880,154 @@ export default function ProfileScreen() {
       return;
     }
 
-    // Show loading toast immediately
-    toastManager.showInfo(t.profile.preparing, t.profile.preparingAvatarUpload);
-
-    // Check cooldown first
+    // UX Fix 3: Check cooldown BEFORE opening picker
     if (cooldowns && !cooldowns.avatar.canChange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      const days = cooldowns.avatar.daysRemaining;
-      const hours = cooldowns.avatar.hoursRemaining;
-      const timeText = days > 0 ? `${days} ${t.common.days} ${t.common.and} ${hours} ${t.common.hours}` : `${hours} ${t.common.hours}`;
-
-      toastManager.showWarning(t.profile.waitABit, t.profile.canChangeAvatarAfter.replace('{time}', timeText));
+      setCooldownBlockType('avatar');
+      setCooldownBlockVisible(true);
       return;
     }
 
-    try {
-      // طلب الصلاحية قبل فتح الـ picker
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        toastManager.showWarning(t.profile.permissionRequired, t.profile.avatarPermissionRequired);
-        return;
-      }
+    // UX Fix 2: Cross-platform action sheet with "remove" option
+    showImageSourceSheet(
+      {
+        title: 'صورة البروفايل',
+        hasExistingImage: !!(userData.avatar || localImage),
+        onGallery: () => _pickAvatarFromGallery(),
+        onCamera: () => _pickAvatarFromCamera(),
+        onRemove: () => _removeAvatar(),
+      },
+      setAndroidSheetVisible,
+      setAndroidSheetOptions,
+    );
+  };
 
-      isPickerActiveRef.current = true;
+  // UX Fix 5: Remove avatar
+  const _removeAvatar = async () => {
+    const token = await getToken();
+    if (!token) { toastManager.showAuthError(); return; }
+    setIsAvatarUploading(true);
+    try {
+      const res = await fetch(`${API_URL}/upload/avatar`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.status === 'SUCCESS') {
+        setLocalImage(null);
+        globalState.setLocalAvatar(undefined);
+        await updateCachedUserData({ avatar: null });
+        toastManager.showSuccess('تم', 'تم إزالة صورة البروفايل');
+      } else {
+        toastManager.showError(t.common.error, json.message || 'فشل إزالة الصورة');
+      }
+    } catch (err: any) {
+      logger.error('Remove avatar error:', err);
+      toastManager.showError(t.common.error, 'فشل إزالة الصورة. تحقق من اتصالك بالإنترنت.');
+    } finally {
+      setIsAvatarUploading(false);
+    }
+  };
+
+  const _pickAvatarFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      toastManager.showWarning(t.profile.permissionRequired, t.profile.avatarPermissionRequired);
+      return;
+    }
+    isPickerActiveRef.current = true;
+    try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
-      isPickerActiveRef.current = false;
-
-      if (result.canceled) {
-        return;
-      }
-
+      if (result.canceled) return;
       const imageUri = result.assets[0]?.uri;
-      if (!imageUri) {
-        toastManager.showError(t.profile.selectionError, t.profile.noValidAvatarSelected);
-        return;
-      }
+      if (!imageUri) return;
+      await _prepareAvatarPreview(imageUri);
+    } finally {
+      isPickerActiveRef.current = false;
+    }
+  };
 
-      let finalUri = imageUri;
-      try {
-        toastManager.showInfo(t.profile.processing, t.profile.compressingImage);
-        const compressed = await compressImage(imageUri, {
-          maxWidth: 1080,
-          maxHeight: 1080,
-          quality: 0.7,
-        });
-        finalUri = compressed.uri;
-        console.log(`Avatar compressed: ${compressed.compressionRatio.toFixed(1)}% saved`);
-      } catch (error) {
-        console.warn('Avatar compression failed, using original:', error);
-        finalUri = imageUri;
-      }
+  const _pickAvatarFromCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      toastManager.showWarning(t.profile.permissionRequired, t.profile.avatarPermissionRequired);
+      return;
+    }
+    isPickerActiveRef.current = true;
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (result.canceled) return;
+      const imageUri = result.assets[0]?.uri;
+      if (!imageUri) return;
+      await _prepareAvatarPreview(imageUri);
+    } finally {
+      isPickerActiveRef.current = false;
+    }
+  };
 
-      const originalAvatar = userData.avatar;
-      setIsAvatarUploading(true);
-      setLocalImage(finalUri);
+  const _prepareAvatarPreview = async (imageUri: string) => {
+    let finalUri = imageUri;
+    try {
+      const compressed = await compressImage(imageUri, { maxWidth: 1080, maxHeight: 1080, quality: 0.7 });
+      finalUri = compressed.uri;
+    } catch { finalUri = imageUri; }
+    // UX Fix 1: Show preview before uploading
+    setPreviewUri(finalUri);
+    setPreviewType('avatar');
+    setPendingUploadFn(() => () => _executeAvatarUpload(finalUri));
+    setIsPreviewVisible(true);
+  };
 
-      // Show upload start toast
-      toastManager.showInfo(t.profile.uploading, t.profile.uploadingAvatarImage);
-
+  const _executeAvatarUpload = async (finalUri: string) => {
+    if (!userData) return;
+    const originalAvatar = userData.avatar;
+    setIsAvatarUploading(true);
+    setLocalImage(finalUri);
+    toastManager.showInfo(t.profile.uploading, t.profile.uploadingAvatarImage);
+    try {
       const token = await getToken();
       if (!token) {
         setLocalImage(originalAvatar || null);
-        setIsAvatarUploading(false);
         toastManager.showAuthError();
         return;
       }
-
       const uploadResult = await uploadImage(finalUri, {
         endpoint: '/upload/avatar',
         fieldName: 'file',
         maxRetries: 2,
         timeoutMs: 55_000,
       });
-
       if (uploadResult.success && uploadResult.url) {
-        const newAvatarUrl = uploadResult.url;
-        setLocalImage(newAvatarUrl);
-
-        if (globalState.userProfile) {
-          globalState.userProfile.avatar = newAvatarUrl;
-        }
-        globalState.setLocalAvatar(newAvatarUrl);
-
-        await updateCachedUserData({ avatar: newAvatarUrl });
+        setLocalImage(uploadResult.url);
+        if (globalState.userProfile) globalState.userProfile.avatar = uploadResult.url;
+        globalState.setLocalAvatar(uploadResult.url);
+        await updateCachedUserData({ avatar: uploadResult.url });
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         toastManager.showUploadSuccess('image');
-        
-        // Mark avatar step as completed
         await markStepCompleted('avatar');
       } else {
         setLocalImage(originalAvatar || null);
-        
-        // Handle specific error cases
         const errorMessage = uploadResult.error || t.profile.avatarUploadFailed;
-        
-        // Check if it's a cooldown error
         if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
           toastManager.showWarning(t.profile.waitABit, errorMessage);
         } else {
           toastManager.showUploadError('image');
         }
       }
-    } catch (error: any) {
-      setLocalImage(userData?.avatar || null);
-      
-      // Handle specific error cases
-      const errorMessage = error.message || t.common.errorOccurred;
-      
-      // Check if it's a cooldown error
-      if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
-        // Don't log cooldown errors as errors since they're expected behavior
-        logger.info('Avatar upload cooldown:', errorMessage);
-        toastManager.showCooldownError(errorMessage);
-      } else {
-        // Log actual errors
-        logger.error('Avatar upload error:', error);
-        toastManager.showUploadError('image');
-      }
+    } catch (err: any) {
+      logger.error('Avatar upload exception:', err);
+      setLocalImage(originalAvatar || null);
+      toastManager.showError(t.common.error, t.profile.avatarUploadFailed || 'فشل رفع صورة البروفايل');
     } finally {
       setIsAvatarUploading(false);
     }
@@ -1075,14 +1041,11 @@ export default function ProfileScreen() {
       return;
     }
 
+    // UX Fix 3: Show cooldown block modal BEFORE opening upload modal
     if (!cooldowns.reelUpload.canChange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
-      const days = cooldowns.reelUpload.daysRemaining;
-      const hours = cooldowns.reelUpload.hoursRemaining;
-      const timeText = days > 0 ? `${days} ${t.common.days} ${t.common.and} ${hours} ${t.common.hours}` : `${hours} ${t.common.hours}`;
-
-      toastManager.showWarning(t.profile.waitABit, t.profile.canUploadVideoAfter.replace('{time}', timeText));
+      setCooldownBlockType('reel');
+      setCooldownBlockVisible(true);
       return;
     }
 
@@ -1179,6 +1142,12 @@ export default function ProfileScreen() {
       );
 
       if (uploadResult.success) {
+        // UX Fix 4: Start polling for Mux processing status
+        const reelId = (uploadResult as any)?.reelId || (uploadResult as any)?.data?.reelId;
+        if (reelId) {
+          setPollingReelId(reelId);
+        }
+
         setVideoUploadMessage(t.profile.uploadSuccessPhase);
         setVideoUploadProgress(100);
         setReelUploadUi({ active: true, progress: 100, phaseLabel: t.profile.uploadSuccessPhase });
@@ -1579,14 +1548,14 @@ export default function ProfileScreen() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           videoCount={myVideos.length}
-          savedCount={savedVideos.length}
+          savedCount={0}
           isOwnProfile={true}
         />
 
         {activeTab === 'videos' && (
           <VideoGrid
             videos={myVideos}
-            onVideoPress={(video, index) => {
+            onVideoPress={(video, _index) => {
               setSelectedVideoUrl(video.thumbnail);
               setIsVideoPlayerVisible(true);
             }}
@@ -1600,89 +1569,54 @@ export default function ProfileScreen() {
         )}
 
         {activeTab === 'saved' && (
-          <VideoGrid
-            videos={savedVideos.map(video => ({
-              id: video.id,
-              thumbnail: video.thumbnail || video.videoUrl,
-              views: video.views?.toString() || '0',
-              duration: '',
-            }))}
-            onVideoPress={(video, index) => {
-              router.push({
-                pathname: '/(tabs)/reels',
-                params: { reelId: video.id }
-              });
-            }}
-            onVideoLongPress={() => {}}
-            onDeleteVideo={() => {}}
-            isDeleteMode={false}
-          />
+          <ProfileSavedGrid getToken={getToken} />
         )}
 
         {activeTab === 'analytics' && (
-          <View style={styles.analyticsContainer}>
-            <Text style={styles.analyticsTitle}>{t.profile.videoAnalytics}</Text>
-
-            <View style={styles.analyticsGrid}>
-              <View style={styles.analyticsCard}>
-                <Ionicons name="eye-outline" size={28} color={ProfileTheme.colors.neonBlue} />
-                <Text style={styles.analyticsValue}>{analytics?.totalViews || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.views}</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Ionicons name="heart-outline" size={28} color="#FF6B6B" />
-                <Text style={styles.analyticsValue}>{analytics?.totalLikes || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.likes}</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Ionicons name="chatbubble-outline" size={28} color={ProfileTheme.colors.neonGreen} />
-                <Text style={styles.analyticsValue}>{analytics?.totalComments || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.comments}</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Ionicons name="person-add-outline" size={28} color="#9B59B6" />
-                <Text style={styles.analyticsValue}>{analytics?.recentFollowers || 0}</Text>
-                <Text style={styles.analyticsLabel}>{t.profile.newFollowers}</Text>
-              </View>
-            </View>
-
-            {/* Prediction Statistics Section */}
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>📊 {t.profile.predictionStats}</Text>
-              <View style={styles.analyticsGrid}>
-                <View style={[styles.analyticsCard, { borderColor: '#22c55e', borderWidth: 1 }]}>
-                  <Ionicons name="checkmark-circle" size={28} color="#22c55e" />
-                  <Text style={[styles.analyticsValue, { color: '#22c55e' }]}>{predictionStats?.correct || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.correctPredictions}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#ef4444', borderWidth: 1 }]}>
-                  <Ionicons name="close-circle" size={28} color="#ef4444" />
-                  <Text style={[styles.analyticsValue, { color: '#ef4444' }]}>{predictionStats?.incorrect || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.wrongPredictions}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#f59e0b', borderWidth: 1 }]}>
-                  <Ionicons name="time" size={28} color="#f59e0b" />
-                  <Text style={[styles.analyticsValue, { color: '#f59e0b' }]}>{predictionStats?.pending || 0}</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.pendingPredictions}</Text>
-                </View>
-
-                <View style={[styles.analyticsCard, { borderColor: '#3b82f6', borderWidth: 1 }]}>
-                  <Ionicons name="analytics" size={28} color="#3b82f6" />
-                  <Text style={[styles.analyticsValue, { color: '#3b82f6' }]}>{predictionStats?.accuracy || 0}%</Text>
-                  <Text style={styles.analyticsLabel}>{t.profile.successRate}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
+          <ProfileAnalyticsTab
+            analytics={analytics}
+            predictionStats={predictionStats}
+          />
         )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* UX Fix 1+2: Image preview modal + Android action sheet */}
+      <ImagePreviewModal
+        visible={isPreviewVisible}
+        imageUri={previewUri}
+        type={previewType}
+        isUploading={previewType === 'avatar' ? isAvatarUploading : isCoverUploading}
+        uploadProgress={0}
+        onConfirm={() => {
+          setIsPreviewVisible(false);
+          if (pendingUploadFn) pendingUploadFn();
+        }}
+        onCancel={() => {
+          setIsPreviewVisible(false);
+          setPreviewUri(null);
+          setPendingUploadFn(null);
+        }}
+      />
+
+      <AndroidImageSourceSheet
+        visible={androidSheetVisible}
+        options={androidSheetOptions}
+        onClose={() => setAndroidSheetVisible(false)}
+      />
+
+      {/* UX Fix 3: Cooldown block modal */}
+      <CooldownBlockModal
+        visible={cooldownBlockVisible}
+        cooldown={
+          cooldownBlockType === 'avatar' ? cooldowns?.avatar ?? null
+          : cooldownBlockType === 'cover' ? cooldowns?.cover ?? null
+          : cooldowns?.reelUpload ?? null
+        }
+        type={cooldownBlockType}
+        onClose={() => setCooldownBlockVisible(false)}
+      />
 
       {/* Modals */}
       <CountryPickerModal

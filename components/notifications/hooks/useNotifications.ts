@@ -166,6 +166,7 @@ export function useNotifications() {
     setBackendNotifications(prev => {
       const exists = prev.some(n => n.id === (notification as any).id);
       if (exists) return prev;
+      // UX Fix 7: Increment badge count immediately on WebSocket notification
       setUnreadCount(prevCount => prevCount + 1);
       return [notification as SocialNotification, ...prev];
     });

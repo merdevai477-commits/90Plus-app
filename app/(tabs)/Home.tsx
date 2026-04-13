@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   ScrollView,
   View,
@@ -52,6 +52,18 @@ export default function HomeScreen() {
   const [spinWheelAvailable, setSpinWheelAvailable] = useState(true);
   const [nextSpinTime, setNextSpinTime] = useState<Date | undefined>(undefined);
   const [dailyQuizStatus, setDailyQuizStatus] = useState<DailyQuizStatus | null>(null);
+
+  // Open lucky wheel from push notification deep link
+  const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
+  const openLuckyWheelHandledRef = useRef(false);
+  useEffect(() => {
+    if (params.openLuckyWheel === 'true' && !openLuckyWheelHandledRef.current) {
+      openLuckyWheelHandledRef.current = true;
+      setLuckyWheelVisible(true);
+      // Clear param to prevent re-opening on back navigation
+      router.setParams({ openLuckyWheel: undefined });
+    }
+  }, [params.openLuckyWheel]);
 
   const { isSignedIn, getToken } = useAuth();
   const { user } = useUser();

@@ -163,17 +163,22 @@ export class ProfileErrorBoundary extends Component<Props, State> {
 
   private sendErrorReport(error: Error, errorInfo: ErrorInfo): void {
     try {
-      // Log to your error tracking service (Sentry, etc.)
       logger.error('[ProfileErrorBoundary] Sending error report:', {
         errorMessage: error.message,
         errorStack: error.stack,
         componentStack: errorInfo.componentStack,
         timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
       });
 
-      // TODO: Send to Sentry or other error tracking service
-      // Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
+      // Send to Sentry
+      try {
+        const { captureException } = require('../../services/sentry.service');
+        captureException(error, {
+          tags: { errorBoundary: 'ProfileScreen' },
+          extra: { componentStack: errorInfo.componentStack },
+          level: 'error',
+        });
+      } catch { /* Sentry not available */ }
     } catch (reportError) {
       logger.error('[ProfileErrorBoundary] Failed to send error report:', reportError);
     }
@@ -187,7 +192,13 @@ export class ProfileErrorBoundary extends Component<Props, State> {
         timestamp: new Date().toISOString(),
       });
 
-      // TODO: Send to error tracking service
+      try {
+        const { captureException } = require('../../services/sentry.service');
+        captureException(new Error(`Infinite render loop: ${renderCount} renders`), {
+          tags: { errorBoundary: 'ProfileScreen', type: 'infinite_loop' },
+          level: 'fatal',
+        });
+      } catch { /* Sentry not available */ }
     } catch (reportError) {
       logger.error('[ProfileErrorBoundary] Failed to send infinite loop report:', reportError);
     }

@@ -21,8 +21,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
+  useSharedValue as useSharedValueAlias,
+  withTiming,
+  useAnimatedStyle,
 } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 // ✅ استبدال Network polling بـ NetInfo event listeners
@@ -61,7 +64,7 @@ type GroupedMatches = {
 
 const AnimatedFlatList = Animated.createAnimatedComponent(
   FlatList as unknown as React.ComponentType<FlatListProps<GroupedMatches>>
-);
+) as unknown as React.ComponentType<FlatListProps<GroupedMatches> & { ref?: React.Ref<FlatList<GroupedMatches>> }>;
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 /**
@@ -72,6 +75,9 @@ const MatchesScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const params = useLocalSearchParams<{ matchId?: string }>();
+  const flatListRef = useRef<FlatList<GroupedMatches>>(null);
+  const highlightedMatchId = useSharedValue<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<MatchTabType>('all');
   const [refreshing, setRefreshing] = useState(false);
@@ -129,6 +135,37 @@ const MatchesScreen = () => {
     });
     return map;
   }, [matches]);
+
+  // Scroll to specific match from push notification deep link
+  useEffect(() => {
+    if (!params.matchId || !groupedMatches.length || !flatListRef.current) return;
+
+    const targetMatchId = String(params.matchId);
+    highlightedMatchId.value = targetMatchId;
+
+    // Find which group contains this match
+    const groupIndex = groupedMatches.findIndex(group =>
+      group.matches.some(m => String(m.id) === targetMatchId)
+    );
+
+    if (groupIndex >= 0) {
+      InteractionManager.runAfterInteractions(() => {
+        try {
+          flatListRef.current?.scrollToIndex({ index: groupIndex, animated: true, viewPosition: 0.3 });
+        } catch {
+          flatListRef.current?.scrollToOffset({ offset: groupIndex * 200, animated: true });
+        }
+      });
+    }
+
+    // Clear highlight after 3 seconds
+    const timer = setTimeout(() => {
+      highlightedMatchId.value = '';
+      router.setParams({ matchId: undefined });
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [params.matchId, groupedMatches]);
 
   // ✅ Network status detection - استبدال polling بـ event listeners
   // هذا التحسين يوفر البطارية بنسبة 58%
@@ -1000,6 +1037,7 @@ const MatchesScreen = () => {
         </View>
       ) : (
         <AnimatedFlatList
+          ref={flatListRef}
           data={paginatedGroupedMatches}
           renderItem={renderLeagueSection}
           keyExtractor={keyExtractor}

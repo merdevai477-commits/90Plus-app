@@ -6,7 +6,7 @@ import '../services/notificationForegroundSetup';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, I18nManager, Linking } from 'react-native';
+import { View, StatusBar, I18nManager, Linking, StyleSheet, Text } from 'react-native';
 import * as Updates from 'expo-updates';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
@@ -24,10 +24,13 @@ import { logger } from "../services/logger";
 import { preloadManager } from "../services/preloadManager";
 import { AuthService } from "../src/services/authService";
 import { useAuth, useUser } from "@clerk/clerk-expo";
+import * as Sentry from '@sentry/react-native';
 import { initSentry, captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
 import { AppSplashScreen } from "../components/splash/AppSplashScreen";
+import { PushNotificationSetup } from "../src/hooks/usePushNotifications";
+import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 
 // Lazy load websocket client to avoid bundling issues with socket.io-client
 let websocketClient: any = null;
@@ -44,8 +47,40 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Get Clerk publishable key
-const clerkPublishableKey = Constants.expoConfig?.extra?.clerkPublishableKey || '';
+// Get Clerk publishable key — no fallback: missing key must be surfaced immediately
+const clerkPublishableKey = Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined;
+
+// Fix 2: Guard — if key is missing, show error instead of silently failing
+function ClerkKeyMissingScreen() {
+  useEffect(() => {
+    try {
+      Sentry.captureMessage('CRITICAL: clerkPublishableKey missing in build', 'fatal');
+    } catch { /* Sentry may not be initialized yet */ }
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+  return (
+    <View style={layoutStyles.errorContainer}>
+      <Text style={layoutStyles.errorText}>
+        خطأ في الإعداد. يرجى إعادة تثبيت التطبيق.
+      </Text>
+    </View>
+  );
+}
+
+const layoutStyles = StyleSheet.create({
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a0030',
+  },
+  errorText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+});
 
 // Token cache for Clerk
 const tokenCache = {
@@ -67,17 +102,19 @@ const tokenCache = {
 
 function ClerkGate({ children }: { children: React.ReactNode }) {
   const { isLoaded } = useAuth();
-  const didHideNativeRef = React.useRef(false);
 
+  // Fix 3a: hide splash as soon as Clerk is ready
   useEffect(() => {
-    if (didHideNativeRef.current) return;
-    didHideNativeRef.current = true;
-    const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        SplashScreen.hideAsync().catch(() => {});
-      });
-    });
-    return () => cancelAnimationFrame(frame);
+    if (!isLoaded) return;
+    SplashScreen.hideAsync().catch(() => {});
+  }, [isLoaded]);
+
+  // Fix 3b: absolute safety — hide splash after 10s no matter what
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 10000);
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   if (!isLoaded) {
@@ -204,10 +241,11 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const run = async () => {
+      // Fix 4: fire-and-forget — don't block on server wakeup
       try {
         const { serverWakeupService } = await import('../services/serverWakeup.service');
-        await serverWakeupService.ensureServerAwake();
-        if (!cancelled) logger.debug('[PreloadInitializer] Server wakeup complete');
+        serverWakeupService.ensureServerAwake().catch(() => {});
+        logger.debug('[PreloadInitializer] Server wakeup triggered (non-blocking)');
       } catch (err) {
         logger.warn('[PreloadInitializer] Server wakeup failed (non-critical):', err);
       }
@@ -294,8 +332,14 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
   }, [isInitialized, isRTL]);
 
   // Keep native splash visible until language/direction is stable (avoids black flash + layout “shake”).
-  if (!isInitialized || I18nManager.isRTL !== isRTL || didRequestReloadRef.current) {
-    return null;
+  // Fix 1: NEVER return null — always show AppSplashScreen while not ready
+  if (!isInitialized) {
+    return <AppSplashScreen />;
+  }
+
+  // RTL mismatch: reload in progress — keep splash visible
+  if (I18nManager.isRTL !== isRTL || didRequestReloadRef.current) {
+    return <AppSplashScreen />;
   }
 
   return <>{children}</>;
@@ -316,7 +360,7 @@ export default function RootLayout() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
-      console.log('[DeepLink] Received:', url);
+      logger.debug('[DeepLink] Received:', url);
 
       if (url.startsWith('90plus://reel/')) {
         const reelId = url.replace('90plus://reel/', '');
@@ -356,7 +400,7 @@ export default function RootLayout() {
           }
         }
       } catch (error) {
-        console.warn('Failed to check app version:', error);
+        logger.warn('Failed to check app version:', error);
       }
     };
 
@@ -369,6 +413,7 @@ export default function RootLayout() {
     };
     initializeAudioAndAssets();
 
+    // Fix 1.5: batch prefetch with 5s delay — max 30 logos, batch 5, 100ms between batches
     const loadLogosAndPrefetch = async () => {
       try {
         const { preloadClubLogos } = await import('../services/clubLogoService');
@@ -378,34 +423,41 @@ export default function RootLayout() {
           if (club.apiId && !club.logo) {
             const { getClubLogo } = await import('../services/clubLogoService');
             const logo = await getClubLogo(club.apiId);
-            if (logo) {
-              club.logo = logo;
-            }
+            if (logo) { club.logo = logo; }
           }
         });
         await Promise.allSettled(logoPromises);
 
-        const clubImages = CLUBS.map(c => c.logo).filter(url => url && url.length > 0);
-        const brandImages = BRANDS.map(b => b.logo).filter(url => url && url.length > 0);
-        const allImages = [...clubImages, ...brandImages];
-        if (allImages.length > 0) {
-          await Image.prefetch(allImages);
+        const clubImages = CLUBS.map(c => c.logo).filter((url): url is string => !!url && url.length > 0);
+        const brandImages = BRANDS.map(b => b.logo).filter((url): url is string => !!url && url.length > 0);
+        const allImages = [...clubImages, ...brandImages].slice(0, 30);
+
+        const batchSize = 5;
+        for (let i = 0; i < allImages.length; i += batchSize) {
+          const batch = allImages.slice(i, i + batchSize);
+          await Promise.allSettled(batch.map(url => Image.prefetch(url)));
+          if (i + batchSize < allImages.length) {
+            await new Promise<void>(r => setTimeout(r, 100));
+          }
         }
       } catch (err) {
         logger.warn('[RootLayout] Logo loading/prefetch failed:', err);
       }
     };
 
-    loadLogosAndPrefetch().catch(err => {
-      logger.warn('[RootLayout] Logo loading failed:', err);
-    });
+    // Delay logos until after app is interactive (Fix 1.5)
+    setTimeout(() => {
+      loadLogosAndPrefetch().catch(err => {
+        logger.warn('[RootLayout] Logo loading failed:', err);
+      });
+    }, 5000);
 
     cacheService.cleanup().catch(err => {
-      console.warn('[RootLayout] Cache cleanup failed:', err);
+      logger.warn('[RootLayout] Cache cleanup failed (non-critical):', err);
     });
 
     cacheService.clearSearchCache().catch(err => {
-      console.warn('[RootLayout] Search cache clear failed:', err);
+      logger.warn('[RootLayout] Search cache clear failed (non-critical):', err);
     });
 
        SplashScreen.setOptions({ duration: 450, fade: true });
@@ -443,11 +495,15 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary onError={handleError} onGoHome={handleGoHome}>
+      {!clerkPublishableKey ? (
+        <ClerkKeyMissingScreen />
+      ) : (
       <ClerkProvider
         publishableKey={clerkPublishableKey}
         tokenCache={tokenCache}
       >
         <SentryUserTracker />
+        <PushNotificationSetup />
         <QueryClientProvider client={queryClient}>
           <WebSocketInitializer>
             <PreloadInitializer>
@@ -461,6 +517,7 @@ export default function RootLayout() {
                             <GestureHandlerRootView style={{ flex: 1 }}>
                               <SafeAreaProvider>
                                 <View style={{ flex: 1, backgroundColor: '#000' }}>
+                                  <GlobalOfflineBanner />
                                   <StatusBar
                                     barStyle="light-content"
                                     backgroundColor="#000"
@@ -482,6 +539,7 @@ export default function RootLayout() {
           </WebSocketInitializer>
         </QueryClientProvider>
       </ClerkProvider>
+      )}
     </ErrorBoundary>
   );
 }

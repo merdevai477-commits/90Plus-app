@@ -117,13 +117,12 @@ class PreloadManagerClass {
    * ✅ FIX: Allow re-initialization for new sessions
    */
   async initialize(getToken: () => Promise<string | null>): Promise<void> {
-    // ✅ FIX: Allow re-initialization if token getter changed (new session)
+    // Allow re-initialization if token getter changed (new session)
     if (this.isInitialized && this.tokenGetter === getToken) {
       logger.debug('[PreloadManager] Already initialized with same token getter');
       return;
     }
 
-    // Stop previous refresh if re-initializing
     if (this.isInitialized) {
       logger.debug('[PreloadManager] Re-initializing with new session');
       this.stopPeriodicRefresh();
@@ -131,17 +130,53 @@ class PreloadManagerClass {
 
     this.tokenGetter = getToken;
     this.isInitialized = true;
-    
-    logger.info('[PreloadManager] Initializing background preloading');
 
-    // ✅ OPTIMIZATION: Start preloading in background without blocking
-    // This allows the app to start faster
-    this.preloadAllScreens().catch(err => {
-      logger.warn('[PreloadManager] Background preload error:', err);
+    logger.info('[PreloadManager] Initializing tiered background preloading');
+
+    // Fix 6: Tiered loading — spread API calls over time to avoid startup congestion
+
+    // TIER 1 — user identity only, run immediately (non-blocking)
+    this.loadTier1().catch(err => {
+      logger.warn('[PreloadManager] Tier 1 preload error:', err);
     });
+
+    // TIER 2 — live data user sees first, after 1s
+    setTimeout(() => {
+      this.loadTier2().catch(err => {
+        logger.warn('[PreloadManager] Tier 2 preload error:', err);
+      });
+    }, 1000);
+
+    // TIER 3 — everything else, after 3s
+    setTimeout(() => {
+      this.loadTier3().catch(err => {
+        logger.warn('[PreloadManager] Tier 3 preload error:', err);
+      });
+    }, 3000);
 
     // Set up periodic refresh (Requirement 8.5)
     this.startPeriodicRefresh();
+  }
+
+  /** Tier 1: user profile only — 1 call, runs immediately */
+  private async loadTier1(): Promise<void> {
+    await this.preloadScreen('profile');
+  }
+
+  /** Tier 2: live data visible on first screen — home + reels */
+  private async loadTier2(): Promise<void> {
+    await Promise.allSettled([
+      this.preloadScreen('home'),
+      this.preloadScreen('reels'),
+    ]);
+  }
+
+  /** Tier 3: background data — notifications + rankings */
+  private async loadTier3(): Promise<void> {
+    await Promise.allSettled([
+      this.preloadScreen('notifications'),
+      this.preloadScreen('rankings'),
+    ]);
   }
 
   /**
@@ -489,10 +524,10 @@ class PreloadManagerClass {
           
           if (response.ok) {
             this.preloadedVideos.add(url);
-            console.log(`[PreloadManager] Preloaded: ${url.substring(0, 50)}...`);
+            logger.debug(`[PreloadManager] Preloaded: ${url.substring(0, 50)}...`);
           }
         } catch (error) {
-          console.warn(`[PreloadManager] Failed to preload: ${url.substring(0, 50)}...`);
+          logger.warn(`[PreloadManager] Failed to preload: ${url.substring(0, 50)}...`);
         }
       })
     );

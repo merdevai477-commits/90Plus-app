@@ -145,11 +145,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               </View>
 
               {/* Error Title */}
-              <Text style={styles.title}>Oops! Something went wrong</Text>
+              <Text style={styles.title}>عذراً! حدث خطأ غير متوقع</Text>
 
               {/* Error Message */}
               <Text style={styles.message}>
-                We encountered an unexpected error. Don't worry, your data is safe.
+                حدث خطأ في التطبيق. بياناتك بأمان. يمكنك المحاولة مرة أخرى.
               </Text>
 
               {/* Error Details (only in development) */}
@@ -169,7 +169,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   activeOpacity={0.8}
                 >
                   <RefreshCw size={20} color="#fff" />
-                  <Text style={styles.retryButtonText}>Try Again</Text>
+                  <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
                 </TouchableOpacity>
 
                 {/* Go Home Button */}
@@ -180,7 +180,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                     activeOpacity={0.8}
                   >
                     <Home size={20} color="#32CD32" />
-                    <Text style={styles.homeButtonText}>Go Home</Text>
+                    <Text style={styles.homeButtonText}>الصفحة الرئيسية</Text>
                   </TouchableOpacity>
                 )}
               </View>
