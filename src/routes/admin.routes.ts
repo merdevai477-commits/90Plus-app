@@ -6,6 +6,7 @@ import { StrikeService } from '../services/strike.service';
 import { AuditService, AuditAction, AuditTargetType } from '../services/audit.service';
 import { suspendUser, autoDeleteContent } from '../services/moderation.service';
 import { NotificationService } from '../services/notification.service';
+import { UploadAnalyticsService } from '../services/upload-analytics.service';
 
 const router = Router();
 
@@ -726,6 +727,21 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
         });
     } catch (error: any) {
         logger.error('Send test push error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * GET /api/admin/uploads/stats  (Fix 12)
+ * Upload analytics for last 7 days
+ */
+router.get('/uploads/stats', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const days = parseInt(req.query.days as string) || 7;
+        const stats = await UploadAnalyticsService.getStats(days);
+        res.json({ status: 'SUCCESS', data: stats });
+    } catch (error: any) {
+        logger.error('Upload stats error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });

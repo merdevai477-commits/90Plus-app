@@ -63,6 +63,10 @@ model User {
   profileCompletionPercentage Int? @default(0) // 0-100%
   firstVideoUploaded Boolean @default(false) // Track if user uploaded first video
 
+  // Storage quota (Fix 7)
+  storageUsedBytes  BigInt @default(0)
+  storageQuotaBytes BigInt @default(5368709120) // 5 GB default
+
   // Profile analytics
   profileViews    Int       @default(0)
   lastReelUpload  DateTime?
@@ -605,17 +609,31 @@ model Block {
   @@map("blocks")
 }
 
+enum ReelStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
 model Reel {
-  id                   String    @id @default(uuid())
+  id                   String     @id @default(uuid())
   userId               String
   videoUrl             String
-  videoStoragePath     String? // Path in Supabase Storage
+  videoStoragePath     String?
+  processedVideoUrl    String?    // URL after transcoding (H.264/720p)
+  processedVideoKey    String?    // R2 key of processed video
   thumbnail            String?
-  thumbnailStoragePath String? // Path in Supabase Storage
-  caption              String?   @db.Text
-  views                Int       @default(0)
-  sharesCount          Int       @default(0) // عدد المشاركات
-  isDeleted            Boolean   @default(false)
+  thumbnailStoragePath String?
+  caption              String?    @db.Text
+  views                Int        @default(0)
+  sharesCount          Int        @default(0)
+  fileSizeBytes        BigInt     @default(0) // Fix 7: track size for quota decrement
+  status               ReelStatus @default(PROCESSING)
+  // Mux Video fields (new reels use Mux; legacy reels keep videoStoragePath)
+  muxUploadId          String?    // Mux direct upload ID
+  muxAssetId           String?    // Mux asset ID (set by webhook)
+  muxPlaybackId        String?    // Mux playback ID (set by webhook)
+  isDeleted            Boolean    @default(false)
   deletedAt            DateTime?
 
   createdAt DateTime @default(now())
@@ -1764,4 +1782,55 @@ enum NotificationEventType {
   SENT
   OPENED
   DISMISSED
+}
+
+// ============================================
+// R2 ORPHAN TRACKER (Fix 2)
+// ============================================
+
+model R2OrphanTracker {
+  id           String   @id @default(uuid())
+  storagePath  String   @unique
+  bucket       String
+  fileSizeBytes BigInt  @default(0)
+  uploadedAt   DateTime @default(now())
+  resolved     Boolean  @default(false)
+  resolvedAt   DateTime?
+
+  @@index([resolved])
+  @@index([uploadedAt])
+  @@map("r2_orphan_tracker")
+}
+
+// ============================================
+// UPLOAD ANALYTICS (Fix 12)
+// ============================================
+
+enum UploadEventType {
+  AVATAR
+  COVER
+  REEL
+}
+
+enum UploadEventStatus {
+  SUCCESS
+  FAILED
+  TIMEOUT
+}
+
+model UploadEvent {
+  id          String            @id @default(uuid())
+  userId      String
+  type        UploadEventType
+  status      UploadEventStatus
+  fileSizeMB  Float
+  durationMs  Int
+  errorCode   String?
+  createdAt   DateTime          @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("upload_events")
 }

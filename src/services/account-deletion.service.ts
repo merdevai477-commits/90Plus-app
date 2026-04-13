@@ -1,6 +1,70 @@
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { clerkClient } from '@clerk/express';
+import Bull, { Queue } from 'bull';
+import { r2MediaStorage } from './r2-media-storage.service';
+
+// ─── Account cleanup queue (Fix 8) ───────────────────────────────────────────
+
+interface AccountCleanupJobData {
+  userId: string;
+  storagePaths: string[];
+}
+
+let accountCleanupQueue: Queue<AccountCleanupJobData> | null = null;
+
+function getAccountCleanupQueue(): Queue<AccountCleanupJobData> | null {
+  if (accountCleanupQueue) return accountCleanupQueue;
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return null;
+
+  accountCleanupQueue = new Bull<AccountCleanupJobData>('account-cleanup', {
+    redis: redisUrl,
+    defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
+  });
+
+  accountCleanupQueue.process(async (job) => {
+    const { userId, storagePaths } = job.data;
+    logger.info(`[AccountCleanup] Deleting ${storagePaths.length} R2 files for user ${userId}`);
+
+    const BATCH = 10;
+    let deleted = 0;
+    for (let i = 0; i < storagePaths.length; i += BATCH) {
+      const batch = storagePaths.slice(i, i + BATCH);
+      await Promise.all(
+        batch.map(async (p) => {
+          const ok = await r2MediaStorage.deleteObject(p);
+          if (ok) deleted++;
+          else logger.warn(`[AccountCleanup] Failed to delete: ${p}`);
+        }),
+      );
+    }
+    logger.info(`[AccountCleanup] Deleted ${deleted}/${storagePaths.length} files for user ${userId}`);
+  });
+
+  accountCleanupQueue.on('failed', (job, err) => {
+    logger.error(`[AccountCleanup] Job ${job.id} failed:`, err.message);
+  });
+
+  return accountCleanupQueue;
+}
+
+async function enqueueAccountCleanup(userId: string, storagePaths: string[]): Promise<void> {
+  const queue = getAccountCleanupQueue();
+  if (!queue) {
+    // Inline fallback — delete in batches of 10
+    logger.warn('[AccountCleanup] Queue unavailable, deleting inline in batches');
+    const BATCH = 10;
+    for (let i = 0; i < storagePaths.length; i += BATCH) {
+      const batch = storagePaths.slice(i, i + BATCH);
+      await Promise.all(
+        batch.map((p) => r2MediaStorage.deleteObject(p).catch(() => undefined)),
+      );
+    }
+    return;
+  }
+  await queue.add({ userId, storagePaths });
+}
 
 export class AccountDeletionService {
   /**
@@ -82,20 +146,33 @@ export class AccountDeletionService {
   }
 
   /**
-   * Delete all user data (cascade delete)
+   * Delete all user data (cascade delete) + enqueue R2 cleanup (Fix 8)
    */
   static async deleteUserData(userId: string): Promise<void> {
     try {
-      // Delete in order to respect foreign key constraints
-      
-      // 1. Delete user's reels and related data
-      const reels = await prisma.reel.findMany({
-        where: { userId },
-        select: { id: true },
-      });
-      
+      // Collect all R2 storage paths before deleting DB records
+      const [reels, userRecord] = await Promise.all([
+        prisma.reel.findMany({
+          where: { userId },
+          select: { id: true, videoStoragePath: true, processedVideoKey: true, thumbnailStoragePath: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { avatarStoragePath: true, coverStoragePath: true },
+        }),
+      ]);
+
+      const storagePaths: string[] = [];
       for (const reel of reels) {
-        // Delete reel-related data
+        if (reel.videoStoragePath) storagePaths.push(reel.videoStoragePath);
+        if (reel.processedVideoKey) storagePaths.push(reel.processedVideoKey);
+        if (reel.thumbnailStoragePath) storagePaths.push(reel.thumbnailStoragePath);
+      }
+      if (userRecord?.avatarStoragePath) storagePaths.push(userRecord.avatarStoragePath);
+      if (userRecord?.coverStoragePath) storagePaths.push(userRecord.coverStoragePath);
+
+      // Delete in order to respect foreign key constraints
+      for (const reel of reels) {
         await prisma.like.deleteMany({ where: { reelId: reel.id } });
         await prisma.comment.deleteMany({ where: { reelId: reel.id } });
         await prisma.reelView.deleteMany({ where: { reelId: reel.id } });
@@ -104,81 +181,36 @@ export class AccountDeletionService {
         await prisma.reelHashtag.deleteMany({ where: { reelId: reel.id } });
         await prisma.reelMention.deleteMany({ where: { reelId: reel.id } });
       }
-      
-      // Delete reels
+
       await prisma.reel.deleteMany({ where: { userId } });
-
-      // 2. Delete user's comments
       await prisma.comment.deleteMany({ where: { userId } });
-
-      // 3. Delete user's likes
       await prisma.like.deleteMany({ where: { userId } });
       await prisma.commentLike.deleteMany({ where: { userId } });
-
-      // 4. Delete user's predictions
       await prisma.prediction.deleteMany({ where: { userId } });
-
-      // 5. Delete user's quiz data
       await prisma.quizAttempt.deleteMany({ where: { userId } });
       await prisma.userQuizAnswer.deleteMany({ where: { userId } });
       await prisma.userQuizState.delete({ where: { userId } }).catch(() => {});
-
-      // 6. Delete user's notifications
       await prisma.notification.deleteMany({ where: { userId } });
-
-      // 7. Delete user's follows
-      await prisma.follow.deleteMany({
-        where: {
-          OR: [{ followerId: userId }, { followingId: userId }],
-        },
-      });
-
-      // 8. Delete user's blocks
-      await prisma.block.deleteMany({
-        where: {
-          OR: [{ blockerId: userId }, { blockedId: userId }],
-        },
-      });
-
-      // 9. Delete user's reports
-      await prisma.report.deleteMany({
-        where: {
-          OR: [{ reporterId: userId }, { reportedUserId: userId }],
-        },
-      });
-
-      // 10. Delete user's strikes
+      await prisma.follow.deleteMany({ where: { OR: [{ followerId: userId }, { followingId: userId }] } });
+      await prisma.block.deleteMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] } });
+      await prisma.report.deleteMany({ where: { OR: [{ reporterId: userId }, { reportedUserId: userId }] } });
       await prisma.strike.deleteMany({ where: { userId } });
-
-      // 11. Delete user's coin transactions
       await prisma.coinTransaction.deleteMany({ where: { userId } });
-
-      // 12. Delete user's achievements
       await prisma.userAchievement.deleteMany({ where: { userId } });
-
-      // 13. Delete user's favorite matches
       await prisma.favoriteMatch.deleteMany({ where: { userId } });
-
-      // 14. Delete user's daily spin history
       await prisma.dailySpinHistory.deleteMany({ where: { userId } });
-
-      // 15. Delete user's saved reels
       await prisma.savedReel.deleteMany({ where: { userId } });
-
-      // 16. Delete user's reel shares
       await prisma.reelShare.deleteMany({ where: { userId } });
-
-      // 17. Delete user's reel views
       await prisma.reelView.deleteMany({ where: { userId } });
-
-      // 18. Delete user's sessions
       await prisma.session.deleteMany({ where: { userId } });
-
-      // 19. Delete user's refresh tokens
       await prisma.refreshToken.deleteMany({ where: { userId } });
-
-      // 20. Delete user's terms acceptances
       await prisma.termsAcceptance.deleteMany({ where: { userId } });
+
+      // Enqueue R2 cleanup after DB records are gone (Fix 8)
+      if (storagePaths.length > 0) {
+        await enqueueAccountCleanup(userId, storagePaths);
+        logger.info(`[AccountDeletion] Enqueued R2 cleanup for ${storagePaths.length} files`);
+      }
 
       logger.info(`All data deleted for user ${userId}`);
     } catch (error) {

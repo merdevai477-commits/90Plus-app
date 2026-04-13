@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { StrikeService, StrikeType } from './strike.service';
 import { NotificationService } from './notification.service';
 import { ReportPriority } from '@prisma/client';
+import { r2MediaStorage } from './r2-media-storage.service';
 
 const CONTENT_AUTO_DELETE_THRESHOLD = 5;
 const USER_SUSPENSION_THRESHOLD = 10;
@@ -97,7 +98,7 @@ export async function autoDeleteContent(
         if (contentType === 'reel') {
             const reel = await prisma.reel.findUnique({
                 where: { id: contentId },
-                select: { id: true, userId: true, isDeleted: true },
+                select: { id: true, userId: true, isDeleted: true, videoStoragePath: true, processedVideoKey: true, thumbnailStoragePath: true },
             });
 
             if (!reel || reel.isDeleted) {
@@ -111,6 +112,12 @@ export async function autoDeleteContent(
                     deletedAt: new Date(),
                 },
             });
+
+            // Fix 4: Delete R2 files (non-blocking)
+            const pathsToDelete = [reel.videoStoragePath, reel.processedVideoKey, reel.thumbnailStoragePath].filter(Boolean) as string[];
+            for (const p of pathsToDelete) {
+                r2MediaStorage.deleteObject(p).catch((err: any) => logger.warn(`[Moderation] R2 delete failed for ${p}:`, err?.message));
+            }
 
             // Notify content owner
             await NotificationService.createNotification({

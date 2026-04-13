@@ -25,6 +25,10 @@
         "allowSyntheticDefaultImports": true,
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
+        "typeRoots": [
+            "./node_modules/.prisma",
+            "./node_modules/@types"
+        ],
         "types": [
             "node",
             "jest"
@@ -42,6 +46,9 @@
             ],
             "@common/*": [
                 "src/common/*"
+            ],
+            "@prisma/client": [
+                "node_modules/.prisma/client/index.d.ts"
             ]
         }
     },

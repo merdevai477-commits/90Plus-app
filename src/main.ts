@@ -38,6 +38,16 @@ initializeSentry(app);
 app.set('trust proxy', true);
 
 // ============================================
+// MUX WEBHOOK — raw body MUST be registered before express.json()
+// ============================================
+import muxWebhookRoutes from './routes/mux-webhook.routes';
+app.use(
+  `${API_PREFIX}/webhooks/mux`,
+  express.raw({ type: 'application/json' }),
+  muxWebhookRoutes,
+);
+
+// ============================================
 // MIDDLEWARE
 // ============================================
 // Helmet security headers with production optimizations
@@ -730,6 +740,16 @@ async function startServer() {
         // Initialize WebSocket server (Requirements: 21.1)
         WebSocketService.initialize(httpServer);
 
+        // ✅ Fix 1: Initialize video-processing queue + verify ffmpeg (always, regardless of football API key)
+        try {
+            const { getVideoProcessingQueue, verifyFfmpeg } = await import('./services/video-processor.service');
+            getVideoProcessingQueue();
+            verifyFfmpeg();
+            logger.info('✅ Video processing queue initialised');
+        } catch (vpErr) {
+            logger.error('❌ Failed to initialise video processing queue:', vpErr);
+        }
+
         httpServer.listen(PORT, '0.0.0.0', async () => {
             logger.info('🚀 90Plus Backend is running! ');
             logger.info(`📍 Server: http://0.0.0.0:${PORT}`);
@@ -793,7 +813,6 @@ async function startServer() {
                         // ✅ Initialize receipt queue
                         const { getReceiptQueue } = await import('./queues/receipt.queue');
                         getReceiptQueue();
-
                         // ✅ Verify FCM/APNs configuration on startup
                         const { verifyFCMConfiguration } = await import('./services/push-notification.service');
                         verifyFCMConfiguration();
@@ -862,6 +881,18 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ GDPR Export Cleanup Cron Job scheduled (daily at 3 AM)');
+
+                    // ✅ Fix 2: R2 Orphan Cleanup – daily at 03:00 Cairo (UTC+2 = 01:00 UTC)
+                    cron.schedule('0 1 * * *', async () => {
+                        logger.info('⏰ Cron: Running R2 orphan cleanup...');
+                        try {
+                            const { runOrphanCleanup } = await import('./services/r2-cleanup.service');
+                            await runOrphanCleanup();
+                        } catch (error) {
+                            logger.error('❌ R2 orphan cleanup cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ R2 Orphan Cleanup Cron Job scheduled (daily at 03:00 Cairo)');
                     
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();

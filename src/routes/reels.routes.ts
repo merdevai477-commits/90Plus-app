@@ -9,6 +9,7 @@ import { redisCacheService } from '../services/redis-cache.service';
 import { moderateReelCaption, moderateComment } from '../middleware/content-moderation.middleware';
 import { filterUGCContent } from '../middleware/filter-content.middleware';
 import { enqueueNotification, enqueueSocialNotification } from '../queues/notification.queue';
+import { r2MediaStorage } from '../services/r2-media-storage.service';
 
 const router = Router();
 
@@ -3350,6 +3351,161 @@ router.get('/rankings', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get reels rankings error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+// ============================================
+// GET /api/reels/:id/signed-url  (Fix 3)
+// Return a fresh signed URL for a reel video
+// ============================================
+router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const reelId = ensureString(req.params.id);
+        const clerkUserId = req.auth?.userId;
+
+        const reel = await prisma.reel.findUnique({
+            where: { id: reelId },
+            select: { id: true, userId: true, videoStoragePath: true, processedVideoKey: true, isDeleted: true },
+        });
+
+        if (!reel || reel.isDeleted) {
+            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            return;
+        }
+
+        // Fix 3: Verify ownership — only the reel owner gets a signed URL
+        const currentUser = clerkUserId
+            ? await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
+            : null;
+
+        if (!currentUser || currentUser.id !== reel.userId) {
+            res.status(403).json({ status: 'ERROR', message: 'Access denied' });
+            return;
+        }
+
+        const storagePath = reel.processedVideoKey || reel.videoStoragePath;
+        if (!storagePath) {
+            res.status(404).json({ status: 'ERROR', message: 'Video file not found in storage' });
+            return;
+        }
+
+        let signedUrl: string;
+        try {
+            signedUrl = await r2MediaStorage.generateSignedUrl(storagePath, 3600);
+        } catch (signErr: any) {
+            logger.error('[reels/signed-url] AWS SDK error:', signErr?.message);
+            res.status(500).json({ status: 'ERROR', message: 'Failed to generate signed URL' });
+            return;
+        }
+
+        res.json({
+            status: 'SUCCESS',
+            data: { reelId, signedUrl, expiresIn: 3600 },
+        });
+    } catch (error: any) {
+        logger.error('Get signed URL error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+// ============================================
+// DELETE /api/reels/:id  (Fix 4 – R2 cascade)
+// Delete a reel and its R2 files
+// ============================================
+router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const reelId = ensureString(req.params.id);
+        const clerkUserId = req.auth?.userId;
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId: clerkUserId! },
+            select: { id: true, reelDeleteCount: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        const MAX_REEL_DELETES = 2;
+        if (user.reelDeleteCount >= MAX_REEL_DELETES) {
+            res.status(429).json({
+                status: 'ERROR',
+                code: 'MAX_DELETES_REACHED',
+                message: 'لقد وصلت للحد الأقصى من مسح الفيديوهات (2 مرات)',
+                deletesUsed: user.reelDeleteCount,
+                maxDeletes: MAX_REEL_DELETES,
+            });
+            return;
+        }
+
+        const reel = await prisma.reel.findUnique({
+            where: { id: reelId },
+            select: { userId: true, videoStoragePath: true, processedVideoKey: true, thumbnailStoragePath: true, fileSizeBytes: true, muxAssetId: true },
+        });
+
+        if (!reel) {
+            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            return;
+        }
+
+        if (reel.userId !== user.id) {
+            res.status(403).json({ status: 'ERROR', message: 'Not authorized to delete this reel' });
+            return;
+        }
+
+        // Fix 4: Delete storage files (Mux asset OR R2 files)
+        if (reel.muxAssetId) {
+            // New reels: delete from Mux
+            const { deleteAsset } = await import('../services/mux.service');
+            await deleteAsset(reel.muxAssetId);
+        } else {
+            // Legacy reels: delete from R2
+            const pathsToDelete = [
+                reel.videoStoragePath,
+                reel.processedVideoKey,
+            ].filter(Boolean) as string[];
+            for (const p of pathsToDelete) {
+                const ok = await r2MediaStorage.deleteObject(p);
+                if (!ok) logger.warn(`[reels/delete] Could not delete R2 object: ${p}`);
+            }
+        }
+
+        // Always delete thumbnail from R2 (both old and new reels)
+        if (reel.thumbnailStoragePath) {
+            r2MediaStorage.deleteObject(reel.thumbnailStoragePath).catch((err: any) =>
+                logger.warn('[reels/delete] Thumbnail R2 delete failed:', err?.message),
+            );
+        }
+
+        await prisma.$transaction([
+            prisma.reel.delete({ where: { id: reelId } }),
+            prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    reelDeleteCount: { increment: 1 },
+                    lastReelUpload: null,
+                    // Fix 7: Decrement storage quota using stored file size
+                    ...(reel.fileSizeBytes > 0
+                        ? { storageUsedBytes: { decrement: reel.fileSizeBytes } }
+                        : {}),
+                },
+            }),
+        ]);
+
+        res.json({
+            status: 'SUCCESS',
+            message: 'تم حذف الفيديو بنجاح',
+            data: {
+                deletesUsed: user.reelDeleteCount + 1,
+                remainingDeletes: MAX_REEL_DELETES - (user.reelDeleteCount + 1),
+                maxDeletes: MAX_REEL_DELETES,
+                uploadCooldownReset: true,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Delete reel error:', error);
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
