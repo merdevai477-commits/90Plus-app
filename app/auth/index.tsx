@@ -10,10 +10,10 @@ import {
     Platform,
     ScrollView,
     Alert,
-    ActivityIndicator,
     Modal,
     Image,
     Dimensions,
+    ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -206,47 +206,44 @@ export default function AuthScreen() {
     const { isSignedIn, isLoaded, signOut } = useAuth();
     const { user } = useUser(); // ✅ Get user from useUser hook
 
-    // ✅ CRITICAL FIX: Handle case where user is already signed in but on auth screen
-    // This can happen if sync failed after Clerk session was activated
+    // Handle case where user is already signed in but landed on auth screen
+    // (e.g. after a failed sync post-restart). Try to sync; on failure just go Home
+    // — never sign the user out automatically.
     useEffect(() => {
         if (isLoaded && isSignedIn) {
-            console.log('⚠️ User already signed in on auth screen - attempting to sync or sign out');
-            
-            // Try to sync with backend
+            console.log('⚠️ User already signed in on auth screen — syncing...');
+
             const attemptSync = async () => {
                 try {
                     setLoadingMessage('جاري التحقق من حالة تسجيل الدخول...');
                     setShowLoadingScreen(true);
-                    
+
                     const syncResult = await syncUserWithBackend();
-                    
+
                     if (syncResult.success) {
-                        // Sync successful, redirect to home
                         console.log('✅ Sync successful, redirecting to home');
                         globalState.setUserType('diamond');
                         useHomeStore.getState().setUserMode('diamond');
-                        
-                        // ✅ Skip onboarding, go directly to Home
                         setTimeout(() => {
                             setShowLoadingScreen(false);
                             router.replace('/(tabs)/Home');
-                        }, 500);
+                        }, 300);
                     } else {
-                        // Sync failed, sign out and let user try again
-                        console.log('❌ Sync failed, signing out');
-                        await signOut?.();
+                        // Sync failed but Clerk session is valid — still go Home
+                        // Better UX: don't force login again for a backend hiccup
+                        console.warn('⚠️ Sync failed, but Clerk session is valid — going Home anyway');
                         setShowLoadingScreen(false);
-                        toastManager.showError('خطأ في المزامنة', 'فشل تحميل بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى.');
+                        router.replace('/(tabs)/Home');
                     }
                 } catch (error) {
                     console.error('❌ Sync attempt failed:', error);
-                    // Sign out on error
-                    await signOut?.();
+                    // Session is still valid — navigate home rather than signing out
                     setShowLoadingScreen(false);
-                    toastManager.showError('خطأ', 'حدث خطأ أثناء التحقق من حالة تسجيل الدخول. يرجى المحاولة مرة أخرى.');
+                    toastManager.showInfo('تنبيه', 'تم تحميل التطبيق. قد تحتاج لتحديث بعض البيانات.');
+                    router.replace('/(tabs)/Home');
                 }
             };
-            
+
             attemptSync();
         }
     }, [isLoaded, isSignedIn]);
@@ -520,14 +517,39 @@ export default function AuthScreen() {
             console.log('🔑 Activating Clerk session...');
             await setActiveSignIn({ session: sessionIdForRetry });
             console.log('✅ Session activated successfully');
+
             console.log('🔄 Syncing user with backend...');
-            const syncResult = await syncUserWithBackend();
-            if (!syncResult.success) {
-                console.error('❌ Sync failed after session activation');
-                await signOut?.();
-                setShowLoadingScreen(false);
-                throw new Error('Sync failed');
+            let syncResult: { success: boolean; isNewUser: boolean } | null = null;
+            try {
+                syncResult = await syncUserWithBackend();
+            } catch (syncErr: any) {
+                // Sync failed — but Clerk session is already active.
+                // DO NOT sign out. Navigate home; data will lazy-load.
+                console.warn('⚠️ Backend sync failed after session activation (non-fatal):', syncErr?.message);
+                toastManager.showInfo('تنبيه', 'تم تسجيل الدخول. جارٍ تحميل البيانات...');
+                globalState.setUserType('diamond');
+                useHomeStore.getState().setUserMode('diamond');
+                preloadManager.initialize(getToken).catch(() => {});
+                setTimeout(() => {
+                    setShowLoadingScreen(false);
+                    router.replace('/(tabs)/Home');
+                }, 400);
+                return;
             }
+
+            if (!syncResult?.success) {
+                // Sync returned false — still keep session, go Home
+                console.warn('⚠️ Sync returned false — proceeding to Home anyway');
+                globalState.setUserType('diamond');
+                useHomeStore.getState().setUserMode('diamond');
+                preloadManager.initialize(getToken).catch(() => {});
+                setTimeout(() => {
+                    setShowLoadingScreen(false);
+                    router.replace('/(tabs)/Home');
+                }, 400);
+                return;
+            }
+
             preloadManager.initialize(getToken).catch((err) => {
                 console.warn('[Auth] Preload initialization failed (non-critical):', err);
             });
@@ -537,44 +559,21 @@ export default function AuthScreen() {
             setTimeout(() => {
                 setShowLoadingScreen(false);
                 router.replace('/(tabs)/Home');
-            }, 500);
-        } catch (syncError: any) {
-            console.error('❌ Login sync error:', syncError);
-            try {
-                await signOut?.();
-                console.log('✅ Clerk session signed out after sync failure');
-            } catch (signOutError) {
-                console.warn('⚠️ Failed to sign out:', signOutError);
-            }
+            }, 400);
+        } catch (sessionError: any) {
+            // Only reach here if setActiveSignIn itself failed (Clerk error)
+            console.error('❌ Clerk session activation error:', sessionError);
             setShowLoadingScreen(false);
-            const isTimeoutError = syncError.name === 'SyncTimeoutError';
-            const errorTitle = syncError.title || 'خطأ';
-            const errorMessage =
-                syncError.message || 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.';
+            const isTimeoutError = sessionError.name === 'SyncTimeoutError';
+            const errorTitle = sessionError.title || 'خطأ في تسجيل الدخول';
+            const errorMessage = sessionError.message || 'حدث خطأ، يرجى المحاولة مرة أخرى.';
             if (isTimeoutError) {
                 Alert.alert(errorTitle, errorMessage, [
-                    {
-                        text: 'إلغاء',
-                        style: 'cancel',
-                        onPress: () => {
-                            setEmail('');
-                            setPassword('');
-                        },
-                    },
-                    {
-                        text: 'إعادة المحاولة',
-                        onPress: () => {
-                            void completeSignInWithSession(sessionIdForRetry);
-                        },
-                    },
+                    { text: 'إلغاء', style: 'cancel', onPress: () => { setEmail(''); setPassword(''); } },
+                    { text: 'إعادة المحاولة', onPress: () => { void completeSignInWithSession(sessionIdForRetry); } },
                 ]);
             } else {
-                Alert.alert(errorTitle, errorMessage, [
-                    {
-                        text: 'حسناً',
-                        onPress: () => {},
-                    },
-                ]);
+                Alert.alert(errorTitle, errorMessage, [{ text: 'حسناً' }]);
             }
         }
     };
@@ -1473,9 +1472,9 @@ export default function AuthScreen() {
         }
     };
 
-    // Show loading screen during authentication
-    if (showLoadingScreen) {
-        return <AuthLoadingScreen message={loadingMessage} />;
+    // Show full-screen loading as soon as any auth action starts
+    if (isLoading || showLoadingScreen) {
+        return <AuthLoadingScreen message={loadingMessage || (isLogin ? 'جاري تسجيل الدخول...' : 'جاري إنشاء الحساب...')} />;
     }
 
     return (
@@ -1686,19 +1685,13 @@ export default function AuthScreen() {
                                 onPress={handleAuth}
                                 onPressIn={handlePressIn}
                                 onPressOut={handlePressOut}
-                                disabled={isLoading}
+                                disabled={isLoading || showLoadingScreen}
                             >
                                 <View style={styles.gradientButton}>
-                                    {isLoading ? (
-                                        <ActivityIndicator color="#0A0514" />
-                                    ) : (
-                                        <>
-                                            <Text style={styles.submitText}>
-                                                {isLogin ? 'دخول' : 'تسجيل'}
-                                            </Text>
-                                            <ArrowRight color="#0A0514" size={20} />
-                                        </>
-                                    )}
+                                    <Text style={styles.submitText}>
+                                        {isLogin ? 'دخول' : 'تسجيل'}
+                                    </Text>
+                                    <ArrowRight color="#0A0514" size={20} />
                                 </View>
                             </TouchableOpacity>
                         </Animated.View>

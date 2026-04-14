@@ -45,6 +45,10 @@ export async function checkAppVersion(): Promise<AppVersionInfo | null> {
         const currentVersion = getCurrentAppVersion();
         const platform = Platform.OS;
 
+        // Abort after 6 seconds to prevent hanging fetch
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
         const response = await fetch(`${API_URL}/app/version?version=${encodeURIComponent(currentVersion)}&platform=${platform}`, {
             method: 'GET',
             headers: {
@@ -52,7 +56,10 @@ export async function checkAppVersion(): Promise<AppVersionInfo | null> {
                 'x-app-version': currentVersion,
                 'x-platform': platform,
             },
+            signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (response.status === 503) {
             // Maintenance mode

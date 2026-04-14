@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -8,210 +9,174 @@ import Animated, {
     withRepeat,
     withSequence,
     withDelay,
+    withSpring,
     Easing,
     interpolate,
+    runOnJS,
 } from 'react-native-reanimated';
-import Svg, { Circle, Path } from 'react-native-svg';
-import { COLORS } from './reels/constants';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface AuthLoadingScreenProps {
     message?: string;
 }
 
-// Golden Football Icon Component
-const GoldenFootball = ({ size = 80 }: { size?: number }) => (
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-        {/* Main ball */}
-        <Circle cx="50" cy="50" r="45" fill="#FFD700" />
-        {/* Pentagon patterns */}
-        <Path
-            d="M50 15 L65 35 L58 55 L42 55 L35 35 Z"
-            fill="#1a1a1a"
-        />
-        <Path
-            d="M80 40 L85 60 L70 75 L55 65 L65 45 Z"
-            fill="#1a1a1a"
-        />
-        <Path
-            d="M20 40 L35 45 L45 65 L30 75 L15 60 Z"
-            fill="#1a1a1a"
-        />
-        <Path
-            d="M35 80 L45 70 L55 70 L65 80 L50 90 Z"
-            fill="#1a1a1a"
-        />
-        {/* Highlight */}
-        <Circle cx="35" cy="30" r="8" fill="rgba(255,255,255,0.4)" />
-    </Svg>
-);
-
 export default function AuthLoadingScreen({ message = 'جاري تسجيل الدخول...' }: AuthLoadingScreenProps) {
-    // Animation values
-    const logoScale = useSharedValue(0);
-    const logoRotate = useSharedValue(0);
-    const textOpacity = useSharedValue(0);
-    const dotsOpacity1 = useSharedValue(0);
-    const dotsOpacity2 = useSharedValue(0);
-    const dotsOpacity3 = useSharedValue(0);
-    const pulseScale = useSharedValue(1);
-    const glowOpacity = useSharedValue(0.3);
+
+    // --- Logo ---
+    const logoScale   = useSharedValue(0.6);
+    const logoOpacity = useSharedValue(0);
+
+    // --- Progress bar ---
+    const progressWidth = useSharedValue(0);
+
+    // --- Shimmer on progress bar ---
+    const shimmerX = useSharedValue(-width);
+
+    // --- Message text ---
+    const textOpacity   = useSharedValue(0);
+    const textTranslateY = useSharedValue(12);
+
+    // --- Bouncing dots ---
+    const dot1Y = useSharedValue(0);
+    const dot2Y = useSharedValue(0);
+    const dot3Y = useSharedValue(0);
+
+    // --- Glow pulse ---
+    const glowScale   = useSharedValue(0.8);
+    const glowOpacity = useSharedValue(0);
 
     useEffect(() => {
-        // Logo entrance animation
-        logoScale.value = withSequence(
-            withTiming(1.2, { duration: 400, easing: Easing.out(Easing.back(1.5)) }),
-            withTiming(1, { duration: 200 })
-        );
+        // Logo entrance — spring pop
+        logoOpacity.value = withTiming(1, { duration: 350 });
+        logoScale.value   = withSpring(1, { damping: 12, stiffness: 140 });
 
-        // Continuous spinning rotation
-        logoRotate.value = withRepeat(
-            withTiming(360, { duration: 2000, easing: Easing.linear }),
-            -1,
-            false
-        );
-
-        // Text fade in
-        textOpacity.value = withDelay(300, withTiming(1, { duration: 500 }));
-
-        // Dots animation (loading indicator)
-        dotsOpacity1.value = withRepeat(
+        // Glow breathing
+        glowOpacity.value = withDelay(200, withRepeat(
             withSequence(
-                withTiming(1, { duration: 300 }),
-                withTiming(0.3, { duration: 300 })
-            ),
-            -1,
-            true
+                withTiming(0.55, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0.18, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+            ), -1, true
+        ));
+        glowScale.value = withDelay(200, withRepeat(
+            withSequence(
+                withTiming(1.18, { duration: 900 }),
+                withTiming(0.92, { duration: 900 }),
+            ), -1, true
+        ));
+
+        // Progress bar — fast initial burst then slows (feels snappy)
+        progressWidth.value = withSequence(
+            withTiming(0.55 * width, { duration: 600, easing: Easing.out(Easing.cubic) }),
+            withTiming(0.75 * width, { duration: 1200, easing: Easing.out(Easing.quad) }),
+            withTiming(0.88 * width, { duration: 2000, easing: Easing.out(Easing.quad) }),
         );
-        dotsOpacity2.value = withDelay(
-            150,
-            withRepeat(
+
+        // Shimmer sweep on progress bar
+        shimmerX.value = withDelay(300, withRepeat(
+            withTiming(width * 1.2, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+            -1, false
+        ));
+
+        // Message text slide-up fade-in
+        textOpacity.value    = withDelay(250, withTiming(1, { duration: 400 }));
+        textTranslateY.value = withDelay(250, withSpring(0, { damping: 16, stiffness: 120 }));
+
+        // Bouncing dots — cascade
+        const dotBounce = (dot: Animated.SharedValue<number>, delay: number) => {
+            dot.value = withDelay(delay, withRepeat(
                 withSequence(
-                    withTiming(1, { duration: 300 }),
-                    withTiming(0.3, { duration: 300 })
-                ),
-                -1,
-                true
-            )
-        );
-        dotsOpacity3.value = withDelay(
-            300,
-            withRepeat(
-                withSequence(
-                    withTiming(1, { duration: 300 }),
-                    withTiming(0.3, { duration: 300 })
-                ),
-                -1,
-                true
-            )
-        );
+                    withTiming(-8, { duration: 280, easing: Easing.out(Easing.quad) }),
+                    withTiming(0,  { duration: 280, easing: Easing.in(Easing.quad) }),
+                    withTiming(0,  { duration: 180 }), // brief rest
+                ), -1, false
+            ));
+        };
+        dotBounce(dot1Y, 400);
+        dotBounce(dot2Y, 560);
+        dotBounce(dot3Y, 720);
 
-        // Pulse animation
-        pulseScale.value = withRepeat(
-            withSequence(
-                withTiming(1.5, { duration: 1000, easing: Easing.out(Easing.ease) }),
-                withTiming(1, { duration: 1000 })
-            ),
-            -1,
-            true
-        );
-
-        // Glow animation
-        glowOpacity.value = withRepeat(
-            withSequence(
-                withTiming(0.6, { duration: 1500 }),
-                withTiming(0.3, { duration: 1500 })
-            ),
-            -1,
-            true
-        );
     }, []);
 
-    const logoStyle = useAnimatedStyle<ViewStyle>(() => {
-        const transform = [
-            { scale: logoScale.value },
-            { rotate: `${logoRotate.value}deg` },
-        ] as unknown as ViewStyle['transform'];
-
-        return { transform };
-    });
-
-    const textStyle = useAnimatedStyle(() => ({
-        opacity: textOpacity.value,
-    }));
-
-    const dot1Style = useAnimatedStyle(() => ({
-        opacity: dotsOpacity1.value,
-    }));
-
-    const dot2Style = useAnimatedStyle(() => ({
-        opacity: dotsOpacity2.value,
-    }));
-
-    const dot3Style = useAnimatedStyle(() => ({
-        opacity: dotsOpacity3.value,
-    }));
-
-    const pulseStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: pulseScale.value }],
-        opacity: interpolate(pulseScale.value, [1, 1.5], [0.5, 0]),
+    // Styles
+    const logoStyle = useAnimatedStyle(() => ({
+        opacity: logoOpacity.value,
+        transform: [{ scale: logoScale.value }],
     }));
 
     const glowStyle = useAnimatedStyle(() => ({
         opacity: glowOpacity.value,
+        transform: [{ scale: glowScale.value }],
     }));
+
+    const progressStyle = useAnimatedStyle(() => ({
+        width: progressWidth.value,
+    }));
+
+    const shimmerStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: shimmerX.value }],
+    }));
+
+    const textStyle = useAnimatedStyle(() => ({
+        opacity: textOpacity.value,
+        transform: [{ translateY: textTranslateY.value }],
+    }));
+
+    const dot1Style = useAnimatedStyle(() => ({ transform: [{ translateY: dot1Y.value }] }));
+    const dot2Style = useAnimatedStyle(() => ({ transform: [{ translateY: dot2Y.value }] }));
+    const dot3Style = useAnimatedStyle(() => ({ transform: [{ translateY: dot3Y.value }] }));
 
     return (
         <View style={styles.container}>
+            {/* Background gradient */}
             <LinearGradient
-                colors={[COLORS.deepBlack, '#0a1a0a', COLORS.deepBlack]}
+                colors={['#1a0035', '#2d0060', '#1a0035']}
                 style={StyleSheet.absoluteFill}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
             />
 
-            {/* Background Glow */}
-            <Animated.View style={[styles.backgroundGlow, glowStyle]}>
-                <LinearGradient
-                    colors={['transparent', COLORS.neonGreen, 'transparent']}
-                    style={styles.glowGradient}
-                    start={{ x: 0, y: 0.5 }}
-                    end={{ x: 1, y: 0.5 }}
+            {/* Soft radial glow behind logo */}
+            <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
+
+            {/* Logo */}
+            <Animated.View style={[styles.logoContainer, logoStyle]}>
+                <Image
+                    source={require('../assets/images/90Plus.png')}
+                    style={styles.logo}
+                    contentFit="contain"
+                    priority="high"
+                    cachePolicy="memory-disk"
                 />
             </Animated.View>
 
-            {/* Pulse Ring */}
-            <Animated.View style={[styles.pulseRing, pulseStyle]} />
-
-            {/* Logo Container - Golden Spinning Football */}
-            <Animated.View style={[styles.logoContainer, logoStyle]}>
-                <View style={styles.ballWrapper}>
-                    <GoldenFootball size={90} />
-                </View>
-            </Animated.View>
-
-            {/* App Name */}
-            <Animated.Text style={[styles.appName, textStyle]}>
-                90Plus
-            </Animated.Text>
-
-            {/* Loading Message */}
-            <Animated.View style={[styles.messageContainer, textStyle]}>
+            {/* Message + dots */}
+            <Animated.View style={[styles.messageRow, textStyle]}>
                 <Text style={styles.message}>{message}</Text>
-                <View style={styles.dotsContainer}>
+                <View style={styles.dotsRow}>
                     <Animated.View style={[styles.dot, dot1Style]} />
                     <Animated.View style={[styles.dot, dot2Style]} />
                     <Animated.View style={[styles.dot, dot3Style]} />
                 </View>
             </Animated.View>
 
-            {/* Bottom Decoration */}
-            <View style={styles.bottomDecoration}>
-                <View style={styles.line} />
-                <Text style={styles.tagline}>Your Football Universe</Text>
-                <View style={styles.line} />
+            {/* Progress bar */}
+            <View style={styles.trackOuter}>
+                <Animated.View style={[styles.progressFill, progressStyle]}>
+                    {/* Shimmer overlay */}
+                    <Animated.View style={[StyleSheet.absoluteFill, styles.shimmerWrapper, shimmerStyle]}>
+                        <LinearGradient
+                            colors={['transparent', 'rgba(255,255,255,0.35)', 'transparent']}
+                            style={styles.shimmerGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        />
+                    </Animated.View>
+                </Animated.View>
             </View>
+
+            {/* Bottom tagline */}
+            <Text style={styles.tagline}>90 Plus · عالمك الكروي</Text>
         </View>
     );
 }
@@ -221,90 +186,82 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: COLORS.deepBlack,
+        backgroundColor: '#1a0035',
     },
-    backgroundGlow: {
+    glow: {
         position: 'absolute',
-        width: width * 2,
-        height: 200,
-        top: height * 0.3,
-    },
-    glowGradient: {
-        flex: 1,
-        opacity: 0.1,
-    },
-    pulseRing: {
-        position: 'absolute',
-        width: 150,
-        height: 150,
-        borderRadius: 75,
-        borderWidth: 2,
-        borderColor: '#FFD700',
+        width: 260,
+        height: 260,
+        borderRadius: 130,
+        backgroundColor: '#7B2FBE',
+        // iOS shadow for bloom effect
+        shadowColor: '#9B59F5',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 80,
+        elevation: 0,
     },
     logoContainer: {
-        marginBottom: 30,
-        shadowColor: '#FFD700',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 20,
-        elevation: 20,
+        marginBottom: 32,
+        shadowColor: '#C084FC',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.6,
+        shadowRadius: 24,
+        elevation: 12,
     },
-    ballWrapper: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        justifyContent: 'center',
+    logo: {
+        width: 110,
+        height: 110,
+    },
+    messageRow: {
         alignItems: 'center',
-        borderWidth: 3,
-        borderColor: '#FFD700',
-    },
-    logoGradient: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    appName: {
-        fontSize: 42,
-        fontWeight: 'bold',
-        color: COLORS.white,
-        marginBottom: 20,
-        letterSpacing: 2,
-    },
-    messageContainer: {
-        alignItems: 'center',
+        marginBottom: 28,
+        gap: 10,
     },
     message: {
-        fontSize: 18,
-        color: COLORS.textSecondary,
-        marginBottom: 15,
+        fontSize: 17,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.92)',
+        letterSpacing: 0.3,
+        textAlign: 'center',
     },
-    dotsContainer: {
+    dotsRow: {
         flexDirection: 'row',
-        gap: 8,
+        alignItems: 'flex-end',
+        gap: 6,
+        height: 16,
     },
     dot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#FFD700',
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
+        backgroundColor: '#C084FC',
     },
-    bottomDecoration: {
-        position: 'absolute',
-        bottom: 60,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 15,
+    trackOuter: {
+        width: width * 0.62,
+        height: 5,
+        borderRadius: 3,
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        overflow: 'hidden',
     },
-    line: {
-        width: 40,
-        height: 1,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+    progressFill: {
+        height: '100%',
+        borderRadius: 3,
+        backgroundColor: '#9B59F5',
+        overflow: 'hidden',
+    },
+    shimmerWrapper: {
+        width: 80,
+    },
+    shimmerGradient: {
+        flex: 1,
     },
     tagline: {
+        position: 'absolute',
+        bottom: 52,
         fontSize: 12,
-        color: 'rgba(255,255,255,0.4)',
-        letterSpacing: 1,
+        color: 'rgba(255,255,255,0.3)',
+        letterSpacing: 1.2,
+        fontWeight: '500',
     },
 });

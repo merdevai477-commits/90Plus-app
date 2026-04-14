@@ -18,13 +18,17 @@ interface QueuedRequest {
   timestamp: number;
 }
 
+// Module-level flag: prevent multiple component instances from triggering
+// simultaneous wakeup calls (e.g. PreloadInitializer re-mounts)
+let _globalWakeupDone = false;
+
 class ServerWakeupService {
   private isWakingUp = false;
   private isAwake = false;
   private requestQueue: QueuedRequest[] = [];
   private wakeupPromise: Promise<boolean> | null = null;
   private lastWakeupAttempt = 0;
-  private readonly WAKEUP_COOLDOWN = 30000; // 30 seconds between wakeup attempts
+  private readonly WAKEUP_COOLDOWN = 60000; // 60s between wakeup attempts (increased to reduce health spam)
   private readonly QUEUE_TIMEOUT = 15000; // 15 seconds max wait in queue
   private readonly WAKEUP_TIMEOUT = 8000; // Fix 4: reduced from 20s to 8s
 
@@ -32,8 +36,14 @@ class ServerWakeupService {
    * Check if server is awake, wake it up if needed
    */
   async ensureServerAwake(): Promise<boolean> {
+    // Global dedup: only one wakeup across all component mounts
+    if (_globalWakeupDone) {
+      return this.isAwake;
+    }
+
     // If already awake, return immediately
     if (this.isAwake) {
+      _globalWakeupDone = true;
       return true;
     }
 
@@ -58,6 +68,10 @@ class ServerWakeupService {
     
     this.isWakingUp = false;
     this.wakeupPromise = null;
+
+    if (result) {
+      _globalWakeupDone = true;
+    }
     
     return result;
   }
@@ -167,6 +181,7 @@ class ServerWakeupService {
     if (this.isAwake) {
       logger.debug('[ServerWakeup] 💤 Server marked as asleep');
       this.isAwake = false;
+      _globalWakeupDone = false; // Allow next wakeup attempt
     }
   }
 
@@ -194,8 +209,10 @@ class ServerWakeupService {
     this.requestQueue = [];
     this.wakeupPromise = null;
     this.lastWakeupAttempt = 0;
+    _globalWakeupDone = false;
   }
 }
 
 export const serverWakeupService = new ServerWakeupService();
 export default serverWakeupService;
+

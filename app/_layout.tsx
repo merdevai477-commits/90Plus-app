@@ -18,6 +18,7 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { logger } from "../services/logger";
@@ -109,11 +110,11 @@ function ClerkGate({ children }: { children: React.ReactNode }) {
     SplashScreen.hideAsync().catch(() => {});
   }, [isLoaded]);
 
-  // Fix 3b: absolute safety — hide splash after 10s no matter what
+  // Absolute safety — hide splash after 5s no matter what (reduced from 10s)
   useEffect(() => {
     const safetyTimer = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => {});
-    }, 10000);
+    }, 5000);
     return () => clearTimeout(safetyTimer);
   }, []);
 
@@ -306,41 +307,83 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Key to persist RTL reload flag across app restarts (prevents infinite reload loop)
+const RTL_RELOAD_FLAG_KEY = '@rtl_reload_requested_v1';
+
 function LanguageInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useLanguageStore(state => state.initialize);
   const isInitialized = useLanguageStore(state => state.isInitialized);
   const isRTL = useLanguageStore(state => state.isRTL);
-  const didRequestReloadRef = React.useRef(false);
+  const isReloadingRef = React.useRef(false); // In-flight guard only
+  const [reloadFailed, setReloadFailed] = React.useState(false);
+  const [forceShow, setForceShow] = React.useState(false);
+  // null = unknown, true = already reloaded once, false = not yet
+  const [alreadyReloaded, setAlreadyReloaded] = React.useState<boolean | null>(null);
+
+  // Read persisted reload flag on mount
+  useEffect(() => {
+    AsyncStorage.getItem(RTL_RELOAD_FLAG_KEY)
+      .then(val => setAlreadyReloaded(val === 'true'))
+      .catch(() => setAlreadyReloaded(false));
+  }, []);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
+  // Safety net: after 5s always show children regardless of state
   useEffect(() => {
-    if (isInitialized) {
-      if (I18nManager.isRTL !== isRTL) {
-        I18nManager.allowRTL(isRTL);
-        I18nManager.forceRTL(isRTL);
-        // Applying RTL/LTR requires a full reload for stable layout.
-        // Without reload, the UI may "shake" during startup as layout direction changes.
-        if (!didRequestReloadRef.current) {
-          didRequestReloadRef.current = true;
-          Updates.reloadAsync().catch(() => {});
-        }
+    const timer = setTimeout(() => {
+      // Clear the reload flag in case it caused the loop
+      AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
+      setForceShow(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Wait until we know if we already reloaded
+    if (!isInitialized || alreadyReloaded === null) return;
+
+    if (I18nManager.isRTL !== isRTL) {
+      I18nManager.allowRTL(isRTL);
+      I18nManager.forceRTL(isRTL);
+
+      // CRITICAL: Only reload ONCE across app restarts using AsyncStorage
+      // useRef resets on every restart → causes infinite reload loop
+      if (!alreadyReloaded && !isReloadingRef.current) {
+        isReloadingRef.current = true;
+        logger.info('[LanguageInitializer] RTL mismatch — reloading once to fix layout direction');
+        AsyncStorage.setItem(RTL_RELOAD_FLAG_KEY, 'true')
+          .then(() => Updates.reloadAsync())
+          .catch(() => {
+            // Reload failed — clear flag and continue without RTL fix
+            isReloadingRef.current = false;
+            AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
+            setReloadFailed(true);
+          });
+      } else {
+        // Already reloaded once — don't loop. Clear flag for next cold start.
+        logger.info('[LanguageInitializer] RTL mismatch after reload — skipping to avoid loop');
+        AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
       }
+    } else {
+      // RTL is now correct — clear the persisted flag
+      AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
     }
-  }, [isInitialized, isRTL]);
+  }, [isInitialized, isRTL, alreadyReloaded]);
 
-  // Keep native splash visible until language/direction is stable (avoids black flash + layout “shake”).
-  // Fix 1: NEVER return null — always show AppSplashScreen while not ready
-  if (!isInitialized) {
-    return <AppSplashScreen />;
-  }
+  // Safety net fired — show children no matter what
+  if (forceShow) return <>{children}</>;
 
-  // RTL mismatch: reload in progress — keep splash visible
-  if (I18nManager.isRTL !== isRTL || didRequestReloadRef.current) {
-    return <AppSplashScreen />;
-  }
+  // Still reading AsyncStorage or initializing language
+  if (alreadyReloaded === null || !isInitialized) return <AppSplashScreen />;
+
+  // Reload failed — proceed without RTL fix (better than stuck forever)
+  if (reloadFailed) return <>{children}</>;
+
+  // Reload in progress — wait for it (safety net will unblock after 5s)
+  if (isReloadingRef.current) return <AppSplashScreen />;
 
   return <>{children}</>;
 }
@@ -387,7 +430,11 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    // Only run version check once — prevent re-render triggering multiple calls
+    let didRun = false;
     const checkVersion = async () => {
+      if (didRun) return;
+      didRun = true;
       try {
         const { checkAppVersion, showUpdateDialog, showMaintenanceDialog } = await import('../services/appVersionService');
         const versionInfo = await checkAppVersion();
@@ -405,7 +452,7 @@ export default function RootLayout() {
     };
 
     checkVersion();
-  }, []);
+  }, []); // Empty deps — run once on mount only
 
   useEffect(() => {
     const initializeAudioAndAssets = async () => {
