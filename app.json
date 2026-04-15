@@ -13,16 +13,33 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
       "usesAppleSignIn": true,
-      "buildNumber": "2",
+      "buildNumber": "78",
       "requireFullScreen": false,
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "35F9.1"
+            ]
+          }
+        ]
+      },
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "NSCameraUsageDescription": "90Plus needs access to your camera to capture photos and videos for your profile picture, cover image, and sharing football moments with the community.",
-        "NSMicrophoneUsageDescription": "90Plus needs access to your microphone to record audio when creating video content for reels and sharing your football commentary.",
-        "NSPhotoLibraryUsageDescription": "90Plus needs access to your photo library to select photos and videos for your profile, cover image, and sharing football content with other fans.",
-        "NSPhotoLibraryAddUsageDescription": "90Plus needs permission to save photos and videos to your library so you can keep your favorite football moments.",
+        "NSCameraUsageDescription": "تطبيق 90Plus يحتاج للوصول إلى الكاميرا لالتقاط صور وفيديوهات لملفك الشخصي، ومشاركته لحظاتك الكروية.",
+        "NSMicrophoneUsageDescription": "نحتاج صلاحية المايكروفون لتسجيل الصوت أثناء تصوير الفيديوهات والتعليقات الخاصة بك.",
+        "NSPhotoLibraryUsageDescription": "نحتاج الوصول لمكتبة الصور لاختيار صور الغلاف والبروفايل الخاصة بك ومقاطع الفيديو.",
+        "NSPhotoLibraryAddUsageDescription": "تطبيق 90Plus يحتاج الإذن لحفظ وتنزيل بعض الفيديوهات والصور الكروية في هاتفك.",
+        "NSUserNotificationsUsageDescription": "نرسل لك إشعارات بأهم الأحداث والمباريات وأهداف فريقك المفضل.",
         "ITSAppUsesNonExemptEncryption": false,
         "UIRequiredDeviceCapabilities": [],
         "UIDeviceFamily": [
@@ -41,9 +58,9 @@
       "package": "com.mhmdsh1892.ninetyplusapp",
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "SCHEDULE_EXACT_ALARM",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
@@ -61,8 +78,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "90Plus needs access to your photo library to select photos and videos for your profile and sharing football content.",
-          "cameraPermission": "90Plus needs access to your camera to capture photos and videos for your profile and sharing football moments."
+          "photosPermission": "نحتاج الوصول للصور لاختيار صور الغلاف والبروفايل.",
+          "cameraPermission": "يُرجى السماح بالوصول للكاميرا لالتقاط فيديوهاتك الرياضية."
         }
       ],
       [
@@ -89,7 +106,7 @@
         "expo-build-properties",
         {
           "ios": {
-            "deploymentTarget": "15.1",
+            "deploymentTarget": "16.0",
             "useFrameworks": "static"
           },
           "android": {
@@ -110,7 +127,6 @@
     },
     "jsEngine": "hermes",
     "updates": {
-      "url": "https://u.expo.dev/99512023-6916-4b26-be1e-8635ec3e0338",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -118,11 +134,13 @@
     "extra": {
       "apiUrl": "https://90plus-app-production-b28d.up.railway.app/api",
       "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "256beea1-dc6d-465c-8f01-d948396bd6ce"
+        "projectId": "36de28c5-7397-415f-a98a-f572c98b1de8"
       }
     },
-    "owner": "mrdev_10"
+    "owner": "90plus"
   }
 }

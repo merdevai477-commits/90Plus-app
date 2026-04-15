@@ -87,15 +87,17 @@ const layoutStyles = StyleSheet.create({
 const tokenCache = {
   async getToken(key: string) {
     try {
-      return SecureStore.getItemAsync(key);
+      return await SecureStore.getItemAsync(key);
     } catch (err) {
+      console.warn('SecureStore getToken error:', err);
       return null;
     }
   },
   async saveToken(key: string, value: string) {
     try {
-      return SecureStore.setItemAsync(key, value);
+      return await SecureStore.setItemAsync(key, value);
     } catch (err) {
+      console.warn('SecureStore saveToken error:', err);
       return;
     }
   },
@@ -550,8 +552,8 @@ export default function RootLayout() {
         tokenCache={tokenCache}
       >
         <SentryUserTracker />
-        <PushNotificationSetup />
         <QueryClientProvider client={queryClient}>
+          <PushNotificationSetup />
           <WebSocketInitializer>
             <PreloadInitializer>
               <LanguageInitializer>

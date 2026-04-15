@@ -81,6 +81,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
+
+    // CRITICAL: Hide native splash screen if it's still visible
+    // Otherwise, the user will be stuck forever seeing the splash
+    // screen while the error UI is hidden underneath.
+    try {
+      const SplashScreen = require('expo-splash-screen');
+      SplashScreen.hideAsync().catch(() => {});
+    } catch (e) {
+      // Ignore if not available
+    }
   }
 
   /**
