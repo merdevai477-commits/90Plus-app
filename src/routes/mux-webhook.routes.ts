@@ -34,15 +34,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // req.body is a raw Buffer here (set by express.raw() in main.ts)
   const rawBody: Buffer = req.body;
+  
+  // Debug info
+  const secret = process.env.MUX_WEBHOOK_SECRET;
+  logger.debug(`[MuxWebhook] Verifying signature. Secret starts with: ${secret?.substring(0, 4)}..., Length: ${secret?.length}, Body type: ${typeof rawBody}, Body size: ${rawBody?.length}`);
 
   let event: any;
   try {
     event = muxService.verifyWebhook(rawBody, signature);
   } catch (err: any) {
     logger.error('[MuxWebhook] Signature verification failed:', err.message);
-    res.status(401).json({ error: 'Invalid signature' });
+    res.status(401).json({ error: 'Invalid signature', details: err.message });
     return;
   }
 
