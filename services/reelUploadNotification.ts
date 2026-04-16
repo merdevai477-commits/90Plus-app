@@ -3,20 +3,29 @@ import * as Notifications from 'expo-notifications';
 import { logger } from './logger';
 
 const CHANNEL_ID = 'reel-upload';
+const CHANNEL_ID_RESULT = 'reel-upload-result';
 const ACTIVE_REQUEST_ID = 'reel-upload-active-session';
 
-let lastPresentedId: string | null = null;
 let lastProgressRounded = -1;
 
-async function ensureChannel(): Promise<void> {
+async function ensureChannels(): Promise<void> {
     if (Platform.OS !== 'android') return;
+    // Silent channel for progress updates (no sound, no vibration)
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-        name: 'رفع الريلز',
+        name: 'رفع الريلز - التقدم',
+        importance: Notifications.AndroidImportance.LOW,
+        vibrationPattern: [],
+        enableVibrate: false,
+        sound: null,
+        showBadge: false,
+    });
+    // Loud channel for success/failure only
+    await Notifications.setNotificationChannelAsync(CHANNEL_ID_RESULT, {
+        name: 'رفع الريلز - النتيجة',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250],
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        showBadge: true,
         enableVibrate: true,
+        showBadge: true,
     });
 }
 
@@ -32,29 +41,12 @@ async function ensurePermission(): Promise<boolean> {
     }
 }
 
-async function dismissTracked(): Promise<void> {
-    if (!lastPresentedId) return;
-    try {
-        await Notifications.dismissNotificationAsync(lastPresentedId);
-    } catch {
-        /* already dismissed */
-    }
-    lastPresentedId = null;
-}
-
-function androidExtras() {
-    if (Platform.OS !== 'android') return {};
-    return {
-        android: {
-            channelId: CHANNEL_ID,
-            sticky: true,
-            priority: Notifications.AndroidNotificationPriority.HIGH,
-        },
-    };
-}
-
 /**
  * إشعار محلي (ليس Push) يوضح للمستخدم أن الريلز يُرفع، بما في ذلك في الخلفية.
+ * - begin()         → إشعار واحد صامت (بدون صوت أو اهتزاز)
+ * - updateProgress() → يُحدّث نص الإشعار الصامت فقط كل 15٪
+ * - success()       → إشعار جديد بصوت واهتزاز
+ * - failure()       → إشعار جديد بصوت واهتزاز
  */
 export const reelUploadNotification = {
     async begin(): Promise<void> {
@@ -62,17 +54,27 @@ export const reelUploadNotification = {
         lastProgressRounded = -1;
         const ok = await ensurePermission();
         if (!ok) return;
-        await ensureChannel();
-        await dismissTracked();
+        await ensureChannels();
+
+        // Cancel any old one first
+        try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
+
         try {
-            lastPresentedId = await Notifications.scheduleNotificationAsync({
+            await Notifications.scheduleNotificationAsync({
                 identifier: ACTIVE_REQUEST_ID,
                 content: {
-                    title: 'جاري رفع الريلز',
-                    body: 'يتم تحضير الفيديو والرفع…',
-                    sound: 'default',
+                    title: '📤 جاري رفع الريلز',
+                    body: 'يتم تحضير الفيديو…',
+                    sound: null,           // ✅ NO SOUND on start
                     data: { type: 'reel_upload_progress' },
-                    ...androidExtras(),
+                    ...(Platform.OS === 'android' ? {
+                        android: {
+                            channelId: CHANNEL_ID,  // silent channel
+                            ongoing: true,           // stays visible during upload
+                            sticky: false,
+                            priority: Notifications.AndroidNotificationPriority.LOW,
+                        },
+                    } : {}),
                 },
                 trigger: null,
             });
@@ -82,29 +84,37 @@ export const reelUploadNotification = {
     },
 
     /**
-     * تحديث نص التقدّم؛ يُخفّف الضجيج (لا يحدّث الإشعار إلا كل ~8٪).
+     * تحديث نص التقدّم؛ يُحدّث فقط كل ~15٪ وبدون صوت أو اهتزاز.
      */
     async updateProgress(progress: number, phaseLabel: string): Promise<void> {
         if (Platform.OS === 'web') return;
         const rounded = Math.min(100, Math.max(0, Math.round(progress)));
         const jump = Math.abs(rounded - lastProgressRounded);
-        if (jump < 8 && rounded > 0 && rounded < 100) return;
+
+        // Only update every 15% — no sound either way
+        if (jump < 15 && rounded > 0 && rounded < 100) return;
         lastProgressRounded = rounded;
 
         const perm = await Notifications.getPermissionsAsync();
         if (perm.status !== 'granted') return;
 
-        await ensureChannel();
-        await dismissTracked();
         try {
-            lastPresentedId = await Notifications.scheduleNotificationAsync({
+            // Replace existing notification in-place (same identifier = no new pop)
+            await Notifications.scheduleNotificationAsync({
                 identifier: ACTIVE_REQUEST_ID,
                 content: {
-                    title: 'جاري رفع الريلز',
-                    body: `${phaseLabel} — ${rounded}٪`,
-                    sound: 'default',
+                    title: `📤 جاري رفع الريلز — ${rounded}٪`,
+                    body: phaseLabel,
+                    sound: null,           // ✅ NEVER make sound during progress
                     data: { type: 'reel_upload_progress', progress: rounded },
-                    ...androidExtras(),
+                    ...(Platform.OS === 'android' ? {
+                        android: {
+                            channelId: CHANNEL_ID,
+                            ongoing: true,
+                            sticky: false,
+                            priority: Notifications.AndroidNotificationPriority.LOW,
+                        },
+                    } : {}),
                 },
                 trigger: null,
             });
@@ -113,34 +123,32 @@ export const reelUploadNotification = {
         }
     },
 
-    async success(message = 'تم نشر الريلز في ملفك الشخصي.'): Promise<void> {
+    async success(message = 'تم نشر الريلز في ملفك الشخصي! 🎉'): Promise<void> {
         if (Platform.OS === 'web') return;
         lastProgressRounded = -1;
-        await dismissTracked();
-        try {
-            await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID);
-        } catch {
-            /* */
-        }
+
+        // Remove the ongoing progress notification
+        try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
+        try { await Notifications.dismissNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
+
         const perm = await Notifications.getPermissionsAsync();
         if (perm.status !== 'granted') return;
-        await ensureChannel();
+        await ensureChannels();
+
         try {
             await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: 'تم رفع الريلز',
+                    title: '✅ تم رفع الريلز!',
                     body: message,
-                    sound: 'default',
+                    sound: 'default',      // ✅ YES sound on success
                     data: { type: 'reel_upload_ok' },
-                    ...(Platform.OS === 'android'
-                        ? {
-                              android: {
-                                  channelId: CHANNEL_ID,
-                                  sticky: false,
-                                  priority: Notifications.AndroidNotificationPriority.HIGH,
-                              },
-                          }
-                        : {}),
+                    ...(Platform.OS === 'android' ? {
+                        android: {
+                            channelId: CHANNEL_ID_RESULT,  // loud channel
+                            sticky: false,
+                            priority: Notifications.AndroidNotificationPriority.HIGH,
+                        },
+                    } : {}),
                 },
                 trigger: null,
             });
@@ -152,31 +160,29 @@ export const reelUploadNotification = {
     async failure(message: string): Promise<void> {
         if (Platform.OS === 'web') return;
         lastProgressRounded = -1;
-        await dismissTracked();
-        try {
-            await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID);
-        } catch {
-            /* */
-        }
+
+        // Remove the ongoing progress notification
+        try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
+        try { await Notifications.dismissNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
+
         const perm = await Notifications.getPermissionsAsync();
         if (perm.status !== 'granted') return;
-        await ensureChannel();
+        await ensureChannels();
+
         try {
             await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: 'فشل رفع الريلز',
+                    title: '❌ فشل رفع الريلز',
                     body: message,
-                    sound: 'default',
+                    sound: 'default',       // ✅ YES sound on failure
                     data: { type: 'reel_upload_error' },
-                    ...(Platform.OS === 'android'
-                        ? {
-                              android: {
-                                  channelId: CHANNEL_ID,
-                                  sticky: false,
-                                  priority: Notifications.AndroidNotificationPriority.DEFAULT,
-                              },
-                          }
-                        : {}),
+                    ...(Platform.OS === 'android' ? {
+                        android: {
+                            channelId: CHANNEL_ID_RESULT,
+                            sticky: false,
+                            priority: Notifications.AndroidNotificationPriority.DEFAULT,
+                        },
+                    } : {}),
                 },
                 trigger: null,
             });
@@ -187,11 +193,7 @@ export const reelUploadNotification = {
 
     async clear(): Promise<void> {
         lastProgressRounded = -1;
-        await dismissTracked();
-        try {
-            await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID);
-        } catch {
-            /* */
-        }
+        try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
+        try { await Notifications.dismissNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
     },
 };
