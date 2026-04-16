@@ -171,9 +171,8 @@ export class MatchWatcherService {
 
         for (const favorite of matchFavorites) {
             const pushToken = favorite.user?.expoPushToken;
-            const hasConsent = favorite.user?.pushNotificationsConsent ?? true;
-            // Pass null if no consent so notification.service skips push but still saves in-app
-            const effectivePushToken = (hasConsent && pushToken) ? pushToken : null;
+            // The user explicitly tapped the bell icon for this match, so we bypass global pushNotificationsConsent.
+            const effectivePushToken = pushToken ? pushToken : null;
 
             const lastHomeScore = favorite.lastHomeScore ?? 0;
             const lastAwayScore = favorite.lastAwayScore ?? 0;

@@ -7,12 +7,16 @@ import { enqueueNotification } from '../queues/notification.queue';
 const router = Router();
 
 // Spin wheel prizes with probabilities
+// Spin wheel prizes with probabilities (Total exactly 100%)
 const SPIN_PRIZES = [
-  { coins: 5, probability: 50, label: '5 كوين', color: '#32cd32' },
-  { coins: 10, probability: 35, label: '10 كوين', color: '#00bfff' },
-  { coins: 25, probability: 10, label: '25 كوين', color: '#9b59b6' },
-  { coins: 50, probability: 4.5, label: '50 كوين', color: '#f39c12' },
-  { coins: 200, probability: 0.5, label: '200 كوين', color: '#e74c3c' },
+  { coins: 5, probability: 35, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { coins: 10, probability: 25, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { coins: 25, probability: 20, label: '25', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { coins: 50, probability: 8.9, label: '50', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { coins: 100, probability: 1, label: '100', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { coins: 200, probability: 0.1, label: '200', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { coins: 5, probability: 6, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { coins: 10, probability: 4, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
 ];
 
 // Helper function to select prize based on probability
@@ -116,7 +120,8 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
         prizes: SPIN_PRIZES.map(p => ({
           coins: p.coins,
           label: p.label,
-          color: p.color
+          colorLight: p.colorLight,
+          colorDark: p.colorDark
         }))
       }
     });
@@ -221,7 +226,8 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
         prize: {
           coins: prize.coins,
           label: prize.label,
-          color: prize.color
+          colorLight: prize.colorLight,
+          colorDark: prize.colorDark
         },
         newBalance: updatedUser.coins,
         nextSpinTime: new Date(now.getTime() + 24 * 60 * 60 * 1000)

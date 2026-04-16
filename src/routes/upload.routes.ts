@@ -386,6 +386,15 @@ router.post(
         fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
       });
 
+      import { enqueueNotification } from '../queues/notification.queue';
+      await enqueueNotification({
+        userId: user.id,
+        title: 'صورة البروفايل',
+        message: 'تم تحديث صورة البروفايل بنجاح!',
+        type: 'GENERAL',
+        data: { type: 'UPLOAD_SUCCESS' }
+      });
+
       res.json({ status: 'SUCCESS', message: 'تم رفع صورة البروفايل بنجاح', data: { url: result.url, storagePath: result.key } });
     } catch (error: any) {
       logger.error('Upload avatar error:', error);

@@ -1708,6 +1708,24 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
             select: { sharesCount: true }
         });
 
+        // Notify reel owner
+        if (reel.userId !== user.id) {
+            const sharer = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { username: true, displayName: true }
+            });
+            const sharerName = sharer?.displayName || sharer?.username || 'شخص';
+            
+            await enqueueSocialNotification({
+                userId: reel.userId,
+                actorId: user.id,
+                title: 'مشاركة جديدة',
+                message: `قام ${sharerName} بمشاركة مقطعك`,
+                type: 'GENERAL', // Map to general or SHARE if added to enum
+                data: { reelId: idStr, platform }
+            });
+        }
+
         res.json({ status: 'SUCCESS', data: { sharesCount: updatedReel.sharesCount } });
     } catch (error: any) {
         logger.error('Share reel error:', error);

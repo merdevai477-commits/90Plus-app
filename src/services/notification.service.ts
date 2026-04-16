@@ -133,7 +133,8 @@ export class NotificationService {
                         where: { id: userId },
                         select: { expoPushToken: true, pushNotificationsConsent: true },
                     });
-                    if (user?.pushNotificationsConsent && user.expoPushToken) {
+                    // For social interactions (like follow/like/comment/share), we prioritize pushing if token exists.
+                    if (user?.expoPushToken) {
                         effectivePushToken = user.expoPushToken;
                     }
                 } catch (err) {

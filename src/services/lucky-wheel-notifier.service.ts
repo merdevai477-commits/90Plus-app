@@ -8,12 +8,23 @@ const BATCH_SIZE = 100;
 
 // UTC offsets where it's currently 9 AM local time
 // e.g. if UTC is 07:00, then UTC+2 users (Egypt, Palestine, Syria) are at 09:00
-function getUTCOffsetsFor9AM(): number[] {
+// Target hours to send the lucky wheel reminder locally to the user
+const TARGET_HOURS = [9, 15, 21]; // 9 AM, 3 PM, 9 PM (approx every 8 waking hours)
+
+function getActiveOffsets(): { targetHour: number, offset: number }[] {
     const utcHour = new Date().getUTCHours();
-    // offset = 9 - utcHour  (e.g. UTC=7 → offset=+2)
-    const offset = 9 - utcHour;
-    // Also include offset-1 and offset+1 to catch DST edge cases
-    return [offset - 1, offset, offset + 1];
+    const active: { targetHour: number, offset: number }[] = [];
+    
+    for (const h of TARGET_HOURS) {
+        let offset = h - utcHour;
+        if (offset > 14) offset -= 24;
+        if (offset < -12) offset += 24;
+        active.push({ targetHour: h, offset });
+        // Include edges
+        active.push({ targetHour: h, offset: offset - 1 });
+        active.push({ targetHour: h, offset: offset + 1 });
+    }
+    return active;
 }
 
 // Map UTC offset (in hours) to list of timezone names
@@ -103,35 +114,38 @@ function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
 
 /**
  * Runs every hour.
- * Sends lucky wheel notification only to users where it's currently 9 AM in their timezone.
- * Uses Redis per-user dedup key (TTL 23h) to prevent double-send.
+ * Sends lucky wheel notification to users where it's currently 9 AM, 3 PM, or 9 PM in their timezone.
+ * Uses Redis per-user dedup key to prevent double-send for the SAME target hour.
  */
 async function runHourlyLuckyWheelNotifier(): Promise<void> {
-    const utcOffsets = getUTCOffsetsFor9AM();
+    const activeOffsetsRows = getActiveOffsets();
     const dateKey = new Date().toISOString().split('T')[0];
 
-    logger.info(`🎡 Lucky wheel hourly check - targeting UTC offsets: ${utcOffsets.join(', ')}`);
+    logger.info(`🎡 Lucky wheel hourly check - targeting local hours: ${TARGET_HOURS.join(', ')}`);
 
     try {
         const { getRedisClient } = await import('../lib/redis');
         const redis = getRedisClient();
-        // Get timezones that match current 9 AM window
-        const targetTimezones: string[] = [];
-        for (const offset of utcOffsets) {
-            const tzList = TIMEZONE_OFFSET_MAP[String(offset)];
-            if (tzList) targetTimezones.push(...tzList);
-        }
-
-        if (targetTimezones.length === 0) {
-            logger.debug('🎡 No timezones match 9 AM window this hour');
-            return;
+        
+        // Map of targetHour -> array of timezones matching
+        const hourTargetMap = new Map<number, { timezones: string[], offsets: number[] }>();
+        
+        for (const row of activeOffsetsRows) {
+            if (!hourTargetMap.has(row.targetHour)) {
+                hourTargetMap.set(row.targetHour, { timezones: [], offsets: [] });
+            }
+            const data = hourTargetMap.get(row.targetHour)!;
+            data.offsets.push(row.offset);
+            
+            const tzList = TIMEZONE_OFFSET_MAP[String(row.offset)];
+            if (tzList) data.timezones.push(...tzList);
         }
 
         // Start of today UTC (for lastDailySpin comparison)
         const startOfTodayUTC = new Date();
         startOfTodayUTC.setUTCHours(0, 0, 0, 0);
 
-        // Get eligible users (country-based timezone matching)
+        // Get eligible users who haven't spun today
         const eligibleUsers = await prisma.user.findMany({
             where: {
                 pushNotificationsConsent: true,
@@ -159,41 +173,57 @@ async function runHourlyLuckyWheelNotifier(): Promise<void> {
         });
         const optedOutIds = new Set(optedOut.map((p: { userId: string }) => p.userId));
 
-        // Filter users by timezone match + not opted out
-        // Users without country get the notification (default to Middle East window)
-        const targetUsers = eligibleUsers.filter((u: { id: string; country: string | null }) => {
-            if (optedOutIds.has(u.id)) return false;
-            if (!u.country) {
-                // No country set - send during UTC+2 window (Egypt/Palestine/Syria)
-                return utcOffsets.includes(2);
-            }
-            // Check if user's country timezone matches current 9 AM window
-            return targetTimezones.some(tz => tz.toLowerCase().includes(u.country!.toLowerCase().replace(' ', '_')))
-                || isCountryInOffsets(u.country, utcOffsets);
-        });
+        const targetSchedules: { userId: string, targetHour: number }[] = [];
 
-        if (targetUsers.length === 0) {
-            logger.debug('🎡 No users match 9 AM window this hour');
+        for (const user of eligibleUsers) {
+            if (optedOutIds.has(user.id)) continue;
+            
+            let matchedHour: number | null = null;
+            
+            if (!user.country) {
+                // No country set - assume UTC+2 (Egypt, etc.)
+                for (const [hour, data] of hourTargetMap.entries()) {
+                    if (data.offsets.includes(2)) { matchedHour = hour; break; }
+                }
+            } else {
+                for (const [hour, data] of hourTargetMap.entries()) {
+                    const countryClean = user.country.toLowerCase().replace(' ', '_');
+                    const matchTz = data.timezones.some(tz => tz.toLowerCase().includes(countryClean));
+                    const matchOffset = isCountryInOffsets(user.country, data.offsets);
+                    if (matchTz || matchOffset) {
+                        matchedHour = hour;
+                        break;
+                    }
+                }
+            }
+            
+            if (matchedHour !== null) {
+                targetSchedules.push({ userId: user.id, targetHour: matchedHour });
+            }
+        }
+
+        if (targetSchedules.length === 0) {
+            logger.debug('🎡 No users match notification windows this hour');
             return;
         }
 
-        // Dedup: filter out users already notified today
+        // Dedup: filter out users already notified for THIS target hour today
         const finalUsers: string[] = [];
-        for (const user of targetUsers) {
-            const dedupKey = `lucky-wheel-sent:${user.id}:${dateKey}`;
+        const dedupKeysToSet: string[] = [];
+        
+        for (const schedule of targetSchedules) {
+            const dedupKey = `lucky-wheel-sent:${schedule.userId}:${dateKey}:${schedule.targetHour}`;
             if (redis) {
                 const alreadySent = await redis.get(dedupKey);
                 if (alreadySent) continue;
             }
-            finalUsers.push(user.id);
+            finalUsers.push(schedule.userId);
+            dedupKeysToSet.push(dedupKey);
         }
 
-        if (finalUsers.length === 0) {
-            logger.debug('🎡 All matching users already notified today');
-            return;
-        }
+        if (finalUsers.length === 0) return;
 
-        logger.info(`🎡 Sending lucky wheel to ${finalUsers.length} users (9 AM in their timezone)`);
+        logger.info(`🎡 Sending lucky wheel to ${finalUsers.length} users for their local notification window`);
 
         const q = getLuckyWheelQueue();
 
@@ -212,18 +242,18 @@ async function runHourlyLuckyWheelNotifier(): Promise<void> {
                 const payloads = users.filter(u => u.expoPushToken).map(u => ({
                     to: u.expoPushToken!,
                     title: '🎡 عجلة الحظ جاهزة!',
-                    body: 'حظك النهارده ينتظرك، العب دلوقتي!',
+                    body: 'حظك النهارده ينتظرك، العب دلوقتي قبل ما يضيع اليوم!',
                     data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
                 }));
                 if (payloads.length > 0) await PushNotificationService.sendBulkNotifications(payloads);
             }
         }
 
-        // Mark users as notified today (TTL 23 hours)
-        if (redis) {
+        // Mark users as notified for this specific window today (TTL 23 hours)
+        if (redis && dedupKeysToSet.length > 0) {
             const pipeline = redis.pipeline();
-            for (const userId of finalUsers) {
-                pipeline.setex(`lucky-wheel-sent:${userId}:${dateKey}`, 23 * 60 * 60, '1');
+            for (const key of dedupKeysToSet) {
+                pipeline.setex(key, 23 * 60 * 60, '1');
             }
             await pipeline.exec();
         }
