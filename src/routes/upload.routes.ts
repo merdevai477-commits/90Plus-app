@@ -586,25 +586,8 @@ router.post(
       }
 
       // ── 3. Create Mux upload URL ──────────────────────────────────────────────
-      // Feature 5: Store raw video in R2 for 24h so failed reels can be retried.
-      // Key: reels/raw/{userId}/{reelId}_raw.mp4 — deleted by webhook on READY.
-      let rawVideoStoragePath: string | null = null;
-      try {
-        const rawResult = await r2MediaStorage.uploadPublic(
-          'reels' as any,
-          user.id,
-          videoFile.buffer,
-          `raw_${Date.now()}.mp4`,
-          videoFile.mimetype,
-        );
-        if (rawResult.success && rawResult.key) {
-          rawVideoStoragePath = rawResult.key;
-          logger.info(`[upload/reel] Raw video stored at ${rawVideoStoragePath} for retry support`);
-        }
-      } catch (rawErr: any) {
-        // Non-fatal — retry won't be available but upload still proceeds
-        logger.warn('[upload/reel] Raw video R2 store failed (non-fatal):', rawErr?.message);
-      }
+      // (Raw video storage removed for performance - Mux handles storage directly)
+      let rawVideoStoragePath: null = null;
 
       // We need reelId for passthrough — create a temporary placeholder reel first
       const placeholderReel = await prisma.reel.create({
