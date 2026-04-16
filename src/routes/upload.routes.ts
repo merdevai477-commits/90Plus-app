@@ -386,7 +386,7 @@ router.post(
         fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
       });
 
-      import { enqueueNotification } from '../queues/notification.queue';
+      const { enqueueNotification } = await import('../queues/notification.queue');
       await enqueueNotification({
         userId: user.id,
         title: 'صورة البروفايل',

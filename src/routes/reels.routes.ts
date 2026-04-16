@@ -1684,7 +1684,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
         // Check if reel exists
         const reel = await prisma.reel.findUnique({
             where: { id: idStr },
-            select: { id: true, sharesCount: true }
+            select: { id: true, sharesCount: true, userId: true }
         });
 
         if (!reel) {
