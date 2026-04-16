@@ -416,30 +416,30 @@ const ReelsFeed: React.FC = () => {
     }
 
     return {
-      id: reel.id,
+      id: reel.id || '',
       user: {
-        id: reel.user.id,
-        username: reel.user.username,
-        name: reel.user.displayName || reel.user.username,
-        avatar: reel.user.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
-        verified: reel.user.isVerified,
+        id: reel.user?.id || '',
+        username: reel.user?.username || 'user',
+        name: reel.user?.displayName || reel.user?.username || 'User',
+        avatar: reel.user?.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
+        verified: reel.user?.isVerified || false,
         followers: 0,
-        isFollowing: followState.isFollowing(reel.user.id)
+        isFollowing: reel.user?.id ? followState.isFollowing(reel.user.id) : false
       },
       videoUrl: reel.videoUrl, // Now guaranteed to be valid
       thumbnail: reel.thumbnail || reel.videoUrl || '',
       duration: 0,
-      likes: reel.likesCount,
-      views: reel.views,
-      comments: reel.commentsCount,
-      shares: reel.sharesCount || 0,
-      liked: reel.isLiked || likedReelIds.includes(reel.id),
+      likes: typeof reel.likesCount === 'number' ? reel.likesCount : 0,
+      views: typeof reel.views === 'number' ? reel.views : 0,
+      comments: typeof reel.commentsCount === 'number' ? reel.commentsCount : 0,
+      shares: typeof reel.sharesCount === 'number' ? reel.sharesCount : 0,
+      liked: reel.isLiked || (reel.id ? likedReelIds.includes(reel.id) : false),
       saved: reel.isSaved || false,
       muted: false, // Audio ON by default (Instagram/TikTok style)
       description: reel.caption || '',
       hashtags: reel.hashtags || [],
       mentions: reel.mentions || [],
-      createdAt: new Date(reel.createdAt)
+      createdAt: reel.createdAt ? new Date(reel.createdAt) : new Date()
     };
   }, [likedReelIds]);
 
@@ -1371,7 +1371,8 @@ const ReelsFeed: React.FC = () => {
 };
 
 // Helper Functions
-const formatCount = (count: number): string => {
+const formatCount = (count?: number): string => {
+  if (count === undefined || count === null || isNaN(count)) return '0';
   if (count >= 1000000) {
     return `${(count / 1000000).toFixed(1)}M`;
   } else if (count >= 1000) {

@@ -58,7 +58,8 @@ interface ReelItemProps {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Helper function to format numbers
-const formatCount = (count: number): string => {
+const formatCount = (count?: number): string => {
+    if (count === undefined || count === null || isNaN(count)) return '0';
     if (count >= 1000000) {
         return `${(count / 1000000).toFixed(1)}M`;
     } else if (count >= 1000) {
@@ -350,7 +351,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     {/* Hide for own reels (18.1), Show for other users (18.2), Show correct state (18.4) */}
                     {(() => {
                         // Type-safe comparison: ensure own videos NEVER show follow button
-                        const isOwnReel = currentUserId && reel.user.id && 
+                        const isOwnReel = currentUserId && reel?.user?.id && 
                             String(currentUserId) === String(reel.user.id);
                         return !isOwnReel && (onFollow || onUnfollow);
                     })() && (
