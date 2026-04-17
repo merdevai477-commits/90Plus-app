@@ -12,10 +12,9 @@
  * 3. Using single batch requests with from/to parameters
  */
 
-import { PrismaClient, CachedFixture } from '@prisma/client';
+import { CachedFixture } from '@prisma/client';
 import { logger } from '../utils/logger';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 
 // Status codes for finished matches
 const FINISHED_STATUSES = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];

@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 
 /**
  * Generate a unique username from display name

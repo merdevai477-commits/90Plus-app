@@ -9,12 +9,10 @@
  * - Returns teams, players, leagues, and matches
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { matchCacheService } from './match-cache.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 
 // Cache TTL for search results (1 hour for general, 5 min for matches)
 const SEARCH_CACHE_TTL = 60 * 60 * 1000; // 1 hour

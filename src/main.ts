@@ -698,7 +698,10 @@ async function startServer() {
         logger.info('Connecting to Database...');
         let databaseConnected = false;
         try {
-            await prisma.$connect();
+            // ✅ FIX P2037: Do NOT call prisma.$connect() explicitly.
+            // $connect() opens connections OUTSIDE the pool and causes "too many clients".
+            // Instead, run a lightweight query — Prisma pools manage connections automatically.
+            await prisma.$queryRaw`SELECT 1`;
             databaseConnected = true;
             logger.info('✅ Database connected successfully');
         } catch (connectErr) {

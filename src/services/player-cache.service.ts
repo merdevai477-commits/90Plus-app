@@ -5,10 +5,9 @@
  * Similar to MatchCacheService but for player/team data.
  */
 
-import { PrismaClient, CachedPlayer, CachedTeam, CachedH2H } from '@prisma/client';
+import { CachedPlayer, CachedTeam, CachedH2H } from '@prisma/client';
 import { logger } from '../utils/logger';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 
 // Cache TTL for in-memory cache
 // ✅ OPTIMIZATION 1: Increased cache duration for teams (24 hours) - teams rarely change

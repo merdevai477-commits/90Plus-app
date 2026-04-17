@@ -1,10 +1,44 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
-// ✅ OPTIMIZED: Connection pool configuration for Railway PostgreSQL
-const CONNECTION_POOL_SIZE = process.env.DATABASE_CONNECTION_POOL_SIZE 
-  ? parseInt(process.env.DATABASE_CONNECTION_POOL_SIZE, 10) 
-  : 10; // Increased to 10 for Railway PostgreSQL
+// ✅ CRITICAL: Connection pool configuration for Railway PostgreSQL
+// Railway free/hobby plans allow ~25 max connections total.
+// We use 3 to leave ample headroom for Railway's own internal connections,
+// other dynos, migrations, and admin tools.
+// This value is enforced INSIDE the DATABASE_URL so Prisma respects it at driver level.
+const CONNECTION_POOL_SIZE = process.env.DATABASE_CONNECTION_POOL_SIZE
+  ? parseInt(process.env.DATABASE_CONNECTION_POOL_SIZE, 10)
+  : 3;
+
+/**
+ * Build DATABASE_URL with connection pool limits enforced at the driver level.
+ * This is the ONLY reliable way to prevent P2037 on Railway.
+ * ?connection_limit=N  → max N connections in this process
+ * ?pool_timeout=10     → fail fast if no connection available within 10s
+ * ?connect_timeout=10  → timeout for initial TCP connection
+ */
+function buildDatabaseUrl(): string {
+  const rawUrl = process.env.DATABASE_URL || '';
+  if (!rawUrl) return rawUrl;
+
+  try {
+    const url = new URL(rawUrl);
+    // Only set if not already in the URL (respect explicit overrides)
+    if (!url.searchParams.has('connection_limit')) {
+      url.searchParams.set('connection_limit', String(CONNECTION_POOL_SIZE));
+    }
+    if (!url.searchParams.has('pool_timeout')) {
+      url.searchParams.set('pool_timeout', '10');
+    }
+    if (!url.searchParams.has('connect_timeout')) {
+      url.searchParams.set('connect_timeout', '10');
+    }
+    return url.toString();
+  } catch {
+    // If URL parsing fails, return as-is
+    return rawUrl;
+  }
+}
 
 // Singleton pattern for Prisma Client
 const globalForPrisma = globalThis as unknown as {
@@ -13,15 +47,14 @@ const globalForPrisma = globalThis as unknown as {
 
 const prismaClientSingleton = () => {
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' 
-      ? ['error', 'warn'] 
+    log: process.env.NODE_ENV === 'development'
+      ? ['error', 'warn']
       : ['error'],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: buildDatabaseUrl(),
       },
     },
-    // ✅ PERFORMANCE: Query optimization
     errorFormat: 'minimal',
   });
 };

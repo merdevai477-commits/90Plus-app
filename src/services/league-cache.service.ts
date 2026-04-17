@@ -4,11 +4,9 @@
  * Caches all available leagues in PostgreSQL and provides search utility.
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 
 class LeagueCacheService {
     private leagueCache: any[] | null = null;

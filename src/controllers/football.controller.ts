@@ -226,12 +226,10 @@ export class FootballController {
       let dbStatus = 'Unknown';
       let transfersCount = 0;
       try {
-        const { PrismaClient } = await import('@prisma/client');
-        const prisma = new PrismaClient();
+        // ✅ Use centralized singleton instead of creating new PrismaClient
         const count = await prisma.cachedTransfer.count().catch(() => 0);
         transfersCount = count;
         dbStatus = 'Connected';
-        await prisma.$disconnect();
       } catch (error: any) {
         dbStatus = error?.code === 'P2021' ? 'Table not found' : 'Disconnected';
       }
@@ -1451,16 +1449,14 @@ export class FootballController {
 
       // First: Check if we have any African teams in database - RETURN IMMEDIATELY if found
       try {
-        const { PrismaClient } = await import('@prisma/client');
-        const prisma = new PrismaClient();
-        
+        // ✅ Use centralized singleton instead of creating new PrismaClient
         const africanCountries = ['Egypt', 'Morocco', 'South Africa', 'Tunisia', 'Algeria', 'Nigeria', 'Ghana'];
         const dbTeams = await prisma.cachedTeam.findMany({
           where: {
             country: { in: africanCountries },
             logo: { not: null },
           },
-          take: 50, // Get more teams from database
+          take: 50,
         });
 
         if (dbTeams.length > 0) {
@@ -1474,8 +1470,6 @@ export class FootballController {
             });
             foundTeamIds.add(team.teamId);
           }
-
-          await prisma.$disconnect();
 
           // Return immediately with database results
           res.json({
@@ -1498,8 +1492,6 @@ export class FootballController {
 
           return;
         }
-
-        await prisma.$disconnect();
       } catch (error: any) {
         logger.warn('Error checking database:', error.message);
       }
