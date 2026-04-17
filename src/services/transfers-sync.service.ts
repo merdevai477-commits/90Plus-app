@@ -11,10 +11,9 @@
 
 import Queue from 'bull';
 import { logger } from '../utils/logger';
-import { footballDataCacheService } from './football-data-cache.service';
-import { footballService } from './football.service';
 import { isRedisConnected } from '../lib/redis';
 import { prisma } from '../lib/prisma';
+
 
 // Create transfers sync queue (only if Redis is available)
 let transfersSyncQueue: Queue.Queue | null = null;
@@ -371,36 +370,14 @@ class TransfersSyncService {
             const beforeCount = await this.getTransfersCount();
             logger.info(`[TransfersSync] 📊 Current transfers in DB: ${beforeCount}`);
 
-            // Fetch transfers from API with retry logic
-            logger.info('[TransfersSync] 📡 Fetching transfers from API...');
-            let transfers;
-            try {
-                transfers = await footballService.getTransfers({});
-            } catch (apiError: any) {
-                // Handle API errors gracefully
-                if (apiError.message?.includes('ECONNRESET') || apiError.code === 'ECONNRESET') {
-                    logger.warn('[TransfersSync] ⚠️ Connection reset by API, will retry later');
-                    return {
-                        lastSyncDate: new Date(),
-                        totalTransfersInDb: beforeCount,
-                        newTransfersFound: 0,
-                        syncDuration: Date.now() - startTime,
-                    };
-                }
-                
-                if (apiError.message?.includes('At least one parameter is required')) {
-                    logger.warn('[TransfersSync] ⚠️ API requires parameters, skipping transfers sync');
-                    return {
-                        lastSyncDate: new Date(),
-                        totalTransfersInDb: beforeCount,
-                        newTransfersFound: 0,
-                        syncDuration: Date.now() - startTime,
-                    };
-                }
-                
-                // Re-throw other errors
-                throw apiError;
-            }
+            // ⚠️ NOTE: The Football API /transfers endpoint REQUIRES a team or player ID.
+            // Calling it with no parameters always returns: "At least one parameter is required."
+            // Transfers are synced per-team/player when the user views their profile page.
+            // Global sync without a parameter is not supported by the API (Free & Pro plans).
+            logger.info('[TransfersSync] ℹ️ Skipping global API call — transfers API requires team/player ID.');
+            logger.info('[TransfersSync] ℹ️ Transfers are fetched on-demand when viewing team/player profiles.');
+
+            const transfers: any[] = [];
 
             if (transfers && transfers.length > 0) {
                 logger.info(`[TransfersSync] 📥 Received ${transfers.length} transfers from API`);
