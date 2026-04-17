@@ -220,6 +220,7 @@ export class PushNotificationService {
                     body: payload.body,
                     data: payload.data || {},
                     badge: payload.badge,
+                    priority: 'high', // Ensures immediate delivery for match events
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
                     ...(payload.channelId ? { channelId: payload.channelId } : {}),
                 };

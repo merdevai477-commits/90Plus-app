@@ -133,8 +133,8 @@ export class NotificationService {
                         where: { id: userId },
                         select: { expoPushToken: true, pushNotificationsConsent: true },
                     });
-                    // For social interactions (like follow/like/comment/share), we prioritize pushing if token exists.
-                    if (user?.expoPushToken) {
+                    // Only push if the user has given consent and has a valid token.
+                    if (user?.pushNotificationsConsent && user?.expoPushToken) {
                         effectivePushToken = user.expoPushToken;
                     }
                 } catch (err) {
@@ -245,7 +245,8 @@ export class NotificationService {
                 awayTeam,
                 homeScore,
                 awayScore,
-                scoringTeam
+                scoringTeam,
+                priority: 'high', // Ensures iOS/Android don't silently drop this notification
             }
         });
     }
