@@ -66,8 +66,14 @@ export const FALLBACK_VIDEOS = [
 export const isValidVideoUrl = (url: string): boolean => {
   if (!url) return false;
 
-  const validExtensions = ['.mp4', '.mov', '.m4v', '.3gp'];
+  const validExtensions = ['.mp4', '.mov', '.m4v', '.3gp', '.m3u8'];
   const lowerUrl = url.toLowerCase();
+
+  // Also accept Mux stream URLs (stream.mux.com) and any https URL
+  // since modern CDNs don't always use file extensions
+  if (lowerUrl.includes('stream.mux.com') || lowerUrl.includes('mux.com')) {
+    return true;
+  }
 
   return validExtensions.some(ext => lowerUrl.includes(ext));
 };

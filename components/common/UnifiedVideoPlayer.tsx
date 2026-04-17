@@ -89,6 +89,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
   const [error, setError] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
@@ -96,6 +97,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
   const signedUrlRefreshAttempts = useRef(0);
   const MAX_SIGNED_URL_REFRESHES = 2;
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoRef = useRef<any>(null);
   const { t } = useLanguage();
@@ -222,18 +224,49 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     }, [isVideoLoaded, isActive, isPausedByLimit])
   );
 
-  const handleLoad = () => {
+  const handleLoad = useCallback(() => {
+    logger.info(`[VideoPlayer] ✅ Video loaded successfully: ${reel.id} | URL: ${activeVideoUrl.substring(0, 60)}...`);
     setIsLoading(false);
     setIsVideoLoaded(true);
+    setError(false);
+    setErrorDetails('');
     signedUrlRefreshAttempts.current = 0; // reset on successful load
-  };
+    
+    // Clear load timeout
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+  }, [reel.id, activeVideoUrl]);
 
   /**
    * Q3 Fix: On video error, attempt to refresh the signed URL.
    * expo-av doesn't expose HTTP status codes, so we try a HEAD request
    * to detect 403 before showing the error UI.
    */
-  const handleError = useCallback(async () => {
+  const handleError = useCallback(async (err?: any) => {
+    const errMsg = typeof err === 'string' ? err : (err?.message || err?.error || JSON.stringify(err) || 'Unknown error');
+    logger.error(`[VideoPlayer] ❌ Video error for reel ${reel.id}: ${errMsg}`);
+    logger.error(`[VideoPlayer] ❌ URL was: ${activeVideoUrl.substring(0, 80)}...`);
+    
+    // Detect HLS / Mux specific errors
+    const isMuxUrl = activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8');
+    if (isMuxUrl) {
+      logger.warn(`[VideoPlayer] 🔍 Mux HLS URL detected. Checking connectivity...`);
+      
+      // Try HEAD request to check if URL is accessible
+      try {
+        const headRes = await fetch(activeVideoUrl, { method: 'HEAD' });
+        logger.info(`[VideoPlayer] 🔍 Mux HEAD status: ${headRes.status} ${headRes.statusText}`);
+        if (headRes.status === 403 || headRes.status === 404) {
+          setErrorDetails(`Mux: ${headRes.status} - الفيديو غير متاح أو انتهت صلاحيته`);
+        }
+      } catch (headErr) {
+        logger.warn(`[VideoPlayer] 🔍 HEAD request failed (network issue):`, headErr);
+        setErrorDetails('مشكلة في الاتصال بخادم الفيديو');
+      }
+    }
+    
     // Check if this might be a 403 (expired signed URL)
     if (
       signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES &&
@@ -255,6 +288,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
               logger.info(`[VideoPlayer] Signed URL refreshed for reel ${reel.id}`);
               setActiveVideoUrl(newUrl);
               setError(false);
+              setErrorDetails('');
               setIsLoading(true);
               setIsVideoLoaded(false);
               return; // Don't show error — retry with new URL
@@ -347,6 +381,9 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     return (
       <View style={[styles.errorContainer, style]}>
         <Text style={styles.errorText}>{t.reels?.loadFailed || 'Failed to load video'}</Text>
+        {errorDetails ? (
+          <Text style={styles.errorDetailText}>{errorDetails}</Text>
+        ) : null}
         <TouchableOpacity
           style={styles.retryButton}
           onPress={handleRetry}
@@ -361,7 +398,12 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     <View style={[styles.videoContainer, style]}>
       <Video
         ref={videoRef}
-        source={{ uri: activeVideoUrl }}
+        source={{
+          uri: activeVideoUrl,
+          // ✅ Critical for Android HLS: Tell ExoPlayer this is an HLS stream
+          // Without this, Android may fail to detect .m3u8 format from Mux URLs
+          ...(activeVideoUrl.includes('.m3u8') ? { overrideFileExtensionAndroid: 'm3u8' } : {}),
+        }}
         style={styles.video}
         resizeMode={VIDEO_DEFAULTS.resizeMode}
         shouldPlay={isActive && isVideoLoaded && !isPausedByLimit && VIDEO_DEFAULTS.shouldPlay}
@@ -372,9 +414,6 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         progressUpdateIntervalMillis={VIDEO_DEFAULTS.progressUpdateIntervalMillis}
         positionMillis={0}
-        // HLS support: expo-av handles .m3u8 natively on iOS.
-        // On Android, expo-av uses ExoPlayer which also supports HLS.
-        // No extra config needed for Mux HLS URLs.
         useNativeControls={false}
       />
 
@@ -466,6 +505,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.background,
+  },
+  errorDetailText: {
+    color: '#aaa',
+    fontSize: 13,
+    marginBottom: 12,
+    textAlign: 'center' as const,
+    paddingHorizontal: 20,
   },
   errorText: {
     color: 'white',

@@ -75,6 +75,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [error, setError] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false); // ✅ Track video load state
   const videoRef = useRef<any>(null);
   const { t } = useLanguage();
   
@@ -109,7 +110,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [isActive, resetReplayCount]);
 
   useEffect(() => {
-    if (videoRef.current) {
+    if (videoRef.current && isVideoLoaded) {
       if (isActive && !isPausedByLimit) {
         videoRef.current.playAsync().catch((e: any) => {
           console.warn('Error playing video:', e);
@@ -120,7 +121,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         });
       }
     }
-  }, [isActive, isPausedByLimit]);
+  }, [isActive, isPausedByLimit, isVideoLoaded]);
 
   const handleError = () => {
     setError(true);
@@ -205,14 +206,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     <View style={styles.videoContainer}>
       <Video
         ref={videoRef}
-        source={{ uri: reel.videoUrl }}
+        source={{
+          uri: reel.videoUrl,
+          // ✅ Critical for Android HLS: Tell ExoPlayer this is an HLS stream
+          ...(reel.videoUrl.includes('.m3u8') ? { overrideFileExtensionAndroid: 'm3u8' } : {}),
+        }}
         style={styles.video}
         resizeMode={VIDEO_DEFAULTS.resizeMode}
-        shouldPlay={isActive && !isPausedByLimit && VIDEO_DEFAULTS.shouldPlay}
+        shouldPlay={isActive && isVideoLoaded && !isPausedByLimit && VIDEO_DEFAULTS.shouldPlay}
         isLooping={VIDEO_DEFAULTS.looping}
         isMuted={reel.muted !== undefined ? reel.muted : VIDEO_DEFAULTS.muted}
-        onLoad={() => setIsLoading(false)}
-        onError={handleError}
+        onLoad={() => {
+          console.log('✅ [Matches/VideoPlayer] Video loaded:', reel.videoUrl?.substring(0, 60));
+          setIsLoading(false);
+          setIsVideoLoaded(true);
+        }}
+        onError={(err: any) => {
+          console.error('❌ [Matches/VideoPlayer] Error:', err, '| URL:', reel.videoUrl?.substring(0, 60));
+          handleError();
+        }}
         onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         progressUpdateIntervalMillis={500}
         positionMillis={0}

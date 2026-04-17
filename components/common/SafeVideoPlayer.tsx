@@ -2,18 +2,21 @@ import React from 'react';
 
 // Import components
 import { VideoPlayerFallback } from './VideoPlayerFallback';
+import { logger } from '../../utils/logger';
 
-// Check if expo-av is available (will be false in Expo Go SDK 52)
+// Check if expo-av is available at module load time
 let hasExpoAV = false;
-let Video: any = null;
+let UnifiedVideoPlayerModule: any = null;
 
-// Try to check if expo-av is available without importing it at top level
-// This prevents the error from blocking the entire app
 try {
-  // We'll do the actual import lazily when needed
-  hasExpoAV = true; // Assume true, will check on actual use
-} catch (error) {
+  // Try loading expo-av first to verify it's available
+  require('expo-av');
+  hasExpoAV = true;
+  // Pre-load UnifiedVideoPlayer so we don't need try/catch in render
+  UnifiedVideoPlayerModule = require('./UnifiedVideoPlayer').default;
+} catch (error: any) {
   hasExpoAV = false;
+  logger.warn('[SafeVideoPlayer] expo-av not available:', error?.message);
 }
 
 /**
@@ -21,16 +24,14 @@ try {
  * Falls back to placeholder if running in Expo Go on SDK 52
  */
 export function SafeVideoPlayer(props: any) {
-  // Try to dynamically import UnifiedVideoPlayer
-  // If it fails (expo-av not available), show fallback
-  try {
-    const UnifiedVideoPlayer = require('./UnifiedVideoPlayer').default;
-    return <UnifiedVideoPlayer {...props} />;
-  } catch (error: any) {
-    // expo-av not available - show fallback
-    console.warn('[SafeVideoPlayer] expo-av not available, using fallback:', error.message);
-    return <VideoPlayerFallback videoUrl={props.reel?.videoUrl || 'N/A'} style={props.style} />;
+  if (hasExpoAV && UnifiedVideoPlayerModule) {
+    return <UnifiedVideoPlayerModule {...props} />;
   }
+
+  // expo-av not available - show fallback
+  logger.warn('[SafeVideoPlayer] Using fallback player (expo-av unavailable)');
+  return <VideoPlayerFallback videoUrl={props.reel?.videoUrl || 'N/A'} style={props.style} />;
 }
 
 export { hasExpoAV };
+

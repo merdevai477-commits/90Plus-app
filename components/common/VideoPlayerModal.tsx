@@ -95,6 +95,7 @@ export default function VideoPlayerModal({
     const [isMuted, setIsMuted] = useState(false); // Audio ON by default (Instagram/TikTok style)
     const [isPaused, setIsPaused] = useState(false);
     const [isVideoActive, setIsVideoActive] = useState(true);
+    const [isVideoReady, setIsVideoReady] = useState(false); // ✅ Track video load state
     const [isLiked, setIsLiked] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
     const [likes, setLikes] = useState(0);
@@ -116,6 +117,7 @@ export default function VideoPlayerModal({
     useEffect(() => {
         if (visible) {
             setIsVideoActive(true);
+            setIsVideoReady(false); // ✅ Reset load state when modal opens
             // Start glow animation
             RNAnimated.loop(
                 RNAnimated.sequence([
@@ -313,15 +315,24 @@ export default function VideoPlayerModal({
                     {videoUrl && Video && hasExpoAV ? (
                         <Video
                             ref={videoRef}
-                            source={{ uri: videoUrl }}
+                            source={{
+                                uri: videoUrl,
+                                // ✅ Critical for Android HLS: Tell ExoPlayer this is an HLS stream
+                                ...(videoUrl.includes('.m3u8') ? { overrideFileExtensionAndroid: 'm3u8' } : {}),
+                            }}
                             style={styles.video}
                             resizeMode={ResizeMode?.COVER || 'cover'}
-                            shouldPlay={isVideoActive && !isPaused}
+                            shouldPlay={isVideoActive && !isPaused && isVideoReady}
                             isLooping
                             isMuted={isMuted}
                             useNativeControls={false}
+                            onLoad={() => {
+                                console.log('✅ [VideoPlayerModal] Video loaded:', videoUrl?.substring(0, 60));
+                                setIsVideoReady(true);
+                            }}
                             onError={(error: any) => {
-                                console.error('Video playback error:', error);
+                                console.error('❌ [VideoPlayerModal] Video playback error:', error);
+                                console.error('❌ [VideoPlayerModal] URL was:', videoUrl?.substring(0, 80));
                                 toastManager.showError('خطأ في الفيديو', 'حدث خطأ أثناء تشغيل الفيديو');
                             }}
                         />
