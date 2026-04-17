@@ -141,6 +141,14 @@ const LeagueSection: React.FC<LeagueSectionProps> = React.memo(({
   if (prevProps.matches.length !== nextProps.matches.length) return false;
   if (prevProps.isExpandedByDefault !== nextProps.isExpandedByDefault) return false;
   
+  // Re-render if favoriteMatchIds changed (this league only cares if intersecting matches changed favorites)
+  // To avoid deep comparison overhead, we stringify and compare if the intersection changed.
+  if (prevProps.favoriteMatchIds !== nextProps.favoriteMatchIds) {
+      const prevFavsInLeague = prevProps.favoriteMatchIds?.filter(id => prevProps.matches.some(m => m.id === id)).join(',') || '';
+      const nextFavsInLeague = nextProps.favoriteMatchIds?.filter(id => nextProps.matches.some(m => m.id === id)).join(',') || '';
+      if (prevFavsInLeague !== nextFavsInLeague) return false;
+  }
+  
   // Check if matches actually changed by comparing IDs
   if (prevProps.matches.length > 0 && nextProps.matches.length > 0) {
     const prevIds = prevProps.matches.map(m => m.id).join(',');

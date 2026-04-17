@@ -189,6 +189,12 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     return [...selectedMajor, ...selectedOthers].slice(0, MAX_PREDICTIONS_TO_SHOW);
   }, [matches, shuffleArrayWithSeed]);
 
+  // ✅ استخدم ref لتخزين getToken لتجنب إعادة إنشاء الدوال
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
   // ✅ تحميل توقعات المستخدم مع caching - مُحسّن بـ useCallback
   const loadUserPredictions = useCallback(async (useCache = true) => {
     try {
@@ -204,7 +210,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         }
       }
 
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) {
         logger.debug('No auth token available - skipping predictions load');
         return;
@@ -243,12 +249,12 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         logger.debug('Background predictions refresh failed (expected if backend offline):', errorMessage);
       }
     }
-  }, [getToken, predictionsCache]);
+  }, [predictionsCache]);
 
   // ✅ تحميل التوقعات المتبقية - مُحسّن بـ useCallback
   const loadRemainingPredictions = useCallback(async () => {
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
 
       const data = await PredictionsService.getRemainingPredictions(token);
@@ -258,7 +264,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
       logger.error('Error loading remaining predictions:', error);
       // ✅ لا نعرض خطأ للمستخدم هنا لأنه ليس حرجاً
     }
-  }, [getToken]);
+  }, []);
 
   // ✅ تحميل جميع البيانات
   const loadAllData = useCallback(async (forceRefresh = false) => {
@@ -277,7 +283,8 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
   // ✅ Load data on mount - مع dependencies صحيحة
   useEffect(() => {
     loadAllData();
-  }, [loadAllData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ✅ useFocusEffect - تحديث البيانات عند العودة للصفحة
   // ✅ مع protection ضد المحاولات المتكررة عند فشل الاتصال
@@ -370,7 +377,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
           [match.id]: { ...prev[match.id], loading: true },
         }));
 
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) throw new Error('No authentication token');
 
         // Submit prediction

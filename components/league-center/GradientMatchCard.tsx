@@ -175,13 +175,13 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           <View style={styles.cardWrapper}>
             <LinearGradient
-              colors={gradientColors as [string, string, string]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              colors={gradientColors as [string, string]}
+              start={{ x: 0, y: 0.4 }}
+              end={{ x: 1, y: 0.6 }}
               style={styles.gradientBase}
             />
 
-            <BlurView intensity={25} tint="dark" style={styles.container}>
+            <BlurView intensity={18} tint="dark" style={styles.container}>
               {/* Visual Glass Sheen */}
               <LinearGradient
                 colors={['rgba(255,255,255,0.08)', 'transparent', 'transparent']}
@@ -433,13 +433,14 @@ const styles = StyleSheet.create({
   },
   gradientBase: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.6, // Blend team colors with dark background
+    opacity: 0.85, // Enhanced to make team colors pop and melt together
   },
   container: {
-    padding: 24, // Increased from 18
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    minHeight: 180, // Ensure a minimum height for "largeness"
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 180,
+    backgroundColor: 'rgba(10, 10, 18, 0.35)', // Add subtle depth under the frosted glass
   },
   topRow: {
     flexDirection: 'row',

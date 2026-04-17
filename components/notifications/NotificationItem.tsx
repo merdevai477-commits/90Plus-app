@@ -39,7 +39,10 @@ export const NotificationItem = React.memo<NotificationItemProps>(({
   const actorName = (data as any)?.actorDisplayName || (data as any)?.actorUsername || (data as any)?.followerUsername || (data as any)?.username;
 
   const formatTime = (dateString: string) => {
+    if (!dateString) return t.notifications?.now || 'الآن';
     const date = new Date(dateString);
+    // Guard against Invalid Date (e.g. undefined/null createdAt from match notifications)
+    if (isNaN(date.getTime())) return t.notifications?.now || 'الآن';
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);

@@ -24,6 +24,8 @@ import {
   Pin
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
+import usePushNotifications from '../../src/hooks/usePushNotifications';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
 import { toastManager } from '../../services/toastManager';
@@ -156,23 +158,33 @@ const MatchCard: React.FC<MatchCardProps> = ({
     }
   };
 
+  const { requestPermissionExplicitly } = usePushNotifications();
+
   const handleToggleNotification = async () => {
     const newState = !isNotificationEnabled;
+    
+    // If user is trying to ENABLE notifications, check for system permission first
+    if (newState) {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') {
+        const canProceed = await requestPermissionExplicitly();
+        if (!canProceed) return; // Modal will be shown by the hook
+      }
+    }
+
     setIsNotificationEnabled(newState);
     await saveNotificationState(newState);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (newState) {
-      Alert.alert(
-        `🔔 ${t.predictions.notificationsEnabled}`,
-        `${t.predictions.notificationMessage}\n\n${match.homeTeam} ${t.matchDetails.vs || 'VS'} ${match.awayTeam}`,
-        [{ text: t.common.done }]
+      toastManager.showSuccess(
+        t.predictions.notificationsEnabled,
+        `${t.predictions.notificationMessage}\n${match.homeTeam} VS ${match.awayTeam}`
       );
     } else {
-      Alert.alert(
-        `🔕 ${t.predictions.notificationsDisabled}`,
-        t.predictions.notificationCancelled,
-        [{ text: t.common.done }]
+      toastManager.showInfo(
+        t.predictions.notificationsDisabled,
+        t.predictions.notificationCancelled
       );
     }
   };

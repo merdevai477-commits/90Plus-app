@@ -115,15 +115,24 @@ export function useNotifications() {
   }, [isLoading, isRefreshing, isLoadingMore, hasMore, loadNotifications, page]);
 
   const allNotifications = useMemo(() => {
-    const convertedMatchNotifications: SocialNotification[] = matchNotifications.map(mn => ({
-      id: mn.id,
-      type: 'MATCH_UPDATE' as const,
-      title: mn.title,
-      message: mn.message,
-      isRead: mn.read,
-      createdAt: mn.time,
-      data: mn.fixtureId ? { matchId: mn.fixtureId } : undefined,
-    }));
+    const convertedMatchNotifications: SocialNotification[] = matchNotifications.map(mn => {
+      // mn.time may be a display string like '21:00', not a parseable ISO date.
+      // Use it only if it parses to a valid Date, otherwise use now.
+      let createdAt = mn.time;
+      const parsed = new Date(mn.time);
+      if (isNaN(parsed.getTime())) {
+        createdAt = new Date().toISOString();
+      }
+      return {
+        id: mn.id,
+        type: 'MATCH_UPDATE' as const,
+        title: mn.title,
+        message: mn.message,
+        isRead: mn.read,
+        createdAt,
+        data: mn.fixtureId ? { matchId: mn.fixtureId } : undefined,
+      };
+    });
 
     const merged = [...backendNotifications, ...convertedMatchNotifications];
     return merged.sort(

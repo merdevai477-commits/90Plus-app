@@ -26,6 +26,7 @@ export default function TeamBadge({
 
   // Show logo if available and no error
   const shouldShowLogo = logo && !imageError && logo.trim() !== '';
+  const isTransparent = color === 'transparent';
 
   return (
     <View style={[
@@ -34,13 +35,14 @@ export default function TeamBadge({
         width: size, 
         height: size,
         borderRadius: size / 2,
-        backgroundColor: shouldShowLogo ? 'rgba(255,255,255,0.05)' : color 
+        backgroundColor: shouldShowLogo && !isTransparent ? 'rgba(255,255,255,0.05)' : color,
+        borderWidth: isTransparent ? 0 : 2,
       }
     ]}>
       {shouldShowLogo ? (
         <Image
           source={{ uri: logo }}
-          style={[styles.logo, { width: size * 0.7, height: size * 0.7 }]}
+          style={[styles.logo, { width: size * 0.95, height: size * 0.95 }]}
           contentFit="contain"
           transition={200}
           cachePolicy="memory-disk"

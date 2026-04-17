@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -8,28 +8,34 @@ import { useQueryClient } from '@tanstack/react-query';
 import { MatchesService } from '../services/authService';
 import { logger } from '../services/logger';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NotificationPermissionModal } from '../../components/common/NotificationPermissionModal';
 import '../../services/notificationForegroundSetup';
+
+const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
 
 export interface PushNotificationState {
     expoPushToken: string | null;
     notification: Notifications.Notification | null;
     error: string | null;
+    showPermissionModal: boolean;
+    setShowPermissionModal: (show: boolean) => void;
+    requestPermissionExplicitly: () => Promise<boolean>;
 }
 
 export function usePushNotifications(): PushNotificationState {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
     const [notification, setNotification] = useState<Notifications.Notification | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showPermissionModal, setShowPermissionModal] = useState(false);
     
     const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
     const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
     
-    // Correctly using useAuth without hacks
     const { getToken, isSignedIn, isLoaded } = useAuth();
     const router = useRouter();
     const queryClient = useQueryClient();
 
-    // Use refs to avoid stale closures in event listeners
     const getTokenRef = useRef(getToken);
     const isSignedInRef = useRef(isSignedIn);
     const routerRef = useRef(router);
@@ -63,7 +69,8 @@ export function usePushNotifications(): PushNotificationState {
         try {
             const authToken = await getTokenRef.current();
             if (!authToken) return;
-            await fetch(`${require('../../config/api.config').getApiUrl()}/notifications/${notificationId}/opened`, {
+            const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-b28d.up.railway.app/api';
+            await fetch(`${apiUrl}/notifications/${notificationId}/opened`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             });
@@ -155,21 +162,53 @@ export function usePushNotifications(): PushNotificationState {
         }
     }).current;
 
+    const requestPermissionExplicitly = useCallback(async (): Promise<boolean> => {
+        try {
+            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            
+            if (existingStatus === 'granted') {
+                const token = await registerForPushNotificationsAsync();
+                if (token) setExpoPushToken(token);
+                return true;
+            }
+
+            // Show our custom soft-prompt first
+            setShowPermissionModal(true);
+            return false;
+        } catch (err) {
+            logger.error('Error in requestPermissionExplicitly:', err);
+            return false;
+        }
+    }, []);
+
     useEffect(() => {
         // Only run after authentication is definitively loaded
         if (!isLoaded) return;
 
         let isMounted = true;
 
-        const initializePushTokens = async () => {
+        const checkInitialPermissions = async () => {
             try {
-                const token = await registerForPushNotificationsAsync();
-                if (token && isMounted) {
-                    setExpoPushToken(token);
-                    
-                    // If user is signed in, send the token to the backend immediately
-                    if (isSignedIn) {
-                        await syncTokenWithBackendWithRetry.current(token, 0);
+                const { status } = await Notifications.getPermissionsAsync();
+                
+                if (status === 'granted') {
+                    const token = await registerForPushNotificationsAsync();
+                    if (token && isMounted) {
+                        setExpoPushToken(token);
+                        
+                        // If user is signed in, send the token to the backend immediately
+                        if (isSignedIn) {
+                            await syncTokenWithBackendWithRetry.current(token, 0);
+                        }
+                    }
+                } else if (status === 'undetermined') {
+                    // Check if we've already asked (soft-prompt persistence)
+                    const alreadyAsked = await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY);
+                    if (!alreadyAsked && isMounted) {
+                        // Delay showing the modal slightly to ensure app is ready/interactive
+                        setTimeout(() => {
+                            if (isMounted) setShowPermissionModal(true);
+                        }, 2500);
                     }
                 }
             } catch (err: any) {
@@ -177,7 +216,7 @@ export function usePushNotifications(): PushNotificationState {
             }
         };
 
-        initializePushTokens();
+        checkInitialPermissions();
 
         // Re-sync token when user signs in (handles case where user logs in after app launch)
         if (isSignedIn && expoPushToken) {
@@ -206,13 +245,13 @@ export function usePushNotifications(): PushNotificationState {
 
             Notifications.setBadgeCountAsync(0);
 
-            // Feature 10: Auto mark-as-read when user taps a notification
+            // Auto mark-as-read when user taps a notification
             if (data?.notificationId && isSignedInRef.current) {
                 trackNotificationOpen(data.notificationId);
-                // Also mark as read (trackNotificationOpen only records the open event)
                 getTokenRef.current().then(token => {
                     if (!token) return;
-                    fetch(`${require('../../config/api.config').getApiUrl()}/notifications/${data.notificationId}/read`, {
+                    const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-b28d.up.railway.app/api';
+                    fetch(`${apiUrl}/notifications/${data.notificationId}/read`, {
                         method: 'PUT',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                     }).catch(err => logger.warn('Auto mark-as-read failed:', err));
@@ -222,7 +261,7 @@ export function usePushNotifications(): PushNotificationState {
             handleDeepLinking(data);
         });
 
-        // Handle AppState changes (e.g. tracking when they come from background, resolving badges)
+        // Handle AppState changes
         const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
             if (nextAppState === 'active') {
                 Notifications.setBadgeCountAsync(0);
@@ -241,74 +280,94 @@ export function usePushNotifications(): PushNotificationState {
         expoPushToken,
         notification,
         error,
+        showPermissionModal,
+        setShowPermissionModal,
+        requestPermissionExplicitly,
     };
 }
 
 async function registerForPushNotificationsAsync(): Promise<string | null> {
-    let token: string | null = null;
-
     if (!Device.isDevice) {
         logger.debug('Push notifications require a physical device');
         return null;
     }
 
     try {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') return null;
 
-        if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-        }
-
-        if (finalStatus !== 'granted') {
-            logger.debug('🚫 Push notification permission not granted by user');
-            return null;
-        }
-
-        // Safely extract the project ID for EAS
         const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-        if (!projectId) {
-            logger.warn('Project ID missing for Expo push token setup.');
-        }
+        const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
         
-        const pushTokenData = await Notifications.getExpoPushTokenAsync({
-            projectId,
-        });
-        
-        token = pushTokenData.data;
+        const token = pushTokenData.data;
         logger.debug('📱 Expo Push Token successfully extracted:', token);
 
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'إشعارات عامة',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#32cd32',
+                sound: 'default',
+            });
+            
+            await Notifications.setNotificationChannelAsync('match-updates', {
+                name: 'تحديثات المباريات',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 500, 250, 500],
+                lightColor: '#22c55e',
+                sound: 'default',
+            });
+        }
+        
+        return token;
     } catch (error) {
         logger.error('Error getting push token:', error);
+        return null;
     }
-
-    // Android-specific channel setup
-    if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-            name: 'إشعارات عامة',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#32cd32',
-            sound: 'default',
-        });
-        
-        await Notifications.setNotificationChannelAsync('match-updates', {
-            name: 'تحديثات المباريات',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 500, 250, 500],
-            lightColor: '#22c55e',
-            sound: 'default',
-        });
-    }
-
-    return token;
 }
 
 // Global Injection Component
 export function PushNotificationSetup() {
-    usePushNotifications();
-    return null;
+    const { showPermissionModal, setShowPermissionModal, expoPushToken } = usePushNotifications();
+    const { isSignedIn } = useAuth();
+    
+    // Manual sync ref for the confirm action
+    const { getToken } = useAuth();
+    const syncToken = async (pushToken: string) => {
+        try {
+            const authToken = await getToken();
+            if (authToken) {
+                await MatchesService.registerPushToken(authToken, pushToken);
+            }
+        } catch (err) {
+            logger.error('Manual token sync failed:', err);
+        }
+    };
+
+    return (
+        <NotificationPermissionModal
+            visible={showPermissionModal}
+            onClose={() => setShowPermissionModal(false)}
+            onConfirm={async () => {
+                try {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
+                    
+                    if (status === 'granted') {
+                        const token = await registerForPushNotificationsAsync();
+                        if (token && isSignedIn) {
+                            await syncToken(token);
+                        }
+                    }
+                } catch (err) {
+                    logger.error('Permission request error:', err);
+                } finally {
+                    setShowPermissionModal(false);
+                }
+            }}
+        />
+    );
 }
 
 export default usePushNotifications;

@@ -35,8 +35,8 @@ import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
 import { DailyQuizStatus } from '../../services/quizApi';
 
-const { width } = Dimensions.get('window');
-const CARD_HEIGHT = 200;
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_HEIGHT = 240;
 const AUTO_SCROLL_INTERVAL = 5000;
 
 interface WelcomeSectionProps {
@@ -64,86 +64,83 @@ interface SlideData {
   type: SlideType;
   gradient: readonly [string, string, ...string[]];
   accentColor: string;
+  glowColor: string;
   icon: string;
   title: string;
   subtitle: string;
   buttonText: string;
   onPress: () => void;
   badge?: string;
+  iconEmoji?: string;
 }
 
-// 🔥 Fire Streak Component - Simple Design (No Glow)
-const FireStreak: React.FC<{ days: number; dayLabel: string }> = ({ days, dayLabel }) => {
-  if (days <= 0) return null;
+// ✨ Ambient Glow Orbs - Premium background effect inspired by Stitch design
+const AmbientGlowOrbs: React.FC<{ color1: string; color2: string }> = ({ color1, color2 }) => {
+  const pulse1 = useSharedValue(0);
+  const pulse2 = useSharedValue(0);
+
+  useEffect(() => {
+    pulse1.value = withRepeat(
+      withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+    pulse2.value = withDelay(
+      1500,
+      withRepeat(
+        withTiming(1, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      )
+    );
+  }, []);
+
+  const orb1Style = useAnimatedStyle<ViewStyle>(() => ({
+    opacity: interpolate(pulse1.value, [0, 1], [0.08, 0.2]),
+    transform: [
+      { scale: interpolate(pulse1.value, [0, 1], [0.8, 1.2]) },
+    ] as ViewStyle['transform'],
+  }));
+
+  const orb2Style = useAnimatedStyle<ViewStyle>(() => ({
+    opacity: interpolate(pulse2.value, [0, 1], [0.06, 0.15]),
+    transform: [
+      { scale: interpolate(pulse2.value, [0, 1], [1, 1.3]) },
+    ] as ViewStyle['transform'],
+  }));
 
   return (
-    <View style={styles.fireContainerNew}>
-      {/* Main container with gradient */}
-      <LinearGradient
-        colors={['#ff6b35', '#ff8c42', '#ff6b35']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.fireGradient}
-      >
-        {/* Fire emoji */}
-        <Text style={styles.fireEmojiNew}>🔥</Text>
-      
-      {/* Streak count */}
-        <View style={styles.streakBadgeNew}>
-          <Text style={styles.streakNumberNew}>{days}</Text>
-          <Text style={styles.streakLabelNew}>{dayLabel}</Text>
-      </View>
-      </LinearGradient>
-    </View>
-  );
-};
-
-// ✨ Animated Background Particles
-const BackgroundParticles: React.FC<{ color: string }> = ({ color }) => {
-  const particles = Array.from({ length: 6 }, (_, i) => {
-    const anim = useSharedValue(0);
-    
-    useEffect(() => {
-      anim.value = withDelay(
-        i * 200,
-        withRepeat(
-          withTiming(1, { duration: 3000 + i * 500, easing: Easing.inOut(Easing.ease) }),
-          -1,
-          true
-        )
-      );
-    }, []);
-
-    const style = useAnimatedStyle<ViewStyle>(() => {
-      const transform = [
-        { translateY: interpolate(anim.value, [0, 1], [0, -30 - i * 10]) },
-        { translateX: interpolate(anim.value, [0, 0.5, 1], [0, (i % 2 === 0 ? 10 : -10), 0]) },
-        { scale: interpolate(anim.value, [0, 0.5, 1], [0.5, 1, 0.5]) },
-      ] as unknown as ViewStyle['transform'];
-
-      return {
-        opacity: interpolate(anim.value, [0, 0.5, 1], [0.1, 0.4, 0.1]),
-        transform,
-      };
-    });
-
-    return (
+    <>
       <Animated.View
-        key={i}
         style={[
-          styles.particle,
           {
-            left: `${15 + i * 15}%`,
-            bottom: `${10 + (i % 3) * 20}%`,
-            backgroundColor: color,
+            position: 'absolute',
+            top: -40,
+            right: -40,
+            width: 160,
+            height: 160,
+            borderRadius: 80,
+            backgroundColor: color1,
           },
-          style,
+          orb1Style,
         ]}
       />
-    );
-  });
-
-  return <View style={styles.particlesContainer}>{particles}</View>;
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            bottom: -30,
+            left: -30,
+            width: 200,
+            height: 200,
+            borderRadius: 100,
+            backgroundColor: color2,
+          },
+          orb2Style,
+        ]}
+      />
+    </>
+  );
 };
 
 export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
@@ -179,6 +176,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   // Animation values
   const cardScale = useSharedValue(1);
   const shimmerAnim = useSharedValue(0);
+  const avatarRing = useSharedValue(0);
 
   // Primary source: active session (Clerk user), then prop, then globalState only if it matches session
   const username = useMemo(() => {
@@ -273,14 +271,29 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   // Shimmer animation
   useEffect(() => {
     shimmerAnim.value = withRepeat(
-      withTiming(1, { duration: 2500, easing: Easing.linear }),
+      withTiming(1, { duration: 3000, easing: Easing.linear }),
+      -1,
+      false
+    );
+  }, []);
+
+  // Avatar ring rotation
+  useEffect(() => {
+    avatarRing.value = withRepeat(
+      withTiming(1, { duration: 8000, easing: Easing.linear }),
       -1,
       false
     );
   }, []);
 
   const shimmerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(shimmerAnim.value, [0, 1], [-width, width]) }],
+    transform: [{ translateX: interpolate(shimmerAnim.value, [0, 1], [-SCREEN_WIDTH, SCREEN_WIDTH]) }],
+  }));
+
+  const avatarRingStyle = useAnimatedStyle(() => ({
+    transform: [
+      { rotate: `${interpolate(avatarRing.value, [0, 1], [0, 360])}deg` },
+    ] as ViewStyle['transform'],
   }));
 
   // Use actual login streak or fallback to streakDays
@@ -289,8 +302,9 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   const slides: SlideData[] = [
     {
       type: 'welcome',
-      gradient: ['#0f0c29', '#302b63', '#24243e'] as const,
-      accentColor: '#a855f7',
+      gradient: ['#0a0a12', '#151525', '#0f0f1a'] as const,
+      accentColor: COLORS.neonGreen,
+      glowColor: '#8eff71',
       icon: 'person',
       title: `${t.home.hello} ${username}!`,
       subtitle: actualLoginStreak > 0 
@@ -303,10 +317,12 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     {
       type: 'spinWheel',
       gradient: spinWheelAvailable 
-        ? (['#f12711', '#f5af19', '#f37335'] as const)
-        : (['#2c3e50', '#34495e', '#2c3e50'] as const),
-      accentColor: spinWheelAvailable ? '#f5af19' : '#7f8c8d',
+        ? (['#1a0a00', '#2a1000', '#1a0800'] as const)
+        : (['#0f0f12', '#1a1a1e', '#0f0f12'] as const),
+      accentColor: spinWheelAvailable ? '#ff9472' : '#555',
+      glowColor: spinWheelAvailable ? '#fc4d00' : '#333',
       icon: 'gift',
+      iconEmoji: '🎰',
       title: spinWheelAvailable ? t.home.luckyWheel : t.home.wheelLocked,
       subtitle: spinWheelAvailable ? t.home.spinAndWin : `${t.home.availableAfter} ${countdown}`,
       buttonText: spinWheelAvailable ? t.home.tryYourLuck : countdown,
@@ -314,9 +330,11 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     },
     {
       type: 'predictions',
-      gradient: ['#11998e', '#38ef7d', '#0f9b0f'] as const,
+      gradient: ['#001a15', '#002a20', '#001510'] as const,
       accentColor: '#38ef7d',
+      glowColor: '#11998e',
       icon: 'football',
+      iconEmoji: '⚽',
       title: t.home.predictions,
       subtitle: predictionsCount > 0 
         ? `${predictionsCount} ${t.home.matchesAvailable}` 
@@ -328,10 +346,12 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     {
       type: 'quiz',
       gradient: dailyQuizStatus?.canTake 
-        ? (['#4776E6', '#8E54E9', '#667eea'] as const)
-        : (['#2c3e50', '#34495e', '#2c3e50'] as const),
-      accentColor: dailyQuizStatus?.canTake ? '#8E54E9' : '#7f8c8d',
+        ? (['#0a0020', '#150040', '#0a0018'] as const)
+        : (['#0f0f12', '#1a1a1e', '#0f0f12'] as const),
+      accentColor: dailyQuizStatus?.canTake ? '#ac8aff' : '#555',
+      glowColor: dailyQuizStatus?.canTake ? '#8E54E9' : '#333',
       icon: 'bulb',
+      iconEmoji: '🧠',
       title: dailyQuizStatus?.categoryName || 'الأسئلة اليومية',
       subtitle: dailyQuizStatus?.canTake 
         ? 'اختبر معرفتك اليوم'
@@ -346,10 +366,12 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
     {
       type: 'rank',
       gradient: userRank > 0 
-        ? (['#f093fb', '#f5576c', '#eb3349'] as const)
-        : (['#2c3e50', '#34495e', '#2c3e50'] as const),
-      accentColor: userRank > 0 ? '#f5576c' : '#7f8c8d',
+        ? (['#1a0010', '#2a0020', '#150010'] as const)
+        : (['#0f0f12', '#1a1a1e', '#0f0f12'] as const),
+      accentColor: userRank > 0 ? '#f5576c' : '#555',
+      glowColor: userRank > 0 ? '#f093fb' : '#333',
       icon: 'trophy',
+      iconEmoji: '🏆',
       title: userRank > 0 ? `${t.home.rankPosition} #${userRank}` : t.home.ranking,
       subtitle: userRank > 0 
         ? t.home.competeWithBest 
@@ -376,7 +398,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
   const handleCardPress = useCallback(() => {
     Haptics.selectionAsync();
     cardScale.value = withSequence(
-      withSpring(0.97, { damping: 15 }),
+      withSpring(0.96, { damping: 15 }),
       withSpring(1, { damping: 15 })
     );
     setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -429,14 +451,25 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
         style={styles.container}
       >
         <TouchableOpacity activeOpacity={0.95} onPress={onRegisterPress}>
-          <LinearGradient
-            colors={['#0f0c29', '#302b63', '#24243e']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.card}
-          >
-            <BackgroundParticles color="#a855f7" />
+          <View style={styles.card}>
+            <LinearGradient
+              colors={['#0a0a12', '#151525', '#0f0f1a']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <AmbientGlowOrbs color1="#8eff71" color2="#ac8aff" />
             
+            {/* Shimmer */}
+            <Animated.View style={[styles.shimmer, shimmerStyle]}>
+              <LinearGradient
+                colors={['transparent', 'rgba(255,255,255,0.04)', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.shimmerGradient}
+              />
+            </Animated.View>
+
             <View style={styles.cardContent}>
               <View style={styles.guestIconContainer}>
                 <Text style={styles.guestEmoji}>🚀</Text>
@@ -467,14 +500,15 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
                 </TouchableOpacity>
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
       </Animated.View>
     );
   }
 
-  // USER MODE
+  // USER MODE - Premium Glass Card Carousel
   const currentSlideData = slides[currentSlide];
+  const hasAvatar = currentSlideData.type === 'welcome' && (propUserAvatar || clerkUser?.imageUrl);
 
   return (
     <Animated.View
@@ -485,101 +519,164 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
         <Animated.View style={cardAnimStyle}>
           <Animated.View
             key={currentSlide}
-            entering={FadeIn.duration(400)}
-            exiting={FadeOut.duration(200)}
+            entering={FadeIn.duration(500)}
+            exiting={FadeOut.duration(250)}
           >
-            <LinearGradient
-              colors={currentSlideData.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.card}
-            >
-              {/* Background particles */}
-              <BackgroundParticles color={currentSlideData.accentColor} />
-              
-              {/* Shimmer effect */}
+            {/* Main Glass Card */}
+            <View style={styles.card}>
+              {/* Deep gradient background */}
+              <LinearGradient
+                colors={currentSlideData.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+
+              {/* Ambient glow orbs */}
+              <AmbientGlowOrbs
+                color1={currentSlideData.glowColor}
+                color2={currentSlideData.accentColor}
+              />
+
+              {/* Glass overlay for depth */}
+              <View style={styles.glassOverlay} />
+
+              {/* Shimmer sweep */}
               <Animated.View style={[styles.shimmer, shimmerStyle]}>
                 <LinearGradient
-                  colors={['transparent', 'rgba(255,255,255,0.1)', 'transparent']}
+                  colors={['transparent', 'rgba(255,255,255,0.03)', 'transparent']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.shimmerGradient}
                 />
               </Animated.View>
 
-              {/* Card content */}
+              {/* Card Content */}
               <View style={styles.cardContent}>
-                {/* Header Row */}
-                <View style={styles.cardHeader}>
-                  {/* Left: Icon or Avatar */}
-                  {currentSlideData.type === 'welcome' && (propUserAvatar || clerkUser?.imageUrl) ? (
-                    <View style={styles.iconBox}>
-                      <Image
-                        source={{ uri: propUserAvatar || clerkUser?.imageUrl || '' }}
-                        style={styles.iconBoxAvatar}
-                        contentFit="cover"
-                        transition={200}
-                      />
-                    </View>
-                  ) : (
-                  <View style={[styles.iconBox, { backgroundColor: `${currentSlideData.accentColor}30` }]}>
-                    <Ionicons name={currentSlideData.icon as any} size={28} color="#fff" />
+                {/* Top Row: Title + Badge/Streak */}
+                <View style={styles.topRow}>
+                  <View style={styles.titleBlock}>
+                    <Text style={styles.kickerLabel}>
+                      {currentSlideData.type === 'welcome' ? 'WELCOME BACK' : 
+                       currentSlideData.type === 'spinWheel' ? (spinWheelAvailable ? 'AVAILABLE NOW' : 'LOCKED') :
+                       currentSlideData.type === 'predictions' ? 'PREDICTIONS' :
+                       currentSlideData.type === 'quiz' ? 'DAILY QUIZ' : 'LEADERBOARD'}
+                    </Text>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {currentSlideData.title}
+                    </Text>
                   </View>
-                  )}
-                  
-                  {/* Center: Title & Subtitle */}
-                  <View style={styles.textContainer}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{currentSlideData.title}</Text>
-                    <Text style={styles.cardSubtitle} numberOfLines={1}>{currentSlideData.subtitle}</Text>
-                  </View>
-                  
-                  {/* Right: Badge */}
-                  {currentSlideData.badge && currentSlideData.type !== 'welcome' ? (
-                    <View style={[styles.badge, { backgroundColor: currentSlideData.accentColor }]}>
-                      <Text style={styles.badgeText}>{currentSlideData.badge}</Text>
+
+                  {/* Fire Streak Badge (only on welcome) */}
+                  {currentSlideData.type === 'welcome' && actualLoginStreak > 0 ? (
+                    <LinearGradient
+                      colors={['#fc4d00', '#ff7346']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.streakBadge}
+                    >
+                      <Text style={styles.streakFireIcon}>🔥</Text>
+                      <Text style={styles.streakBadgeText}>
+                        {actualLoginStreak} {t.home.day}
+                      </Text>
+                    </LinearGradient>
+                  ) : currentSlideData.badge ? (
+                    <View style={[styles.countBadge, { backgroundColor: currentSlideData.accentColor }]}>
+                      <Text style={styles.countBadgeText}>{currentSlideData.badge}</Text>
                     </View>
                   ) : null}
                 </View>
 
-                {/* Action button with Fire streak (for welcome card) */}
-                {currentSlideData.type === 'welcome' && actualLoginStreak > 0 ? (
-                  <View style={styles.actionButtonWithStreak}>
-                    <FireStreak days={actualLoginStreak} dayLabel={t.home.day} />
+                {/* Middle Row: Avatar (welcome) or Icon + Subtitle */}
+                <View style={styles.middleRow}>
+                  {hasAvatar ? (
+                    <View style={styles.avatarSection}>
+                      {/* Rotating gradient ring around avatar */}
+                      <Animated.View style={[styles.avatarRing, avatarRingStyle]}>
+                        <LinearGradient
+                          colors={[COLORS.neonGreen, '#ac8aff', COLORS.neonGreen]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.avatarRingGradient}
+                        />
+                      </Animated.View>
+                      <View style={styles.avatarContainer}>
+                        <Image
+                          source={{ uri: propUserAvatar || clerkUser?.imageUrl || '' }}
+                          style={styles.avatarImage}
+                          contentFit="cover"
+                          transition={200}
+                        />
+                      </View>
+                      {/* Verified check */}
+                      <View style={styles.verifiedBadge}>
+                        <Ionicons name="checkmark" size={10} color="#0d6100" />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[styles.iconCircle, { backgroundColor: `${currentSlideData.accentColor}15` }]}>
+                      {currentSlideData.iconEmoji ? (
+                        <Text style={styles.iconEmoji}>{currentSlideData.iconEmoji}</Text>
+                      ) : (
+                        <Ionicons name={currentSlideData.icon as any} size={28} color={currentSlideData.accentColor} />
+                      )}
+                    </View>
+                  )}
+
+                  <View style={styles.subtitleBlock}>
+                    {currentSlideData.type === 'welcome' ? (
+                      <>
+                        <Text style={styles.levelLabel}>
+                          Level {globalState.userProfile?.stats?.level || 1}
+                        </Text>
+                        <Text style={styles.subtitleText} numberOfLines={1}>
+                          {currentSlideData.subtitle}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={styles.subtitleText} numberOfLines={2}>
+                        {currentSlideData.subtitle}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Bottom Row: Action Button */}
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={() => handleButtonPress(currentSlideData)}
-                  activeOpacity={0.8}
+                  activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.1)']}
+                    colors={
+                      currentSlideData.type === 'welcome'
+                        ? [COLORS.neonGreen, '#2ff801'] as const
+                        : [`${currentSlideData.accentColor}40`, `${currentSlideData.accentColor}20`] as const
+                    }
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={styles.actionButtonGradient}
+                    style={[
+                      styles.actionButtonGradient,
+                      currentSlideData.type === 'welcome' && styles.actionButtonGradientPrimary,
+                    ]}
                   >
-                    <Text style={styles.actionButtonText}>{currentSlideData.buttonText}</Text>
-                    <Ionicons name="chevron-back" size={16} color="#fff" />
+                    <Text
+                      style={[
+                        styles.actionButtonText,
+                        currentSlideData.type === 'welcome' && styles.actionButtonTextPrimary,
+                      ]}
+                    >
+                      {currentSlideData.buttonText}
+                    </Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color={currentSlideData.type === 'welcome' ? '#0d6100' : '#fff'}
+                    />
                   </LinearGradient>
                 </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => handleButtonPress(currentSlideData)}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.1)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.actionButtonGradient}
-                    >
-                      <Text style={styles.actionButtonText}>{currentSlideData.buttonText}</Text>
-                      <Ionicons name="chevron-back" size={16} color="#fff" />
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
 
-                {/* Dots */}
+                {/* Dots Indicator */}
                 <View style={styles.dotsContainer}>
                   {slides.map((_, index) => (
                     <TouchableOpacity
@@ -587,12 +684,15 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
                       onPress={() => handleDotPress(index)}
                       hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                     >
-                      <Animated.View
+                      <View
                         style={[
                           styles.dot,
                           currentSlide === index && [
                             styles.dotActive,
-                            { backgroundColor: currentSlideData.accentColor },
+                            {
+                              backgroundColor: currentSlideData.accentColor,
+                              shadowColor: currentSlideData.accentColor,
+                            },
                           ],
                         ]}
                       />
@@ -600,7 +700,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
                   ))}
                 </View>
               </View>
-            </LinearGradient>
+            </View>
           </Animated.View>
         </Animated.View>
       </TouchableOpacity>
@@ -617,41 +717,48 @@ const styles = StyleSheet.create({
   welcomeSkeletonCard: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
+
+  // ========================
+  // GLASS CARD (Stitch-inspired)
+  // ========================
   card: {
     height: CARD_HEIGHT,
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: 'hidden',
     position: 'relative',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.15)',
+    // Glass-card border: subtle top+left highlight
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderLeftColor: 'rgba(255,255,255,0.05)',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderRightColor: 'rgba(255,255,255,0.02)',
+    borderBottomColor: 'rgba(255,255,255,0.02)',
+    // Deep shadow for card lift
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+    elevation: 16,
+  },
+  glassOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(25, 25, 30, 0.3)',
+    // Expo BlurView can be used here too but this is lighter
   },
   cardContent: {
     flex: 1,
-    padding: 20,
+    padding: 22,
     justifyContent: 'space-between',
     zIndex: 10,
   },
-  
-  // Particles
-  particlesContainer: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  particle: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  
-  // Shimmer
+
+  // ========================
+  // SHIMMER
+  // ========================
   shimmer: {
     position: 'absolute',
     top: 0,
@@ -661,211 +768,228 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   shimmerGradient: {
-    width: 100,
+    width: 120,
     height: '100%',
   },
-  
-  // Header
-  cardHeader: {
-    flexDirection: 'row-reverse', // RTL layout
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.25)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-    overflow: 'hidden',
-  },
-  iconBoxAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
-  },
-  
-  // Fire Streak - Simple Design (No Glow)
-  fireContainerNew: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  fireGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    gap: 8,
-  },
-  fireEmojiNew: {
-    fontSize: 24,
-  },
-  streakBadgeNew: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  streakNumberNew: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  streakLabelNew: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  
-  // Badge
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    minWidth: 44,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  
-  // Text
-  textContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  welcomeHeader: {
+
+  // ========================
+  // TOP ROW
+  // ========================
+  topRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  welcomeTextContainer: {
+  titleBlock: {
     flex: 1,
+    paddingLeft: 12,
+  },
+  kickerLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 2,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'right',
+    marginBottom: 4,
+    textTransform: 'uppercase',
   },
   cardTitle: {
-    fontSize: 21,
+    fontSize: 24,
     fontWeight: '800',
     color: '#fff',
-    marginBottom: 4,
     textAlign: 'right',
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-    letterSpacing: 0.3,
+    letterSpacing: -0.5,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'right',
-    lineHeight: 20,
-    fontWeight: '500',
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  
-  // Action Button
-  actionButton: {
-    alignSelf: 'flex-start', // RTL - button on right side
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  actionButtonWithStreak: {
-    flexDirection: 'row-reverse',
+
+  // Streak Badge (fire)
+  streakBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  actionButtonGradient: {
-    flexDirection: 'row-reverse', // RTL
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
+    gap: 4,
+    shadowColor: '#fc4d00',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  streakFireIcon: {
+    fontSize: 12,
+  },
+  streakBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+
+  // Count Badge
+  countBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    minWidth: 40,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  actionButtonText: {
+  countBadgeText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '900',
     letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
-  
-  // Dots
+
+  // ========================
+  // MIDDLE ROW (Avatar / Icon + Subtitle)
+  // ========================
+  middleRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+  },
+
+  // Avatar with animated gradient ring
+  avatarSection: {
+    position: 'relative',
+    width: 64,
+    height: 64,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarRing: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+  },
+  avatarRingGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  avatarContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#0e0e11',
+    backgroundColor: '#1a1a1e',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.neonGreen,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#0e0e11',
+  },
+
+  // Icon circle (for non-welcome slides)
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  iconEmoji: {
+    fontSize: 28,
+  },
+
+  subtitleBlock: {
+    flex: 1,
+    paddingHorizontal: 4,
+  },
+  levelLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'right',
+    marginBottom: 2,
+  },
+  subtitleText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'right',
+    lineHeight: 22,
+  },
+
+  // ========================
+  // ACTION BUTTON (Stitch-inspired green CTA)
+  // ========================
+  actionButton: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  actionButtonGradientPrimary: {
+    borderColor: 'transparent',
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.2,
+  },
+  actionButtonTextPrimary: {
+    color: '#0d6100',
+  },
+
+  // ========================
+  // DOTS
+  // ========================
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 8,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   dotActive: {
     width: 24,
+    borderRadius: 3,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 4,
   },
   
-  // Guest Mode
+  // ========================
+  // GUEST MODE
+  // ========================
   guestIconContainer: {
     alignSelf: 'center',
     marginBottom: 12,
@@ -912,8 +1036,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 25,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   secondaryBtnText: {
     color: '#fff',

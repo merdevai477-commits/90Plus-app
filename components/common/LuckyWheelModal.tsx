@@ -149,91 +149,78 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       }),
     ]).start();
 
-    // Fetch real prize in parallel with a long visual spin (see phases below).
-    let finalPrizeIndex = 0;
-    let finalPrize = PRIZES[0];
-    const segmentAngle = 360 / PRIZES.length;
-
-    // Reset spin state
+    // Start initial continuous spin
     spinAnim.setValue(0);
     spinValueRef.current = 0;
-
-    // Fetch prize (prefer real result; fallback random if needed) - start in parallel with phase 1
-    const prizePromise = (async (): Promise<{ prizeIndex: number; prize: typeof PRIZES[number] }> => {
-      try {
-        const token = await getToken();
-        if (token) {
-          const response = await fetch(`${API_URL}/daily-spin/spin`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          const data = await response.json();
-
-          if (data?.status === 'SUCCESS') {
-            const coins = (data.data?.prize?.coins as number | undefined) ?? undefined;
-            let idx = typeof coins === 'number' ? PRIZES.findIndex(p => p.coins === coins) : -1;
-            if (idx === -1) idx = 0;
-            return { prizeIndex: idx, prize: PRIZES[idx] };
-          }
-        }
-      } catch (error) {
-        console.error('Spin API error:', error);
-      }
-
-      const idx = Math.floor(Math.random() * PRIZES.length);
-      return { prizeIndex: idx, prize: PRIZES[idx] };
-    })();
-
-    // Phase 1: fixed minimum spin, then keep turning until the API returns (no dead stop on slow network)
-    let apiSettled = false;
-    prizePromise.finally(() => {
-      apiSettled = true;
-    });
-
-    await new Promise<void>((resolve) => {
+    
+    // We start an infinite spin while waiting for the API
+    const infiniteSpin = Animated.loop(
       Animated.timing(spinAnim, {
-        toValue: 360 * 4.75,
-        duration: 3200,
+        toValue: 360,
+        duration: 600,
         easing: Easing.linear,
         useNativeDriver: true,
-      }).start(() => resolve());
-    });
+      })
+    );
+    infiniteSpin.start();
 
-    const spinChunk = () =>
-      new Promise<void>((resolve) => {
-        const c = spinValueRef.current;
-        Animated.timing(spinAnim, {
-          toValue: c + 360,
-          duration: 500,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }).start(() => resolve());
-      });
+    let finalPrizeIndex = 0;
+    let finalPrize = PRIZES[0];
 
-    while (!apiSettled) {
-      await spinChunk();
+    try {
+      const token = await getToken();
+      if (token) {
+        const response = await fetch(`${API_URL}/daily-spin/spin`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const data = await response.json();
+
+        if (data?.status === 'SUCCESS') {
+          const coins = (data.data?.prize?.coins as number | undefined) ?? undefined;
+          let idx = typeof coins === 'number' ? PRIZES.findIndex(p => p.coins === coins) : -1;
+          if (idx === -1) idx = 0;
+          finalPrizeIndex = idx;
+          finalPrize = PRIZES[idx];
+        } else {
+          finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
+          finalPrize = PRIZES[finalPrizeIndex];
+        }
+      }
+    } catch (error) {
+      console.error('Spin API error:', error);
+      finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
+      finalPrize = PRIZES[finalPrizeIndex];
     }
 
-    const prizeResult = await prizePromise;
-    finalPrizeIndex = prizeResult.prizeIndex;
-    finalPrize = prizeResult.prize;
-
-    // Phase 2: long deceleration — cubic-out keeps visible motion longer than quad-out
-    const targetAngle = 360 - (finalPrizeIndex * segmentAngle) - (segmentAngle / 2);
-    const current = spinValueRef.current;
-
-    const extraTurns = 9;
-    const totalRotation = current + 360 * extraTurns + targetAngle;
+    // Capture the current value of the spin to seamlessly transition
+    infiniteSpin.stop();
+    const currentAngle = spinValueRef.current % 360;
+    spinAnim.setValue(currentAngle);
+    
+    // Phase 2: Decelerate to the target angle
+    const segmentAngle = 360 / PRIZES.length;
+    // targetAngle calculates where the prize segment will be at the top pointer (270 degrees usually, but here pointer is Top = 0 degrees)
+    // Actually pointer is Top. Start is -90 + gap. So index * 45. 
+    // To land on index, the wheel needs to rotate such that the segment is on top.
+    const targetAngle = 360 - (finalPrizeIndex * segmentAngle);
+    
+    // Calculate total rotation to add a nice deceleration feeling (5 extra spins)
+    const extraTurns = Math.ceil(currentAngle / 360) + 5;
+    const finalRotation = (360 * extraTurns) + targetAngle;
 
     Animated.timing(spinAnim, {
-      toValue: totalRotation,
-      duration: 9800,
+      toValue: finalRotation,
+      duration: 5000, // 5 seconds deceleration
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(async () => {
+      // Ensure the value stays bounded
+      spinAnim.setValue(finalRotation % 360);
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (Platform.OS === 'android') {
         Vibration.vibrate([0, 100, 50, 100, 50, 200]);
@@ -242,8 +229,12 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       setWonPrize({ coins: finalPrize.coins });
       setCanSpin(false);
       setIsSpinning(false);
-
-      await addCoins(finalPrize.coins);
+      
+      try {
+        await addCoins(finalPrize.coins);
+      } catch (e) {
+        console.error('Add coins error:', e);
+      }
 
       setTimeout(() => {
         setShowResult(true);

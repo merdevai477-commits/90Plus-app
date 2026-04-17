@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
@@ -54,7 +56,7 @@ export const MatchList: React.FC<MatchListProps> = ({ matches, onMatchPress, onV
     const renderItem = React.useCallback(({ item, index }: { item: Match, index: number }) => (
         <Animated.View
             entering={FadeInDown.delay(index * 50).springify().damping(15)}
-            style={{ width: 330 }}
+            style={{ width: Math.min(SCREEN_WIDTH - 56, 340), minHeight: 190 }}
         >
             <GradientMatchCard
                 match={mapStoreMatchToGradientMatch(item)}

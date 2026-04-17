@@ -151,14 +151,13 @@ export const TEAM_COLORS: Record<string, string> = {
 
 /**
  * Gets dynamic team colors for a match
- * Returns [HomeColor, DarkCenter, AwayColor]
+ * Returns [HomeColor, AwayColor] for a smooth melting effect
  */
-export const getTeamGradients = (homeName: string, awayName: string): string[] => {
+export const getTeamGradients = (homeName: string, awayName: string): [string, string] => {
   const homeColor = TEAM_COLORS[homeName] || GRADIENT_SCHEMES[0][0];
   const awayColor = TEAM_COLORS[awayName] || GRADIENT_SCHEMES[0][1];
 
-  // Use a dark center to give depth and make content pop
-  return [homeColor, '#000000', awayColor];
+  return [homeColor, awayColor];
 };
 
 /**

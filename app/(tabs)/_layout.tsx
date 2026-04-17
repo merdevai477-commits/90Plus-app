@@ -174,12 +174,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="leagues"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
           name="rank"
           options={{
             href: null,

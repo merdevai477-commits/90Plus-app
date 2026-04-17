@@ -24,10 +24,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  FlatList,
   TextInput,
-  ListRenderItem,
 } from 'react-native';
+import { FlashList, ListRenderItem } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useDebouncedCallback } from 'use-debounce';
@@ -665,26 +664,24 @@ const TransfersSection: React.FC<TransfersSectionProps> = React.memo(({
     );
   }
 
-  // ✅ استخدام FlatList بدلاً من .map() للأداء الأفضل
+  // ✅ استخدام FlashList الحارق للأداء بدلاً من FlatList
   return (
-    <FlatList
-      data={paginatedGroups}
-      renderItem={renderLeagueSection}
-      keyExtractor={keyExtractor}
-      ListHeaderComponent={ListHeaderComponent}
-      ListFooterComponent={ListFooterComponent}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-      // ✅ Performance optimizations
-      initialNumToRender={3}
-      maxToRenderPerBatch={2}
-      windowSize={5}
-      removeClippedSubviews={true}
-      // ✅ Infinite scroll
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.5}
-      // ✅ لا نستخدم getItemLayout لأن الارتفاعات متغيرة (collapsible sections)
-    />
+    <View style={{ flex: 1, minHeight: 400 }}>
+      <FlashList
+        data={paginatedGroups}
+        renderItem={renderLeagueSection}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={ListHeaderComponent}
+        ListFooterComponent={ListFooterComponent}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        // ✅ FlashList optimizations
+        estimatedItemSize={250}
+        // ✅ Infinite scroll
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+      />
+    </View>
   );
 }, (prevProps, nextProps) => {
   return (

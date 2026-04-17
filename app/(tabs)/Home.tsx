@@ -478,7 +478,7 @@ export default function HomeScreen() {
   };
 
   const handleViewAllMatches = () => {
-    router.push('/(tabs)/leagues');
+    router.navigate('/(tabs)/matches');
   };
 
   const handleMatchPress = (matchId: string) => {
@@ -552,11 +552,11 @@ export default function HomeScreen() {
         <WelcomeSection
           onRegisterPress={() => router.push('/signup')}
           onLoginPress={() => router.push('/auth')}
-          onProfilePress={() => router.push('/(tabs)/profile')}
+          onProfilePress={() => router.navigate('/(tabs)/profile')}
           onSpinWheelPress={() => setLuckyWheelVisible(true)}
-          onPredictionsPress={() => router.push({ pathname: '/(tabs)/leagues', params: { tab: 'predictions' } })}
-          onQuizPress={() => router.push('/(tabs)/quiz')}
-          onRankPress={() => router.push('/(tabs)/rank')}
+          onPredictionsPress={() => router.navigate({ pathname: '/(tabs)/matches', params: { tab: 'predictions' } })}
+          onQuizPress={() => router.navigate('/(tabs)/quiz')}
+          onRankPress={() => router.navigate('/(tabs)/rank')}
           username={currentUsername}
           userAvatar={userAvatar}
           predictionsCount={remainingPredictions}

@@ -15,6 +15,7 @@ import {
   Text,
   ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import type { FlatListProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -62,9 +63,9 @@ type GroupedMatches = {
   matches: Match[];
 };
 
-const AnimatedFlatList = Animated.createAnimatedComponent(
-  FlatList as unknown as React.ComponentType<FlatListProps<GroupedMatches>>
-) as unknown as React.ComponentType<FlatListProps<GroupedMatches> & { ref?: React.Ref<FlatList<GroupedMatches>> }>;
+const AnimatedFlashList = Animated.createAnimatedComponent(
+  FlashList as unknown as React.ComponentType<any>
+) as unknown as React.ComponentType<any>;
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 /**
@@ -75,8 +76,9 @@ const MatchesScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const params = useLocalSearchParams<{ matchId?: string }>();
-  const flatListRef = useRef<FlatList<GroupedMatches>>(null);
+  const params = useLocalSearchParams<{ matchId?: string; tab?: MatchTabType }>();
+  // @ts-ignore
+  const flatListRef = useRef<any>(null);
   const highlightedMatchId = useSharedValue<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<MatchTabType>('all');
@@ -87,6 +89,14 @@ const MatchesScreen = () => {
   const [tabLoading, setTabLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Set active tab from params
+  useEffect(() => {
+    if (params.tab && params.tab !== activeTab) {
+      setActiveTab(params.tab as MatchTabType);
+      router.setParams({ tab: undefined });
+    }
+  }, [params.tab]);
   
   // Transfer filters
   const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]);
@@ -1036,8 +1046,9 @@ const MatchesScreen = () => {
           />
         </View>
       ) : (
-        <AnimatedFlatList
-          ref={flatListRef}
+        <View style={{ flex: 1, minHeight: 400 }}>
+          <AnimatedFlashList
+            ref={flatListRef}
           data={paginatedGroupedMatches}
           renderItem={renderLeagueSection}
           keyExtractor={keyExtractor}
@@ -1057,11 +1068,7 @@ const MatchesScreen = () => {
           }
           onScroll={scrollHandler}
           scrollEventThrottle={16}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={2}
-          updateCellsBatchingPeriod={100}
-          initialNumToRender={2}
-          windowSize={3}
+          estimatedItemSize={280}
           onEndReached={loadMoreLeagues}
           onEndReachedThreshold={0.6}
           ListFooterComponent={
@@ -1072,8 +1079,8 @@ const MatchesScreen = () => {
             ) : null
           }
           accessibilityLabel="Matches list"
-          // Remove getItemLayout as item heights vary significantly
         />
+        </View>
       )}
     </View>
   );

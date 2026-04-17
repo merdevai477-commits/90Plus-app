@@ -9,6 +9,7 @@ import { Match } from '../components/league-center/matchCardUtils';
 import { fetchMatchesByDate, fetchLiveMatches } from '../components/league-center/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
+import { Image } from 'expo-image';
 
 export interface GroupedMatches {
   leagueId: number;
@@ -209,6 +210,22 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
         }
 
         setMatches(fetchedMatches);
+
+        // 🚀 Aggressive Prefetching for logos (Instant Performance Phase 1)
+        try {
+          const logosToPrefetch = new Set<string>();
+          fetchedMatches.forEach(m => {
+            if (m.homeTeam?.logo) logosToPrefetch.add(m.homeTeam.logo);
+            if (m.awayTeam?.logo) logosToPrefetch.add(m.awayTeam.logo);
+            if (m.league?.logo) logosToPrefetch.add(m.league.logo);
+          });
+          const urls = Array.from(logosToPrefetch).slice(0, 100);
+          if (urls.length > 0) {
+            Image.prefetch(urls, 'memory-disk').catch(() => {});
+          }
+        } catch (e) {
+          logger.warn('Failed to prefetch logos', e);
+        }
 
         // Update caches
         const cacheTTL = isPastDate
