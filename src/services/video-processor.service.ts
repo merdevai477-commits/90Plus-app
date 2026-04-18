@@ -78,12 +78,17 @@ export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null 
     return null;
   }
 
-  videoProcessingQueue = new Bull<VideoProcessingJobData>('video-processing', {
-    redis: redisUrl,
+  // Use URL parsing to extract details if needed, or better, just pass the URL string as first argument
+  // to Bull which accepts (name, url, opts)
+  videoProcessingQueue = new Bull<VideoProcessingJobData>('video-processing', redisUrl, {
+    redis: {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: true,
+    },
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5_000 },
-      timeout: 8 * 60 * 1000, // 8 minutes — ffmpeg on a 50MB video should finish well within this
+      timeout: 8 * 60 * 1000,
       removeOnComplete: 100,
       removeOnFail: 200,
     },
@@ -109,8 +114,8 @@ export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null 
   videoProcessingQueue.on('error', (err: any) => {
     // Bull/Redis on free tiers frequently drops idle connections, causing noisy EPIPE/ECONNRESET errors.
     // They are non-fatal as Bull will auto-reconnect.
-    if (['ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(err.code)) {
-      logger.debug(`[VideoProcessor] Redis connection dropped (${err.code}), bull will reconnect automatically.`);
+    if (['ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(err.code) || err.message?.includes('MaxRetriesPerRequestError')) {
+      logger.debug(`[VideoProcessor] Redis connection dropped (${err.code || 'MaxRetries'}), bull will reconnect automatically.`);
       return;
     }
     logger.error('[VideoProcessor] Queue error:', err);
