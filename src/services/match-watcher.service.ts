@@ -18,6 +18,18 @@ interface ApiFootballMatch {
     };
 }
 
+interface ApiFootballEvent {
+    time: { elapsed: number };
+    team: { id: number; name: string };
+    player: { id: number | null; name: string | null };
+    assist: { id: number | null; name: string | null };
+    type: string;    // 'Goal', 'Card', 'subst', 'Var'
+    detail: string;  // 'Normal Goal', 'Yellow Card', 'Red Card', 'Second Yellow card'
+}
+
+// In-memory store for last-seen event count per match (resets on server restart)
+const seenEventCounts = new Map<number, number>();
+
 export class MatchWatcherService {
     private static isRunning = false;
     private static intervalId: NodeJS.Timeout | null = null;
@@ -165,9 +177,16 @@ export class MatchWatcherService {
         const status = matchData.fixture.status.short;
         const homeScore = matchData.goals.home ?? 0;
         const awayScore = matchData.goals.away ?? 0;
+        const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(status);
 
         // Get all favorites for this match
         const matchFavorites = favoriteMatches.filter(f => f.apiMatchId === matchId);
+
+        // Fetch events for this match if it's LIVE (for card notifications)
+        let liveEvents: ApiFootballEvent[] = [];
+        if (isLive) {
+            liveEvents = await this.fetchMatchEvents(matchId);
+        }
 
         for (const favorite of matchFavorites) {
             const pushToken = favorite.user?.expoPushToken;
@@ -275,6 +294,11 @@ export class MatchWatcherService {
             });
         }
 
+        // Process card events for all users who favorited this match
+        if (isLive && liveEvents.length > 0) {
+            await this.processCardEvents(matchId, liveEvents, matchFavorites);
+        }
+
         // Send WebSocket match update to all subscribed clients
         WebSocketService.sendMatchUpdate(matchId, {
             matchId,
@@ -282,6 +306,77 @@ export class MatchWatcherService {
             awayScore,
             status,
         });
+    }
+
+    /**
+     * Fetch live events (goals, cards) for a match from API-Football
+     */
+    private static async fetchMatchEvents(matchId: number): Promise<ApiFootballEvent[]> {
+        try {
+            const data = await footballService.fetchFromApi<any[]>('/fixtures/events', { fixture: matchId });
+            if (!data || !Array.isArray(data)) return [];
+            return data as ApiFootballEvent[];
+        } catch (error) {
+            logger.warn(`[MatchWatcher] Failed to fetch events for match ${matchId}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Process card events and notify users who favorited the match.
+     * Uses seenEventCounts to avoid sending duplicate notifications for the same events.
+     */
+    private static async processCardEvents(
+        matchId: number,
+        events: ApiFootballEvent[],
+        matchFavorites: any[]
+    ) {
+        const cardEvents = events.filter(e =>
+            e.type === 'Card' &&
+            ['Yellow Card', 'Red Card', 'Second Yellow card'].includes(e.detail)
+        );
+
+        const prevCount = seenEventCounts.get(matchId) ?? 0;
+        const newEvents = cardEvents.slice(prevCount);
+
+        if (newEvents.length === 0) return;
+
+        seenEventCounts.set(matchId, cardEvents.length);
+        logger.info(`[MatchWatcher] ${newEvents.length} new card event(s) for match ${matchId}`);
+
+        for (const event of newEvents) {
+            const isRed = event.detail === 'Red Card' || event.detail === 'Second Yellow card';
+            const emoji = isRed ? '🟥' : '🟨';
+            const cardLabel = isRed ? 'بطاقة حمراء' : 'بطاقة صفراء';
+            const playerName = event.player?.name || 'لاعب';
+            const teamName = event.team?.name || '';
+            const elapsed = event.time?.elapsed ?? '';
+
+            const title = `${emoji} ${cardLabel}!`;
+            const message = `${playerName} (${teamName}) - الدقيقة ${elapsed}'`;
+
+            for (const favorite of matchFavorites) {
+                try {
+                    await NotificationService.createNotification({
+                        userId: favorite.userId,
+                        pushToken: favorite.user?.expoPushToken ?? null,
+                        title,
+                        message,
+                        type: 'MATCH_UPDATE',
+                        channelId: 'match-updates',
+                        data: {
+                            type: isRed ? 'MATCH_RED_CARD' : 'MATCH_YELLOW_CARD',
+                            matchId,
+                            playerName,
+                            teamName,
+                            elapsed,
+                        },
+                    });
+                } catch (err) {
+                    logger.warn(`[MatchWatcher] Card notification failed for user ${favorite.userId}:`, err);
+                }
+            }
+        }
     }
 }
 

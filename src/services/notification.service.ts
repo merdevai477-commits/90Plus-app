@@ -9,6 +9,9 @@ export enum NotificationType {
     MATCH_START = 'MATCH_START',
     MATCH_END = 'MATCH_END',
     MATCH_HALFTIME = 'MATCH_HALFTIME',
+    MATCH_FAVORITE = 'MATCH_FAVORITE',
+    MATCH_YELLOW_CARD = 'MATCH_YELLOW_CARD',
+    MATCH_RED_CARD = 'MATCH_RED_CARD',
     PREDICTION_RESULT = 'PREDICTION_RESULT',
     FOLLOW = 'FOLLOW',
     LIKE = 'LIKE',
@@ -77,6 +80,9 @@ function resolveChannelId(type: string, explicitChannelId?: string): string {
         case 'MATCH_START':
         case 'MATCH_END':
         case 'MATCH_HALFTIME':
+        case 'MATCH_FAVORITE':
+        case 'MATCH_YELLOW_CARD':
+        case 'MATCH_RED_CARD':
             return 'match-updates';
         case 'VIDEO_PROCESSED':
             return 'general';

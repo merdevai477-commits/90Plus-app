@@ -381,19 +381,27 @@ router.post(
         logger.error('Profile completion recalc failed:', err);
       }
 
-      await UploadAnalyticsService.record({
-        userId: user.id, type: 'AVATAR', status: 'SUCCESS',
-        fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
-      });
+      try {
+        await UploadAnalyticsService.record({
+          userId: user.id, type: 'AVATAR', status: 'SUCCESS',
+          fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
+        });
+      } catch (err) {
+        logger.error('Upload analytics failed:', err);
+      }
 
-      const { enqueueNotification } = await import('../queues/notification.queue');
-      await enqueueNotification({
-        userId: user.id,
-        title: 'صورة البروفايل',
-        message: 'تم تحديث صورة البروفايل بنجاح!',
-        type: 'GENERAL',
-        data: { type: 'UPLOAD_SUCCESS' }
-      });
+      try {
+        const { enqueueNotification } = await import('../queues/notification.queue');
+        await enqueueNotification({
+          userId: user.id,
+          title: 'صورة البروفايل',
+          message: 'تم تحديث صورة البروفايل بنجاح!',
+          type: 'GENERAL',
+          data: { type: 'UPLOAD_SUCCESS' }
+        });
+      } catch (err) {
+        logger.error('Enqueue notification failed:', err);
+      }
 
       res.json({ status: 'SUCCESS', message: 'تم رفع صورة البروفايل بنجاح', data: { url: result.url, storagePath: result.key } });
     } catch (error: any) {
@@ -500,10 +508,14 @@ router.post(
 
       invalidateUserCache(clerkUserId);
 
-      await UploadAnalyticsService.record({
-        userId: user.id, type: 'COVER', status: 'SUCCESS',
-        fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
-      });
+      try {
+        await UploadAnalyticsService.record({
+          userId: user.id, type: 'COVER', status: 'SUCCESS',
+          fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
+        });
+      } catch (err) {
+        logger.error('Upload analytics failed:', err);
+      }
 
       res.json({ status: 'SUCCESS', message: 'تم رفع صورة الغلاف بنجاح', data: { url: result.url, storagePath: result.key } });
     } catch (error: any) {

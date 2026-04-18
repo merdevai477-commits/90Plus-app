@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
+import { enqueueNotification } from '../queues/notification.queue';
 
 const router = Router();
 
@@ -66,6 +67,23 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
                 leagueName,
             },
         });
+
+        // 🔔 Fire instant push notification (non-blocking) when user favorites a match
+        const home = homeTeam || 'الفريق الأول';
+        const away = awayTeam || 'الفريق الثاني';
+        enqueueNotification({
+            userId: user.id,
+            title: '🔔 تم تفضيل المباراة',
+            message: `${home} ضد ${away} — سيتم إخبارك بكل الأهداف والأحداث المهمة!`,
+            type: 'MATCH_FAVORITE',
+            data: {
+                type: 'MATCH_FAVORITE',
+                matchId: apiMatchId,
+                homeTeam: home,
+                awayTeam: away,
+                leagueName,
+            },
+        }).catch(err => logger.warn('[matches/favorite] Notification enqueue failed (non-fatal):', err));
 
         res.json({
             status: 'SUCCESS',
