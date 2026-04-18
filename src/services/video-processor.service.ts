@@ -16,6 +16,7 @@
  */
 
 import Bull, { Queue, Job } from 'bull';
+import Redis from 'ioredis';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import fs from 'fs';
@@ -69,6 +70,13 @@ export interface VideoProcessingJobData {
 
 let videoProcessingQueue: Queue<VideoProcessingJobData> | null = null;
 
+function createBullRedis(redisUrl: string): Redis {
+  return new Redis(redisUrl, {
+    enableReadyCheck: false,
+    maxRetriesPerRequest: null,
+  });
+}
+
 export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null {
   if (videoProcessingQueue) return videoProcessingQueue;
 
@@ -78,13 +86,8 @@ export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null 
     return null;
   }
 
-  // Use URL parsing to extract details if needed, or better, just pass the URL string as first argument
-  // to Bull which accepts (name, url, opts)
-  videoProcessingQueue = new Bull<VideoProcessingJobData>('video-processing', redisUrl, {
-    redis: {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: true,
-    },
+  videoProcessingQueue = new Bull<VideoProcessingJobData>('video-processing', {
+    createClient: (type) => createBullRedis(redisUrl),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5_000 },

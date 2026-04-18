@@ -1,4 +1,5 @@
 import Bull, { Queue } from 'bull';
+import Redis from 'ioredis';
 import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
@@ -63,6 +64,13 @@ interface LuckyWheelBatchJob {
     date: string;
 }
 
+function createBullRedis(redisUrl: string): Redis {
+    return new Redis(redisUrl, {
+        enableReadyCheck: false,
+        maxRetriesPerRequest: null,
+    });
+}
+
 let luckyWheelQueue: Queue<LuckyWheelBatchJob> | null = null;
 
 function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
@@ -71,7 +79,9 @@ function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
     const redisUrl = process.env.REDIS_URL;
     if (!redisUrl) return null;
 
-    luckyWheelQueue = new Bull<LuckyWheelBatchJob>('lucky-wheel-notifications', { redis: redisUrl });
+    luckyWheelQueue = new Bull<LuckyWheelBatchJob>('lucky-wheel-notifications', {
+        createClient: (type) => createBullRedis(redisUrl),
+    });
 
     luckyWheelQueue.process(async (job) => {
         const { userIds, date } = job.data;

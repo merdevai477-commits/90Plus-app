@@ -1,9 +1,17 @@
 import Bull, { Queue } from 'bull';
+import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 import { checkPushReceipts } from '../services/push-notification.service';
 
 interface ReceiptJob {
     receiptIds: string[];
+}
+
+function createBullRedis(redisUrl: string): Redis {
+    return new Redis(redisUrl, {
+        enableReadyCheck: false,
+        maxRetriesPerRequest: null,
+    });
 }
 
 let receiptQueue: Queue<ReceiptJob> | null = null;
@@ -17,7 +25,9 @@ export function getReceiptQueue(): Queue<ReceiptJob> | null {
         return null;
     }
 
-    receiptQueue = new Bull<ReceiptJob>('expo-receipts', { redis: redisUrl });
+    receiptQueue = new Bull<ReceiptJob>('expo-receipts', {
+        createClient: (type) => createBullRedis(redisUrl),
+    });
 
     receiptQueue.process(async (job) => {
         const { receiptIds } = job.data;
