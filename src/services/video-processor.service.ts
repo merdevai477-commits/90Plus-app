@@ -106,7 +106,13 @@ export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null 
     }
   });
 
-  videoProcessingQueue.on('error', (err) => {
+  videoProcessingQueue.on('error', (err: any) => {
+    // Bull/Redis on free tiers frequently drops idle connections, causing noisy EPIPE/ECONNRESET errors.
+    // They are non-fatal as Bull will auto-reconnect.
+    if (['ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(err.code)) {
+      logger.debug(`[VideoProcessor] Redis connection dropped (${err.code}), bull will reconnect automatically.`);
+      return;
+    }
     logger.error('[VideoProcessor] Queue error:', err);
   });
 
