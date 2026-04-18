@@ -12,8 +12,7 @@ import { logger } from './utils/logger';
 import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
-// Dynamic import for transfersSyncService to avoid top-level await issues
-let transfersSyncService: any;
+
 
 // Load environment variables
 dotenv.config();
@@ -913,20 +912,7 @@ async function startServer() {
                     backgroundPreloadService.start();
                     logger.info('✅ Background preload service started');
                     
-                    // ✅ Start transfers sync service (will work with or without Redis)
-                    try {
-                        // Dynamic import to avoid top-level await issues
-                        if (!transfersSyncService) {
-                            const transfersSyncModule = await import('./services/transfers-sync.service');
-                            transfersSyncService = transfersSyncModule.transfersSyncService;
-                        }
-                        transfersSyncService.start();
-                        logger.info('✅ Transfers Sync Service started');
-                    } catch (error) {
-                        logger.warn('⚠️ Failed to start Transfers Sync Service:', error);
-                        logger.warn('   App will continue without transfers sync service');
-                        // Continue without transfers sync - app will still work
-                    }
+
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
                 }
@@ -956,9 +942,7 @@ process.on('SIGINT', async () => {
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
-    if (transfersSyncService) {
-        transfersSyncService.stop(); // ✅ Stop transfers sync service
-    }
+
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);
@@ -970,9 +954,7 @@ process.on('SIGTERM', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
-    if (transfersSyncService) {
-        transfersSyncService.stop(); // ✅ Stop transfers sync service
-    }
+
     stopKeepAlive();
     await prisma.$disconnect();
     process.exit(0);

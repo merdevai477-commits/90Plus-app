@@ -208,33 +208,6 @@ router.get('/teams/:id/coaches', FootballController.getTeamCoaches);
 router.get('/teams/:id', FootballController.getTeamById);
 
 // ============================================
-// TRANSFERS ROUTES
-// ============================================
-
-// GET /api/football/transfers
-// Player transfers
-router.get('/transfers', FootballController.getTransfers);
-
-// GET /api/football/transfers/by-leagues
-// Get transfers by leagues with date range
-// Query params: leagues (comma-separated IDs), from (YYYY-MM-DD), to (YYYY-MM-DD)
-router.get('/transfers/by-leagues', FootballController.getTransfersByLeagues);
-
-// POST /api/football/transfers/sync
-// Sync transfers from API to database (run this to populate the database)
-// Query params: force (boolean) - force sync even if already syncing
-router.post('/transfers/sync', FootballController.syncTransfersToDatabase);
-
-// GET /api/football/transfers/sync/status
-// Get the status of the transfers sync service
-router.get('/transfers/sync/status', FootballController.getSyncStatus);
-
-// GET /api/football/transfers/cached
-// Get cached transfers from database (fast, zero-delay)
-// Query params: leagues (comma-separated IDs), season (optional), from (YYYY-MM-DD), to (YYYY-MM-DD)
-router.get('/transfers/cached', FootballController.getCachedTransfers);
-
-// ============================================
 // VENUES ROUTES
 // ============================================
 

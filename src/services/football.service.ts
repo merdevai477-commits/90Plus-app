@@ -145,7 +145,7 @@ class FootballService {
 
     // Ensure minimum delay between requests (increased for better rate limit compliance)
     const timeSinceLastRequest = now - this.lastRequestTime;
-    const requiredDelay = this.minDelay * 2; // Double the delay for transfers
+    const requiredDelay = this.minDelay;
     if (timeSinceLastRequest < requiredDelay && this.lastRequestTime > 0) {
       await this.sleep(requiredDelay - timeSinceLastRequest);
     }
@@ -744,36 +744,7 @@ class FootballService {
     });
   }
 
-  /**
-   * Get transfers
-   * Note: API-Football does not support 'date' parameter for transfers endpoint
-   * Date filtering should be done client-side after fetching
-   * Note: Can be called without parameters to get all transfers
-   */
-  async getTransfers(params: { team?: number; player?: number; date?: string }): Promise<any[]> {
-    const apiParams: Record<string, any> = {};
-    if (params.team) apiParams.team = params.team;
-    if (params.player) apiParams.player = params.player;
-    // Note: date parameter is not supported by API-Football transfers endpoint
-    // We'll filter by date in the cache service instead
-    // Note: Can be called without parameters to get all transfers
-    
-    const allTransfers = await this.fetchFromApi<any[]>('/transfers', apiParams);
-    
-    // Filter by date if provided (client-side filtering)
-    if (params.date && allTransfers) {
-      return allTransfers.filter((transfer: any) => {
-        // Check if any transfer in the transfers array matches the date
-        if (transfer.transfers && Array.isArray(transfer.transfers)) {
-          return transfer.transfers.some((t: any) => t.date === params.date);
-        }
-        // Fallback: check update field
-        return transfer.update === params.date;
-      });
-    }
-    
-    return allTransfers;
-  }
+
 
   /**
    * Get team trophies

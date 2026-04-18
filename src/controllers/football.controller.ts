@@ -222,16 +222,12 @@ export class FootballController {
       const rateLimitStatus = footballService.getRateLimitStatus();
       const cacheStats = matchCacheService.getCacheStats();
       
-      // Check database connectivity for cached transfers
       let dbStatus = 'Unknown';
-      let transfersCount = 0;
       try {
         // ✅ Use centralized singleton instead of creating new PrismaClient
-        const count = await prisma.cachedTransfer.count().catch(() => 0);
-        transfersCount = count;
         dbStatus = 'Connected';
       } catch (error: any) {
-        dbStatus = error?.code === 'P2021' ? 'Table not found' : 'Disconnected';
+        dbStatus = 'Disconnected';
       }
 
       const health = {
@@ -247,11 +243,9 @@ export class FootballController {
         rateLimit: rateLimitStatus,
         cache: {
           matchCache: cacheStats,
-          transfersInDatabase: transfersCount,
         },
         database: {
           status: dbStatus,
-          transfersCount,
         },
       };
 
@@ -1079,234 +1073,7 @@ export class FootballController {
     }
   }
 
-  /**
-   * GET /api/football/transfers - Get transfers
-   */
-  static async getTransfers(req: Request, res: Response): Promise<void> {
-    try {
-      if (!footballService.isConfigured()) {
-        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
-        return;
-      }
 
-      const team = req.query.team ? parseInt(req.query.team as string) : undefined;
-      const player = req.query.player ? parseInt(req.query.player as string) : undefined;
-      const date = req.query.date as string | undefined;
-
-      const params: Record<string, any> = {};
-      if (team) params.team = team;
-      if (player) params.player = player;
-      if (date) params.date = date;
-
-      const transfers = await footballDataCacheService.getTransfers(params);
-
-      res.json({
-        status: 'SUCCESS',
-        results: transfers.length,
-        response: transfers,
-      });
-    } catch (error) {
-      FootballController.handleError(res, error);
-    }
-  }
-
-  /**
-   * GET /api/football/transfers/by-leagues - Get transfers by leagues with date range
-   * Optimized: Uses database cache first, falls back to API if needed
-   */
-  static async getTransfersByLeagues(req: Request, res: Response): Promise<void> {
-    try {
-      if (!footballService.isConfigured()) {
-        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
-        return;
-      }
-
-      const leaguesParam = req.query.leagues as string | undefined;
-      const fromDate = req.query.from as string | undefined;
-      const toDate = req.query.to as string | undefined;
-
-      const leagueIds = leaguesParam 
-        ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-        : undefined;
-
-      const dateRange = (fromDate && toDate) 
-        ? { from: fromDate, to: toDate }
-        : undefined;
-
-      // ✅ First try database cache (fast, no API calls)
-      let transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, undefined, dateRange);
-
-      // ✅ If no data in database, use /transfers endpoint directly
-      if (transfersByLeagues.length === 0) {
-        logger.debug('📡 No cached transfers found in database, fetching from API...');
-        
-        // Use direct transfers endpoint (same as /transfers endpoint)
-        const allTransfers = await footballDataCacheService.getTransfers({});
-        
-        if (allTransfers && allTransfers.length > 0) {
-          logger.debug(`📡 Fetched ${allTransfers.length} transfers from API`);
-          
-          // Filter by date range if specified
-          let filteredTransfers = allTransfers;
-          if (dateRange) {
-            filteredTransfers = allTransfers.filter((transfer: any) => {
-              if (!transfer.transfers || !Array.isArray(transfer.transfers)) {
-                return false;
-              }
-              // Check if any transfer in the array falls within date range
-              return transfer.transfers.some((t: any) => {
-                if (!t.date) return false;
-                // Handle different date formats (YYMMDD or YYYY-MM-DD)
-                let transferDate: Date;
-                try {
-                  if (t.date.length === 6) {
-                    // YYMMDD format (e.g., "310812" = 31/08/2012)
-                    const year = 2000 + parseInt(t.date.substring(0, 2));
-                    const month = parseInt(t.date.substring(2, 4)) - 1;
-                    const day = parseInt(t.date.substring(4, 6));
-                    transferDate = new Date(year, month, day);
-                  } else {
-                    transferDate = new Date(t.date);
-                  }
-                } catch {
-                  return false;
-                }
-                const fromDateObj = new Date(dateRange.from);
-                const toDateObj = new Date(dateRange.to);
-                return transferDate >= fromDateObj && transferDate <= toDateObj;
-              });
-            });
-            logger.debug(`📡 Filtered to ${filteredTransfers.length} transfers within date range`);
-          }
-
-          // Group transfers by league and enhance with additional info
-          // Try to determine league from team info or group by date
-          if (filteredTransfers.length > 0) {
-            // Group by league if available, otherwise group by date ranges
-            const leagueMap = new Map<number | string, {
-              leagueId: number;
-              leagueName: string;
-              leagueLogo?: string;
-              transfers: any[];
-            }>();
-
-            for (const transfer of filteredTransfers) {
-              // Try to get league from transfer data
-              const leagueId = transfer.league?.id || 0;
-              const leagueName = transfer.league?.name || 'Unknown League';
-              const leagueLogo = transfer.league?.logo;
-              
-              // Use league ID as key, or use date range if no league
-              const key = leagueId || 'all';
-              
-              if (!leagueMap.has(key)) {
-                leagueMap.set(key, {
-                  leagueId: leagueId || 0,
-                  leagueName: leagueId ? leagueName : 'All Leagues',
-                  leagueLogo: leagueLogo,
-                  transfers: [],
-                });
-              }
-              
-              // Enhance transfer with additional info
-              const firstTransfer = transfer.transfers?.[0];
-              const lastTransfer = transfer.transfers?.[transfer.transfers.length - 1];
-              
-              const enhancedTransfer = {
-                ...transfer,
-                // Add classification (player/coach) - assume player for now
-                classification: 'player', // Can be enhanced later with player/coach detection
-                // Add formatted dates
-                formattedDate: transfer.update ? formatTransferDate(transfer.update) : null,
-                // Add date range info
-                dateRange: {
-                  start: firstTransfer?.date ? formatTransferDate(firstTransfer.date) : null,
-                  end: lastTransfer?.date ? formatTransferDate(lastTransfer.date) : null,
-                  startRaw: firstTransfer?.date || null,
-                  endRaw: lastTransfer?.date || null,
-                },
-                // Add transfer value if available
-                transferValue: firstTransfer?.type || null,
-                // Add transfer count
-                transferCount: transfer.transfers?.length || 0,
-                // Add current team info
-                currentTeam: lastTransfer?.teams?.in || null,
-                // Add previous team info
-                previousTeam: firstTransfer?.teams?.out || null,
-              };
-              
-              leagueMap.get(key)!.transfers.push(enhancedTransfer);
-            }
-
-            transfersByLeagues = Array.from(leagueMap.values());
-            logger.debug(`✅ Returning ${filteredTransfers.length} transfers grouped in ${transfersByLeagues.length} league(s)`);
-          }
-        } else {
-          logger.debug('⚠️ No transfers returned from API');
-        }
-      } else {
-        logger.debug(`✅ Using ${transfersByLeagues.length} leagues from database cache`);
-      }
-
-      const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
-
-      // Sort leagues by name for better organization
-      transfersByLeagues.sort((a, b) => {
-        if (a.leagueId === 0) return 1; // "All Leagues" at the end
-        if (b.leagueId === 0) return -1;
-        return (a.leagueName || '').localeCompare(b.leagueName || '');
-      });
-
-      res.json({
-        status: 'SUCCESS',
-        results: totalTransfers,
-        leagues: transfersByLeagues.length,
-        response: transfersByLeagues,
-        metadata: {
-          hasLeagueInfo: transfersByLeagues.some(l => l.leagueId > 0),
-          dateRange: dateRange || null,
-          cached: transfersByLeagues.length > 0 && transfersByLeagues[0].transfers.length > 0,
-        },
-      });
-    } catch (error) {
-      FootballController.handleError(res, error);
-    }
-  }
-
-  /**
-   * POST /api/football/transfers/sync
-   * Sync transfers from API to database (admin endpoint)
-   * This fetches transfers from the external API and saves them to the database
-   * Query params: force (boolean) - force sync even if already syncing
-   */
-  static async syncTransfersToDatabase(req: Request, res: Response): Promise<void> {
-    try {
-      if (!footballService.isConfigured()) {
-        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
-        return;
-      }
-
-      const force = req.query.force === 'true';
-      logger.info(`📡 Starting transfers sync to database (force: ${force})...`);
-
-      // Use the sync service for proper tracking
-      const { transfersSyncService } = await import('../services/transfers-sync.service');
-      const stats = await transfersSyncService.triggerManualSync(force);
-      
-      res.json({
-        status: 'SUCCESS',
-        message: `Sync completed`,
-        data: {
-          totalTransfersInDb: stats.totalTransfersInDb,
-          newTransfersFound: stats.newTransfersFound,
-          syncDuration: `${Math.round(stats.syncDuration / 1000)}s`,
-          lastSyncDate: stats.lastSyncDate,
-        },
-      });
-    } catch (error) {
-      FootballController.handleError(res, error);
-    }
-  }
 
   /**
    * GET /api/football/teams/all-logos
@@ -1365,7 +1132,7 @@ export class FootballController {
                     if (team?.id && !processedTeamIds.has(team.id)) {
                       processedTeamIds.add(team.id);
                       
-                      await footballDataCacheService.cacheTeamFromTransfer({
+                      await footballDataCacheService.cacheTeam({
                         id: team.id,
                         name: team.name || 'Unknown Team',
                         logo: team.logo || null,
@@ -1527,7 +1294,7 @@ export class FootballController {
                 const teamData = team[0]?.team || team[0];
                 if (teamData?.id && teamData?.logo && !foundTeamIds.has(teamData.id)) {
                   foundTeamIds.add(teamData.id);
-                  await footballDataCacheService.cacheTeamFromTransfer({
+                  await footballDataCacheService.cacheTeam({
                     id: teamData.id,
                     name: teamData.name || teamInfo.name,
                     logo: teamData.logo,
@@ -1601,7 +1368,7 @@ export class FootballController {
                 
                 if (teamId && teamLogo && !foundTeamIds.has(teamId)) {
                   foundTeamIds.add(teamId);
-                  await footballDataCacheService.cacheTeamFromTransfer({
+                  await footballDataCacheService.cacheTeam({
                     id: teamId,
                     name: team?.name || 'Unknown',
                     logo: teamLogo,
@@ -1624,96 +1391,9 @@ export class FootballController {
     }
   }
 
-  /**
-   * GET /api/football/transfers/sync/status
-   * Get the status of the transfers sync service
-   */
-  static async getSyncStatus(req: Request, res: Response): Promise<void> {
-    try {
-      const { transfersSyncService } = await import('../services/transfers-sync.service');
-      const status = transfersSyncService.getStatus();
-      
-      res.json({
-        status: 'SUCCESS',
-        data: {
-          serviceRunning: status.isRunning,
-          currentlySyncing: status.isSyncing,
-          lastSync: status.lastSync ? {
-            date: status.lastSync.lastSyncDate,
-            totalTransfersInDb: status.lastSync.totalTransfersInDb,
-            newTransfersFound: status.lastSync.newTransfersFound,
-            duration: `${Math.round(status.lastSync.syncDuration / 1000)}s`,
-          } : null,
-          schedule: {
-            weekly: 'Every Sunday at 3:00 AM',
-            daily: 'Every day at 6:00 AM',
-          },
-        },
-      });
-    } catch (error) {
-      FootballController.handleError(res, error);
-    }
-  }
 
-  /**
-   * GET /api/football/transfers/cached
-   * Get cached transfers from database (fast, no API calls)
-   * Query params: leagues (comma-separated IDs), season (optional, default current), from (YYYY-MM-DD), to (YYYY-MM-DD)
-   */
-  static async getCachedTransfers(req: Request, res: Response): Promise<void> {
-    try {
-      // Set timeout to 10 seconds to avoid hanging
-      const timeout = setTimeout(() => {
-        if (!res.headersSent) {
-          res.status(504).json({
-            status: 'ERROR',
-            message: 'Request timeout - database query took too long',
-          });
-        }
-      }, 10000);
 
-      try {
-        const leaguesParam = req.query.leagues as string | undefined;
-        const seasonParam = req.query.season as string | undefined;
-        const fromDate = req.query.from as string | undefined;
-        const toDate = req.query.to as string | undefined;
 
-        const leagueIds = leaguesParam 
-          ? leaguesParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-          : undefined; // undefined means get from all leagues (كل الدوريات)
-
-        // Season is optional - if not provided, get from all seasons (including last year)
-        const season = seasonParam ? parseInt(seasonParam) : undefined;
-
-        const dateRange = (fromDate && toDate) 
-          ? { from: fromDate, to: toDate }
-          : undefined;
-
-        // Get transfers from database (includes last year - السنة الفاتت)
-        logger.debug(`📡 getCachedTransfers request - LeagueIds: ${leagueIds ? leagueIds.join(',') : 'ALL'}, Season: ${season || 'ALL'}, DateRange: ${dateRange ? `${dateRange.from} to ${dateRange.to}` : 'ALL'}`);
-        
-        const transfersByLeagues = await footballDataCacheService.getCachedTransfersByLeagues(leagueIds, season, dateRange);
-
-        clearTimeout(timeout);
-
-        const totalTransfers = transfersByLeagues.reduce((sum, item) => sum + item.transfers.length, 0);
-
-        logger.debug(`📡 getCachedTransfers response - Leagues: ${transfersByLeagues.length}, Total Transfers: ${totalTransfers}`);
-
-        res.json({
-          status: 'SUCCESS',
-          results: totalTransfers,
-          leagues: transfersByLeagues.length,
-          response: transfersByLeagues,
-        });
-      } catch (error) {
-        clearTimeout(timeout);
-        FootballController.handleError(res, error);
-      }
-    } catch (error) {
-      FootballController.handleError(res, error);
-    }
-  }
 
   /**
    * GET /api/football/venues/:id - Get venue/stadium information

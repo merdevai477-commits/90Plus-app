@@ -40,7 +40,7 @@ interface HealthCheck {
     database?: {
       activeConnections: number;
       poolSize: number;
-      isConnected: boolean;
+      isConnected?: boolean;
     };
   };
 }
