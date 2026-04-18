@@ -120,11 +120,12 @@ export async function autoDeleteContent(
             }
 
             // Notify content owner
-            await NotificationService.createNotification({
+            const { enqueueNotification } = await import('../queues/notification.queue');
+            await enqueueNotification({
                 userId: reel.userId,
-                title: 'تم حذف المحتوى',
-                message: `تم حذف فيديوك تلقائياً بسبب: ${reason}`,
-                type: 'GENERAL',
+                title: 'تنبيه: تم حذف فيديوك',
+                message: `تم حذف مقطعك لتلقيه بلاغات متعددة (${reason}). تحذير: استمرار المخالفات سيؤدي إلى حظر حسابك نهائياً!`,
+                type: 'SYSTEM',
                 data: {
                     reelId: contentId,
                     reason,
@@ -156,11 +157,12 @@ export async function autoDeleteContent(
             await AuditService.logContentDeleted(contentId, AuditTargetType.COMMENT, 'SYSTEM', reason);
 
             // Notify comment owner
-            await NotificationService.createNotification({
+            const { enqueueNotification } = await import('../queues/notification.queue');
+            await enqueueNotification({
                 userId: comment.userId,
-                title: 'تم حذف التعليق',
-                message: `تم حذف تعليقك تلقائياً بسبب: ${reason}`,
-                type: 'GENERAL',
+                title: 'تنبيه: تم حذف تعليقك',
+                message: `تم حذف تعليقك لتلقيه بلاغات متعددة (${reason}). تحذير: يرجى الالتزام بالقواعد لكي لا يتم حظر حسابك بصفة دائمة.`,
+                type: 'SYSTEM',
                 data: {
                     commentId: contentId,
                     reason,

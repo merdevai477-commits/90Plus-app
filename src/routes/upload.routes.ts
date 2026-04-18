@@ -394,13 +394,13 @@ router.post(
         const { enqueueNotification } = await import('../queues/notification.queue');
         await enqueueNotification({
           userId: user.id,
-          title: 'صورة البروفايل',
+          title: '🖼️ صورة البروفايل',
           message: 'تم تحديث صورة البروفايل بنجاح!',
           type: 'GENERAL',
-          data: { type: 'UPLOAD_SUCCESS' }
+          data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' }
         });
       } catch (err) {
-        logger.error('Enqueue notification failed:', err);
+        logger.error('Enqueue notification failed for avatar:', err);
       }
 
       res.json({ status: 'SUCCESS', message: 'تم رفع صورة البروفايل بنجاح', data: { url: result.url, storagePath: result.key } });
@@ -515,6 +515,19 @@ router.post(
         });
       } catch (err) {
         logger.error('Upload analytics failed:', err);
+      }
+
+      try {
+        const { enqueueNotification } = await import('../queues/notification.queue');
+        await enqueueNotification({
+          userId: user.id,
+          title: '🎨 صورة الغلاف',
+          message: 'تم تحديث صورة الغلاف بنجاح!',
+          type: 'GENERAL',
+          data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' }
+        });
+      } catch (err) {
+        logger.error('Enqueue notification failed for cover:', err);
       }
 
       res.json({ status: 'SUCCESS', message: 'تم رفع صورة الغلاف بنجاح', data: { url: result.url, storagePath: result.key } });

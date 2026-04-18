@@ -14,8 +14,10 @@
 import { Router, Request, Response } from 'express';
 import * as muxService from '../services/mux.service';
 import { NotificationService } from '../services/notification.service';
+import { enqueueNotification } from '../queues/notification.queue';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+
 
 const router = Router();
 
@@ -160,6 +162,7 @@ async function handleAssetReady(event: any): Promise<void> {
 
   logger.info(`[MuxWebhook] Reel ${reel.id} is READY — playbackId: ${playbackId}`);
 
+  // 1. Notify the uploader that their video is ready
   await NotificationService.createNotification({
     userId: reel.userId,
     title: '✅ فيديوهك جاهز!',
@@ -167,7 +170,53 @@ async function handleAssetReady(event: any): Promise<void> {
     type: 'VIDEO_PROCESSED',
     data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'READY', muxPlaybackId: playbackId },
   });
+
+  // 2. 📢 Notify followers that someone they follow posted a new video (fire-and-forget)
+  setImmediate(async () => {
+    try {
+      // Get uploader info for the notification message
+      const uploader = await prisma.user.findUnique({
+        where: { id: reel.userId },
+        select: { username: true, displayName: true },
+      });
+
+      if (!uploader) return;
+
+      const uploaderName = uploader.displayName || uploader.username || 'شخص';
+
+      // Fetch up to 500 followers (limit to avoid overwhelming the queue)
+      const followers = await prisma.follow.findMany({
+        where: { followingId: reel.userId },
+        select: { followerId: true },
+        take: 500,
+      });
+
+      if (followers.length === 0) return;
+
+      logger.info(`[MuxWebhook] Notifying ${followers.length} followers of user ${reel.userId} about new video`);
+
+      // Batch enqueue in groups of 50 to avoid Redis overload
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < followers.length; i += BATCH_SIZE) {
+        const batch = followers.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(
+          batch.map(f =>
+            enqueueNotification({
+              userId: f.followerId,
+              title: '🎬 فيديو جديد!',
+              message: `${uploaderName} نشر فيديو جديد — شوفه دلوقتي!`,
+              type: 'FOLLOW_ACTIVITY',
+              data: { type: 'FOLLOW_ACTIVITY', reelId: reel.id, uploaderUsername: uploader.username, screen: '/(tabs)/reels' },
+            })
+          )
+        );
+      }
+    } catch (err: any) {
+      logger.warn('[MuxWebhook] Failed to notify followers about new video (non-critical):', err?.message);
+    }
+  });
 }
+
 
 async function handleAssetErrored(event: any): Promise<void> {
   const assetId: string | undefined = event.data?.id;

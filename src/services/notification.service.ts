@@ -23,7 +23,14 @@ export enum NotificationType {
     REPORT_RESOLVED = 'REPORT_RESOLVED',
     MILESTONE = 'MILESTONE',
     COIN_MILESTONE = 'COIN_MILESTONE',
-    GENERAL = 'GENERAL'
+    GENERAL = 'GENERAL',
+    // ── New triggers ──────────────────────────────────
+    LUCKY_WHEEL = 'LUCKY_WHEEL',         // Lucky wheel spin result
+    COMMENT_LIKE = 'COMMENT_LIKE',       // Like on a comment
+    FOLLOW_ACTIVITY = 'FOLLOW_ACTIVITY', // Someone you follow uploaded a new video
+    LEADERBOARD_TOP10 = 'LEADERBOARD_TOP10', // User entered top 10 ranking
+    RE_ENGAGEMENT = 'RE_ENGAGEMENT',     // Re-engagement motivational push
+    SHARE = 'SHARE',                     // Someone shared your reel
 }
 
 export interface NotificationActor {
@@ -74,6 +81,9 @@ function resolveChannelId(type: string, explicitChannelId?: string): string {
         case 'REPLY':
         case 'MENTION':
         case 'FOLLOW':
+        case 'COMMENT_LIKE':
+        case 'SHARE':
+        case 'FOLLOW_ACTIVITY':
             return 'social';
         case 'MATCH_UPDATE':
         case 'MATCH_GOAL':
@@ -89,6 +99,9 @@ function resolveChannelId(type: string, explicitChannelId?: string): string {
         case 'GIFT':
         case 'COIN_MILESTONE':
         case 'MILESTONE':
+        case 'LUCKY_WHEEL':
+        case 'LEADERBOARD_TOP10':
+        case 'RE_ENGAGEMENT':
             return 'general';
         default:
             return 'general';

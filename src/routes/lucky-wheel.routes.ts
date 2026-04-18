@@ -167,6 +167,15 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
             })
         ]);
 
+        // 🎰 Lucky Wheel spin result notification (fire-and-forget)
+        enqueueNotification({
+            userId: user.id,
+            title: prize.coins >= 50 ? '🎉 يا سلام! جائزة كبيرة!' : '🎡 لفيت العجلة!',
+            message: `مبروك! ربحت ${prize.coins} تذكرة من عجلة الحظ اليومية 🎁`,
+            type: 'LUCKY_WHEEL',
+            data: { type: 'LUCKY_WHEEL', coinsWon: prize.coins, prizeIndex: prize.index, screen: '/(tabs)/Home' },
+        }).catch(() => {});
+
         res.json({
             status: 'SUCCESS',
             data: {
@@ -182,6 +191,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
         res.status(500).json({ status: 'ERROR', message: error.message });
     }
 });
+
 
 /**
  * GET /api/lucky-wheel/history

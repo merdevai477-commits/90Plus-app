@@ -12,12 +12,12 @@ export enum StrikeType {
 }
 
 export interface StrikeThresholds {
-    contentAutoDelete: number; // 5 strikes
+    contentAutoDelete: number; // 3 strikes
     userSuspension: number; // 10 strikes
 }
 
 const DEFAULT_THRESHOLDS: StrikeThresholds = {
-    contentAutoDelete: 5,
+    contentAutoDelete: 3,
     userSuspension: 10,
 };
 

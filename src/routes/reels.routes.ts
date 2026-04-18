@@ -1270,12 +1270,13 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
             await enqueueSocialNotification({
                 userId: comment.userId,
                 actorId: user.id,
-                title: 'إعجاب على تعليقك',
+                title: '❤️ إعجاب على تعليقك',
                 message: `أعجب ${user.displayName || user.username} بتعليقك`,
-                type: 'LIKE',
+                type: 'COMMENT_LIKE',
                 data: {
                     commentId: commentIdStr,
                     reelId: comment.reelId,
+                    screen: '/(tabs)/reels',
                 },
             });
         }
@@ -1708,7 +1709,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
             select: { sharesCount: true }
         });
 
-        // Notify reel owner
+        // Notify reel owner (if not self)
         if (reel.userId !== user.id) {
             const sharer = await prisma.user.findUnique({
                 where: { id: user.id },
@@ -1719,12 +1720,13 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
             await enqueueSocialNotification({
                 userId: reel.userId,
                 actorId: user.id,
-                title: 'مشاركة جديدة',
-                message: `قام ${sharerName} بمشاركة مقطعك`,
-                type: 'GENERAL', // Map to general or SHARE if added to enum
-                data: { reelId: idStr, platform }
+                title: '🔗 شاركوا مقطعك!',
+                message: `${sharerName} شارك مقطعك على ${platform || 'وسائل التواصل'}`,
+                type: 'SHARE',
+                data: { reelId: idStr, platform, screen: '/(tabs)/reels' }
             });
         }
+
 
         res.json({ status: 'SUCCESS', data: { sharesCount: updatedReel.sharesCount } });
     } catch (error: any) {
