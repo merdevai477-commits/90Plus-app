@@ -23,7 +23,7 @@ router.patch('/me', requireAuth, moderateBio, ProfileController.updateMyProfile)
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;   // صورة البروفايل: مرة كل 7 أيام (Requirement 10)
 const COVER_CHANGE_COOLDOWN_DAYS = 15;   // صورة الغلاف: مرة كل 15 يوم
 const USERNAME_CHANGE_COOLDOWN_DAYS = 15; // اليوزر نيم: مرة كل 15 يوم
-const REEL_UPLOAD_COOLDOWN_DAYS = 3;      // الريلز: مرة كل 3 أيام
+const REEL_UPLOAD_COOLDOWN_DAYS = 1;      // الريلز: مرة كل يوم
 
 /**
  * PUT /api/profile/avatar

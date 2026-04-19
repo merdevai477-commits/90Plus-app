@@ -5,7 +5,7 @@ import { validateFileSize, validateMimeType } from '../middleware/file-validatio
 import { logger } from '../utils/logger';
 
 // Constants for rate limiting
-const REEL_UPLOAD_COOLDOWN_DAYS = 3;
+const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم
 // Requirements 13.5, 13.6: Allow up to 2 deletions, block the third
 export const MAX_REEL_DELETES = 2;
 

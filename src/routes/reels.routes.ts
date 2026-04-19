@@ -20,7 +20,7 @@ const ensureString = (param: string | string[] | undefined): string => {
 };
 
 // Constants
-const REEL_UPLOAD_COOLDOWN_DAYS = 3;
+const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم
 const REELS_PER_PAGE = 5;
 const MAX_COMMENTS_PREVIEW = 3;
 
@@ -296,6 +296,81 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
  * This legacy route accepted arbitrary videoUrl strings and was a security risk.
  * All reel creation now goes through POST /api/upload/reel (Mux pipeline).
  */
+
+// ============================================
+// PATCH /api/reels/:id  — Edit reel caption & hashtags
+// Only the reel owner can edit. Caption goes through moderation.
+// ============================================
+router.patch('/:id', requireAuth, writeLimiter, moderateReelCaption, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const reelId = ensureString(req.params.id);
+        const clerkUserId = req.auth?.userId;
+        const { caption, hashtags } = req.body;
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId: clerkUserId! },
+            select: { id: true },
+        });
+        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+
+        const reel = await prisma.reel.findUnique({
+            where: { id: reelId },
+            select: { id: true, userId: true, status: true },
+        });
+        if (!reel) { res.status(404).json({ status: 'ERROR', message: 'Reel not found' }); return; }
+        if (reel.userId !== user.id) { res.status(403).json({ status: 'ERROR', message: 'Not authorized' }); return; }
+        if (reel.status === 'PROCESSING') {
+            res.status(400).json({ status: 'ERROR', message: 'لا يمكن تعديل الفيديو أثناء المعالجة' });
+            return;
+        }
+
+        // Build update payload
+        const updateData: Record<string, any> = {};
+        if (caption !== undefined) updateData.caption = caption?.trim() || null;
+
+        await prisma.reel.update({ where: { id: reelId }, data: updateData });
+
+        // Replace hashtags if provided
+        if (Array.isArray(hashtags)) {
+            // Remove old hashtag links and decrement counts
+            const oldLinks = await prisma.reelHashtag.findMany({
+                where: { reelId },
+                select: { hashtagId: true },
+            });
+            if (oldLinks.length > 0) {
+                await prisma.reelHashtag.deleteMany({ where: { reelId } });
+                await prisma.hashtag.updateMany({
+                    where: { id: { in: oldLinks.map((l: any) => l.hashtagId) } },
+                    data: { reelCount: { decrement: 1 } },
+                });
+            }
+
+            // Add new hashtags
+            for (const tag of hashtags.slice(0, 10)) {
+                const cleanTag = tag.toLowerCase().replace(/^#/, '').trim();
+                if (!cleanTag) continue;
+                const hashtag = await prisma.hashtag.upsert({
+                    where: { name: cleanTag },
+                    create: { name: cleanTag, reelCount: 1 },
+                    update: { reelCount: { increment: 1 } },
+                });
+                await prisma.reelHashtag.create({ data: { reelId, hashtagId: hashtag.id } });
+            }
+        }
+
+        // Invalidate caches
+        await Promise.allSettled([
+            clearResponseCache('/reels/feed'),
+            redisCacheService.delPattern('reels:feed:*'),
+            redisCacheService.del(`reel:${reelId}`),
+        ]);
+
+        res.json({ status: 'SUCCESS', message: 'تم تحديث الفيديو بنجاح' });
+    } catch (error: any) {
+        logger.error('Edit reel error:', error);
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+    }
+});
 
 // ============================================
 // POST /api/reels/:id/retry  (Feature 5)

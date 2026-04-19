@@ -174,7 +174,7 @@ const uploadReel = multer({
 
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;
 const COVER_CHANGE_COOLDOWN_DAYS = 15;
-const REEL_UPLOAD_COOLDOWN_DAYS = 3;
+const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم لتشجيع المحتوى
 const REEL_UPLOAD_LOCK_MS = 25 * 60 * 1000;
 
 // ─── Reel upload lock helper ──────────────────────────────────────────────────
