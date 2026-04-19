@@ -1,0 +1,152 @@
+{
+  "expo": {
+    "name": "90Plus",
+    "slug": "90plus",
+    "version": "1.0.1",
+    "runtimeVersion": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/90Plus.png",
+    "scheme": "ninetyplus",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
+      "usesAppleSignIn": true,
+      "buildNumber": "78",
+      "requireFullScreen": false,
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "CA92.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "35F9.1"
+            ]
+          }
+        ]
+      },
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSCameraUsageDescription": "تطبيق 90Plus يحتاج للوصول إلى الكاميرا لالتقاط صور وفيديوهات لملفك الشخصي، ومشاركته لحظاتك الكروية.",
+        "NSMicrophoneUsageDescription": "نحتاج صلاحية المايكروفون لتسجيل الصوت أثناء تصوير الفيديوهات والتعليقات الخاصة بك.",
+        "NSPhotoLibraryUsageDescription": "نحتاج الوصول لمكتبة الصور لاختيار صور الغلاف والبروفايل الخاصة بك ومقاطع الفيديو.",
+        "NSPhotoLibraryAddUsageDescription": "تطبيق 90Plus يحتاج الإذن لحفظ وتنزيل بعض الفيديوهات والصور الكروية في هاتفك.",
+        "NSUserNotificationsUsageDescription": "نرسل لك إشعارات بأهم الأحداث والمباريات وأهداف فريقك المفضل.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIRequiredDeviceCapabilities": [],
+        "UIDeviceFamily": [
+          1,
+          2
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#4A148C",
+        "foregroundImage": "./assets/images/90Plus.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/90Plus.png"
+      },
+      "package": "com.mhmdsh1892.ninetyplusapp",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/90Plus.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow 90Plus to access your microphone for recording videos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "نحتاج الوصول للصور لاختيار صور الغلاف والبروفايل.",
+          "cameraPermission": "يُرجى السماح بالوصول للكاميرا لالتقاط فيديوهاتك الرياضية."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/90Plus.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#4A148C",
+          "dark": {
+            "backgroundColor": "#4A148C"
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/90Plus.png",
+          "color": "#22c55e"
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0",
+            "useFrameworks": "static"
+          },
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "minSdkVersion": 24
+          }
+        }
+      ],
+      "expo-font",
+      "expo-localization",
+      "expo-secure-store",
+      "@sentry/react-native/expo"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "jsEngine": "hermes",
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "apiUrl": "https://90plus-app-production-b28d.up.railway.app/api",
+      "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "36de28c5-7397-415f-a98a-f572c98b1de8"
+      }
+    },
+    "owner": "90plus"
+  }
+}

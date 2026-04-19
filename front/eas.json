@@ -1,0 +1,63 @@
+{
+  "cli": {
+    "version": ">= 16.28.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "node": "20.18.0",
+      "ios": {
+        "image": "latest"
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
+        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-b28d.up.railway.app/api"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "node": "20.18.0",
+      "ios": {
+        "image": "latest"
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
+        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-b28d.up.railway.app/api"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "node": "20.18.0",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
+        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-b28d.up.railway.app/api"
+      },
+      "ios": {
+        "image": "latest",
+        "simulator": false,
+        "buildConfiguration": "Release"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "mhmdsh1892@gmail.com",
+        "ascAppId": "6758296989",
+        "appleTeamId": "BNVH5YFQXZ",
+        "sku": "90plus-ios-app"
+      }
+    }
+  }
+}

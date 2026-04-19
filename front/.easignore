@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Expo
+.expo/
+.expo-shared/
+
+# Native folders (using Prebuild/CNG)
+/ios
+/android
+
+# Build outputs
+dist/
+build/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+__tests__/
+*.test.ts
+*.test.tsx
+*.test.js
+*.spec.ts
+*.spec.tsx
+*.spec.js
+coverage/
+.nyc_output/
+
+# Environment files
+.env.local
+.env.*.local
+.env.development
+.env.test
+
+# Documentation
+*.md
+docs/
+README.md
+
+# Misc
+*.orig
+.cache/
+
+# Old quiz assets with problematic names
+assets/Quiz/احدذر من اللاعب.png
+assets/Quiz/Guess the numer.png
+assets/Quiz/legand.png
+
+# All quiz category images (using URLs from server instead)
+assets/Quiz/Flash.png
+assets/Quiz/Mcq.png
+assets/Quiz/guess-the-number.png
+assets/Quiz/legend.png
+assets/Quiz/who-am-i.png
+
