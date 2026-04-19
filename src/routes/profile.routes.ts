@@ -105,7 +105,7 @@ router.put('/avatar', requireAuth, async (req: Request, res: Response): Promise<
         });
     } catch (error: any) {
         logger.error('Update avatar error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Failed to update avatar' });
     }
 });
 
@@ -189,7 +189,7 @@ router.put('/cover', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Update cover error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Failed to update cover' });
     }
 });
 
@@ -294,7 +294,7 @@ router.put('/username', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Update username error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Failed to update username' });
     }
 });
 
@@ -326,7 +326,8 @@ router.post('/:username/view', requireAuth, async (req: Request, res: Response):
 
         res.json({ status: 'SUCCESS' });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        logger.error('Update profile error:', error);
+        res.status(500).json({ status: 'ERROR', message: 'Failed to update profile' });
     }
 });
 

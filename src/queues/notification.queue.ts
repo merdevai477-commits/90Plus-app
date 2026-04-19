@@ -44,7 +44,7 @@ function createBullRedis(redisUrl: string): Redis {
 
 let queue: Queue<NotificationJob> | null = null;
 
-function getQueue(): Queue<NotificationJob> | null {
+export function getNotificationQueue(): Queue<NotificationJob> | null {
   if (queue) return queue;
 
   const redisUrl = process.env.REDIS_URL;
@@ -189,7 +189,7 @@ export async function enqueueSocialNotification(params: {
   message: string;
   data?: any;
 }): Promise<void> {
-  const q = getQueue();
+  const q = getNotificationQueue();
   if (!q) {
     setImmediate(() => {
       NotificationService.createSocialNotification(params).catch((err) => {
@@ -219,7 +219,7 @@ export async function enqueueNotification(params: {
   message: string;
   data?: any;
 }): Promise<void> {
-  const q = getQueue();
+  const q = getNotificationQueue();
   if (!q) {
     setImmediate(() => {
       NotificationService.createNotification(params).catch((err) => {

@@ -1,0 +1,930 @@
+{
+  "collection": {
+    "info": {
+      "name": "90Plus API",
+      "description": "Complete API collection for 90Plus football social media platform",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      "_postman_id": "90plus-api-collection",
+      "version": "1.0.0"
+    },
+    "auth": {
+      "type": "bearer",
+      "bearer": [
+        {
+          "key": "token",
+          "value": "{{clerk_token}}",
+          "type": "string"
+        }
+      ]
+    },
+    "variable": [
+      {
+        "key": "base_url",
+        "value": "https://90plus-app-production-b28d.up.railway.app/api",
+        "type": "string"
+      },
+      {
+        "key": "clerk_token",
+        "value": "",
+        "type": "string"
+      }
+    ],
+    "item": [
+      {
+        "name": "Health & Status",
+        "item": [
+          {
+            "name": "Health Check",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/health",
+                "host": ["{{base_url}}"],
+                "path": ["health"]
+              },
+              "description": "Check API health status, database connection, and system metrics"
+            },
+            "response": []
+          },
+          {
+            "name": "API Info",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}",
+                "host": ["{{base_url}}"]
+              },
+              "description": "Get API information and available endpoints"
+            },
+            "response": []
+          },
+          {
+            "name": "Metrics",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/metrics",
+                "host": ["{{base_url}}"],
+                "path": ["metrics"]
+              },
+              "description": "Get API performance metrics"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Daily Spin",
+        "item": [
+          {
+            "name": "Get Spin Status",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/daily-spin/status",
+                "host": ["{{base_url}}"],
+                "path": ["daily-spin", "status"]
+              },
+              "description": "Check if user can spin today and get spin history"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test(\"Status code is 200\", function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test(\"Response has SUCCESS status\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                    "});",
+                    "",
+                    "pm.test(\"Response contains spin data\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data).to.have.property(\"canSpin\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"currentCoins\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"prizes\");",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Spin Wheel",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/daily-spin/spin",
+                "host": ["{{base_url}}"],
+                "path": ["daily-spin", "spin"]
+              },
+              "description": "Spin the daily wheel and get prize"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test(\"Status code is 200 or 429\", function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 429]);",
+                    "});",
+                    "",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test(\"Response has SUCCESS status\", function () {",
+                    "        var jsonData = pm.response.json();",
+                    "        pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                    "    });",
+                    "    ",
+                    "    pm.test(\"Response contains prize data\", function () {",
+                    "        var jsonData = pm.response.json();",
+                    "        pm.expect(jsonData.data).to.have.property(\"prize\");",
+                    "        pm.expect(jsonData.data).to.have.property(\"newBalance\");",
+                    "    });",
+                    "} else if (pm.response.code === 429) {",
+                    "    pm.test(\"Cooldown error returned\", function () {",
+                    "        var jsonData = pm.response.json();",
+                    "        pm.expect(jsonData.code).to.eql(\"SPIN_COOLDOWN\");",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get Spin History",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/daily-spin/history?limit=30",
+                "host": ["{{base_url}}"],
+                "path": ["daily-spin", "history"],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "30"
+                  }
+                ]
+              },
+              "description": "Get user's spin history"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Authentication",
+        "item": [
+          {
+            "name": "Sync User with Backend",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/clerk/me",
+                "host": ["{{base_url}}"],
+                "path": ["clerk", "me"]
+              },
+              "description": "Sync authenticated user with backend database"
+            },
+            "response": []
+          },
+          {
+            "name": "Get User Stats",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/clerk/stats",
+                "host": ["{{base_url}}"],
+                "path": ["clerk", "stats"]
+              },
+              "description": "Get user statistics (followers, following, reels)"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Reels",
+        "item": [
+          {
+            "name": "Get Reels Feed",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/reels/feed?limit=5",
+                "host": ["{{base_url}}"],
+                "path": ["reels", "feed"],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "5"
+                  },
+                  {
+                    "key": "cursor",
+                    "value": "",
+                    "disabled": true
+                  }
+                ]
+              },
+              "description": "Get paginated reels feed"
+            },
+            "response": []
+          },
+          {
+            "name": "View Reel",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/reels/:id/view",
+                "host": ["{{base_url}}"],
+                "path": ["reels", ":id", "view"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Increment view count for a reel"
+            },
+            "response": []
+          },
+          {
+            "name": "Like Reel",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/reels/:id/like",
+                "host": ["{{base_url}}"],
+                "path": ["reels", ":id", "like"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Like a reel"
+            },
+            "response": []
+          },
+          {
+            "name": "Unlike Reel",
+            "request": {
+              "method": "DELETE",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/reels/:id/like",
+                "host": ["{{base_url}}"],
+                "path": ["reels", ":id", "like"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Unlike a reel"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Reel Comments",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/reels/:id/comments?limit=20",
+                "host": ["{{base_url}}"],
+                "path": ["reels", ":id", "comments"],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "20"
+                  }
+                ],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Get comments for a reel"
+            },
+            "response": []
+          },
+          {
+            "name": "Add Comment",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"content\": \"Great video!\",\n  \"parentId\": null,\n  \"mentions\": []\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/reels/:id/comments",
+                "host": ["{{base_url}}"],
+                "path": ["reels", ":id", "comments"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Add a comment to a reel"
+            },
+            "response": []
+          },
+          {
+            "name": "Retry Failed Reel",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/reels/:id/retry",
+                "host": ["{{base_url}}"],
+                "path": ["reels", ":id", "retry"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Retry Mux processing for a failed reel"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Upload",
+        "item": [
+          {
+            "name": "Upload Avatar",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "body": {
+                "mode": "formdata",
+                "formdata": [
+                  {
+                    "key": "file",
+                    "type": "file",
+                    "src": []
+                  }
+                ]
+              },
+              "url": {
+                "raw": "{{base_url}}/upload/avatar",
+                "host": ["{{base_url}}"],
+                "path": ["upload", "avatar"]
+              },
+              "description": "Upload user avatar image"
+            },
+            "response": []
+          },
+          {
+            "name": "Upload Cover",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "body": {
+                "mode": "formdata",
+                "formdata": [
+                  {
+                    "key": "file",
+                    "type": "file",
+                    "src": []
+                  }
+                ]
+              },
+              "url": {
+                "raw": "{{base_url}}/upload/cover",
+                "host": ["{{base_url}}"],
+                "path": ["upload", "cover"]
+              },
+              "description": "Upload user cover image"
+            },
+            "response": []
+          },
+          {
+            "name": "Upload Reel",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "body": {
+                "mode": "formdata",
+                "formdata": [
+                  {
+                    "key": "video",
+                    "type": "file",
+                    "src": []
+                  },
+                  {
+                    "key": "thumbnail",
+                    "type": "file",
+                    "src": [],
+                    "disabled": true
+                  },
+                  {
+                    "key": "caption",
+                    "value": "",
+                    "type": "text"
+                  },
+                  {
+                    "key": "hashtags",
+                    "value": "[]",
+                    "type": "text"
+                  },
+                  {
+                    "key": "mentions",
+                    "value": "[]",
+                    "type": "text"
+                  }
+                ]
+              },
+              "url": {
+                "raw": "{{base_url}}/upload/reel",
+                "host": ["{{base_url}}"],
+                "path": ["upload", "reel"]
+              },
+              "description": "Upload a video reel"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Notifications",
+        "item": [
+          {
+            "name": "Get Notifications",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications?limit=20&offset=0",
+                "host": ["{{base_url}}"],
+                "path": ["notifications"],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "20"
+                  },
+                  {
+                    "key": "offset",
+                    "value": "0"
+                  }
+                ]
+              },
+              "description": "Get user notifications with pagination"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Unread Count",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications/unread-count",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", "unread-count"]
+              },
+              "description": "Get count of unread notifications"
+            },
+            "response": []
+          },
+          {
+            "name": "Mark as Read",
+            "request": {
+              "method": "PUT",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications/:id/read",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", ":id", "read"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Mark a notification as read"
+            },
+            "response": []
+          },
+          {
+            "name": "Mark All as Read",
+            "request": {
+              "method": "PUT",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications/read-all",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", "read-all"]
+              },
+              "description": "Mark all notifications as read"
+            },
+            "response": []
+          },
+          {
+            "name": "Delete Notification",
+            "request": {
+              "method": "DELETE",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications/:id",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", ":id"],
+                "variable": [
+                  {
+                    "key": "id",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Delete a notification"
+            },
+            "response": []
+          },
+          {
+            "name": "Clear All Notifications",
+            "request": {
+              "method": "DELETE",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications/clear-all",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", "clear-all"]
+              },
+              "description": "Delete all notifications"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Notification Preferences",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/notifications/preferences",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", "preferences"]
+              },
+              "description": "Get notification preferences"
+            },
+            "response": []
+          },
+          {
+            "name": "Update Notification Preferences",
+            "request": {
+              "method": "PUT",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"matchGoals\": true,\n  \"matchStart\": true,\n  \"socialLike\": true,\n  \"socialComment\": true\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/notifications/preferences",
+                "host": ["{{base_url}}"],
+                "path": ["notifications", "preferences"]
+              },
+              "description": "Update notification preferences"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Matches",
+        "item": [
+          {
+            "name": "Get Live Fixtures",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/football/fixtures/live",
+                "host": ["{{base_url}}"],
+                "path": ["football", "fixtures", "live"]
+              },
+              "description": "Get live football fixtures"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Fixtures by Date",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/football/fixtures?date=2024-01-01",
+                "host": ["{{base_url}}"],
+                "path": ["football", "fixtures"],
+                "query": [
+                  {
+                    "key": "date",
+                    "value": "2024-01-01"
+                  }
+                ]
+              },
+              "description": "Get fixtures for a specific date"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Predictions",
+        "item": [
+          {
+            "name": "Get User Predictions",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/predictions",
+                "host": ["{{base_url}}"],
+                "path": ["predictions"]
+              },
+              "description": "Get user's predictions"
+            },
+            "response": []
+          },
+          {
+            "name": "Create Prediction",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"fixtureId\": 123456,\n  \"homeScore\": 2,\n  \"awayScore\": 1\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/predictions",
+                "host": ["{{base_url}}"],
+                "path": ["predictions"]
+              },
+              "description": "Create a match prediction"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Coins",
+        "item": [
+          {
+            "name": "Get Coin Balance",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/coins/balance",
+                "host": ["{{base_url}}"],
+                "path": ["coins", "balance"]
+              },
+              "description": "Get user's coin balance"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Coin Transactions",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/coins/transactions?limit=20",
+                "host": ["{{base_url}}"],
+                "path": ["coins", "transactions"],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "20"
+                  }
+                ]
+              },
+              "description": "Get user's coin transaction history"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Profile",
+        "item": [
+          {
+            "name": "Get Profile Completion",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/profile/completion",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "completion"]
+              },
+              "description": "Get profile completion status"
+            },
+            "response": []
+          },
+          {
+            "name": "Update Profile",
+            "request": {
+              "method": "PUT",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"displayName\": \"John Doe\",\n  \"bio\": \"Football fan\",\n  \"favoriteTeam\": \"Manchester United\"\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/clerk/profile",
+                "host": ["{{base_url}}"],
+                "path": ["clerk", "profile"]
+              },
+              "description": "Update user profile"
+            },
+            "response": []
+          },
+          {
+            "name": "Update Username",
+            "request": {
+              "method": "PUT",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"username\": \"newusername\"\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/profile/username",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "username"]
+              },
+              "description": "Update username (15-day cooldown)"
+            },
+            "response": []
+          }
+        ]
+      },
+      {
+        "name": "Quiz",
+        "item": [
+          {
+            "name": "Get Quiz Categories",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/quiz/categories",
+                "host": ["{{base_url}}"],
+                "path": ["quiz", "categories"]
+              },
+              "description": "Get all quiz categories"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Daily Quiz Status",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/quiz/daily-status",
+                "host": ["{{base_url}}"],
+                "path": ["quiz", "daily-status"]
+              },
+              "description": "Get daily quiz status and availability"
+            },
+            "response": []
+          },
+          {
+            "name": "Start Quiz",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/quiz/:categoryId/start",
+                "host": ["{{base_url}}"],
+                "path": ["quiz", ":categoryId", "start"],
+                "variable": [
+                  {
+                    "key": "categoryId",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Start a quiz for a category"
+            },
+            "response": []
+          },
+          {
+            "name": "Submit Quiz",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"q1\",\n      \"answer\": \"A\"\n    }\n  ]\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/quiz/:categoryId/submit",
+                "host": ["{{base_url}}"],
+                "path": ["quiz", ":categoryId", "submit"],
+                "variable": [
+                  {
+                    "key": "categoryId",
+                    "value": ""
+                  }
+                ]
+              },
+              "description": "Submit quiz answers"
+            },
+            "response": []
+          },
+          {
+            "name": "Get Quiz Stats",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/quiz/stats",
+                "host": ["{{base_url}}"],
+                "path": ["quiz", "stats"]
+              },
+              "description": "Get user's quiz statistics"
+            },
+            "response": []
+          }
+        ]
+      }
+    ]
+  },
+  "environment": {
+    "name": "90Plus Production",
+    "values": [
+      {
+        "key": "base_url",
+        "value": "https://90plus-app-production-b28d.up.railway.app/api",
+        "enabled": true
+      },
+      {
+        "key": "clerk_token",
+        "value": "",
+        "enabled": true
+      }
+    ]
+  }
+}

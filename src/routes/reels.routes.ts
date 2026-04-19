@@ -24,9 +24,9 @@ const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 const REELS_PER_PAGE = 5;
 const MAX_COMMENTS_PREVIEW = 3;
 
-// Cache for reels feed (30 seconds TTL - short because feed changes often)
+// Cache for reels feed (180 seconds TTL - increased from 30s to reduce DB load)
 const feedCache = new Map<string, { data: any; timestamp: number }>();
-const FEED_CACHE_TTL = 30 * 1000; // 30 seconds
+const FEED_CACHE_TTL = 180 * 1000; // 180 seconds (3 minutes)
 
 // Cache for user IDs (5 minutes TTL)
 const userIdCache = new Map<string, { id: string; timestamp: number }>();
@@ -211,7 +211,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         res.json(responseData);
     } catch (error: any) {
         logger.error('Get reels feed error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -287,7 +287,7 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Get hashtag reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -373,7 +373,7 @@ router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Prom
         res.json({ status: 'SUCCESS', message: 'جاري إعادة معالجة الفيديو', data: { reelId, muxUploadId: uploadId } });
     } catch (error: any) {
         logger.error('Retry reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -726,7 +726,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
             data: { comments: formattedComments, totalCount }
         });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -973,7 +973,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
 
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1009,7 +1009,7 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
 
         res.json({ status: 'SUCCESS', data: { replies } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1043,7 +1043,7 @@ router.get('/search/users', requireAuth, async (req: Request, res: Response): Pr
 
         res.json({ status: 'SUCCESS', data: { users } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1187,7 +1187,7 @@ router.get('/search', requireAuth, lenientLimiter, async (req: Request, res: Res
         res.json({ status: 'SUCCESS', data: results });
     } catch (error: any) {
         logger.error('Search reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1209,7 +1209,7 @@ router.get('/trending-hashtags', async (req: Request, res: Response): Promise<vo
 
         res.json({ status: 'SUCCESS', data: { hashtags } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1284,7 +1284,7 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Like comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1317,7 +1317,7 @@ router.delete('/comments/:commentId/like', requireAuth, async (req: Request, res
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Unlike comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1383,7 +1383,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
         res.json({ status: 'SUCCESS', message: 'Comment deleted successfully' });
     } catch (error: any) {
         logger.error('Delete comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1491,7 +1491,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
     } catch (error: any) {
         logger.error('Report comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1547,7 +1547,7 @@ router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promi
         res.json({ status: 'SUCCESS', data: { saved: true } });
     } catch (error: any) {
         logger.error('Save reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1578,7 +1578,7 @@ router.delete('/:id/save', requireAuth, async (req: Request, res: Response): Pro
         res.json({ status: 'SUCCESS', data: { saved: false } });
     } catch (error: any) {
         logger.error('Unsave reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1653,7 +1653,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Get saved reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1731,7 +1731,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
         res.json({ status: 'SUCCESS', data: { sharesCount: updatedReel.sharesCount } });
     } catch (error: any) {
         logger.error('Share reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1853,7 +1853,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
     } catch (error: any) {
         logger.error('Report reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -1935,7 +1935,7 @@ router.get('/rankings/top-views', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }
         });
     } catch (error: any) {
         logger.error('Get top views rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2016,7 +2016,7 @@ router.get('/rankings/top-shares', responseCacheMiddleware({ ttl: 5 * 60 * 1000 
         });
     } catch (error: any) {
         logger.error('Get top shares rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2107,7 +2107,7 @@ router.get('/rankings/top-predictions', responseCacheMiddleware({ ttl: 5 * 60 * 
         });
     } catch (error: any) {
         logger.error('Get top predictions rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2182,7 +2182,7 @@ router.get('/rankings/top-commenters', responseCacheMiddleware({ ttl: 5 * 60 * 1
         });
     } catch (error: any) {
         logger.error('Get top commenters rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2345,7 +2345,7 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
         });
     } catch (error: any) {
         logger.error('Get all rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2466,7 +2466,7 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
         });
     } catch (error: any) {
         logger.error('Get top players error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2570,7 +2570,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
         });
     } catch (error: any) {
         logger.error('Vote for player error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2621,7 +2621,7 @@ router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, 
         });
     } catch (error: any) {
         logger.error('Get player votes error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2720,7 +2720,7 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
         });
     } catch (error: any) {
         logger.error('Award badges error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2900,7 +2900,7 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
         });
     } catch (error: any) {
         logger.error('Award team of month error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -2996,7 +2996,7 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
         });
     } catch (error: any) {
         logger.error('Get user rank error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -3048,7 +3048,7 @@ router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 6
         });
     } catch (error: any) {
         logger.error('Get user badges error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -3193,7 +3193,7 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
         res.json(responseData);
     } catch (error: any) {
         logger.error('Get reels feed error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -3257,7 +3257,7 @@ router.get('/trending', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get trending reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -3323,7 +3323,7 @@ router.get('/rankings', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get reels rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -3377,7 +3377,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
         });
     } catch (error: any) {
         logger.error('Get signed URL error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 
@@ -3478,7 +3478,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
         });
     } catch (error: any) {
         logger.error('Delete reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
 

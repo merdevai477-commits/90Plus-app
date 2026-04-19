@@ -815,6 +815,11 @@ async function startServer() {
                         // ✅ Initialize receipt queue
                         const { getReceiptQueue } = await import('./queues/receipt.queue');
                         getReceiptQueue();
+                        
+                        // ✅ Initialize notification queue so processors and cron jobs start immediately
+                        const { getNotificationQueue } = await import('./queues/notification.queue');
+                        getNotificationQueue();
+                        
                         // ✅ Verify FCM/APNs configuration on startup
                         const { verifyFCMConfiguration } = await import('./services/push-notification.service');
                         verifyFCMConfiguration();

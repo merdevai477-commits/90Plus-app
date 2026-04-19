@@ -127,7 +127,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
     });
   } catch (error: any) {
     logger.error('Get spin status error:', error);
-    res.status(500).json({ status: 'ERROR', message: error.message });
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
   }
 });
 
@@ -236,7 +236,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
     });
   } catch (error: any) {
     logger.error('Spin wheel error:', error);
-    res.status(500).json({ status: 'ERROR', message: error.message });
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
   }
 });
 
@@ -288,7 +288,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
     });
   } catch (error: any) {
     logger.error('Get spin history error:', error);
-    res.status(500).json({ status: 'ERROR', message: error.message });
+    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
   }
 });
 

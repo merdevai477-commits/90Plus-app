@@ -50,10 +50,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     } catch (err: any) {
       logger.error('[MuxWebhook] Signature verification failed:', err.message);
       logger.error('[MuxWebhook] Secret length:', secret.length, '| Signature:', signature?.substring(0, 30));
-      // ⚠️ Temporarily return 200 instead of 401 to prevent Mux retry loops
-      // while we investigate the signature mismatch.
-      // TODO: revert to res.status(401) once signature is confirmed working.
-      logger.warn('[MuxWebhook] Proceeding despite signature failure (TEMP — fix secret in Railway env vars)');
+      res.status(401).json({ error: 'Invalid webhook signature' });
+      return;
     }
   }
 
@@ -91,8 +89,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({ received: true });
   } catch (err: any) {
-    logger.error(`[MuxWebhook] Error handling ${eventType}:`, err.message);
-    res.status(200).json({ received: true, error: err.message });
+    logger.error(`[MuxWebhook] Error handling ${eventType}:`, err);
+    res.status(200).json({ received: true, error: 'Processing error' });
   }
 });
 
@@ -143,6 +141,21 @@ async function handleAssetReady(event: any): Promise<void> {
       status: 'READY',
     },
   });
+
+  // Invalidate feed cache so the new READY reel appears immediately
+  try {
+    const { getRedisClient } = await import('../lib/redis');
+    const redis = getRedisClient();
+    if (redis) {
+      const feedKeys = await redis.keys('reels:feed:*');
+      if (feedKeys.length > 0) {
+        await redis.del(...feedKeys);
+        logger.info(`[MuxWebhook] Invalidated ${feedKeys.length} feed cache keys for reel ${reel.id}`);
+      }
+    }
+  } catch (cacheErr: any) {
+    logger.warn('[MuxWebhook] Feed cache invalidation failed (non-critical):', cacheErr?.message);
+  }
 
   // Feature 5: Delete the raw video from R2 now that Mux has processed it
   const reelWithRaw = await prisma.reel.findUnique({
