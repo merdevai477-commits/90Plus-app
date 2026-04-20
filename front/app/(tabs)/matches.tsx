@@ -608,7 +608,9 @@ const MatchesScreen = () => {
         onTabChange={handleTabChange}
       />
 
-      {activeTab === 'predictions' ? (
+      {/* Fix 6: Keep LazyPredictionsSection always mounted after first render.
+          Use display:none instead of conditional rendering to prevent re-import delay on tab switch. */}
+      <View style={{ display: activeTab === 'predictions' ? 'flex' : 'none', flex: activeTab === 'predictions' ? 1 : undefined }}>
         <AnimatedScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -641,7 +643,9 @@ const MatchesScreen = () => {
             />
           </Suspense>
         </AnimatedScrollView>
-      ) : filteredGroupedMatches.length === 0 ? (
+      </View>
+
+      {activeTab !== 'predictions' && filteredGroupedMatches.length === 0 ? (
         <View style={styles.emptyContainer}>
           <EmptyState
             icon="calendar-outline"
@@ -649,7 +653,7 @@ const MatchesScreen = () => {
             message={t.matches.empty.tryDifferentDate}
           />
         </View>
-      ) : (
+      ) : activeTab !== 'predictions' ? (
         <View style={{ flex: 1, minHeight: 400 }}>
           <AnimatedFlashList
             ref={flatListRef}
@@ -686,7 +690,7 @@ const MatchesScreen = () => {
           accessibilityLabel="Matches list"
         />
         </View>
-      )}
+      ) : null}
     </View>
   );
 };
