@@ -290,7 +290,7 @@ const MatchesScreen = () => {
       }
     });
     setExpandedLeagueIds(initial);
-  }, [selectedDate, filteredGroupedMatches.length]);
+  }, [selectedDate]);
 
   const toggleLeague = useCallback((leagueId: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

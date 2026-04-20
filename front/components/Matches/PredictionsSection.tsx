@@ -61,9 +61,85 @@ const PREDICTION_COST = 5; // تكلفة التوقع بالكوبونات
 const MAX_PREDICTIONS_TO_SHOW = 10; // الحد الأقصى للمباريات المعروضة
 const CACHE_TTL = 60 * 1000; // 1 minute cache TTL
 
+// Fix PERF-2: Separate memoized component for prediction buttons.
+// React.memo ensures it only re-renders when its own props change,
+// not when the parent's predictions state updates for a different match.
+interface PredictionButtonsProps {
+  match: Match;
+  matchPrediction: { prediction?: 'home' | 'draw' | 'away'; isCorrect?: boolean; loading?: boolean } | undefined;
+  onPredict: (match: Match, type: 'home' | 'draw' | 'away') => void;
+}
+
+const PredictionButtons = React.memo(({ match, matchPrediction, onPredict }: PredictionButtonsProps) => {
+  const isLoading = matchPrediction?.loading;
+  const hasPredicted = !!matchPrediction?.prediction;
+
+  if (isLoading) {
+    return (
+      <View style={predBtnStyles.loadingContainer}>
+        <ActivityIndicator size="small" color={MATCH_DETAILS_COLORS.accent} />
+        <Text style={predBtnStyles.loadingText}>جاري التوقع...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={predBtnStyles.predictionButtons}>
+      {(['home', 'draw', 'away'] as const).map((type) => {
+        const isSelected = matchPrediction?.prediction === type;
+        const label = type === 'home' ? match.homeTeam?.name?.substring(0, 10)
+                    : type === 'away' ? match.awayTeam?.name?.substring(0, 10)
+                    : undefined;
+        const activeColors: [string, string] =
+          type === 'home' ? ['rgba(34, 197, 94, 0.3)', 'rgba(34, 197, 94, 0.1)']
+          : type === 'draw' ? ['rgba(250, 204, 21, 0.3)', 'rgba(250, 204, 21, 0.1)']
+          : ['rgba(239, 68, 68, 0.3)', 'rgba(239, 68, 68, 0.1)'];
+        const inactiveColors: [string, string] = ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)'];
+
+        return (
+          <TouchableOpacity
+            key={type}
+            style={[
+              predBtnStyles.predictionButton,
+              isSelected && predBtnStyles.predictionButtonActive,
+              hasPredicted && !isSelected && predBtnStyles.predictionButtonDisabled,
+            ]}
+            onPress={() => onPredict(match, type)}
+            disabled={hasPredicted}
+            activeOpacity={0.7}
+          >
+            <LinearGradient
+              colors={isSelected ? activeColors : inactiveColors}
+              style={predBtnStyles.buttonGradient}
+            >
+              <Text style={[predBtnStyles.predictionButtonText, isSelected && predBtnStyles.predictionButtonTextActive]}>
+                {type === 'draw' ? 'تعادل' : 'فوز'}
+              </Text>
+              {label && <Text style={predBtnStyles.predictionButtonLabel}>{label}</Text>}
+            </LinearGradient>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+});
+
+const predBtnStyles = StyleSheet.create({
+  loadingContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 8 },
+  loadingText: { marginLeft: 8, fontSize: 13, color: MATCH_DETAILS_COLORS.textSecondary },
+  predictionButtons: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  predictionButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
+  predictionButtonActive: { borderWidth: 2, borderColor: MATCH_DETAILS_COLORS.accent },
+  predictionButtonDisabled: { opacity: 0.4 },
+  buttonGradient: { paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center' },
+  predictionButtonText: { fontSize: 14, fontWeight: 'bold', color: MATCH_DETAILS_COLORS.text, marginBottom: 2 },
+  predictionButtonTextActive: { color: MATCH_DETAILS_COLORS.accent },
+  predictionButtonLabel: { fontSize: 10, color: MATCH_DETAILS_COLORS.textSecondary, textAlign: 'center' },
+});
+
 const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatchPress }) => {
   const { getToken } = useAuth();
-  const { coins, subtractCoins } = useCoins();
+  const { coins, refreshCoins } = useCoins();
   const [predictions, setPredictions] = useState<PredictionState>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null); // ✅ Error state للمستخدم
@@ -451,8 +527,10 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         const token = await getTokenRef.current();
         if (!token) throw new Error('No authentication token');
 
-        // Submit prediction
-        await PredictionsService.submitPrediction(token, {
+        // Fix SEC-4 + ERR-1: Submit to backend FIRST.
+        // Backend handles coin deduction atomically.
+        // Only sync UI from backend response — no local subtractCoins call.
+        const result = await PredictionsService.submitPrediction(token, {
           apiMatchId: match.id,
           predictionType,
           homeTeam: match.homeTeam?.name || 'Home',
@@ -463,24 +541,23 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
           leagueName: match.league?.name,
         });
 
-        // Deduct coins
-        const success = await subtractCoins(PREDICTION_COST);
-        if (!success) {
-          throw new Error('Failed to deduct coins');
-        }
-
-        // Update state
+        // Backend succeeded — update prediction state
         setPredictions((prev) => ({
           ...prev,
           [match.id]: { prediction: predictionType, loading: false },
         }));
 
-        // Update remaining predictions
+        // Update remaining predictions from backend response
         if (currentRemaining !== null) {
           setRemainingPredictions(currentRemaining - 1);
         }
 
-        // ✅ تحديث الـ cache
+        // Sync coins balance from backend (not local deduction)
+        refreshCoins().catch(() => {
+          // Silent fail — coins will sync on next focus
+        });
+
+        // Invalidate predictions cache
         predictionsCache.delete('user-predictions');
 
         toastManager.showSuccess(
@@ -490,13 +567,12 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
       } catch (error) {
         logger.error('Error submitting prediction:', error);
         
-        // Reset loading state
+        // Reset loading state — no coins were deducted locally so no rollback needed
         setPredictions((prev) => ({
           ...prev,
           [match.id]: { ...prev[match.id], loading: false },
         }));
 
-        // ✅ رسالة خطأ واضحة للمستخدم
         const errorMessage = error instanceof Error ? error.message : 'خطأ غير معروف';
         setError(`فشل إرسال التوقع: ${errorMessage}`);
         
@@ -506,118 +582,18 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         );
       }
     },
-    [getToken, subtractCoins, predictionsCache]
+    [refreshCoins, predictionsCache]
   );
 
-  // ✅ Render prediction buttons - Memoized component
-  const renderPredictionButtons = useCallback((match: Match) => {
-    const matchPrediction = predictions[match.id];
-    const isLoading = matchPrediction?.loading;
-    const hasPredicted = !!matchPrediction?.prediction;
-
-    if (isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={MATCH_DETAILS_COLORS.accent} />
-          <Text style={styles.loadingText}>جاري التوقع...</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.predictionButtons}>
-        {/* Home Win */}
-        <TouchableOpacity
-          style={[
-            styles.predictionButton,
-            matchPrediction?.prediction === 'home' && styles.predictionButtonActive,
-            hasPredicted && matchPrediction?.prediction !== 'home' && styles.predictionButtonDisabled,
-          ]}
-          onPress={() => handlePrediction(match, 'home')}
-          disabled={hasPredicted}
-          activeOpacity={0.7}
-        >
-          <LinearGradient
-            colors={
-              matchPrediction?.prediction === 'home'
-                ? ['rgba(34, 197, 94, 0.3)', 'rgba(34, 197, 94, 0.1)']
-                : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']
-            }
-            style={styles.buttonGradient}
-          >
-            <Text style={[
-              styles.predictionButtonText,
-              matchPrediction?.prediction === 'home' && styles.predictionButtonTextActive,
-            ]}>
-              فوز
-            </Text>
-            <Text style={styles.predictionButtonLabel}>
-              {match.homeTeam?.name?.substring(0, 10)}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Draw */}
-        <TouchableOpacity
-          style={[
-            styles.predictionButton,
-            matchPrediction?.prediction === 'draw' && styles.predictionButtonActive,
-            hasPredicted && matchPrediction?.prediction !== 'draw' && styles.predictionButtonDisabled,
-          ]}
-          onPress={() => handlePrediction(match, 'draw')}
-          disabled={hasPredicted}
-          activeOpacity={0.7}
-        >
-          <LinearGradient
-            colors={
-              matchPrediction?.prediction === 'draw'
-                ? ['rgba(250, 204, 21, 0.3)', 'rgba(250, 204, 21, 0.1)']
-                : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']
-            }
-            style={styles.buttonGradient}
-          >
-            <Text style={[
-              styles.predictionButtonText,
-              matchPrediction?.prediction === 'draw' && styles.predictionButtonTextActive,
-            ]}>
-              تعادل
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Away Win */}
-        <TouchableOpacity
-          style={[
-            styles.predictionButton,
-            matchPrediction?.prediction === 'away' && styles.predictionButtonActive,
-            hasPredicted && matchPrediction?.prediction !== 'away' && styles.predictionButtonDisabled,
-          ]}
-          onPress={() => handlePrediction(match, 'away')}
-          disabled={hasPredicted}
-          activeOpacity={0.7}
-        >
-          <LinearGradient
-            colors={
-              matchPrediction?.prediction === 'away'
-                ? ['rgba(239, 68, 68, 0.3)', 'rgba(239, 68, 68, 0.1)']
-                : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']
-            }
-            style={styles.buttonGradient}
-          >
-            <Text style={[
-              styles.predictionButtonText,
-              matchPrediction?.prediction === 'away' && styles.predictionButtonTextActive,
-            ]}>
-              فوز
-            </Text>
-            <Text style={styles.predictionButtonLabel}>
-              {match.awayTeam?.name?.substring(0, 10)}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    );
-  }, [predictions, handlePrediction]);
+  // Fix PERF-2: Extracted as a memoized component so it only re-renders when its own props change,
+  // instead of re-rendering every time the parent predictions state updates.
+  const renderPredictionButtons = (match: Match) => (
+    <PredictionButtons
+      match={match}
+      matchPrediction={predictions[match.id]}
+      onPredict={handlePrediction}
+    />
+  );
 
   // ✅ FlatList renderItem — replaces .map() for virtualized rendering
   const renderMatchItem = useCallback(({ item: match }: { item: Match }) => {

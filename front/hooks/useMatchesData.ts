@@ -292,13 +292,13 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   // Preload upcoming days in background
   const preloadUpcomingDays = useCallback(async (days: number) => {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
       
       const preloadPromises: Promise<void>[] = [];
       for (let i = 1; i <= days; i++) {
-        const futureDate = new Date(today);
-        futureDate.setDate(today.getDate() + i);
+        const futureDate = new Date(startDate);
+        futureDate.setDate(startDate.getDate() + i);
         const futureDateStr = futureDate.toISOString().split('T')[0];
         
         // Check if already cached

@@ -100,103 +100,126 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const user = await prisma.user.findFirst({
+        // Find user (minimal select — full validation happens inside transaction)
+        const userExists = await prisma.user.findFirst({
             where: { clerkUserId },
-            select: { id: true, coins: true }
+            select: { id: true }
         });
 
-        if (!user) {
+        if (!userExists) {
             res.status(404).json({ error: 'User not found' });
             return;
         }
 
-        // Check if user has enough coins
-        if (user.coins < PREDICTION_COST) {
-            res.status(400).json({
-                error: 'Insufficient coins',
-                required: PREDICTION_COST,
-                current: user.coins
-            });
-            return;
-        }
-
-        // Check daily limit
+        // Fix SEC-5: Move coins check, daily limit check, and duplicate check INSIDE the transaction
+        // so all 3 operations are atomic — eliminates the race condition where two concurrent
+        // requests could both pass the pre-transaction checks and double-deduct coins.
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const todayPredictions = await (prisma as any).prediction.count({
-            where: {
-                userId: user.id,
-                createdAt: {
-                    gte: today,
-                    lt: tomorrow
-                }
-            }
-        });
+        let prediction: any;
+        let updatedUser: any;
+        let todayPredictionsCount = 0;
 
-        if (todayPredictions >= DAILY_PREDICTION_LIMIT) {
-            res.status(400).json({
-                error: 'Daily prediction limit reached',
-                limit: DAILY_PREDICTION_LIMIT
+        try {
+            [prediction, updatedUser] = await prisma.$transaction(async (tx) => {
+                // Re-read user with coins inside transaction (prevents TOCTOU race)
+                const user = await tx.user.findUnique({
+                    where: { id: userExists.id },
+                    select: { id: true, coins: true }
+                });
+
+                if (!user) throw new Error('USER_NOT_FOUND');
+
+                // Atomic coins check
+                if (user.coins < PREDICTION_COST) {
+                    throw new Error(`INSUFFICIENT_COINS:${user.coins}`);
+                }
+
+                // Atomic daily limit check
+                const todayCount = await (tx as any).prediction.count({
+                    where: {
+                        userId: user.id,
+                        createdAt: { gte: today, lt: tomorrow }
+                    }
+                });
+                todayPredictionsCount = todayCount;
+
+                if (todayCount >= DAILY_PREDICTION_LIMIT) {
+                    throw new Error('DAILY_LIMIT_REACHED');
+                }
+
+                // Atomic duplicate check
+                const existing = await (tx as any).prediction.findUnique({
+                    where: {
+                        userId_apiMatchId: {
+                            userId: user.id,
+                            apiMatchId: parseInt(apiMatchId)
+                        }
+                    }
+                });
+
+                if (existing) throw new Error('ALREADY_PREDICTED');
+
+                // All checks passed — create prediction and deduct coins atomically
+                const newPrediction = await (tx as any).prediction.create({
+                    data: {
+                        userId: user.id,
+                        apiMatchId: parseInt(apiMatchId),
+                        predictionType,
+                        coinsSpent: PREDICTION_COST,
+                        isCorrect: null,
+                        homeTeam,
+                        awayTeam,
+                        homeTeamLogo,
+                        awayTeamLogo,
+                        matchDate: matchDate ? new Date(matchDate) : null,
+                        leagueName
+                    }
+                });
+
+                const newUser = await tx.user.update({
+                    where: { id: user.id },
+                    data: { coins: { decrement: PREDICTION_COST } },
+                    select: { coins: true }
+                });
+
+                await (tx as any).coinTransaction.create({
+                    data: {
+                        userId: user.id,
+                        amount: -PREDICTION_COST,
+                        type: 'PREDICTION' as any,
+                        description: `توقع على مباراة ${homeTeam || 'Home'} vs ${awayTeam || 'Away'}`
+                    }
+                });
+
+                return [newPrediction, newUser];
             });
-            return;
-        }
-
-        // Check if already predicted on this match
-        const existingPrediction = await (prisma as any).prediction.findUnique({
-            where: {
-                userId_apiMatchId: {
-                    userId: user.id,
-                    apiMatchId: parseInt(apiMatchId)
-                }
+        } catch (txError: any) {
+            const msg = txError?.message || '';
+            if (msg === 'USER_NOT_FOUND') {
+                res.status(404).json({ error: 'User not found' });
+            } else if (msg.startsWith('INSUFFICIENT_COINS:')) {
+                const current = parseInt(msg.split(':')[1]) || 0;
+                res.status(400).json({ error: 'Insufficient coins', required: PREDICTION_COST, current });
+            } else if (msg === 'DAILY_LIMIT_REACHED') {
+                res.status(400).json({ error: 'Daily prediction limit reached', limit: DAILY_PREDICTION_LIMIT });
+            } else if (msg === 'ALREADY_PREDICTED') {
+                res.status(400).json({ error: 'Already predicted on this match' });
+            } else {
+                throw txError; // re-throw unexpected errors to outer catch
             }
-        });
-
-        if (existingPrediction) {
-            res.status(400).json({ error: 'Already predicted on this match' });
             return;
         }
-
-        // Create prediction and deduct coins in transaction
-        const [prediction, updatedUser] = await prisma.$transaction([
-            (prisma as any).prediction.create({
-                data: {
-                    userId: user.id,
-                    apiMatchId: parseInt(apiMatchId),
-                    predictionType,
-                    coinsSpent: PREDICTION_COST,
-                    isCorrect: null, // ✅ Explicitly set to null (pending state)
-                    homeTeam,
-                    awayTeam,
-                    homeTeamLogo,
-                    awayTeamLogo,
-                    matchDate: matchDate ? new Date(matchDate) : null,
-                    leagueName
-                }
-            }),
-            prisma.user.update({
-                where: { id: user.id },
-                data: { coins: { decrement: PREDICTION_COST } },
-                select: { coins: true }
-            }),
-            prisma.coinTransaction.create({
-                data: {
-                    userId: user.id,
-                    amount: -PREDICTION_COST,
-                    type: 'PREDICTION' as any,
-                    description: `توقع على مباراة ${homeTeam || 'Home'} vs ${awayTeam || 'Away'}`
-                }
-            })
-        ]);
 
         res.json({
             success: true,
             data: {
                 prediction,
                 newBalance: updatedUser.coins,
-                remaining: DAILY_PREDICTION_LIMIT - todayPredictions - 1
+                remaining: DAILY_PREDICTION_LIMIT - todayPredictionsCount - 1
             },
             message: 'تم تسجيل توقعك بنجاح! 🎯'
         });

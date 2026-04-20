@@ -9,6 +9,7 @@ interface CoinsContextType {
   addCoins: (amount: number) => Promise<void>;
   subtractCoins: (amount: number) => Promise<boolean>;
   resetCoins: () => Promise<void>;
+  refreshCoins: () => Promise<void>;
   loading: boolean;
 }
 
@@ -114,7 +115,7 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <CoinsContext.Provider value={{ coins, addCoins, subtractCoins, resetCoins, loading }}>
+    <CoinsContext.Provider value={{ coins, addCoins, subtractCoins, resetCoins, refreshCoins: loadCoins, loading }}>
       {children}
     </CoinsContext.Provider>
   );
