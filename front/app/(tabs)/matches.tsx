@@ -216,29 +216,19 @@ const MatchesScreen = () => {
     return filtered;
   }, [matches, activeTab, favoriteMatchesSet]);
 
-  // Group filtered matches by league - using Set for O(1) lookup
+  // Fix 11: filteredGroupedMatches filters from the already-grouped result (groupedMatches from hook)
+  // instead of re-grouping filteredMatches from scratch — eliminates the double O(n) grouping.
   const filteredGroupedMatches = useMemo((): GroupedMatches[] => {
-    const groupsMap = new Map<number, GroupedMatches>();
+    // Determine which match IDs pass the active tab filter
+    const allowedIds = new Set(filteredMatches.map(m => m.id));
 
-    filteredMatches.forEach((match) => {
-      const leagueId = match.league?.id || 0;
-      const leagueName = match.league?.name || 'Unknown League';
-      const leagueLogo = match.league?.logo;
-
-      if (!groupsMap.has(leagueId)) {
-        groupsMap.set(leagueId, {
-          leagueId,
-          leagueName,
-          leagueLogo,
-          matches: [],
-        });
-      }
-
-      groupsMap.get(leagueId)!.matches.push(match);
-    });
-
-    // Convert to array and filter out empty leagues
-    const groups = Array.from(groupsMap.values()).filter(group => group.matches.length > 0);
+    // Filter each league group to only include matches that pass the tab filter
+    const groups: GroupedMatches[] = groupedMatches
+      .map(group => ({
+        ...group,
+        matches: group.matches.filter(m => allowedIds.has(m.id)),
+      }))
+      .filter(group => group.matches.length > 0);
 
     // Major leagues IDs (Top 5)
     const majorLeaguesSet = new Set([
@@ -254,11 +244,9 @@ const MatchesScreen = () => {
       const aIsMajor = majorLeaguesSet.has(a.leagueId);
       const bIsMajor = majorLeaguesSet.has(b.leagueId);
       
-      // Major leagues come first
       if (aIsMajor && !bIsMajor) return -1;
       if (bIsMajor && !aIsMajor) return 1;
       
-      // If both are major, maintain order: Premier League, La Liga, Bundesliga, Serie A, Ligue 1
       if (aIsMajor && bIsMajor) {
         const majorOrder = [
           MAJOR_LEAGUES.PREMIER_LEAGUE,
@@ -269,35 +257,19 @@ const MatchesScreen = () => {
         ];
         const aIndex = majorOrder.indexOf(a.leagueId);
         const bIndex = majorOrder.indexOf(b.leagueId);
-        if (aIndex !== -1 && bIndex !== -1) {
-          return aIndex - bIndex;
-        }
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
       }
       
-      // Then favorites
       const aIsFavorite = favoriteLeaguesSet.has(a.leagueId);
       const bIsFavorite = favoriteLeaguesSet.has(b.leagueId);
       if (aIsFavorite && !bIsFavorite) return -1;
       if (bIsFavorite && !aIsFavorite) return 1;
       
-      // Finally alphabetically
       return a.leagueName.localeCompare(b.leagueName);
     });
 
-    // Sort matches within each league: Live first, then by time
-    groups.forEach((group) => {
-      group.matches.sort((a, b) => {
-        if (a.status === 'live' && b.status !== 'live') return -1;
-        if (b.status === 'live' && a.status !== 'live') return 1;
-        if (a.fixtureDate && b.fixtureDate) {
-          return new Date(a.fixtureDate).getTime() - new Date(b.fixtureDate).getTime();
-        }
-        return 0;
-      });
-    });
-
     return groups;
-  }, [filteredMatches, favoriteLeaguesSet]);
+  }, [groupedMatches, filteredMatches, favoriteLeaguesSet]);
 
   // Set default expanded leagues
   useEffect(() => {

@@ -213,10 +213,13 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
             fetchMatchesByDate(selectedDate),
           ]);
 
-          // Merge and deduplicate (live matches take priority)
-          const liveMatchIds = new Set(liveMatches.map((m) => m.id));
-          const uniqueScheduledMatches = scheduledMatches.filter((m) => !liveMatchIds.has(m.id));
-          fetchedMatches = [...liveMatches, ...uniqueScheduledMatches];
+          // Fix 9: Deduplicate using Map keyed by match ID.
+          // Scheduled matches inserted first, then live matches overwrite them
+          // so the live version (more up-to-date status) always wins.
+          const mergeMap = new Map<string, Match>();
+          scheduledMatches.forEach(m => mergeMap.set(m.id, m));
+          liveMatches.forEach(m => mergeMap.set(m.id, m)); // live overwrites scheduled
+          fetchedMatches = Array.from(mergeMap.values());
           
           // Pre-fetch and cache upcoming 3 days in background
           preloadUpcomingDays(3);
@@ -334,9 +337,11 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
           fetchLiveMatches(),
           fetchMatchesByDate(date),
         ]);
-        const liveMatchIds = new Set(liveMatches.map((m) => m.id));
-        const uniqueScheduledMatches = scheduledMatches.filter((m) => !liveMatchIds.has(m.id));
-        fetchedMatches = [...liveMatches, ...uniqueScheduledMatches];
+        // Fix 9: Map-based dedup — live version overwrites scheduled
+        const mergeMap = new Map<string, Match>();
+        scheduledMatches.forEach(m => mergeMap.set(m.id, m));
+        liveMatches.forEach(m => mergeMap.set(m.id, m));
+        fetchedMatches = Array.from(mergeMap.values());
       } else {
         fetchedMatches = await fetchMatchesByDate(date);
       }
@@ -360,7 +365,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
   useEffect(() => {
     fetchDataRef.current();
-  }, [dateString]); // Only re-fetch when date changes
+  }, [dateString, isToday, isPastDate]); // Re-fetch when date changes or when isToday/isPastDate change (e.g. at midnight)
 
   const refetch = useCallback(async () => {
     await fetchData(true);

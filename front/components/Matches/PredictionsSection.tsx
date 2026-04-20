@@ -23,6 +23,7 @@ import {
   ActivityIndicator,
   FlatList,
 } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -352,7 +353,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
   const lastRefreshAttempt = useRef<number>(0);
   const failedAttempts = useRef<number>(0);
   const MAX_FAILED_ATTEMPTS = 3; // الحد الأقصى للمحاولات الفاشلة
-  const MIN_REFRESH_INTERVAL = 5000; // 5 ثواني بين كل محاولة
+  const MIN_REFRESH_INTERVAL = 30000; // 30 ثانية بين كل محاولة — تقليل API calls عند التنقل السريع بين التابات
 
   useFocusEffect(
     useCallback(() => {
@@ -401,6 +402,16 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
       const currentCoins = coinsRef.current;
       const currentRemaining = remainingRef.current;
 
+      // Fix 8: Offline guard — check connectivity before doing anything
+      const netState = await NetInfo.fetch();
+      if (netState.isConnected === false) {
+        toastManager.showWarning(
+          'غير متصل',
+          'أنت غير متصل بالإنترنت، لا يمكن إرسال التوقع'
+        );
+        return; // Do NOT deduct coins, do NOT call API
+      }
+
       // Check if already predicted
       if (currentPredictions[match.id]?.prediction) {
         toastManager.showWarning(
@@ -427,7 +438,6 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
         );
         return;
       }
-
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setError(null); // إعادة تعيين الخطأ
