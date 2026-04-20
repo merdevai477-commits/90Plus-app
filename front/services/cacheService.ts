@@ -19,6 +19,21 @@ const DEFAULT_TTL = 5 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 100;
 
 /**
+ * Module-level in-memory store for large object caches (e.g. reels feed).
+ * AsyncStorage only stores IDs + metadata for these keys; full objects live here.
+ * This avoids large JSON serialization on Android which blocks the JS thread.
+ *
+ * Key: cache key string  →  Value: { data: T; timestamp: number; ttl: number }
+ */
+const memoryStore = new Map<string, { data: any; timestamp: number; ttl: number }>();
+
+/**
+ * Keys that should use the memory-first strategy (IDs in AsyncStorage, data in memory).
+ * Add any key here whose payload is a large array of objects.
+ */
+const MEMORY_FIRST_KEYS = new Set<string>(['reels_feed']);
+
+/**
  * Cache entry structure with timestamp and TTL support
  */
 export interface CacheEntry<T> {
@@ -28,6 +43,16 @@ export interface CacheEntry<T> {
   lastUpdated?: number; // Track when data was last successfully updated
 }
 
+/**
+ * Slim AsyncStorage entry for memory-first keys.
+ * Stores only IDs + metadata so the serialized payload stays small.
+ */
+interface SlimCacheEntry {
+  ids: string[];
+  timestamp: number;
+  ttl: number;
+  meta?: Record<string, any>; // nextCursor, hasMore, cachedAt, etc.
+}
 /**
  * Cache TTL configuration for different data types
  */
@@ -89,6 +114,39 @@ class CacheService {
    * @param allowStale - If true, return stale data even if expired
    */
   async get<T>(key: string, allowStale: boolean = false): Promise<T | null> {
+    // ── Memory-first path for large object caches ──────────────────────────
+    if (MEMORY_FIRST_KEYS.has(key)) {
+      const mem = memoryStore.get(key);
+      if (mem) {
+        const age = Date.now() - mem.timestamp;
+        if (age <= mem.ttl || allowStale) {
+          return mem.data as T;
+        }
+        // Expired in memory — fall through to AsyncStorage rehydration below
+        memoryStore.delete(key);
+      }
+
+      // Try to rehydrate from AsyncStorage slim entry
+      try {
+        const cacheKey = this.getCacheKey(key);
+        const raw = await AsyncStorage.getItem(cacheKey);
+        if (raw) {
+          const slim: SlimCacheEntry = JSON.parse(raw);
+          const age = Date.now() - slim.timestamp;
+          if (age <= slim.ttl || allowStale) {
+            // We only have IDs — reconstruct a minimal object so callers
+            // can at least check hasMore / nextCursor while fresh data loads.
+            const rehydrated = { ...(slim.meta || {}), ids: slim.ids } as unknown as T;
+            memoryStore.set(key, { data: rehydrated, timestamp: slim.timestamp, ttl: slim.ttl });
+            return rehydrated;
+          }
+        }
+      } catch {
+        // Silent fail — fresh fetch will follow
+      }
+      return null;
+    }
+    // ── Standard AsyncStorage path ─────────────────────────────────────────
     try {
       const cacheKey = this.getCacheKey(key);
       const raw = await AsyncStorage.getItem(cacheKey);
@@ -126,6 +184,43 @@ class CacheService {
    * Requirement 4.4: Remove oldest entries when cache exceeds limits
    */
   async set<T>(key: string, data: T, ttl: number = DEFAULT_TTL): Promise<void> {
+    // ── Memory-first path for large object caches ──────────────────────────
+    if (MEMORY_FIRST_KEYS.has(key)) {
+      const now = Date.now();
+      // Always store full data in memory
+      memoryStore.set(key, { data, timestamp: now, ttl });
+
+      // Persist only IDs + metadata to AsyncStorage to keep the payload tiny
+      try {
+        const cacheKey = this.getCacheKey(key);
+        const dataAsAny = data as any;
+
+        // Extract IDs — works for reels feed ({ reels: [...] }) and plain arrays
+        let ids: string[] = [];
+        if (Array.isArray(dataAsAny)) {
+          ids = dataAsAny.map((item: any) => item?.id).filter(Boolean);
+        } else if (Array.isArray(dataAsAny?.reels)) {
+          ids = dataAsAny.reels.map((item: any) => item?.id).filter(Boolean);
+        }
+
+        // Capture non-array metadata fields (nextCursor, hasMore, cachedAt, …)
+        const meta: Record<string, any> = {};
+        if (dataAsAny && typeof dataAsAny === 'object' && !Array.isArray(dataAsAny)) {
+          for (const k of Object.keys(dataAsAny)) {
+            if (k !== 'reels') meta[k] = dataAsAny[k];
+          }
+        }
+
+        const slim: SlimCacheEntry = { ids, timestamp: now, ttl, meta };
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(slim));
+        await this.evictIfNeeded();
+      } catch (error: any) {
+        // Storage errors are non-critical — data is already in memory
+        console.warn(`[CacheService] AsyncStorage slim-write failed for "${key}":`, error?.message);
+      }
+      return;
+    }
+    // ── Standard AsyncStorage path ─────────────────────────────────────────
     try {
       const cacheKey = this.getCacheKey(key);
       const now = Date.now();
@@ -175,6 +270,8 @@ class CacheService {
    * Invalidate (remove) a specific cache entry.
    */
   async invalidate(key: string): Promise<void> {
+    // Clear from memory store if present
+    memoryStore.delete(key);
     try {
       const cacheKey = this.getCacheKey(key);
       await AsyncStorage.removeItem(cacheKey);
@@ -285,6 +382,8 @@ class CacheService {
    * Clear all cache entries.
    */
   async clearAll(): Promise<void> {
+    // Clear memory store
+    memoryStore.clear();
     try {
       const allKeys = await AsyncStorage.getAllKeys();
       const cacheKeys = allKeys.filter(key => key.startsWith(CACHE_PREFIX));

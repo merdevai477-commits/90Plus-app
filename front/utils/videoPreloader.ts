@@ -45,7 +45,7 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
 
     await fetch(videoUrl, {
       method: 'GET',
-      headers: { Range: 'bytes=0-1023' },
+      headers: { Range: 'bytes=0-65535' },
       signal: controller.signal,
     });
     clearTimeout(timeout);
