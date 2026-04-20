@@ -23,6 +23,7 @@ export interface UseMatchesDataResult {
   groupedMatches: GroupedMatches[];
   loading: boolean;
   error: string | null;
+  isDataStale: boolean;
   refetch: () => Promise<void>;
   matchesCount: number;
   leaguesCount: number;
@@ -129,6 +130,8 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
+  const [isDataStale, setIsDataStale] = useState<boolean>(false);
   const isFetchingRef = useRef(false);
   const initialLoadRef = useRef(true);
 
@@ -152,9 +155,9 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   // Group matches by league
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
 
-  // Calculate counts
-  const matchesCount = useMemo(() => matches.length, [matches.length]);
-  const leaguesCount = useMemo(() => groupedMatches.length, [groupedMatches.length]);
+  // Fix PERF-7: .length is O(1) — no useMemo needed
+  const matchesCount = matches.length;
+  const leaguesCount = groupedMatches.length;
 
   const fetchData = useCallback(
     async (forceRefresh = false) => {
@@ -244,6 +247,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
         }
 
         setMatches(fetchedMatches);
+        setIsDataStale(false); // fresh data loaded successfully
 
         // 🚀 Aggressive Prefetching for logos (Instant Performance Phase 1)
         try {
@@ -361,6 +365,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
       }
 
       setMatches(fetchedMatches);
+      setIsDataStale(false); // background refresh succeeded
 
       const cacheTTL = isTodayFlag ? 2 * 60 * 1000 : 3 * 24 * 60 * 60 * 1000; // 3 days for future
       const cacheKey = getMatchesCacheKey(dateStr);
@@ -369,7 +374,8 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
       evictOldestIfNeeded(lastBackgroundFetch);
       await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
     } catch (err) {
-      // Silent fail for background refresh
+      // Fix ERR-3: mark data as stale so UI can show a subtle indicator
+      setIsDataStale(true);
       logger.warn('Background refresh failed:', err);
     }
   }, []);
@@ -392,6 +398,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     groupedMatches,
     loading,
     error,
+    isDataStale,
     refetch,
     matchesCount,
     leaguesCount,

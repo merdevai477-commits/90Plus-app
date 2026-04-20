@@ -46,7 +46,7 @@ router.get('/remaining', requireAuth, async (req: Request, res: Response): Promi
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const todayPredictions = await (prisma as any).prediction.count({
+        const todayPredictions = await prisma.prediction.count({
             where: {
                 userId: user.id,
                 createdAt: {
@@ -253,7 +253,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const predictions = await (prisma as any).prediction.findMany({
+        const predictions = await prisma.prediction.findMany({
             where: { userId: user.id },
             orderBy: { createdAt: 'desc' },
             take: 50
@@ -298,12 +298,12 @@ router.get('/match/:matchId/count', async (req: Request, res: Response): Promise
         // Ensure matchId is a string (handle array case)
         const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
 
-        const count = await (prisma as any).prediction.count({
+        const count = await prisma.prediction.count({
             where: { apiMatchId: parseInt(matchIdParam) }
         });
 
         // Get breakdown by type
-        const breakdown = await (prisma as any).prediction.groupBy({
+        const breakdown = await prisma.prediction.groupBy({
             by: ['predictionType'],
             where: { apiMatchId: parseInt(matchIdParam) },
             _count: true
@@ -346,7 +346,7 @@ router.post('/matches/counts', requireAuth, async (req: Request, res: Response):
             return;
         }
 
-        const counts = await (prisma as any).prediction.groupBy({
+        const counts = await prisma.prediction.groupBy({
             by: ['apiMatchId'],
             where: {
                 apiMatchId: { in: matchIds.map((id: any) => parseInt(id)) }
@@ -399,27 +399,27 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
         }
 
         // Get total predictions
-        const total = await (prisma as any).prediction.count({
+        const total = await prisma.prediction.count({
             where: { userId: user.id }
         });
 
         // Get correct predictions
-        const correct = await (prisma as any).prediction.count({
+        const correct = await prisma.prediction.count({
             where: { userId: user.id, isCorrect: true }
         });
 
         // Get incorrect predictions
-        const incorrect = await (prisma as any).prediction.count({
+        const incorrect = await prisma.prediction.count({
             where: { userId: user.id, isCorrect: false }
         });
 
         // Get pending (not resolved yet)
-        const pending = await (prisma as any).prediction.count({
+        const pending = await prisma.prediction.count({
             where: { userId: user.id, isCorrect: null }
         });
 
         // Get total coins won from predictions
-        const coinsWonResult = await (prisma as any).prediction.aggregate({
+        const coinsWonResult = await prisma.prediction.aggregate({
             where: { userId: user.id, isCorrect: true },
             _sum: { coinsWon: true }
         });
@@ -484,7 +484,7 @@ router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res:
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');
 
         // Get count of unresolved predictions before
-        const unresolvedBefore = await (prisma as any).prediction.count({
+        const unresolvedBefore = await prisma.prediction.count({
             where: { isCorrect: null }
         });
 
@@ -492,7 +492,7 @@ router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res:
         await PredictionWatcherService.checkPredictions();
 
         // Get count after
-        const unresolvedAfter = await (prisma as any).prediction.count({
+        const unresolvedAfter = await prisma.prediction.count({
             where: { isCorrect: null }
         });
 
@@ -520,7 +520,7 @@ router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res:
  */
 router.get('/unresolved', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const unresolvedPredictions = await (prisma as any).prediction.findMany({
+        const unresolvedPredictions = await prisma.prediction.findMany({
             where: { isCorrect: null },
             select: {
                 id: true,
@@ -639,7 +639,7 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const todayPredictions = await (prisma as any).prediction.count({
+        const todayPredictions = await prisma.prediction.count({
             where: {
                 userId: user.id,
                 createdAt: {
@@ -660,7 +660,7 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         }
 
         // Check if already predicted on this match
-        const existingPrediction = await (prisma as any).prediction.findUnique({
+        const existingPrediction = await prisma.prediction.findUnique({
             where: {
                 userId_apiMatchId: {
                     userId: user.id,
@@ -690,7 +690,7 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
 
         // Create prediction and deduct coins in transaction
         const [prediction, updatedUser] = await prisma.$transaction([
-            (prisma as any).prediction.create({
+            prisma.prediction.create({
                 data: {
                     userId: user.id,
                     apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId,
@@ -754,12 +754,12 @@ router.get('/leaderboard', async (req: Request, res: Response): Promise<void> =>
         const take = Math.min(parseInt(limit as string) || 10, 50);
         
         // Efficient leaderboard: aggregate in DB instead of loading every user's predictions.
-        const countsByUserAndState = await (prisma as any).prediction.groupBy({
+        const countsByUserAndState = await prisma.prediction.groupBy({
             by: ['userId', 'isCorrect'],
             _count: true,
         });
 
-        const coinsWonByUser = await (prisma as any).prediction.groupBy({
+        const coinsWonByUser = await prisma.prediction.groupBy({
             by: ['userId'],
             where: { isCorrect: true },
             _sum: { coinsWon: true },

@@ -414,6 +414,10 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
   // ✅ Load data on mount - مع dependencies صحيحة
   useEffect(() => {
     loadAllData();
+    // Fix MEM-2: clear predictions cache on unmount to prevent memory accumulation
+    return () => {
+      predictionsCache.clear();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

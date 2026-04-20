@@ -133,7 +133,7 @@ export const PredictionsService = {
   /**
    * Get user predictions
    */
-  getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: { [key: string]: any } }> => {
+  getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: Record<string, Prediction & { prediction: { type: 'home' | 'draw' | 'away' } }> }> => {
     try {
       const response = await fetch(`${API_URL}/predictions/user`, {
         headers: {

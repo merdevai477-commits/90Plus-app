@@ -108,6 +108,7 @@ const MatchesScreen = () => {
     groupedMatches,
     loading,
     error,
+    isDataStale,
     refetch,
     matchesCount,
     leaguesCount,
@@ -121,14 +122,10 @@ const MatchesScreen = () => {
   const { favoriteMatchIds, isFavorite, toggleFavorite } = useFavoriteMatches();
   const favoriteMatchesSet = useMemo(() => new Set(favoriteMatchIds), [favoriteMatchIds]);
 
-  // Create matches Map for O(1) lookup
-  const matchesMap = useMemo(() => {
-    const map = new Map<string, Match>();
-    matches.forEach((match) => {
-      map.set(match.id, match);
-    });
-    return map;
-  }, [matches]);
+  // Fix PERF-4: matchesMap is only used in handleMatchPress — build it inside the callback
+  // using a ref so it's always current without triggering re-renders on every matches update.
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   // Scroll to specific match from push notification deep link
   useEffect(() => {
@@ -143,16 +140,27 @@ const MatchesScreen = () => {
     );
 
     if (groupIndex >= 0) {
-      InteractionManager.runAfterInteractions(() => {
+      const handle = InteractionManager.runAfterInteractions(() => {
         try {
           flatListRef.current?.scrollToIndex({ index: groupIndex, animated: true, viewPosition: 0.3 });
         } catch {
           flatListRef.current?.scrollToOffset({ offset: groupIndex * 200, animated: true });
         }
       });
+
+      // Clear highlight after 3 seconds
+      const timer = setTimeout(() => {
+        highlightedMatchId.value = '';
+        router.setParams({ matchId: undefined });
+      }, 3000);
+
+      return () => {
+        handle.cancel();
+        clearTimeout(timer);
+      };
     }
 
-    // Clear highlight after 3 seconds
+    // Clear highlight after 3 seconds (when groupIndex < 0)
     const timer = setTimeout(() => {
       highlightedMatchId.value = '';
       router.setParams({ matchId: undefined });
@@ -355,10 +363,11 @@ const MatchesScreen = () => {
     leaguesCount: filteredGroupedMatches.length,
   }), [filteredMatches, filteredGroupedMatches]);
 
-  // Handle match press - using Map for O(1) lookup
+  // Handle match press - build Map on demand from ref (O(1) lookup, no useMemo overhead)
   const handleMatchPress = useCallback(
     (matchId: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const matchesMap = new Map(matchesRef.current.map(m => [m.id, m]));
       const match = matchesMap.get(matchId);
       if (match && match.homeTeam && match.awayTeam) {
         router.push({
@@ -380,7 +389,7 @@ const MatchesScreen = () => {
         });
       }
     },
-    [router, matchesMap]
+    [router]
   );
 
   // Handle refresh - optimized to skip if recently refreshed or offline
@@ -438,7 +447,7 @@ const MatchesScreen = () => {
           onPress={() => handleMatchPress(item.match.id)}
           onFavoritePress={() => handleFavoritePress(item.match)}
           showFavorite={true}
-          isFavorite={favoriteMatchIds.includes(item.match.id)}
+          isFavorite={favoriteMatchesSet.has(item.match.id)}
         />
       </View>
     );
@@ -556,6 +565,13 @@ const MatchesScreen = () => {
           <Text style={styles.networkText}>
             {t.matches.networkOffline || 'No internet connection'}
           </Text>
+        </View>
+      )}
+
+      {/* Fix ERR-4: Stale data banner — shown when background refresh failed but cached data is displayed */}
+      {isDataStale && isOnline && matches.length > 0 && (
+        <View style={styles.staleIndicator}>
+          <Text style={styles.staleText}>⚠️ البيانات قد لا تكون محدثة</Text>
         </View>
       )}
 
@@ -699,6 +715,19 @@ const styles = StyleSheet.create({
     color: MATCH_DETAILS_COLORS.error,
     fontSize: 12,
     fontWeight: '600',
+  },
+  staleIndicator: {
+    backgroundColor: 'rgba(250, 204, 21, 0.12)',
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(250, 204, 21, 0.25)',
+  },
+  staleText: {
+    color: 'rgba(250, 204, 21, 0.9)',
+    fontSize: 11,
+    fontWeight: '500',
   },
 });
 
