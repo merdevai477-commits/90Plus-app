@@ -33,8 +33,35 @@ const getMatchesCacheKey = (dateString: string): string => {
   return `matches_${dateString}`;
 };
 
-// Memory cache for instant access
-const memoryCache = new Map<string, { data: Match[]; timestamp: number }>();
+// Memory cache for instant access with TTL check
+interface MemoryCacheEntry {
+  data: Match[];
+  timestamp: number;
+}
+
+const memoryCache = new Map<string, MemoryCacheEntry>();
+
+// TTL configuration based on match date
+const getCacheTTL = (dateString: string): number => {
+  const today = new Date().toISOString().split('T')[0];
+  const isPast = dateString < today;
+  const isToday = dateString === today;
+  
+  if (isPast) {
+    return 60 * 60 * 1000; // 60 minutes for past matches
+  } else if (isToday) {
+    return 2 * 60 * 1000; // 2 minutes for today's matches
+  } else {
+    return 30 * 60 * 1000; // 30 minutes for future matches
+  }
+};
+
+// Check if cache entry is still valid
+const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
+  const ttl = getCacheTTL(dateString);
+  const age = Date.now() - entry.timestamp;
+  return age < ttl;
+};
 
 // ✅ Throttle background refresh - track last background fetch per date
 const lastBackgroundFetch = new Map<string, number>();
@@ -104,16 +131,12 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     if (initialLoadRef.current) {
       initialLoadRef.current = false;
       const memoryCached = memoryCache.get(dateString);
-      if (memoryCached) {
-        const age = Date.now() - memoryCached.timestamp;
-        const ttl = isPastDate ? 30 * 24 * 60 * 60 * 1000 : isToday ? 2 * 60 * 1000 : 60 * 60 * 1000;
-        if (age < ttl) {
-          setMatches(memoryCached.data);
-          setLoading(false);
-        }
+      if (memoryCached && isCacheValid(memoryCached, dateString)) {
+        setMatches(memoryCached.data);
+        setLoading(false);
       }
     }
-  }, [dateString, isToday, isPastDate]);
+  }, [dateString]);
 
   // Group matches by league
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
@@ -135,25 +158,21 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
         // Try memory cache first (instant)
         if (!forceRefresh) {
           const memoryCached = memoryCache.get(dateString);
-          if (memoryCached) {
-            const age = Date.now() - memoryCached.timestamp;
-            const ttl = isPastDate ? 30 * 24 * 60 * 60 * 1000 : isToday ? 2 * 60 * 1000 : 60 * 60 * 1000;
-            if (age < ttl) {
-              logger.debug(`📦 Memory cache hit for ${dateString}`);
-              setMatches(memoryCached.data);
-              setLoading(false);
-              
-              // For past dates, don't refresh
-              if (isPastDate) {
-                isFetchingRef.current = false;
-                return;
-              }
-              
-              // For today/future, refresh in background
-              fetchDataInBackground(dateString, isToday, isPastDate);
+          if (memoryCached && isCacheValid(memoryCached, dateString)) {
+            logger.debug(`📦 Memory cache hit for ${dateString}`);
+            setMatches(memoryCached.data);
+            setLoading(false);
+            
+            // For past dates, don't refresh
+            if (isPastDate) {
               isFetchingRef.current = false;
               return;
             }
+            
+            // For today/future, refresh in background
+            fetchDataInBackground(dateString, isToday, isPastDate);
+            isFetchingRef.current = false;
+            return;
           }
         }
 

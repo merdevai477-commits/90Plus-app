@@ -34,6 +34,7 @@ import { useCoins } from '../../contexts/CoinsContext';
 import { logger } from '../../utils/logger';
 import { MAJOR_LEAGUES } from '../../services/apiFootball';
 import { toastManager } from '../../services/toastManager';
+import { fetchMatchesByDate } from '../league-center/leagueApiUtils';
 
 interface PredictionsSectionProps {
   matches: Match[];
@@ -65,6 +66,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null); // ✅ Error state للمستخدم
   const [remainingPredictions, setRemainingPredictions] = useState<number | null>(null);
+  const [fetchedMatches, setFetchedMatches] = useState<Match[]>([]); // ✅ Internal matches state
 
   // ✅ Refs للقيم المتغيرة لتقليل dependencies في useCallback
   const predictionsRef = useRef<PredictionState>(predictions);
@@ -113,8 +115,21 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
 
   // ✅ Filter and sort matches مع seeded random للثبات
   const displayedMatches = useMemo(() => {
+    // Merge props matches with fetched matches
+    const allMatches = [...matches, ...fetchedMatches];
+    
+    // Remove duplicates by match ID
+    const uniqueMatchesMap = new Map<string, Match>();
+    allMatches.forEach(m => {
+      if (m && m.id) {
+        uniqueMatchesMap.set(m.id, m);
+      }
+    });
+    
     // ✅ Safety check: filter out null/undefined matches
-    const validMatches = matches.filter(m => m && m.id && m.league && m.status !== 'finished' && m.status !== 'live');
+    const validMatches = Array.from(uniqueMatchesMap.values()).filter(
+      m => m && m.id && m.league && m.status !== 'finished' && m.status !== 'live'
+    );
     
     if (validMatches.length === 0) {
       return [];
@@ -187,7 +202,7 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     
     // دمج المباريات مع الحفاظ على الترتيب (الدوريات الكبرى أولاً)
     return [...selectedMajor, ...selectedOthers].slice(0, MAX_PREDICTIONS_TO_SHOW);
-  }, [matches, shuffleArrayWithSeed]);
+  }, [matches, fetchedMatches, shuffleArrayWithSeed]);
 
   // ✅ استخدم ref لتخزين getToken لتجنب إعادة إنشاء الدوال
   const getTokenRef = useRef(getToken);
@@ -266,6 +281,39 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     }
   }, []);
 
+  // ✅ Fetch upcoming matches if validMatches is empty
+  const fetchUpcomingMatches = useCallback(async () => {
+    try {
+      setLoading(true);
+      logger.debug('Fetching upcoming matches for predictions...');
+      
+      // Fetch next 7 days of matches
+      const today = new Date();
+      const matchesPromises: Promise<Match[]>[] = [];
+      
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        matchesPromises.push(fetchMatchesByDate(date));
+      }
+      
+      const allMatches = (await Promise.all(matchesPromises)).flat();
+      
+      // Filter for upcoming matches only
+      const upcomingMatches = allMatches.filter(
+        m => m && m.id && m.status !== 'finished' && m.status !== 'live'
+      );
+      
+      setFetchedMatches(upcomingMatches);
+      logger.debug(`✅ Fetched ${upcomingMatches.length} upcoming matches`);
+    } catch (error) {
+      logger.error('Error fetching upcoming matches:', error);
+      setError('فشل تحميل المباريات القادمة');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // ✅ تحميل جميع البيانات
   const loadAllData = useCallback(async (forceRefresh = false) => {
     if (!forceRefresh) {
@@ -285,6 +333,13 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ✅ Fetch upcoming matches if displayedMatches is empty after initial load
+  useEffect(() => {
+    if (!loading && displayedMatches.length === 0 && fetchedMatches.length === 0) {
+      fetchUpcomingMatches();
+    }
+  }, [loading, displayedMatches.length, fetchedMatches.length, fetchUpcomingMatches]);
 
   // ✅ useFocusEffect - تحديث البيانات عند العودة للصفحة
   // ✅ مع protection ضد المحاولات المتكررة عند فشل الاتصال
@@ -558,14 +613,25 @@ const PredictionsSection: React.FC<PredictionsSectionProps> = ({ matches, onMatc
     );
   }
 
-  // Empty state
+  // Empty state with detailed explanation
   if (displayedMatches.length === 0) {
+    // Determine why there are no valid matches
+    const allLive = matches.every(m => m.status === 'live');
+    const allFinished = matches.every(m => m.status === 'finished');
+    
+    let emptyMessage = 'لا توجد مباريات متاحة للتوقع الآن';
+    if (allLive) {
+      emptyMessage = 'المباريات الحالية جارية الآن، التوقعات متاحة للمباريات القادمة فقط';
+    } else if (allFinished) {
+      emptyMessage = 'انتهت مباريات اليوم، تابع المباريات القادمة غداً';
+    }
+    
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyIcon}>🎯</Text>
         <Text style={styles.emptyTitle}>لا توجد مباريات قادمة</Text>
         <Text style={styles.emptyMessage}>
-          لا توجد مباريات قادمة متاحة للتوقع حالياً
+          {emptyMessage}
         </Text>
       </View>
     );

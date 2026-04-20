@@ -1,4 +1,25 @@
 {
+  "postman": {
+    "workspace": {
+      "id": "a13f5335-b315-45ca-8d77-43dafb162b4c",
+      "name": "محمود فتحي's Workspace"
+    },
+    "collections": {
+      "reels": {
+        "id": "bcdc4967-491f-47d6-a835-91ed4af38de6",
+        "uid": "54140869-bcdc4967-491f-47d6-a835-91ed4af38de6",
+        "name": "90Plus Reels API",
+        "url": "https://www.postman.com/blackandwight625-5095867/90plus-reels-api/collection/bcdc4967-491f-47d6-a835-91ed4af38de6"
+      }
+    },
+    "environments": {
+      "production": {
+        "id": "037385a0-8eac-4f78-b0aa-8c3dd8c84e6f",
+        "uid": "54140869-037385a0-8eac-4f78-b0aa-8c3dd8c84e6f",
+        "name": "90Plus Production"
+      }
+    }
+  },
   "collection": {
     "info": {
       "name": "90Plus API",
