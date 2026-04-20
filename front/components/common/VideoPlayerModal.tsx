@@ -84,7 +84,6 @@ export default function VideoPlayerModal({
     const [isMuted, setIsMuted] = useState(false); // Audio ON by default (Instagram/TikTok style)
     const [isPaused, setIsPaused] = useState(false);
     const [isVideoActive, setIsVideoActive] = useState(true);
-    const [isVideoReady, setIsVideoReady] = useState(false); // ✅ Track video load state
     const [isLiked, setIsLiked] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
     const [likes, setLikes] = useState(0);
@@ -106,7 +105,6 @@ export default function VideoPlayerModal({
     useEffect(() => {
         if (visible) {
             setIsVideoActive(true);
-            setIsVideoReady(false); // ✅ Reset load state when modal opens
             // Start glow animation
             RNAnimated.loop(
                 RNAnimated.sequence([
@@ -127,17 +125,13 @@ export default function VideoPlayerModal({
         }
     }, [visible]);
 
-    // Fallback: if onLoad hasn't fired within 3 seconds, force isVideoReady=true
-    // This prevents a black screen when expo-av silently skips the onLoad callback
+    // Fallback: log a warning if onLoad hasn't fired within 3 seconds.
+    // shouldPlay no longer depends on isVideoReady so no state update needed —
+    // this is kept only for diagnostic purposes.
     useEffect(() => {
         if (!visible || !videoUrl) return;
         const fallbackTimer = setTimeout(() => {
-            setIsVideoReady(prev => {
-                if (!prev) {
-                    console.warn('[VideoPlayerModal] ⏰ onLoad fallback triggered for:', videoUrl?.substring(0, 60));
-                }
-                return true;
-            });
+            console.warn('[VideoPlayerModal] ⏰ onLoad not fired after 3s for:', videoUrl?.substring(0, 60));
         }, 3000);
         return () => clearTimeout(fallbackTimer);
     }, [visible, videoUrl]);
@@ -335,7 +329,6 @@ export default function VideoPlayerModal({
                             useNativeControls={false}
                             onLoad={() => {
                                 console.log('✅ [VideoPlayerModal] Video loaded:', videoUrl?.substring(0, 60));
-                                setIsVideoReady(true);
                             }}
                             onError={(error: any) => {
                                 console.error('❌ [VideoPlayerModal] Video playback error:', error);

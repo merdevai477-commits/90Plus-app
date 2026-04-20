@@ -80,8 +80,7 @@ const MatchesScreen = () => {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ matchId?: string; tab?: MatchTabType }>();
-  // @ts-ignore
-  const flatListRef = useRef<any>(null);
+  const flatListRef = useRef<FlashList<FlatListItem>>(null);
   const highlightedMatchId = useSharedValue<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<MatchTabType>('all');
@@ -122,10 +121,12 @@ const MatchesScreen = () => {
   const { favoriteMatchIds, isFavorite, toggleFavorite } = useFavoriteMatches();
   const favoriteMatchesSet = useMemo(() => new Set(favoriteMatchIds), [favoriteMatchIds]);
 
-  // Fix PERF-4: matchesMap is only used in handleMatchPress — build it inside the callback
-  // using a ref so it's always current without triggering re-renders on every matches update.
-  const matchesRef = useRef(matches);
-  matchesRef.current = matches;
+  // Fix PERF-3: memoize matchesMap so handleMatchPress gets O(1) lookup
+  // without rebuilding the Map on every press
+  const matchesMap = useMemo(
+    () => new Map(matches.map(m => [m.id, m])),
+    [matches]
+  );
 
   // Scroll to specific match from push notification deep link
   useEffect(() => {
@@ -367,7 +368,6 @@ const MatchesScreen = () => {
   const handleMatchPress = useCallback(
     (matchId: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const matchesMap = new Map(matchesRef.current.map(m => [m.id, m]));
       const match = matchesMap.get(matchId);
       if (match && match.homeTeam && match.awayTeam) {
         router.push({
@@ -389,7 +389,7 @@ const MatchesScreen = () => {
         });
       }
     },
-    [router]
+    [router, matchesMap]
   );
 
   // Handle refresh - optimized to skip if recently refreshed or offline

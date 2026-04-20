@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import type { Prediction, User } from '@prisma/client';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
 import { logger } from '../utils/logger';
@@ -119,8 +120,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        let prediction: any;
-        let updatedUser: any;
+        let prediction: Prediction;
+        let updatedUser: Pick<User, 'coins'>;
         let todayPredictionsCount = 0;
 
         try {
