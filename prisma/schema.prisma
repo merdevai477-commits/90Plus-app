@@ -1328,6 +1328,10 @@ model Prediction {
   matchDate    DateTime?
   leagueName   String?
 
+  // Exact score prediction (used by /submit endpoint)
+  predictedHomeScore Int?
+  predictedAwayScore Int?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, apiMatchId])

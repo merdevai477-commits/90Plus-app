@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
+import { requireAdmin } from '../middleware/rbac.middleware';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -311,13 +312,14 @@ router.get('/match/:matchId/count', async (req: Request, res: Response): Promise
 /**
  * POST /api/predictions/matches/counts
  * Get prediction counts for multiple matches (batch)
+ * Fix SEC-2: requireAuth + max 50 matchIds
  */
-router.post('/matches/counts', async (req: Request, res: Response): Promise<void> => {
+router.post('/matches/counts', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { matchIds } = req.body;
 
-        if (!matchIds || !Array.isArray(matchIds)) {
-            res.status(400).json({ error: 'matchIds array required' });
+        if (!matchIds || !Array.isArray(matchIds) || matchIds.length > 50) {
+            res.status(400).json({ error: 'matchIds must be an array with at most 50 items' });
             return;
         }
 
@@ -326,7 +328,8 @@ router.post('/matches/counts', async (req: Request, res: Response): Promise<void
             where: {
                 apiMatchId: { in: matchIds.map((id: any) => parseInt(id)) }
             },
-            _count: true
+            _count: true,
+            take: 50,
         });
 
         const countsMap: { [key: number]: number } = {};
@@ -423,9 +426,10 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
 /**
  * POST /api/predictions/resolve/:matchId
- * Manually resolve predictions for a match (admin/debug)
+ * Manually resolve predictions for a match (admin only)
+ * Fix SEC-1: requireAuth + requireAdmin
  */
-router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<void> => {
+router.post('/resolve/:matchId', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         // Ensure matchId is a string (handle array case)
         const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -448,9 +452,10 @@ router.post('/resolve/:matchId', async (req: Request, res: Response): Promise<vo
 
 /**
  * POST /api/predictions/resolve-all
- * Trigger resolution check for all unresolved predictions (admin/debug)
+ * Trigger resolution check for all unresolved predictions (admin only)
+ * Fix SEC-1: requireAuth + requireAdmin
  */
-router.post('/resolve-all', async (req: Request, res: Response): Promise<void> => {
+router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         // Import the service dynamically to avoid circular dependency
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');
@@ -487,9 +492,10 @@ router.post('/resolve-all', async (req: Request, res: Response): Promise<void> =
 
 /**
  * GET /api/predictions/unresolved
- * Get list of unresolved predictions (admin/debug)
+ * Get list of unresolved predictions (admin only)
+ * Fix SEC-1: requireAuth + requireAdmin
  */
-router.get('/unresolved', async (req: Request, res: Response): Promise<void> => {
+router.get('/unresolved', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const unresolvedPredictions = await (prisma as any).prediction.findMany({
             where: { isCorrect: null },
@@ -668,10 +674,9 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
                     predictionType,
                     coinsSpent: PREDICTION_COST,
                     isCorrect: null, // ✅ Explicitly set to null (pending state)
-                    // Store the exact score prediction in a JSON field or separate columns
-                    // For now, using homeTeam/awayTeam fields to store scores
-                    homeTeam: `Score: ${home}`,
-                    awayTeam: `Score: ${away}`,
+                    // Fix SEC-3: store scores in dedicated fields, not in team name fields
+                    predictedHomeScore: home,
+                    predictedAwayScore: away,
                 }
             }),
             prisma.user.update({

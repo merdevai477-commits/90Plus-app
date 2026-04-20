@@ -40,6 +40,18 @@ interface MemoryCacheEntry {
 }
 
 const memoryCache = new Map<string, MemoryCacheEntry>();
+const lastBackgroundFetch = new Map<string, number>();
+
+// Fix MEM-1: Evict oldest entry when cache exceeds this size
+const MAX_CACHE_ENTRIES = 10;
+
+const evictOldestIfNeeded = (map: Map<string, any>) => {
+  if (map.size >= MAX_CACHE_ENTRIES) {
+    // Map preserves insertion order — first key is oldest
+    const oldestKey = map.keys().next().value;
+    if (oldestKey !== undefined) map.delete(oldestKey);
+  }
+};
 
 // TTL configuration based on match date
 const getCacheTTL = (dateString: string): number => {
@@ -64,7 +76,6 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 };
 
 // ✅ Throttle background refresh - track last background fetch per date
-const lastBackgroundFetch = new Map<string, number>();
 const BACKGROUND_REFRESH_THROTTLE = 2 * 60 * 1000; // 2 minutes minimum between background refreshes
 
 /**
@@ -184,6 +195,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
               cachedCount: cached.length,
             });
             // Update memory cache first
+            evictOldestIfNeeded(memoryCache);
             memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
             setMatches(cached);
             setLoading(false);
@@ -256,6 +268,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
           ? 2 * 60 * 1000 // 2 minutes for today
           : 3 * 24 * 60 * 60 * 1000; // 3 days for future
 
+        evictOldestIfNeeded(memoryCache);
         memoryCache.set(dateString, { data: fetchedMatches, timestamp: Date.now() });
         await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
 
@@ -294,6 +307,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
           preloadPromises.push(
             fetchMatchesByDate(futureDate).then(matches => {
               if (matches.length > 0) {
+                evictOldestIfNeeded(memoryCache);
                 memoryCache.set(futureDateStr, { data: matches, timestamp: Date.now() });
                 const cacheKey = getMatchesCacheKey(futureDateStr);
                 cacheService.set(cacheKey, matches, 3 * 24 * 60 * 60 * 1000); // 3 days cache
@@ -350,7 +364,9 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
       const cacheTTL = isTodayFlag ? 2 * 60 * 1000 : 3 * 24 * 60 * 60 * 1000; // 3 days for future
       const cacheKey = getMatchesCacheKey(dateStr);
+      evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });
+      evictOldestIfNeeded(lastBackgroundFetch);
       await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
     } catch (err) {
       // Silent fail for background refresh
