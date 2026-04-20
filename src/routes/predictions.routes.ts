@@ -139,7 +139,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                 }
 
                 // Atomic daily limit check
-                const todayCount = await (tx as any).prediction.count({
+                const todayCount = await tx.prediction.count({
                     where: {
                         userId: user.id,
                         createdAt: { gte: today, lt: tomorrow }
@@ -152,7 +152,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                 }
 
                 // Atomic duplicate check
-                const existing = await (tx as any).prediction.findUnique({
+                const existing = await tx.prediction.findUnique({
                     where: {
                         userId_apiMatchId: {
                             userId: user.id,
@@ -164,7 +164,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                 if (existing) throw new Error('ALREADY_PREDICTED');
 
                 // All checks passed — create prediction and deduct coins atomically
-                const newPrediction = await (tx as any).prediction.create({
+                const newPrediction = await tx.prediction.create({
                     data: {
                         userId: user.id,
                         apiMatchId: parseInt(apiMatchId),
@@ -186,7 +186,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                     select: { coins: true }
                 });
 
-                await (tx as any).coinTransaction.create({
+                await tx.coinTransaction.create({
                     data: {
                         userId: user.id,
                         amount: -PREDICTION_COST,
@@ -293,7 +293,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
  * GET /api/predictions/match/:matchId/count
  * Get prediction count for a specific match
  */
-router.get('/match/:matchId/count', async (req: Request, res: Response): Promise<void> => {
+router.get('/match/:matchId/count', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         // Ensure matchId is a string (handle array case)
         const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -748,7 +748,7 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
  * GET /api/predictions/leaderboard
  * Get top predictors leaderboard
  */
-router.get('/leaderboard', async (req: Request, res: Response): Promise<void> => {
+router.get('/leaderboard', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);

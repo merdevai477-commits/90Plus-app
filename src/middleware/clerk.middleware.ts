@@ -26,6 +26,8 @@ interface CachedUser {
 
 const userCache = new Map<string, CachedUser>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+// Fix NEW-MEM-1: cap the in-memory user cache to prevent unbounded growth
+const MAX_USER_CACHE = 500;
 
 const clerkMiddlewareMw = clerkMiddleware();
 const clerkRequireAuthMw = clerkRequireAuth();
@@ -46,6 +48,11 @@ async function getVerifiedUser(userId: string): Promise<boolean> {
     try {
         const user = await clerkClient.users.getUser(userId);
         if (user && user.id) {
+            // Evict oldest entry if cache is at capacity
+            if (userCache.size >= MAX_USER_CACHE) {
+                const oldestKey = userCache.keys().next().value;
+                if (oldestKey !== undefined) userCache.delete(oldestKey);
+            }
             userCache.set(userId, { userId: user.id, verifiedAt: now });
             return true;
         }
@@ -55,8 +62,7 @@ async function getVerifiedUser(userId: string): Promise<boolean> {
         if (error.status === 429 && cached) {
             cached.verifiedAt = now; // Extend cache on rate limit
             return true;
-        }
-        // Session JWT was already validated by @clerk/express above. A failing
+        }        // Session JWT was already validated by @clerk/express above. A failing
         // users.getUser (rate limits, outages, network) must not turn every
         // protected route into HTTP 500 — that breaks /clerk/me, profile, reels, etc.
         logger.warn('[requireAuth] Clerk users.getUser failed; trusting validated session', {
