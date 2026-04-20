@@ -127,6 +127,21 @@ export default function VideoPlayerModal({
         }
     }, [visible]);
 
+    // Fallback: if onLoad hasn't fired within 3 seconds, force isVideoReady=true
+    // This prevents a black screen when expo-av silently skips the onLoad callback
+    useEffect(() => {
+        if (!visible || !videoUrl) return;
+        const fallbackTimer = setTimeout(() => {
+            setIsVideoReady(prev => {
+                if (!prev) {
+                    console.warn('[VideoPlayerModal] ⏰ onLoad fallback triggered for:', videoUrl?.substring(0, 60));
+                }
+                return true;
+            });
+        }, 3000);
+        return () => clearTimeout(fallbackTimer);
+    }, [visible, videoUrl]);
+
     // Haptic feedback
     const lightImpact = () => {
         if (Platform.OS === 'ios') {
@@ -307,11 +322,14 @@ export default function VideoPlayerModal({
                             source={{
                                 uri: videoUrl,
                                 // ✅ Critical for Android HLS: Tell ExoPlayer this is an HLS stream
-                                ...(videoUrl.includes('.m3u8') ? { overrideFileExtensionAndroid: 'm3u8' } : {}),
+                                // Fix: also detect stream.mux.com URLs (not just .m3u8 extension)
+                                ...(videoUrl.includes('stream.mux.com') || videoUrl.includes('.m3u8')
+                                    ? { overrideFileExtensionAndroid: 'm3u8' }
+                                    : {}),
                             }}
                             style={styles.video}
                             resizeMode={ResizeMode.COVER}
-                            shouldPlay={isVideoActive && !isPaused && isVideoReady}
+                            shouldPlay={isVideoActive && !isPaused}
                             isLooping
                             isMuted={isMuted}
                             useNativeControls={false}

@@ -541,6 +541,7 @@ export default function ProfileScreen() {
     return uniqueVideos.map((video: any) => ({
       id: video.id,
       thumbnail: video.thumbnail || video.uri,
+      videoUrl: video.videoUrl || video.uri || video.thumbnail,
       views: video.views || '0',
       duration: video.duration || '',
       isUploading: video.isUploading || false,
@@ -1550,7 +1551,7 @@ export default function ProfileScreen() {
           <VideoGrid
             videos={myVideos}
             onVideoPress={(video, _index) => {
-              setSelectedVideoUrl(video.thumbnail);
+              setSelectedVideoUrl((video as any).videoUrl || video.thumbnail);
               setIsVideoPlayerVisible(true);
             }}
             onVideoLongPress={() => setIsDeleteMode(prev => !prev)}

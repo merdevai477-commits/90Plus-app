@@ -309,7 +309,7 @@ const DoubleTapLikeAnimation: React.FC<{
 
 // Main Reels Feed Component
 const ReelsFeed: React.FC = () => {
-  const params = useLocalSearchParams<{ reelId?: string; commentId?: string; autoOpenComments?: string }>();
+  const params = useLocalSearchParams<{ reelId?: string; commentId?: string; autoOpenComments?: string; startFrom?: string }>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
@@ -705,6 +705,24 @@ const ReelsFeed: React.FC = () => {
       toastManager.showError('المقطع غير موجود', 'المقطع مش موجود أو اتحذف');
     }
   }, [params.reelId, params.commentId, params.autoOpenComments, reels]);
+
+  // Handle startFrom param: scroll to a specific reel when navigating from Home screen
+  useEffect(() => {
+    if (!params.startFrom || reels.length === 0) return;
+
+    const reelIndex = reels.findIndex(r => r.id === params.startFrom);
+    if (reelIndex < 0) return;
+
+    setTimeout(() => {
+      try {
+        flatListRef.current?.scrollToIndex({ index: reelIndex, animated: false });
+        setCurrentIndex(reelIndex);
+      } catch {
+        flatListRef.current?.scrollToOffset({ offset: reelIndex * SCREEN_HEIGHT, animated: false });
+        setCurrentIndex(reelIndex);
+      }
+    }, 300);
+  }, [params.startFrom, reels]);
 
   // Load viewed reels from AsyncStorage on mount
   useEffect(() => {

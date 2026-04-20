@@ -576,7 +576,7 @@ export default function HomeScreen() {
 
         <VideoList
           videos={videos}
-          onVideoPress={useCallback(() => router.push('/reels'), [router])}
+          onVideoPress={useCallback((videoId: string) => router.push({ pathname: '/reels', params: { startFrom: videoId } }), [router])}
           onViewAllPress={useCallback(() => router.push('/reels'), [router])}
           isLoading={loadingRankings}
         />
