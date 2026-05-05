@@ -111,7 +111,6 @@ export const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({
                         keyExtractor={(item) => item.id}
                         contentContainerStyle={styles.commentsList}
                         showsVerticalScrollIndicator={false}
-                        estimatedItemSize={100}
                     />
 
                     <LinearGradient

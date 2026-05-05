@@ -15,7 +15,7 @@ import {
   Text,
   ActivityIndicator,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
 import type { FlatListProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -80,7 +80,7 @@ const MatchesScreen = () => {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ matchId?: string; tab?: MatchTabType }>();
-  const flatListRef = useRef<FlashList<FlatListItem>>(null);
+  const flatListRef = useRef<FlashListRef<FlatListItem>>(null);
   const highlightedMatchId = useSharedValue<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<MatchTabType>('all');
@@ -665,7 +665,6 @@ const MatchesScreen = () => {
           }
           onScroll={scrollHandler}
           scrollEventThrottle={16}
-          estimatedItemSize={280}
           onEndReached={loadMoreLeagues}
           onEndReachedThreshold={0.6}
           ListFooterComponent={

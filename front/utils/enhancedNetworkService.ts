@@ -12,10 +12,12 @@
  */
 
 import NetInfo from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
 import { logger } from '../services/logger';
 import { getApiUrl } from '../config/api.config';
 
 const API_URL = getApiUrl();
+const NETWORK_RUNTIME_KEY = '__90plusEnhancedNetworkServiceRuntime__';
 
 // Network configuration
 const NETWORK_CONFIG = {
@@ -50,34 +52,86 @@ const requestCache = new Map<string, { data: any; timestamp: number; etag?: stri
 // Pending requests to prevent duplicates
 const pendingRequests = new Map<string, Promise<any>>();
 
+type NetworkRuntimeState = {
+    initialized: boolean;
+    initializationPromise: Promise<void> | null;
+    healthCheckTimer: ReturnType<typeof setInterval> | null;
+    netInfoUnsubscribe: (() => void) | null;
+    lastLoggedNetworkState: string | null;
+};
+
+const getNetworkRuntimeState = (): NetworkRuntimeState => {
+    const globalScope = globalThis as typeof globalThis & {
+        [NETWORK_RUNTIME_KEY]?: NetworkRuntimeState;
+    };
+
+    if (!globalScope[NETWORK_RUNTIME_KEY]) {
+        globalScope[NETWORK_RUNTIME_KEY] = {
+            initialized: false,
+            initializationPromise: null,
+            healthCheckTimer: null,
+            netInfoUnsubscribe: null,
+            lastLoggedNetworkState: null,
+        };
+    }
+
+    return globalScope[NETWORK_RUNTIME_KEY];
+};
+
+const isBrowserWeb = (): boolean => Platform.OS === 'web' && typeof window !== 'undefined';
+
+const canInitializeNetworkService = (): boolean => Platform.OS !== 'web' || typeof window !== 'undefined';
+
 /**
  * Enhanced Network Service Class
  */
 export class EnhancedNetworkService {
-    private static initialized = false;
-    private static healthCheckTimer: NodeJS.Timeout | null = null;
-    private static netInfoUnsubscribe: (() => void) | null = null;
-
     /**
      * Initialize the network service
      */
     static async initialize(): Promise<void> {
-        if (this.initialized) return;
+        if (!canInitializeNetworkService()) return;
+
+        const runtimeState = getNetworkRuntimeState();
+        if (runtimeState.initialized) return;
+        if (runtimeState.initializationPromise) return runtimeState.initializationPromise;
+
+        runtimeState.initializationPromise = this.initializeRuntime();
+
+        try {
+            await runtimeState.initializationPromise;
+        } finally {
+            runtimeState.initializationPromise = null;
+        }
+    }
+
+    private static async initializeRuntime(): Promise<void> {
+        const runtimeState = getNetworkRuntimeState();
 
         try {
             // ✅ FIXED: Store unsubscribe function for cleanup
-            this.netInfoUnsubscribe = NetInfo.addEventListener(state => {
+            runtimeState.netInfoUnsubscribe = NetInfo.addEventListener(state => {
                 const wasConnected = networkState.isConnected;
-                
-                networkState.isConnected = state.isConnected ?? false;
-                networkState.isInternetReachable = state.isInternetReachable ?? false;
+                const webOnline = isBrowserWeb() ? window.navigator.onLine : null;
+
+                networkState.isConnected = webOnline ?? state.isConnected ?? false;
+                networkState.isInternetReachable = webOnline ?? state.isInternetReachable ?? false;
                 networkState.connectionType = state.type || 'unknown';
 
-                logger.info('[EnhancedNetwork] Network state changed:', {
+                const nextLoggedNetworkState = JSON.stringify({
                     isConnected: networkState.isConnected,
                     isInternetReachable: networkState.isInternetReachable,
                     type: networkState.connectionType,
                 });
+
+                if (runtimeState.lastLoggedNetworkState !== nextLoggedNetworkState) {
+                    runtimeState.lastLoggedNetworkState = nextLoggedNetworkState;
+                    logger.info('[EnhancedNetwork] Network state changed:', {
+                        isConnected: networkState.isConnected,
+                        isInternetReachable: networkState.isInternetReachable,
+                        type: networkState.connectionType,
+                    });
+                }
 
                 // If we just got connected, check server health
                 if (!wasConnected && networkState.isConnected) {
@@ -87,19 +141,21 @@ export class EnhancedNetworkService {
 
             // Get initial network state
             const initialState = await NetInfo.fetch();
-            networkState.isConnected = initialState.isConnected ?? false;
-            networkState.isInternetReachable = initialState.isInternetReachable ?? false;
+            const webOnline = isBrowserWeb() ? window.navigator.onLine : null;
+            networkState.isConnected = webOnline ?? initialState.isConnected ?? false;
+            networkState.isInternetReachable = webOnline ?? initialState.isInternetReachable ?? false;
             networkState.connectionType = initialState.type || 'unknown';
 
-            // Start periodic health checks
             this.startHealthChecks();
 
-            // Initial server health check
-            await this.checkServerHealth();
+            if (networkState.isConnected) {
+                await this.checkServerHealth();
+            }
 
-            this.initialized = true;
+            runtimeState.initialized = true;
             logger.info('[EnhancedNetwork] Service initialized successfully');
         } catch (error) {
+            runtimeState.initialized = false;
             logger.error('[EnhancedNetwork] Failed to initialize:', error);
         }
     }
@@ -108,11 +164,13 @@ export class EnhancedNetworkService {
      * Start periodic health checks
      */
     private static startHealthChecks(): void {
-        if (this.healthCheckTimer) {
-            clearInterval(this.healthCheckTimer);
+        const runtimeState = getNetworkRuntimeState();
+
+        if (runtimeState.healthCheckTimer) {
+            clearInterval(runtimeState.healthCheckTimer);
         }
 
-        this.healthCheckTimer = setInterval(() => {
+        runtimeState.healthCheckTimer = setInterval(() => {
             if (networkState.isConnected) {
                 this.checkServerHealth();
             }
@@ -123,6 +181,8 @@ export class EnhancedNetworkService {
      * Check server health
      */
     static async checkServerHealth(): Promise<boolean> {
+        if (!canInitializeNetworkService()) return false;
+
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -383,21 +443,25 @@ export class EnhancedNetworkService {
      * Cleanup - ✅ FIXED: Proper cleanup to prevent memory leaks
      */
     static cleanup(): void {
+        const runtimeState = getNetworkRuntimeState();
+
         // Clear health check timer
-        if (this.healthCheckTimer) {
-            clearInterval(this.healthCheckTimer);
-            this.healthCheckTimer = null;
+        if (runtimeState.healthCheckTimer) {
+            clearInterval(runtimeState.healthCheckTimer);
+            runtimeState.healthCheckTimer = null;
         }
         
         // Remove NetInfo listener
-        if (this.netInfoUnsubscribe) {
-            this.netInfoUnsubscribe();
-            this.netInfoUnsubscribe = null;
+        if (runtimeState.netInfoUnsubscribe) {
+            runtimeState.netInfoUnsubscribe();
+            runtimeState.netInfoUnsubscribe = null;
         }
         
         this.clearCache();
         pendingRequests.clear();
-        this.initialized = false;
+        runtimeState.initialized = false;
+        runtimeState.initializationPromise = null;
+        runtimeState.lastLoggedNetworkState = null;
         
         logger.debug('[EnhancedNetwork] Service cleaned up');
     }

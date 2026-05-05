@@ -13,6 +13,7 @@ import Animated, {
     Easing,
     interpolate,
     runOnJS,
+    type SharedValue,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -83,7 +84,7 @@ export default function AuthLoadingScreen({ message = 'جاري تسجيل ال�
         textTranslateY.value = withDelay(250, withSpring(0, { damping: 16, stiffness: 120 }));
 
         // Bouncing dots — cascade
-        const dotBounce = (dot: Animated.SharedValue<number>, delay: number) => {
+        const dotBounce = (dot: SharedValue<number>, delay: number) => {
             dot.value = withDelay(delay, withRepeat(
                 withSequence(
                     withTiming(-8, { duration: 280, easing: Easing.out(Easing.quad) }),
@@ -137,7 +138,7 @@ export default function AuthLoadingScreen({ message = 'جاري تسجيل ال�
             />
 
             {/* Soft radial glow behind logo */}
-            <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
+            <Animated.View style={[styles.glow, glowStyle, { pointerEvents: 'none' }]} />
 
             {/* Logo */}
             <Animated.View style={[styles.logoContainer, logoStyle]}>

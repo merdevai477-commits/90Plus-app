@@ -237,7 +237,6 @@ export default function FollowersListModal({
                             renderItem={renderUserCard}
                             contentContainerStyle={styles.listContent}
                             showsVerticalScrollIndicator={false}
-                            estimatedItemSize={90}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>

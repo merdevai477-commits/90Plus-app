@@ -76,7 +76,7 @@ export const ProfessionalToast: React.FC<ProfessionalToastProps> = ({
   const slideAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const config = getToastConfig(type);
 
@@ -190,7 +190,7 @@ export const ProfessionalToast: React.FC<ProfessionalToastProps> = ({
   if (!visible) return null;
 
   return (
-    <View style={[styles.container, getPositionStyle()]} pointerEvents="box-none">
+    <View style={[styles.container, getPositionStyle(), { pointerEvents: 'box-none' }]}>
       <Animated.View
         style={[
           styles.toastContainer,

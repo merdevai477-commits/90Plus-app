@@ -37,7 +37,7 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
 
   const lastRefreshRef = useRef<number>(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check if we should refresh based on time
   const shouldRefresh = useCallback(() => {

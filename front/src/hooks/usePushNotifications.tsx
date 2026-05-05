@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+import type { Notification, EventSubscription } from 'expo-notifications';
 import Constants from 'expo-constants';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,10 +13,21 @@ import { NotificationPermissionModal } from '../../components/common/Notificatio
 import '../../services/notificationForegroundSetup';
 
 const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+    try {
+        Notifications = require('expo-notifications') as NotificationsModule;
+    } catch {
+        Notifications = null;
+    }
+}
 
 export interface PushNotificationState {
     expoPushToken: string | null;
-    notification: Notifications.Notification | null;
+    notification: Notification | null;
     error: string | null;
     showPermissionModal: boolean;
     setShowPermissionModal: (show: boolean) => void;
@@ -25,12 +36,12 @@ export interface PushNotificationState {
 
 export function usePushNotifications(): PushNotificationState {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-    const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+    const [notification, setNotification] = useState<Notification | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showPermissionModal, setShowPermissionModal] = useState(false);
     
-    const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
-    const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
+    const notificationListener = useRef<EventSubscription | undefined>(undefined);
+    const responseListener = useRef<EventSubscription | undefined>(undefined);
     
     const { getToken, isSignedIn, isLoaded } = useAuth();
     const router = useRouter();
@@ -163,6 +174,8 @@ export function usePushNotifications(): PushNotificationState {
     }).current;
 
     const requestPermissionExplicitly = useCallback(async (): Promise<boolean> => {
+        if (!Notifications) return false;
+
         try {
             const { status: existingStatus } = await Notifications.getPermissionsAsync();
             
@@ -182,6 +195,8 @@ export function usePushNotifications(): PushNotificationState {
     }, []);
 
     useEffect(() => {
+        if (!Notifications) return;
+
         // Only run after authentication is definitively loaded
         if (!isLoaded) return;
 
@@ -287,6 +302,8 @@ export function usePushNotifications(): PushNotificationState {
 }
 
 async function registerForPushNotificationsAsync(): Promise<string | null> {
+    if (!Notifications) return null;
+
     if (!Device.isDevice) {
         logger.debug('Push notifications require a physical device');
         return null;
@@ -329,6 +346,8 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
 
 // Global Injection Component
 export function PushNotificationSetup() {
+    if (!Notifications) return null;
+
     const { showPermissionModal, setShowPermissionModal, expoPushToken } = usePushNotifications();
     const { isSignedIn } = useAuth();
     

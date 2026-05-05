@@ -55,7 +55,7 @@ export interface AnimationCleanupReturn {
   /**
    * Register a timer for cleanup
    */
-  registerTimer: (timerId: NodeJS.Timeout) => void;
+  registerTimer: (timerId: ReturnType<typeof setTimeout>) => void;
   
   /**
    * Register an event listener for cleanup
@@ -92,7 +92,7 @@ export function useAnimationCleanup(
   // Store all items that need cleanup
   const animatedValuesRef = useRef<Set<Animated.Value | Animated.ValueXY>>(new Set());
   const animationsRef = useRef<Set<Animated.CompositeAnimation>>(new Set());
-  const timersRef = useRef<Set<NodeJS.Timeout>>(new Set());
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const listenersRef = useRef<Set<() => void>>(new Set());
   
   // Track cleanup performance
@@ -132,7 +132,7 @@ export function useAnimationCleanup(
     }
   }, [debug, componentName]);
   
-  const registerTimer = useCallback((timerId: NodeJS.Timeout) => {
+  const registerTimer = useCallback((timerId: ReturnType<typeof setTimeout>) => {
     if (!isMountedRef.current) {
       if (debug) {
         logger.warn(`[${componentName}] Attempted to register timer after unmount`);

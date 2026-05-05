@@ -47,7 +47,7 @@ export const VideoFeed: React.FC<VideoFeedProps> = React.memo(({
 
   // Handle viewable items changed
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ViewToken<VideoItem>[] }) => {
       const newVisibleIds = new Set<string>();
 
       viewableItems.forEach((viewableItem) => {
@@ -127,7 +127,6 @@ export const VideoFeed: React.FC<VideoFeedProps> = React.memo(({
       data={videos}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      estimatedItemSize={estimatedItemSize}
       onViewableItemsChanged={onViewableItemsChanged}
       viewabilityConfig={viewabilityConfig}
       onEndReached={onEndReached}
@@ -138,7 +137,6 @@ export const VideoFeed: React.FC<VideoFeedProps> = React.memo(({
       snapToAlignment="start"
       showsVerticalScrollIndicator={false}
       drawDistance={estimatedItemSize * 2} // Preload 2 videos ahead
-      estimatedListSize={{ height: SCREEN_HEIGHT, width: Dimensions.get('window').width }}
     />
   );
 });

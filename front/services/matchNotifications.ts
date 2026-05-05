@@ -2,17 +2,31 @@
  * Match notifications service
  */
 
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import FollowedMatchesStorage, { FollowedMatch } from './followedMatchesStorage';
 import PredictionStorage from './predictionStorage';
 import './notificationForegroundSetup';
+
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    Notifications = require('expo-notifications') as NotificationsModule;
+  } catch {
+    Notifications = null;
+  }
+}
 
 class MatchNotificationsService {
   /**
    * Request notification permissions
    */
   async requestPermissions(): Promise<boolean> {
+    if (!Notifications) return false;
+
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;

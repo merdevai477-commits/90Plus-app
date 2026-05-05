@@ -157,13 +157,11 @@ export const ReelItem: React.FC<ReelItemProps> = ({
       {/* Gradients */}
       <LinearGradient
         colors={['rgba(0,0,0,0.8)', 'transparent']}
-        style={styles.topGradient}
-        pointerEvents="none"
+        style={[styles.topGradient, { pointerEvents: 'none' }]}
       />
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.8)']}
-        style={styles.bottomGradient}
-        pointerEvents="none"
+        style={[styles.bottomGradient, { pointerEvents: 'none' }]}
       />
       
       {/* User Info */}

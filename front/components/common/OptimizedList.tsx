@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import { FlashList, FlashListProps } from '@shopify/flash-list';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { View, Text, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native';
 
 // Fallback theme colors (ThemeContext not available in this component)
@@ -11,7 +11,7 @@ const THEME = {
 interface OptimizedListProps<T> {
   data: T[];
   renderItem: (item: T, index: number) => React.ReactElement;
-  estimatedItemSize: number; // REQUIRED for FlashList
+  estimatedItemSize: number;
   type?: 'video' | 'image' | 'post' | 'chat' | 'user' | 'mixed';
   onEndReached?: () => void;
   onRefresh?: () => void;
@@ -58,7 +58,7 @@ export function OptimizedList<T>({
   scrollEventThrottle = 16,
 }: OptimizedListProps<T>) {
   const theme = THEME;
-  const flashListRef = useRef<FlashList<T>>(null);
+  const flashListRef = useRef<FlashListRef<T>>(null);
 
   // Default key extractor
   const defaultKeyExtractor = useCallback(
@@ -143,15 +143,6 @@ export function OptimizedList<T>({
     [type]
   );
 
-  // Blank area monitoring (development only)
-  const handleBlankArea = useCallback((blankAreaEvent: { blankArea: number }) => {
-    if (__DEV__ && blankAreaEvent.blankArea > 50) {
-      console.warn(
-        `[OptimizedList] Blank area detected: ${blankAreaEvent.blankArea}px. Consider adjusting estimatedItemSize.`
-      );
-    }
-  }, []);
-
   // Scroll to top function (exposed via ref)
   const scrollToTop = useCallback(() => {
     flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -163,7 +154,6 @@ export function OptimizedList<T>({
       data={data}
       renderItem={renderItemWrapper}
       keyExtractor={keyExtractor || defaultKeyExtractor}
-      estimatedItemSize={estimatedItemSize}
       getItemType={getItemType}
       onEndReached={handleEndReached}
       onEndReachedThreshold={0.5}
@@ -180,9 +170,7 @@ export function OptimizedList<T>({
       showsHorizontalScrollIndicator={showsHorizontalScrollIndicator}
       onScroll={onScroll}
       scrollEventThrottle={scrollEventThrottle}
-      onBlankArea={handleBlankArea}
       drawDistance={250} // How far ahead to render (pixels)
-      estimatedListSize={{ height: 800, width: 400 }} // Approximate list size
     />
   );
 }

@@ -149,7 +149,7 @@ export const useThrottle = <T extends (...args: any[]) => any>(
   delay: number = 300
 ): T => {
   const lastRun = useRef<number>(Date.now());
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   return useCallback(
     ((...args: any[]) => {

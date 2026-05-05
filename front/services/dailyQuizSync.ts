@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 type GetTokenFunction = () => Promise<string | null>;
 
 class DailyQuizSyncService {
-    private syncInterval: NodeJS.Timeout | null = null;
+    private syncInterval: ReturnType<typeof setTimeout> | null = null;
     private getToken: GetTokenFunction | null = null;
     private isActive = false;
     private lastSyncTime = 0;

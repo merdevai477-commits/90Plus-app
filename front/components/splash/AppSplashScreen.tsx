@@ -89,7 +89,7 @@ export function AppSplashScreen() {
       <StatusBar style="light" />
 
       {/* Radial glow */}
-      <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
+      <Animated.View style={[styles.glow, glowStyle, { pointerEvents: 'none' }]} />
 
       {/* Logo */}
       <Animated.View style={[styles.logoWrap, logoStyle]}>

@@ -9,6 +9,7 @@ import {
   Dimensions,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import {
@@ -24,13 +25,24 @@ import {
   Pin
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import usePushNotifications from '../../src/hooks/usePushNotifications';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
 import { toastManager } from '../../services/toastManager';
 
 const { width } = Dimensions.get('window');
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    Notifications = require('expo-notifications') as NotificationsModule;
+  } catch {
+    Notifications = null;
+  }
+}
 
 export interface Match {
   id: string;
@@ -165,6 +177,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
     
     // If user is trying to ENABLE notifications, check for system permission first
     if (newState) {
+      if (!Notifications) return;
+
       const { status } = await Notifications.getPermissionsAsync();
       if (status !== 'granted') {
         const canProceed = await requestPermissionExplicitly();

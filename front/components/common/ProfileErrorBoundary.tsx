@@ -49,7 +49,7 @@ interface State {
 // ============================================================================
 
 export class ProfileErrorBoundary extends Component<Props, State> {
-  private renderCountResetTimer: NodeJS.Timeout | null = null;
+  private renderCountResetTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly MAX_RENDER_COUNT: number;
   private readonly RENDER_COUNT_RESET_INTERVAL = 5000; // 5 seconds
 

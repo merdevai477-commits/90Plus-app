@@ -133,7 +133,6 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                                     </Text>
                                 </TouchableOpacity>
                             )}
-                            estimatedItemSize={100}
                         />
                     </View>
 

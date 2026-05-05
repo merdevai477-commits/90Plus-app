@@ -15,7 +15,7 @@ function RotatingCarousel<T>({ data, renderItem, itemWidth, visibleCount = 5, au
   const listRef = useRef<any>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (paused) return;

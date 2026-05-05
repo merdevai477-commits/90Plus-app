@@ -122,7 +122,6 @@ export default function CountryPickerModal({ visible, onClose, onSelect, selecte
                         keyExtractor={(item) => item.id}
                         contentContainerStyle={styles.listContent}
                         renderItem={renderCountryItem}
-                        estimatedItemSize={70}
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Ionicons name="flag-outline" size={48} color="#666" />

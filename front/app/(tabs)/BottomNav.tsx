@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Dimensions,
   Animated,
+  Platform,
 } from 'react-native';
 import { Home, Brain, User, BarChart3, Video, Landmark } from 'lucide-react-native';
 import Svg, { Rect, Line, Circle, Ellipse } from 'react-native-svg';
@@ -75,7 +76,9 @@ const NavItem = ({
             styles.glowEffect,
             {
               backgroundColor: activeColor,
-              shadowColor: activeColor,
+              ...(Platform.OS === 'web'
+                ? { boxShadow: `0 0 15px ${activeColor}` }
+                : { shadowColor: activeColor }),
             },
           ]}
         />
@@ -211,7 +214,9 @@ const BottomNav = () => {
                         styles.glowEffect,
                         {
                           backgroundColor: activeColor,
-                          shadowColor: activeColor,
+                          ...(Platform.OS === 'web'
+                            ? { boxShadow: `0 0 15px ${activeColor}` }
+                            : { shadowColor: activeColor }),
                         },
                       ]}
                     />
@@ -270,10 +275,17 @@ const styles = StyleSheet.create({
     height: NAV_HEIGHT,
     borderRadius: NAV_HEIGHT / 2,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 8px 16px rgba(0, 0, 0, 0.4)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+      },
+    }),
     elevation: 20,
   },
   blurBackground: {
@@ -302,9 +314,14 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     opacity: 0.3,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
+    ...Platform.select({
+      web: {},
+      default: {
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 15,
+      },
+    }),
     elevation: 10,
   },
   iconContainer: {

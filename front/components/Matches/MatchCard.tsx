@@ -143,7 +143,7 @@ const MatchCard: React.FC<MatchCardProps> = React.memo(({ match, onPress, onFavo
 
         {/* Glow effect for live matches */}
         {isLive && (
-          <Animated.View style={[styles.glowOverlay, glowStyle]} pointerEvents="none">
+          <Animated.View style={[styles.glowOverlay, glowStyle, { pointerEvents: 'none' }]}>
             <LinearGradient
               colors={['rgba(34, 197, 94, 0.1)', 'transparent']}
               style={StyleSheet.absoluteFill}

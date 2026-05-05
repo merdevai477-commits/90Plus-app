@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, TouchableOpacity, StyleSheet, Text, AppState, AppStateStatus } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, AppState, AppStateStatus, Platform } from 'react-native';
 import { Search, Bell, Settings } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
@@ -290,7 +290,11 @@ const styles = StyleSheet.create({
     borderWidth: BorderWidth.default,
     borderColor: Colors.glass.border,
     flexShrink: 0,
-    ...Elevation[6],
+    ...(Platform.OS === 'web'
+      ? {
+        boxShadow: '0 6px 5px rgba(0, 0, 0, 0.27)',
+      }
+      : Elevation[6]),
   },
   iconButtonGradient: {
     width: '100%',
@@ -322,10 +326,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     borderWidth: BorderWidth.thick,
     borderColor: Colors.background.default,
-    shadowColor: Colors.error.default,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.9,
-    shadowRadius: 6,
+    ...(Platform.OS === 'web'
+      ? {
+        boxShadow: `0 2px 6px ${Colors.error.default}`,
+      }
+      : {
+        shadowColor: Colors.error.default,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.9,
+        shadowRadius: 6,
+      }),
     elevation: 10,
   },
   badgeGlow: {

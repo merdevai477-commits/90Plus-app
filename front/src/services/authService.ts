@@ -51,7 +51,7 @@ const memoryCache = new Map<string, { data: any; timestamp: number }>();
 const MEMORY_CACHE_TTL = 2 * 60 * 1000; // 2 minutes — fewer repeat calls while switching tabs
 
 // Debouncing for syncUserWithBackend to prevent stampedes (short delay — first paint stays fast)
-const syncDebounceTimers = new Map<string, NodeJS.Timeout>();
+const syncDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const SYNC_DEBOUNCE_MS = 120;
 
 // Helper function to get from memory cache

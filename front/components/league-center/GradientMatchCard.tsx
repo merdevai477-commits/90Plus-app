@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -425,10 +426,16 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: '#0F0F1A',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
+    ...(Platform.OS === 'web'
+      ? {
+        boxShadow: '0 12px 16px rgba(0, 0, 0, 0.5)',
+      }
+      : {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
+      }),
     elevation: 15,
   },
   gradientBase: {
@@ -543,9 +550,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 85,
     lineHeight: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    ...(Platform.OS === 'web'
+      ? {
+        textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+      }
+      : {
+        textShadowColor: 'rgba(0, 0, 0, 0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      }),
   },
   centerArea: {
     flex: 1,
@@ -560,9 +573,15 @@ const styles = StyleSheet.create({
     fontSize: 32, // Increased from 28
     fontWeight: '800',
     letterSpacing: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    ...(Platform.OS === 'web'
+      ? {
+        textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+      }
+      : {
+        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+      }),
   },
   matchTime: {
     color: '#FFFFFF',

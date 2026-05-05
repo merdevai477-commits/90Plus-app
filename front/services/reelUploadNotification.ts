@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { logger } from './logger';
 
 const CHANNEL_ID = 'reel-upload';
@@ -7,8 +7,20 @@ const CHANNEL_ID_RESULT = 'reel-upload-result';
 const ACTIVE_REQUEST_ID = 'reel-upload-active-session';
 
 let lastProgressRounded = -1;
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+    try {
+        Notifications = require('expo-notifications') as NotificationsModule;
+    } catch {
+        Notifications = null;
+    }
+}
 
 async function ensureChannels(): Promise<void> {
+    if (!Notifications) return;
     if (Platform.OS !== 'android') return;
     // Silent channel for progress updates (no sound, no vibration)
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
@@ -30,6 +42,8 @@ async function ensureChannels(): Promise<void> {
 }
 
 async function ensurePermission(): Promise<boolean> {
+    if (!Notifications) return false;
+
     try {
         const { status: existing } = await Notifications.getPermissionsAsync();
         if (existing === 'granted') return true;
@@ -50,7 +64,7 @@ async function ensurePermission(): Promise<boolean> {
  */
 export const reelUploadNotification = {
     async begin(): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         lastProgressRounded = -1;
         const ok = await ensurePermission();
         if (!ok) return;
@@ -87,7 +101,7 @@ export const reelUploadNotification = {
      * تحديث نص التقدّم؛ يُحدّث فقط كل ~15٪ وبدون صوت أو اهتزاز.
      */
     async updateProgress(progress: number, phaseLabel: string): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         const rounded = Math.min(100, Math.max(0, Math.round(progress)));
         const jump = Math.abs(rounded - lastProgressRounded);
 
@@ -124,7 +138,7 @@ export const reelUploadNotification = {
     },
 
     async success(message = 'تم نشر الريلز في ملفك الشخصي! 🎉'): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         lastProgressRounded = -1;
 
         // Remove the ongoing progress notification
@@ -158,7 +172,7 @@ export const reelUploadNotification = {
     },
 
     async failure(message: string): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         lastProgressRounded = -1;
 
         // Remove the ongoing progress notification
@@ -192,6 +206,7 @@ export const reelUploadNotification = {
     },
 
     async clear(): Promise<void> {
+        if (!Notifications) return;
         lastProgressRounded = -1;
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
         try { await Notifications.dismissNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
