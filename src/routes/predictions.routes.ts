@@ -353,6 +353,9 @@ router.post('/matches/counts', requireAuth, async (req: Request, res: Response):
                 apiMatchId: { in: matchIds.map((id: any) => parseInt(id)) }
             },
             _count: true,
+            orderBy: {
+                apiMatchId: 'asc',
+            },
             take: 50,
         });
 

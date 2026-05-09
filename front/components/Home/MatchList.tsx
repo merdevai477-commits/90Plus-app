@@ -11,7 +11,7 @@ import { Match } from '../../src/store/home.store';
 import { useTranslation } from '../../src/i18n';
 import { SkeletonCard } from '../ui/Skeleton';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/designSystem/designSystem';
-import GradientMatchCard, { Match as GradientMatch } from '../league-center/GradientMatchCard';
+import GradientMatchCard, { Match as GradientMatch } from '../Matches/GradientMatchCard';
 
 interface MatchListProps {
     matches: Match[];

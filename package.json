@@ -59,6 +59,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.957.0",
     "@aws-sdk/s3-request-presigner": "^3.957.0",
+    "@callstack/liquid-glass": "^0.7.1",
     "@clerk/express": "^2.0.8",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@lucia-auth/adapter-prisma": "^4.0.1",

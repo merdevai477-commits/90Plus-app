@@ -24,8 +24,8 @@ import {
   TrendingUp,
   Play
 } from 'lucide-react-native';
-import { useFadeIn, useSlideIn, usePulse } from '../leagues/Animations';
-import { useHapticFeedback } from '../leagues/HapticFeedback';
+import { useFadeIn, useSlideIn, usePulse } from '../Matches/Animations';
+import { useHapticFeedback } from '../Matches/HapticFeedback';
 import { useAuth } from '@clerk/clerk-expo';
 import { AuthService, SearchUserResult, ReelsService } from '../../src/services/authService';
 import { router } from 'expo-router';

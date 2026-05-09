@@ -37,7 +37,7 @@ import type { UnifiedReelData } from '../common/UnifiedVideoPlayer';
 import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { ReelData } from './types';
 import { COLORS, GRADIENTS, EFFECTS } from './constants';
-import { useReelHaptics } from './useReelHaptics';
+import * as Haptics from 'expo-haptics';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ReelItemProps {
@@ -113,8 +113,13 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [editCaption, setEditCaption] = useState('');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-    const haptics = useReelHaptics();
     const { t } = useLanguage();
+
+    const haptics = {
+        lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+        mediumImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
+        heavyImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy),
+    };
 
     // Animations
     const glowAnim = useRef(new RNAnimated.Value(0)).current;

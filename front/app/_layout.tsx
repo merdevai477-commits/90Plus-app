@@ -178,6 +178,8 @@ import { Image } from "expo-image";
 import { CLUBS } from "../data/clubs";
 import { BRANDS } from "../data/brands";
 import { cacheService } from "../services/cacheService";
+import { TamaguiProvider } from 'tamagui';
+import config from '../tamagui.config';
 
 function WebSocketInitializer({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoaded } = useAuth();
@@ -547,47 +549,49 @@ export default function RootLayout() {
       {!clerkPublishableKey ? (
         <ClerkKeyMissingScreen />
       ) : (
-      <ClerkProvider
-        publishableKey={clerkPublishableKey}
-        tokenCache={tokenCache}
-      >
-        <SentryUserTracker />
-        <QueryClientProvider client={queryClient}>
-          <PushNotificationSetup />
-          <WebSocketInitializer>
-            <PreloadInitializer>
-              <LanguageInitializer>
-                <LanguageProvider>
-                  <SettingsProvider>
-                    <CoinsProvider>
-                      <VideosProvider>
-                        <ToastProvider>
-                          <ProfessionalToastProvider>
-                            <GestureHandlerRootView style={{ flex: 1 }}>
-                              <SafeAreaProvider>
-                                <View style={{ flex: 1, backgroundColor: '#000' }}>
-                                  <GlobalOfflineBanner />
-                                  <StatusBar
-                                    barStyle="light-content"
-                                    backgroundColor="#000"
-                                  />
-                                  <ClerkGate>
-                                    <RootLayoutNav />
-                                  </ClerkGate>
-                                </View>
-                              </SafeAreaProvider>
-                            </GestureHandlerRootView>
-                          </ProfessionalToastProvider>
-                        </ToastProvider>
-                      </VideosProvider>
-                    </CoinsProvider>
-                  </SettingsProvider>
-                </LanguageProvider>
-              </LanguageInitializer>
-            </PreloadInitializer>
-          </WebSocketInitializer>
-        </QueryClientProvider>
-      </ClerkProvider>
+      <TamaguiProvider config={config} defaultTheme="dark">
+        <ClerkProvider
+          publishableKey={clerkPublishableKey}
+          tokenCache={tokenCache}
+        >
+          <SentryUserTracker />
+          <QueryClientProvider client={queryClient}>
+            <PushNotificationSetup />
+            <WebSocketInitializer>
+              <PreloadInitializer>
+                <LanguageInitializer>
+                  <LanguageProvider>
+                    <SettingsProvider>
+                      <CoinsProvider>
+                        <VideosProvider>
+                          <ToastProvider>
+                            <ProfessionalToastProvider>
+                              <GestureHandlerRootView style={{ flex: 1 }}>
+                                <SafeAreaProvider>
+                                  <View style={{ flex: 1, backgroundColor: '#000' }}>
+                                    <GlobalOfflineBanner />
+                                    <StatusBar
+                                      barStyle="light-content"
+                                      backgroundColor="#000"
+                                    />
+                                    <ClerkGate>
+                                      <RootLayoutNav />
+                                    </ClerkGate>
+                                  </View>
+                                </SafeAreaProvider>
+                              </GestureHandlerRootView>
+                            </ProfessionalToastProvider>
+                          </ToastProvider>
+                        </VideosProvider>
+                      </CoinsProvider>
+                    </SettingsProvider>
+                  </LanguageProvider>
+                </LanguageInitializer>
+              </PreloadInitializer>
+            </WebSocketInitializer>
+          </QueryClientProvider>
+        </ClerkProvider>
+      </TamaguiProvider>
       )}
     </ErrorBoundary>
   );

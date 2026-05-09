@@ -8,7 +8,7 @@ import { MatchFavoritesStorage } from '../src/storage/matchFavorites.storage';
 import { ApiFootballService } from '../services/apiFootball';
 import { useAuth } from '@clerk/clerk-expo';
 import { logger } from '../utils/logger';
-import { Match } from '../components/league-center/matchCardUtils';
+import { Match } from '../components/Matches/matchCardUtils';
 
 interface UseFavoriteMatchesResult {
   favoriteMatchIds: string[];
