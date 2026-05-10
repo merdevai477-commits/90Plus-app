@@ -152,7 +152,16 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
     });
 
     if (response.ok) {
-      const fixtures: Fixture[] = await response.json();
+      // Backend wraps the fixtures array in { status, results, response: [...] }.
+      // Accept both shapes for safety (raw array OR wrapped object).
+      const raw = await response.json();
+      const fixtures: Fixture[] = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.response)
+          ? raw.response
+          : Array.isArray(raw?.data)
+            ? raw.data
+            : [];
       const matches = mapFixturesToMatches(fixtures);
       
       // Cache the results locally - permanent for past dates
@@ -203,7 +212,16 @@ export const fetchLiveMatches = async (): Promise<Match[]> => {
     });
 
     if (response.ok) {
-      const fixtures: Fixture[] = await response.json();
+      // Backend wraps the fixtures array in { status, results, response: [...] }.
+      // Accept both shapes for safety (raw array OR wrapped object).
+      const raw = await response.json();
+      const fixtures: Fixture[] = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.response)
+          ? raw.response
+          : Array.isArray(raw?.data)
+            ? raw.data
+            : [];
       return mapFixturesToMatches(fixtures);
     }
   } catch (error) {
