@@ -96,6 +96,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             where: {
                 isDeleted: false,
                 status: 'READY', // Fix 7: exclude PROCESSING/FAILED reels from feed
+                videoUrl: { not: '' }, // Fix 8: skip rows where Mux webhook hasn't fired yet
                 ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
             }, // Exclude deleted reels + blocked users
             take: take + 1, // Get one extra to check if there's more
@@ -168,15 +169,27 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
 
         const hasMore = reels.length > take;
         const data = hasMore ? reels.slice(0, -1) : reels;
-        const nextCursor = hasMore ? data[data.length - 1]?.id : null;
+
+        // Extra safety: drop any reel whose videoUrl is empty or points to a
+        // thumbnail/image path (legacy rows from before Mux). The frontend
+        // player refuses to load these anyway — filter here so the feed
+        // count/cursor stays accurate.
+        const isPlayableUrl = (url: string | null | undefined): boolean => {
+            if (!url || typeof url !== 'string') return false;
+            const trimmed = url.trim();
+            if (trimmed.length === 0) return false;
+            if (!/^https?:\/\//i.test(trimmed)) return false;
+            const lower = trimmed.toLowerCase();
+            if (lower.includes('/thumbnails/') || lower.includes('/thumbnail/')) return false;
+            if (/\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(lower)) return false;
+            return true;
+        };
+        const playableData = data.filter((r: any) => isPlayableUrl(r.videoUrl));
+
+        const nextCursor = hasMore ? playableData[playableData.length - 1]?.id ?? data[data.length - 1]?.id : null;
 
         // Format response
-        const formattedReels = data.map((reel: any) => {
-            // Log videoUrl for debugging
-            if (!reel.videoUrl || reel.videoUrl.trim() === '') {
-                logger.warn(`[ReelsFeed] Reel ${reel.id} has empty or missing videoUrl`);
-            }
-            
+        const formattedReels = playableData.map((reel: any) => {
             return {
                 id: reel.id,
                 videoUrl: reel.videoUrl,

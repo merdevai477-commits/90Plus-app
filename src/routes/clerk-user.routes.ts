@@ -883,9 +883,16 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
             return;
         }
 
-        // Get user's reels
+        // Get user's reels — only READY ones with a valid video URL so we
+        // never return PROCESSING/FAILED rows (whose videoUrl is '' or a
+        // placeholder thumbnail) to the client. This stops "Failed to load
+        // video" noise in the profile grid.
         const reels = await prisma.reel.findMany({
-            where: { userId: user.id },
+            where: {
+                userId: user.id,
+                status: 'READY',
+                videoUrl: { not: '' },
+            },
             select: {
                 id: true,
                 videoUrl: true,
@@ -905,8 +912,24 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
             skip: parseInt(offset as string),
         });
 
+        // Extra safety: strip any row whose videoUrl looks like an image/
+        // thumbnail (legacy reels from before Mux) so the player never gets
+        // an unplayable source.
+        const isPlayableVideoUrl = (url: string | null | undefined): boolean => {
+            if (!url || typeof url !== 'string') return false;
+            const trimmed = url.trim();
+            if (trimmed.length === 0) return false;
+            if (!/^https?:\/\//i.test(trimmed)) return false;
+            const lower = trimmed.toLowerCase();
+            if (lower.includes('/thumbnails/') || lower.includes('/thumbnail/')) return false;
+            if (/\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(lower)) return false;
+            return true;
+        };
+
+        const playableReels = reels.filter((reel: any) => isPlayableVideoUrl(reel.videoUrl));
+
         // Format response
-        const formattedReels = reels.map((reel: any) => ({
+        const formattedReels = playableReels.map((reel: any) => ({
             id: reel.id,
             uri: reel.videoUrl,
             thumbnail: reel.thumbnail,
