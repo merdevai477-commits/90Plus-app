@@ -2,7 +2,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { clerkClient } from '@clerk/express';
 import Bull, { Queue } from 'bull';
-import Redis from 'ioredis';
+import { bullCreateClient } from '../lib/bull-redis';
 import { r2MediaStorage } from './r2-media-storage.service';
 
 // ─── Account cleanup queue (Fix 8) ───────────────────────────────────────────
@@ -10,13 +10,6 @@ import { r2MediaStorage } from './r2-media-storage.service';
 interface AccountCleanupJobData {
   userId: string;
   storagePaths: string[];
-}
-
-function createBullRedis(redisUrl: string): Redis {
-  return new Redis(redisUrl, {
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null,
-  });
 }
 
 let accountCleanupQueue: Queue<AccountCleanupJobData> | null = null;
@@ -27,7 +20,7 @@ function getAccountCleanupQueue(): Queue<AccountCleanupJobData> | null {
   if (!redisUrl) return null;
 
   accountCleanupQueue = new Bull<AccountCleanupJobData>('account-cleanup', {
-    createClient: (type) => createBullRedis(redisUrl),
+    createClient: bullCreateClient(redisUrl),
     defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
   });
 

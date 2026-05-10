@@ -16,7 +16,6 @@
  */
 
 import Bull, { Queue, Job } from 'bull';
-import Redis from 'ioredis';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import fs from 'fs';
@@ -26,6 +25,7 @@ import https from 'https';
 import http from 'http';
 import { URL } from 'url';
 import prisma from '../lib/prisma';
+import { bullCreateClient } from '../lib/bull-redis';
 import { r2MediaStorage } from './r2-media-storage.service';
 import { NotificationService } from './notification.service';
 import { logger } from '../utils/logger';
@@ -70,13 +70,6 @@ export interface VideoProcessingJobData {
 
 let videoProcessingQueue: Queue<VideoProcessingJobData> | null = null;
 
-function createBullRedis(redisUrl: string): Redis {
-  return new Redis(redisUrl, {
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null,
-  });
-}
-
 export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null {
   if (videoProcessingQueue) return videoProcessingQueue;
 
@@ -87,7 +80,7 @@ export function getVideoProcessingQueue(): Queue<VideoProcessingJobData> | null 
   }
 
   videoProcessingQueue = new Bull<VideoProcessingJobData>('video-processing', {
-    createClient: (type) => createBullRedis(redisUrl),
+    createClient: bullCreateClient(redisUrl),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5_000 },
