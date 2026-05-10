@@ -100,7 +100,6 @@ export const MatchList = React.memo(({ matches, onMatchPress, onViewAllPress, on
                     data={skeletonData}
                     renderItem={renderSkeleton}
                     keyExtractor={(item) => item.id}
-                    estimatedItemSize={190}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
@@ -111,7 +110,6 @@ export const MatchList = React.memo(({ matches, onMatchPress, onViewAllPress, on
                     data={matches}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
-                    estimatedItemSize={190}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}

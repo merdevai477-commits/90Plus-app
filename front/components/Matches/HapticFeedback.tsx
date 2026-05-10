@@ -26,6 +26,10 @@ export interface HapticFeedback {
   error: () => void;
   /** Warning notification. */
   warning: () => void;
+  /** Alias: search-bar keystroke feel (light tap). */
+  search: () => void;
+  /** Alias: card/list-item tap (medium feel). */
+  cardTap: () => void;
   /** Unified trigger matching the older useHaptic API. */
   trigger: (type?: 'light' | 'medium' | 'heavy' | 'selection' | 'success' | 'error' | 'warning') => void;
 }
@@ -58,6 +62,8 @@ export function useHapticFeedback(): HapticFeedback {
         success: noop,
         error: noop,
         warning: noop,
+        search: noop,
+        cardTap: noop,
         trigger: noop,
       };
     }
@@ -100,7 +106,7 @@ export function useHapticFeedback(): HapticFeedback {
       }
     };
 
-    return { selection, light, medium, heavy, success, error, warning, trigger };
+    return { selection, light, medium, heavy, success, error, warning, trigger, search: light, cardTap: medium };
   }, []);
 }
 

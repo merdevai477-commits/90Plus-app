@@ -162,7 +162,6 @@ export const PlayerList = React.memo(({ players, onPlayerPress, onViewAllPress, 
                 data={isLoading ? skeletonData : (hasPlayers ? players : placeholderData)}
                 renderItem={isLoading ? renderSkeleton : renderItem}
                 keyExtractor={(item) => item.id}
-                estimatedItemSize={210}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}

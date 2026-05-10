@@ -62,8 +62,6 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={s.horizontalList}
-          // @ts-ignore - estimatedItemSize is valid but TypeScript definitions may be outdated
-          estimatedItemSize={120}
         />
       )}
     </View>

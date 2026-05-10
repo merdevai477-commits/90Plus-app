@@ -115,7 +115,6 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
             numColumns={COLUMN_COUNT}
             scrollEnabled={false}
             contentContainerStyle={styles.grid}
-            estimatedItemSize={Math.round(ITEM_SIZE * 1.5)}
         />
     );
 });

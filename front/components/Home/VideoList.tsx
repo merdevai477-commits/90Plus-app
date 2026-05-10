@@ -139,7 +139,6 @@ export const VideoList = React.memo(({ videos, onVideoPress, onViewAllPress, isL
                     data={skeletonData}
                     renderItem={renderSkeleton}
                     keyExtractor={(item) => item.id}
-                    estimatedItemSize={200}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
@@ -150,7 +149,6 @@ export const VideoList = React.memo(({ videos, onVideoPress, onViewAllPress, isL
                     data={videos}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
-                    estimatedItemSize={200}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}
@@ -162,7 +160,6 @@ export const VideoList = React.memo(({ videos, onVideoPress, onViewAllPress, isL
                     data={placeholderData}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
-                    estimatedItemSize={200}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.listContent}

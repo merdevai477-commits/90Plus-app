@@ -416,7 +416,6 @@ export default function NotificationScreen() {
         renderItem={renderItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
-        estimatedItemSize={100}
         removeClippedSubviews
         getItemType={item => (item.type === 'FOLLOW' ? 'follow' : 'regular')}
         onEndReached={handleLoadMore}
