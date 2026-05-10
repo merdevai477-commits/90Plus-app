@@ -3,46 +3,26 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
-  TextInput,
-  ScrollView,
   Dimensions,
   StyleSheet,
-  Modal,
   Animated,
   Easing,
   FlatList,
   ActivityIndicator,
   Alert,
-  AccessibilityInfo,
   ViewToken,
   Platform,
   Vibration,
-  Keyboard,
-  KeyboardAvoidingView,
   Share,
   StatusBar,
 } from 'react-native';
 import * as Network from 'expo-network';
-import { useDebounce } from 'use-debounce';
 import {
   Heart,
-  MessageCircle,
-  Flag,
-  Volume2,
-  VolumeX,
   Eye,
   X,
-  Send,
   ChevronUp,
-  Share2,
-  Bookmark,
-  MoreVertical,
-  CheckCircle,
-  Play,
 } from 'lucide-react-native';
-
-import { Video } from 'expo-av';
 
 // للـ Gradient
 import { LinearGradient } from 'expo-linear-gradient';
@@ -60,8 +40,7 @@ import CommentsModal from '../../components/common/CommentsModal';
 import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
 import { useFollowStore } from '../../src/store/useFollowStore';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // videoPreloader is now handled by preloadManager
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../services/cacheService';
