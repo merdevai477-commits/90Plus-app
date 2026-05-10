@@ -9,33 +9,23 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+type NotificationsModule = typeof import('expo-notifications');
+
 const isExpoGo = Constants.appOwnership === 'expo';
 
 /** Lazy-load `expo-notifications` (returns null in Expo Go / web). */
-let cachedModule: typeof import('expo-notifications') | null | undefined;
-function getNotifications(): typeof import('expo-notifications') | null {
+let cachedModule: NotificationsModule | null | undefined;
+function getNotifications(): NotificationsModule | null {
   if (Platform.OS === 'web') return null;
   if (isExpoGo) return null;
   if (cachedModule !== undefined) return cachedModule;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    cachedModule = require('expo-notifications') as typeof import('expo-notifications');
+    cachedModule = require('expo-notifications') as NotificationsModule;
   } catch {
     cachedModule = null;
   }
   return cachedModule;
-}
-
-type NotificationsModule = typeof import('expo-notifications');
-let Notifications: NotificationsModule | null = null;
-const isExpoGo = Constants.appOwnership === 'expo';
-
-if (Platform.OS !== 'web' && !isExpoGo) {
-  try {
-    Notifications = require('expo-notifications') as NotificationsModule;
-  } catch {
-    Notifications = null;
-  }
 }
 
 class MatchNotificationsService {
