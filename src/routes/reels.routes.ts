@@ -28,6 +28,15 @@ const MAX_COMMENTS_PREVIEW = 3;
 const feedCache = new Map<string, { data: any; timestamp: number }>();
 const FEED_CACHE_TTL = 180 * 1000; // 180 seconds (3 minutes)
 
+/**
+ * Clear all entries of the in-process feed cache. Called by the Mux webhook
+ * when a new reel becomes READY so the feed shows the new video immediately
+ * instead of waiting for the 3-minute TTL to expire.
+ */
+export function clearReelsFeedCache(): void {
+    feedCache.clear();
+}
+
 // Cache for user IDs (5 minutes TTL)
 const userIdCache = new Map<string, { id: string; timestamp: number }>();
 const USER_ID_CACHE_TTL = 5 * 60 * 1000;
@@ -2290,13 +2299,20 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
 
         // Parallel queries for better performance
         const [topViewsReels, topSharesReels, topPredictors, topCommentersData] = await Promise.all([
-            // Top Views
+            // Top Views — only READY reels with a playable URL, otherwise
+            // Home shows thumbnails that fail when tapped.
             prisma.reel.findMany({
-                where: { createdAt: { gte: threeDaysAgo } },
+                where: {
+                    createdAt: { gte: threeDaysAgo },
+                    status: 'READY',
+                    videoUrl: { not: '' },
+                    isDeleted: false,
+                },
                 take,
                 orderBy: { views: 'desc' },
                 select: {
                     id: true,
+                    videoUrl: true,
                     thumbnail: true,
                     caption: true,
                     views: true,
@@ -2318,7 +2334,10 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
             prisma.reel.findMany({
                 where: { 
                     createdAt: { gte: threeDaysAgo },
-                    sharesCount: { gt: 0 }
+                    sharesCount: { gt: 0 },
+                    status: 'READY',
+                    videoUrl: { not: '' },
+                    isDeleted: false,
                 },
                 take,
                 orderBy: { sharesCount: 'desc' },

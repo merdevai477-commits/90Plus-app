@@ -857,6 +857,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
     try {
         const username = ensureString(req.params.username);
         const { limit = '20', offset = '0' } = req.query;
+        const requestingClerkUserId = req.auth?.userId;
 
         logger.info(`[GET /user/:username/reels] 🔍 Request for username: ${username}, limit: ${limit}, offset: ${offset}`);
 
@@ -872,7 +873,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
         // Find user by username
         const user = await prisma.user.findUnique({
             where: { username },
-            select: { id: true },
+            select: { id: true, clerkUserId: true },
         });
 
         if (!user) {
@@ -883,22 +884,24 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
             return;
         }
 
-        // Get user's reels — only READY ones with a valid video URL so we
-        // never return PROCESSING/FAILED rows (whose videoUrl is '' or a
-        // placeholder thumbnail) to the client. This stops "Failed to load
-        // video" noise in the profile grid.
+        // Owner sees their own PROCESSING reels too so upload feels responsive.
+        // Other viewers only see READY ones (so the player never receives an
+        // empty videoUrl).
+        const isOwner = !!requestingClerkUserId && user.clerkUserId === requestingClerkUserId;
+        const reelsWhere = isOwner
+            ? { userId: user.id, status: { in: ['READY', 'PROCESSING'] as any } }
+            : { userId: user.id, status: 'READY' as const, videoUrl: { not: '' } };
+
+        // Get user's reels.
         const reels = await prisma.reel.findMany({
-            where: {
-                userId: user.id,
-                status: 'READY',
-                videoUrl: { not: '' },
-            },
+            where: reelsWhere,
             select: {
                 id: true,
                 videoUrl: true,
                 thumbnail: true,
                 caption: true,
                 views: true,
+                status: true,
                 createdAt: true,
                 _count: {
                     select: {
@@ -926,17 +929,23 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
             return true;
         };
 
-        const playableReels = reels.filter((reel: any) => isPlayableVideoUrl(reel.videoUrl));
+        const playableReels = reels.filter((reel: any) => {
+            // Owner sees their PROCESSING rows (no videoUrl yet) so they can
+            // see the upload is in flight. Others only see fully playable ones.
+            if (reel.status === 'PROCESSING') return isOwner;
+            return isPlayableVideoUrl(reel.videoUrl);
+        });
 
         // Format response
         const formattedReels = playableReels.map((reel: any) => ({
             id: reel.id,
-            uri: reel.videoUrl,
+            uri: reel.videoUrl || '',
             thumbnail: reel.thumbnail,
             caption: reel.caption,
             views: reel.views.toString(),
             likes: reel._count.likes,
             comments: reel._count.comments,
+            status: reel.status, // so the UI can show a "Processing…" overlay
             createdAt: reel.createdAt,
         }));
 

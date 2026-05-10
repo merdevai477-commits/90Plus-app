@@ -273,8 +273,12 @@ app.use(`${API_PREFIX}`, generalLimiter);
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/clerk`, clerkUserRoutes);
 app.use(`${API_PREFIX}/webhooks/clerk`, webhookLimiter, webhookRoutes);
+// IMPORTANT: profileCompletionRoutes MUST be mounted BEFORE profileRoutes
+// because profileRoutes contains a greedy GET /:username handler that would
+// otherwise swallow /completion, /completion/step as "username" lookups and
+// return 404 "User not found".
+app.use(`${API_PREFIX}/profile`, profileCompletionRoutes); // Profile completion routes (must come first)
 app.use(`${API_PREFIX}/profile`, profileRoutes);
-app.use(`${API_PREFIX}/profile`, profileCompletionRoutes); // Profile completion routes
 app.use(`${API_PREFIX}/videos`, videoRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
 app.use(`${API_PREFIX}/reels`, reelsRoutes);
