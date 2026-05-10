@@ -1,361 +1,276 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, TouchableOpacity, StyleSheet, Text, AppState, AppStateStatus, Platform } from 'react-native';
-import { Search, Bell, Settings } from 'lucide-react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  interpolate,
-  Easing,
-  type SharedValue,
-} from 'react-native-reanimated';
+// @ts-nocheck
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    StyleSheet,
+    Platform,
+    AppState,
+    type AppStateStatus,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import { CoinsBadge } from '../common/CoinsBadge';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import { NotificationService } from '../../src/services/authService';
-import { useHomeStore } from '../../src/store/home.store';
+import { Settings, Search, Bell, Zap } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { Colors, Elevation, BorderRadius, Spacing, Animation as AnimConfig, TouchTargets, FontWeights, BorderWidth } from '../../src/designSystem/designSystem';
+import {
+    LIVE_RED,
+    PURPLE_SOFT,
+    TEXT_PRIMARY,
+    SCREEN_PADDING_H,
+} from '../../constants/tokens';
+import { useCoins } from '../../contexts/CoinsContext';
+import { useHomeStore } from '../../src/store/home.store';
+import { NotificationService } from '../../src/services/authService';
+
+const ICON_SIZE = 18;
+const CLUSTER_PAD = 4;
 
 interface HomeHeaderProps {
-  onSettingsPress: () => void;
-  onSearchPress: () => void;
-  onNotificationPress: () => void;
+    userName?: string;
+    onSettingsPress?: () => void;
+    onSearchPress?: () => void;
+    onNotificationPress?: () => void;
 }
 
-export const HomeHeader = React.memo(({
-  onSettingsPress,
-  onSearchPress,
-  onNotificationPress,
-}: HomeHeaderProps) => {
-  const insets = useSafeAreaInsets();
-  const { getToken } = useAuth();
-  const [backendUnreadCount, setBackendUnreadCount] = useState(0);
-  const [prevUnreadCount, setPrevUnreadCount] = useState(0);
-  const appState = useRef(AppState.currentState);
-  const lastFetchTime = useRef(0);
-  const pulseAnim = useSharedValue(0);
-  
-  // Button press animations
-  const settingsScale = useSharedValue(1);
-  const searchScale = useSharedValue(1);
-  const notificationScale = useSharedValue(1);
-  
-  // Get match notifications from store
-  const { notifications: matchNotifications } = useHomeStore();
-  
-  // Calculate local unread match notifications count
-  const localUnreadCount = useMemo(() => {
-    return matchNotifications.filter(n => !n.read).length;
-  }, [matchNotifications]);
-  
-  // Total unread count = backend + local match notifications
-  const totalUnreadCount = useMemo(() => {
-    return backendUnreadCount + localUnreadCount;
-  }, [backendUnreadCount, localUnreadCount]);
+export const HomeHeader = React.memo(function HomeHeader({
+    userName = '',
+    onSettingsPress,
+    onSearchPress,
+    onNotificationPress,
+}: HomeHeaderProps) {
+    const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const { getToken } = useAuth();
+    const { coins } = useCoins();
 
-  const fetchUnreadCount = useCallback(async () => {
-    // Throttle: don't fetch more than once per minute
-    const now = Date.now();
-    if (now - lastFetchTime.current < 60000) return;
-    
-    lastFetchTime.current = now;
-    
-    try {
-      const token = await getToken();
-      if (token) {
-        const count = await NotificationService.getUnreadCount(token);
-        
-        // إذا في إشعار جديد، اعمل haptic feedback
-        const newTotalCount = count + localUnreadCount;
-        if (newTotalCount > prevUnreadCount && prevUnreadCount >= 0) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-        
-        setPrevUnreadCount(totalUnreadCount);
-        setBackendUnreadCount(count);
-      }
-    } catch (error) {
-      // Silent fail
-      console.log('Error fetching notifications:', error);
-    }
-  }, [getToken, localUnreadCount, totalUnreadCount]);
+    const [backendUnreadCount, setBackendUnreadCount] = useState(0);
+    const appState = useRef(AppState.currentState);
+    const lastFetchTime = useRef(0);
 
-  useEffect(() => {
-    // Initial fetch
-    fetchUnreadCount();
+    const { notifications: matchNotifications } = useHomeStore();
 
-    // Refresh every 5 minutes (instead of 30 seconds)
-    const interval = setInterval(fetchUnreadCount, 300000);
-
-    // Also refresh when app comes to foreground
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        fetchUnreadCount();
-      }
-      appState.current = nextAppState;
-    });
-
-    return () => {
-      clearInterval(interval);
-      subscription.remove();
-    };
-  }, [fetchUnreadCount]);
-
-  // Pulse animation for notification badge (reanimated)
-  useEffect(() => {
-    if (totalUnreadCount > 0) {
-      pulseAnim.value = withRepeat(
-        withSequence(
-          withTiming(1, {
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-          }),
-          withTiming(0, {
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-          })
-        ),
-        -1,
-        false
-      );
-    } else {
-      pulseAnim.value = 0;
-    }
-  }, [totalUnreadCount]);
-
-  const pulseStyle = useAnimatedStyle(() => {
-    const scale = interpolate(pulseAnim.value, [0, 1], [1, 1.2]);
-    return {
-      transform: [{ scale }],
-    };
-  });
-
-  // Button press animations
-  const createButtonStyle = (scale: SharedValue<number>) => {
-    return useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
-  };
-
-  const handleButtonPress = useCallback((scale: SharedValue<number>, callback: () => void) => {
-    Haptics.selectionAsync();
-    scale.value = withSequence(
-      withTiming(0.95, { duration: AnimConfig.duration.short }),
-      withTiming(1, { duration: AnimConfig.duration.short })
+    const localUnreadCount = useMemo(
+        () => matchNotifications.filter((n) => !n.read).length,
+        [matchNotifications],
     );
-    callback();
-  }, []);
 
-  const settingsStyle = createButtonStyle(settingsScale);
-  const searchStyle = createButtonStyle(searchScale);
-  const notificationStyle = createButtonStyle(notificationScale);
+    const notificationCount = backendUnreadCount + localUnreadCount;
 
-  return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
-      <LinearGradient
-        colors={['rgba(0,0,0,0.95)', 'rgba(0,0,0,0.85)', 'rgba(0,0,0,0.7)']}
-        style={StyleSheet.absoluteFill}
-      />
-      <BlurView intensity={30} tint="dark" style={styles.blurBackground} />
-      
-      <View style={styles.headerContent}>
-        {/* Left: Settings */}
-        <Animated.View style={settingsStyle}>
-          <TouchableOpacity 
-            style={styles.iconButton} 
-            onPress={() => handleButtonPress(settingsScale, onSettingsPress)}
-            activeOpacity={1}
-            accessibilityLabel="Settings"
-            accessibilityRole="button"
-          >
-            <LinearGradient
-              colors={[Colors.glass.medium, Colors.glass.dark]}
-              style={styles.iconButtonGradient}
-            >
-              <Settings size={22} color={Colors.onSurface.primary} />
-            </LinearGradient>
-          </TouchableOpacity>
-        </Animated.View>
+    const fetchUnreadCount = useCallback(async () => {
+        const now = Date.now();
+        if (now - lastFetchTime.current < 60_000) return;
+        lastFetchTime.current = now;
+        try {
+            const token = await getToken();
+            if (!token) return;
+            const count = await NotificationService.getUnreadCount(token);
+            setBackendUnreadCount(count);
+        } catch {
+            // silent
+        }
+    }, [getToken]);
 
-        {/* Right: Actions */}
-        <View style={styles.rightActions}>
-          {/* Coins Badge */}
-          <View style={styles.coinsContainer}>
-            <CoinsBadge />
-          </View>
+    useEffect(() => {
+        fetchUnreadCount();
+        const subscription = AppState.addEventListener('change', (next: AppStateStatus) => {
+            if (appState.current.match(/inactive|background/) && next === 'active') {
+                fetchUnreadCount();
+            }
+            appState.current = next;
+        });
+        const interval = setInterval(fetchUnreadCount, 60_000);
+        return () => {
+            subscription.remove();
+            clearInterval(interval);
+        };
+    }, [fetchUnreadCount]);
 
-          <Animated.View style={searchStyle}>
-            <TouchableOpacity 
-              style={styles.iconButton} 
-              onPress={() => handleButtonPress(searchScale, onSearchPress)}
-              activeOpacity={1}
-              accessibilityLabel="Search"
-              accessibilityRole="button"
-            >
-              <LinearGradient
-                colors={[Colors.glass.medium, Colors.glass.dark]}
-                style={styles.iconButtonGradient}
-              >
-                <Search size={22} color={Colors.onSurface.primary} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
+    const handleSettings = useCallback(() => {
+        Haptics.selectionAsync();
+        if (onSettingsPress) onSettingsPress();
+        else router.push('/(tabs)/settings');
+    }, [onSettingsPress, router]);
 
-          <Animated.View style={notificationStyle}>
-            <TouchableOpacity 
-              style={styles.iconButton} 
-              onPress={() => handleButtonPress(notificationScale, onNotificationPress)}
-              activeOpacity={1}
-              accessibilityLabel={`Notifications${totalUnreadCount > 0 ? `, ${totalUnreadCount} unread` : ''}`}
-              accessibilityRole="button"
-            >
-              <LinearGradient
-                colors={[Colors.glass.medium, Colors.glass.dark]}
-                style={styles.iconButtonGradient}
-              >
-                <Bell size={22} color={Colors.onSurface.primary} />
-                
-                {totalUnreadCount > 0 && (
-                  <Animated.View 
-                    style={[styles.notificationBadge, pulseStyle]}
-                  >
-                    <View style={styles.badgeContainer}>
-                      <LinearGradient
-                        colors={[Colors.error.default, Colors.error.light]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.badgeGradient}
-                      >
-                        <Text style={styles.notificationBadgeText}>
-                          {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+    const handleSearch = useCallback(() => {
+        Haptics.selectionAsync();
+        if (onSearchPress) onSearchPress();
+        else router.push('/(tabs)/matches');
+    }, [onSearchPress, router]);
+
+    const handleNotifications = useCallback(() => {
+        Haptics.selectionAsync();
+        if (onNotificationPress) onNotificationPress();
+        else router.push('/notifications');
+    }, [onNotificationPress, router]);
+
+    const handleCoinsPress = useCallback(() => {
+        Haptics.selectionAsync();
+        router.push('/(tabs)/profile');
+    }, [router]);
+
+    const HeaderWrapper: any = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+    const wrapperProps: any = isLiquidGlassSupported
+        ? { effect: 'clear', interactive: true }
+        : { intensity: 15, tint: 'dark' };
+
+    return (
+        <HeaderWrapper
+            {...wrapperProps}
+            style={[styles.container, { paddingTop: insets.top }]}
+        >
+            <View style={styles.inner}>
+                <View style={styles.titleBlock}>
+                    <Text style={styles.brand}>90PLUS</Text>
+                    {userName ? (
+                        <Text style={styles.greeting} numberOfLines={1}>
+                            Hi, {userName}
                         </Text>
-                      </LinearGradient>
-                      {/* Glow effect */}
-                      <View style={styles.badgeGlow} />
+                    ) : null}
+                </View>
+
+                <View style={styles.trailing}>
+                    <TouchableOpacity
+                        activeOpacity={0.72}
+                        onPress={handleCoinsPress}
+                        style={styles.coins}
+                        accessibilityRole="button"
+                    >
+                        <Zap size={14} color="#A855F7" fill="#A855F7" strokeWidth={2.5} />
+                        <Text style={styles.coinsVal}>{coins.toLocaleString()}</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.toolbar}>
+                        <TouchableOpacity
+                            activeOpacity={0.72}
+                            hitSlop={8}
+                            style={styles.toolBtn}
+                            onPress={handleSettings}
+                        >
+                            <Settings color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
+                        </TouchableOpacity>
+                        <View style={styles.sep} />
+                        <TouchableOpacity
+                            activeOpacity={0.72}
+                            hitSlop={8}
+                            style={styles.toolBtn}
+                            onPress={handleSearch}
+                        >
+                            <Search color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
+                        </TouchableOpacity>
+                        <View style={styles.sep} />
+                        <View>
+                            <TouchableOpacity
+                                activeOpacity={0.72}
+                                hitSlop={8}
+                                style={styles.toolBtn}
+                                onPress={handleNotifications}
+                            >
+                                <Bell color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
+                            </TouchableOpacity>
+                            {notificationCount > 0 && (
+                                <View style={styles.badge}>
+                                    <Text style={styles.badgeTxt}>
+                                        {notificationCount > 99 ? '99+' : notificationCount}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
-                  </Animated.View>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </View>
-    </View>
-  );
+                </View>
+            </View>
+            <View style={styles.hairline} />
+        </HeaderWrapper>
+    );
 });
 
+export const HOME_HEADER_BODY_HEIGHT = 56;
+
 const styles = StyleSheet.create({
-  headerContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-  },
-  blurBackground: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    height: TouchTargets.comfortable,
-    minHeight: TouchTargets.comfortable,
-  },
-  rightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  coinsContainer: {
-    flexShrink: 0,
-    marginRight: Spacing.xs,
-  },
-  iconButton: {
-    width: TouchTargets.minimum,
-    height: TouchTargets.minimum,
-    borderRadius: BorderRadius.round,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: BorderWidth.default,
-    borderColor: Colors.glass.border,
-    flexShrink: 0,
-    ...(Platform.OS === 'web'
-      ? {
-        boxShadow: '0 6px 5px rgba(0, 0, 0, 0.27)',
-      }
-      : Elevation[6]),
-  },
-  iconButtonGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    zIndex: 10,
-  },
-  badgeContainer: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: BorderRadius.round,
-    overflow: 'visible',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  badgeGradient: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: BorderRadius.round,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.sm,
-    borderWidth: BorderWidth.thick,
-    borderColor: Colors.background.default,
-    ...(Platform.OS === 'web'
-      ? {
-        boxShadow: `0 2px 6px ${Colors.error.default}`,
-      }
-      : {
-        shadowColor: Colors.error.default,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.9,
-        shadowRadius: 6,
-      }),
-    elevation: 10,
-  },
-  badgeGlow: {
-    position: 'absolute',
-    top: -2,
-    left: -2,
-    right: -2,
-    bottom: -2,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.error.default,
-    opacity: 0.3,
-    zIndex: -1,
-  },
-  notificationBadgeText: {
-    color: Colors.onError,
-    fontSize: 11,
-    fontWeight: FontWeights.extrabold,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
+    container: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        backgroundColor: Platform.OS === 'android' ? 'rgba(6,4,10,0.0)' : 'transparent',
+    },
+    inner: {
+        minHeight: HOME_HEADER_BODY_HEIGHT,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: SCREEN_PADDING_H,
+        gap: 10,
+        paddingVertical: 6,
+    },
+    titleBlock: { flex: 1, minWidth: 0 },
+    brand: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: PURPLE_SOFT,
+        letterSpacing: 0.8,
+        marginBottom: 2,
+    },
+    greeting: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: TEXT_PRIMARY,
+        letterSpacing: -0.3,
+        textAlign: 'left',
+    },
+    trailing: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    coins: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        minWidth: 54,
+    },
+    coinsVal: { fontSize: 12, fontWeight: '800', color: '#FFFFFF' },
+    toolbar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 999,
+        backgroundColor: 'rgba(255,255,255,0.055)',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.09)',
+        paddingHorizontal: CLUSTER_PAD,
+        paddingVertical: CLUSTER_PAD / 2,
+    },
+    toolBtn: { width: 36, height: 34, alignItems: 'center', justifyContent: 'center' },
+    sep: {
+        width: StyleSheet.hairlineWidth,
+        height: 16,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        marginHorizontal: 1,
+    },
+    badge: {
+        position: 'absolute',
+        top: 4,
+        right: 6,
+        minWidth: 15,
+        height: 15,
+        borderRadius: 8,
+        paddingHorizontal: 3,
+        backgroundColor: LIVE_RED,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.45)',
+    },
+    badgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
+    hairline: {
+        height: StyleSheet.hairlineWidth,
+        marginHorizontal: SCREEN_PADDING_H,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+    },
 });
