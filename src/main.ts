@@ -752,6 +752,19 @@ async function startServer() {
             logger.error('❌ Failed to initialise video processing queue:', vpErr);
         }
 
+        // ✅ Warmup: pre-heat DB connection pool + prefetch hot data to avoid
+        //    slow cold-start queries (CachedFixture, QuizCategory, Leagues, …)
+        if (databaseConnected) {
+            try {
+                const { warmupService } = await import('./services/warmup.service');
+                warmupService.start().catch((err) =>
+                    logger.warn('Warmup failed (non-fatal):', err?.message ?? err),
+                );
+            } catch (warmErr) {
+                logger.warn('Could not start warmup service (non-fatal):', warmErr);
+            }
+        }
+
         httpServer.listen(PORT, '0.0.0.0', async () => {
             logger.info('🚀 90Plus Backend is running! ');
             logger.info(`📍 Server: http://0.0.0.0:${PORT}`);
