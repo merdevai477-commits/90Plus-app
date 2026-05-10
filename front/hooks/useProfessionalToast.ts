@@ -25,7 +25,7 @@ export const useProfessionalToast = () => {
     position: 'top',
   });
 
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const showToast = useCallback((
     type: ToastType,

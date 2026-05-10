@@ -8,6 +8,15 @@ import { Platform } from 'react-native';
 
 // ─── Base Colors ──────────────────────────────────────────────────────────────
 
+const THEME_PALETTE = {
+  text: 'rgba(255,255,255,0.90)',
+  background: '#080608',
+  tint: '#7C3AED',
+  icon: 'rgba(255,255,255,0.55)',
+  tabIconDefault: 'rgba(255,255,255,0.25)',
+  tabIconSelected: '#7C3AED',
+} as const;
+
 export const Colors = {
   // Backgrounds
   bgBase: '#080608',
@@ -105,6 +114,13 @@ export const Colors = {
   white06: 'rgba(255,255,255,0.06)',
   white04: 'rgba(255,255,255,0.04)',
   white03: 'rgba(255,255,255,0.03)',
+
+  // Back-compat: Expo boilerplate components (Themed.tsx, useThemeColor.ts,
+  // EditScreenInfo.tsx, collapsible.tsx, modal.tsx) expect Colors.light
+  // and Colors.dark palettes. Both point to the same token set because
+  // the app is dark-only.
+  light: THEME_PALETTE,
+  dark: THEME_PALETTE,
 } as const;
 
 // ─── Gradients ────────────────────────────────────────────────────────────────
