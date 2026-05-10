@@ -8,6 +8,7 @@ import prisma from '../lib/prisma';
 import type { Prediction, User } from '@prisma/client';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
+import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -21,7 +22,7 @@ const CORRECT_PREDICTION_REWARD = 10; // coins - مكافأة التوقع ال�
  * GET /api/predictions/remaining
  * Get remaining daily predictions for user
  */
-router.get('/remaining', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/remaining', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         // ✅ استخدام req.auth.userId من الـ middleware
         const clerkUserId = req.auth?.userId;
@@ -366,7 +367,7 @@ router.post('/matches/counts', requireAuth, async (req: Request, res: Response):
  * GET /api/predictions/stats
  * Get prediction statistics for user (correct, incorrect, total)
  */
-router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
 

@@ -106,7 +106,9 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                 set({ isLoading: true });
 
                 const response = await fetchWithTimeout(`${getApiUrl()}/predictions/remaining`, {
-                    timeout: 15000, // 15 seconds
+                    timeout: 30000, // 30s to tolerate Railway cold-starts
+                    retries: 1,
+                    retryDelay: 1500,
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
@@ -144,7 +146,9 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         fetchUserPredictionsInFlight = (async () => {
             try {
                 const response = await fetchWithTimeout(`${getApiUrl()}/predictions/user`, {
-                    timeout: 15000,
+                    timeout: 30000, // 30s to tolerate Railway cold-starts
+                    retries: 1,
+                    retryDelay: 1500,
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
@@ -172,7 +176,9 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
 
         try {
             const response = await fetchWithTimeout(`${getApiUrl()}/predictions/stats`, {
-                timeout: 15000,
+                timeout: 30000, // 30s to tolerate Railway cold-starts
+                retries: 1,
+                retryDelay: 1500,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
@@ -274,7 +280,9 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         try {
             const response = await fetchWithTimeout(`${getApiUrl()}/predictions/matches/counts`, {
                 method: 'POST',
-                timeout: 15000,
+                timeout: 30000, // 30s to tolerate Railway cold-starts
+                retries: 1,
+                retryDelay: 1500,
                 headers: {
                     'Content-Type': 'application/json',
                 },
