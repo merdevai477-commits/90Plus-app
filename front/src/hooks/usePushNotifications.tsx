@@ -14,36 +14,24 @@ import '../../services/notificationForegroundSetup';
 // Lazy-load expo-notifications. In Expo Go on SDK 53+ the module crashes at
 // import time because push-token auto-registration is no longer available —
 // see https://docs.expo.dev/develop/development-builds/introduction/
+type NotificationsModule = typeof import('expo-notifications');
 const isExpoGo = Constants.appOwnership === 'expo';
-let cachedNotifications: typeof import('expo-notifications') | null | undefined;
-function loadNotifications(): typeof import('expo-notifications') | null {
+let cachedNotifications: NotificationsModule | null | undefined;
+
+function loadNotifications(): NotificationsModule | null {
     if (Platform.OS === 'web') return null;
     if (isExpoGo) return null;
     if (cachedNotifications !== undefined) return cachedNotifications;
     try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        cachedNotifications = require('expo-notifications') as typeof import('expo-notifications');
+        cachedNotifications = require('expo-notifications') as NotificationsModule;
     } catch {
         cachedNotifications = null;
     }
     return cachedNotifications;
 }
 
-// Only used for types
-type Notifications = typeof import('expo-notifications');
-
 const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
-type NotificationsModule = typeof import('expo-notifications');
-let Notifications: NotificationsModule | null = null;
-const isExpoGo = Constants.appOwnership === 'expo';
-
-if (Platform.OS !== 'web' && !isExpoGo) {
-    try {
-        Notifications = require('expo-notifications') as NotificationsModule;
-    } catch {
-        Notifications = null;
-    }
-}
 
 export interface PushNotificationState {
     expoPushToken: string | null;
@@ -194,8 +182,6 @@ export function usePushNotifications(): PushNotificationState {
     }).current;
 
     const requestPermissionExplicitly = useCallback(async (): Promise<boolean> => {
-        if (!Notifications) return false;
-
         try {
             const Notifications = loadNotifications();
             if (!Notifications) {
@@ -220,7 +206,7 @@ export function usePushNotifications(): PushNotificationState {
     }, []);
 
     useEffect(() => {
-        if (!Notifications) return;
+        if (!loadNotifications()) return;
 
         // Only run after authentication is definitively loaded
         if (!isLoaded) return;
@@ -265,15 +251,23 @@ export function usePushNotifications(): PushNotificationState {
             syncTokenWithBackendWithRetry.current(expoPushToken, 0);
         }
 
-        // 1. Foreground Notification arrives
         const Notifications = loadNotifications();
+
+        // Handle AppState changes (works even without notifications module)
+        const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active') {
+                Notifications?.setBadgeCountAsync(0);
+            }
+        });
+
         if (!Notifications) {
             return () => {
                 isMounted = false;
-                appStateSubscription?.remove?.();
+                appStateSubscription.remove();
             };
         }
 
+        // 1. Foreground Notification arrives
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
             const data = notification.request.content.data as Record<string, any>;
 
@@ -311,13 +305,6 @@ export function usePushNotifications(): PushNotificationState {
             handleDeepLinking(data);
         });
 
-        // Handle AppState changes
-        const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-            if (nextAppState === 'active') {
-                Notifications.setBadgeCountAsync(0);
-            }
-        });
-
         return () => {
             isMounted = false;
             if (notificationListener.current) notificationListener.current.remove();
@@ -337,8 +324,6 @@ export function usePushNotifications(): PushNotificationState {
 }
 
 async function registerForPushNotificationsAsync(): Promise<string | null> {
-    if (!Notifications) return null;
-
     if (!Device.isDevice) {
         logger.debug('Push notifications require a physical device');
         return null;
@@ -387,7 +372,7 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
 
 // Global Injection Component
 export function PushNotificationSetup() {
-    if (!Notifications) return null;
+    if (!loadNotifications()) return null;
 
     const { showPermissionModal, setShowPermissionModal, expoPushToken } = usePushNotifications();
     const { isSignedIn } = useAuth();
