@@ -402,7 +402,7 @@ const ReelsFeed: React.FC = () => {
         isFollowing: reel.user?.id ? followState.isFollowing(reel.user.id) : false
       },
       videoUrl: reel.videoUrl, // Now guaranteed to be valid
-      thumbnail: reel.thumbnail || reel.videoUrl || '',
+      thumbnail: reel.thumbnail || '',
       duration: 0,
       likes: typeof reel.likesCount === 'number' ? reel.likesCount : 0,
       views: typeof reel.views === 'number' ? reel.views : 0,

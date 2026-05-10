@@ -163,6 +163,14 @@ class WarmupService {
         take: 10,
       });
 
+      // Pre-load CachedFixture — the largest hot table; first query after a
+      // cold start frequently takes > 2s because Postgres needs to build
+      // the plan / load indexes into shared_buffers.
+      await prisma.cachedFixture.findMany({
+        select: { fixtureId: true },
+        take: 200,
+      });
+
       const duration = Date.now() - startTime;
       logger.info(`✅ Critical data warmed up in ${duration}ms`);
 

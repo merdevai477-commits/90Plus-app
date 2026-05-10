@@ -176,6 +176,8 @@ function RootLayoutNav() {
       <Stack.Screen name="user" options={{ headerShown: false }} />
       <Stack.Screen name="player-profile" options={{ headerShown: false }} />
       <Stack.Screen name="team-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
+      <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
     </Stack>

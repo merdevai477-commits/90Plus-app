@@ -126,7 +126,12 @@ class MatchCacheService {
     }
 
     /**
-     * Sync fixture IDs from database to memory for fast lookup
+     * Sync fixture IDs from database to memory for fast lookup.
+     *
+     * Performance: we only pull fixtures from the last 180 days — that's the
+     * only window where an incoming API fixture could already be in the DB
+     * (older ones are finished and won't get re-fetched). Capping this avoids
+     * scanning the entire table on cold start.
      */
     private async syncDbFixtureIds(): Promise<void> {
         const now = Date.now();
@@ -135,15 +140,18 @@ class MatchCacheService {
         }
 
         try {
+            const cutoff = new Date(now - 180 * 24 * 60 * 60 * 1000); // 180 days ago
             const fixtures = await prisma.cachedFixture.findMany({
+                where: { matchDate: { gte: cutoff } },
                 select: { fixtureId: true },
+                take: 5000,
             });
 
             this.dbFixtureIds.clear();
-            fixtures.forEach(f => this.dbFixtureIds.add(f.fixtureId));
+            fixtures.forEach((f) => this.dbFixtureIds.add(f.fixtureId));
             this.lastDbSync = now;
 
-            logger.debug(`📦 Synced ${this.dbFixtureIds.size} fixture IDs from database`);
+            logger.debug(`📦 Synced ${this.dbFixtureIds.size} fixture IDs from database (last 180d)`);
         } catch (error) {
             logger.error('Failed to sync fixture IDs from database:', error);
         }

@@ -23,3 +23,24 @@ Thumbs.db
 
 # Kiro settings (contains API keys)
 .kiro/settings/
+
+# Test result files (use CI/CD logs instead)
+test-results*.txt
+*-test-results.txt
+
+# Commit message artifacts
+COMMIT_MESSAGE*.txt
+
+# Temporary / debug scripts — keep scripts in scripts/ folder
+/test-*.ts
+/check-*.ts
+/create-*.ts
+/clear-*.ts
+/apply-*.ts
+/quick-*.ts
+/quick-*.js
+/fix-*.sh
+/deploy-*.sh
+
+# Prisma build cache
+.tsbuildinfo

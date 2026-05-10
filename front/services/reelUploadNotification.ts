@@ -23,17 +23,8 @@ const CHANNEL_ID_RESULT = 'reel-upload-result';
 const ACTIVE_REQUEST_ID = 'reel-upload-active-session';
 
 let lastProgressRounded = -1;
-type NotificationsModule = typeof import('expo-notifications');
-let Notifications: NotificationsModule | null = null;
-const isExpoGo = Constants.appOwnership === 'expo';
 
-if (Platform.OS !== 'web' && !isExpoGo) {
-    try {
-        Notifications = require('expo-notifications') as NotificationsModule;
-    } catch {
-        Notifications = null;
-    }
-}
+type NotificationsModule = typeof import('expo-notifications');
 
 /** True when the app is running inside Expo Go (not a development/production build). */
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -43,14 +34,14 @@ const isExpoGo = Constants.appOwnership === 'expo';
  * devices where the native module is available. Returns `null` in Expo Go
  * or on web.
  */
-let cachedModule: typeof import('expo-notifications') | null | undefined;
-function getNotificationsModule(): typeof import('expo-notifications') | null {
+let cachedModule: NotificationsModule | null | undefined;
+function getNotificationsModule(): NotificationsModule | null {
     if (Platform.OS === 'web') return null;
     if (isExpoGo) return null;
     if (cachedModule !== undefined) return cachedModule;
     try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        cachedModule = require('expo-notifications') as typeof import('expo-notifications');
+        cachedModule = require('expo-notifications') as NotificationsModule;
     } catch {
         cachedModule = null;
     }
@@ -58,7 +49,6 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
 }
 
 async function ensureChannels(): Promise<void> {
-    if (!Notifications) return;
     if (Platform.OS !== 'android') return;
     const Notifications = getNotificationsModule();
     if (!Notifications) return;
@@ -109,10 +99,11 @@ async function ensurePermission(): Promise<boolean> {
  */
 export const reelUploadNotification = {
     async begin(): Promise<void> {
-        if (Platform.OS === 'web' || !Notifications) return;
-        lastProgressRounded = -1;
+        if (Platform.OS === 'web') return;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
+
+        lastProgressRounded = -1;
 
         const ok = await ensurePermission();
         if (!ok) return;
@@ -190,10 +181,11 @@ export const reelUploadNotification = {
     },
 
     async success(message = 'تم نشر الريلز في ملفك الشخصي! 🎉'): Promise<void> {
-        if (Platform.OS === 'web' || !Notifications) return;
-        lastProgressRounded = -1;
+        if (Platform.OS === 'web') return;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
+
+        lastProgressRounded = -1;
 
         // Remove the ongoing progress notification
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
@@ -226,10 +218,11 @@ export const reelUploadNotification = {
     },
 
     async failure(message: string): Promise<void> {
-        if (Platform.OS === 'web' || !Notifications) return;
-        lastProgressRounded = -1;
+        if (Platform.OS === 'web') return;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
+
+        lastProgressRounded = -1;
 
         // Remove the ongoing progress notification
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
@@ -262,10 +255,9 @@ export const reelUploadNotification = {
     },
 
     async clear(): Promise<void> {
-        if (!Notifications) return;
-        lastProgressRounded = -1;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
+        lastProgressRounded = -1;
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
         try { await Notifications.dismissNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
     },

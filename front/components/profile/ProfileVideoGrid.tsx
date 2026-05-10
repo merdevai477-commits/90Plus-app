@@ -113,7 +113,7 @@ export const ProfileSavedGrid: React.FC<{ getToken: () => Promise<string | null>
     <VideoGrid
       videos={savedVideos.map((video: any) => ({
         id: video.id,
-        thumbnail: video.thumbnail || video.videoUrl,
+        thumbnail: video.thumbnail || '',
         views: video.views?.toString() || '0',
         duration: '',
       }))}

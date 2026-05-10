@@ -1,5 +1,5 @@
 import Bull, { Queue } from 'bull';
-import Redis from 'ioredis';
+import { bullCreateClient } from '../lib/bull-redis';
 import { logger } from '../utils/logger';
 import { NotificationService } from '../services/notification.service';
 import PushNotificationService from '../services/push-notification.service';
@@ -32,16 +32,6 @@ export type NotificationJob =
       payload: Record<string, never>; // empty — cron triggers the job itself
     };
 
-/** Shared Bull-compatible Redis connection factory.
- *  Bull requires enableReadyCheck: false and maxRetriesPerRequest: null
- *  on ALL connection instances (client, subscriber, bclient). */
-function createBullRedis(redisUrl: string): Redis {
-  return new Redis(redisUrl, {
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null,
-  });
-}
-
 let queue: Queue<NotificationJob> | null = null;
 
 export function getNotificationQueue(): Queue<NotificationJob> | null {
@@ -54,7 +44,7 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
   }
 
   queue = new Bull<NotificationJob>('notifications', {
-    createClient: (type) => createBullRedis(redisUrl),
+    createClient: bullCreateClient(redisUrl),
   });
 
   queue.process(async (job) => {
