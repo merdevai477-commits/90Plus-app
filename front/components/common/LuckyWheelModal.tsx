@@ -27,16 +27,17 @@ const API_URL = getApiUrl();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = SCREEN_WIDTH * 0.8;
 
-// الجوائز - 8 أقسام مع الألوان البنفسجية المتدرجة
+// Brand palette: alternating Purple (primary) + Gold (accent) for a premium look
+// كل قسم بلون متناوب - بنفسجي وذهبي (هوية 90Plus)
 const PRIZES = [
-  { coins: 5, probability: 35, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 10, probability: 25, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-  { coins: 25, probability: 15, label: '25', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 50, probability: 12, label: '50', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-  { coins: 100, probability: 8, label: '100', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 200, probability: 4, label: '200', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-  { coins: 5, probability: 0.8, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 10, probability: 0.2, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { coins: 5, probability: 35, label: '5', colorLight: '#A855F7', colorDark: '#6D28D9' },
+  { coins: 10, probability: 25, label: '10', colorLight: '#F5C518', colorDark: '#B8860B' },
+  { coins: 25, probability: 15, label: '25', colorLight: '#A855F7', colorDark: '#6D28D9' },
+  { coins: 50, probability: 12, label: '50', colorLight: '#F5C518', colorDark: '#B8860B' },
+  { coins: 100, probability: 8, label: '100', colorLight: '#A855F7', colorDark: '#6D28D9' },
+  { coins: 200, probability: 4, label: '200', colorLight: '#F5C518', colorDark: '#B8860B' },
+  { coins: 5, probability: 0.8, label: '5', colorLight: '#A855F7', colorDark: '#6D28D9' },
+  { coins: 10, probability: 0.2, label: '10', colorLight: '#F5C518', colorDark: '#B8860B' },
 ];
 
 interface LuckyWheelModalProps {
@@ -453,25 +454,35 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       statusBarTranslucent
     >
       <View style={styles.container}>
-        <BlurView intensity={90} style={StyleSheet.absoluteFill} tint="dark" />
+        {/* Layered background — deep app gradient + strong blur */}
+        <LinearGradient
+          colors={['rgba(5,1,13,0.98)', 'rgba(30,15,60,0.96)', 'rgba(5,1,13,0.98)']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <BlurView intensity={60} style={StyleSheet.absoluteFill} tint="dark" />
+
+        {/* Ambient glow behind wheel */}
+        <View style={styles.ambientGlow} pointerEvents="none" />
         
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color="#fff" />
+          <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.7}>
+            <X size={22} color="#fff" />
           </TouchableOpacity>
           
           <View style={styles.coinsDisplay}>
-            <Coins size={20} color="#ffd700" />
+            <Coins size={18} color="#F5C518" />
             <Text style={styles.coinsText}>{currentCoins}</Text>
           </View>
         </View>
 
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Sparkles size={24} color="#ffd700" />
+          <Sparkles size={22} color="#F5C518" />
           <Text style={styles.title}>{t.luckyWheel?.title || 'عجلة الحظ'}</Text>
-          <Sparkles size={24} color="#ffd700" />
+          <Sparkles size={22} color="#A855F7" />
         </View>
 
         {/* Wheel Container */}
@@ -501,17 +512,18 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
             <TouchableOpacity
               onPress={spinWheel}
               disabled={isSpinning}
-              activeOpacity={0.8}
-              style={styles.spinButtonOuter}
+              activeOpacity={0.85}
+              style={[styles.spinButtonOuter, { shadowColor: '#A855F7' }]}
             >
               <LinearGradient
-                colors={isSpinning ? ['#666', '#444'] : ['#22c55e', '#16a34a']}
+                colors={isSpinning ? ['#555', '#333'] : ['#A855F7', '#7C3AED', '#5B21B6']}
                 style={styles.spinButton}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
+                <Sparkles size={18} color="#fff" />
                 <Text style={styles.spinButtonText}>
-                  {isSpinning ? (t.luckyWheel?.spinning || 'جاري اللف...') : (t.luckyWheel?.spin ? t.luckyWheel.spin + ' العجلة!' : 'لف العجلة!')}
+                  {isSpinning ? (t.luckyWheel?.spinning || 'جاري اللف...') : (t.luckyWheel?.spin ? t.luckyWheel.spin + '!' : 'لف العجلة!')}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -556,17 +568,17 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
               <Text style={styles.resultEmoji}>🎉</Text>
               <Text style={styles.resultTitle}>{t.luckyWheel?.congratulations || 'مبروك!'}</Text>
               <View style={styles.resultCoins}>
-                <Coins size={36} color="#ffd700" />
+                <Coins size={38} color="#F5C518" />
                 <Text style={styles.resultCoinsText}>+{wonPrize.coins}</Text>
               </View>
               <Text style={styles.resultSubtext}>{t.luckyWheel?.youWon || 'كسبت'} {wonPrize.coins} {t.luckyWheel?.coins || 'كوينز'}!</Text>
               
               <TouchableOpacity 
                 onPress={() => { setShowResult(false); onClose(); }} 
-                style={styles.resultButton}
+                style={[styles.resultButton, { shadowColor: '#A855F7' }]}
               >
                 <LinearGradient
-                  colors={['#22c55e', '#16a34a']}
+                  colors={['#A855F7', '#7C3AED']}
                   style={styles.resultButtonGradient}
                 >
                   <Text style={styles.resultButtonText}>{t.luckyWheel?.great || 'رائع!'}</Text>
@@ -586,7 +598,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(10, 10, 20, 0.9)',
+    backgroundColor: 'rgba(5, 1, 13, 0.95)',
+  },
+  ambientGlow: {
+    position: 'absolute',
+    width: WHEEL_SIZE * 1.3,
+    height: WHEEL_SIZE * 1.3,
+    borderRadius: WHEEL_SIZE * 0.65,
+    backgroundColor: 'rgba(168,85,247,0.22)',
+    top: '20%',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 80,
+    elevation: 30,
   },
   header: {
     position: 'absolute',
@@ -600,39 +625,43 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   coinsDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 16,
+    backgroundColor: 'rgba(245,197,24,0.12)',
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    gap: 8,
+    gap: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,215,0,0.3)',
+    borderColor: 'rgba(245,197,24,0.4)',
   },
   coinsText: {
-    color: '#ffd700',
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: '#F5C518',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '900',
     color: '#fff',
+    letterSpacing: -0.4,
   },
   wheelContainer: {
     width: WHEEL_SIZE + 40,
@@ -646,12 +675,12 @@ const styles = StyleSheet.create({
     width: WHEEL_SIZE + 50,
     height: WHEEL_SIZE + 50,
     borderRadius: (WHEEL_SIZE + 50) / 2,
-    backgroundColor: '#8B5CF6',
-    shadowColor: '#8B5CF6',
+    backgroundColor: '#A855F7',
+    shadowColor: '#A855F7',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 40,
-    elevation: 20,
+    shadowRadius: 50,
+    elevation: 24,
   },
   wheel: {
     width: WHEEL_SIZE,
@@ -681,25 +710,25 @@ const styles = StyleSheet.create({
   spinButtonOuter: {
     borderRadius: 30,
     overflow: 'hidden',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 10,
   },
   spinButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 50,
+    paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 30,
-    gap: 12,
+    gap: 10,
   },
   spinButtonText: {
     color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   lockedContainer: {
     alignItems: 'center',
@@ -730,10 +759,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   timerText: {
-    color: '#ffd700',
+    color: '#A855F7',
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '900',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
   },
   resultOverlay: {
     position: 'absolute',
@@ -750,7 +780,7 @@ const styles = StyleSheet.create({
     padding: 40,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: 'rgba(139, 92, 246, 0.5)',
+    borderColor: 'rgba(168, 85, 247, 0.55)',
     width: SCREEN_WIDTH * 0.85,
   },
   resultEmoji: {
@@ -767,18 +797,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
     paddingHorizontal: 30,
     paddingVertical: 16,
     borderRadius: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.5)',
+    borderColor: 'rgba(245,197,24,0.5)',
   },
   resultCoinsText: {
-    color: '#ffd700',
-    fontSize: 40,
-    fontWeight: 'bold',
+    color: '#F5C518',
+    fontSize: 42,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(245,197,24,0.6)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   resultSubtext: {
     color: 'rgba(255,255,255,0.7)',
