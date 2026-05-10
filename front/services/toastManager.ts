@@ -37,6 +37,25 @@ class ToastManager {
     this.showToastCallback?.('info', title, message, options);
   }
 
+  /**
+   * Show a persistent loading toast with a spinning icon. Unlike the other
+   * variants this one does NOT auto-dismiss — callers must call
+   * `toastManager.hideLoading()` (or show another toast) when the work is
+   * done. Useful for long-running actions like uploads.
+   */
+  showLoading(title: string, message: string, options?: ToastOptions) {
+    this.showToastCallback?.('loading', title, message, options);
+  }
+
+  /** Dismiss the current loading toast (shows a fleeting success-less info). */
+  hideLoading() {
+    // Ask the provider to hide via a no-op info toast with duration=0 so it
+    // exits immediately. Implementation: providers handle `loading` specially
+    // (no auto-hide) and any new toast replaces it, so a new info with 1ms
+    // duration + empty strings is the simplest way to dismiss.
+    this.showToastCallback?.('info', '', '', { duration: 1 });
+  }
+
   // Convenience methods for common scenarios
   showNetworkError() {
     this.showError('خطأ في الشبكة', 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى');

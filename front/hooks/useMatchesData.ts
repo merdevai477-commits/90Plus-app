@@ -5,8 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Match } from '../components/league-center/matchCardUtils';
-import { fetchMatchesByDate, fetchLiveMatches } from '../components/league-center/leagueApiUtils';
+import { Match } from '../components/Matches/matchCardUtils';
+import { fetchMatchesByDate, fetchLiveMatches } from '../components/Matches/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { Image } from 'expo-image';

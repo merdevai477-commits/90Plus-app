@@ -1,9 +1,23 @@
-import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { FlashList, ViewToken } from '@shopify/flash-list';
-import { Video, ResizeMode } from 'expo-av';
+/**
+ * VideoFeed (generic) — vertical video list with auto-play / auto-pause.
+ *
+ * Not currently used by the reels page (that's handled by reels.tsx +
+ * ReelItem + UnifiedVideoPlayer), but exported so any new feature that wants
+ * a simple TikTok-style list can reuse it.
+ *
+ * SDK 55 migration:
+ *  - Swapped FlashList v1 API (`estimatedItemSize`) for the v2 API.
+ *  - Swapped `expo-av`'s imperative `<Video ref>` for `expo-video`'s
+ *    `useVideoPlayer` / `<VideoView>` combo driven through a ref map of
+ *    `VideoPlayer` instances.
+ */
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Dimensions, StyleSheet, View } from 'react-native';
+import { FlashList, type ViewToken } from '@shopify/flash-list';
+import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
+
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface VideoItem {
   id: string;
@@ -18,230 +32,167 @@ interface VideoFeedProps {
   onEndReached?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
-  estimatedItemSize?: number;
   onVideoView?: (videoId: string) => void;
 }
 
+/** Convert a bare URL into a VideoSource with HLS hinting for Mux. */
+function toSource(url: string): VideoSource {
+  const isHls = url.includes('stream.mux.com') || url.includes('.m3u8');
+  return { uri: url, ...(isHls ? { contentType: 'hls' as const } : {}) };
+}
+
 /**
- * Optimized video feed component with auto-play/pause
- * Uses FlashList for 10x better performance
- * Only plays visible videos, pauses others
+ * Optimized vertical video feed.
+ *
+ * Auto-plays the visible item, pauses others.
  */
-export const VideoFeed: React.FC<VideoFeedProps> = React.memo(({
-  videos,
-  renderOverlay,
-  onEndReached,
-  onRefresh,
-  refreshing = false,
-  estimatedItemSize = SCREEN_HEIGHT,
-  onVideoView,
-}) => {
-  const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
-  const videoRefs = useRef<Map<string, Video>>(new Map());
+export const VideoFeed: React.FC<VideoFeedProps> = React.memo(
+  ({ videos, renderOverlay, onEndReached, onRefresh, refreshing = false, onVideoView }) => {
+    const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
+    const videoPlayersRef = useRef<Map<string, any>>(new Map());
 
-  // Viewability config for video auto-play
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 80, // Video must be 80% visible
-    minimumViewTime: 500, // Must be visible for 500ms
-  }).current;
+    const viewabilityConfig = useRef({
+      itemVisiblePercentThreshold: 80,
+      minimumViewTime: 500,
+    }).current;
 
-  // Handle viewable items changed
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken<VideoItem>[] }) => {
-      const newVisibleIds = new Set<string>();
+    const onViewableItemsChanged = useCallback(
+      ({ viewableItems }: { viewableItems: ViewToken<VideoItem>[] }) => {
+        const nextVisible = new Set<string>();
 
-      viewableItems.forEach((viewableItem) => {
-        const item = viewableItem.item as VideoItem;
-        if (viewableItem.isViewable && item?.id) {
-          newVisibleIds.add(item.id);
-        }
-      });
+        viewableItems.forEach((v) => {
+          const item = v.item as VideoItem;
+          if (v.isViewable && item?.id) nextVisible.add(item.id);
+        });
 
-      // Pause videos that are no longer visible
-      visibleVideoIds.forEach((videoId) => {
-        if (!newVisibleIds.has(videoId)) {
-          const videoRef = videoRefs.current.get(videoId);
-          videoRef?.pauseAsync().catch(() => {});
-        }
-      });
-
-      // Play newly visible videos
-      newVisibleIds.forEach((videoId) => {
-        if (!visibleVideoIds.has(videoId)) {
-          const videoRef = videoRefs.current.get(videoId);
-          videoRef?.playAsync().catch(() => {});
-          
-          // Track video view
-          if (onVideoView) {
-            onVideoView(videoId);
-          }
-        }
-      });
-
-      setVisibleVideoIds(newVisibleIds);
-    },
-    [visibleVideoIds, onVideoView]
-  );
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Pause and unload all videos
-      videoRefs.current.forEach((videoRef) => {
-        videoRef.pauseAsync().catch(() => {});
-        videoRef.unloadAsync().catch(() => {});
-      });
-      videoRefs.current.clear();
-    };
-  }, []);
-
-  // Render video item
-  const renderItem = useCallback(
-    ({ item, index }: { item: VideoItem; index: number }) => {
-      const isVisible = visibleVideoIds.has(item.id);
-
-      return (
-        <VideoItem
-          item={item}
-          index={index}
-          isVisible={isVisible}
-          videoRef={(ref) => {
-            if (ref) {
-              videoRefs.current.set(item.id, ref);
-            } else {
-              videoRefs.current.delete(item.id);
+        // Pause players that are no longer visible.
+        visibleVideoIds.forEach((id) => {
+          if (!nextVisible.has(id)) {
+            const p = videoPlayersRef.current.get(id);
+            try {
+              p?.pause?.();
+            } catch {
+              /* ignore */
             }
-          }}
-          renderOverlay={renderOverlay}
-        />
-      );
-    },
-    [visibleVideoIds, renderOverlay]
-  );
+          }
+        });
 
-  // Key extractor
-  const keyExtractor = useCallback((item: VideoItem) => item.id, []);
+        // Play newly-visible players.
+        nextVisible.forEach((id) => {
+          if (!visibleVideoIds.has(id)) {
+            const p = videoPlayersRef.current.get(id);
+            try {
+              p?.play?.();
+            } catch {
+              /* ignore */
+            }
+            onVideoView?.(id);
+          }
+        });
 
-  return (
-    <FlashList
-      data={videos}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={viewabilityConfig}
-      onEndReached={onEndReached}
-      onEndReachedThreshold={0.5}
-      pagingEnabled
-      decelerationRate="fast"
-      snapToInterval={estimatedItemSize}
-      snapToAlignment="start"
-      showsVerticalScrollIndicator={false}
-      drawDistance={estimatedItemSize * 2} // Preload 2 videos ahead
-    />
-  );
-});
+        setVisibleVideoIds(nextVisible);
+      },
+      [visibleVideoIds, onVideoView],
+    );
 
+    // Clean up refs on unmount. expo-video's `useVideoPlayer` does its own
+    // lifecycle management so we don't have to release manually.
+    useEffect(() => {
+      return () => {
+        videoPlayersRef.current.clear();
+      };
+    }, []);
+
+    const renderItem = useCallback(
+      ({ item, index }: { item: VideoItem; index: number }) => {
+        return (
+          <VideoFeedItem
+            item={item}
+            index={index}
+            isVisible={visibleVideoIds.has(item.id)}
+            registerPlayer={(player) => {
+              if (player) videoPlayersRef.current.set(item.id, player);
+              else videoPlayersRef.current.delete(item.id);
+            }}
+            renderOverlay={renderOverlay}
+          />
+        );
+      },
+      [visibleVideoIds, renderOverlay],
+    );
+
+    const keyExtractor = useCallback((item: VideoItem) => item.id, []);
+
+    return (
+      <FlashList
+        data={videos}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        pagingEnabled
+        decelerationRate="fast"
+        snapToInterval={SCREEN_HEIGHT}
+        snapToAlignment="start"
+        showsVerticalScrollIndicator={false}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      />
+    );
+  },
+);
 VideoFeed.displayName = 'VideoFeed';
 
 /**
- * Individual video item component
- * Memoized to prevent unnecessary re-renders
+ * Individual video item. Keeps its own `VideoPlayer` via `useVideoPlayer`
+ * so the parent list can drive play/pause through the registered ref.
  */
-interface VideoItemProps {
+interface VideoFeedItemProps {
   item: VideoItem;
   index: number;
   isVisible: boolean;
-  videoRef: (ref: Video | null) => void;
+  registerPlayer: (player: any | null) => void;
   renderOverlay?: (item: VideoItem, index: number) => React.ReactElement;
 }
 
-const VideoItem: React.FC<VideoItemProps> = React.memo(
-  ({ item, index, isVisible, videoRef, renderOverlay }) => {
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(false);
+const VideoFeedItem: React.FC<VideoFeedItemProps> = React.memo(
+  ({ item, isVisible, registerPlayer, renderOverlay, index }) => {
+    const player = useVideoPlayer(toSource(item.videoUrl), (p) => {
+      p.loop = true;
+      p.muted = false;
+      if (isVisible) p.play();
+    });
 
-    const handleLoad = useCallback(() => {
-      setIsLoading(false);
-      setError(false);
-    }, []);
-
-    const handleError = useCallback(() => {
-      setIsLoading(false);
-      setError(true);
-      console.error(`[VideoFeed] Failed to load video: ${item.id}`);
-    }, [item.id]);
+    // Publish the player up to the parent.
+    useEffect(() => {
+      registerPlayer(player);
+      return () => registerPlayer(null);
+    }, [player, registerPlayer]);
 
     return (
       <View style={styles.videoContainer}>
-        <Video
-          ref={videoRef}
-          source={{ uri: item.videoUrl }}
-          style={styles.video}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={isVisible}
-          isLooping
-          isMuted={false}
-          onLoad={handleLoad}
-          onError={handleError}
-          usePoster={!!item.thumbnailUrl}
-          posterSource={item.thumbnailUrl ? { uri: item.thumbnailUrl } : undefined}
-          posterStyle={styles.poster}
-        />
-
-        {/* Overlay content (likes, comments, etc.) */}
-        {renderOverlay && renderOverlay(item, index)}
-
-        {/* Loading indicator */}
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            {/* Add your loading component here */}
-          </View>
-        )}
-
-        {/* Error state */}
-        {error && (
-          <View style={styles.errorContainer}>
-            {/* Add your error component here */}
-          </View>
-        )}
+        <VideoView style={styles.video} player={player} contentFit="cover" nativeControls={false} />
+        {renderOverlay?.(item, index)}
       </View>
     );
   },
-  (prevProps, nextProps) => {
-    // Custom comparison to prevent unnecessary re-renders
-    return (
-      prevProps.item.id === nextProps.item.id &&
-      prevProps.isVisible === nextProps.isVisible &&
-      prevProps.index === nextProps.index
-    );
-  }
+  (prev, next) =>
+    prev.item.id === next.item.id &&
+    prev.isVisible === next.isVisible &&
+    prev.index === next.index,
 );
-
-VideoItem.displayName = 'VideoItem';
+VideoFeedItem.displayName = 'VideoFeedItem';
 
 const styles = StyleSheet.create({
   videoContainer: {
     height: SCREEN_HEIGHT,
-    width: '100%',
+    width: SCREEN_WIDTH,
     backgroundColor: '#000',
   },
   video: {
     flex: 1,
-  },
-  poster: {
-    resizeMode: 'cover',
-  },
-  loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  errorContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
 });
 

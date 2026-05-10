@@ -120,7 +120,7 @@ All checks passed! Ready to:
 
 4. **Test Production:**
    ```bash
-   export API_URL="https://90plus-app-production-b28d.up.railway.app"
+   export API_URL="https://90plus-app-production-c88c.up.railway.app"
    export TEST_TOKEN="your_production_jwt"
    ./test-reels-api.sh
    ```

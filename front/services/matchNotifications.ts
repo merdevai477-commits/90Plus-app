@@ -1,12 +1,30 @@
 /**
  * Match notifications service
+ *
+ * SDK 55 note: `expo-notifications` is loaded lazily and only outside of
+ * Expo Go, because importing it in Expo Go triggers the "Android Push
+ * notifications ... was removed from Expo Go" runtime error.
  */
 
-import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import FollowedMatchesStorage, { FollowedMatch } from './followedMatchesStorage';
-import PredictionStorage from './predictionStorage';
-import './notificationForegroundSetup';
+import { Platform } from 'react-native';
+
+const isExpoGo = Constants.appOwnership === 'expo';
+
+/** Lazy-load `expo-notifications` (returns null in Expo Go / web). */
+let cachedModule: typeof import('expo-notifications') | null | undefined;
+function getNotifications(): typeof import('expo-notifications') | null {
+  if (Platform.OS === 'web') return null;
+  if (isExpoGo) return null;
+  if (cachedModule !== undefined) return cachedModule;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    cachedModule = require('expo-notifications') as typeof import('expo-notifications');
+  } catch {
+    cachedModule = null;
+  }
+  return cachedModule;
+}
 
 type NotificationsModule = typeof import('expo-notifications');
 let Notifications: NotificationsModule | null = null;
@@ -22,9 +40,11 @@ if (Platform.OS !== 'web' && !isExpoGo) {
 
 class MatchNotificationsService {
   /**
-   * Request notification permissions
+   * Request notification permissions + set up the Android match channel.
+   * No-op in Expo Go / on web.
    */
   async requestPermissions(): Promise<boolean> {
+    const Notifications = getNotifications();
     if (!Notifications) return false;
 
     try {

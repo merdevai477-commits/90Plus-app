@@ -20,7 +20,7 @@ import { createClerkClient } from '@clerk/backend';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const API_BASE = process.env.TEST_API_URL ||
-  'https://90plus-app-production-b28d.up.railway.app/api';
+  'https://90plus-app-production-c88c.up.railway.app/api';
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY!;
 if (!CLERK_SECRET_KEY) { console.error('❌ CLERK_SECRET_KEY not set'); process.exit(1); }

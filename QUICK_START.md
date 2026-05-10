@@ -52,7 +52,7 @@ git push origin main
 
 ### 1. Test Production API
 ```bash
-export API_URL="https://90plus-app-production-b28d.up.railway.app"
+export API_URL="https://90plus-app-production-c88c.up.railway.app"
 export TEST_TOKEN="your_production_jwt_token"
 ./test-reels-api.sh
 ```

@@ -8,7 +8,6 @@
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
@@ -76,7 +75,14 @@
     "plugins": [
       "expo-router",
       [
-        "expo-av",
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
+      ],
+      [
+        "expo-audio",
         {
           "microphonePermission": "Allow 90Plus to access your microphone for recording videos."
         }
@@ -116,9 +122,9 @@
             "useFrameworks": "static"
           },
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0",
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0",
             "minSdkVersion": 24
           }
         }
@@ -133,14 +139,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "jsEngine": "hermes",
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
     "extra": {
-      "apiUrl": "https://90plus-app-production-b28d.up.railway.app/api",
+      "apiUrl": "https://90plus-app-production-c88c.up.railway.app/api",
       "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
       "router": {
         "origin": false

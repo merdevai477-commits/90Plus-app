@@ -48,8 +48,16 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Get Clerk publishable key — no fallback: missing key must be surfaced immediately
-const clerkPublishableKey = Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined;
+// Get Clerk publishable key.
+// Priority order:
+//   1) EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY env var (works everywhere including
+//      production builds where `Constants.expoConfig` can return null)
+//   2) `extra.clerkPublishableKey` from app.json (used by default in dev)
+// If both are missing we render ClerkKeyMissingScreen instead of silently
+// crashing `useAuth` later.
+const clerkPublishableKey =
+  (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined) ||
+  (Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined);
 
 // Fix 2: Guard — if key is missing, show error instead of silently failing
 function ClerkKeyMissingScreen() {
@@ -178,6 +186,8 @@ import { Image } from "expo-image";
 import { CLUBS } from "../data/clubs";
 import { BRANDS } from "../data/brands";
 import { cacheService } from "../services/cacheService";
+import { TamaguiProvider } from 'tamagui';
+import config from '../tamagui.config';
 
 function WebSocketInitializer({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoaded } = useAuth();
@@ -547,47 +557,49 @@ export default function RootLayout() {
       {!clerkPublishableKey ? (
         <ClerkKeyMissingScreen />
       ) : (
-      <ClerkProvider
-        publishableKey={clerkPublishableKey}
-        tokenCache={tokenCache}
-      >
-        <SentryUserTracker />
-        <QueryClientProvider client={queryClient}>
-          <PushNotificationSetup />
-          <WebSocketInitializer>
-            <PreloadInitializer>
-              <LanguageInitializer>
-                <LanguageProvider>
-                  <SettingsProvider>
-                    <CoinsProvider>
-                      <VideosProvider>
-                        <ToastProvider>
-                          <ProfessionalToastProvider>
-                            <GestureHandlerRootView style={{ flex: 1 }}>
-                              <SafeAreaProvider>
-                                <View style={{ flex: 1, backgroundColor: '#000' }}>
-                                  <GlobalOfflineBanner />
-                                  <StatusBar
-                                    barStyle="light-content"
-                                    backgroundColor="#000"
-                                  />
-                                  <ClerkGate>
-                                    <RootLayoutNav />
-                                  </ClerkGate>
-                                </View>
-                              </SafeAreaProvider>
-                            </GestureHandlerRootView>
-                          </ProfessionalToastProvider>
-                        </ToastProvider>
-                      </VideosProvider>
-                    </CoinsProvider>
-                  </SettingsProvider>
-                </LanguageProvider>
-              </LanguageInitializer>
-            </PreloadInitializer>
-          </WebSocketInitializer>
-        </QueryClientProvider>
-      </ClerkProvider>
+      <TamaguiProvider config={config} defaultTheme="dark">
+        <ClerkProvider
+          publishableKey={clerkPublishableKey}
+          tokenCache={tokenCache}
+        >
+          <SentryUserTracker />
+          <QueryClientProvider client={queryClient}>
+            <PushNotificationSetup />
+            <WebSocketInitializer>
+              <PreloadInitializer>
+                <LanguageInitializer>
+                  <LanguageProvider>
+                    <SettingsProvider>
+                      <CoinsProvider>
+                        <VideosProvider>
+                          <ToastProvider>
+                            <ProfessionalToastProvider>
+                              <GestureHandlerRootView style={{ flex: 1 }}>
+                                <SafeAreaProvider>
+                                  <View style={{ flex: 1, backgroundColor: '#000' }}>
+                                    <GlobalOfflineBanner />
+                                    <StatusBar
+                                      barStyle="light-content"
+                                      backgroundColor="#000"
+                                    />
+                                    <ClerkGate>
+                                      <RootLayoutNav />
+                                    </ClerkGate>
+                                  </View>
+                                </SafeAreaProvider>
+                              </GestureHandlerRootView>
+                            </ProfessionalToastProvider>
+                          </ToastProvider>
+                        </VideosProvider>
+                      </CoinsProvider>
+                    </SettingsProvider>
+                  </LanguageProvider>
+                </LanguageInitializer>
+              </PreloadInitializer>
+            </WebSocketInitializer>
+          </QueryClientProvider>
+        </ClerkProvider>
+      </TamaguiProvider>
       )}
     </ErrorBoundary>
   );

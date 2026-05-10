@@ -3,7 +3,7 @@
 # 90Plus Reels — Full API Test Suite
 # Run this against your production/Railway URL
 
-BASE_URL="${API_URL:-https://90plus-app-production-b28d.up.railway.app}"
+BASE_URL="${API_URL:-https://90plus-app-production-c88c.up.railway.app}"
 TOKEN="${TEST_TOKEN:-}"
 
 PASS=0

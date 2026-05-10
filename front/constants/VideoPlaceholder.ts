@@ -1,42 +1,52 @@
 /**
- * Video Thumbnail Placeholder
- * 
- * Provides a default placeholder for video thumbnails when thumbnail generation fails.
- * This ensures a consistent user experience and prevents empty/black spaces.
- * 
- * Requirement 2.12: Display default image when thumbnail generation fails
+ * VideoPlaceholder
+ *
+ * Helpers for dealing with reel thumbnail URLs in lists.
+ * If a reel doesn't have a real thumbnail (or the thumbnail URL is the raw
+ * video URL, or is obviously a placeholder), we fall back to a branded
+ * placeholder style so the grid never shows a broken image.
  */
 
-// Using a solid color placeholder with a play icon overlay
-// This is more reliable than using an external image URL
+/**
+ * Styling tokens for the "no thumbnail" placeholder tile.
+ * Exposed as an object so call sites can spread `.backgroundColor` into
+ * a View style (instead of rendering a broken remote image URL).
+ */
 export const VIDEO_THUMBNAIL_PLACEHOLDER = {
-  // Fallback color for when thumbnail is null
-  backgroundColor: '#1a1a1a',
-  
-  // Alternative: Use a default image from assets
-  // If you want to use an actual image, uncomment and add the image to assets
-  // defaultImage: require('../assets/images/video-placeholder.png'),
-  
-  // For remote fallback (less reliable, requires network)
-  defaultRemoteUrl: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=300&h=500&fit=crop',
-};
+  /** Background color of the placeholder tile (matches reel dark surfaces). */
+  backgroundColor: '#1A1A1A',
+  /** Icon tint inside the placeholder. */
+  iconColor: '#666666',
+  /** Label color inside the placeholder. */
+  labelColor: '#999999',
+} as const;
 
 /**
- * Helper function to get a valid thumbnail URI
- * Returns the thumbnail if available, otherwise returns a placeholder
+ * Decide whether the given thumbnail URL looks like a valid still image.
+ * Rejects:
+ *  - missing/empty strings
+ *  - Mux HLS URLs (.m3u8) and raw Mux stream URLs — those play as video,
+ *    not as a static thumbnail
+ *  - .mp4 / .mov / .m3u8 paths in general
+ *  - obvious placeholder strings ("null", "undefined")
  */
-export function getThumbnailUri(thumbnail: string | null | undefined): string | null {
-  if (thumbnail && thumbnail.trim() !== '') {
-    return thumbnail;
-  }
-  // Return null to indicate we should show a placeholder component
-  // rather than trying to load an invalid image
-  return null;
-}
+export function isValidThumbnail(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
 
-/**
- * Check if a thumbnail is valid
- */
-export function isValidThumbnail(thumbnail: string | null | undefined): boolean {
-  return thumbnail !== null && thumbnail !== undefined && thumbnail.trim() !== '';
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+
+  const lower = trimmed.toLowerCase();
+
+  if (lower === 'null' || lower === 'undefined') return false;
+
+  // Raw Mux playback URLs — these are HLS streams, not still images.
+  if (lower.includes('stream.mux.com') || lower.endsWith('.m3u8')) return false;
+
+  // Raw video URLs.
+  if (/\.(mp4|mov|m4v|webm|3gp)(\?|$)/.test(lower)) return false;
+
+  // Anything else (http(s) image URL, data URL, or local file) is assumed
+  // to be a real image.
+  return /^(https?:|data:|file:)/.test(lower);
 }

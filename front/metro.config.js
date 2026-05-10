@@ -1,3 +1,4 @@
+// Learn more https://docs.expo.dev/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
@@ -5,24 +6,25 @@ const config = getDefaultConfig(__dirname);
 // Production optimizations
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Fix for socket.io-client in React Native
-// Force CommonJS builds instead of ESM for socket.io packages
+// Fix for socket.io-client in React Native — force CJS builds instead of ESM
+// These packages ship both CJS and ESM; RN's Metro cannot correctly resolve their ESM entry.
+const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  // Redirect ESM builds to CJS builds for socket.io packages
   if (moduleName === 'socket.io-client') {
     return context.resolveRequest(context, 'socket.io-client/build/cjs/index.js', platform);
   }
   if (moduleName === 'engine.io-client') {
     return context.resolveRequest(context, 'engine.io-client/build/cjs/index.js', platform);
   }
-  
-  // Use default resolution for everything else
+
+  if (originalResolveRequest) {
+    return originalResolveRequest(context, moduleName, platform);
+  }
   return context.resolveRequest(context, moduleName, platform);
 };
 
-// Production optimizations
+// Production minifier — terser gives smaller bundle than Hermes's default
 if (isProduction) {
-  // Enable minification
   config.transformer = {
     ...config.transformer,
     minifierPath: require.resolve('metro-minify-terser'),
@@ -37,12 +39,6 @@ if (isProduction) {
         keep_fnames: false,
       },
     },
-  };
-
-  // Optimize resolver
-  config.resolver = {
-    ...config.resolver,
-    sourceExts: [...(config.resolver.sourceExts || []), 'jsx', 'js', 'ts', 'tsx'],
   };
 }
 

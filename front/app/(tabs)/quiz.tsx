@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { QUIZ_QUESTIONS, Question } from '@/constants/quizData';
+
 import {
   Lightbulb,
   Heart,

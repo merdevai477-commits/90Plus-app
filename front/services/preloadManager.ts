@@ -499,8 +499,14 @@ class PreloadManagerClass {
   }
 
   /**
-   * Process preload queue using real expo-av preloading
-   * Uses Video.createAsync with shouldPlay=false to actually buffer video data
+   * Process preload queue by warming the CDN connection for each URL.
+   *
+   * SDK 55 migration: `Video.createAsync` from `expo-av` has been removed.
+   * `expo-video` does not expose an imperative "buffer this URL" API that
+   * works without attaching to a <VideoView>. Instead we fall back to the
+   * same lightweight CDN-warming approach `videoPreloader.preloadVideo`
+   * uses: a ranged HEAD/GET request that primes the TCP connection and
+   * edge-cache without downloading the whole video.
    */
   private async processQueue(): Promise<void> {
     if (this.preloadQueue.length === 0) {
@@ -514,17 +520,11 @@ class PreloadManagerClass {
     await Promise.allSettled(
       batch.map(async (url) => {
         try {
-          const { Video } = await import('expo-av');
-          // createAsync with shouldPlay=false actually buffers the video
-          const { sound } = await (Video as any).createAsync(
-            { uri: url },
-            { shouldPlay: false, isMuted: true, progressUpdateIntervalMillis: 99999 },
-            null
-          );
-          this.preloadedVideos.add(url);
-          // Unload immediately — we just wanted to prime the network buffer
-          sound?.unloadAsync?.().catch(() => {});
-          logger.debug(`[PreloadManager] Preloaded (expo-av): ${url.substring(0, 50)}...`);
+          const success = await preloadVideo(url);
+          if (success) {
+            this.preloadedVideos.add(url);
+            logger.debug(`[PreloadManager] Warmed CDN for: ${url.substring(0, 50)}...`);
+          }
         } catch (error) {
           // Preload failure is non-critical — video will load on demand
           logger.warn(`[PreloadManager] Failed to preload: ${url.substring(0, 50)}...`);

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import { FlashList, FlashListRef } from '@shopify/flash-list';
+import { FlashList, FlashListProps, type FlashListRef } from '@shopify/flash-list';
 import { View, Text, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native';
 
 // Fallback theme colors (ThemeContext not available in this component)
@@ -11,7 +11,11 @@ const THEME = {
 interface OptimizedListProps<T> {
   data: T[];
   renderItem: (item: T, index: number) => React.ReactElement;
-  estimatedItemSize: number;
+  /**
+   * @deprecated Ignored in FlashList v2 — item size is auto-measured.
+   * Kept in the type for backward-compat with existing callers.
+   */
+  estimatedItemSize?: number;
   type?: 'video' | 'image' | 'post' | 'chat' | 'user' | 'mixed';
   onEndReached?: () => void;
   onRefresh?: () => void;
@@ -38,7 +42,7 @@ interface OptimizedListProps<T> {
 export function OptimizedList<T>({
   data,
   renderItem,
-  estimatedItemSize,
+  estimatedItemSize: _estimatedItemSize,
   type = 'mixed',
   onEndReached,
   onRefresh,
@@ -143,6 +147,16 @@ export function OptimizedList<T>({
     [type]
   );
 
+  // Blank area monitoring kept as a no-op here. FlashList v2 measures items
+  // automatically, so large blank areas are uncommon. The `onBlankArea` prop
+  // from v1 was removed.
+  const handleBlankArea = useCallback((blankAreaEvent: { blankArea: number }) => {
+    if (__DEV__ && blankAreaEvent.blankArea > 50) {
+      console.warn(`[OptimizedList] Blank area detected: ${blankAreaEvent.blankArea}px`);
+    }
+  }, []);
+  void handleBlankArea;
+
   // Scroll to top function (exposed via ref)
   const scrollToTop = useCallback(() => {
     flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -170,7 +184,6 @@ export function OptimizedList<T>({
       showsHorizontalScrollIndicator={showsHorizontalScrollIndicator}
       onScroll={onScroll}
       scrollEventThrottle={scrollEventThrottle}
-      drawDistance={250} // How far ahead to render (pixels)
     />
   );
 }

@@ -23,7 +23,7 @@ import AdvancedSearchBar, { SearchResult } from '../../components/Home/AdvancedS
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
 import { useHomeStore } from '../../src/store/home.store';
 import { Colors as DesignColors, Spacing } from '../../src/designSystem/designSystem';
-import { useHapticFeedback } from '../../components/leagues/HapticFeedback';
+import { useHapticFeedback } from '../../components/Matches/HapticFeedback';
 import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';

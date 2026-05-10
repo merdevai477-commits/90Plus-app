@@ -1,28 +1,16 @@
-import React from 'react';
-
-// Import components
-import { VideoPlayerFallback } from './VideoPlayerFallback';
-import { logger } from '../../utils/logger';
-
-import { Video } from 'expo-av';
-import { UnifiedVideoPlayer } from './UnifiedVideoPlayer';
-
-const hasExpoAV = true;
-const UnifiedVideoPlayerModule = UnifiedVideoPlayer;
-
 /**
- * Safe wrapper for UnifiedVideoPlayer that checks if expo-av is available
- * Falls back to placeholder if running in Expo Go on SDK 52
+ * SafeVideoPlayer - thin re-export over UnifiedVideoPlayer.
+ *
+ * Historically this wrapper guarded against `expo-av` not being available in
+ * Expo Go on SDK 52. Since SDK 55 we use `expo-video` which is always present
+ * in a development or production build, so the guard is no longer needed and
+ * the fallback branch was unreachable.
+ *
+ * Kept as a re-export so existing call sites (e.g. components/reels/ReelItem)
+ * continue to work without import churn.
  */
-export function SafeVideoPlayer(props: any) {
-  if (hasExpoAV && UnifiedVideoPlayerModule) {
-    return <UnifiedVideoPlayerModule {...props} />;
-  }
 
-  // expo-av not available - show fallback
-  logger.warn('[SafeVideoPlayer] Using fallback player (expo-av unavailable)');
-  return <VideoPlayerFallback videoUrl={props.reel?.videoUrl || 'N/A'} style={props.style} />;
-}
+export { UnifiedVideoPlayer as SafeVideoPlayer } from './UnifiedVideoPlayer';
 
-export { hasExpoAV };
-
+/** @deprecated expo-video is always available in SDK 55+. Always returns true. */
+export const hasExpoAV = true;

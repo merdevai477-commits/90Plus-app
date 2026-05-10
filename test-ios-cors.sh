@@ -3,7 +3,7 @@
 # 🍎 iOS CORS Testing Script
 # Tests if the backend properly handles iOS/mobile origins
 
-API_URL="https://90plus-app-production-b28d.up.railway.app/api"
+API_URL="https://90plus-app-production-c88c.up.railway.app/api"
 
 echo "🧪 Testing iOS CORS Configuration..."
 echo "=================================="

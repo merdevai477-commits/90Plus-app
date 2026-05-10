@@ -30,4 +30,3 @@ export const ANIMATION_CONFIG = {
   staggerDelay: 50,
   pulseDuration: 2000,
 } as const;
-

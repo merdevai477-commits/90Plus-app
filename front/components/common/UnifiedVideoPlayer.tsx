@@ -1,16 +1,45 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+/**
+ * UnifiedVideoPlayer
+ *
+ * Single source of truth for vertical reel-style video playback across the
+ * app (reels feed, profile grid tap, modal popups). Internally it wraps
+ * `expo-video` (SDK 55) — `useVideoPlayer` + `<VideoView>` — and adds:
+ *
+ *  - Replay limit (auto-replays at most MAX_AUTO_REPLAYS, then shows a
+ *    tappable replay overlay)
+ *  - Signed-URL refresh (retries the Mux URL if it returns 403)
+ *  - Load timeout (shows retry UI after 15s of stuck loading)
+ *  - Mux HLS detection (logs diagnostics when a Mux URL fails)
+ *  - Compatibility shim for the legacy `onVideoRef` prop: we publish the
+ *    `VideoPlayer` instance through the same callback so existing callers
+ *    (e.g. `useReelsAudioManager`) can call `.play()` / `.pause()` on it.
+ *
+ * SDK 55 migration notes:
+ *  - `expo-av`'s imperative <Video ref={...}> API is gone. All playback is
+ *    driven through a `VideoPlayer` instance returned by `useVideoPlayer`.
+ *  - `onPlaybackStatusUpdate` has been replaced by the event system: we use
+ *    `useEvent(player, 'statusChange'|'playingChange'|'playToEnd'|'timeUpdate')`.
+ *  - `ResizeMode.COVER` → `contentFit="cover"`.
+ *  - `overrideFileExtensionAndroid` is gone. For HLS sources we set
+ *    `contentType: 'hls'` on the VideoSource, which tells ExoPlayer / AVPlayer
+ *    to treat the stream as HLS even when the URL has no .m3u8 extension.
+ */
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { useEvent } from 'expo';
+import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
 import { Play } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
+
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
 import { VIDEO_DEFAULTS } from '../../utils/videoConfig';
@@ -20,52 +49,62 @@ import { getApiUrl } from '../../config/api.config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Types
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface UnifiedReelData {
   id: string;
   videoUrl: string;
   thumbnail?: string;
   duration?: number;
-  muted?: boolean; // Optional - defaults to VIDEO_DEFAULTS.muted
+  /** Optional — defaults to VIDEO_DEFAULTS.muted (audio ON, Instagram/TikTok style). */
+  muted?: boolean;
 }
 
 export interface UnifiedVideoPlayerProps {
   reel: UnifiedReelData;
   isActive: boolean;
-  onVideoRef: (ref: any, id: string) => void;
-  /** Optional: Disable replay limit (for testing or special cases) */
+  /**
+   * Receives the underlying `VideoPlayer` instance for this reel, so callers
+   * can drive playback imperatively (pause-on-navigate, pause-on-background,
+   * etc). Called with `null` on unmount. Shape kept backward-compatible with
+   * the old expo-av `ref` shape.
+   */
+  onVideoRef: (player: any | null, id: string) => void;
+  /** Disable the 2-replay cap. Mostly used in tests. */
   disableReplayLimit?: boolean;
-  /** Optional: Show progress bar */
+  /** Show the horizontal progress bar. Defaults to true. */
   showProgressBar?: boolean;
-  /** Optional: Override default muted state */
+  /** Override the default muted state (takes precedence over reel.muted). */
   muted?: boolean;
-  /** Optional: Custom style */
+  /** Extra style to merge onto the video container. */
   style?: any;
 }
 
-// Constants
+// ─── Styling tokens ───────────────────────────────────────────────────────────
+
 const COLORS = {
   primary: '#FFD700',
   background: '#000000',
   error: '#FF5252',
   progressBg: 'rgba(255, 255, 255, 0.3)',
   progressFill: '#32cd32',
-};
+} as const;
 
 /**
- * Unified Video Player Component (Internal)
- * 
- * Single source of truth for all video playback across the app.
- * Uses VIDEO_DEFAULTS for consistent behavior (audio ON, autoplay ON).
- * 
- * Features:
- * - Auto-replay up to 2 times (via replay limit)
- * - Pause and show replay button after 2 replays
- * - Manual tap restarts playback
- * - Replay count resets when scrolling away
- * - Audio ON by default (Instagram/TikTok style)
- * - Error Boundary for graceful error handling
+ * Build a VideoSource from a plain URL. Adds Mux HLS hints when the URL looks
+ * like a Mux playback URL so both Android (ExoPlayer) and iOS (AVPlayer) pick
+ * the right loader.
  */
+function buildVideoSource(url: string): VideoSource {
+  const isHls = url.includes('stream.mux.com') || url.includes('.m3u8');
+  return {
+    uri: url,
+    ...(isHls ? { contentType: 'hls' as const } : {}),
+  };
+}
+
+// ─── Internal implementation ──────────────────────────────────────────────────
+
 const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   reel,
   isActive,
@@ -75,412 +114,303 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   muted: overrideMuted,
   style,
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [error, setError] = useState(false);
-  const [errorDetails, setErrorDetails] = useState<string>('');
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-  // Q3 Fix: track the active video URL (may be refreshed if signed URL expires)
+  // -------- URL management (signed URL refresh support) --------
   const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
   const signedUrlRefreshAttempts = useRef(0);
   const MAX_SIGNED_URL_REFRESHES = 2;
-  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
 
-  const videoRef = useRef<any>(null);
-  const { t } = useLanguage();
-  const { getToken } = useAuth();
-  
-  // Determine muted state: override > prop > default
-  const isMuted = overrideMuted !== undefined 
-    ? overrideMuted 
-    : (reel.muted !== undefined ? reel.muted : VIDEO_DEFAULTS.muted);
-  
-  // Replay limit tracking
-  const {
-    replayCount,
-    isPausedByLimit,
-    onVideoEnd,
-    onManualReplay,
-    resetReplayCount,
-  } = useVideoReplayLimit(reel.id, MAX_AUTO_REPLAYS);
-
-  // Track if video has finished to detect replay
-  const lastPositionRef = useRef<number>(0);
-  const durationRef = useRef<number>(0);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      onVideoRef(videoRef.current, reel.id);
-    }
-    return () => {
-      onVideoRef(null, reel.id);
-    };
-  }, [reel.id, onVideoRef]);
-
-  // Sync activeVideoUrl when reel.videoUrl changes (e.g. after processing → processedVideoUrl)
+  // Reset URL when the parent passes a new reel.videoUrl (e.g. upload processed → new signed URL).
   useEffect(() => {
     setActiveVideoUrl(reel.videoUrl);
     signedUrlRefreshAttempts.current = 0;
-    // Reset loading state when URL changes
-    setIsLoading(true);
-    setIsVideoLoaded(false);
-    setError(false);
-    setErrorDetails('');
   }, [reel.videoUrl]);
 
-  // Load timeout: إذا الفيديو ما اتحملش في 15 ثانية، اعرض زرار retry
+  // -------- Resolve muted state (override > reel prop > default) --------
+  const isMuted =
+    overrideMuted !== undefined
+      ? overrideMuted
+      : reel.muted !== undefined
+        ? reel.muted
+        : VIDEO_DEFAULTS.muted;
+
+  // -------- Create the player --------
+  const player = useVideoPlayer(buildVideoSource(activeVideoUrl), (p) => {
+    p.muted = isMuted;
+    p.loop = VIDEO_DEFAULTS.looping;
+    p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
+    p.audioMixingMode = 'auto';
+    if (isActive && VIDEO_DEFAULTS.autoplay) {
+      p.play();
+    }
+  });
+
+  // Publish player to parent (imperative control — backward-compat with useReelsAudioManager).
   useEffect(() => {
-    if (!isActive || !reel.videoUrl) return;
-
-    // Clear any existing timeout
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-    }
-
-    if (isLoading && !isVideoLoaded && !error) {
-      loadTimeoutRef.current = setTimeout(() => {
-        if (!isMountedRef.current) return;
-        if (!isVideoLoaded) {
-          logger.warn(`[VideoPlayer] ⏰ Load timeout for reel ${reel.id}`);
-          setError(true);
-          setErrorDetails('انتهت مهلة تحميل الفيديو. تحقق من اتصالك.');
-          setIsLoading(false);
-        }
-      }, 15_000);
-    }
-
+    onVideoRef(player, reel.id);
     return () => {
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-        loadTimeoutRef.current = null;
-      }
+      onVideoRef(null, reel.id);
     };
-  }, [isActive, isLoading, isVideoLoaded, error, reel.id, reel.videoUrl]);
+  }, [player, reel.id, onVideoRef]);
 
-  // Reset replay count when video becomes inactive (scrolled away)
+  // Keep muted in sync when prop changes
   useEffect(() => {
-    if (!isActive) {
-      resetReplayCount();
+    try {
+      player.muted = isMuted;
+    } catch {
+      /* player may be releasing */
     }
-  }, [isActive, resetReplayCount]);
+  }, [player, isMuted]);
 
-  // ✅ FIX: Track actual playback state to avoid multiple playAsync calls
-  const isActuallyPlayingRef = useRef(false);
-  const playAttemptInProgressRef = useRef(false);
-  const lastControlAttemptRef = useRef<number>(0);
-
-  // Control video playback based on active state
-  useEffect(() => {
-    const controlVideo = async () => {
-      if (!videoRef.current || !isVideoLoaded) return;
-      
-      const shouldBePlaying = isActive && !isPausedByLimit;
-      
-      // ✅ Throttle control attempts to prevent rapid-fire calls
-      const now = Date.now();
-      if (now - lastControlAttemptRef.current < 100) return;
-      lastControlAttemptRef.current = now;
-      
-      try {
-        if (shouldBePlaying) {
-          // ✅ Prevent multiple simultaneous play attempts
-          if (playAttemptInProgressRef.current) return;
-          
-          // ✅ Check actual video status before attempting play
-          const status = await videoRef.current.getStatusAsync();
-          if ('isPlaying' in status && status.isPlaying) {
-            isActuallyPlayingRef.current = true;
-            return; // Already playing
-          }
-          
-          playAttemptInProgressRef.current = true;
-          await videoRef.current.playAsync();
-          isActuallyPlayingRef.current = true;
-          playAttemptInProgressRef.current = false;
-        } else {
-          // Only pause if actually playing
-          if (isActuallyPlayingRef.current || playAttemptInProgressRef.current) {
-            await videoRef.current.pauseAsync();
-            isActuallyPlayingRef.current = false;
-            playAttemptInProgressRef.current = false;
-          }
-        }
-      } catch (error) {
-        playAttemptInProgressRef.current = false;
-        // Only log non-trivial errors
-        const errorMessage = (error as Error)?.message || 'unknown';
-        if (!errorMessage.includes('already') && !errorMessage.includes('not ready')) {
-          console.log(`[UnifiedVideoPlayer] Video control for ${reel.id}:`, errorMessage);
-        }
-      }
-    };
-    controlVideo();
-  }, [isActive, isVideoLoaded, isPausedByLimit, reel.id]);
-
-  // ✅ FIX: Handle page focus to resume video when returning to reels page
-  useFocusEffect(
-    useCallback(() => {
-      // When page gains focus, try to resume if this video should be playing
-      const resumeIfNeeded = async () => {
-        if (!videoRef.current || !isVideoLoaded || !isActive || isPausedByLimit) return;
-        
-        try {
-          const status = await videoRef.current.getStatusAsync();
-          if ('isPlaying' in status && !status.isPlaying) {
-            // Video should be playing but isn't - resume it
-            await videoRef.current.playAsync();
-            isActuallyPlayingRef.current = true;
-          }
-        } catch (error) {
-          // Ignore errors - playback will be handled by useEffect
-        }
-      };
-      
-      // Small delay to let the page settle
-      const timer = setTimeout(resumeIfNeeded, 200);
-      
-      return () => {
-        clearTimeout(timer);
-      };
-    }, [isVideoLoaded, isActive, isPausedByLimit])
+  // -------- Replay limit tracking --------
+  const { isPausedByLimit, onVideoEnd, onManualReplay, resetReplayCount } = useVideoReplayLimit(
+    reel.id,
+    MAX_AUTO_REPLAYS,
   );
 
-  const handleLoad = useCallback(() => {
-    logger.info(`[VideoPlayer] ✅ Video loaded successfully: ${reel.id} | URL: ${activeVideoUrl.substring(0, 60)}...`);
-    setIsLoading(false);
-    setIsVideoLoaded(true);
-    setError(false);
-    setErrorDetails('');
-    signedUrlRefreshAttempts.current = 0; // reset on successful load
-    
-    // Clear load timeout
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-      loadTimeoutRef.current = null;
-    }
-  }, [reel.id, activeVideoUrl]);
+  useEffect(() => {
+    if (!isActive) resetReplayCount();
+  }, [isActive, resetReplayCount]);
 
-  /**
-   * Q3 Fix: On video error, attempt to refresh the signed URL.
-   * expo-av doesn't expose HTTP status codes, so we try a HEAD request
-   * to detect 403 before showing the error UI.
-   */
-  const handleError = useCallback(async (err?: any) => {
-    const errMsg = typeof err === 'string' ? err : (err?.message || err?.error || JSON.stringify(err) || 'Unknown error');
-    logger.error(`[VideoPlayer] ❌ Video error for reel ${reel.id}: ${errMsg}`);
-    logger.error(`[VideoPlayer] ❌ URL was: ${activeVideoUrl.substring(0, 80)}...`);
-    
-    // Detect HLS / Mux specific errors
-    const isMuxUrl = activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8');
-    if (isMuxUrl) {
-      logger.warn(`[VideoPlayer] 🔍 Mux HLS URL detected. Checking connectivity...`);
-      
-      // Try HEAD request to check if URL is accessible
-      try {
-        const headRes = await fetch(activeVideoUrl, { method: 'HEAD' });
-        logger.info(`[VideoPlayer] 🔍 Mux HEAD status: ${headRes.status} ${headRes.statusText}`);
-        if (!isMountedRef.current) return;
-        if (headRes.status === 403 || headRes.status === 404) {
-          setErrorDetails(`Mux: ${headRes.status} - الفيديو غير متاح أو انتهت صلاحيته`);
+  // -------- Status / events via useEvent --------
+  // useEvent returns the stateful snapshot of the last payload — perfect for rendering.
+  const { status, error: playerError } = useEvent(player, 'statusChange', {
+    status: player.status,
+    error: undefined as { message: string } | undefined,
+  });
+
+  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
+
+  const { currentTime } = useEvent(player, 'timeUpdate', {
+    currentTime: 0,
+    bufferedPosition: 0,
+    currentLiveTimestamp: null,
+    currentOffsetFromLive: null,
+  });
+
+  // `playToEnd` fires once when the video hits the end — count replays off that.
+  useEvent(player, 'playToEnd', undefined);
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('playToEnd', () => {
+      if (disableReplayLimit || !isActive) return;
+      const shouldContinue = onVideoEnd();
+      if (shouldContinue) {
+        // replay: seek to start and resume
+        try {
+          player.currentTime = 0;
+          player.play();
+        } catch {
+          /* ignore */
         }
-      } catch (headErr) {
-        logger.warn(`[VideoPlayer] 🔍 HEAD request failed (network issue):`, headErr);
-        if (!isMountedRef.current) return;
-        setErrorDetails('مشكلة في الاتصال بخادم الفيديو');
+      } else {
+        // cap reached — pause and show overlay
+        try {
+          player.pause();
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+    return () => {
+      sub?.remove?.();
+    };
+  }, [player, disableReplayLimit, isActive, onVideoEnd]);
+
+  // -------- Playback control (play/pause on isActive change) --------
+  useEffect(() => {
+    if (!player) return;
+    const shouldPlay = isActive && !isPausedByLimit;
+    try {
+      if (shouldPlay) {
+        if (!player.playing) player.play();
+      } else if (player.playing) {
+        player.pause();
+      }
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (!msg.includes('released') && !msg.includes('already')) {
+        logger.debug(`[UnifiedVideoPlayer] play/pause for ${reel.id}:`, msg);
       }
     }
-    
-    // Check if this might be a 403 (expired signed URL)
+  }, [player, isActive, isPausedByLimit, reel.id]);
+
+  // Resume when screen regains focus
+  useFocusEffect(
+    useCallback(() => {
+      const timer = setTimeout(() => {
+        if (!player || !isActive || isPausedByLimit) return;
+        try {
+          if (!player.playing) player.play();
+        } catch {
+          /* ignore */
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    }, [player, isActive, isPausedByLimit]),
+  );
+
+  // -------- Loading / error UI state --------
+  const isLoading = status === 'loading' || status === 'idle';
+  const isReady = status === 'readyToPlay';
+  const hasError = status === 'error';
+
+  // Load-timeout: show the retry screen if we're still loading after 15s.
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isActive) return;
+    if (!isLoading || isReady) {
+      setLoadTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (!isReady) {
+        logger.warn(`[UnifiedVideoPlayer] ⏰ Load timeout for reel ${reel.id}`);
+        setLoadTimedOut(true);
+      }
+    }, 15_000);
+    return () => clearTimeout(timer);
+  }, [isActive, isLoading, isReady, reel.id]);
+
+  // -------- Signed-URL refresh on error --------
+  const { getToken } = useAuth();
+  const [errorDetails, setErrorDetails] = useState<string>('');
+
+  useEffect(() => {
+    if (!hasError) return;
+    const msg = playerError?.message ?? 'Unknown error';
+    logger.error(`[UnifiedVideoPlayer] ❌ Video error for reel ${reel.id}: ${msg}`);
+    logger.error(`[UnifiedVideoPlayer] ❌ URL was: ${activeVideoUrl.substring(0, 80)}...`);
+
+    // Try to refresh signed URL if this looks like a 403 / expired URL case.
+    const isSignedUrl = activeVideoUrl.includes('X-Amz-Signature');
     if (
-      signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES &&
-      activeVideoUrl.includes('X-Amz-Signature') // is a signed URL
+      isSignedUrl &&
+      signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES
     ) {
       signedUrlRefreshAttempts.current += 1;
-      logger.info(`[VideoPlayer] Attempting signed URL refresh (attempt ${signedUrlRefreshAttempts.current}) for reel ${reel.id}`);
+      logger.info(
+        `[UnifiedVideoPlayer] Attempting signed URL refresh (attempt ${signedUrlRefreshAttempts.current}) for reel ${reel.id}`,
+      );
 
-      try {
-        const token = await getToken();
-        if (!isMountedRef.current) return;
-        if (token) {
+      (async () => {
+        try {
+          const token = await getToken();
+          if (!token) return;
           const res = await fetch(`${getApiUrl()}/reels/${reel.id}/signed-url`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          if (res.ok) {
-            const data = await res.json();
-            const newUrl: string = data?.data?.signedUrl;
-            if (!isMountedRef.current) return;
-            if (newUrl) {
-              logger.info(`[VideoPlayer] Signed URL refreshed for reel ${reel.id}`);
-              setActiveVideoUrl(newUrl);
-              setError(false);
-              setErrorDetails('');
-              setIsLoading(true);
-              setIsVideoLoaded(false);
-              return; // Don't show error — retry with new URL
+          if (!res.ok) return;
+          const data = await res.json();
+          const newUrl: string | undefined = data?.data?.signedUrl;
+          if (newUrl) {
+            logger.info(`[UnifiedVideoPlayer] Signed URL refreshed for reel ${reel.id}`);
+            setActiveVideoUrl(newUrl);
+            setErrorDetails('');
+            try {
+              await player.replaceAsync(buildVideoSource(newUrl));
+              if (isActive) player.play();
+            } catch (replaceErr) {
+              logger.warn('[UnifiedVideoPlayer] replaceAsync failed:', replaceErr);
             }
           }
+        } catch (refreshErr) {
+          logger.warn('[UnifiedVideoPlayer] Signed URL refresh failed:', refreshErr);
         }
-      } catch (refreshErr) {
-        logger.warn('[VideoPlayer] Signed URL refresh failed:', refreshErr);
-      }
+      })();
+      return;
     }
 
-    // Fallback: show error UI
-    if (!isMountedRef.current) return;
-    setError(true);
-    setIsLoading(false);
-    setIsVideoLoaded(false);
-  }, [activeVideoUrl, reel.id, getToken]);
+    // Mux-specific diagnostic: HEAD the URL to surface 403/404 in the UI.
+    const isMux = activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8');
+    if (isMux) {
+      (async () => {
+        try {
+          const head = await fetch(activeVideoUrl, { method: 'HEAD' });
+          logger.info(`[UnifiedVideoPlayer] 🔍 Mux HEAD status: ${head.status} ${head.statusText}`);
+          if (head.status === 403 || head.status === 404) {
+            setErrorDetails(`Mux: ${head.status} - الفيديو غير متاح أو انتهت صلاحيته`);
+          }
+        } catch (headErr) {
+          logger.warn('[UnifiedVideoPlayer] 🔍 HEAD request failed (network issue):', headErr);
+          setErrorDetails('مشكلة في الاتصال بخادم الفيديو');
+        }
+      })();
+    }
+  }, [hasError, playerError, activeVideoUrl, reel.id, getToken, player, isActive]);
 
-  const handleRetry = () => {
+  // -------- Manual retry / manual replay --------
+  const handleRetry = useCallback(() => {
     signedUrlRefreshAttempts.current = 0;
-    setError(false);
-    setIsLoading(true);
-    setIsVideoLoaded(false);
-    setActiveVideoUrl(reel.videoUrl); // reset to original URL on manual retry
-  };
+    setErrorDetails('');
+    setLoadTimedOut(false);
+    setActiveVideoUrl(reel.videoUrl);
+    try {
+      player.replaceAsync(buildVideoSource(reel.videoUrl));
+      if (isActive) player.play();
+    } catch (e) {
+      logger.warn('[UnifiedVideoPlayer] handleRetry replaceAsync failed:', e);
+    }
+  }, [reel.videoUrl, player, isActive]);
 
-  /**
-   * Handle manual replay when user taps the replay button
-   */
-  const handleManualReplay = useCallback(async () => {
+  const handleManualReplay = useCallback(() => {
     onManualReplay();
-    if (videoRef.current) {
-      try {
-        await videoRef.current.setPositionAsync(0);
-        await videoRef.current.playAsync();
-      } catch (e) {
-        console.warn('Error restarting video:', e);
-      }
+    try {
+      player.currentTime = 0;
+      player.play();
+    } catch (e) {
+      logger.warn('[UnifiedVideoPlayer] Error restarting video:', e);
     }
-  }, [onManualReplay]);
+  }, [onManualReplay, player]);
 
-  /**
-   * Handle playback status updates to detect video end and sync playback state
-   */
-  const handlePlaybackStatusUpdate = useCallback((status: any) => {
-    if ('isBuffering' in status) {
-      setIsBuffering(status.isBuffering || false);
-    }
-    
-    // ✅ Sync actual playback state with ref
-    if ('isPlaying' in status) {
-      isActuallyPlayingRef.current = status.isPlaying || false;
-    }
-    
-    if (!disableReplayLimit && 'isLoaded' in status && status.isLoaded) {
-      const { positionMillis, durationMillis, didJustFinish } = status;
-      
-      // Store duration for reference
-      if (durationMillis) {
-        durationRef.current = durationMillis;
-        setDuration(durationMillis);
-      }
-      
-      // Update progress
-      if (positionMillis && durationMillis && durationMillis > 0) {
-        setProgress(positionMillis / durationMillis);
-      }
-      
-      // ✅ FIX: Only call setIsVideoLoaded once — calling setState on every
-      // playback status update (60fps) caused a render storm
-      // isVideoLoaded is already set in handleLoad; this is a safety fallback
-      if (status.isLoaded && !isVideoLoaded) {
-        setIsVideoLoaded(true);
-      }
-      
-      // Detect video end (didJustFinish is true when video reaches the end)
-      if (didJustFinish && isActive) {
-        const shouldContinue = onVideoEnd();
-        
-        if (!shouldContinue && videoRef.current) {
-          // Pause the video - replay limit reached
-          videoRef.current.pauseAsync().catch((e: any) => {
-            console.warn('Error pausing video after replay limit:', e);
-          });
-        }
-      }
-      
-      lastPositionRef.current = positionMillis || 0;
-    }
-  }, [disableReplayLimit, isActive, onVideoEnd, isVideoLoaded]);
+  // -------- Render ---------
+  const { t } = useLanguage();
+  const showErrorUi = (hasError || loadTimedOut) && !isLoading;
 
-  if (error) {
+  if (showErrorUi) {
     return (
       <View style={[styles.errorContainer, style]}>
         <Text style={styles.errorText}>{t.reels?.loadFailed || 'Failed to load video'}</Text>
-        {errorDetails ? (
-          <Text style={styles.errorDetailText}>{errorDetails}</Text>
+        {errorDetails ? <Text style={styles.errorDetailText}>{errorDetails}</Text> : null}
+        {loadTimedOut && !errorDetails ? (
+          <Text style={styles.errorDetailText}>انتهت مهلة تحميل الفيديو. تحقق من اتصالك.</Text>
         ) : null}
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={handleRetry}
-        >
+        <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
           <Text style={styles.retryText}>{t.reels?.retry || 'Retry'}</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const duration = player.duration;
+  const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
+
   return (
     <View style={[styles.videoContainer, style]}>
-      <Video
-        ref={videoRef}
-        source={{
-          uri: activeVideoUrl,
-          // ✅ Critical for Android HLS: Always override for Mux HLS streams and .m3u8 URLs
-          // stream.mux.com delivers HLS — ExoPlayer needs this hint to decode correctly
-          ...(activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8')
-            ? { overrideFileExtensionAndroid: 'm3u8' }
-            : {}),
-        }}
+      <VideoView
         style={styles.video}
-        resizeMode={VIDEO_DEFAULTS.resizeMode}
-        // ✅ FIX: Do NOT gate shouldPlay on isVideoLoaded — expo-av controls playback
-        // internally. Gating on isVideoLoaded causes a chicken-and-egg where video
-        // never starts. Let the useEffect handle play/pause imperatively instead.
-        shouldPlay={isActive && !isPausedByLimit && VIDEO_DEFAULTS.shouldPlay}
-        isLooping={VIDEO_DEFAULTS.looping}
-        isMuted={isMuted}
-        onLoad={handleLoad}
-        onError={handleError}
-        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-        progressUpdateIntervalMillis={VIDEO_DEFAULTS.progressUpdateIntervalMillis}
-        // ✅ FIX: REMOVED positionMillis={0} — this prop seeks video to 0 on EVERY
-        // render, causing constant restarts. Only set position imperatively when needed.
-        useNativeControls={false}
+        player={player}
+        contentFit={VIDEO_DEFAULTS.contentFit}
+        nativeControls={false}
+        allowsPictureInPicture={false}
       />
 
-      {/* Loading/Buffering Indicator */}
-      {(isLoading || isBuffering) && (
-        <View style={styles.loadingContainer}>
+      {/* Loading / buffering indicator */}
+      {(isLoading || !isPlaying) && !hasError && isActive && (
+        <View style={styles.loadingContainer} pointerEvents="none">
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>
-            {isLoading ? (t.reels?.loading || 'Loading...') : (t.reels?.buffering || 'Buffering...')}
-          </Text>
         </View>
       )}
 
-      {/* Progress Bar */}
-      {showProgressBar && !isLoading && duration > 0 && (
-        <View style={styles.progressContainer}>
+      {/* Progress bar */}
+      {showProgressBar && duration > 0 && (
+        <View style={styles.progressContainer} pointerEvents="none">
           <View style={styles.progressBackground}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
         </View>
       )}
 
-      {/* Replay Button Overlay - Shown when replay limit reached */}
+      {/* Replay overlay — shown when user hit the replay cap */}
       {isPausedByLimit && !isLoading && (
         <TouchableOpacity
           style={styles.replayOverlay}
@@ -492,14 +422,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
           <View style={styles.replayButton}>
             <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
           </View>
-          <Text style={styles.replayText}>
-            {t.reels?.tapToReplay || 'Tap to replay'}
-          </Text>
+          <Text style={styles.replayText}>{t.reels?.tapToReplay || 'Tap to replay'}</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   videoContainer: {
@@ -524,12 +454,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  loadingText: {
-    color: 'white',
-    marginTop: 10,
-    fontSize: 14,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   progressContainer: {
     position: 'absolute',
@@ -553,17 +478,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.background,
   },
+  errorText: {
+    color: 'white',
+    fontSize: 16,
+    marginBottom: 16,
+  },
   errorDetailText: {
     color: '#aaa',
     fontSize: 13,
     marginBottom: 12,
     textAlign: 'center' as const,
     paddingHorizontal: 20,
-  },
-  errorText: {
-    color: 'white',
-    fontSize: 16,
-    marginBottom: 16,
   },
   retryButton: {
     paddingHorizontal: 24,
@@ -606,10 +531,8 @@ const styles = StyleSheet.create({
   },
 });
 
-/**
- * Unified Video Player Component (Exported with Error Boundary)
- * Requirement: Critical Priority #3 - Add Error Boundary for videos
- */
+// ─── Exported component with Error Boundary ───────────────────────────────────
+
 export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = (props) => {
   return (
     <VideoErrorBoundary
@@ -625,3 +548,5 @@ export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = (props) => 
     </VideoErrorBoundary>
   );
 };
+
+export default UnifiedVideoPlayer;
