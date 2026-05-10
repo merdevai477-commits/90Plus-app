@@ -8,7 +8,6 @@
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
@@ -56,7 +55,6 @@
         "monochromeImage": "./assets/images/90Plus.png"
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -139,7 +137,6 @@
     "experiments": {
       "typedRoutes": true
     },
-    "jsEngine": "hermes",
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
