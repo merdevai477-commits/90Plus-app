@@ -41,6 +41,21 @@ class FootballApiError extends Error {
   }
 }
 
+// Circuit breaker for 429 Too Many Requests: once we hit the daily quota,
+// stop making API calls for a cool-down window instead of burning retries.
+let quotaExhaustedUntil = 0;
+const QUOTA_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const QUOTA_COOLDOWN_RETRY_AFTER_MS = 10 * 60 * 1000; // if Retry-After not present, guess 10 min
+
+function isQuotaExhausted(): boolean {
+  return Date.now() < quotaExhaustedUntil;
+}
+
+function markQuotaExhausted(retryAfterSec?: number): void {
+  const coolMs = retryAfterSec ? retryAfterSec * 1000 : QUOTA_COOLDOWN_MS;
+  quotaExhaustedUntil = Date.now() + coolMs;
+}
+
 class FootballService {
   private readonly apiKey: string;
   private readonly baseUrl = 'https://v3.football.api-sports.io';
@@ -313,6 +328,16 @@ class FootballService {
       return cached;
     }
 
+    // ✅ If we already hit the daily quota, skip the API entirely and return
+    // an empty array so upstream code uses the DB fallback instead of burning
+    // retries and producing cascading 429 errors in the logs.
+    if (isQuotaExhausted()) {
+      logger.debug(`⏭️  Skipping API call (quota exhausted until ${new Date(quotaExhaustedUntil).toISOString()}): ${cacheKey}`);
+      // Short TTL so we don't poison the cache with empty results once the quota resets
+      await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+      return [] as T;
+    }
+
     // Rate limit check
     await this.checkRateLimit();
 
@@ -336,6 +361,17 @@ class FootballService {
       this.lastRequestTime = Date.now();
 
       if (!response.ok) {
+        // 429 → trip the circuit breaker so we stop burning retries for the day
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('retry-after');
+          const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined;
+          markQuotaExhausted(isNaN(retryAfterSec as number) ? undefined : retryAfterSec);
+          logger.warn(`⚠️ API-Football 429 Too Many Requests — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`);
+          // Cache empty so upstream returns a usable value instead of throwing
+          await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+          return [] as T;
+        }
+
         throw new FootballApiError(
           `API request failed: ${response.statusText}`,
           response.status

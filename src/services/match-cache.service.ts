@@ -314,11 +314,15 @@ class MatchCacheService {
                 this.dbFixtureIds.add(fixture.fixture.id);
                 archivedCount++;
 
-                // ✅ AUTOMATIC: Fetch and store lineups, statistics, and events in background
-                // This ensures future requests for this match data = 0 API calls
-                this.fetchAndStoreMatchDetails(fixture.fixture.id).catch(error => {
-                    logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
-                });
+                // ⚠️ Background detail fetch burns 3 API calls per match (lineups +
+                // statistics + events). On the Free plan (100/day) that exhausts the
+                // quota in <10 archived matches and causes cascading 429 errors.
+                // Only fetch details when explicitly opted in via env flag.
+                if (process.env.FOOTBALL_API_PLAN === 'pro' || process.env.FETCH_MATCH_DETAILS === 'true') {
+                    this.fetchAndStoreMatchDetails(fixture.fixture.id).catch(error => {
+                        logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
+                    });
+                }
             } catch (error) {
                 logger.error(`Failed to archive fixture ${fixture.fixture.id}:`, error);
             }
