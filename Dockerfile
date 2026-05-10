@@ -25,13 +25,14 @@ RUN npx prisma generate
 COPY . .
 
 # Remove .tsbuildinfo if exists
-RUN rm -f .tsbuildinfo || true
+RUN rm -f .tsbuildinfo dist || true
 
-# Build TypeScript
-RUN npm run build || echo 'Build completed with errors'
+# Build TypeScript - fail hard on errors instead of masking them
+RUN npm run build
 
-# Verify build
-RUN npm run verify:build || echo 'Warning: quiz.routes.js verification failed'
+# Verify build - fail hard if the expected outputs aren't there
+RUN npm run verify:build
+RUN test -f dist/src/main.js || (echo "FATAL: dist/src/main.js missing after build" && exit 1)
 
 # Expose port (Railway uses 3000)
 EXPOSE 3000
