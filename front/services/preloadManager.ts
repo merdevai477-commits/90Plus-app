@@ -386,7 +386,10 @@ class PreloadManagerClass {
               isFollowing: false,
             },
             videoUrl: reel.videoUrl,
-            thumbnail: reel.thumbnail || reel.videoUrl,
+            // If no thumbnail, leave empty — do NOT use the video URL as an
+            // image source, otherwise <Image> will try to load a video as a
+            // thumbnail and fail with "Failed to load video".
+            thumbnail: reel.thumbnail || '',
             duration: 0,
             likes: reel.likesCount,
             views: reel.views,

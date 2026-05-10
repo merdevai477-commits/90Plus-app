@@ -61,7 +61,9 @@ const transformBackendReel = (reel: ReelFeedItem, likedReelIds: string[] = []): 
     isFollowing: false
   },
   videoUrl: reel.videoUrl,
-  thumbnail: reel.thumbnail || reel.videoUrl,
+  // Empty string instead of video URL — prevents <Image> from trying to
+  // render a video file as a thumbnail.
+  thumbnail: reel.thumbnail || '',
   duration: 0,
   likes: reel.likesCount,
   views: reel.views,

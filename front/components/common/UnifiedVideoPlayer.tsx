@@ -103,6 +103,23 @@ function buildVideoSource(url: string): VideoSource {
   };
 }
 
+/**
+ * Returns true if the given URL is clearly NOT a playable video source
+ * (empty, a thumbnail endpoint, or an obvious image extension). Prevents
+ * the player from spending 15s trying to decode an image as video.
+ */
+function isInvalidVideoUrl(url: string | undefined | null): boolean {
+  if (!url || typeof url !== 'string') return true;
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return true;
+  if (!/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('file://')) return true;
+  const lower = trimmed.toLowerCase();
+  // Thumbnail endpoints and image extensions are never valid video sources.
+  if (lower.includes('/thumbnails/') || lower.includes('/thumbnail/')) return true;
+  if (/\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(lower)) return true;
+  return false;
+}
+
 // ─── Internal implementation ──────────────────────────────────────────────────
 
 const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
@@ -119,6 +136,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const signedUrlRefreshAttempts = useRef(0);
   const MAX_SIGNED_URL_REFRESHES = 2;
 
+  // Guard: fail-fast if the URL is clearly not a video (empty, thumbnail
+  // endpoint, image extension). Prevents the 15s spin-and-timeout cycle.
+  const invalidSource = isInvalidVideoUrl(activeVideoUrl);
+
   // Reset URL when the parent passes a new reel.videoUrl (e.g. upload processed → new signed URL).
   useEffect(() => {
     setActiveVideoUrl(reel.videoUrl);
@@ -134,15 +155,21 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         : VIDEO_DEFAULTS.muted;
 
   // -------- Create the player --------
-  const player = useVideoPlayer(buildVideoSource(activeVideoUrl), (p) => {
-    p.muted = isMuted;
-    p.loop = VIDEO_DEFAULTS.looping;
-    p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
-    p.audioMixingMode = 'auto';
-    if (isActive && VIDEO_DEFAULTS.autoplay) {
-      p.play();
-    }
-  });
+  // When the URL is invalid we pass an empty source so expo-video stays idle
+  // instead of trying (and failing) to decode an image as a video. The
+  // early-return below renders a proper error UI immediately.
+  const player = useVideoPlayer(
+    invalidSource ? null : buildVideoSource(activeVideoUrl),
+    (p) => {
+      p.muted = isMuted;
+      p.loop = VIDEO_DEFAULTS.looping;
+      p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
+      p.audioMixingMode = 'auto';
+      if (isActive && VIDEO_DEFAULTS.autoplay && !invalidSource) {
+        p.play();
+      }
+    },
+  );
 
   // Publish player to parent (imperative control — backward-compat with useReelsAudioManager).
   useEffect(() => {
@@ -218,7 +245,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
   // -------- Playback control (play/pause on isActive change) --------
   useEffect(() => {
-    if (!player) return;
+    if (!player || invalidSource) return;
     const shouldPlay = isActive && !isPausedByLimit;
     try {
       if (shouldPlay) {
@@ -232,13 +259,13 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         logger.debug(`[UnifiedVideoPlayer] play/pause for ${reel.id}:`, msg);
       }
     }
-  }, [player, isActive, isPausedByLimit, reel.id]);
+  }, [player, isActive, isPausedByLimit, reel.id, invalidSource]);
 
   // Resume when screen regains focus
   useFocusEffect(
     useCallback(() => {
       const timer = setTimeout(() => {
-        if (!player || !isActive || isPausedByLimit) return;
+        if (!player || !isActive || isPausedByLimit || invalidSource) return;
         try {
           if (!player.playing) player.play();
         } catch {
@@ -246,13 +273,15 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         }
       }, 200);
       return () => clearTimeout(timer);
-    }, [player, isActive, isPausedByLimit]),
+    }, [player, isActive, isPausedByLimit, invalidSource]),
   );
 
   // -------- Loading / error UI state --------
-  const isLoading = status === 'loading' || status === 'idle';
+  // If the source is invalid we report "not loading" so the timeout effect
+  // never arms and we drop straight into the error UI below.
+  const isLoading = !invalidSource && (status === 'loading' || status === 'idle');
   const isReady = status === 'readyToPlay';
-  const hasError = status === 'error';
+  const hasError = !invalidSource && status === 'error';
 
   // Load-timeout: show the retry screen if we're still loading after 15s.
   const [loadTimedOut, setLoadTimedOut] = useState(false);
@@ -274,12 +303,20 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   // -------- Signed-URL refresh on error --------
   const { getToken } = useAuth();
   const [errorDetails, setErrorDetails] = useState<string>('');
+  // Track which (reel.id, url) pair we've already logged so we don't spam
+  // the same failure message every render.
+  const loggedErrorKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!hasError) return;
     const msg = playerError?.message ?? 'Unknown error';
-    logger.error(`[UnifiedVideoPlayer] ❌ Video error for reel ${reel.id}: ${msg}`);
-    logger.error(`[UnifiedVideoPlayer] ❌ URL was: ${activeVideoUrl.substring(0, 80)}...`);
+    const errorKey = `${reel.id}|${activeVideoUrl}`;
+    if (loggedErrorKeyRef.current !== errorKey) {
+      loggedErrorKeyRef.current = errorKey;
+      logger.warn(
+        `[UnifiedVideoPlayer] Video load failed for reel ${reel.id}: ${msg} — url prefix: ${activeVideoUrl.substring(0, 80)}`,
+      );
+    }
 
     // Try to refresh signed URL if this looks like a 403 / expired URL case.
     const isSignedUrl = activeVideoUrl.includes('X-Amz-Signature');
@@ -364,19 +401,25 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
   // -------- Render ---------
   const { t } = useLanguage();
-  const showErrorUi = (hasError || loadTimedOut) && !isLoading;
+  const showErrorUi = (hasError || loadTimedOut || invalidSource) && !isLoading;
 
   if (showErrorUi) {
+    const invalidReason = invalidSource
+      ? 'مصدر الفيديو غير صالح'
+      : errorDetails
+        ? errorDetails
+        : loadTimedOut
+          ? 'انتهت مهلة تحميل الفيديو. تحقق من اتصالك.'
+          : '';
     return (
       <View style={[styles.errorContainer, style]}>
         <Text style={styles.errorText}>{t.reels?.loadFailed || 'Failed to load video'}</Text>
-        {errorDetails ? <Text style={styles.errorDetailText}>{errorDetails}</Text> : null}
-        {loadTimedOut && !errorDetails ? (
-          <Text style={styles.errorDetailText}>انتهت مهلة تحميل الفيديو. تحقق من اتصالك.</Text>
-        ) : null}
-        <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryText}>{t.reels?.retry || 'Retry'}</Text>
-        </TouchableOpacity>
+        {invalidReason ? <Text style={styles.errorDetailText}>{invalidReason}</Text> : null}
+        {!invalidSource && (
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryText}>{t.reels?.retry || 'Retry'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

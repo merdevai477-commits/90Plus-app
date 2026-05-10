@@ -538,15 +538,38 @@ export default function ProfileScreen() {
       return true;
     });
 
-    return uniqueVideos.map((video: any) => ({
-      id: video.id,
-      thumbnail: video.thumbnail || video.uri,
-      videoUrl: video.videoUrl || video.uri || video.thumbnail,
-      views: video.views || '0',
-      duration: video.duration || '',
-      isUploading: video.isUploading || false,
-      uploadProgress: video.uploadProgress,
-    }));
+    // Helper — reject thumbnail/image URLs so the player is never handed one.
+    const isPlayableVideoUrl = (url: any): boolean => {
+      if (!url || typeof url !== 'string') return false;
+      const trimmed = url.trim();
+      if (trimmed.length === 0) return false;
+      if (!/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('file://')) return false;
+      const lower = trimmed.toLowerCase();
+      if (lower.includes('/thumbnails/') || lower.includes('/thumbnail/')) return false;
+      if (/\.(jpe?g|png|gif|webp|bmp|svg|avif)(\?|$)/i.test(lower)) return false;
+      return true;
+    };
+
+    return uniqueVideos
+      .map((video: any) => {
+        const rawVideoUrl = video.videoUrl || video.uri || '';
+        // Never fall back to thumbnail — that's an image URL and would
+        // cause "Failed to load video" in the player.
+        const videoUrl = isPlayableVideoUrl(rawVideoUrl) ? rawVideoUrl : '';
+        return {
+          id: video.id,
+          thumbnail: video.thumbnail || video.uri,
+          videoUrl,
+          views: video.views || '0',
+          duration: video.duration || '',
+          isUploading: video.isUploading || false,
+          uploadProgress: video.uploadProgress,
+        };
+      })
+      // Hide rows that are neither currently uploading nor have a usable
+      // video URL yet (e.g. Mux is still processing). They'll reappear
+      // once the webhook fills in videoUrl and the cache refreshes.
+      .filter((v: any) => v.isUploading || v.videoUrl.length > 0);
   }, [cachedVideos, uploadedVideos]);
   
   const analytics = cachedAnalytics;
@@ -1551,8 +1574,15 @@ export default function ProfileScreen() {
           <VideoGrid
             videos={myVideos}
             onVideoPress={(video, _index) => {
-              setSelectedVideoUrl((video as any).videoUrl || video.thumbnail);
-              setIsVideoPlayerVisible(true);
+              const src = (video as any).videoUrl;
+              // Only open the player if we actually have a video URL — never
+              // pass a thumbnail (image) as the video source.
+              if (src && typeof src === 'string' && src.length > 0) {
+                setSelectedVideoUrl(src);
+                setIsVideoPlayerVisible(true);
+              } else {
+                toastManager.showWarning('الفيديو غير جاهز', 'لا يوجد مصدر فيديو صالح للتشغيل');
+              }
             }}
             onVideoLongPress={() => setIsDeleteMode(prev => !prev)}
             onDeleteVideo={(videoId) => {
