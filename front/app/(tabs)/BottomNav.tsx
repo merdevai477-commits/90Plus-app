@@ -62,7 +62,7 @@ const NavItem = ({ icon: Icon, isActive, onPress, onPressIn, scaleAnim, activeCo
 );
 
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
-type AppRoute = '/home' | '/matches' | '/quiz' | '/chat' | '/profile' | '/reels' | '/rank';
+type AppRoute = '/(tabs)/Home' | '/(tabs)/matches' | '/(tabs)/quiz' | '/chat' | '/(tabs)/profile' | '/(tabs)/reels' | '/(tabs)/rank';
 
 const BottomNav = () => {
   const router = useRouter();
@@ -74,12 +74,12 @@ const BottomNav = () => {
   ).current;
 
   const tabs: { name: TabName; icon: typeof Home | null; customIcon?: boolean; aiIcon?: boolean; route: AppRoute }[] = [
-    { name: 'Home',       icon: Home,      route: '/home' },
-    { name: 'Leagues',    icon: null,      customIcon: true, route: '/matches' },
+    { name: 'Home',       icon: Home,      route: '/(tabs)/Home' },
+    { name: 'Leagues',    icon: null,      customIcon: true, route: '/(tabs)/matches' },
     { name: 'AI',         icon: null,      aiIcon: true, route: '/chat' },
-    { name: 'Profile',    icon: User,      route: '/profile' },
-    { name: 'Highlights', icon: Video,     route: '/reels' },
-    { name: 'Rank',       icon: BarChart3, route: '/rank' },
+    { name: 'Profile',    icon: User,      route: '/(tabs)/profile' },
+    { name: 'Highlights', icon: Video,     route: '/(tabs)/reels' },
+    { name: 'Rank',       icon: BarChart3, route: '/(tabs)/rank' },
   ];
 
   const isMatchDetails = pathname?.includes('match-details');
@@ -88,14 +88,21 @@ const BottomNav = () => {
   const isProfileStack =
     pathname?.includes('/notifications') ||
     pathname?.includes('/settings');
-  const activeTab: TabName =
-    isMatchDetails || isMatches
-      ? 'Leagues'
-      : isChat
-      ? 'AI'
-      : isProfileStack
-      ? 'Profile'
-      : (tabs.find(tab => pathname === tab.route || pathname?.toLowerCase() === tab.route)?.name ?? 'Home');
+  const activeTab: TabName = (() => {
+    if (isMatchDetails || isMatches) return 'Leagues';
+    if (isChat) return 'AI';
+    if (isProfileStack) return 'Profile';
+    // Match by route path segment (case-insensitive) so `/Home`, `/profile`,
+    // `/reels`, `/rank` all map to the right tab regardless of group prefix.
+    const p = (pathname ?? '').toLowerCase();
+    const found = tabs.find(tab => {
+      const r = tab.route.toLowerCase();
+      // Strip expo-router group prefix so `/(tabs)/home` → `/home`
+      const stripped = r.replace(/\/\([^)]+\)/g, '');
+      return p === r || p === stripped || p.endsWith(stripped);
+    });
+    return found?.name ?? 'Home';
+  })();
 
   const glassProps = isLiquidGlassSupported
     ? { effect: "clear" as const, interactive: true }
@@ -124,8 +131,17 @@ const BottomNav = () => {
       Animated.timing(scaleAnims[index], { toValue: 0.85, duration: 100, useNativeDriver: true }),
       Animated.spring(scaleAnims[index], { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
+    // Guard against double-tapping the same tab (no-op, avoids flicker).
+    const p = (pathname ?? '').toLowerCase();
+    const targetStripped = tab.route.toLowerCase().replace(/\/\([^)]+\)/g, '');
+    if (p === tab.route.toLowerCase() || p === targetStripped || p.endsWith(targetStripped)) {
+      return;
+    }
+    // Use replace (not push) so tabs don't stack and each tap isn't a full
+    // remount of the (tabs) group — which used to briefly show the splash
+    // while Clerk re-initialised on the new stack entry.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    router.push(tab.route as any);
+    router.replace(tab.route as any);
   };
 
   return (
