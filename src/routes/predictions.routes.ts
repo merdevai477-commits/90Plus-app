@@ -13,8 +13,8 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // Constants
-const DAILY_PREDICTION_LIMIT = 10; // الحد الأقصى للتوقعات اليومية
-const PREDICTION_COST = 5; // coins - تكلفة كل توقع
+const DAILY_PREDICTION_LIMIT = 10; // الحد الأقصى للتوقعات اليومية (= عدد التذاكر اليومية)
+const PREDICTION_COST = 0; // Deprecated — predictions now cost only 1 daily ticket, not coins.
 const CORRECT_PREDICTION_REWARD = 10; // coins - مكافأة التوقع الصحيح
 
 /**
@@ -126,7 +126,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
         try {
             [prediction, updatedUser] = await prisma.$transaction(async (tx) => {
-                // Re-read user with coins inside transaction (prevents TOCTOU race)
+                // Re-read user inside transaction (prevents TOCTOU race)
                 const user = await tx.user.findUnique({
                     where: { id: userExists.id },
                     select: { id: true, coins: true }
@@ -134,12 +134,10 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
                 if (!user) throw new Error('USER_NOT_FOUND');
 
-                // Atomic coins check
-                if (user.coins < PREDICTION_COST) {
-                    throw new Error(`INSUFFICIENT_COINS:${user.coins}`);
-                }
+                // Predictions no longer cost coins — only a daily ticket.
+                // The old INSUFFICIENT_COINS check has been removed.
 
-                // Atomic daily limit check
+                // Atomic daily limit check (= ticket check)
                 const todayCount = await tx.prediction.count({
                     where: {
                         userId: user.id,
@@ -164,13 +162,13 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
                 if (existing) throw new Error('ALREADY_PREDICTED');
 
-                // All checks passed — create prediction and deduct coins atomically
+                // All checks passed — create prediction atomically (no coin charge).
                 const newPrediction = await tx.prediction.create({
                     data: {
                         userId: user.id,
                         apiMatchId: parseInt(apiMatchId),
                         predictionType,
-                        coinsSpent: PREDICTION_COST,
+                        coinsSpent: PREDICTION_COST, // = 0
                         isCorrect: null,
                         homeTeam,
                         awayTeam,
@@ -181,20 +179,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                     }
                 });
 
-                const newUser = await tx.user.update({
-                    where: { id: user.id },
-                    data: { coins: { decrement: PREDICTION_COST } },
-                    select: { coins: true }
-                });
-
-                await tx.coinTransaction.create({
-                    data: {
-                        userId: user.id,
-                        amount: -PREDICTION_COST,
-                        type: 'PREDICTION' as any,
-                        description: `توقع على مباراة ${homeTeam || 'Home'} vs ${awayTeam || 'Away'}`
-                    }
-                });
+                // No coin deduction — predictions now cost only 1 daily ticket.
+                const newUser = { coins: user.coins };
 
                 return [newPrediction, newUser];
             });
@@ -202,9 +188,6 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             const msg = txError?.message || '';
             if (msg === 'USER_NOT_FOUND') {
                 res.status(404).json({ error: 'User not found' });
-            } else if (msg.startsWith('INSUFFICIENT_COINS:')) {
-                const current = parseInt(msg.split(':')[1]) || 0;
-                res.status(400).json({ error: 'Insufficient coins', required: PREDICTION_COST, current });
             } else if (msg === 'DAILY_LIMIT_REACHED') {
                 res.status(400).json({ error: 'Daily prediction limit reached', limit: DAILY_PREDICTION_LIMIT });
             } else if (msg === 'ALREADY_PREDICTED') {

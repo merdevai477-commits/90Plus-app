@@ -11,6 +11,7 @@ import { MainShell } from '../../components/Matches/MainShell';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { PredictionsService } from '../../services/predictions.service';
+import { toastManager } from '../../services/toastManager';
 import type { Match } from '../../components/Matches/matchCardUtils';
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'Finished', 'Predictions'] as const;
@@ -363,24 +364,38 @@ export default function MatchesHubScreenV2() {
   }, [groupedMatches, filter]);
 
   // Handle prediction submission
+  //
+  // Flow:
+  //  1. Check ticket count (local state) — show warning toast if 0
+  //  2. Check if already predicted — silent no-op
+  //  3. Optimistic UI update: mark predicted + decrement ticket count
+  //  4. Call backend; on failure, roll back the optimistic change
+  //  5. Show success/error toast
   const handlePredict = useCallback(async (fixtureId: string, type: 'home' | 'draw' | 'away') => {
     if (ticketsRemaining <= 0) {
-      Alert.alert('No Tickets', 'You have no prediction tickets left today. They renew every 24 hours.');
+      toastManager.showWarning(
+        'لا توجد تذاكر',
+        'انتهت تذاكر التوقع لليوم. تتجدد كل 24 ساعة تلقائياً.',
+      );
       return;
     }
-    if (predictedMatches[fixtureId]) return; // already predicted
+    if (predictedMatches[fixtureId]) return; // already predicted — no-op
 
+    // Find fixture details BEFORE optimistic update (used for both API + toast)
+    let fixtureDetails: Fixture | undefined;
+    for (const g of groups) {
+      const found = g.fixtures.find(f => f.id === fixtureId);
+      if (found) { fixtureDetails = found; break; }
+    }
+
+    // Optimistic UI update — instant feedback
+    setPredictedMatches(prev => ({ ...prev, [fixtureId]: type }));
+    setTicketsRemaining(prev => Math.max(0, prev - 1));
     setSubmittingId(fixtureId);
+
     try {
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
-
-      // Find fixture details for the API call
-      let fixtureDetails: Fixture | undefined;
-      for (const g of groups) {
-        const found = g.fixtures.find(f => f.id === fixtureId);
-        if (found) { fixtureDetails = found; break; }
-      }
 
       await PredictionsService.submitPrediction(token, {
         apiMatchId: fixtureId,
@@ -393,41 +408,66 @@ export default function MatchesHubScreenV2() {
         leagueName: fixtureDetails?.leagueName,
       });
 
-      // Update local state immediately (optimistic)
-      setPredictedMatches(prev => ({ ...prev, [fixtureId]: type }));
-      setTicketsRemaining(prev => Math.max(0, prev - 1));
+      // Success — show toast
+      toastManager.showPredictionSuccess();
     } catch (err: any) {
       const msg = err?.message || 'Failed to submit prediction';
+
+      // Already predicted: server has a record, UI state is correct — don't roll back.
       if (msg.includes('Already predicted')) {
-        setPredictedMatches(prev => ({ ...prev, [fixtureId]: type }));
-      } else if (msg.includes('Insufficient coins') || msg.includes('Daily prediction limit')) {
-        Alert.alert('Cannot Predict', msg);
+        toastManager.showInfo('تم التوقع مسبقاً', 'لقد توقعت على هذه المباراة قبل ذلك');
+        return;
+      }
+
+      // Anything else — roll back the optimistic update
+      setPredictedMatches(prev => {
+        const next = { ...prev };
+        delete next[fixtureId];
+        return next;
+      });
+      setTicketsRemaining(prev => prev + 1);
+
+      if (msg.includes('Daily prediction limit')) {
+        toastManager.showWarning(
+          'انتهت تذاكر اليوم',
+          'استخدمت كل تذاكر التوقع لليوم. تتجدد كل 24 ساعة تلقائياً.',
+        );
       } else {
-        Alert.alert('Error', msg);
+        toastManager.showPredictionError();
       }
     } finally {
       setSubmittingId(null);
     }
   }, [ticketsRemaining, predictedMatches, groups, getToken]);
 
-  const headerRight = (
-    <TouchableOpacity activeOpacity={0.7} onPress={() => setShowTicketsInfo(true)}>
-      <View style={styles.ticketsOuter}>
-        <View style={styles.ticketsInner}>
-          {isLiquidGlassSupported ? (
-            <LiquidGlassView {...({style: StyleSheet.absoluteFill, tint: 'rgba(255,255,255,0.00)', effect: 'clear'} as any)} />
-          ) : (
-            <BlurView intensity={0} tint="light" style={StyleSheet.absoluteFill} />
-          )}
-          <LinearGradient colors={['rgba(168,85,247,0.15)', 'transparent']} style={StyleSheet.absoluteFill} />
-          <View style={{ shadowColor: '#a855f7', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.8, shadowRadius: 8, elevation: 4 }}>
-            <Ticket size={18} color="#d8b4fe" />
+  const headerRight = (() => {
+    const isEmpty = ticketsRemaining <= 0;
+    // When empty: icon + text turn black-ish, and the subtle purple wash/glow go away.
+    const iconColor = isEmpty ? '#1a1a1a' : '#d8b4fe';
+    const iconShadowColor = isEmpty ? 'transparent' : '#a855f7';
+    const gradientColors = isEmpty
+      ? (['rgba(0,0,0,0.45)', 'rgba(0,0,0,0.0)'] as const)
+      : (['rgba(168,85,247,0.15)', 'transparent'] as const);
+
+    return (
+      <TouchableOpacity activeOpacity={0.7} onPress={() => setShowTicketsInfo(true)}>
+        <View style={styles.ticketsOuter}>
+          <View style={styles.ticketsInner}>
+            {isLiquidGlassSupported ? (
+              <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(255,255,255,0.00)', effect: 'clear' } as any)} />
+            ) : (
+              <BlurView intensity={0} tint="light" style={StyleSheet.absoluteFill} />
+            )}
+            <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} />
+            <View style={{ shadowColor: iconShadowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: isEmpty ? 0 : 0.8, shadowRadius: 8, elevation: isEmpty ? 0 : 4 }}>
+              <Ticket size={18} color={iconColor} />
+            </View>
+            <Text style={[styles.ticketsTxt, isEmpty && styles.ticketsTxtEmpty]}>{ticketsRemaining}</Text>
           </View>
-          <Text style={styles.ticketsTxt}>{ticketsRemaining}</Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  })();
 
   const FloatingHeader = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
@@ -652,6 +692,7 @@ const styles = StyleSheet.create({
   ticketsOuter: { shadowColor: '#000000ff', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.8, shadowRadius: 12, elevation: 8 },
   ticketsInner: { height: 40, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(84, 13, 151, 0)', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, overflow: 'hidden' },
   ticketsTxt: { color: '#e9d5ff', fontSize: 16, fontWeight: '800', textShadowColor: '#a855f7', textShadowRadius: 8, zIndex: 1 },
+  ticketsTxtEmpty: { color: '#1a1a1a', textShadowColor: 'transparent' },
   calendarBtn: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   tabChip: {
     minWidth: 62, height: 38, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
