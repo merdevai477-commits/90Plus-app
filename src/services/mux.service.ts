@@ -87,6 +87,23 @@ export async function getAsset(assetId: string): Promise<MuxAsset> {
 }
 
 /**
+ * Retrieve a Mux direct upload by its upload ID to discover the asset it
+ * created. Returns null if the upload has not yet produced an asset (e.g.
+ * the PUT is still streaming or Mux is still creating the asset).
+ */
+export async function getUploadAsset(uploadId: string): Promise<MuxAsset | null> {
+  try {
+    const upload = await mux().video.uploads.retrieve(uploadId);
+    const assetId = (upload as any).asset_id as string | undefined;
+    if (!assetId) return null;
+    return await getAsset(assetId);
+  } catch (err: any) {
+    logger.warn(`[Mux] Failed to retrieve upload ${uploadId}: ${err?.message}`);
+    return null;
+  }
+}
+
+/**
  * Construct the HLS playback URL for a given playback ID.
  */
 export function getPlaybackUrl(playbackId: string): string {

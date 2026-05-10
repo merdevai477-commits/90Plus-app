@@ -157,6 +157,17 @@ async function handleAssetReady(event: any): Promise<void> {
     logger.warn('[MuxWebhook] Feed cache invalidation failed (non-critical):', cacheErr?.message);
   }
 
+  // Also clear the in-process feed cache used by /api/reels/feed so the new
+  // READY reel becomes visible immediately (otherwise cached pages hide it
+  // for up to 3 minutes).
+  try {
+    const { clearReelsFeedCache } = await import('./reels.routes');
+    clearReelsFeedCache();
+    logger.info(`[MuxWebhook] Cleared in-process feed cache for reel ${reel.id}`);
+  } catch (cacheErr: any) {
+    logger.warn('[MuxWebhook] In-process feed cache clear failed (non-critical):', cacheErr?.message);
+  }
+
   // Feature 5: Delete the raw video from R2 now that Mux has processed it
   const reelWithRaw = await prisma.reel.findUnique({
     where: { id: reel.id },

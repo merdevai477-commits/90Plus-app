@@ -811,7 +811,7 @@ router.post(
 router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const reelId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const reel = await prisma.reel.findUnique({
+    let reel = await prisma.reel.findUnique({
       where: { id: reelId },
       select: {
         id: true,
@@ -819,12 +819,94 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
         videoUrl: true,
         processedVideoUrl: true,
         thumbnail: true,
+        muxUploadId: true,
+        muxAssetId: true,
         muxPlaybackId: true,
         userId: true,
+        createdAt: true,
       },
     });
 
     if (!reel) { sendError(res, 404, 'NOT_FOUND', 'Reel not found'); return; }
+
+    // Poll-fallback: if the reel has been PROCESSING for >30s, ask Mux directly
+    // and self-heal the DB in case the webhook was missed or delayed.
+    const processingTooLong =
+      reel.status === 'PROCESSING' &&
+      reel.muxUploadId &&
+      Date.now() - new Date(reel.createdAt).getTime() > 30_000;
+
+    if (processingTooLong) {
+      try {
+        let asset: Awaited<ReturnType<typeof muxService.getAsset>> | null = null;
+        if (reel.muxAssetId) {
+          asset = await muxService.getAsset(reel.muxAssetId);
+        } else if (reel.muxUploadId) {
+          asset = await muxService.getUploadAsset(reel.muxUploadId);
+        }
+
+        if (asset?.status === 'ready') {
+          const publicPlayback = asset.playbackIds?.find((p) => p.policy === 'public') ?? asset.playbackIds?.[0];
+          if (publicPlayback) {
+            const playbackId = publicPlayback.id;
+            const newVideoUrl = muxService.getPlaybackUrl(playbackId);
+            const newThumb = reel.thumbnail || muxService.getThumbnailUrl(playbackId);
+
+            reel = await prisma.reel.update({
+              where: { id: reel.id },
+              data: {
+                muxAssetId: asset.id,
+                muxPlaybackId: playbackId,
+                videoUrl: newVideoUrl,
+                thumbnail: newThumb,
+                status: 'READY',
+              },
+              select: {
+                id: true,
+                status: true,
+                videoUrl: true,
+                processedVideoUrl: true,
+                thumbnail: true,
+                muxUploadId: true,
+                muxAssetId: true,
+                muxPlaybackId: true,
+                userId: true,
+                createdAt: true,
+              },
+            });
+
+            // Invalidate the feed cache so the new READY reel appears immediately.
+            try {
+              const { clearReelsFeedCache } = await import('./reels.routes');
+              clearReelsFeedCache();
+            } catch { /* non-critical */ }
+
+            logger.info(`[upload/status] Self-healed reel ${reel.id} → READY via poll fallback`);
+          }
+        } else if (asset?.status === 'errored') {
+          reel = await prisma.reel.update({
+            where: { id: reel.id },
+            data: { status: 'FAILED' },
+            select: {
+              id: true,
+              status: true,
+              videoUrl: true,
+              processedVideoUrl: true,
+              thumbnail: true,
+              muxUploadId: true,
+              muxAssetId: true,
+              muxPlaybackId: true,
+              userId: true,
+              createdAt: true,
+            },
+          });
+          logger.warn(`[upload/status] Reel ${reel.id} marked FAILED via poll fallback`);
+        }
+      } catch (pollErr: any) {
+        logger.warn(`[upload/status] Poll fallback failed for reel ${reelId}: ${pollErr?.message}`);
+        // Non-fatal — fall through and return whatever state we have.
+      }
+    }
 
     // Prefer processedVideoUrl (legacy R2) or videoUrl (Mux HLS set by webhook)
     const videoUrl = reel.processedVideoUrl || reel.videoUrl || null;
