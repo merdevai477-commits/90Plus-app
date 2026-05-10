@@ -128,7 +128,7 @@ npx tsc --noEmit
 
 **Usage:**
 ```bash
-export API_URL="https://90plus-app-production-b28d.up.railway.app"
+export API_URL="https://90plus-app-production-c88c.up.railway.app"
 export TEST_TOKEN="your_clerk_jwt_token"
 ./test-reels-api.sh
 ```
@@ -181,7 +181,7 @@ VERIFIED:
 ## STEP 15 — Postman Production Validation
 
 ### Test Collection Required
-**Base URL:** `https://90plus-app-production-b28d.up.railway.app`
+**Base URL:** `https://90plus-app-production-c88c.up.railway.app`
 
 **13 Tests:**
 1. GET /api/reels/feed → 200

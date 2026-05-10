@@ -20,7 +20,7 @@
 ### 3. **Environment: 90Plus Production**
 - **ID:** `037385a0-8eac-4f78-b0aa-8c3dd8c84e6f`
 - **Variables:**
-  - `base_url`: `https://90plus-app-production-b28d.up.railway.app/api`
+  - `base_url`: `https://90plus-app-production-c88c.up.railway.app/api`
   - `clerk_token`: (فارغ - يجب إضافته)
   - `test_reel_id`: (يتم ملؤه تلقائياً من أول request)
 

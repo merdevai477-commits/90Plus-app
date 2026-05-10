@@ -41,7 +41,7 @@
     "variable": [
       {
         "key": "base_url",
-        "value": "https://90plus-app-production-b28d.up.railway.app/api",
+        "value": "https://90plus-app-production-c88c.up.railway.app/api",
         "type": "string"
       },
       {
@@ -938,7 +938,7 @@
     "values": [
       {
         "key": "base_url",
-        "value": "https://90plus-app-production-b28d.up.railway.app/api",
+        "value": "https://90plus-app-production-c88c.up.railway.app/api",
         "enabled": true
       },
       {

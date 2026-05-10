@@ -89,7 +89,7 @@ export function usePushNotifications(): PushNotificationState {
         try {
             const authToken = await getTokenRef.current();
             if (!authToken) return;
-            const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-b28d.up.railway.app/api';
+            const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-c88c.up.railway.app/api';
             await fetch(`${apiUrl}/notifications/${notificationId}/opened`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
@@ -285,7 +285,7 @@ export function usePushNotifications(): PushNotificationState {
                 trackNotificationOpen(data.notificationId);
                 getTokenRef.current().then(token => {
                     if (!token) return;
-                    const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-b28d.up.railway.app/api';
+                    const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-c88c.up.railway.app/api';
                     fetch(`${apiUrl}/notifications/${data.notificationId}/read`, {
                         method: 'PUT',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
