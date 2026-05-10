@@ -281,13 +281,28 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
                 res.statusCode < 300 &&
                 (isStatusSuccess || isSuccessFlag);
 
+            // Cap cache lifetime for empty payloads so a transient backend
+            // outage (e.g. API quota exhausted → empty list) doesn't freeze
+            // the UI showing "No matches" for the full TTL.
+            const isEmptyPayload = (() => {
+                const data = body?.data ?? body?.response;
+                if (Array.isArray(data)) return data.length === 0;
+                if (data && typeof data === 'object' && 'results' in body) {
+                    return body.results === 0;
+                }
+                return false;
+            })();
+            const effectiveTtl = isEmptyPayload
+                ? Math.min(ttl ?? 5 * 60 * 1000, 20 * 1000) // 20s cap for empty
+                : ttl;
+
             if (shouldCache) {
                 // Cache asynchronously without blocking response
-                responseCache.set(req, body, ttl).then((etag) => {
+                responseCache.set(req, body, effectiveTtl).then((etag) => {
                     res.setHeader('ETag', `"${etag}"`);
-                    res.setHeader('X-Cache', 'MISS');
-                    const effectiveTtl = ttl || 5 * 60 * 1000;
-                    res.setHeader('Cache-Control', `private, max-age=${Math.floor(effectiveTtl / 1000)}`);
+                    res.setHeader('X-Cache', isEmptyPayload ? 'MISS-EMPTY' : 'MISS');
+                    const maxAge = effectiveTtl ?? 5 * 60 * 1000;
+                    res.setHeader('Cache-Control', `private, max-age=${Math.floor(maxAge / 1000)}`);
                 }).catch(() => {
                     // Ignore cache errors, don't block response
                     responseCache.failFill(req, new Error('CACHE_SET_FAILED'));
