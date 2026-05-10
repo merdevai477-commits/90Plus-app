@@ -272,9 +272,14 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
         res.json = function (body: any) {
             // IMPORTANT: Never cache error responses.
             // Caching 4xx/5xx (or non-success payloads) can lock clients into retry loops.
+            // Accept both response shapes used in this codebase:
+            //   { status: 'SUCCESS', data: ... }  (primary)
+            //   { success: true, data: ... }     (predictions/legacy)
+            const isStatusSuccess = body?.status === 'SUCCESS';
+            const isSuccessFlag = body?.success === true;
             const shouldCache = res.statusCode >= 200 &&
                 res.statusCode < 300 &&
-                body?.status === 'SUCCESS';
+                (isStatusSuccess || isSuccessFlag);
 
             if (shouldCache) {
                 // Cache asynchronously without blocking response
