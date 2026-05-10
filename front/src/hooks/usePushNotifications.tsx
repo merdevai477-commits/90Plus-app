@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
@@ -12,11 +11,32 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationPermissionModal } from '../../components/common/NotificationPermissionModal';
 import '../../services/notificationForegroundSetup';
 
+// Lazy-load expo-notifications. In Expo Go on SDK 53+ the module crashes at
+// import time because push-token auto-registration is no longer available —
+// see https://docs.expo.dev/develop/development-builds/introduction/
+const isExpoGo = Constants.appOwnership === 'expo';
+let cachedNotifications: typeof import('expo-notifications') | null | undefined;
+function loadNotifications(): typeof import('expo-notifications') | null {
+    if (Platform.OS === 'web') return null;
+    if (isExpoGo) return null;
+    if (cachedNotifications !== undefined) return cachedNotifications;
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        cachedNotifications = require('expo-notifications') as typeof import('expo-notifications');
+    } catch {
+        cachedNotifications = null;
+    }
+    return cachedNotifications;
+}
+
+// Only used for types
+type Notifications = typeof import('expo-notifications');
+
 const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
 
 export interface PushNotificationState {
     expoPushToken: string | null;
-    notification: Notifications.Notification | null;
+    notification: any | null;
     error: string | null;
     showPermissionModal: boolean;
     setShowPermissionModal: (show: boolean) => void;
@@ -25,13 +45,13 @@ export interface PushNotificationState {
 
 export function usePushNotifications(): PushNotificationState {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-    const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+    const [notification, setNotification] = useState<any | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showPermissionModal, setShowPermissionModal] = useState(false);
-    
-    const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
-    const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
-    
+
+    const notificationListener = useRef<any>(undefined);
+    const responseListener = useRef<any>(undefined);
+
     const { getToken, isSignedIn, isLoaded } = useAuth();
     const router = useRouter();
     const queryClient = useQueryClient();
@@ -164,6 +184,11 @@ export function usePushNotifications(): PushNotificationState {
 
     const requestPermissionExplicitly = useCallback(async (): Promise<boolean> => {
         try {
+            const Notifications = loadNotifications();
+            if (!Notifications) {
+                setError('Push notifications require a development build, not Expo Go.');
+                return false;
+            }
             const { status: existingStatus } = await Notifications.getPermissionsAsync();
             
             if (existingStatus === 'granted') {
@@ -189,6 +214,8 @@ export function usePushNotifications(): PushNotificationState {
 
         const checkInitialPermissions = async () => {
             try {
+                const Notifications = loadNotifications();
+                if (!Notifications) return;
                 const { status } = await Notifications.getPermissionsAsync();
                 
                 if (status === 'granted') {
@@ -224,6 +251,14 @@ export function usePushNotifications(): PushNotificationState {
         }
 
         // 1. Foreground Notification arrives
+        const Notifications = loadNotifications();
+        if (!Notifications) {
+            return () => {
+                isMounted = false;
+                appStateSubscription?.remove?.();
+            };
+        }
+
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
             const data = notification.request.content.data as Record<string, any>;
 
@@ -292,6 +327,12 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
         return null;
     }
 
+    const Notifications = loadNotifications();
+    if (!Notifications) {
+        logger.debug('Push notifications not available (Expo Go / web)');
+        return null;
+    }
+
     try {
         const { status } = await Notifications.getPermissionsAsync();
         if (status !== 'granted') return null;
@@ -351,6 +392,12 @@ export function PushNotificationSetup() {
             onClose={() => setShowPermissionModal(false)}
             onConfirm={async () => {
                 try {
+                    const Notifications = loadNotifications();
+                    if (!Notifications) {
+                        await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
+                        setShowPermissionModal(false);
+                        return;
+                    }
                     const { status } = await Notifications.requestPermissionsAsync();
                     await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
                     

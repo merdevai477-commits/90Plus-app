@@ -48,8 +48,16 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Get Clerk publishable key — no fallback: missing key must be surfaced immediately
-const clerkPublishableKey = Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined;
+// Get Clerk publishable key.
+// Priority order:
+//   1) EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY env var (works everywhere including
+//      production builds where `Constants.expoConfig` can return null)
+//   2) `extra.clerkPublishableKey` from app.json (used by default in dev)
+// If both are missing we render ClerkKeyMissingScreen instead of silently
+// crashing `useAuth` later.
+const clerkPublishableKey =
+  (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined) ||
+  (Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined);
 
 // Fix 2: Guard — if key is missing, show error instead of silently failing
 function ClerkKeyMissingScreen() {

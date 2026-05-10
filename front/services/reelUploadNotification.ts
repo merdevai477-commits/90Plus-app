@@ -1,5 +1,21 @@
+/**
+ * reelUploadNotification
+ *
+ * Foreground/background notifications that keep the user informed about
+ * an in-progress reel upload. Uses a silent channel for progress updates
+ * and a loud channel for success/failure results.
+ *
+ * SDK 55 note:
+ *  - We dynamically `require('expo-notifications')` on first use instead of
+ *    importing at the top of the file. The push-token auto-registration
+ *    side-effect inside `expo-notifications` throws in Expo Go as of
+ *    SDK 53 ("Android Push notifications ... was removed from Expo Go"),
+ *    and a top-level import would make the whole app crash.
+ *  - In Expo Go we turn every method into a no-op.
+ */
+
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { logger } from './logger';
 
 const CHANNEL_ID = 'reel-upload';
@@ -8,8 +24,32 @@ const ACTIVE_REQUEST_ID = 'reel-upload-active-session';
 
 let lastProgressRounded = -1;
 
+/** True when the app is running inside Expo Go (not a development/production build). */
+const isExpoGo = Constants.appOwnership === 'expo';
+
+/**
+ * Lazy-load expo-notifications only when we actually need it and only on
+ * devices where the native module is available. Returns `null` in Expo Go
+ * or on web.
+ */
+let cachedModule: typeof import('expo-notifications') | null | undefined;
+function getNotificationsModule(): typeof import('expo-notifications') | null {
+    if (Platform.OS === 'web') return null;
+    if (isExpoGo) return null;
+    if (cachedModule !== undefined) return cachedModule;
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        cachedModule = require('expo-notifications') as typeof import('expo-notifications');
+    } catch {
+        cachedModule = null;
+    }
+    return cachedModule;
+}
+
 async function ensureChannels(): Promise<void> {
     if (Platform.OS !== 'android') return;
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
     // Silent channel for progress updates (no sound, no vibration)
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
         name: 'رفع الريلز - التقدم',
@@ -30,6 +70,8 @@ async function ensureChannels(): Promise<void> {
 }
 
 async function ensurePermission(): Promise<boolean> {
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return false;
     try {
         const { status: existing } = await Notifications.getPermissionsAsync();
         if (existing === 'granted') return true;
@@ -42,16 +84,24 @@ async function ensurePermission(): Promise<boolean> {
 }
 
 /**
- * إشعار محلي (ليس Push) يوضح للمستخدم أن الريلز يُرفع، بما في ذلك في الخلفية.
- * - begin()         → إشعار واحد صامت (بدون صوت أو اهتزاز)
- * - updateProgress() → يُحدّث نص الإشعار الصامت فقط كل 15٪
- * - success()       → إشعار جديد بصوت واهتزاز
- * - failure()       → إشعار جديد بصوت واهتزاز
+ * Local-only notifications that inform the user about an in-progress reel
+ * upload (including while the app is backgrounded).
+ *
+ * - begin()          → single silent notification (no sound/vibration)
+ * - updateProgress() → updates the same silent notification every ~15 %
+ * - success()        → fires a new notification with sound + vibration
+ * - failure()        → fires a new notification with sound + vibration
+ * - clear()          → removes any pending/visible progress notification
+ *
+ * All methods degrade to no-ops in Expo Go / on web.
  */
 export const reelUploadNotification = {
     async begin(): Promise<void> {
         if (Platform.OS === 'web') return;
         lastProgressRounded = -1;
+        const Notifications = getNotificationsModule();
+        if (!Notifications) return;
+
         const ok = await ensurePermission();
         if (!ok) return;
         await ensureChannels();
@@ -84,10 +134,14 @@ export const reelUploadNotification = {
     },
 
     /**
-     * تحديث نص التقدّم؛ يُحدّث فقط كل ~15٪ وبدون صوت أو اهتزاز.
+     * Update progress text; only actually posts every ~15 % and never plays
+     * sound/vibration.
      */
     async updateProgress(progress: number, phaseLabel: string): Promise<void> {
         if (Platform.OS === 'web') return;
+        const Notifications = getNotificationsModule();
+        if (!Notifications) return;
+
         const rounded = Math.min(100, Math.max(0, Math.round(progress)));
         const jump = Math.abs(rounded - lastProgressRounded);
 
@@ -126,6 +180,8 @@ export const reelUploadNotification = {
     async success(message = 'تم نشر الريلز في ملفك الشخصي! 🎉'): Promise<void> {
         if (Platform.OS === 'web') return;
         lastProgressRounded = -1;
+        const Notifications = getNotificationsModule();
+        if (!Notifications) return;
 
         // Remove the ongoing progress notification
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
@@ -160,6 +216,8 @@ export const reelUploadNotification = {
     async failure(message: string): Promise<void> {
         if (Platform.OS === 'web') return;
         lastProgressRounded = -1;
+        const Notifications = getNotificationsModule();
+        if (!Notifications) return;
 
         // Remove the ongoing progress notification
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
@@ -193,6 +251,8 @@ export const reelUploadNotification = {
 
     async clear(): Promise<void> {
         lastProgressRounded = -1;
+        const Notifications = getNotificationsModule();
+        if (!Notifications) return;
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
         try { await Notifications.dismissNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
     },

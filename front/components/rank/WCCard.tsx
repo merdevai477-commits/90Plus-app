@@ -3,7 +3,16 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronRight } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Image,
+  ImageStyle,
+  StyleSheet,
+  Text,
+  TextStyle,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from 'react-native';
 
 const WC_DATE = new Date('2026-06-11T00:00:00').getTime();
 
@@ -95,7 +104,22 @@ export default function WCCard({ onPressSoon }: WCCardProps) {
   );
 }
 
-const s = StyleSheet.create({
+const s = StyleSheet.create<{
+  wcCard: ViewStyle;
+  wcPlayerImg: ImageStyle;
+  wcInner: ViewStyle;
+  wcLeft: ViewStyle;
+  wcTitle: TextStyle;
+  wcSub: TextStyle;
+  wcBtnDisabled: ViewStyle;
+  wcBtnTxt: TextStyle;
+  wcRight: ViewStyle;
+  cdLabel: TextStyle;
+  cdRow: ViewStyle;
+  cdBlock: ViewStyle;
+  cdNum: TextStyle;
+  cdLbl: TextStyle;
+}>({
   wcCard: {
     marginHorizontal: 0, borderRadius: 0, marginTop: 20,
     overflow: 'hidden', borderWidth: 0, minHeight: 250, backgroundColor: '#0D0820',
