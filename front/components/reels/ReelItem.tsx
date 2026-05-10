@@ -439,13 +439,11 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             {/* Gradients */}
             <LinearGradient
                 colors={GRADIENTS.darkFade}
-                style={styles.topGradient}
-                pointerEvents="none"
+                style={[styles.topGradient, { pointerEvents: 'none' }]}
             />
             <LinearGradient
                 colors={GRADIENTS.bottomFade}
-                style={styles.bottomGradient}
-                pointerEvents="none"
+                style={[styles.bottomGradient, { pointerEvents: 'none' }]}
             />
 
             {/* User Info - Glass Card */}

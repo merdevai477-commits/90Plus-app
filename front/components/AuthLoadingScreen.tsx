@@ -138,7 +138,7 @@ export default function AuthLoadingScreen({ message = 'جاري تسجيل ال�
             />
 
             {/* Soft radial glow behind logo */}
-            <Animated.View style={[styles.glow, glowStyle]} pointerEvents="none" />
+            <Animated.View style={[styles.glow, glowStyle, { pointerEvents: 'none' }]} />
 
             {/* Logo */}
             <Animated.View style={[styles.logoContainer, logoStyle]}>

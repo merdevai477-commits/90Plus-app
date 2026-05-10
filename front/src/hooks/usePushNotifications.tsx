@@ -33,6 +33,17 @@ function loadNotifications(): typeof import('expo-notifications') | null {
 type Notifications = typeof import('expo-notifications');
 
 const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+    try {
+        Notifications = require('expo-notifications') as NotificationsModule;
+    } catch {
+        Notifications = null;
+    }
+}
 
 export interface PushNotificationState {
     expoPushToken: string | null;
@@ -183,6 +194,8 @@ export function usePushNotifications(): PushNotificationState {
     }).current;
 
     const requestPermissionExplicitly = useCallback(async (): Promise<boolean> => {
+        if (!Notifications) return false;
+
         try {
             const Notifications = loadNotifications();
             if (!Notifications) {
@@ -207,6 +220,8 @@ export function usePushNotifications(): PushNotificationState {
     }, []);
 
     useEffect(() => {
+        if (!Notifications) return;
+
         // Only run after authentication is definitively loaded
         if (!isLoaded) return;
 
@@ -322,6 +337,8 @@ export function usePushNotifications(): PushNotificationState {
 }
 
 async function registerForPushNotificationsAsync(): Promise<string | null> {
+    if (!Notifications) return null;
+
     if (!Device.isDevice) {
         logger.debug('Push notifications require a physical device');
         return null;
@@ -370,6 +387,8 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
 
 // Global Injection Component
 export function PushNotificationSetup() {
+    if (!Notifications) return null;
+
     const { showPermissionModal, setShowPermissionModal, expoPushToken } = usePushNotifications();
     const { isSignedIn } = useAuth();
     

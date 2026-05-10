@@ -171,7 +171,7 @@ export const WelcomeSection = React.memo(({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [countdown, setCountdown] = useState('');
   const [quizCountdown, setQuizCountdown] = useState('');
-  const autoScrollRef = useRef<NodeJS.Timeout | null>(null);
+  const autoScrollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Animation values
   const cardScale = useSharedValue(1);
@@ -689,7 +689,12 @@ export const WelcomeSection = React.memo(({
                           styles.dot,
                           currentSlide === index && [
                             styles.dotActive,
-                            {
+                            Platform.OS === 'web'
+                              ? {
+                              backgroundColor: currentSlideData.accentColor,
+                              boxShadow: `0 0 6px ${currentSlideData.accentColor}`,
+                            }
+                              : {
                               backgroundColor: currentSlideData.accentColor,
                               shadowColor: currentSlideData.accentColor,
                             },
@@ -737,11 +742,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderRightColor: 'rgba(255,255,255,0.02)',
     borderBottomColor: 'rgba(255,255,255,0.02)',
-    // Deep shadow for card lift
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5,
-    shadowRadius: 40,
+    ...(Platform.OS === 'web'
+      ? {
+        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+      }
+      : {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.5,
+        shadowRadius: 40,
+      }),
     elevation: 16,
   },
   glassOverlay: {
@@ -809,10 +819,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     gap: 4,
-    shadowColor: '#fc4d00',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    ...(Platform.OS === 'web'
+      ? {
+        boxShadow: '0 0 12px rgba(252, 77, 0, 0.4)',
+      }
+      : {
+        shadowColor: '#fc4d00',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      }),
     elevation: 8,
   },
   streakFireIcon: {
@@ -832,10 +848,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     minWidth: 40,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    ...(Platform.OS === 'web'
+      ? {
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.3)',
+      }
+      : {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      }),
     elevation: 4,
   },
   countBadgeText: {
@@ -981,9 +1003,13 @@ const styles = StyleSheet.create({
   dotActive: {
     width: 24,
     borderRadius: 3,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
+    ...(Platform.OS === 'web'
+      ? {}
+      : {
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.6,
+        shadowRadius: 8,
+      }),
     elevation: 4,
   },
   

@@ -30,7 +30,7 @@ export function safeInterval(
   callback: () => Promise<void>,
   intervalMs: number,
   errorMessage: string = 'Interval callback failed'
-): NodeJS.Timeout {
+): ReturnType<typeof setTimeout> {
   const safeCallback = async () => {
     try {
       await callback();
@@ -50,7 +50,7 @@ export function safeTimeout(
   callback: () => Promise<void>,
   timeoutMs: number,
   errorMessage: string = 'Timeout callback failed'
-): NodeJS.Timeout {
+): ReturnType<typeof setTimeout> {
   const safeCallback = async () => {
     try {
       await callback();

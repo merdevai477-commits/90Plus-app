@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ImageBackground, Platform } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { COLORS } from '../reels/constants';
@@ -192,9 +192,15 @@ const styles = StyleSheet.create({
         color: Colors.onSurface.primary,
         fontWeight: Typography.title.large.fontWeight,
         letterSpacing: 0.5,
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        ...(Platform.OS === 'web'
+            ? {
+                textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+            }
+            : {
+                textShadowColor: 'rgba(0,0,0,0.5)',
+                textShadowOffset: { width: 0, height: 2 },
+                textShadowRadius: 4,
+            }),
     },
     viewAll: {
         ...Typography.label.medium,

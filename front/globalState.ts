@@ -1,7 +1,23 @@
 import { DiamondProfile } from './types/profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const STORAGE_KEY = '@global_state';
+const canUseAsyncStorage = () => {
+  if (
+    typeof window === 'undefined' &&
+    typeof document === 'undefined' &&
+    typeof navigator === 'undefined'
+  ) {
+    return false;
+  }
+
+  if (Platform.OS === 'web') {
+    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  }
+
+  return true;
+};
 
 export interface TempAuthData {
   email: string;
@@ -34,6 +50,11 @@ export const globalState = {
   // Load state from AsyncStorage
   // Load state from AsyncStorage
     loadState: async () => {
+      if (!canUseAsyncStorage()) {
+        globalState.isLoaded = true;
+        return;
+      }
+
       try {
         const stored = await AsyncStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -58,6 +79,8 @@ export const globalState = {
 
   // Save state to AsyncStorage
   saveState: async () => {
+    if (!canUseAsyncStorage()) return;
+
     try {
       const data: StoredState = {
         userType: globalState.userType,
@@ -108,7 +131,9 @@ export const globalState = {
   logout: async () => {
     // Clear AsyncStorage first to prevent stale data from being loaded
     try {
-      await AsyncStorage.removeItem(STORAGE_KEY);
+      if (canUseAsyncStorage()) {
+        await AsyncStorage.removeItem(STORAGE_KEY);
+      }
     } catch (error) {
       console.error('Error clearing global state from AsyncStorage:', error);
     }
@@ -135,15 +160,17 @@ export const globalState = {
     
     // Clear all AsyncStorage keys related to user data
     try {
-      const keys = await AsyncStorage.getAllKeys();
-      const userKeys = keys.filter(key => 
-        key.includes('user') || 
-        key.includes('profile') || 
-        key.includes('cache') ||
-        key.includes('@90plus')
-      );
-      if (userKeys.length > 0) {
-        await AsyncStorage.multiRemove(userKeys);
+      if (canUseAsyncStorage()) {
+        const keys = await AsyncStorage.getAllKeys();
+        const userKeys = keys.filter(key => 
+          key.includes('user') || 
+          key.includes('profile') || 
+          key.includes('cache') ||
+          key.includes('@90plus')
+        );
+        if (userKeys.length > 0) {
+          await AsyncStorage.multiRemove(userKeys);
+        }
       }
     } catch (error) {
       console.error('Error clearing user-related AsyncStorage keys:', error);

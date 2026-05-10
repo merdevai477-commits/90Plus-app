@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
         shadowRadius: 40,
         elevation: 20,
         // Force LTR direction to prevent card layout from flipping in RTL languages
-        direction: 'ltr',
+        writingDirection: 'ltr',
     },
     cardSvg: {
         position: 'absolute',
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         width: '100%',
         marginVertical: 8, // Increased from 4
-        direction: 'ltr', // Prevent RTL flip
+        writingDirection: 'ltr', // Prevent RTL flip
     },
     statItem: {
         alignItems: 'center',

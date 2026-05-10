@@ -213,8 +213,7 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
         {/* Gradient overlay for transfer type */}
         <LinearGradient
           colors={typeColors.gradient}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
         />
 
         {/* League Header */}

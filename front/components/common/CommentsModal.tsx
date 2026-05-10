@@ -107,7 +107,7 @@ export default function CommentsModal({
     const [showMentionPicker, setShowMentionPicker] = useState(false);
     const [mentionUsers, setMentionUsers] = useState<any[]>([]);
     const [mentionPosition, setMentionPosition] = useState({ start: 0, end: 0 });
-    const mentionSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const mentionSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const inputRef = useRef<TextInput>(null);
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -178,7 +178,7 @@ export default function CommentsModal({
                 }
                 mentionSearchTimeoutRef.current = setTimeout(() => {
                     searchUsers(textAfterAt);
-                }, 300) as unknown as NodeJS.Timeout;
+                }, 300);
             } else {
                 setShowMentionPicker(false);
             }

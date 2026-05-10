@@ -23,6 +23,17 @@ const CHANNEL_ID_RESULT = 'reel-upload-result';
 const ACTIVE_REQUEST_ID = 'reel-upload-active-session';
 
 let lastProgressRounded = -1;
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+    try {
+        Notifications = require('expo-notifications') as NotificationsModule;
+    } catch {
+        Notifications = null;
+    }
+}
 
 /** True when the app is running inside Expo Go (not a development/production build). */
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -47,6 +58,7 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
 }
 
 async function ensureChannels(): Promise<void> {
+    if (!Notifications) return;
     if (Platform.OS !== 'android') return;
     const Notifications = getNotificationsModule();
     if (!Notifications) return;
@@ -97,7 +109,7 @@ async function ensurePermission(): Promise<boolean> {
  */
 export const reelUploadNotification = {
     async begin(): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         lastProgressRounded = -1;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
@@ -178,7 +190,7 @@ export const reelUploadNotification = {
     },
 
     async success(message = 'تم نشر الريلز في ملفك الشخصي! 🎉'): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         lastProgressRounded = -1;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
@@ -214,7 +226,7 @@ export const reelUploadNotification = {
     },
 
     async failure(message: string): Promise<void> {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web' || !Notifications) return;
         lastProgressRounded = -1;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
@@ -250,6 +262,7 @@ export const reelUploadNotification = {
     },
 
     async clear(): Promise<void> {
+        if (!Notifications) return;
         lastProgressRounded = -1;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;

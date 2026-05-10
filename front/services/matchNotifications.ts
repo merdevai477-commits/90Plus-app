@@ -26,6 +26,18 @@ function getNotifications(): typeof import('expo-notifications') | null {
   return cachedModule;
 }
 
+type NotificationsModule = typeof import('expo-notifications');
+let Notifications: NotificationsModule | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    Notifications = require('expo-notifications') as NotificationsModule;
+  } catch {
+    Notifications = null;
+  }
+}
+
 class MatchNotificationsService {
   /**
    * Request notification permissions + set up the Android match channel.

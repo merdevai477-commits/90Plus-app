@@ -24,7 +24,7 @@ import { ensureNotificationForegroundHandler } from '../services/notificationFor
 let Notifications: any = null;
 const isExpoGo = Constants.appOwnership === 'expo';
 
-if (!isExpoGo) {
+if (!isExpoGo && Platform.OS !== 'web') {
   try {
     Notifications = require('expo-notifications');
   } catch (error) {

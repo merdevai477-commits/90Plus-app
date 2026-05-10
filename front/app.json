@@ -132,7 +132,9 @@
       "expo-font",
       "expo-localization",
       "expo-secure-store",
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

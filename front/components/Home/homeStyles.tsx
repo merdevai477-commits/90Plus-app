@@ -182,9 +182,16 @@ export const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     marginBottom: 8,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    ...Platform.select({
+      web: {
+        textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+      },
+      default: {
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+      },
+    }),
   },
   heroSubtitle: {
     color: COLORS.textSecondary,
@@ -529,10 +536,17 @@ export const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a', 
     borderLeftWidth: 1, 
     borderLeftColor: 'rgba(34, 197, 94, 0.3)', 
-    shadowColor: '#22c55e', 
-    shadowOffset: { width: -4, height: 0 }, 
-    shadowOpacity: 0.4, 
-    shadowRadius: 12, 
+    ...Platform.select({
+      web: {
+        boxShadow: '-4px 0 12px rgba(34, 197, 94, 0.4)',
+      },
+      default: {
+        shadowColor: '#22c55e',
+        shadowOffset: { width: -4, height: 0 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      },
+    }),
     elevation: 20,
     paddingTop: 60,
     paddingHorizontal: 20,

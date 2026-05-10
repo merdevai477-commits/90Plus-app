@@ -201,7 +201,7 @@ export const ProfessionalToast: React.FC<ProfessionalToastProps> = ({
   });
 
   return (
-    <View style={[styles.container, getPositionStyle()]} pointerEvents="box-none">
+    <View style={[styles.container, getPositionStyle(), { pointerEvents: 'box-none' }]}>
       <Animated.View
         style={[
           styles.toastContainer,

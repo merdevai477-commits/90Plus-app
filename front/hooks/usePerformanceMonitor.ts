@@ -136,7 +136,7 @@ export function usePerformanceMonitor(
   const renderCountRef = useRef(0);
   const mountTimeRef = useRef(Date.now());
   const lastCheckTimeRef = useRef(Date.now());
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
   const appStateRef = useRef(AppState.currentState);
   const hasWarned = useRef(false);
