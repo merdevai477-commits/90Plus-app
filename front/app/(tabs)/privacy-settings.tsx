@@ -31,6 +31,7 @@ import { logger } from '../../services/logger';
 import { getApiEndpoint } from '../../config/api.config';
 import { captureException } from '../../services/sentry.service';
 import { router } from 'expo-router';
+import { APP_BG } from '../../constants/ui';
 
 interface ConsentState {
   analytics: boolean;
@@ -483,7 +484,7 @@ export default function PrivacySettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: APP_BG,
   },
   loadingContainer: {
     flex: 1,

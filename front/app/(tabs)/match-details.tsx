@@ -18,6 +18,7 @@ import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, Fixtu
 import { useTranslation } from '../../src/i18n';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
+import { APP_BG } from '../../constants/ui';
 import { FootballField } from '../../components/match-details/FootballField';
 import { matchArchiveService } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
@@ -921,7 +922,7 @@ const MatchDetailsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0720', // Deep dark purple/black background
+    backgroundColor: APP_BG,
   },
   customHeader: {
     paddingTop: 50,
