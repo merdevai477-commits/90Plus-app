@@ -194,11 +194,10 @@ function MatchRow({
           ) : (
             <>
               <Text style={styles.predTitle}>Make Your Prediction</Text>
-              <View style={styles.predButtons}>
-                {isSubmitting ? (
-                  <ActivityIndicator color={PURPLE_PRIMARY} style={{ flex: 1, height: 44 }} />
-                ) : (
-                  <>
+              {isSubmitting ? (
+                <ActivityIndicator color={PURPLE_PRIMARY} style={{ flex: 1, height: 44 }} />
+              ) : (
+                <View style={styles.predButtons}>
                     <PredictionButton 
                       label={fixture.home} 
                       isActive={false}
@@ -220,9 +219,8 @@ function MatchRow({
                       activeColor="rgba(239,68,68,0.6)" 
                       activeGradient={['rgba(239,68,68,0.45)', 'rgba(220,38,38,0.15)']}
                     />
-                  </>
+                  </View>
                 )}
-              </View>
             </>
           )}
         </View>
@@ -285,7 +283,7 @@ function LeagueCard({
       </TouchableOpacity>
       
       {isExpanded && (
-        <>
+        <View>
           {group.fixtures.map((fixture) => (
             <MatchRow 
               key={fixture.id} 
@@ -299,7 +297,7 @@ function LeagueCard({
           <TouchableOpacity activeOpacity={0.8} style={styles.viewAllBtn}>
             <Text style={styles.viewAllTxt}>View All  ›</Text>
           </TouchableOpacity>
-        </>
+        </View>
       )}
     </View>
   );
