@@ -10,6 +10,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { MainShell } from '../../components/Matches/MainShell';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
+import { APP_BG, GlassWrapper, glassProps } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { PredictionsService } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
@@ -501,7 +502,7 @@ export default function MatchesHubScreenV2() {
   const FloatingHeader = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: APP_BG }}>
       <FloatingHeader
         {...(isLiquidGlassSupported ? { effect: 'clear', tint: 'rgba(5,1,13,0.1)' } as any : { intensity: 15, tint: 'dark' })}
         style={[styles.floatingHeader, { paddingTop: Math.max(insets.top, 10) + 10 }]}

@@ -23,6 +23,7 @@ import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
 import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
+import { APP_BG } from '../../constants/ui';
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const ACCENT = '#A855F7';
@@ -243,7 +244,7 @@ export default function RankScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#05010D' },
+  root: { flex: 1, backgroundColor: APP_BG },
 
   heroBlock: { overflow: 'hidden', paddingBottom: 20 },
   heroBgTrophy: {

@@ -13,6 +13,7 @@ import {
   Vibration,
   ImageBackground,
 } from 'react-native';
+import { APP_BG } from '../../constants/ui';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -146,7 +147,7 @@ export default function QuizScreen() {
   // Safety check for translations
   if (!t || !t.quiz) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: APP_BG }}>
         <Text style={{ color: '#fff' }}>Loading...</Text>
       </View>
     );
@@ -155,7 +156,7 @@ export default function QuizScreen() {
   // Show loading while checking auth
   if (!isLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: APP_BG }}>
         <Text style={{ color: '#fff' }}>Loading...</Text>
       </View>
     );
@@ -1284,7 +1285,7 @@ export default function QuizScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: APP_BG,
   },
   progressBar: {
     height: 6,

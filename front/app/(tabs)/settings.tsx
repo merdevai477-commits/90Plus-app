@@ -39,6 +39,7 @@ import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
 import ImprovedAccountDeletionModal from '../../components/common/ImprovedAccountDeletionModal';
 import { AccountDeletionService } from '../../services/accountDeletionService';
 import { toastManager } from '../../services/toastManager';
+import { APP_BG } from '../../constants/ui';
 
 const { width } = Dimensions.get('window');
 
@@ -904,11 +905,11 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: APP_BG,
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: APP_BG,
     justifyContent: 'center',
     alignItems: 'center',
   },
