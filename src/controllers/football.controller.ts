@@ -326,6 +326,7 @@ export class FootballController {
       });
     } catch (error) {
       logger.warn('getLiveFixtures: upstream error, returning empty list for client stability', error);
+      logger.warn('getLiveFixtures error details:', error instanceof Error ? error.message : String(error));
       res.status(200).json({
         status: 'SUCCESS',
         results: 0,
