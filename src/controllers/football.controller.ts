@@ -310,7 +310,18 @@ export class FootballController {
 
       // Fetch from API
       logger.debug('📡 Fetching live fixtures from API');
-      const fixtures = await footballService.getLiveFixtures();
+      let fixtures: any[] = [];
+      try {
+        fixtures = await footballService.getLiveFixtures();
+      } catch (fetchError: any) {
+        // One retry on timeout/network error
+        if (fetchError?.name === 'FootballApiError' || fetchError?.message?.includes('timed out') || fetchError?.message?.includes('timeout')) {
+          logger.warn('getLiveFixtures: first attempt failed, retrying once...', fetchError?.message);
+          fixtures = await footballService.getLiveFixtures();
+        } else {
+          throw fetchError;
+        }
+      }
 
       // Update cache
       FootballController.liveFixturesCache = {
@@ -324,9 +335,9 @@ export class FootballController {
         response: fixtures,
         cached: false,
       });
-    } catch (error) {
-      logger.warn('getLiveFixtures: upstream error, returning empty list for client stability', error);
-      logger.warn('getLiveFixtures error details:', error instanceof Error ? error.message : String(error));
+    } catch (error: any) {
+      const errMsg = error?.message || String(error);
+      logger.warn(`getLiveFixtures: upstream error (${errMsg}), returning empty list for client stability`);
       res.status(200).json({
         status: 'SUCCESS',
         results: 0,
