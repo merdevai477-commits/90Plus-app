@@ -8,6 +8,13 @@ import { getApiUrl } from '../config/api.config';
 
 const API_URL = getApiUrl(); // Already includes /api
 
+// ─── In-flight deduplication ──────────────────────────────────────────────────
+// Multiple screens (Home, Matches, Rank) call getRemainingPredictions and
+// getUserPredictions on mount at the same time. Without dedup, that's 3+
+// concurrent requests to the same endpoint which burns rate-limit quota.
+let _inFlightRemaining: Promise<PredictionRemaining> | null = null;
+let _inFlightUserPreds: Promise<any> | null = null;
+
 export interface PredictionType {
   type: 'home' | 'draw' | 'away';
 }
@@ -60,30 +67,35 @@ export const PredictionsService = {
    * Get remaining daily predictions
    */
   getRemainingPredictions: async (token: string): Promise<PredictionRemaining> => {
-    try {
-      const response = await fetch(`${API_URL}/predictions/remaining`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+    // Collapse concurrent calls — multiple screens call this on mount.
+    if (_inFlightRemaining) return _inFlightRemaining;
 
-      if (!response.ok) {
-        const msg = await PredictionsService._parseError(response);
-        throw new Error(msg || `Failed to get remaining predictions: ${response.statusText}`);
+    _inFlightRemaining = (async () => {
+      try {
+        const response = await fetch(`${API_URL}/predictions/remaining`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const msg = await PredictionsService._parseError(response);
+          throw new Error(msg || `Failed to get remaining predictions: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) return result.data;
+        throw new Error('Invalid response format');
+      } catch (error) {
+        logger.error('Error getting remaining predictions:', error);
+        throw error;
+      } finally {
+        _inFlightRemaining = null;
       }
+    })();
 
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        return result.data;
-      }
-
-      throw new Error('Invalid response format');
-    } catch (error) {
-      logger.error('Error getting remaining predictions:', error);
-      throw error;
-    }
+    return _inFlightRemaining;
   },
 
   /**
@@ -134,30 +146,35 @@ export const PredictionsService = {
    * Get user predictions
    */
   getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: Record<string, Prediction & { prediction: { type: 'home' | 'draw' | 'away' } }> }> => {
-    try {
-      const response = await fetch(`${API_URL}/predictions/user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+    // Collapse concurrent calls.
+    if (_inFlightUserPreds) return _inFlightUserPreds;
 
-      if (!response.ok) {
-        const msg = await PredictionsService._parseError(response);
-        throw new Error(msg || `Failed to get user predictions: ${response.statusText}`);
+    _inFlightUserPreds = (async () => {
+      try {
+        const response = await fetch(`${API_URL}/predictions/user`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const msg = await PredictionsService._parseError(response);
+          throw new Error(msg || `Failed to get user predictions: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) return result.data;
+        throw new Error('Invalid response format');
+      } catch (error) {
+        logger.error('Error getting user predictions:', error);
+        throw error;
+      } finally {
+        _inFlightUserPreds = null;
       }
+    })();
 
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        return result.data;
-      }
-
-      throw new Error('Invalid response format');
-    } catch (error) {
-      logger.error('Error getting user predictions:', error);
-      throw error;
-    }
+    return _inFlightUserPreds;
   },
 
   /**
