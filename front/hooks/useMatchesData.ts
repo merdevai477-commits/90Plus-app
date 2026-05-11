@@ -136,8 +136,21 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   const isFetchingRef = useRef(false);
   const initialLoadRef = useRef(true);
 
-  const dateString = useMemo(() => selectedDate.toISOString().split('T')[0], [selectedDate]);
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Use LOCAL date string (not UTC) so a user in UTC+3 at 00:30 local
+  // doesn't accidentally fetch yesterday's matches.
+  const dateString = useMemo(() => {
+    const y = selectedDate.getFullYear();
+    const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const d = String(selectedDate.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [selectedDate]);
+  const today = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
   const isToday = dateString === today;
   const isPastDate = dateString < today;
   

@@ -265,6 +265,22 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
         logger.warn('[PreloadInitializer] Server wakeup failed (non-critical):', err);
       }
 
+      // Prime the matches cache for today (and yesterday) in the background
+      // so the matches tab opens with a memory-cache HIT instead of a network wait.
+      // Uses the same in-flight dedup as the tab itself — zero extra requests if
+      // the tab mounts before this resolves.
+      try {
+        const { fetchMatchesByDate } = await import('../components/Matches/leagueApiUtils');
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        fetchMatchesByDate(today).catch(() => {});
+        fetchMatchesByDate(yesterday).catch(() => {});
+        logger.debug('[PreloadInitializer] Matches cache prime triggered (non-blocking)');
+      } catch (err) {
+        logger.warn('[PreloadInitializer] Matches cache prime failed (non-critical):', err);
+      }
+
       if (cancelled) return;
 
       // Prime /clerk/me memory cache before tabs mount — faster profile tab

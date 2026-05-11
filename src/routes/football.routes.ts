@@ -1,5 +1,13 @@
 import { Router } from 'express';
 import { FootballController } from '../controllers/football.controller';
+import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+
+// Shared public cache TTLs for football data (no userId in key — same response for all users)
+const SHARED_CACHE_30S  = responseCacheMiddleware({ ttl: 30  * 1000, sharedCache: true });
+const SHARED_CACHE_60S  = responseCacheMiddleware({ ttl: 60  * 1000, sharedCache: true });
+const SHARED_CACHE_5MIN = responseCacheMiddleware({ ttl: 5   * 60 * 1000, sharedCache: true });
+const SHARED_CACHE_1H   = responseCacheMiddleware({ ttl: 60  * 60 * 1000, sharedCache: true });
+const SHARED_CACHE_24H  = responseCacheMiddleware({ ttl: 24  * 60 * 60 * 1000, sharedCache: true });
 
 const router = Router();
 
@@ -13,11 +21,11 @@ router.get('/health', FootballController.getHealth);
 // GET /api/football/leagues
 // Get all available leagues
 // ============================================
-router.get('/leagues', FootballController.getLeagues);
+router.get('/leagues', SHARED_CACHE_1H, FootballController.getLeagues);
 
 // GET /api/football/leagues/all
 // Get all available leagues with caching
-router.get('/leagues/all', FootballController.getAllLeagues);
+router.get('/leagues/all', SHARED_CACHE_24H, FootballController.getAllLeagues);
 
 // GET /api/football/teams/all-logos
 // Fetch ALL team logos from API-Football and save to database
@@ -26,7 +34,7 @@ router.get('/teams/all-logos', FootballController.getAllTeamLogos);
 
 // GET /api/football/teams/african-logos
 // Get logos for 10 major African teams
-router.get('/teams/african-logos', FootballController.getAfricanTeamLogos);
+router.get('/teams/african-logos', SHARED_CACHE_24H, FootballController.getAfricanTeamLogos);
 
 // ============================================
 // GET /api/football/fixtures
@@ -37,13 +45,13 @@ router.get('/fixtures', FootballController.getFixtures);
 
 // GET /api/football/search
 // Unified search across players, teams, leagues
-router.get('/search', FootballController.search);
+router.get('/search', SHARED_CACHE_5MIN, FootballController.search);
 
 // ============================================
 // GET /api/football/fixtures/live
-// Get live fixtures
+// Get live fixtures — shared 60s cache (same for all users)
 // ============================================
-router.get('/fixtures/live', FootballController.getLiveFixtures);
+router.get('/fixtures/live', SHARED_CACHE_60S, FootballController.getLiveFixtures);
 
 // ============================================
 // GET /api/football/fixtures/optimized
@@ -51,7 +59,7 @@ router.get('/fixtures/live', FootballController.getLiveFixtures);
 // Uses DB for finished matches, API for live/scheduled
 // Query params: from, to (YYYY-MM-DD format)
 // ============================================
-router.get('/fixtures/optimized', FootballController.getOptimizedFixtures);
+router.get('/fixtures/optimized', SHARED_CACHE_30S, FootballController.getOptimizedFixtures);
 
 // ============================================
 // CACHED DATA ROUTES (Permanent Storage)
@@ -59,45 +67,45 @@ router.get('/fixtures/optimized', FootballController.getOptimizedFixtures);
 // ============================================
 
 // GET /api/football/cached/matches/:date - Get matches by date (permanent cache)
-router.get('/cached/matches/:date', FootballController.getCachedMatchesByDate);
+router.get('/cached/matches/:date', SHARED_CACHE_5MIN, FootballController.getCachedMatchesByDate);
 
 // GET /api/football/cached/player/:id - Get player (permanent cache)
-router.get('/cached/player/:id', FootballController.getCachedPlayer);
+router.get('/cached/player/:id', SHARED_CACHE_1H, FootballController.getCachedPlayer);
 
 // GET /api/football/cached/teams/all - Get all cached teams
-router.get('/cached/teams/all', FootballController.getAllCachedTeams);
+router.get('/cached/teams/all', SHARED_CACHE_24H, FootballController.getAllCachedTeams);
 
 // ✅ OPTIMIZATION 2: GET /api/football/cached/teams/batch - Get multiple teams in one request
 // Query param: ?ids=1020,1021,1022 (comma-separated team IDs)
 // Must be before /cached/team/:id to avoid route conflicts
-router.get('/cached/teams/batch', FootballController.getCachedTeamsBatch);
+router.get('/cached/teams/batch', SHARED_CACHE_1H, FootballController.getCachedTeamsBatch);
 
 // GET /api/football/cached/team/:id - Get team (permanent cache)
-router.get('/cached/team/:id', FootballController.getCachedTeam);
+router.get('/cached/team/:id', SHARED_CACHE_1H, FootballController.getCachedTeam);
 
 // GET /api/football/cached/standings/:leagueId - Get standings (1 hour cache)
-router.get('/cached/standings/:leagueId', FootballController.getCachedStandings);
+router.get('/cached/standings/:leagueId', SHARED_CACHE_1H, FootballController.getCachedStandings);
 
 // GET /api/football/cached/h2h - Get H2H (permanent cache)
-router.get('/cached/h2h', FootballController.getCachedH2H);
+router.get('/cached/h2h', SHARED_CACHE_24H, FootballController.getCachedH2H);
 
 // GET /api/football/cached/fixture/:id/lineups - Get lineups (permanent for finished)
-router.get('/cached/fixture/:id/lineups', FootballController.getCachedLineups);
+router.get('/cached/fixture/:id/lineups', SHARED_CACHE_24H, FootballController.getCachedLineups);
 
 // GET /api/football/cached/fixture/:id/statistics - Get statistics (permanent for finished)
-router.get('/cached/fixture/:id/statistics', FootballController.getCachedStatistics);
+router.get('/cached/fixture/:id/statistics', SHARED_CACHE_24H, FootballController.getCachedStatistics);
 
 // GET /api/football/cached/fixture/:id/events - Get events (permanent for finished)
-router.get('/cached/fixture/:id/events', FootballController.getCachedEvents);
+router.get('/cached/fixture/:id/events', SHARED_CACHE_24H, FootballController.getCachedEvents);
 
 // GET /api/football/cached/search - Unified search with caching
-router.get('/cached/search', FootballController.getCachedSearch);
+router.get('/cached/search', SHARED_CACHE_5MIN, FootballController.getCachedSearch);
 
 // GET /api/football/cached/popular-searches - Get popular search suggestions
-router.get('/cached/popular-searches', FootballController.getPopularSearches);
+router.get('/cached/popular-searches', SHARED_CACHE_1H, FootballController.getPopularSearches);
 
 // GET /api/football/cached/team/:id/matches - Get team matches (live, upcoming, finished)
-router.get('/cached/team/:id/matches', FootballController.getCachedTeamMatches);
+router.get('/cached/team/:id/matches', SHARED_CACHE_5MIN, FootballController.getCachedTeamMatches);
 
 // GET /api/football/cached/stats - Get full cache statistics
 router.get('/cached/stats', FootballController.getFullCacheStats);
@@ -112,46 +120,46 @@ router.get('/cache/stats', FootballController.getCacheStats);
 // GET /api/football/fixtures/:id
 // Get a single fixture by ID
 // ============================================
-router.get('/fixtures/:id', FootballController.getFixtureById);
+router.get('/fixtures/:id', SHARED_CACHE_5MIN, FootballController.getFixtureById);
 
 // ============================================
 // GET /api/football/fixtures/:id/lineups
 // Get lineups for a fixture
 // ============================================
-router.get('/fixtures/:id/lineups', FootballController.getFixtureLineups);
+router.get('/fixtures/:id/lineups', SHARED_CACHE_1H, FootballController.getFixtureLineups);
 
 // ============================================
 // GET /api/football/fixtures/:id/statistics
 // Get statistics for a fixture
 // ============================================
-router.get('/fixtures/:id/statistics', FootballController.getFixtureStatistics);
+router.get('/fixtures/:id/statistics', SHARED_CACHE_1H, FootballController.getFixtureStatistics);
 
 // ============================================
 // GET /api/football/fixtures/:id/events
 // Get events for a fixture (goals, cards, substitutions)
 // ============================================
-router.get('/fixtures/:id/events', FootballController.getFixtureEvents);
+router.get('/fixtures/:id/events', SHARED_CACHE_1H, FootballController.getFixtureEvents);
 
 // ============================================
 // GET /api/football/standings
 // Get standings for a league
 // Query params: league (required), season (optional)
 // ============================================
-router.get('/standings', FootballController.getStandings);
+router.get('/standings', SHARED_CACHE_1H, FootballController.getStandings);
 
 // ============================================
 // GET /api/football/h2h
 // Get head to head matches between two teams
 // Query params: team1 (required), team2 (required), count (optional, default 5)
 // ============================================
-router.get('/h2h', FootballController.getHeadToHead);
+router.get('/h2h', SHARED_CACHE_24H, FootballController.getHeadToHead);
 
 // ============================================
 // GET /api/football/h2h/cached
 // Get head to head with intelligent caching
 // Query params: team1 (required), team2 (required), count (optional)
 // ============================================
-router.get('/h2h/cached', FootballController.getH2HWithCache);
+router.get('/h2h/cached', SHARED_CACHE_24H, FootballController.getH2HWithCache);
 
 // ============================================
 // PLAYER ROUTES
@@ -159,26 +167,26 @@ router.get('/h2h/cached', FootballController.getH2HWithCache);
 
 // GET /api/football/players/top/scorers
 // Must be before /players/:id to avoid route conflicts
-router.get('/players/top/scorers', FootballController.getTopScorers);
+router.get('/players/top/scorers', SHARED_CACHE_1H, FootballController.getTopScorers);
 
 // GET /api/football/players/top/scorers/predictions
 // Get predictions for top scorers based on current performance
-router.get('/players/top/scorers/predictions', FootballController.getTopScorersPredictions);
+router.get('/players/top/scorers/predictions', SHARED_CACHE_1H, FootballController.getTopScorersPredictions);
 
 // GET /api/football/players/top/assists
 // Top assists/playmakers
-router.get('/players/top/assists', FootballController.getTopAssists);
+router.get('/players/top/assists', SHARED_CACHE_1H, FootballController.getTopAssists);
 
 // GET /api/football/players/top/yellow-cards
 // Top yellow cards
-router.get('/players/top/yellow-cards', FootballController.getTopYellowCards);
+router.get('/players/top/yellow-cards', SHARED_CACHE_1H, FootballController.getTopYellowCards);
 
 // GET /api/football/players/top/red-cards
 // Top red cards
-router.get('/players/top/red-cards', FootballController.getTopRedCards);
+router.get('/players/top/red-cards', SHARED_CACHE_1H, FootballController.getTopRedCards);
 
 // GET /api/football/players/:id
-router.get('/players/:id', FootballController.getPlayerById);
+router.get('/players/:id', SHARED_CACHE_1H, FootballController.getPlayerById);
 
 // ============================================
 // TEAM ROUTES
@@ -186,26 +194,26 @@ router.get('/players/:id', FootballController.getPlayerById);
 
 // GET /api/football/teams/:id/squad
 // Must be before /teams/:id to avoid route conflicts
-router.get('/teams/:id/squad', FootballController.getTeamSquad);
+router.get('/teams/:id/squad', SHARED_CACHE_1H, FootballController.getTeamSquad);
 
 // GET /api/football/teams/:id/statistics
 // Team statistics
-router.get('/teams/:id/statistics', FootballController.getTeamStatistics);
+router.get('/teams/:id/statistics', SHARED_CACHE_1H, FootballController.getTeamStatistics);
 
 // GET /api/football/teams/:id/injuries
 // Team injuries
-router.get('/teams/:id/injuries', FootballController.getTeamInjuries);
+router.get('/teams/:id/injuries', SHARED_CACHE_5MIN, FootballController.getTeamInjuries);
 
 // GET /api/football/teams/:id/trophies
 // Team trophies and awards
-router.get('/teams/:id/trophies', FootballController.getTeamTrophies);
+router.get('/teams/:id/trophies', SHARED_CACHE_24H, FootballController.getTeamTrophies);
 
 // GET /api/football/teams/:id/coaches
 // Team coaches
-router.get('/teams/:id/coaches', FootballController.getTeamCoaches);
+router.get('/teams/:id/coaches', SHARED_CACHE_24H, FootballController.getTeamCoaches);
 
 // GET /api/football/teams/:id
-router.get('/teams/:id', FootballController.getTeamById);
+router.get('/teams/:id', SHARED_CACHE_1H, FootballController.getTeamById);
 
 // ============================================
 // VENUES ROUTES
@@ -213,7 +221,7 @@ router.get('/teams/:id', FootballController.getTeamById);
 
 // GET /api/football/venues/:id
 // Venue/stadium information
-router.get('/venues/:id', FootballController.getVenueInfo);
+router.get('/venues/:id', SHARED_CACHE_24H, FootballController.getVenueInfo);
 
 // ============================================
 // ROUNDS ROUTES
@@ -221,17 +229,16 @@ router.get('/venues/:id', FootballController.getVenueInfo);
 
 // GET /api/football/fixtures/rounds
 // League rounds
-router.get('/fixtures/rounds', FootballController.getLeagueRounds);
-
-export default router;
-
+router.get('/fixtures/rounds', SHARED_CACHE_1H, FootballController.getLeagueRounds);
 
 // ============================================
 // GET /api/football/standings/:leagueId
 // Get standings for a league (path parameter version)
 // ============================================
-router.get('/standings/:leagueId', async (req, res) => {
+router.get('/standings/:leagueId', SHARED_CACHE_1H, async (req, res) => {
     // Forward to main standings endpoint with query params
     req.query.league = req.params.leagueId;
     return FootballController.getStandings(req, res);
 });
+
+export default router;

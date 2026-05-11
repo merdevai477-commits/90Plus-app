@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, Modal, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
@@ -129,8 +130,18 @@ function MatchRow({
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
               {fixture.homeLogo ? (
-                <Image source={{ uri: fixture.homeLogo }} style={styles.teamLogo} resizeMode="contain" />
-              ) : null}
+                <Image
+                  source={{ uri: fixture.homeLogo }}
+                  style={styles.teamLogo}
+                  contentFit="contain"
+                  transition={150}
+                  placeholder={{ thumbhash: undefined }}
+                />
+              ) : (
+                <View style={styles.logoInitials}>
+                  <Text style={styles.logoInitialsTxt}>{(fixture.home || '?').slice(0, 2).toUpperCase()}</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{fixture.home}</Text>
           </View>
@@ -151,8 +162,17 @@ function MatchRow({
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
               {fixture.awayLogo ? (
-                <Image source={{ uri: fixture.awayLogo }} style={styles.teamLogo} resizeMode="contain" />
-              ) : null}
+                <Image
+                  source={{ uri: fixture.awayLogo }}
+                  style={styles.teamLogo}
+                  contentFit="contain"
+                  transition={150}
+                />
+              ) : (
+                <View style={styles.logoInitials}>
+                  <Text style={styles.logoInitialsTxt}>{(fixture.away || '?').slice(0, 2).toUpperCase()}</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{fixture.away}</Text>
           </View>
@@ -244,7 +264,12 @@ function LeagueCard({
         <View style={styles.leagueLeft}>
           <View style={styles.leagueLogoWrap}>
             {group.leagueLogo ? (
-              <Image source={{ uri: group.leagueLogo }} style={styles.leagueLogo} resizeMode="contain" />
+              <Image
+                source={{ uri: group.leagueLogo }}
+                style={styles.leagueLogo}
+                contentFit="contain"
+                transition={150}
+              />
             ) : null}
           </View>
           <Text style={styles.leagueTitle}>{group.league}</Text>
@@ -757,6 +782,11 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.09)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
   },
+  logoInitials: {
+    width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(124,58,237,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  logoInitialsTxt: { color: '#A78BFA', fontSize: 9, fontWeight: '800' },
   teamLogo: { width: 25, height: 25 },
   teamTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', maxWidth: '100%' },
   scoreCol: { width: '32%', alignItems: 'center' },

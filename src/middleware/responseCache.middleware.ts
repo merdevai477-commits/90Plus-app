@@ -25,11 +25,15 @@ class ResponseCache {
     private pendingRejectors = new Map<string, (err: unknown) => void>();
 
     /**
-     * Generate cache key from request
+     * Generate cache key from request.
+     * When `sharedCache` is true the userId is omitted so a single entry
+     * serves ALL users (correct for public/shared endpoints like football
+     * match listings that are identical regardless of auth).
      */
-    private getCacheKey(req: Request): string {
+    private getCacheKey(req: Request, sharedCache = false): string {
         const path = req.path;
         const query = JSON.stringify(req.query);
+        if (sharedCache) return `${path}:${query}:shared`;
         const userId = (req as any).auth?.userId || 'anonymous';
         return `${path}:${query}:${userId}`;
     }
@@ -45,8 +49,8 @@ class ResponseCache {
     /**
      * Get cached response
      */
-    async get(req: Request): Promise<CacheEntry | null> {
-        const key = this.getCacheKey(req);
+    async get(req: Request, sharedCache = false): Promise<CacheEntry | null> {
+        const key = this.getCacheKey(req, sharedCache);
         
         // Try Redis first
         const redisKey = `response:${key}`;
@@ -87,8 +91,8 @@ class ResponseCache {
      * Register an in-flight cache fill for stampede protection.
      * Returns false if another fill is already in progress.
      */
-    beginFill(req: Request): boolean {
-        const key = this.getCacheKey(req);
+    beginFill(req: Request, sharedCache = false): boolean {
+        const key = this.getCacheKey(req, sharedCache);
         if (this.pending.has(key)) return false;
 
         let resolveFn!: (entry: CacheEntry) => void;
@@ -121,8 +125,8 @@ class ResponseCache {
         return true;
     }
 
-    endFill(req: Request, entry: CacheEntry): void {
-        const key = this.getCacheKey(req);
+    endFill(req: Request, entry: CacheEntry, sharedCache = false): void {
+        const key = this.getCacheKey(req, sharedCache);
         const resolve = this.pendingResolvers.get(key);
         if (resolve) resolve(entry);
         this.pending.delete(key);
@@ -130,8 +134,8 @@ class ResponseCache {
         this.pendingRejectors.delete(key);
     }
 
-    failFill(req: Request, err: unknown): void {
-        const key = this.getCacheKey(req);
+    failFill(req: Request, err: unknown, sharedCache = false): void {
+        const key = this.getCacheKey(req, sharedCache);
         const reject = this.pendingRejectors.get(key);
         if (reject) reject(err);
         this.pending.delete(key);
@@ -142,8 +146,8 @@ class ResponseCache {
     /**
      * Set cached response
      */
-    async set(req: Request, data: any, ttl?: number): Promise<string> {
-        const key = this.getCacheKey(req);
+    async set(req: Request, data: any, ttl?: number, sharedCache = false): Promise<string> {
+        const key = this.getCacheKey(req, sharedCache);
         const etag = this.generateETag(data);
         const entry: CacheEntry = {
             data,
@@ -160,7 +164,7 @@ class ResponseCache {
         this.memoryCache.set(key, entry);
 
         // Resolve any waiters.
-        this.endFill(req, entry);
+        this.endFill(req, entry, sharedCache);
 
         return etag;
     }
@@ -210,9 +214,21 @@ setInterval(() => {
 /**
  * Response caching middleware
  * Only caches GET requests
+ *
+ * Options:
+ * - ttl: entry lifetime in ms (default 5 min)
+ * - skip: return true to bypass caching for this request
+ * - sharedCache: when true, omit userId from cache key so a single entry
+ *   serves ALL users. Use for public/anonymous endpoints only (football
+ *   match listings, live fixtures, team info, etc.) — never for user-scoped
+ *   data like /clerk/me, /profile/completion.
  */
-export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Request) => boolean } = {}) {
-    const { ttl, skip } = options;
+export function responseCacheMiddleware(options: {
+    ttl?: number;
+    skip?: (req: Request) => boolean;
+    sharedCache?: boolean;
+} = {}) {
+    const { ttl, skip, sharedCache = false } = options;
 
     return async (req: Request, res: Response, next: NextFunction) => {
         // Only cache GET requests
@@ -227,7 +243,7 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
 
         let cached: CacheEntry | null = null;
         try {
-            cached = await responseCache.get(req);
+            cached = await responseCache.get(req, sharedCache);
         } catch (err) {
             logger.warn('responseCache.get failed; continuing without cache', {
                 path: req.path,
@@ -238,7 +254,7 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             // Check ETag
             const ifNoneMatch = req.headers['if-none-match'];
             if (ifNoneMatch === cached.etag || ifNoneMatch === `"${cached.etag}"` || ifNoneMatch === `W/"${cached.etag}"`) {
-                res.setHeader('Cache-Control', `private, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
+                res.setHeader('Cache-Control', `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
                 res.status(304).end();
                 return;
             }
@@ -246,16 +262,16 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
             // Return cached data
             res.setHeader('ETag', `"${cached.etag}"`);
             res.setHeader('X-Cache', 'HIT');
-            res.setHeader('Cache-Control', `private, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
+            res.setHeader('Cache-Control', `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
             return res.json(cached.data);
         }
 
         // Cache miss: register a fill so concurrent requests can wait instead of stampeding downstream.
-        const isLeader = responseCache.beginFill(req);
+        const isLeader = responseCache.beginFill(req, sharedCache);
         if (!isLeader) {
             let filled: CacheEntry | null = null;
             try {
-                filled = await responseCache.get(req);
+                filled = await responseCache.get(req, sharedCache);
             } catch (err) {
                 logger.warn('responseCache.get (follower) failed; proceeding uncached', {
                     path: req.path,
@@ -304,18 +320,18 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
 
             if (shouldCache) {
                 // Cache asynchronously without blocking response
-                responseCache.set(req, body, effectiveTtl).then((etag) => {
+                responseCache.set(req, body, effectiveTtl, sharedCache).then((etag) => {
                     res.setHeader('ETag', `"${etag}"`);
                     res.setHeader('X-Cache', isEmptyPayload ? 'MISS-EMPTY' : 'MISS');
                     const maxAge = effectiveTtl ?? 5 * 60 * 1000;
-                    res.setHeader('Cache-Control', `private, max-age=${Math.floor(maxAge / 1000)}`);
+                    res.setHeader('Cache-Control', `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor(maxAge / 1000)}`);
                 }).catch(() => {
                     // Ignore cache errors, don't block response
-                    responseCache.failFill(req, new Error('CACHE_SET_FAILED'));
+                    responseCache.failFill(req, new Error('CACHE_SET_FAILED'), sharedCache);
                 });
             } else {
                 // Release waiters for this key if leader request ended with non-cacheable response.
-                responseCache.failFill(req, new Error('RESPONSE_NOT_CACHEABLE'));
+                responseCache.failFill(req, new Error('RESPONSE_NOT_CACHEABLE'), sharedCache);
                 res.setHeader('X-Cache', 'SKIP');
             }
             return originalJson(body);
@@ -323,7 +339,7 @@ export function responseCacheMiddleware(options: { ttl?: number; skip?: (req: Re
 
         res.on('close', () => {
             // If the connection drops before we cache anything, release waiters.
-            responseCache.failFill(req, new Error('RESPONSE_CLOSED'));
+            responseCache.failFill(req, new Error('RESPONSE_CLOSED'), sharedCache);
         });
 
         next();
