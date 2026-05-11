@@ -107,7 +107,7 @@ export const skipRateLimitForTrusted = (req: Request, _res: Response): boolean =
 export const generalLimiter = rateLimit({
     store: getRedisRateLimitStore(),
     windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 60 * 1000, // 15 min prod, 1 min dev
-    max: process.env.NODE_ENV === 'production' ? 5000 : 2000, // 5000 prod (was 2000), 2000 dev
+    max: process.env.NODE_ENV === 'production' ? 10000 : 3000, // 10000 prod (raised from 5000), 3000 dev
     message: {
         status: 'ERROR',
         message: 'Too many requests, please try again later',
@@ -128,6 +128,14 @@ export const generalLimiter = rateLimit({
         if (p.startsWith('/quiz/daily-status')) return true;
         // All prediction GETs are polled from multiple screens — use lenientShellLimiter only.
         if (req.method === 'GET' && p.startsWith('/predictions')) return true;
+        // User-sync endpoints have their own per-route limiters.
+        if (p.startsWith('/clerk/me')) return true;
+        if (p.startsWith('/clerk/stats')) return true;
+        if (p.startsWith('/clerk/user/')) return true;
+        if (p.startsWith('/coins/balance')) return true;
+        if (p.startsWith('/profile/completion')) return true;
+        if (p.startsWith('/profile/analytics')) return true;
+        if (p.startsWith('/profile/cooldowns')) return true;
         return false;
     },
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
