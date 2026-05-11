@@ -98,6 +98,12 @@ class ResponseCache {
             rejectFn = reject;
         });
 
+        // Attach a no-op .catch so this promise never surfaces as an
+        // UnhandledPromiseRejection. Followers attach their own .catch via
+        // the `await Promise.race(...)` path; the leader path may never
+        // subscribe at all (when the response finishes before anyone waits).
+        p.catch(() => { /* swallowed — intentionally no-op */ });
+
         this.pending.set(key, p);
         this.pendingResolvers.set(key, resolveFn);
         this.pendingRejectors.set(key, rejectFn);

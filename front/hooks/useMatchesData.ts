@@ -77,7 +77,8 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 };
 
 // ✅ Throttle background refresh - track last background fetch per date
-const BACKGROUND_REFRESH_THROTTLE = 2 * 60 * 1000; // 2 minutes minimum between background refreshes
+// Raised from 2 min to 5 min — with 100 req/day Free plan, 2 min was too aggressive.
+const BACKGROUND_REFRESH_THROTTLE = 5 * 60 * 1000; // 5 minutes minimum between background refreshes
 
 /**
  * Groups matches by league
@@ -236,8 +237,10 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
           liveMatches.forEach(m => mergeMap.set(m.id, m)); // live overwrites scheduled
           fetchedMatches = Array.from(mergeMap.values());
           
-          // Pre-fetch and cache upcoming 3 days in background
-          preloadUpcomingDays(3);
+          // Pre-fetching upcoming days was burning 3 API calls per launch
+          // against a 100/day quota. Disabled — users can swipe to the next
+          // day and we'll fetch on-demand (and cache) then.
+          // preloadUpcomingDays(3);
         } else if (!isPastDate) {
           // For future dates, just fetch scheduled matches
           fetchedMatches = await fetchMatchesByDate(selectedDate);

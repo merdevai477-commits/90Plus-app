@@ -128,7 +128,9 @@ function MatchRow({
         <View style={styles.rowBody}>
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
-              <Image source={{ uri: fixture.homeLogo }} style={styles.teamLogo} resizeMode="contain" />
+              {fixture.homeLogo ? (
+                <Image source={{ uri: fixture.homeLogo }} style={styles.teamLogo} resizeMode="contain" />
+              ) : null}
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{fixture.home}</Text>
           </View>
@@ -148,7 +150,9 @@ function MatchRow({
           </View>
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
-              <Image source={{ uri: fixture.awayLogo }} style={styles.teamLogo} resizeMode="contain" />
+              {fixture.awayLogo ? (
+                <Image source={{ uri: fixture.awayLogo }} style={styles.teamLogo} resizeMode="contain" />
+              ) : null}
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{fixture.away}</Text>
           </View>
@@ -239,7 +243,9 @@ function LeagueCard({
       >
         <View style={styles.leagueLeft}>
           <View style={styles.leagueLogoWrap}>
-            <Image source={{ uri: group.leagueLogo }} style={styles.leagueLogo} resizeMode="contain" />
+            {group.leagueLogo ? (
+              <Image source={{ uri: group.leagueLogo }} style={styles.leagueLogo} resizeMode="contain" />
+            ) : null}
           </View>
           <Text style={styles.leagueTitle}>{group.league}</Text>
         </View>
