@@ -59,7 +59,7 @@ function markQuotaExhausted(retryAfterSec?: number): void {
 class FootballService {
   private readonly apiKey: string;
   private readonly baseUrl = 'https://v3.football.api-sports.io';
-  private readonly timeout = 15000;
+  private readonly timeout = 20000; // 20s (was 15s — api-football can be slow)
 
   // ✅ OPTIMIZED: Use Redis for persistent caching across server restarts
   // Fallback to in-memory cache if Redis is unavailable
