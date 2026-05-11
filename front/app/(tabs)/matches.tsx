@@ -8,6 +8,13 @@ import { Bell, Star, ChevronDown, ChevronRight, Calendar, Ticket, X } from 'luci
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+  runOnJS,
+} from 'react-native-reanimated';
 import { MainShell } from '../../components/Matches/MainShell';
 import BottomNav from './BottomNav';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
@@ -316,6 +323,8 @@ function LeagueAllMatchesModal({
 
 // ─── League Card ──────────────────────────────────────────────────────────────
 const PREVIEW_COUNT = 2; // max fixtures shown before "View All"
+const ANIM_DURATION = 280;
+const ANIM_EASING = Easing.out(Easing.cubic);
 
 function LeagueCard({ 
   group, 
@@ -331,17 +340,53 @@ function LeagueCard({
   predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const hasMore = group.fixtures.length > PREVIEW_COUNT;
   const previewFixtures = hasMore ? group.fixtures.slice(0, PREVIEW_COUNT) : group.fixtures;
+
+  // ── Reanimated values ──────────────────────────────────────────────────────
+  const contentHeight = useSharedValue(0);   // measured height of content
+  const animHeight   = useSharedValue(0);    // animated height (0 → contentHeight)
+  const animChevron  = useSharedValue(0);    // 0 = collapsed, 1 = expanded
+  const measured     = useSharedValue(false); // true once onLayout fires
+
+  const toggle = useCallback(() => {
+    const next = !isExpanded;
+    setIsExpanded(next);
+    animChevron.value = withTiming(next ? 1 : 0, { duration: ANIM_DURATION, easing: ANIM_EASING });
+    animHeight.value  = withTiming(next ? contentHeight.value : 0, { duration: ANIM_DURATION, easing: ANIM_EASING });
+  }, [isExpanded, animChevron, animHeight, contentHeight]);
+
+  // Animated container height
+  const animContainerStyle = useAnimatedStyle(() => ({
+    height: animHeight.value,
+    overflow: 'hidden',
+  }));
+
+  // Animated chevron rotation: 0 → 0deg (collapsed), 1 → -180deg (expanded)
+  const animChevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${animChevron.value * -180}deg` }],
+  }));
+
+  // Measure content on first layout — hidden until measured to avoid jump
+  const onContentLayout = useCallback((e: any) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > 0 && !measured.value) {
+      measured.value = true;
+      contentHeight.value = h;
+      // If already expanded (e.g. re-render), snap to full height
+      if (isExpanded) animHeight.value = h;
+    }
+  }, [measured, contentHeight, animHeight, isExpanded]);
 
   return (
     <>
       <View style={styles.leagueCard}>
-        {/* Header — tap to open modal */}
+        {/* Header — tap to toggle accordion */}
         <TouchableOpacity
           style={styles.leagueHead}
           activeOpacity={0.7}
-          onPress={() => setShowAll(true)}
+          onPress={toggle}
         >
           <View style={styles.leagueLeft}>
             <View style={styles.leagueLogoWrap}>
@@ -356,11 +401,49 @@ function LeagueCard({
             </View>
             <Text style={styles.leagueTitle}>{group.league}</Text>
           </View>
-          {/* Match count badge */}
-          <View style={styles.matchCountBadge}>
-            <Text style={styles.matchCountTxt}>{group.fixtures.length}</Text>
+          <View style={styles.leagueRight}>
+            {/* Match count badge */}
+            <View style={styles.matchCountBadge}>
+              <Text style={styles.matchCountTxt}>{group.fixtures.length}</Text>
+            </View>
+            {/* Animated chevron */}
+            <Animated.View style={animChevronStyle}>
+              <ChevronDown size={16} color="rgba(255,255,255,0.45)" />
+            </Animated.View>
           </View>
         </TouchableOpacity>
+
+        {/* Animated accordion container */}
+        <Animated.View style={animContainerStyle}>
+          {/* Hidden measurement ghost — rendered once, opacity 0 until measured */}
+          <View
+            onLayout={onContentLayout}
+            style={{ opacity: measured.value ? 1 : 0 }}
+          >
+            {/* Preview fixtures (max PREVIEW_COUNT) */}
+            {previewFixtures.map((fixture) => (
+              <MatchRow
+                key={fixture.id}
+                fixture={fixture}
+                showPreds={filter === 'Predictions'}
+                onPredict={onPredict}
+                submittingId={submittingId}
+                predictedMatches={predictedMatches}
+              />
+            ))}
+
+            {/* View All — only if more than PREVIEW_COUNT matches */}
+            {hasMore && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.viewAllBtn}
+                onPress={() => setShowAll(true)}
+              >
+                <Text style={styles.viewAllTxt}>View All ({group.fixtures.length})  ›</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
       </View>
 
       {/* Full list modal */}
@@ -855,7 +938,7 @@ const styles = StyleSheet.create({
   },
   leagueLogo: { width: 20, height: 20 },
   leagueTitle: { color: TEXT_PRIMARY, fontSize: 16, fontWeight: '700' },
-  leagueRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  leagueRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   leagueLive: { color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700' },
   rowWrap: {
     minHeight: 94, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10,
