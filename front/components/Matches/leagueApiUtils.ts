@@ -120,6 +120,14 @@ export const mapFixturesToMatches = (fixtures: Fixture[]): Match[] => {
   return fixtures.map(mapFixtureToMatch);
 };
 
+// ─── In-flight request deduplication ──────────────────────────────────────────
+// Collapse multiple concurrent fetchMatchesByDate(date) / fetchLiveMatches()
+// calls for the same key into ONE network request. Without this, mounting two
+// components at once (Home + matches tab) fires duplicate requests that all
+// count against the quota.
+const inFlightMatchesByDate = new Map<string, Promise<Match[]>>();
+let inFlightLiveMatches: Promise<Match[]> | null = null;
+
 /**
  * Fetches matches for a specific date directly from backend API.
  * Uses caching: past dates cached for 30 days (permanent), today for 5 min, future for 2 hours.
@@ -129,6 +137,19 @@ export const mapFixturesToMatches = (fixtures: Fixture[]): Match[] => {
  */
 export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
   const dateString = date.toISOString().split('T')[0];
+
+  // Collapse concurrent calls for the same date.
+  const existing = inFlightMatchesByDate.get(dateString);
+  if (existing) return existing;
+
+  const promise = fetchMatchesByDateImpl(date, dateString).finally(() => {
+    inFlightMatchesByDate.delete(dateString);
+  });
+  inFlightMatchesByDate.set(dateString, promise);
+  return promise;
+};
+
+const fetchMatchesByDateImpl = async (date: Date, dateString: string): Promise<Match[]> => {
   const today = new Date().toISOString().split('T')[0];
   const isPastDate = dateString < today;
   
@@ -201,6 +222,16 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
  * ✅ INTEGRATED: Direct backend API integration
  */
 export const fetchLiveMatches = async (): Promise<Match[]> => {
+  // Collapse concurrent calls — live matches are shared across screens.
+  if (inFlightLiveMatches) return inFlightLiveMatches;
+
+  inFlightLiveMatches = fetchLiveMatchesImpl().finally(() => {
+    inFlightLiveMatches = null;
+  });
+  return inFlightLiveMatches;
+};
+
+const fetchLiveMatchesImpl = async (): Promise<Match[]> => {
   try {
     // Try direct backend API call first
     const apiUrl = getApiUrl();
