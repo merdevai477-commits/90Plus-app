@@ -1,25 +1,41 @@
-import React, { useMemo, useState, useEffect, useCallback, memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, FlatList, Dimensions } from 'react-native';
+import { useMemo, useState, useEffect, useCallback, memo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
-import { Bell, Star, ChevronDown, ChevronRight, Calendar, Ticket, X } from 'lucide-react-native';
+import { Bell, ChevronDown, Calendar, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import { MainShell } from '../../components/Matches/MainShell';
+import { FlashList } from '@shopify/flash-list';
 import BottomNav from './BottomNav';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
-import { PredictionsService } from '../../services/predictions.service';
+import { PredictionsService, PredictionApiError } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
+import { cacheService } from '../../services/cacheService';
+import { predictionsMapKey, predictionsTicketsKey } from '../../services/predictionsCacheKeys';
+import { offlineQueue } from '../../src/services/offlineQueue';
+import NetInfo from '@react-native-community/netinfo';
+import { useTranslation } from '../../src/i18n';
+import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import type { Match } from '../../components/Matches/matchCardUtils';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'Finished', 'Predictions'] as const;
+
+// Translation keys for the filter tab labels. Kept in lock-step with FILTERS
+// above — if a filter is added here, add its label key in locales/*.ts.
+const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
+  All: 'matches.tabs.all',
+  Live: 'matches.tabs.live',
+  Upcoming: 'matches.tabs.upcoming',
+  Finished: 'matches.tabs.finished',
+  Predictions: 'matches.tabs.predictions',
+};
 
 // Map API match status to display status
 function mapStatus(status: string): 'LIVE' | 'FT' | 'UPCOMING' {
@@ -49,87 +65,135 @@ type LeagueGroup = {
   id: string;
   league: string;
   leagueLogo: string;
-  liveLabel: string;
   fixtures: Fixture[];
 };
 
-function PredictionButton({ 
-  label, 
-  isActive, 
-  onPress, 
-  activeColor,
-  activeGradient,
+// Prediction visual tokens — one source of truth.
+const PRED_COLORS = {
+  home: {
+    base: 'rgba(59,130,246,0.9)',
+    soft: 'rgba(59,130,246,0.6)',
+    gradient: ['rgba(59,130,246,0.55)', 'rgba(37,99,235,0.25)'] as const,
+    glow: '#3b82f6',
+  },
+  draw: {
+    base: 'rgba(156,163,175,0.9)',
+    soft: 'rgba(156,163,175,0.6)',
+    gradient: ['rgba(156,163,175,0.55)', 'rgba(107,114,128,0.25)'] as const,
+    glow: '#9ca3af',
+  },
+  away: {
+    base: 'rgba(239,68,68,0.9)',
+    soft: 'rgba(239,68,68,0.6)',
+    gradient: ['rgba(239,68,68,0.55)', 'rgba(220,38,38,0.25)'] as const,
+    glow: '#ef4444',
+  },
+} as const;
+
+type PredictionKind = 'home' | 'draw' | 'away';
+
+const PredictionButton = memo(function PredictionButton({
+  label,
+  isActive,
+  onPress,
+  kind,
   disabled,
-}: { 
-  label: string; 
-  isActive: boolean; 
+}: {
+  label: string;
+  isActive: boolean;
   onPress: () => void;
-  activeColor: string;
-  activeGradient: readonly [string, string];
+  kind: PredictionKind;
   disabled?: boolean;
 }) {
+  const palette = PRED_COLORS[kind];
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[
-        styles.predBtn, 
-        isActive && { borderColor: activeColor, transform: [{ scale: 1.02 }] },
-        disabled && { opacity: 0.5 },
-      ]} 
+        styles.predBtn,
+        isActive && {
+          borderColor: palette.soft,
+          transform: [{ scale: 1.03 }],
+          shadowColor: palette.glow,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.9,
+          shadowRadius: 12,
+          elevation: 10,
+        },
+        disabled && !isActive && { opacity: 0.5 },
+      ]}
       onPress={onPress}
       activeOpacity={0.7}
       disabled={disabled}
     >
       <View style={[StyleSheet.absoluteFill, { borderRadius: 10, overflow: 'hidden' }]}>
         {isLiquidGlassSupported ? (
-          <LiquidGlassView 
+          <LiquidGlassView
             {...({
               style: StyleSheet.absoluteFill,
-              tint: "rgba(20,15,30,0.65)",
-              effect: "clear"
+              tint: 'rgba(20,15,30,0.65)',
+              effect: 'clear',
             } as any)}
           />
         ) : (
           <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
         )}
         {isActive && (
-          <LinearGradient 
-            colors={activeGradient}
+          <LinearGradient
+            colors={palette.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
         )}
       </View>
-      <Text style={[styles.predBtnTxt, isActive && { color: '#fff', textShadowColor: activeColor, textShadowRadius: 8, textShadowOffset: {width: 0, height: 0} }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.predBtnTxt,
+          isActive && {
+            color: '#fff',
+            textShadowColor: palette.glow,
+            textShadowRadius: 10,
+            textShadowOffset: { width: 0, height: 0 },
+          },
+        ]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </TouchableOpacity>
   );
-}
+});
 
-function MatchRow({ 
-  fixture, 
+const MatchRow = memo(function MatchRow({
+  fixture,
   showPreds,
   onPredict,
   submittingId,
   predictedMatches,
-}: { 
+  isSubscribed,
+  isSubscribing,
+  onToggleSubscription,
+}: {
   fixture: Fixture;
   showPreds: boolean;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
   predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+  isSubscribed: boolean;
+  isSubscribing: boolean;
+  onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
 }) {
-  const [bellActive, setBellActive] = useState(false);
   const existingPrediction = predictedMatches[fixture.id] ?? null;
   const isSubmitting = submittingId === fixture.id;
+  const { translate: t } = useTranslation();
+
+  // Bell is only actionable for future matches — no point notifying for a
+  // match that already started or finished.
+  const canSubscribe = fixture.status === 'UPCOMING';
 
   return (
     <View style={styles.rowWrapCol}>
       <View style={styles.rowWrap}>
-        <TouchableOpacity style={styles.rowIcon} activeOpacity={0.7}>
-          <Star size={16} color="rgba(255,255,255,0.45)" />
-        </TouchableOpacity>
         <View style={styles.rowBody}>
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
@@ -139,7 +203,8 @@ function MatchRow({
                   style={styles.teamLogo}
                   contentFit="contain"
                   transition={150}
-                  placeholder={{ thumbhash: undefined }}
+                  cachePolicy="memory-disk"
+                  recyclingKey={fixture.homeLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
@@ -151,9 +216,9 @@ function MatchRow({
           </View>
           <View style={styles.scoreCol}>
             {fixture.status === 'UPCOMING' ? (
-              <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>UPCOMING</Text></View>
-            ) : fixture.live ? <Text style={styles.liveBadge}>LIVE</Text> : <Text style={styles.ftBadge}>FT</Text>}
-            
+              <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>{t('matches.status.upcoming')}</Text></View>
+            ) : fixture.live ? <Text style={styles.liveBadge}>{t('matches.status.live')}</Text> : <Text style={styles.ftBadge}>{t('matches.status.finished')}</Text>}
+
             {fixture.status === 'UPCOMING' ? (
               <Text style={styles.timeTxt}>{fixture.time}</Text>
             ) : (
@@ -171,6 +236,8 @@ function MatchRow({
                   style={styles.teamLogo}
                   contentFit="contain"
                   transition={150}
+                  cachePolicy="memory-disk"
+                  recyclingKey={fixture.awayLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
@@ -181,57 +248,63 @@ function MatchRow({
             <Text style={styles.teamTxt} numberOfLines={1}>{fixture.away}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.rowIcon} activeOpacity={0.7} onPress={() => setBellActive(!bellActive)}>
-          <Bell size={16} color={bellActive ? "#fbbf24" : "rgba(255,255,255,0.45)"} fill={bellActive ? "#fbbf24" : "transparent"} />
+        <TouchableOpacity
+          style={styles.rowIcon}
+          activeOpacity={0.7}
+          onPress={() => canSubscribe && onToggleSubscription(fixture, !isSubscribed)}
+          disabled={!canSubscribe || isSubscribing}
+          hitSlop={8}
+        >
+          {isSubscribing ? (
+            <ActivityIndicator size="small" color="#fbbf24" />
+          ) : (
+            <Bell
+              size={17}
+              color={isSubscribed ? '#fbbf24' : canSubscribe ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.2)'}
+              fill={isSubscribed ? '#fbbf24' : 'transparent'}
+            />
+          )}
         </TouchableOpacity>
       </View>
-      
+
       {showPreds && fixture.status === 'UPCOMING' && (
         <View style={styles.predWrap}>
-          {existingPrediction ? (
-            <View style={styles.predDoneWrap}>
-              <Text style={styles.predDoneIcon}>✅</Text>
-              <Text style={styles.predDoneTxt}>
-                Predicted: {existingPrediction === 'home' ? fixture.home : existingPrediction === 'away' ? fixture.away : 'Draw'}
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.predTitle}>Make Your Prediction</Text>
-              {isSubmitting ? (
-                <ActivityIndicator color={PURPLE_PRIMARY} style={{ flex: 1, height: 44 }} />
-              ) : (
-                <View style={styles.predButtons}>
-                    <PredictionButton 
-                      label={fixture.home} 
-                      isActive={false}
-                      onPress={() => onPredict(fixture.id, 'home')} 
-                      activeColor="rgba(59,130,246,0.6)" 
-                      activeGradient={['rgba(59,130,246,0.45)', 'rgba(37,99,235,0.15)']}
-                    />
-                    <PredictionButton 
-                      label="Draw" 
-                      isActive={false}
-                      onPress={() => onPredict(fixture.id, 'draw')} 
-                      activeColor="rgba(156,163,175,0.6)" 
-                      activeGradient={['rgba(156,163,175,0.45)', 'rgba(107,114,128,0.15)']}
-                    />
-                    <PredictionButton 
-                      label={fixture.away} 
-                      isActive={false}
-                      onPress={() => onPredict(fixture.id, 'away')} 
-                      activeColor="rgba(239,68,68,0.6)" 
-                      activeGradient={['rgba(239,68,68,0.45)', 'rgba(220,38,38,0.15)']}
-                    />
-                  </View>
-                )}
-            </>
-          )}
+          <View style={styles.predTitleRow}>
+            <Text style={styles.predTitle}>
+              {existingPrediction ? t('matches.prediction.yourPrediction') : t('matches.prediction.title')}
+            </Text>
+            {isSubmitting && (
+              <ActivityIndicator size="small" color={PURPLE_PRIMARY} style={styles.predTitleSpinner} />
+            )}
+          </View>
+          <View style={styles.predButtons}>
+            <PredictionButton
+              label={fixture.home}
+              kind="home"
+              isActive={existingPrediction === 'home'}
+              onPress={() => onPredict(fixture.id, 'home')}
+              disabled={!!existingPrediction || isSubmitting}
+            />
+            <PredictionButton
+              label={t('matches.prediction.drawLabel')}
+              kind="draw"
+              isActive={existingPrediction === 'draw'}
+              onPress={() => onPredict(fixture.id, 'draw')}
+              disabled={!!existingPrediction || isSubmitting}
+            />
+            <PredictionButton
+              label={fixture.away}
+              kind="away"
+              isActive={existingPrediction === 'away'}
+              onPress={() => onPredict(fixture.id, 'away')}
+              disabled={!!existingPrediction || isSubmitting}
+            />
+          </View>
         </View>
       )}
     </View>
   );
-}
+});
 
 // ─── League All Matches Modal ─────────────────────────────────────────────────
 function LeagueAllMatchesModal({
@@ -242,6 +315,9 @@ function LeagueAllMatchesModal({
   onPredict,
   submittingId,
   predictedMatches,
+  subscribedFixtures,
+  subscribingFixtureId,
+  onToggleSubscription,
 }: {
   group: LeagueGroup | null;
   visible: boolean;
@@ -250,6 +326,9 @@ function LeagueAllMatchesModal({
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
   predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+  subscribedFixtures: ReadonlySet<string>;
+  subscribingFixtureId: string | null;
+  onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
 }) {
   if (!group) return null;
   return (
@@ -293,7 +372,7 @@ function LeagueAllMatchesModal({
             </TouchableOpacity>
           </View>
           {/* All fixtures */}
-          <FlatList
+          <FlashList
             data={group.fixtures}
             keyExtractor={f => f.id}
             renderItem={({ item }) => (
@@ -303,6 +382,9 @@ function LeagueAllMatchesModal({
                 onPredict={onPredict}
                 submittingId={submittingId}
                 predictedMatches={predictedMatches}
+                isSubscribed={subscribedFixtures.has(item.id)}
+                isSubscribing={subscribingFixtureId === item.id}
+                onToggleSubscription={onToggleSubscription}
               />
             )}
             showsVerticalScrollIndicator={false}
@@ -317,21 +399,28 @@ function LeagueAllMatchesModal({
 // ─── League Card ──────────────────────────────────────────────────────────────
 const PREVIEW_COUNT = 2; // max fixtures shown before "View All"
 
-function LeagueCard({ 
-  group, 
+const LeagueCard = memo(function LeagueCard({
+  group,
   filter,
   onPredict,
   submittingId,
   predictedMatches,
-}: { 
+  subscribedFixtures,
+  subscribingFixtureId,
+  onToggleSubscription,
+}: {
   group: LeagueGroup;
   filter: string;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
   predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+  subscribedFixtures: ReadonlySet<string>;
+  subscribingFixtureId: string | null;
+  onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const { translate: t } = useTranslation();
   const hasMore = group.fixtures.length > PREVIEW_COUNT;
   const previewFixtures = hasMore ? group.fixtures.slice(0, PREVIEW_COUNT) : group.fixtures;
 
@@ -380,6 +469,9 @@ function LeagueCard({
                 onPredict={onPredict}
                 submittingId={submittingId}
                 predictedMatches={predictedMatches}
+                isSubscribed={subscribedFixtures.has(fixture.id)}
+                isSubscribing={subscribingFixtureId === fixture.id}
+                onToggleSubscription={onToggleSubscription}
               />
             ))}
             {hasMore && (
@@ -388,7 +480,9 @@ function LeagueCard({
                 style={styles.viewAllBtn}
                 onPress={() => setShowAll(true)}
               >
-                <Text style={styles.viewAllTxt}>View All ({group.fixtures.length})  ›</Text>
+                <Text style={styles.viewAllTxt}>
+                  {t('matches.screen.viewAll').replace('{{count}}', String(group.fixtures.length))}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -404,10 +498,13 @@ function LeagueCard({
         onPredict={onPredict}
         submittingId={submittingId}
         predictedMatches={predictedMatches}
+        subscribedFixtures={subscribedFixtures}
+        subscribingFixtureId={subscribingFixtureId}
+        onToggleSubscription={onToggleSubscription}
       />
     </>
   );
-}
+});
 
 export default function MatchesHubScreenV2() {
   const params = useLocalSearchParams();
@@ -415,10 +512,16 @@ export default function MatchesHubScreenV2() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>(initialFilter);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showTicketsInfo, setShowTicketsInfo] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState(14); // calendar selected day index
+  // selectedDate is the ground truth; the calendar grid derives everything
+  // else from it (month length, highlighted cell, etc.).
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const insets = useSafeAreaInsets();
-  const { getToken } = useAuth();
+  const { getToken, userId } = useAuth();
+  const { t: tObj, translate: t } = useTranslation();
 
   // Tickets (remaining predictions)
   const [ticketsRemaining, setTicketsRemaining] = useState<number>(10);
@@ -427,11 +530,58 @@ export default function MatchesHubScreenV2() {
   // Which match is currently being submitted
   const [submittingId, setSubmittingId] = useState<string | null>(null);
 
+  // Bell (match-start push) subscription state
+  const [subscribedFixtures, setSubscribedFixtures] = useState<Set<string>>(() => new Set());
+  const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
+
   // Real matches data from backend
   const { groupedMatches, loading, error, refetch } = useMatchesData(selectedDate);
 
-  // Load tickets count and existing predictions on mount
+  // ─── Instant hydration from local cache ────────────────────────────────────
+  // Cache keys are SCOPED TO userId so a logout→login on the same device
+  // never leaks another user's predictions. When userId is absent we skip
+  // the cache entirely instead of falling back to a shared key.
+  const PRED_CACHE_KEY = useMemo(
+    () => (userId ? predictionsMapKey(userId) : null),
+    [userId],
+  );
+  const TICKETS_CACHE_KEY = useMemo(
+    () => (userId ? predictionsTicketsKey(userId) : null),
+    [userId],
+  );
+
+  // Clear in-memory state when the signed-in user changes. Prevents visual
+  // leakage between the previous user's predictions and the new user's
+  // (empty until the server sync completes).
   useEffect(() => {
+    setPredictedMatches({});
+    setTicketsRemaining(10);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!PRED_CACHE_KEY || !TICKETS_CACHE_KEY) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [cachedMap, cachedTickets] = await Promise.all([
+          cacheService.get<Record<string, 'home' | 'draw' | 'away'>>(PRED_CACHE_KEY),
+          cacheService.get<number>(TICKETS_CACHE_KEY),
+        ]);
+        if (cancelled) return;
+        if (cachedMap) setPredictedMatches(cachedMap);
+        if (typeof cachedTickets === 'number') setTicketsRemaining(cachedTickets);
+      } catch {
+        // non-fatal
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [PRED_CACHE_KEY, TICKETS_CACHE_KEY]);
+
+  // Load tickets count and existing predictions on mount (server sync)
+  useEffect(() => {
+    if (!PRED_CACHE_KEY || !TICKETS_CACHE_KEY) return;
     const loadPredictionsData = async () => {
       try {
         const token = await getToken();
@@ -447,12 +597,40 @@ export default function MatchesHubScreenV2() {
           map[matchId] = pred.prediction.type;
         });
         setPredictedMatches(map);
+        // Persist reconciled state — 24h TTL covers a full ticket cycle.
+        cacheService.set(PRED_CACHE_KEY, map, 24 * 60 * 60 * 1000).catch(() => {});
+        cacheService.set(TICKETS_CACHE_KEY, remaining.remaining, 24 * 60 * 60 * 1000).catch(() => {});
       } catch {
-        // silently fail — tickets will show default
+        // silently fail — cached values stay visible
       }
     };
     loadPredictionsData();
-  }, [getToken]);
+  }, [getToken, PRED_CACHE_KEY, TICKETS_CACHE_KEY]);
+
+  // Reset bell state when the signed-in user changes.
+  useEffect(() => {
+    setSubscribedFixtures(new Set());
+  }, [userId]);
+
+  // Hydrate bell state from the backend on mount / userId change.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const ids = await MatchSubscriptionsService.listIds(token);
+        if (cancelled) return;
+        setSubscribedFixtures(new Set(Array.from(ids).map((n) => String(n))));
+      } catch {
+        // non-fatal
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, userId]);
 
   useEffect(() => {
     if (params.filter && FILTERS.includes(params.filter as any)) {
@@ -466,7 +644,6 @@ export default function MatchesHubScreenV2() {
       id: String(g.leagueId),
       league: g.leagueName,
       leagueLogo: g.leagueLogo || '',
-      liveLabel: 'Live',
       fixtures: g.matches.map((m: Match): Fixture => ({
         id: m.id,
         home: m.homeTeam?.name || 'Home',
@@ -504,13 +681,16 @@ export default function MatchesHubScreenV2() {
   //  1. Check ticket count (local state) — show warning toast if 0
   //  2. Check if already predicted — silent no-op
   //  3. Optimistic UI update: mark predicted + decrement ticket count
-  //  4. Call backend; on failure, roll back the optimistic change
-  //  5. Show success/error toast
+  //  4. Fire instant top toast so user sees confirmation immediately
+  //  5. Persist to AsyncStorage (user-scoped) so the state survives restarts
+  //  6. Offline? enqueue for later and return. Online? call the backend.
+  //  7. On failure, match by error CODE (not string) and roll back.
   const handlePredict = useCallback(async (fixtureId: string, type: 'home' | 'draw' | 'away') => {
     if (ticketsRemaining <= 0) {
       toastManager.showWarning(
-        'لا توجد تذاكر',
-        'انتهت تذاكر التوقع لليوم. تتجدد كل 24 ساعة تلقائياً.',
+        t('matches.prediction.noTicketsTitle'),
+        t('matches.prediction.noTicketsMessage'),
+        { position: 'top' },
       );
       return;
     }
@@ -523,14 +703,67 @@ export default function MatchesHubScreenV2() {
       if (found) { fixtureDetails = found; break; }
     }
 
-    // Optimistic UI update — instant feedback
-    setPredictedMatches(prev => ({ ...prev, [fixtureId]: type }));
-    setTicketsRemaining(prev => Math.max(0, prev - 1));
+    // Build next state (for persistence) and apply optimistic updates.
+    const nextMap: Record<string, 'home' | 'draw' | 'away'> = { ...predictedMatches, [fixtureId]: type };
+    const nextTickets = Math.max(0, ticketsRemaining - 1);
+
+    setPredictedMatches(nextMap);
+    setTicketsRemaining(nextTickets);
     setSubmittingId(fixtureId);
+
+    // Instant top toast — user sees confirmation in the same frame they tap.
+    const predictedSide =
+      type === 'home' ? fixtureDetails?.home || t('matches.prediction.homeLabelFallback')
+      : type === 'away' ? fixtureDetails?.away || t('matches.prediction.awayLabelFallback')
+      : t('matches.prediction.drawLabel');
+    toastManager.showSuccess(
+      t('matches.prediction.savedTitle'),
+      t('matches.prediction.savedMessage')
+        .replace('{{side}}', predictedSide)
+        .replace('{{count}}', String(nextTickets)),
+      { position: 'top', duration: 2200 },
+    );
+
+    // Persist immediately so a cold restart keeps the same visual state.
+    // Only when we have a userId — never write under a shared key.
+    if (PRED_CACHE_KEY && TICKETS_CACHE_KEY) {
+      cacheService.set(PRED_CACHE_KEY, nextMap, 24 * 60 * 60 * 1000).catch(() => {});
+      cacheService.set(TICKETS_CACHE_KEY, nextTickets, 24 * 60 * 60 * 1000).catch(() => {});
+    }
+
+    // If we're offline, enqueue the mutation and skip the network roundtrip.
+    // useOfflineSync will replay it when connectivity returns.
+    const netState = await NetInfo.fetch().catch(() => null);
+    const isOnline = netState?.isConnected === true && netState?.isInternetReachable !== false;
+    if (!isOnline) {
+      if (userId) {
+        await offlineQueue.enqueue({
+          type: 'PREDICTION',
+          payload: {
+            userId,
+            apiMatchId: fixtureId,
+            predictionType: type,
+            homeTeam: fixtureDetails?.home || '',
+            awayTeam: fixtureDetails?.away || '',
+            homeTeamLogo: fixtureDetails?.homeLogo,
+            awayTeamLogo: fixtureDetails?.awayLogo,
+            matchDate: fixtureDetails?.matchDate || new Date().toISOString(),
+            leagueName: fixtureDetails?.leagueName,
+          },
+        }).catch(() => {});
+      }
+      toastManager.showInfo(
+        t('offlineQueue.queuedTitle'),
+        t('offlineQueue.queuedMessage'),
+        { position: 'top', duration: 2500 },
+      );
+      setSubmittingId(null);
+      return;
+    }
 
     try {
       const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token) throw new PredictionApiError('E002', 'Not authenticated', 401);
 
       await PredictionsService.submitPrediction(token, {
         apiMatchId: fixtureId,
@@ -542,38 +775,193 @@ export default function MatchesHubScreenV2() {
         matchDate: fixtureDetails?.matchDate || new Date().toISOString(),
         leagueName: fixtureDetails?.leagueName,
       });
+      // Server accepted — nothing more to do, UI already reflects success.
+    } catch (err) {
+      // Prefer structured codes from PredictionApiError; fall back to a
+      // synthetic 'E010' for unexpected error shapes (network/timeout).
+      const apiErr = err instanceof PredictionApiError ? err : null;
+      const code = apiErr?.code ?? 'E010';
 
-      // Success — show toast
-      toastManager.showPredictionSuccess();
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to submit prediction';
+      // E005 = server already has a matching prediction. UI is already in the
+      // correct state from the optimistic update — leave it as-is.
+      if (code === 'E005') return;
 
-      // Already predicted: server has a record, UI state is correct — don't roll back.
-      if (msg.includes('Already predicted')) {
-        toastManager.showInfo('تم التوقع مسبقاً', 'لقد توقعت على هذه المباراة قبل ذلك');
+      // Network-level failure *after* passing the NetInfo check — treat like
+      // offline and queue it. Happens on flaky connections.
+      if (code === 'E010' && userId) {
+        await offlineQueue.enqueue({
+          type: 'PREDICTION',
+          payload: {
+            userId,
+            apiMatchId: fixtureId,
+            predictionType: type,
+            homeTeam: fixtureDetails?.home || '',
+            awayTeam: fixtureDetails?.away || '',
+            homeTeamLogo: fixtureDetails?.homeLogo,
+            awayTeamLogo: fixtureDetails?.awayLogo,
+            matchDate: fixtureDetails?.matchDate || new Date().toISOString(),
+            leagueName: fixtureDetails?.leagueName,
+          },
+        }).catch(() => {});
+        toastManager.showInfo(
+          t('offlineQueue.queuedTitle'),
+          t('offlineQueue.queuedMessage'),
+          { position: 'top', duration: 2500 },
+        );
         return;
       }
 
-      // Anything else — roll back the optimistic update
-      setPredictedMatches(prev => {
-        const next = { ...prev };
-        delete next[fixtureId];
-        return next;
-      });
-      setTicketsRemaining(prev => prev + 1);
+      // Anything else — roll back the optimistic update and revert cache.
+      const rolledBack: Record<string, 'home' | 'draw' | 'away'> = { ...nextMap };
+      delete rolledBack[fixtureId];
+      setPredictedMatches(rolledBack);
+      setTicketsRemaining(ticketsRemaining);
+      if (PRED_CACHE_KEY && TICKETS_CACHE_KEY) {
+        cacheService.set(PRED_CACHE_KEY, rolledBack, 24 * 60 * 60 * 1000).catch(() => {});
+        cacheService.set(TICKETS_CACHE_KEY, ticketsRemaining, 24 * 60 * 60 * 1000).catch(() => {});
+      }
 
-      if (msg.includes('Daily prediction limit')) {
+      // E006 = rate limit (daily prediction limit reached)
+      if (code === 'E006') {
         toastManager.showWarning(
-          'انتهت تذاكر اليوم',
-          'استخدمت كل تذاكر التوقع لليوم. تتجدد كل 24 ساعة تلقائياً.',
+          t('matches.prediction.dailyLimitTitle'),
+          t('matches.prediction.dailyLimitMessage'),
+          { position: 'top' },
         );
       } else {
-        toastManager.showPredictionError();
+        toastManager.showError(
+          t('matches.prediction.submitFailedTitle'),
+          apiErr?.message || t('matches.prediction.submitFailedMessage'),
+          { position: 'top' },
+        );
       }
     } finally {
       setSubmittingId(null);
     }
-  }, [ticketsRemaining, predictedMatches, groups, getToken]);
+  }, [ticketsRemaining, predictedMatches, groups, getToken, userId, PRED_CACHE_KEY, TICKETS_CACHE_KEY, t]);
+
+  // Toggle match-start push notification for a fixture (the bell icon).
+  // Optimistic: flip the bell immediately, roll back on API failure.
+  const handleToggleSubscription = useCallback(
+    async (fixture: Fixture, subscribe: boolean) => {
+      if (!userId) {
+        toastManager.showWarning(
+          t('offlineQueue.queuedTitle'),
+          t('offlineQueue.queuedMessage'),
+          { position: 'top' },
+        );
+        return;
+      }
+      if (fixture.status !== 'UPCOMING') return;
+
+      setSubscribingFixtureId(fixture.id);
+
+      // Optimistic toggle
+      setSubscribedFixtures((prev) => {
+        const next = new Set(prev);
+        if (subscribe) next.add(fixture.id);
+        else next.delete(fixture.id);
+        return next;
+      });
+
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        if (subscribe) {
+          await MatchSubscriptionsService.subscribe(token, {
+            fixtureId: fixture.id,
+            matchTime: fixture.matchDate || new Date().toISOString(),
+            homeTeam: fixture.home,
+            awayTeam: fixture.away,
+            homeTeamLogo: fixture.homeLogo,
+            awayTeamLogo: fixture.awayLogo,
+            leagueName: fixture.leagueName,
+          });
+          toastManager.showSuccess(
+            t('matches.bell.subscribedTitle'),
+            t('matches.bell.subscribedMessage'),
+            { position: 'top', duration: 2000 },
+          );
+        } else {
+          await MatchSubscriptionsService.unsubscribe(token, fixture.id);
+          toastManager.showInfo(
+            t('matches.bell.unsubscribedTitle'),
+            t('matches.bell.unsubscribedMessage'),
+            { position: 'top', duration: 1800 },
+          );
+        }
+      } catch (err) {
+        // Roll back the optimistic toggle on failure.
+        setSubscribedFixtures((prev) => {
+          const next = new Set(prev);
+          if (subscribe) next.delete(fixture.id);
+          else next.add(fixture.id);
+          return next;
+        });
+        toastManager.showError(
+          t('matches.bell.errorTitle'),
+          t('matches.bell.errorMessage'),
+          { position: 'top' },
+        );
+      } finally {
+        setSubscribingFixtureId(null);
+      }
+    },
+    [userId, getToken, t],
+  );
+
+  // ─── Calendar grid (driven by selectedDate — always in sync) ──────────────
+  // `calendarGrid` is the array of cells to render. Each cell is either a
+  // day number (1..daysInMonth) or `null` for a leading blank so the first
+  // day lands under the correct weekday column.
+  const calendarGrid = useMemo(() => {
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Native JS Date.getDay: 0=Sunday..6=Saturday.
+    // Arabic calendars traditionally start the week on Saturday; everyone
+    // else we render Sunday-first. Convert native 0..6 into offset within
+    // the rendered week.
+    const firstDayNative = new Date(year, month, 1).getDay();
+    const weekStartsOn = tObj.matches?.screen?.weekStartsOn === 'saturday' ? 6 : 0;
+    const offset = (firstDayNative - weekStartsOn + 7) % 7;
+
+    const cells: Array<number | null> = [];
+    for (let i = 0; i < offset; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  }, [selectedDate, tObj.matches?.screen?.weekStartsOn]);
+
+  // Week-day labels in the correct order for the current locale.
+  const weekDayLabels = useMemo(() => {
+    const base: readonly string[] = tObj.matches?.screen?.weekDays ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    // The keys in locales are stored Mon-first (Mon..Sun). Reorder so the
+    // first element matches the locale's week start (Sunday-first or
+    // Saturday-first for Arabic).
+    const weekStartsOn = tObj.matches?.screen?.weekStartsOn === 'saturday' ? 'Sat'
+      : tObj.matches?.screen?.weekStartsOn === 'monday' ? 'Mon'
+      : 'Sun';
+    // Build a Sunday-first canonical order mapped to the Mon-first base.
+    // base order = [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
+    // indexes:      0    1    2    3    4    5    6
+    const byKey: Record<string, string> = {
+      Mon: base[0], Tue: base[1], Wed: base[2], Thu: base[3], Fri: base[4], Sat: base[5], Sun: base[6],
+    };
+    const order = weekStartsOn === 'Sat' ? ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+      : weekStartsOn === 'Mon' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return order.map((k) => byKey[k]);
+  }, [tObj.matches?.screen?.weekDays, tObj.matches?.screen?.weekStartsOn]);
+
+  const selectedDay = selectedDate.getDate();
+  const selectedMonthLabel = useMemo(() => {
+    try {
+      return selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    } catch {
+      return `${selectedDate.getMonth() + 1}/${selectedDate.getFullYear()}`;
+    }
+  }, [selectedDate]);
 
   const headerRight = useMemo(() => {
     const isEmpty = ticketsRemaining <= 0;
@@ -618,13 +1006,13 @@ export default function MatchesHubScreenV2() {
               <Text style={styles.logoPlusSmall}>PLUS</Text>
             </View>
           </View>
-          <Text style={styles.headerTitleTxt}>Live Score</Text>
+          <Text style={styles.headerTitleTxt}>{t('matches.screen.title')}</Text>
         </View>
         <View style={{ flex: 1 }} />
         {headerRight}
       </FloatingHeader>
-      {/* FlatList — virtualized, no nested scroll */}
-      <FlatList
+      {/* FlashList — virtualized, JS-thread friendly, no nested scroll */}
+      <FlashList
         data={groups}
         keyExtractor={g => g.id}
         renderItem={({ item }) => (
@@ -634,11 +1022,16 @@ export default function MatchesHubScreenV2() {
             onPredict={handlePredict}
             submittingId={submittingId}
             predictedMatches={predictedMatches}
+            subscribedFixtures={subscribedFixtures}
+            subscribingFixtureId={subscribingFixtureId}
+            onToggleSubscription={handleToggleSubscription}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        contentContainerStyle={[styles.listContent, { paddingTop: Math.max(insets.top, 10) + 60 }]}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
         showsVerticalScrollIndicator={false}
+        onRefresh={refetch}
+        refreshing={loading}
         ListHeaderComponent={
           <View style={styles.listHeader}>
             <View style={styles.tabsRow}>
@@ -655,7 +1048,7 @@ export default function MatchesHubScreenV2() {
                       {active && (
                         <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
                       )}
-                      <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{f}</Text>
+                      <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{t(FILTER_LABEL_KEYS[f])}</Text>
                       {f === 'Live' && filter !== 'Live' && <View style={styles.liveDot} />}
                     </TouchableOpacity>
                   );
@@ -676,18 +1069,18 @@ export default function MatchesHubScreenV2() {
           loading ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-              <Text style={styles.loadingTxt}>Loading matches...</Text>
+              <Text style={styles.loadingTxt}>{t('matches.screen.loading')}</Text>
             </View>
           ) : error ? (
             <View style={styles.errorWrap}>
               <Text style={styles.errorTxt}>⚠️ {error}</Text>
               <TouchableOpacity style={styles.retryBtn} onPress={refetch} activeOpacity={0.7}>
-                <Text style={styles.retryTxt}>Retry</Text>
+                <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTxt}>No matches found</Text>
+              <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
             </View>
           )
         }
@@ -707,27 +1100,42 @@ export default function MatchesHubScreenV2() {
               )}
               <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0.5)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <View style={styles.calHeader}>
-                <Text style={styles.calTitle}>Select Date</Text>
+                <View>
+                  <Text style={styles.calTitle}>{t('matches.screen.selectDate')}</Text>
+                  <Text style={styles.calMonthLabel}>{selectedMonthLabel}</Text>
+                </View>
                 <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                  <Text style={styles.calClose}>Done</Text>
+                  <Text style={styles.calClose}>{t('matches.screen.done')}</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.calBody}>
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <Text key={d} style={styles.calDayName}>{d}</Text>)}
-                {Array.from({ length: 31 }).map((_, i) => (
-                  <TouchableOpacity key={i} style={[styles.calDay, i === selectedDay && styles.calDayActive]} onPress={() => {
-                    setSelectedDay(i);
-                    const d = new Date();
-                    d.setDate(i + 1);
-                    setSelectedDate(d);
-                    setShowCalendar(false);
-                  }}>
-                    {i === selectedDay && (
-                      <LinearGradient colors={['rgba(168,85,247,0.9)', 'rgba(126,34,206,0.6)']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-                    )}
-                    <Text style={[styles.calDayTxt, i === selectedDay && { color: '#fff', textShadowColor: 'rgba(255,255,255,0.5)', textShadowRadius: 10 }]}>{i + 1}</Text>
-                  </TouchableOpacity>
+                {weekDayLabels.map((d, i) => (
+                  <Text key={`wd-${i}`} style={styles.calDayName}>{d}</Text>
                 ))}
+                {calendarGrid.map((day, idx) => {
+                  if (day === null) {
+                    return <View key={`blank-${idx}`} style={styles.calDay} />;
+                  }
+                  const isSelected = day === selectedDay;
+                  return (
+                    <TouchableOpacity
+                      key={`d-${day}`}
+                      style={[styles.calDay, isSelected && styles.calDayActive]}
+                      onPress={() => {
+                        const next = new Date(selectedDate);
+                        next.setDate(day);
+                        next.setHours(0, 0, 0, 0);
+                        setSelectedDate(next);
+                        setShowCalendar(false);
+                      }}
+                    >
+                      {isSelected && (
+                        <LinearGradient colors={['rgba(168,85,247,0.9)', 'rgba(126,34,206,0.6)']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                      )}
+                      <Text style={[styles.calDayTxt, isSelected && { color: '#fff', textShadowColor: 'rgba(255,255,255,0.5)', textShadowRadius: 10 }]}>{day}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           </View>
@@ -752,18 +1160,18 @@ export default function MatchesHubScreenV2() {
                   <Ticket size={32} color="#d8b4fe" />
                 </View>
               </View>
-              <Text style={styles.infoTitle}>Match Tickets</Text>
+              <Text style={styles.infoTitle}>{t('matches.tickets.sheetTitle')}</Text>
               <View style={styles.infoRow}>
                 <View style={styles.infoDot} />
-                <Text style={styles.infoText}>1 Ticket = 1 Match Prediction</Text>
+                <Text style={styles.infoText}>{t('matches.tickets.rule1')}</Text>
               </View>
               <View style={styles.infoRow}>
                 <View style={styles.infoDot} />
-                <Text style={styles.infoText}>Tickets renew automatically every 24 hours.</Text>
+                <Text style={styles.infoText}>{t('matches.tickets.rule2')}</Text>
               </View>
               <TouchableOpacity style={styles.infoBtn} onPress={() => setShowTicketsInfo(false)} activeOpacity={0.8}>
                 <LinearGradient colors={['#a855f7', '#7e22ce']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <Text style={styles.infoBtnTxt}>Got it</Text>
+                <Text style={styles.infoBtnTxt}>{t('matches.tickets.gotIt')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -813,11 +1221,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)', alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
-  groupsWrap: { gap: 14 },
-  listContent: { paddingHorizontal: 16, paddingBottom: 120 },
   listHeader: { marginBottom: 4 },
   leagueCard: {
-    borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(12,10,20,0.85)', overflow: 'hidden',
   },
   // All-matches bottom sheet
@@ -872,69 +1278,72 @@ const styles = StyleSheet.create({
     height: 1,
   },
   leagueHead: {
-    height: 46, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
+    height: 52, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  leagueLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  leagueLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   leagueLogoWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  leagueLogo: { width: 20, height: 20 },
-  leagueTitle: { color: TEXT_PRIMARY, fontSize: 16, fontWeight: '700' },
+  leagueLogo: { width: 22, height: 22 },
+  leagueTitle: { color: TEXT_PRIMARY, fontSize: 17, fontWeight: '700' },
   leagueRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   leagueLive: { color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700' },
   rowWrap: {
-    minHeight: 94, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10,
+    minHeight: 116, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  rowIcon: { width: 24, alignItems: 'center', justifyContent: 'center' },
+  rowIcon: { width: 28, alignItems: 'center', justifyContent: 'center' },
   rowBody: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8,
   },
-  teamCol: { width: '34%', alignItems: 'center', gap: 6 },
+  teamCol: { width: '34%', alignItems: 'center', gap: 8 },
   logoStub: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.09)',
+    width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.09)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
   },
   logoInitials: {
-    width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(124,58,237,0.3)',
+    width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(124,58,237,0.3)',
     alignItems: 'center', justifyContent: 'center',
   },
-  logoInitialsTxt: { color: '#A78BFA', fontSize: 9, fontWeight: '800' },
-  teamLogo: { width: 25, height: 25 },
-  teamTxt: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', maxWidth: '100%' },
+  logoInitialsTxt: { color: '#A78BFA', fontSize: 11, fontWeight: '800' },
+  teamLogo: { width: 34, height: 34 },
+  teamTxt: { color: 'rgba(255,255,255,0.92)', fontSize: 14, fontWeight: '600', maxWidth: '100%' },
   scoreCol: { width: '32%', alignItems: 'center' },
-  liveBadge: { color: '#ef4444', fontSize: 11, fontWeight: '900', backgroundColor: 'rgba(239,68,68,0.14)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
+  liveBadge: { color: '#ef4444', fontSize: 11, fontWeight: '900', backgroundColor: 'rgba(239,68,68,0.14)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
   ftBadge: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '800' },
   scoreTxt: {
-    marginTop: 4, color: '#fff', fontSize: 34, lineHeight: 36, fontWeight: '900',
+    marginTop: 6, color: '#fff', fontSize: 38, lineHeight: 40, fontWeight: '900',
     letterSpacing: -1, fontVariant: ['tabular-nums'],
   },
   scoreDash: { color: 'rgba(255,255,255,0.45)' },
-  minuteTxt: { marginTop: 2, color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  viewAllBtn: { height: 44, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  minuteTxt: { marginTop: 3, color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },
   rowWrapCol: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   upcomingBadge: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700' },
-  timeTxt: { marginTop: 4, color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: 0, fontVariant: ['tabular-nums'] },
-  predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 4 },
-  predTitle: { color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '700', marginBottom: 10, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
+  timeTxt: { marginTop: 6, color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 0, fontVariant: ['tabular-nums'] },
+  predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
+  predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
+  predTitleSpinner: { marginLeft: 4 },
+  predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
   predButtons: { flexDirection: 'row', gap: 10, paddingHorizontal: 4 },
-  predBtn: { flex: 1, height: 44, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  predBtnTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '800', textAlign: 'center', zIndex: 1 },
+  predBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  predBtnTxt: { color: 'rgba(255,255,255,0.72)', fontSize: 13, fontWeight: '800', textAlign: 'center', zIndex: 1 },
 
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   calendarModalOuter: { width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
   calendarModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden', padding: 24 },
   calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, zIndex: 1 },
   calTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  calMonthLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '600', marginTop: 2 },
   calClose: { color: PURPLE_PRIMARY, fontSize: 16, fontWeight: '700' },
   calBody: { flexDirection: 'row', flexWrap: 'wrap', gap: '2%', zIndex: 1 },
   calDayName: { width: '12%', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700', marginBottom: 12 },
@@ -960,9 +1369,4 @@ const styles = StyleSheet.create({
   retryTxt: { color: '#d8b4fe', fontSize: 14, fontWeight: '700' },
   emptyWrap: { alignItems: 'center', paddingVertical: 60 },
   emptyTxt: { color: 'rgba(255,255,255,0.3)', fontSize: 15 },
-
-  // Prediction done state
-  predDoneWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
-  predDoneIcon: { fontSize: 16 },
-  predDoneTxt: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '600' },
 });

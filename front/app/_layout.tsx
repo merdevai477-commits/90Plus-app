@@ -32,6 +32,7 @@ import { useNavigationTracking } from "../hooks/useNavigationTracking";
 import { AppSplashScreen } from "../components/splash/AppSplashScreen";
 import { PushNotificationSetup } from "../src/hooks/usePushNotifications";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
+import { useOfflineSync } from "../src/hooks/useOfflineSync";
 
 // Lazy load websocket client to avoid bundling issues with socket.io-client
 let websocketClient: any = null;
@@ -138,6 +139,11 @@ function ClerkGate({ children }: { children: React.ReactNode }) {
 function RootLayoutNav() {
   // Track navigation changes for Sentry breadcrumbs
   useNavigationTracking();
+
+  // Drain offline queue when connectivity returns. Must live inside the
+  // Clerk + i18n + toast providers, which is true for any screen the Stack
+  // renders.
+  useOfflineSync();
 
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>

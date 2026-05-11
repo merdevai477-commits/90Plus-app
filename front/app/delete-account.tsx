@@ -30,6 +30,8 @@ import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { getApiEndpoint } from '../config/api.config';
 import { captureException } from '../services/sentry.service';
+import { cacheService } from '../services/cacheService';
+import { predictionsMapKey, predictionsTicketsKey } from '../services/predictionsCacheKeys';
 
 const DELETION_REASONS = [
   { id: 'privacy', label: 'Privacy concerns' },
@@ -41,7 +43,7 @@ const DELETION_REASONS = [
 ];
 
 export default function DeleteAccountScreen() {
-  const { getToken, signOut } = useAuth();
+  const { getToken, signOut, userId } = useAuth();
   const { translate: t, language, isRTL } = useTranslation();
   
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
@@ -109,7 +111,15 @@ export default function DeleteAccountScreen() {
                 [
                   {
                     text: t('common.done') || 'Done',
-                    onPress: () => {
+                    onPress: async () => {
+                      // Purge this user's prediction caches before sign-out so
+                      // a later login on the same device starts clean.
+                      if (userId) {
+                        await Promise.all([
+                          cacheService.invalidate(predictionsMapKey(userId)),
+                          cacheService.invalidate(predictionsTicketsKey(userId)),
+                        ]).catch(() => {});
+                      }
                       signOut();
                       router.replace('/');
                     },

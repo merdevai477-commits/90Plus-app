@@ -8,7 +8,7 @@
 /**
  * Supported language codes
  */
-export type Language = 'ar' | 'en' | 'fr' | 'es' | 'de' | 'it' | 'tr' | 'pt';
+export type Language = 'ar' | 'en';
 
 /**
  * Text direction for languages
@@ -33,19 +33,13 @@ export interface LanguageInfo {
 
 /**
  * All supported languages with metadata
- * Requirements: 7.1 - Display all 8 supported languages
+ * Requirements: 7.1 - Display all supported languages
  * Requirements: 7.2 - Show each language name in its native script
  * Requirements: 7.3 - Show a flag or icon for each language
  */
 export const SUPPORTED_LANGUAGES: readonly LanguageInfo[] = [
   { code: 'ar', name: 'Arabic', nativeName: 'العربية', flag: '🇸🇦', direction: 'rtl' },
   { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧', direction: 'ltr' },
-  { code: 'fr', name: 'French', nativeName: 'Français', flag: '🇫🇷', direction: 'ltr' },
-  { code: 'es', name: 'Spanish', nativeName: 'Español', flag: '🇪🇸', direction: 'ltr' },
-  { code: 'de', name: 'German', nativeName: 'Deutsch', flag: '🇩🇪', direction: 'ltr' },
-  { code: 'it', name: 'Italian', nativeName: 'Italiano', flag: '🇮🇹', direction: 'ltr' },
-  { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', flag: '🇹🇷', direction: 'ltr' },
-  { code: 'pt', name: 'Portuguese', nativeName: 'Português', flag: '🇵🇹', direction: 'ltr' },
 ] as const;
 
 /**

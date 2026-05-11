@@ -10,15 +10,9 @@
 import { NativeModules, Platform } from 'react-native';
 import { Language, DEFAULT_LANGUAGE, isLanguageSupported, SUPPORTED_LANGUAGE_CODES } from './types';
 
-// Import all translation files
+// Import translation files — Arabic and English only
 import { en } from '../../locales/en';
 import { ar } from '../../locales/ar';
-import { fr } from '../../locales/fr';
-import { es } from '../../locales/es';
-import { de } from '../../locales/de';
-import { it } from '../../locales/it';
-import { tr } from '../../locales/tr';
-import { pt } from '../../locales/pt';
 
 /**
  * Type for translation keys (nested object structure)
@@ -31,12 +25,6 @@ export type TranslationKeys = typeof en;
 export const translations: Record<Language, TranslationKeys> = {
   en,
   ar: ar as unknown as TranslationKeys,
-  fr: fr as unknown as TranslationKeys,
-  es: es as unknown as TranslationKeys,
-  de: de as unknown as TranslationKeys,
-  it: it as unknown as TranslationKeys,
-  tr: tr as unknown as TranslationKeys,
-  pt: pt as unknown as TranslationKeys,
 };
 
 /**

@@ -43,24 +43,48 @@ export interface PredictionRemaining {
   predictionCost: number;
 }
 
+/**
+ * Strongly-typed prediction API error. The frontend matches on `code` (a
+ * stable identifier from the backend, e.g. 'E005') rather than the human
+ * `message`, so localization or wording changes never break branching logic.
+ */
+export class PredictionApiError extends Error {
+  code: string;
+  status: number;
+  details?: Record<string, unknown>;
+
+  constructor(code: string, message: string, status: number, details?: Record<string, unknown>) {
+    super(message);
+    this.name = 'PredictionApiError';
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
+}
+
 export const PredictionsService = {
   /**
    * Best-effort error parsing for non-OK responses.
-   * Handles JSON and non-JSON bodies (e.g., 502 HTML).
+   * Handles JSON and non-JSON bodies (e.g., 502 HTML). Returns a typed
+   * PredictionApiError so callers can branch on the error code instead of
+   * substring-matching the message.
    */
-  _parseError: async (response: Response): Promise<string> => {
+  _parseError: async (response: Response): Promise<PredictionApiError> => {
     const contentType = response.headers.get('content-type') || '';
     try {
       if (contentType.includes('application/json')) {
         const data: any = await response.json();
-        return data?.message || data?.error || data?.statusText || response.statusText || `HTTP ${response.status}`;
+        const code = typeof data?.error === 'string' ? data.error : 'E010';
+        const message = data?.message || data?.error || response.statusText || `HTTP ${response.status}`;
+        const details = data?.details && typeof data.details === 'object' ? data.details as Record<string, unknown> : undefined;
+        return new PredictionApiError(code, String(message), response.status, details);
       }
       const text = await response.text();
-      if (text) return text.slice(0, 500);
+      const snippet = text ? text.slice(0, 500) : (response.statusText || `HTTP ${response.status}`);
+      return new PredictionApiError('E010', snippet, response.status);
     } catch {
-      // ignore parsing errors
+      return new PredictionApiError('E010', response.statusText || `HTTP ${response.status}`, response.status);
     }
-    return response.statusText || `HTTP ${response.status}`;
   },
 
   /**
@@ -80,13 +104,12 @@ export const PredictionsService = {
         });
 
         if (!response.ok) {
-          const msg = await PredictionsService._parseError(response);
-          throw new Error(msg || `Failed to get remaining predictions: ${response.statusText}`);
+          throw await PredictionsService._parseError(response);
         }
 
         const result = await response.json();
         if (result.success && result.data) return result.data;
-        throw new Error('Invalid response format');
+        throw new PredictionApiError('E010', 'Invalid response format', response.status);
       } catch (error) {
         logger.error('Error getting remaining predictions:', error);
         throw error;
@@ -125,17 +148,16 @@ export const PredictionsService = {
       });
 
       if (!response.ok) {
-        const msg = await PredictionsService._parseError(response);
-        throw new Error(msg || `Failed to submit prediction: ${response.statusText}`);
+        throw await PredictionsService._parseError(response);
       }
 
       const result = await response.json();
-      
+
       if (result.success && result.data) {
         return result.data;
       }
 
-      throw new Error('Invalid response format');
+      throw new PredictionApiError('E010', 'Invalid response format', response.status);
     } catch (error) {
       logger.error('Error submitting prediction:', error);
       throw error;
@@ -159,13 +181,12 @@ export const PredictionsService = {
         });
 
         if (!response.ok) {
-          const msg = await PredictionsService._parseError(response);
-          throw new Error(msg || `Failed to get user predictions: ${response.statusText}`);
+          throw await PredictionsService._parseError(response);
         }
 
         const result = await response.json();
         if (result.success && result.data) return result.data;
-        throw new Error('Invalid response format');
+        throw new PredictionApiError('E010', 'Invalid response format', response.status);
       } catch (error) {
         logger.error('Error getting user predictions:', error);
         throw error;
@@ -195,17 +216,16 @@ export const PredictionsService = {
       });
 
       if (!response.ok) {
-        const msg = await PredictionsService._parseError(response);
-        throw new Error(msg || `Failed to get match prediction count: ${response.statusText}`);
+        throw await PredictionsService._parseError(response);
       }
 
       const result = await response.json();
-      
+
       if (result.success && result.data) {
         return result.data;
       }
 
-      throw new Error('Invalid response format');
+      throw new PredictionApiError('E010', 'Invalid response format', response.status);
     } catch (error) {
       logger.error('Error getting match prediction count:', error);
       throw error;

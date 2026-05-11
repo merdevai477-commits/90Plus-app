@@ -1,0 +1,32 @@
+{
+  "version": "1.1",
+  "totalHits": 1,
+  "totalSaved": 1,
+  "lastUpdated": "2026-04-28T23:28:08.421Z",
+  "cache": [
+    {
+      "id": "449a5a49-e967-4fdd-9313-28f573fb25a2",
+      "category": "football",
+      "keywords": [
+        "best",
+        "football",
+        "player",
+        "world"
+      ],
+      "question": "who is the best football player in the world?",
+      "answer": "حسب الإحصائيات والألقاب، ميسي يُعتبر الأفضل تاريخيًا (8 كرات ذهبية، فوز بكأس العالم 2022). 💡 ممكن تسألني عن: أفضل لاعب حاليًا.",
+      "dialect": "auto",
+      "hits": 1,
+      "createdAt": "2026-04-28T23:25:19.243Z",
+      "lastHit": "2026-04-28T23:28:08.421Z",
+      "quick_replies": [
+        "مين أفضل لاعب في التاريخ؟",
+        "إيه أفضل تشكيلة في الكرة؟"
+      ],
+      "related_intents": [
+        "football_general"
+      ],
+      "confidence": 1
+    }
+  ]
+}

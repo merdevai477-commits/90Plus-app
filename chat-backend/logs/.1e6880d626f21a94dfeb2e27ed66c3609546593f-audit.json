@@ -1,0 +1,25 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\90Plus AI chat\\ChatAi\\chat-backend\\logs\\.1e6880d626f21a94dfeb2e27ed66c3609546593f-audit.json",
+    "files": [
+        {
+            "date": 1777500730558,
+            "name": "C:\\90Plus AI chat\\ChatAi\\chat-backend\\logs\\combined-2026-04-30.log",
+            "hash": "a0d2c0a03f3057429da7e42c33723b11ff413d769d7e298d74b865426ec5548d"
+        },
+        {
+            "date": 1777585544457,
+            "name": "C:\\90Plus AI chat\\ChatAi\\chat-backend\\logs\\combined-2026-05-01.log",
+            "hash": "bee97b0ec6f18026a2c05e2dbbbf09bda012d38acbefa584d20e63bcdb4921d7"
+        },
+        {
+            "date": 1777677927918,
+            "name": "C:\\90Plus AI chat\\ChatAi\\chat-backend\\logs\\combined-2026-05-02.log",
+            "hash": "0c987a5d5de4de51bdcfa684d12eeb3b59a52803611c0f55b638aea53b98350c"
+        }
+    ],
+    "hashType": "sha256"
+}

@@ -1,0 +1,121 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  conversations  Conversation[]
+  dailyLimits    DailyLimit[]
+  refreshTokens  RefreshToken[]
+  deviceTokens   DeviceToken[]
+}
+
+// ─── Conversation ─────────────────────────────────────────────────────────────
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   @default("محادثة جديدة")
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+}
+
+// ─── Message ──────────────────────────────────────────────────────────────────
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // 'user' | 'ai'
+  text           String
+  category       String?  // 'football' | 'nutrition' | 'training' | 'recovery'
+  imageUrl       String?  // للصور المرفقة
+  modelUsed      String?
+  fromCache      Boolean  @default(false)
+  responseTimeMs Int?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// ─── DailyLimit ───────────────────────────────────────────────────────────────
+// كل يوم record منفصل لكل user — الـ composite unique يضمن ده
+model DailyLimit {
+  id     String @id @default(cuid())
+  userId String
+  date   String // "2025-04-26" كـ string
+  count  Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date]) // كل يوم record منفصل
+}
+
+// ─── RefreshToken ─────────────────────────────────────────────────────────────
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  deviceId  String   // لدعم multi-device
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── DeviceToken (Push Notifications) ────────────────────────────────────────
+model DeviceToken {
+  id        String @id @default(cuid())
+  userId    String
+  token     String // Expo Push Token
+  platform  String // 'ios' | 'android'
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── QACache ──────────────────────────────────────────────────────────────────
+model QACache {
+  id          String                       @id @default(cuid())
+  question    String                       @unique
+  answer      String                       @db.Text
+  embedding   Unsupported("vector(3072)")?
+  category    String?
+  language    String                       @default("ar")
+  hitCount    Int                          @default(0)
+  lastHit     DateTime                     @updatedAt
+  createdAt   DateTime                     @default(now())
+  
+  @@index([category])
+  @@index([hitCount])
+}
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+model Analytics {
+  id           String   @id @default(cuid())
+  date         DateTime @default(now())
+  fromCache    Boolean  @default(false)
+  modelUsed    String?
+  responseMs   Int?
+  category     String?
+  costSaved    Float    @default(0)
+  
+  @@index([date])
+}

@@ -11,10 +11,12 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from '../../src/i18n';
 
 export const GlobalOfflineBanner: React.FC = () => {
   const [isOffline, setIsOffline] = useState(false);
   const slideAnim = React.useRef(new Animated.Value(-40)).current;
+  const { translate: t } = useTranslation();
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -34,7 +36,7 @@ export const GlobalOfflineBanner: React.FC = () => {
   return (
     <Animated.View style={[styles.banner, { transform: [{ translateY: slideAnim }] }]}>
       <Ionicons name="wifi-outline" size={16} color="#fff" />
-      <Text style={styles.text}>لا يوجد اتصال بالإنترنت</Text>
+      <Text style={styles.text}>{t('offlineQueue.bannerOffline')}</Text>
     </Animated.View>
   );
 };

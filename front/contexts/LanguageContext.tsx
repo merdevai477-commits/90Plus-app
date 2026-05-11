@@ -27,7 +27,7 @@ import React, { createContext, useContext, ReactNode, useEffect, useState } from
 import { TranslationKeys } from '../locales/ar';
 import { useTranslation } from '../src/i18n';
 
-type Language = 'ar' | 'en' | 'fr' | 'es' | 'de' | 'it' | 'tr' | 'pt';
+type Language = 'ar' | 'en';
 type Direction = 'rtl' | 'ltr';
 
 interface LanguageContextType {
