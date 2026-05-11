@@ -80,6 +80,16 @@ export function usePushNotifications(): PushNotificationState {
             if (attempt < 3) {
                 const delay = Math.pow(2, attempt) * 2000;
                 setTimeout(() => syncTokenWithBackendWithRetry.current(pushToken, attempt + 1), delay);
+            } else {
+                // All retries exhausted — report to Sentry so we know users
+                // are silently missing push notifications.
+                try {
+                    const Sentry = await import('@sentry/react-native');
+                    Sentry.captureException(err, {
+                        tags: { component: 'PushNotifications', action: 'syncToken' },
+                        extra: { tokenPrefix: pushToken.substring(0, 20) },
+                    });
+                } catch { /* Sentry may not be initialized */ }
             }
         }
     });
