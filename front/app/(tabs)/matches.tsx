@@ -254,24 +254,32 @@ function LeagueAllMatchesModal({
   if (!group) return null;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.modalOverlay, { justifyContent: 'flex-end', padding: 0 }]}>
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 40 : 100}
-          tint="dark"
-          style={StyleSheet.absoluteFill}
-        />
-        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+      {/* Full-screen iOS-style blur backdrop */}
+      <BlurView
+        intensity={Platform.OS === 'ios' ? 60 : 100}
+        tint={Platform.OS === 'ios' ? 'systemUltraThinMaterialDark' : 'dark'}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Tap outside to close */}
+      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+
+      {/* Bottom sheet */}
+      <View style={styles.allMatchesSheetWrap}>
         <View style={styles.allMatchesSheet}>
+          {/* Sheet glass surface */}
           {isLiquidGlassSupported ? (
-            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(10,5,20,0.99)', effect: 'regular' } as any)} />
+            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(8,4,18,0.92)', effect: 'regular' } as any)} />
           ) : (
-            <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={Platform.OS === 'ios' ? 80 : 100} tint="dark" style={StyleSheet.absoluteFill} />
           )}
+          {/* Subtle purple top glow */}
           <LinearGradient
-            colors={['rgba(168,85,247,0.12)', 'rgba(5,1,13,0.98)']}
-            style={StyleSheet.absoluteFill}
+            colors={['rgba(168,85,247,0.18)', 'transparent']}
+            style={[StyleSheet.absoluteFill, { height: 120 }]}
             pointerEvents="none"
           />
+          {/* Drag handle */}
+          <View style={styles.sheetHandle} />
           {/* Sheet header */}
           <View style={styles.allMatchesHeader}>
             <View style={styles.leagueLeft}>
@@ -281,7 +289,7 @@ function LeagueAllMatchesModal({
               <Text style={styles.allMatchesTitle}>{group.league}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.allMatchesClose} activeOpacity={0.7}>
-              <X size={20} color="rgba(255,255,255,0.7)" />
+              <X size={20} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
           </View>
           {/* All fixtures */}
@@ -298,7 +306,7 @@ function LeagueAllMatchesModal({
               />
             )}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 32 }}
+            contentContainerStyle={{ paddingBottom: 40 }}
           />
         </View>
       </View>
@@ -800,12 +808,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(12,10,20,0.85)', overflow: 'hidden',
   },
   // All-matches bottom sheet
+  allMatchesSheetWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   allMatchesSheet: {
     maxHeight: SCREEN_HEIGHT * 0.82,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.25)',
+    borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
     overflow: 'hidden',
     width: '100%',
+    // iOS shadow for depth
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    elevation: 30,
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignSelf: 'center',
+    marginTop: 12, marginBottom: 4,
   },
   allMatchesHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
