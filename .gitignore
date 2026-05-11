@@ -44,3 +44,6 @@ COMMIT_MESSAGE*.txt
 
 # Prisma build cache
 .tsbuildinfo
+
+# Chat data (per-instance JSON store)
+data/chat/
