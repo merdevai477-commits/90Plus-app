@@ -28,15 +28,24 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-const AI_API_KEY = process.env.AI_API_KEY ?? process.env.GOOGLE_AI_KEY ?? '';
-const AI_BASE_URL = process.env.AI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta/openai';
-const AI_MODEL = process.env.AI_MODEL ?? 'gemini-2.5-flash';
+// Key resolution order: AI_API_KEY → OPENROUTER_API_KEY → GOOGLE_AI_KEY.
+// This lets the same codebase serve multiple providers without code changes —
+// just switch the env vars.
+const AI_API_KEY =
+    process.env.AI_API_KEY ??
+    process.env.OPENROUTER_API_KEY ??
+    process.env.GOOGLE_AI_KEY ??
+    '';
+const AI_BASE_URL = process.env.AI_BASE_URL ?? 'https://openrouter.ai/api/v1';
+const AI_MODEL = process.env.AI_MODEL ?? 'openai/gpt-oss-120b';
 const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 20);
 
 const ai = new OpenAI({
     apiKey: AI_API_KEY,
     baseURL: AI_BASE_URL,
     defaultHeaders: {
+        // Required by OpenRouter for analytics / rate-limit attribution.
+        // Gemini's OpenAI-compatible endpoint ignores these headers safely.
         'HTTP-Referer': 'https://90plus.app',
         'X-Title': '90Plus AI Chat',
     },
