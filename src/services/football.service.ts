@@ -396,7 +396,9 @@ class FootballService {
           throw new FootballApiError('Rate limit exceeded. Please wait a moment.');
         }
 
-        throw new FootballApiError('API returned errors');
+        // Log the full error for debugging
+        logger.error('❌ Football API full error object:', JSON.stringify(data.errors));
+        throw new FootballApiError(`API returned errors: ${JSON.stringify(data.errors)}`);
       }
 
       logger.debug(`✅ Football API Response: ${data.results} results`);
