@@ -1,20 +1,23 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator } from 'react-native';
+import React, { useMemo, useState, useEffect, useCallback, memo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, FlatList, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
-import { Bell, Star, ChevronDown, Calendar, Ticket } from 'lucide-react-native';
+import { Bell, Star, ChevronDown, ChevronRight, Calendar, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { MainShell } from '../../components/Matches/MainShell';
+import BottomNav from './BottomNav';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
-import { APP_BG, GlassWrapper, glassProps } from '../../constants/ui';
+import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { PredictionsService } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
 import type { Match } from '../../components/Matches/matchCardUtils';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'Finished', 'Predictions'] as const;
 
@@ -230,6 +233,82 @@ function MatchRow({
   );
 }
 
+// ─── League All Matches Modal ─────────────────────────────────────────────────
+function LeagueAllMatchesModal({
+  group,
+  visible,
+  onClose,
+  filter,
+  onPredict,
+  submittingId,
+  predictedMatches,
+}: {
+  group: LeagueGroup | null;
+  visible: boolean;
+  onClose: () => void;
+  filter: string;
+  onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
+  submittingId: string | null;
+  predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+}) {
+  if (!group) return null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={[styles.modalOverlay, { justifyContent: 'flex-end', padding: 0 }]}>
+        <BlurView
+          intensity={Platform.OS === 'ios' ? 40 : 100}
+          tint="dark"
+          style={StyleSheet.absoluteFill}
+        />
+        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+        <View style={styles.allMatchesSheet}>
+          {isLiquidGlassSupported ? (
+            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(10,5,20,0.99)', effect: 'regular' } as any)} />
+          ) : (
+            <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+          <LinearGradient
+            colors={['rgba(168,85,247,0.12)', 'rgba(5,1,13,0.98)']}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          {/* Sheet header */}
+          <View style={styles.allMatchesHeader}>
+            <View style={styles.leagueLeft}>
+              {group.leagueLogo ? (
+                <Image source={{ uri: group.leagueLogo }} style={styles.allMatchesLeagueLogo} contentFit="contain" />
+              ) : null}
+              <Text style={styles.allMatchesTitle}>{group.league}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.allMatchesClose} activeOpacity={0.7}>
+              <X size={20} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          </View>
+          {/* All fixtures */}
+          <FlatList
+            data={group.fixtures}
+            keyExtractor={f => f.id}
+            renderItem={({ item }) => (
+              <MatchRow
+                fixture={item}
+                showPreds={filter === 'Predictions'}
+                onPredict={onPredict}
+                submittingId={submittingId}
+                predictedMatches={predictedMatches}
+              />
+            )}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 32 }}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── League Card ──────────────────────────────────────────────────────────────
+const PREVIEW_COUNT = 2; // max fixtures shown before "View All"
+
 function LeagueCard({ 
   group, 
   filter,
@@ -243,64 +322,69 @@ function LeagueCard({
   submittingId: string | null;
   predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
 }) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const liveCount = group.fixtures.filter(f => f.live).length;
+  const [showAll, setShowAll] = useState(false);
+  const hasMore = group.fixtures.length > PREVIEW_COUNT;
+  const previewFixtures = hasMore ? group.fixtures.slice(0, PREVIEW_COUNT) : group.fixtures;
 
   return (
-    <View style={styles.leagueCard}>
-      <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
-      <LinearGradient
-        colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.02)', 'transparent']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.cardShine}
-      />
-      <TouchableOpacity 
-        style={styles.leagueHead}
-        activeOpacity={0.7}
-        onPress={() => setIsExpanded(!isExpanded)}
-      >
-        <View style={styles.leagueLeft}>
-          <View style={styles.leagueLogoWrap}>
-            {group.leagueLogo ? (
-              <Image
-                source={{ uri: group.leagueLogo }}
-                style={styles.leagueLogo}
-                contentFit="contain"
-                transition={150}
-              />
-            ) : null}
+    <>
+      <View style={styles.leagueCard}>
+        {/* Header */}
+        <View style={styles.leagueHead}>
+          <View style={styles.leagueLeft}>
+            <View style={styles.leagueLogoWrap}>
+              {group.leagueLogo ? (
+                <Image
+                  source={{ uri: group.leagueLogo }}
+                  style={styles.leagueLogo}
+                  contentFit="contain"
+                  transition={150}
+                />
+              ) : null}
+            </View>
+            <Text style={styles.leagueTitle}>{group.league}</Text>
           </View>
-          <Text style={styles.leagueTitle}>{group.league}</Text>
+          {/* Match count badge */}
+          <View style={styles.matchCountBadge}>
+            <Text style={styles.matchCountTxt}>{group.fixtures.length}</Text>
+          </View>
         </View>
-        <View style={styles.leagueRight}>
-          {liveCount > 0 && <Text style={styles.leagueLive}>Live {liveCount}</Text>}
-          <ChevronDown 
-            size={15} 
-            color="rgba(255,255,255,0.45)" 
-            style={{ transform: [{ rotate: isExpanded ? '0deg' : '-90deg' }] }}
+
+        {/* Preview fixtures (max 2) */}
+        {previewFixtures.map((fixture) => (
+          <MatchRow
+            key={fixture.id}
+            fixture={fixture}
+            showPreds={filter === 'Predictions'}
+            onPredict={onPredict}
+            submittingId={submittingId}
+            predictedMatches={predictedMatches}
           />
-        </View>
-      </TouchableOpacity>
-      
-      {isExpanded && (
-        <View>
-          {group.fixtures.map((fixture) => (
-            <MatchRow 
-              key={fixture.id} 
-              fixture={fixture} 
-              showPreds={filter === 'Predictions'}
-              onPredict={onPredict}
-              submittingId={submittingId}
-              predictedMatches={predictedMatches}
-            />
-          ))}
-          <TouchableOpacity activeOpacity={0.8} style={styles.viewAllBtn}>
-            <Text style={styles.viewAllTxt}>View All  ›</Text>
+        ))}
+
+        {/* View All button — only if more than 2 matches */}
+        {hasMore && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.viewAllBtn}
+            onPress={() => setShowAll(true)}
+          >
+            <Text style={styles.viewAllTxt}>View All ({group.fixtures.length})  ›</Text>
           </TouchableOpacity>
-        </View>
-      )}
-    </View>
+        )}
+      </View>
+
+      {/* Full list modal */}
+      <LeagueAllMatchesModal
+        group={showAll ? group : null}
+        visible={showAll}
+        onClose={() => setShowAll(false)}
+        filter={filter}
+        onPredict={onPredict}
+        submittingId={submittingId}
+        predictedMatches={predictedMatches}
+      />
+    </>
   );
 }
 
@@ -470,9 +554,8 @@ export default function MatchesHubScreenV2() {
     }
   }, [ticketsRemaining, predictedMatches, groups, getToken]);
 
-  const headerRight = (() => {
+  const headerRight = useMemo(() => {
     const isEmpty = ticketsRemaining <= 0;
-    // When empty: icon + text turn black-ish, and the subtle purple wash/glow go away.
     const iconColor = isEmpty ? '#1a1a1a' : '#d8b4fe';
     const iconShadowColor = isEmpty ? 'transparent' : '#a855f7';
     const gradientColors = isEmpty
@@ -497,7 +580,7 @@ export default function MatchesHubScreenV2() {
         </View>
       </TouchableOpacity>
     );
-  })();
+  }, [ticketsRemaining]);
 
   const FloatingHeader = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
@@ -519,67 +602,89 @@ export default function MatchesHubScreenV2() {
         <View style={{ flex: 1 }} />
         {headerRight}
       </FloatingHeader>
-      <MainShell title=" " subtitle=" ">
-        <View style={styles.tabsRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
-          {FILTERS.map((f) => {
-            const active = filter === f;
-            return (
-              <TouchableOpacity key={f} onPress={() => setFilter(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
-                {isLiquidGlassSupported ? (
-                  <LiquidGlassView 
-                    {...({
-                      style: [StyleSheet.absoluteFill, { borderRadius: 11 }],
-                      tint: "rgba(20,15,30,0.65)",
-                      effect: "clear"
-                    } as any)}
-                  />
-                ) : (
-                  <BlurView intensity={25} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
-                )}
-                {active ? (
-                  <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
-                ) : null}
-                <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{f}</Text>
-                {f === 'Live' && filter !== 'Live' ? <View style={styles.liveDot} /> : null}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-        <TouchableOpacity style={styles.calendarBtn} onPress={() => setShowCalendar(true)} activeOpacity={0.7}>
-          {isLiquidGlassSupported ? (
-            <LiquidGlassView {...({style: StyleSheet.absoluteFill, tint: 'rgba(20,15,30,0.65)', effect: 'clear'} as any)} />
-          ) : (
-            <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-          )}
-          <Calendar size={18} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-      </View>
-
-      <Modal visible={showCalendar} transparent animationType="fade">
-        <View style={[
-          styles.modalOverlay,
-          Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }
-        ]}>
-          <BlurView 
-            intensity={Platform.OS === 'ios' ? 30 : 100} 
-            tint="dark" 
-            style={StyleSheet.absoluteFill} 
+      {/* FlatList — virtualized, no nested scroll */}
+      <FlatList
+        data={groups}
+        keyExtractor={g => g.id}
+        renderItem={({ item }) => (
+          <LeagueCard
+            group={item}
+            filter={filter}
+            onPredict={handlePredict}
+            submittingId={submittingId}
+            predictedMatches={predictedMatches}
           />
+        )}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        contentContainerStyle={[styles.listContent, { paddingTop: Math.max(insets.top, 10) + 60 }]}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            <View style={styles.tabsRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
+                {FILTERS.map((f) => {
+                  const active = filter === f;
+                  return (
+                    <TouchableOpacity key={f} onPress={() => setFilter(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
+                      {isLiquidGlassSupported ? (
+                        <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
+                      ) : (
+                        <BlurView intensity={25} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
+                      )}
+                      {active && (
+                        <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
+                      )}
+                      <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{f}</Text>
+                      {f === 'Live' && filter !== 'Live' && <View style={styles.liveDot} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity style={styles.calendarBtn} onPress={() => setShowCalendar(true)} activeOpacity={0.7}>
+                {isLiquidGlassSupported ? (
+                  <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
+                ) : (
+                  <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+                )}
+                <Calendar size={18} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
+              <Text style={styles.loadingTxt}>Loading matches...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorWrap}>
+              <Text style={styles.errorTxt}>⚠️ {error}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={refetch} activeOpacity={0.7}>
+                <Text style={styles.retryTxt}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyTxt}>No matches found</Text>
+            </View>
+          )
+        }
+      />
+
+      {/* Calendar Modal */}
+      <Modal visible={showCalendar} transparent animationType="fade">
+        <View style={[styles.modalOverlay, Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
+          <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCalendar(false)} activeOpacity={1} />
           <View style={styles.calendarModalOuter}>
             <View style={styles.calendarModalInner}>
               {isLiquidGlassSupported ? (
-                <LiquidGlassView {...({style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular'} as any)} />
+                <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular' } as any)} />
               ) : (
                 <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
               )}
-              <LinearGradient 
-                colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0.5)']} 
-                start={{x: 0, y: 0}} end={{x: 1, y: 1}} 
-                style={StyleSheet.absoluteFill} 
-                pointerEvents="none" 
-              />
+              <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0.5)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <View style={styles.calHeader}>
                 <Text style={styles.calTitle}>Select Date</Text>
                 <TouchableOpacity onPress={() => setShowCalendar(false)}>
@@ -588,7 +693,7 @@ export default function MatchesHubScreenV2() {
               </View>
               <View style={styles.calBody}>
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <Text key={d} style={styles.calDayName}>{d}</Text>)}
-                {Array.from({length: 31}).map((_, i) => (
+                {Array.from({ length: 31 }).map((_, i) => (
                   <TouchableOpacity key={i} style={[styles.calDay, i === selectedDay && styles.calDayActive]} onPress={() => {
                     setSelectedDay(i);
                     const d = new Date();
@@ -597,13 +702,9 @@ export default function MatchesHubScreenV2() {
                     setShowCalendar(false);
                   }}>
                     {i === selectedDay && (
-                      <LinearGradient 
-                        colors={['rgba(168,85,247,0.9)', 'rgba(126,34,206,0.6)']} 
-                        style={StyleSheet.absoluteFill} 
-                        start={{x:0, y:0}} end={{x:1, y:1}} 
-                      />
+                      <LinearGradient colors={['rgba(168,85,247,0.9)', 'rgba(126,34,206,0.6)']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
                     )}
-                    <Text style={[styles.calDayTxt, i === selectedDay && {color: '#fff', textShadowColor: 'rgba(255,255,255,0.5)', textShadowRadius: 10}]}>{i + 1}</Text>
+                    <Text style={[styles.calDayTxt, i === selectedDay && { color: '#fff', textShadowColor: 'rgba(255,255,255,0.5)', textShadowRadius: 10 }]}>{i + 1}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -612,52 +713,35 @@ export default function MatchesHubScreenV2() {
         </View>
       </Modal>
 
+      {/* Tickets Info Modal */}
       <Modal visible={showTicketsInfo} transparent animationType="fade">
-        <View style={[
-          styles.modalOverlay,
-          Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }
-        ]}>
-          <BlurView 
-            intensity={Platform.OS === 'ios' ? 30 : 100} 
-            tint="dark" 
-            style={StyleSheet.absoluteFill} 
-          />
+        <View style={[styles.modalOverlay, Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
+          <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowTicketsInfo(false)} activeOpacity={1} />
-          
           <View style={styles.ticketsInfoModalOuter}>
             <View style={styles.ticketsInfoModalInner}>
               {isLiquidGlassSupported ? (
-                <LiquidGlassView {...({style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular'} as any)} />
+                <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular' } as any)} />
               ) : (
                 <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
               )}
-              <LinearGradient 
-                colors={['rgba(168,85,247,0.15)', 'rgba(0,0,0,0.5)']} 
-                start={{x: 0, y: 0}} end={{x: 1, y: 1}} 
-                style={StyleSheet.absoluteFill} 
-                pointerEvents="none" 
-              />
-              
+              <LinearGradient colors={['rgba(168,85,247,0.15)', 'rgba(0,0,0,0.5)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <View style={styles.infoIconWrap}>
-                <View style={{ shadowColor: '#a855f7', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.8, shadowRadius: 10, elevation: 6 }}>
+                <View style={{ shadowColor: '#a855f7', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 6 }}>
                   <Ticket size={32} color="#d8b4fe" />
                 </View>
               </View>
-              
               <Text style={styles.infoTitle}>Match Tickets</Text>
-              
               <View style={styles.infoRow}>
                 <View style={styles.infoDot} />
                 <Text style={styles.infoText}>1 Ticket = 1 Match Prediction</Text>
               </View>
-              
               <View style={styles.infoRow}>
                 <View style={styles.infoDot} />
                 <Text style={styles.infoText}>Tickets renew automatically every 24 hours.</Text>
               </View>
-
               <TouchableOpacity style={styles.infoBtn} onPress={() => setShowTicketsInfo(false)} activeOpacity={0.8}>
-                <LinearGradient colors={['#a855f7', '#7e22ce']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={['#a855f7', '#7e22ce']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 <Text style={styles.infoBtnTxt}>Got it</Text>
               </TouchableOpacity>
             </View>
@@ -665,37 +749,7 @@ export default function MatchesHubScreenV2() {
         </View>
       </Modal>
 
-      <View style={styles.groupsWrap}>
-        {loading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-            <Text style={styles.loadingTxt}>Loading matches...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorWrap}>
-            <Text style={styles.errorTxt}>⚠️ {error}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={refetch} activeOpacity={0.7}>
-              <Text style={styles.retryTxt}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        ) : groups.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyTxt}>No matches found</Text>
-          </View>
-        ) : (
-          groups.map((group) => (
-            <LeagueCard 
-              key={group.id} 
-              group={group} 
-              filter={filter}
-              onPredict={handlePredict}
-              submittingId={submittingId}
-              predictedMatches={predictedMatches}
-            />
-          ))
-        )}
-      </View>
-    </MainShell>
+      <BottomNav />
     </View>
   );
 }
@@ -739,10 +793,40 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   groupsWrap: { gap: 14 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 120 },
+  listHeader: { marginBottom: 4 },
   leagueCard: {
     borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(12,10,20,0.65)', overflow: 'hidden',
+    backgroundColor: 'rgba(12,10,20,0.85)', overflow: 'hidden',
   },
+  // All-matches bottom sheet
+  allMatchesSheet: {
+    maxHeight: SCREEN_HEIGHT * 0.82,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    borderWidth: 1, borderColor: 'rgba(168,85,247,0.25)',
+    overflow: 'hidden',
+    width: '100%',
+  },
+  allMatchesHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+    zIndex: 1,
+  },
+  allMatchesLeagueLogo: { width: 28, height: 28, marginRight: 10 },
+  allMatchesTitle: { color: '#fff', fontSize: 18, fontWeight: '800', flex: 1 },
+  allMatchesClose: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // Match count badge
+  matchCountBadge: {
+    backgroundColor: 'rgba(168,85,247,0.2)',
+    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
+    borderWidth: 1, borderColor: 'rgba(168,85,247,0.35)',
+  },
+  matchCountTxt: { color: '#d8b4fe', fontSize: 12, fontWeight: '800' },
   cardShine: {
     position: 'absolute',
     top: 0,
@@ -756,15 +840,15 @@ const styles = StyleSheet.create({
   },
   leagueLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   leagueLogoWrap: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  leagueLogo: { width: 14, height: 14 },
+  leagueLogo: { width: 20, height: 20 },
   leagueTitle: { color: TEXT_PRIMARY, fontSize: 16, fontWeight: '700' },
   leagueRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   leagueLive: { color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700' },
