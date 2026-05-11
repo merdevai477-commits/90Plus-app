@@ -329,8 +329,12 @@ function LeagueCard({
   return (
     <>
       <View style={styles.leagueCard}>
-        {/* Header */}
-        <View style={styles.leagueHead}>
+        {/* Header — tap to open modal */}
+        <TouchableOpacity
+          style={styles.leagueHead}
+          activeOpacity={0.7}
+          onPress={() => setShowAll(true)}
+        >
           <View style={styles.leagueLeft}>
             <View style={styles.leagueLogoWrap}>
               {group.leagueLogo ? (
@@ -348,30 +352,7 @@ function LeagueCard({
           <View style={styles.matchCountBadge}>
             <Text style={styles.matchCountTxt}>{group.fixtures.length}</Text>
           </View>
-        </View>
-
-        {/* Preview fixtures (max 2) */}
-        {previewFixtures.map((fixture) => (
-          <MatchRow
-            key={fixture.id}
-            fixture={fixture}
-            showPreds={filter === 'Predictions'}
-            onPredict={onPredict}
-            submittingId={submittingId}
-            predictedMatches={predictedMatches}
-          />
-        ))}
-
-        {/* View All button — only if more than 2 matches */}
-        {hasMore && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.viewAllBtn}
-            onPress={() => setShowAll(true)}
-          >
-            <Text style={styles.viewAllTxt}>View All ({group.fixtures.length})  ›</Text>
-          </TouchableOpacity>
-        )}
+        </TouchableOpacity>
       </View>
 
       {/* Full list modal */}
