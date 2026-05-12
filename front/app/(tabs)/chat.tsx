@@ -501,7 +501,7 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
       >
         <View style={styles.welcomeBadge}>
           <View style={styles.welcomeBadgeDot} />
-          <Text style={styles.welcomeBadgeText}>AI READY</Text>
+          <Text style={styles.welcomeBadgeText}>BETA</Text>
         </View>
         <Text style={styles.welcomeTitle}>أهلاً يا محمود!</Text>
         <Text style={styles.welcomeSubtitle}>كيف أقدر أساعدك؟</Text>

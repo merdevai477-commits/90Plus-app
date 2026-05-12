@@ -82,6 +82,10 @@ const ProfileCard = memo(function ProfileCard({
         enabled: __DEV__, // Only in development
         memoryWarningThreshold: 50,
         memoryCriticalThreshold: 100,
+        // Shimmer + holographic animations drive many legitimate renders
+        // on a long-lived profile screen; bump the threshold so we only
+        // flag truly pathological cases.
+        maxRenderCount: 500,
         debug: false,
     });
 

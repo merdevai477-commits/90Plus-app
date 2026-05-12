@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Line } from 'react-native-svg';
-import { Colors, Radius, FontSize, Spacing, Gradients } from '../../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Gradients } from '../../constants/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

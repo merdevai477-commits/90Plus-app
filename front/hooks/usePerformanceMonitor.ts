@@ -141,6 +141,9 @@ export function usePerformanceMonitor(
   const appStateRef = useRef(AppState.currentState);
   const hasWarned = useRef(false);
   const hasCritical = useRef(false);
+  // Fires the "high render count" warning exactly once per mount so the
+  // developer sees it but the log doesn't spam every 5 seconds forever.
+  const hasWarnedRenderCount = useRef(false);
   
   // ============================================================================
   // ESTIMATE MEMORY USAGE
@@ -219,8 +222,11 @@ export function usePerformanceMonitor(
       }
     }
     
-    // Check render count
-    if (renderCount >= maxRenderCount) {
+    // Check render count — warn once per mount only. Long-lived screens
+    // with persistent animations (FIFA card shimmer, reels, etc.) cross
+    // this threshold naturally; repeating the log every 5s is noise.
+    if (renderCount >= maxRenderCount && !hasWarnedRenderCount.current) {
+      hasWarnedRenderCount.current = true;
       logger.warn(`[${componentName}] ⚠️ High render count: ${renderCount} (threshold: ${maxRenderCount})`);
     }
   }, [
