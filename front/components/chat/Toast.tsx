@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import Svg, { Polyline, Circle, Line } from 'react-native-svg';
-import { Colors, Radius, FontSize, Spacing, BlurIntensity, Duration } from '../../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, BlurIntensity, Duration } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Types ───────────────────────────────────────────────────────────────────

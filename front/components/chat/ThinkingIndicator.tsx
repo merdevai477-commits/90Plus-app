@@ -15,7 +15,7 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import { Brain, CheckCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing, Duration } from '../../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, Duration } from '../../constants/theme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

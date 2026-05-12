@@ -33,7 +33,7 @@ import {
   FontSize,
   Spacing,
   BlurIntensity,
-} from '../../../constants/theme';
+} from '../../constants/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

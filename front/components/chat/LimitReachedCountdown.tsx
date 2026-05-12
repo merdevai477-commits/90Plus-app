@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Text, StyleSheet } from 'react-native';
-import { Colors, FontSize } from '../../../constants/theme';
+import { Colors, FontSize } from '../../constants/theme';
 
 interface LimitReachedCountdownProps {
   resetTime: Date;

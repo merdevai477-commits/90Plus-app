@@ -14,7 +14,7 @@ import {
   FontSize,
   Spacing,
   Gradients,
-} from '../../../constants/theme';
+} from '../../constants/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

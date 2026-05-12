@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Colors, Radius, Spacing } from '../../../constants/theme';
+import { Colors, Radius, Spacing } from '../../constants/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

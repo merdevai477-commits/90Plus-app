@@ -26,7 +26,7 @@ import { BlurView } from 'expo-blur';
 
 import {
   Colors, Radius, FontSize, LineHeight, Spacing, Gradients, BlurIntensity,
-} from '../../../constants/theme';
+} from '../../constants/theme';
 import { MessageContextMenu } from '../chat/MessageContextMenu';
 import { Message } from '../../hooks/useAIChatNative';
 

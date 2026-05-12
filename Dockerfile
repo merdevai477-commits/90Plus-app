@@ -13,7 +13,9 @@ RUN apt-get update && apt-get install -y \
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+# --legacy-peer-deps: the `openai` SDK peer-requires zod@^3 but we use zod@^4
+# everywhere else; this flag lets both coexist without downgrading zod.
+RUN npm ci --legacy-peer-deps
 
 # Copy Prisma schema
 COPY prisma ./prisma/

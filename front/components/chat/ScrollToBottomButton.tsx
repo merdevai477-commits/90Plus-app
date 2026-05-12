@@ -23,7 +23,7 @@ import {
   Spacing,
   Gradients,
   Layout,
-} from '../../../constants/theme';
+} from '../../constants/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

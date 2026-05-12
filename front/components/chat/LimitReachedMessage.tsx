@@ -11,7 +11,7 @@ import { BlurView } from 'expo-blur';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LimitReachedCountdown } from './LimitReachedCountdown';
-import { Colors, Radius, FontSize, Spacing, BlurIntensity } from '../../../constants/theme';
+import { Colors, Radius, FontSize, Spacing, BlurIntensity } from '../../constants/theme';
 
 interface LimitReachedMessageProps {
   resetTime: Date;
