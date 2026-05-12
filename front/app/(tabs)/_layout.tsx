@@ -174,6 +174,13 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="chat"
+          options={{
+            // No tab icon — navigation handled by BottomNav's AI button.
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="rank"
           options={{
             href: null,

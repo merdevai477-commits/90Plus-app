@@ -449,7 +449,7 @@ router.get('/match-subscriptions', requireAuth, async (req: Request, res: Respon
 
         res.json({
             status: 'SUCCESS',
-            data: { fixtureIds: rows.map((r) => r.apiMatchId) },
+            data: { fixtureIds: rows.map((r: { apiMatchId: number }) => r.apiMatchId) },
         });
     } catch (error: any) {
         logger.error('Match subscriptions fetch error:', error);

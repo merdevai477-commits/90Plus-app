@@ -62,7 +62,7 @@ const NavItem = ({ icon: Icon, isActive, onPress, onPressIn, scaleAnim, activeCo
 );
 
 // ─── Bottom Nav ───────────────────────────────────────────────────────────────
-type AppRoute = '/(tabs)/Home' | '/(tabs)/matches' | '/(tabs)/quiz' | '/(tabs)/chat' | '/(tabs)/profile' | '/(tabs)/reels' | '/(tabs)/rank';
+type AppRoute = '/(tabs)/Home' | '/(tabs)/matches' | '/(tabs)/quiz' | '/(tabs)/ChatScreen' | '/(tabs)/profile' | '/(tabs)/reels' | '/(tabs)/rank';
 
 const BottomNav = () => {
   const router = useRouter();
@@ -76,7 +76,7 @@ const BottomNav = () => {
   const tabs: { name: TabName; icon: typeof Home | null; customIcon?: boolean; aiIcon?: boolean; route: AppRoute }[] = [
     { name: 'Home',       icon: Home,      route: '/(tabs)/Home' },
     { name: 'Leagues',    icon: null,      customIcon: true, route: '/(tabs)/matches' },
-    { name: 'AI',         icon: null,      aiIcon: true, route: '/(tabs)/chat' },
+    { name: 'AI',         icon: null,      aiIcon: true, route: '/(tabs)/ChatScreen' },
     { name: 'Profile',    icon: User,      route: '/(tabs)/profile' },
     { name: 'Highlights', icon: Video,     route: '/(tabs)/reels' },
     { name: 'Rank',       icon: BarChart3, route: '/(tabs)/rank' },
