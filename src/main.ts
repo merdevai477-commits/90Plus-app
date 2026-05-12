@@ -231,6 +231,7 @@ import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
 import gdprRoutes from './routes/gdpr.routes';
+import chatRoutes from './routes/chat.routes';
 import path from 'path';
 
 // Import services
@@ -255,6 +256,9 @@ import {
 app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
 app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
+// Chat routes: streaming + long polling — use lenient limiter
+app.use(`${API_PREFIX}/chat`, lenientLimiter);
+app.use(`${API_PREFIX}/conversations`, lenientLimiter);
 app.use(`${API_PREFIX}/daily-spin`, lenientShellLimiter);
 app.use(`${API_PREFIX}/quiz/daily-status`, lenientShellLimiter);
 // All /predictions routes (GET-heavy from multiple tabs); POST still passes generalLimiter after.
@@ -294,6 +298,7 @@ app.use(`${API_PREFIX}/terms`, termsRoutes);
 app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
+app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
@@ -836,7 +841,11 @@ async function startServer() {
                         // ✅ Initialize notification queue so processors and cron jobs start immediately
                         const { getNotificationQueue } = await import('./queues/notification.queue');
                         getNotificationQueue();
-                        
+
+                        // ✅ Initialize match-start reminder queue (delayed push when a subscribed match kicks off)
+                        const { getMatchStartReminderQueue } = await import('./queues/match-start-reminder.queue');
+                        getMatchStartReminderQueue();
+
                         // ✅ Verify FCM/APNs configuration on startup
                         const { verifyFCMConfiguration } = await import('./services/push-notification.service');
                         verifyFCMConfiguration();

@@ -46,12 +46,6 @@ export interface UseTranslationReturn {
 const LOCALE_MAP: Record<Language, string> = {
   ar: 'ar-SA',
   en: 'en-US',
-  fr: 'fr-FR',
-  es: 'es-ES',
-  de: 'de-DE',
-  it: 'it-IT',
-  tr: 'tr-TR',
-  pt: 'pt-PT',
 };
 
 /**

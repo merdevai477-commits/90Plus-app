@@ -268,6 +268,195 @@ router.delete('/clear-all', requireAuth, async (req: Request, res: Response): Pr
     }
 });
 
+// ─── 6.5 Match notification subscriptions ───────────────────────────────────
+// MUST come before the /:id routes below — otherwise DELETE /:id would
+// swallow DELETE /match-subscribe/:fixtureId (Express segment-matching).
+//
+// Lets the user "bell" a fixture on the matches screen. Persists in FavoriteMatch
+// so the existing MatchWatcherService sees it, AND schedules a dedicated Bull
+// delayed job that fires a push notification at kick-off time.
+
+/**
+ * POST /api/notifications/match-subscribe
+ * Body: { fixtureId: number, matchTime: string(ISO), homeTeam, awayTeam,
+ *         homeTeamLogo?, awayTeamLogo?, leagueName? }
+ */
+router.post('/match-subscribe', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const { fixtureId, matchTime, homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, leagueName } = req.body ?? {};
+        const parsedFixtureId = Number.parseInt(String(fixtureId), 10);
+
+        if (!Number.isFinite(parsedFixtureId) || !matchTime || !homeTeam || !awayTeam) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'fixtureId, matchTime, homeTeam and awayTeam are required',
+            });
+            return;
+        }
+
+        const matchDate = new Date(matchTime);
+        if (Number.isNaN(matchDate.getTime())) {
+            res.status(400).json({ status: 'ERROR', message: 'Invalid matchTime' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        const subscription = await prisma.favoriteMatch.upsert({
+            where: { userId_apiMatchId: { userId: user.id, apiMatchId: parsedFixtureId } },
+            update: {
+                matchDate,
+                homeTeam: String(homeTeam),
+                awayTeam: String(awayTeam),
+                homeTeamLogo: homeTeamLogo ? String(homeTeamLogo) : null,
+                awayTeamLogo: awayTeamLogo ? String(awayTeamLogo) : null,
+                leagueName: leagueName ? String(leagueName) : null,
+                // Re-arming after a previous notification means the user must have
+                // re-subscribed for a re-scheduled fixture (e.g. postponed).
+                notifiedStart: false,
+            },
+            create: {
+                userId: user.id,
+                apiMatchId: parsedFixtureId,
+                matchDate,
+                homeTeam: String(homeTeam),
+                awayTeam: String(awayTeam),
+                homeTeamLogo: homeTeamLogo ? String(homeTeamLogo) : null,
+                awayTeamLogo: awayTeamLogo ? String(awayTeamLogo) : null,
+                leagueName: leagueName ? String(leagueName) : null,
+            },
+        });
+
+        // Schedule the delayed push. Safe if Redis is down (returns silently).
+        try {
+            const { scheduleMatchStartReminder } = await import('../queues/match-start-reminder.queue');
+            await scheduleMatchStartReminder({
+                userId: user.id,
+                fixtureId: parsedFixtureId,
+                homeTeam: String(homeTeam),
+                awayTeam: String(awayTeam),
+                matchDate: matchDate.toISOString(),
+            });
+        } catch (err) {
+            logger.warn('[match-subscribe] failed to schedule reminder:', err);
+        }
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                fixtureId: parsedFixtureId,
+                subscribed: true,
+                subscriptionId: subscription.id,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Match subscribe error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * DELETE /api/notifications/match-subscribe/:fixtureId
+ */
+router.delete('/match-subscribe/:fixtureId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const fixtureIdParam = Array.isArray(req.params.fixtureId) ? req.params.fixtureId[0] : req.params.fixtureId;
+        const parsedFixtureId = Number.parseInt(fixtureIdParam, 10);
+        if (!Number.isFinite(parsedFixtureId)) {
+            res.status(400).json({ status: 'ERROR', message: 'Invalid fixtureId' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Idempotent delete — missing record is not an error.
+        await prisma.favoriteMatch.deleteMany({
+            where: { userId: user.id, apiMatchId: parsedFixtureId },
+        });
+
+        try {
+            const { cancelMatchStartReminder } = await import('../queues/match-start-reminder.queue');
+            await cancelMatchStartReminder(user.id, parsedFixtureId);
+        } catch (err) {
+            logger.warn('[match-subscribe] failed to cancel reminder:', err);
+        }
+
+        res.json({
+            status: 'SUCCESS',
+            data: { fixtureId: parsedFixtureId, subscribed: false },
+        });
+    } catch (error: any) {
+        logger.error('Match unsubscribe error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
+/**
+ * GET /api/notifications/match-subscriptions
+ * Returns the set of fixtureIds the current user is subscribed to. Used by
+ * the Matches screen to hydrate the bell state on mount.
+ */
+router.get('/match-subscriptions', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+        if (!user) {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        // Only return future or live matches — past ones are noise for the UI.
+        const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000); // 3h back to cover live matches
+        const rows = await prisma.favoriteMatch.findMany({
+            where: { userId: user.id, matchDate: { gte: cutoff } },
+            select: { apiMatchId: true },
+            take: 500,
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: { fixtureIds: rows.map((r) => r.apiMatchId) },
+        });
+    } catch (error: any) {
+        logger.error('Match subscriptions fetch error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 // ─── 7–10. Parameterised /:id routes (MUST come last) ────────────────────────
 
 /**

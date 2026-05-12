@@ -8,8 +8,9 @@ import prisma from '../lib/prisma';
 import type { Prediction, User } from '@prisma/client';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
-import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.get('/remaining', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ error: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -38,7 +39,7 @@ router.get('/remaining', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }
         });
 
         if (!user) {
-            res.status(404).json({ error: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -72,7 +73,7 @@ router.get('/remaining', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }
         });
     } catch (error) {
         logger.error('Error getting remaining predictions:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -86,19 +87,24 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ error: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         const { apiMatchId, predictionType, homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, matchDate, leagueName } = req.body;
 
         if (!apiMatchId || !predictionType) {
-            res.status(400).json({ error: 'Missing required fields' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Missing required fields', {
+                required: ['apiMatchId', 'predictionType'],
+            });
             return;
         }
 
         if (!['home', 'draw', 'away'].includes(predictionType)) {
-            res.status(400).json({ error: 'Invalid prediction type' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid prediction type', {
+                field: 'predictionType',
+                allowed: ['home', 'draw', 'away'],
+            });
             return;
         }
 
@@ -109,7 +115,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         });
 
         if (!userExists) {
-            res.status(404).json({ error: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -188,11 +194,17 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         } catch (txError: any) {
             const msg = txError?.message || '';
             if (msg === 'USER_NOT_FOUND') {
-                res.status(404).json({ error: 'User not found' });
+                sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             } else if (msg === 'DAILY_LIMIT_REACHED') {
-                res.status(400).json({ error: 'Daily prediction limit reached', limit: DAILY_PREDICTION_LIMIT });
+                sendError(req, res, ErrorCode.RATE_LIMIT, 'Daily prediction limit reached', {
+                    reason: 'DAILY_LIMIT_REACHED',
+                    limit: DAILY_PREDICTION_LIMIT,
+                });
             } else if (msg === 'ALREADY_PREDICTED') {
-                res.status(400).json({ error: 'Already predicted on this match' });
+                sendError(req, res, ErrorCode.CONFLICT, 'Already predicted on this match', {
+                    reason: 'ALREADY_PREDICTED',
+                    matchId: String(apiMatchId),
+                });
             } else {
                 throw txError; // re-throw unexpected errors to outer catch
             }
@@ -208,9 +220,16 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             },
             message: 'تم تسجيل توقعك بنجاح! 🎯'
         });
+
+        // Invalidate the per-user predictions cache so the next GET /user
+        // reflects this new prediction immediately (30s TTL would otherwise
+        // leave the UI out of sync after optimistic write).
+        clearResponseCache('/predictions/user').catch((err) => {
+            logger.warn('Failed to invalidate /predictions/user cache:', err);
+        });
     } catch (error) {
         logger.error('Error creating prediction:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -218,13 +237,13 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
  * GET /api/predictions/user
  * Get all predictions for current user
  */
-router.get('/user', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         // ✅ استخدام req.auth.userId من الـ middleware
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ error: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -234,7 +253,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
         });
 
         if (!user) {
-            res.status(404).json({ error: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -270,7 +289,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
         });
     } catch (error) {
         logger.error('Error getting user predictions:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -313,7 +332,7 @@ router.get('/match/:matchId/count', requireAuth, async (req: Request, res: Respo
         });
     } catch (error) {
         logger.error('Error getting match prediction count:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -327,7 +346,10 @@ router.post('/matches/counts', requireAuth, async (req: Request, res: Response):
         const { matchIds } = req.body;
 
         if (!matchIds || !Array.isArray(matchIds) || matchIds.length > 50) {
-            res.status(400).json({ error: 'matchIds must be an array with at most 50 items' });
+            sendError(req, res, ErrorCode.VALIDATION, 'matchIds must be an array with at most 50 items', {
+                field: 'matchIds',
+                max: 50,
+            });
             return;
         }
 
@@ -359,7 +381,7 @@ router.post('/matches/counts', requireAuth, async (req: Request, res: Response):
         });
     } catch (error) {
         logger.error('Error getting batch prediction counts:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -372,7 +394,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ error: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -382,7 +404,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         });
 
         if (!user) {
-            res.status(404).json({ error: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -431,7 +453,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         });
     } catch (error) {
         logger.error('Error getting prediction stats:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -453,11 +475,11 @@ router.post('/resolve/:matchId', requireAuth, requireAdmin, async (req: Request,
         if (result.success) {
             res.json({ success: true, message: result.message });
         } else {
-            res.status(400).json({ success: false, error: result.message });
+            sendError(req, res, ErrorCode.VALIDATION, result.message);
         }
     } catch (error) {
         logger.error('Error resolving predictions:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -497,7 +519,7 @@ router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res:
         });
     } catch (error) {
         logger.error('Error resolving all predictions:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -537,7 +559,7 @@ router.get('/unresolved', requireAuth, requireAdmin, async (req: Request, res: R
         });
     } catch (error) {
         logger.error('Error getting unresolved predictions:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -552,11 +574,7 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({
-                success: false,
-                error: 'Unauthorized',
-                message: 'يجب تسجيل الدخول لإرسال التوقعات'
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'يجب تسجيل الدخول لإرسال التوقعات');
             return;
         }
 
@@ -564,10 +582,8 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
 
         // Validation
         if (!matchId || homeScore === undefined || awayScore === undefined) {
-            res.status(400).json({
-                success: false,
-                error: 'Missing required fields',
-                message: 'يرجى إدخال جميع البيانات المطلوبة'
+            sendError(req, res, ErrorCode.VALIDATION, 'يرجى إدخال جميع البيانات المطلوبة', {
+                required: ['matchId', 'homeScore', 'awayScore'],
             });
             return;
         }
@@ -577,20 +593,18 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         const away = parseInt(awayScore);
 
         if (isNaN(home) || isNaN(away)) {
-            res.status(400).json({
-                success: false,
-                error: 'Invalid scores',
-                message: 'يرجى إدخال أرقام صحيحة'
+            sendError(req, res, ErrorCode.VALIDATION, 'يرجى إدخال أرقام صحيحة', {
+                reason: 'INVALID_SCORES',
             });
             return;
         }
 
         // Validate score range (0-20)
         if (home < 0 || away < 0 || home > 20 || away > 20) {
-            res.status(400).json({
-                success: false,
-                error: 'Invalid score range',
-                message: 'النتيجة يجب أن تكون بين 0 و 20'
+            sendError(req, res, ErrorCode.VALIDATION, 'النتيجة يجب أن تكون بين 0 و 20', {
+                reason: 'INVALID_SCORE_RANGE',
+                min: 0,
+                max: 20,
             });
             return;
         }
@@ -601,22 +615,16 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (!user) {
-            res.status(404).json({
-                success: false,
-                error: 'User not found',
-                message: 'المستخدم غير موجود'
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'المستخدم غير موجود');
             return;
         }
 
         // Check if user has enough coins
         if (user.coins < PREDICTION_COST) {
-            res.status(400).json({
-                success: false,
-                error: 'Insufficient coins',
-                message: `تحتاج إلى ${PREDICTION_COST} عملة لإرسال توقع`,
+            sendError(req, res, ErrorCode.VALIDATION, `تحتاج إلى ${PREDICTION_COST} عملة لإرسال توقع`, {
+                reason: 'INSUFFICIENT_COINS',
                 required: PREDICTION_COST,
-                current: user.coins
+                current: user.coins,
             });
             return;
         }
@@ -638,11 +646,9 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (todayPredictions >= DAILY_PREDICTION_LIMIT) {
-            res.status(400).json({
-                success: false,
-                error: 'Daily prediction limit reached',
-                message: `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`,
-                limit: DAILY_PREDICTION_LIMIT
+            sendError(req, res, ErrorCode.RATE_LIMIT, `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`, {
+                reason: 'DAILY_LIMIT_REACHED',
+                limit: DAILY_PREDICTION_LIMIT,
             });
             return;
         }
@@ -658,10 +664,9 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (existingPrediction) {
-            res.status(400).json({
-                success: false,
-                error: 'Already predicted',
-                message: 'لقد أرسلت توقعاً لهذه المباراة بالفعل'
+            sendError(req, res, ErrorCode.CONFLICT, 'لقد أرسلت توقعاً لهذه المباراة بالفعل', {
+                reason: 'ALREADY_PREDICTED',
+                matchId: String(matchId),
             });
             return;
         }
@@ -722,13 +727,13 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
             },
             message: '🎯 تم إرسال توقعك بنجاح!'
         });
+
+        clearResponseCache('/predictions/user').catch((err) => {
+            logger.warn('Failed to invalidate /predictions/user cache:', err);
+        });
     } catch (error) {
         logger.error('Error submitting score prediction:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error',
-            message: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.'
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
     }
 });
 
@@ -818,7 +823,7 @@ router.get('/leaderboard', requireAuth, async (req: Request, res: Response): Pro
         });
     } catch (error) {
         logger.error('Error getting predictions leaderboard:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

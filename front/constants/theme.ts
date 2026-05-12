@@ -397,16 +397,22 @@ export const WS_CONFIG = {
 
 export const API_CONFIG = {
   /**
-   * Backend URL — loaded from EXPO_PUBLIC_BACKEND_URL env var.
+   * Chat backend root URL (without /api suffix — the hook appends /api/chat/*).
    *
-   * Setup in .env:
-   *   iOS Simulator:    EXPO_PUBLIC_BACKEND_URL=http://localhost:3001
-   *   Android Emulator: EXPO_PUBLIC_BACKEND_URL=http://10.0.2.2:3001
-   *   Physical Device:  EXPO_PUBLIC_BACKEND_URL=http://<your-local-ip>:3001
+   * Merged into the main 90Plus backend, so we reuse EXPO_PUBLIC_API_URL
+   * (which ends with /api) by stripping the trailing /api. That way dev,
+   * staging and production all point to the same host automatically.
    *
-   * Fallback: auto-detects Android emulator and uses 10.0.2.2
+   * Fallbacks:
+   *   - iOS Simulator:    http://localhost:3000
+   *   - Android Emulator: http://10.0.2.2:3000
    */
-  baseUrl: process.env.EXPO_PUBLIC_BACKEND_URL
-    ?? (Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://localhost:3001'),
+  baseUrl: (() => {
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (apiUrl) return apiUrl.replace(/\/api\/?$/, '');
+    const legacy = process.env.EXPO_PUBLIC_BACKEND_URL;
+    if (legacy) return legacy;
+    return Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+  })(),
   userIdKey: 'ai-chat-user-id',
 } as const;

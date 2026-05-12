@@ -311,6 +311,16 @@ export const ar = {
 
   notificationCancelled: 'لن تتلقى إشعارات حول هذه المباراة',
 
+  offlineQueue: {
+    bannerOffline: 'أنت غير متصل بالإنترنت',
+    queuedTitle: 'تم الحفظ بلا اتصال',
+    queuedMessage: 'سيتم إرسال توقعك عند عودة الإنترنت.',
+    syncedTitle: 'تم إرسال توقعاتك',
+    syncedMessage: 'تم إرسال {{count}} توقع بعد عودة الاتصال.',
+    failedTitle: 'تعذّر إرسال بعض التوقعات',
+    failedMessage: 'تم تجاهل {{count}} توقع لم يتم إرسالها.',
+  },
+
   matches: {
     tabs: {
       all: 'الكل',
@@ -328,6 +338,47 @@ export const ar = {
       extraTime: 'وقت إضافي',
       penalties: 'ركلات ترجيح',
       upcoming: 'قادمة',
+    },
+    screen: {
+      title: 'النتائج المباشرة',
+      loading: 'جاري تحميل المباريات...',
+      loadFailed: 'فشل تحميل المباريات',
+      retry: 'إعادة المحاولة',
+      noMatchesFound: 'لا توجد مباريات',
+      viewAll: 'عرض الكل ({{count}}) ›',
+      selectDate: 'اختر التاريخ',
+      done: 'تم',
+      weekDays: ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'],
+      weekStartsOn: 'saturday',
+    },
+    prediction: {
+      title: 'سجّل توقعك',
+      yourPrediction: 'توقعك',
+      homeLabelFallback: 'المضيف',
+      awayLabelFallback: 'الضيف',
+      drawLabel: 'تعادل',
+      savedTitle: 'تم تسجيل توقعك',
+      savedMessage: '{{side}} • تذاكر متبقية: {{count}}',
+      noTicketsTitle: 'لا توجد تذاكر',
+      noTicketsMessage: 'انتهت تذاكر التوقع لليوم. تتجدد كل 24 ساعة تلقائياً.',
+      dailyLimitTitle: 'انتهت تذاكر اليوم',
+      dailyLimitMessage: 'استخدمت كل تذاكر التوقع لليوم. تتجدد كل 24 ساعة تلقائياً.',
+      submitFailedTitle: 'تعذّر حفظ التوقع',
+      submitFailedMessage: 'حدث خطأ أثناء الاتصال بالخادم. تم إلغاء التوقع.',
+    },
+    tickets: {
+      sheetTitle: 'تذاكر المباريات',
+      rule1: 'تذكرة واحدة = توقع واحد',
+      rule2: 'تتجدد التذاكر كل 24 ساعة تلقائياً.',
+      gotIt: 'تمام',
+    },
+    bell: {
+      subscribedTitle: 'تم ضبط التذكير',
+      subscribedMessage: 'هنبعتلك إشعار لحظة بداية المباراة.',
+      unsubscribedTitle: 'تم إلغاء التذكير',
+      unsubscribedMessage: 'لن تستلم إشعاراً عن هذه المباراة.',
+      errorTitle: 'تعذّر تحديث التذكير',
+      errorMessage: 'حاول مرة أخرى بعد قليل.',
     },
     time: {
       today: 'اليوم',
