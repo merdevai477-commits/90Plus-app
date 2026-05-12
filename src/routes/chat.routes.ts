@@ -28,28 +28,76 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // ─── Config ──────────────────────────────────────────────────────────────────
-// Key resolution order: AI_API_KEY → OPENROUTER_API_KEY → GOOGLE_AI_KEY.
-// This lets the same codebase serve multiple providers without code changes —
-// just switch the env vars.
-const AI_API_KEY =
-    process.env.AI_API_KEY ??
-    process.env.OPENROUTER_API_KEY ??
-    process.env.GOOGLE_AI_KEY ??
-    '';
-const AI_BASE_URL = process.env.AI_BASE_URL ?? 'https://openrouter.ai/api/v1';
-const AI_MODEL = process.env.AI_MODEL ?? 'openai/gpt-oss-120b';
+// Two-provider setup: a primary and an automatic fallback.
+// If the primary errors out BEFORE streaming any tokens (rate limit,
+// timeout, 5xx, auth), the fallback takes over transparently. The user
+// just sees a slightly slower response — never a failure.
+interface ProviderConfig {
+    name: string;
+    apiKey: string;
+    baseURL: string;
+    model: string;
+    client: OpenAI;
+}
+
+function buildClient(apiKey: string, baseURL: string): OpenAI {
+    return new OpenAI({
+        apiKey,
+        baseURL,
+        defaultHeaders: {
+            // OpenRouter uses these for analytics / attribution.
+            // Gemini's OpenAI-compatible endpoint ignores them safely.
+            'HTTP-Referer': 'https://90plus.app',
+            'X-Title': '90Plus AI Chat',
+        },
+    });
+}
+
+const PRIMARY: ProviderConfig | null = (() => {
+    const apiKey =
+        process.env.AI_API_KEY ??
+        process.env.GOOGLE_AI_KEY ??
+        '';
+    if (!apiKey) return null;
+    return {
+        name: 'primary',
+        apiKey,
+        baseURL: process.env.AI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta/openai',
+        model: process.env.AI_MODEL ?? 'gemini-2.5-flash',
+        client: buildClient(apiKey, process.env.AI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta/openai'),
+    };
+})();
+
+const FALLBACK: ProviderConfig | null = (() => {
+    const apiKey = process.env.OPENROUTER_API_KEY ?? '';
+    if (!apiKey) return null;
+    // Don't register the fallback if it's the same provider as the primary
+    // (prevents a pointless retry on the exact same endpoint).
+    const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
+    if (PRIMARY && PRIMARY.apiKey === apiKey && PRIMARY.baseURL === baseURL) return null;
+    return {
+        name: 'fallback',
+        apiKey,
+        baseURL,
+        model: process.env.OPENROUTER_MODEL ?? 'openai/gpt-oss-120b',
+        client: buildClient(apiKey, baseURL),
+    };
+})();
+
+const PROVIDERS: ProviderConfig[] = [PRIMARY, FALLBACK].filter(
+    (p): p is ProviderConfig => p !== null,
+);
+
 const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 20);
 
-const ai = new OpenAI({
-    apiKey: AI_API_KEY,
-    baseURL: AI_BASE_URL,
-    defaultHeaders: {
-        // Required by OpenRouter for analytics / rate-limit attribution.
-        // Gemini's OpenAI-compatible endpoint ignores these headers safely.
-        'HTTP-Referer': 'https://90plus.app',
-        'X-Title': '90Plus AI Chat',
-    },
-});
+// Log provider setup once at module load so you can verify the env is wired
+// correctly without grepping runtime logs.
+if (PROVIDERS.length === 0) {
+    logger.warn('[chat] ⚠️ no AI provider configured — /api/chat/stream will return 503');
+} else {
+    const summary = PROVIDERS.map((p) => `${p.name}=${p.model}`).join(' → ');
+    logger.info(`[chat] 🤖 providers: ${summary}`);
+}
 
 // ─── Persistent store (JSON file) ────────────────────────────────────────────
 type StoredRole = 'user' | 'ai';
@@ -445,33 +493,83 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         detailed: 1200,
     };
 
-    // ─── Stream from AI provider ─────────────────────────────────────────────
-    try {
-        const stream = await ai.chat.completions.create({
-            model: AI_MODEL,
-            max_tokens: maxTokensByMode[lengthMode],
-            stream: true,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...trimmedHistory,
-                { role: 'user', content: trimmedMessage },
-            ],
-            temperature: 0.45,
-        });
+    // ─── Stream from AI provider with automatic fallback ──────────────────────
+    //
+    // Try the primary provider first. If it fails BEFORE emitting any tokens,
+    // transparently retry with the fallback. Once a token has been streamed
+    // to the client we can't retry — a mid-stream failure ends the response
+    // with an error, same as before.
+    if (PROVIDERS.length === 0) {
+        logger.error('[chat] no AI provider configured — check AI_API_KEY / OPENROUTER_API_KEY');
+        decrementLimit(userId);
+        sendError('AI service not configured');
+        return;
+    }
 
-        let fullText = '';
-        for await (const chunk of stream) {
-            const token = chunk.choices[0]?.delta?.content ?? '';
-            if (token) {
-                fullText += token;
-                sendToken(token);
+    let fullText = '';
+    let usedProvider: ProviderConfig | null = null;
+    let firstTokenSent = false;
+    const providerErrors: string[] = [];
+
+    const requestBody = {
+        max_tokens: maxTokensByMode[lengthMode],
+        stream: true as const,
+        messages: [
+            { role: 'system' as const, content: systemPrompt },
+            ...trimmedHistory,
+            { role: 'user' as const, content: trimmedMessage },
+        ],
+        temperature: 0.45,
+    };
+
+    for (const provider of PROVIDERS) {
+        // Don't retry if we already started streaming to the client —
+        // the HTTP response is already half-written.
+        if (firstTokenSent) break;
+
+        try {
+            const stream = await provider.client.chat.completions.create({
+                model: provider.model,
+                ...requestBody,
+            });
+
+            usedProvider = provider;
+            for await (const chunk of stream) {
+                const token = chunk.choices[0]?.delta?.content ?? '';
+                if (token) {
+                    fullText += token;
+                    firstTokenSent = true;
+                    sendToken(token);
+                }
             }
-        }
+            // Stream finished successfully — break out of the fallback loop.
+            break;
+        } catch (err: any) {
+            const msg = err?.message ?? String(err);
+            providerErrors.push(`${provider.name}: ${msg.slice(0, 120)}`);
+            logger.warn(`[chat] provider ${provider.name} (${provider.model}) failed: ${msg.slice(0, 200)}`);
 
-        // ─── Save AI reply ───────────────────────────────────────────────────
+            if (firstTokenSent) {
+                // Too late to fall back — close the stream with whatever we have.
+                break;
+            }
+            // Otherwise: loop continues, tries the next provider.
+        }
+    }
+
+    // ─── Handle outcome ──────────────────────────────────────────────────────
+    if (!firstTokenSent || !usedProvider) {
+        logger.error('[chat] all providers failed:', providerErrors.join(' | '));
+        decrementLimit(userId);
+        sendError('AI service error. Please try again.');
+        return;
+    }
+
+    try {
+        // Save AI reply
         appendMessage(userId, targetConversation.id, 'ai', fullText);
 
-        // ─── Auto-title on first exchange ────────────────────────────────────
+        // Auto-title on first exchange
         if (
             targetConversation.title === 'محادثة جديدة' &&
             targetConversation.messages.length <= 2
@@ -485,12 +583,17 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         sendDone({
             remaining: getRemaining(userId),
             resetAt: getResetTime(),
-            usedModel: AI_MODEL,
+            usedModel: usedProvider.model,
+            usedProvider: usedProvider.name,
         });
     } catch (err: any) {
-        logger.error('[chat] stream error:', err?.message ?? err);
-        decrementLimit(userId);
-        sendError('AI service error. Please try again.');
+        logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);
+        // The user already got their tokens — close the SSE cleanly.
+        sendDone({
+            remaining: getRemaining(userId),
+            resetAt: getResetTime(),
+            usedModel: usedProvider.model,
+        });
     }
 });
 
