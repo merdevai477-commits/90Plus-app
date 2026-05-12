@@ -372,24 +372,26 @@ function LeagueAllMatchesModal({
             </TouchableOpacity>
           </View>
           {/* All fixtures */}
-          <FlashList
-            data={group.fixtures}
-            keyExtractor={f => f.id}
-            renderItem={({ item }) => (
-              <MatchRow
-                fixture={item}
-                showPreds={filter === 'Predictions'}
-                onPredict={onPredict}
-                submittingId={submittingId}
-                predictedMatches={predictedMatches}
-                isSubscribed={subscribedFixtures.has(item.id)}
-                isSubscribing={subscribingFixtureId === item.id}
-                onToggleSubscription={onToggleSubscription}
-              />
-            )}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40 }}
-          />
+          <View style={styles.allMatchesListWrap}>
+            <FlashList
+              data={group.fixtures}
+              keyExtractor={f => f.id}
+              renderItem={({ item }) => (
+                <MatchRow
+                  fixture={item}
+                  showPreds={filter === 'Predictions'}
+                  onPredict={onPredict}
+                  submittingId={submittingId}
+                  predictedMatches={predictedMatches}
+                  isSubscribed={subscribedFixtures.has(item.id)}
+                  isSubscribing={subscribingFixtureId === item.id}
+                  onToggleSubscription={onToggleSubscription}
+                />
+              )}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 40 }}
+            />
+          </View>
         </View>
       </View>
     </Modal>
@@ -1030,8 +1032,11 @@ export default function MatchesHubScreenV2() {
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
         showsVerticalScrollIndicator={false}
-        onRefresh={refetch}
-        refreshing={loading}
+        // Pull-to-refresh intentionally disabled: `useMatchesData` already
+        // refetches on a 60s interval while the screen is mounted AND
+        // transparently background-refreshes when Redis/API cache expires.
+        // Exposing onRefresh encourages users to spam it, which would
+        // burn API quota fast on the Free plan.
         ListHeaderComponent={
           <View style={styles.listHeader}>
             <View style={styles.tabsRow}>
@@ -1232,11 +1237,16 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   allMatchesSheet: {
-    maxHeight: SCREEN_HEIGHT * 0.82,
+    // Explicit height (not maxHeight) so the inner FlashList has a known
+    // layout box. Android/FlashList collapses to 0 otherwise.
+    height: SCREEN_HEIGHT * 0.82,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
     overflow: 'hidden',
     width: '100%',
+    // Opaque fallback for Android where the expo-blur intensity isn't a full
+    // frosted glass — keeps the sheet readable.
+    backgroundColor: Platform.OS === 'android' ? 'rgba(15,8,28,0.96)' : 'transparent',
     // iOS shadow for depth
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -8 },
@@ -1244,6 +1254,9 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 30,
   },
+  // Wrapper that gives the FlashList a concrete flex:1 container. Without
+  // this the list renders 0px tall and the sheet looks empty.
+  allMatchesListWrap: { flex: 1, zIndex: 1 },
   sheetHandle: {
     width: 36, height: 4, borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.25)',

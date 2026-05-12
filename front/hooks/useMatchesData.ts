@@ -405,6 +405,24 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     fetchDataRef.current();
   }, [dateString, isToday, isPastDate]); // Re-fetch when date changes or when isToday/isPastDate change (e.g. at midnight)
 
+  // ─── Silent auto-refresh ────────────────────────────────────────────────
+  // Instead of exposing pull-to-refresh (which users spam and burns quota),
+  // we schedule a background tick based on how "live" the current day is:
+  //   - today  → every 60s (live scores can update frequently)
+  //   - future → every 5 minutes (fixtures rarely change last-minute)
+  //   - past   → no refresh at all (permanent cache)
+  //
+  // The call goes through `fetchDataInBackground` which is already throttled
+  // (BACKGROUND_REFRESH_THROTTLE = 5min), so we won't double-fire.
+  useEffect(() => {
+    if (isPastDate) return; // finished — nothing to refresh
+    const intervalMs = isToday ? 60_000 : 5 * 60_000;
+    const id = setInterval(() => {
+      fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [dateString, isToday, isPastDate, fetchDataInBackground]);
+
   const refetch = useCallback(async () => {
     await fetchData(true);
   }, [fetchData]);
