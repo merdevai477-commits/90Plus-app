@@ -47,3 +47,14 @@ COMMIT_MESSAGE*.txt
 
 # Chat data (per-instance JSON store)
 data/chat/
+
+# Large binary assets — commit these through Git LFS or upload to CDN instead
+_tmp_*.png
+front/assets/images/*.png
+# Keep only essential small icons (override above by un-ignoring)
+!front/assets/images/icon.png
+!front/assets/images/favicon.png
+!front/assets/images/splash-icon.png
+!front/assets/images/android-icon-background.png
+!front/assets/images/android-icon-foreground.png
+!front/assets/images/android-icon-monochrome.png

@@ -1,167 +1,126 @@
-# Project Structure
+---
+inclusion: always
+---
+
+# Project Structure & Conventions
 
 ## Repository Layout
 
 ```
 /
-├── Backend/           # Node.js/Express API server
-├── front/             # React Native/Expo mobile app
-└── .kiro/             # Kiro AI configuration and specs
+├── Backend/    # Node.js/Express + Prisma API (also has root-level src/ in this repo)
+├── front/      # React Native / Expo mobile app (iOS, Android, Web)
+└── .kiro/      # Kiro specs, steering, and hooks
 ```
 
-## Backend Structure
+Note: backend TypeScript sources currently live under the repository root `src/` (e.g. `src/main.ts`, `src/routes/`, `src/services/`). The `Backend/` folder holds static assets (`Backend/public/`). Treat the root `src/` tree as the backend source of truth.
+
+## Backend Layout (`src/` at repo root)
 
 ```
-Backend/
-├── src/
-│   ├── main.ts                    # Application entry point
-│   ├── config/                    # Configuration files
-│   ├── controllers/               # Route handlers (business logic)
-│   ├── routes/                    # API route definitions
-│   ├── middleware/                # Express middleware
-│   │   ├── clerk.middleware.ts    # Authentication
-│   │   ├── auth-rate-limit.middleware.ts
-│   │   ├── file-validation.middleware.ts
-│   │   ├── rbac.middleware.ts     # Role-based access control
-│   │   └── ...
-│   ├── services/                  # Business logic services
-│   │   ├── football.service.ts
-│   │   ├── daily-quiz.service.ts
-│   │   ├── moderation.service.ts
-│   │   ├── *-cache.service.ts     # Caching layers
-│   │   └── ...
-│   ├── lib/                       # Shared libraries
-│   │   ├── prisma.ts              # Prisma client
-│   │   └── redis.ts               # Redis client
-│   ├── utils/                     # Utility functions
-│   ├── data/                      # Static data (quiz questions, etc.)
-│   ├── scripts/                   # Utility scripts
-│   └── __tests__/                 # Property-based tests
-├── prisma/
-│   ├── schema.prisma              # Database schema
-│   ├── migrations/                # Database migrations
-│   └── seed.ts                    # Seed data
-├── public/                        # Static files (terms, privacy)
-└── dist/                          # Compiled output (gitignored)
+src/
+├── main.ts              # Express entry point
+├── config/              # Environment + service configs
+├── controllers/         # HTTP handlers (thin; delegate to services)
+├── routes/              # Express routers; apply middleware here
+├── middleware/          # clerk, rbac, rate-limit, file-validation, responseCache, ...
+├── services/            # Business logic; *-cache.service.ts for caching layers
+├── queues/              # BullMQ / background jobs
+├── lib/                 # prisma.ts, redis.ts (shared singletons)
+├── utils/               # Pure helpers
+├── data/                # Static seed data (quiz questions, etc.)
+├── scripts/             # One-off utility scripts
+└── __tests__/           # Property-based tests (fast-check)
+
+prisma/
+├── schema.prisma        # Single source of truth for DB
+├── migrations/          # Never edit applied migrations
+└── seed.ts
 ```
 
-### Backend Patterns
+### Backend Rules
 
-- **Controllers** handle HTTP requests/responses
-- **Services** contain business logic and are reusable
-- **Middleware** handles cross-cutting concerns (auth, validation, rate limiting)
-- **Routes** define API endpoints and apply middleware
-- Caching services follow pattern: `*-cache.service.ts`
-- Property-based tests in `__tests__/` use fast-check
+- Controllers are thin: validate input, call a service, shape the response. No business logic inline.
+- Services hold business logic and are reusable across controllers, queues, and scripts.
+- Always import Prisma from `src/lib/prisma.ts` and Redis from `src/lib/redis.ts`. Do not instantiate new clients.
+- Routes are the only place middleware is composed: `router.<verb>('/path', ...middleware, controller)`.
+- Cache services follow the `<domain>-cache.service.ts` naming (e.g. `match-cache.service.ts`).
+- Use Prisma transactions when a write touches multiple tables.
+- Apply `clerk.middleware` for auth, `rbac.middleware` for admin/developer routes, and a rate limiter on every mutating or auth-adjacent endpoint.
+- Never modify `schema.prisma` without creating a migration.
 
-## Frontend Structure
+## Frontend Layout (`front/`)
 
 ```
 front/
-├── app/                           # Expo Router (file-based routing)
-│   ├── (tabs)/                    # Tab navigation screens
-│   │   ├── Home.tsx
-│   │   ├── leagues.tsx
-│   │   ├── quiz.tsx
-│   │   └── settings.tsx
-│   ├── auth/                      # Authentication screens
-│   ├── user/                      # User profile screens
-│   ├── _layout.tsx                # Root layout
-│   └── [dynamic].tsx              # Dynamic routes
-├── components/                    # React components
-│   ├── common/                    # Shared components
-│   ├── Home/                      # Home screen components
-│   ├── Matches/                   # Match-related components
-│   ├── reels/                     # Video reel components
-│   ├── Quiz/                      # Quiz components
-│   └── ...
-├── services/                      # API clients and business logic
-│   ├── quizApi.ts
-│   ├── predictions.service.ts
-│   ├── websocketClient.ts
-│   ├── *CacheService.ts           # Client-side caching
-│   └── ...
-├── hooks/                         # Custom React hooks
-│   ├── useMatchesData.ts
-│   ├── useWebSocket.ts
-│   └── ...
-├── contexts/                      # React Context providers
-│   ├── LanguageContext.tsx
-│   ├── CoinsContext.tsx
-│   └── ...
+├── app/                 # expo-router (file-based routes)
+│   ├── (tabs)/          # Main tab screens (Home, matches, quiz, reels, settings, ...)
+│   ├── auth/            # Auth flow screens
+│   ├── user/[username]  # Dynamic profile routes
+│   ├── _layout.tsx      # Root layout
+│   └── *.tsx            # Top-level screens (onboarding, delete-account, ...)
+├── components/          # Grouped by feature: common/, Home/, Matches/, reels/, Quiz/, chat/, profile/, rank/, notifications/, tamagui/, shell/, auth/
+├── services/            # API clients + client-side business logic (*Api.ts, *Service.ts, *CacheService.ts)
+├── hooks/               # Custom hooks (use*)
+├── contexts/            # React Context providers (LanguageContext, CoinsContext, ...)
 ├── src/
-│   ├── store/                     # Zustand state management
-│   └── i18n/                      # Internationalization
-├── locales/                       # Translation files (en.ts, ar.ts, etc.)
-├── constants/                     # App constants and themes
-├── utils/                         # Utility functions
-├── types/                         # TypeScript type definitions
-├── config/                        # App configuration
-│   └── api.config.ts              # API endpoints
-├── data/                          # Static data (clubs, leagues, etc.)
-└── assets/                        # Images, sounds, fonts
+│   ├── store/           # Zustand stores (complex global state)
+│   ├── services/        # Lower-level services (authService, storageService, ...)
+│   ├── storage/         # Persistent storage helpers
+│   ├── hooks/           # Internal hooks (push notifications, ...)
+│   └── i18n/            # i18n setup
+├── locales/             # Translation dictionaries (en.ts, ar.ts, es.ts, fr.ts, de.ts, it.ts, pt.ts, tr.ts)
+├── constants/           # theme.ts, ui.ts, ...
+├── config/api.config.ts # API base URL + endpoints
+├── utils/, types/, data/, assets/
 ```
 
-### Frontend Patterns
+### Frontend Rules
 
-- **File-based routing** via expo-router in `app/` directory
-- **Tab navigation** in `app/(tabs)/` for main screens
-- **Component organization** by feature (Home, Matches, Quiz, etc.)
-- **Services** handle API calls and external integrations
-- **Hooks** encapsulate reusable logic
-- **Contexts** for global state (language, coins, settings)
-- **Zustand stores** in `src/store/` for complex state
-- Path alias `@/*` maps to project root
+- All navigation uses expo-router. Do not add a separate navigation library.
+- Screens in `app/` use default exports. Components in `components/` use named exports.
+- Hooks are prefixed `use*`. Services are suffixed `Service.ts` or `Api.ts`.
+- State placement:
+  - UI-only state → `useState`.
+  - Server state → React Query.
+  - Global app state → Zustand stores in `src/store/`.
+  - Cross-cutting providers (language, coins, settings) → `contexts/`.
+- Always use translation keys from `locales/`; never hardcode user-facing strings. Support RTL for Arabic (`I18nManager.isRTL`, use `start`/`end` instead of `left`/`right`).
+- Use `FlatList`/`FlashList` for long lists with a stable `keyExtractor`.
+- Path alias `@/*` resolves to the `front/` root.
 
-## Key Conventions
+## Database Domains
 
-### Backend
+Organize new Prisma models into the existing domains:
 
-- Controllers export functions: `export const functionName = async (req, res) => {}`
-- Services export classes or functions
-- Routes use Express Router: `router.get('/path', middleware, controller)`
-- Middleware follows Express signature: `(req, res, next) => {}`
-- Database queries use Prisma client from `lib/prisma.ts`
-- Redis caching via `lib/redis.ts`
-- Error handling with try-catch and proper HTTP status codes
-- Rate limiting per endpoint basis
-- Property-based tests for critical business logic
+- Users & Auth: `User`, `Session`, `RefreshTokens`
+- Football: `Leagues`, `Teams`, `Players`, `Matches`
+- Quiz: `QuizCategories`, `QuizQuestions`, `QuizAttempts`
+- Social: `Follows`, `Reels`, `Likes`, `Comments`
+- Gamification: `CoinTransactions`, `Achievements`, `UserAchievements`
+- Moderation: `Reports`, `Notifications`, `Strikes`
 
-### Frontend
+Use soft deletes (`deletedAt`) for user-generated content. Index frequently queried fields (username, email, foreign keys).
 
-- Components use functional components with TypeScript
-- Hooks follow `use*` naming convention
-- Services follow `*Service.ts` or `*Api.ts` naming
-- Screens in `app/` directory use default exports
-- Components in `components/` use named exports
-- Async operations use try-catch with error handling
-- Loading states and error boundaries for UX
-- Optimistic updates for better perceived performance
-- Cache-first strategies for offline support
+## API Conventions
 
-## Database Schema Organization
+- Base path: `/api`. Follow REST verbs (GET/POST/PATCH/PUT/DELETE) with plural nouns (`/api/users`, `/api/reels`).
+- Success shape: `{ data: <payload>, message?: string }`. Paginated lists: `{ data: [...], total, page, limit }` (default limit 20).
+- Error shape: `{ error: "E0xx", message: string, details?: any, timestamp: string, path: string }` using the standardized error codes (E001–E010).
+- Version via `/api/v2/...` only for breaking changes.
+- Never expose internal IDs, tokens, or password hashes in responses.
 
-Prisma schema organized by domain:
-- User & Authentication (User, Session, RefreshTokens)
-- Football Data (Leagues, Teams, Players, Matches)
-- Quiz System (QuizCategories, QuizQuestions, QuizAttempts)
-- Social Features (Follows, Reels, Likes, Comments)
-- Gamification (CoinTransactions, Achievements, UserAchievements)
-- Moderation (Reports, Notifications, Strikes)
+## Testing Layout
 
-## API Structure
+- Backend property-based tests: `src/__tests__/` using `fast-check`. Target invariants (coin balance never negative, quiz scoring monotonicity, prediction idempotency).
+- Frontend tests colocated under `__tests__/` next to the code (e.g. `front/hooks/__tests__/useProfileCompletion.test.ts`).
+- Mock external services (Clerk, Supabase, Redis, third-party APIs) in unit tests.
+- Integration tests hit real endpoints against a test database and clean up after themselves.
 
-Backend API follows RESTful conventions:
-- Base path: `/api`
-- Authentication: Clerk middleware on protected routes
-- Rate limiting: Applied per route
-- Response format: JSON with consistent structure
-- Error responses: `{ error: string, details?: any }`
-- Success responses: `{ data: any, message?: string }`
+## When Adding New Code
 
-## Testing Strategy
-
-- **Backend:** Property-based tests for business logic invariants
-- **Frontend:** Unit tests for utilities and hooks
-- **Integration:** API endpoint testing with Jest
-- Test files colocated with source: `__tests__/` directories
+1. Match the existing folder and file naming before introducing a new location.
+2. Backend feature: add `routes/<x>.routes.ts` → `controllers/<x>.controller.ts` → `services/<x>.service.ts`, plus a cache service if the data is hot.
+3. Frontend screen: add under `app/` (tab screens in `app/(tabs)/`), put reusable UI in `components/<Feature>/`, data fetching in `services/`, and encapsulate logic in `hooks/`.
+4. New user-facing text: add the key to every file in `front/locales/` (at minimum `en.ts` and `ar.ts`).
+5. New env vars: add to `.env.example` with a placeholder value.

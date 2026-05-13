@@ -1838,3 +1838,52 @@ model UploadEvent {
   @@index([createdAt])
   @@map("upload_events")
 }
+
+// ============================================
+// AI CHAT (90Plus Captain AI)
+// ============================================
+//
+// Models for the AI chat assistant. Replaces the legacy file-based
+// chat-store.json with proper DB-backed storage. userId here is the
+// device-local UUID issued by the frontend (x-user-id header) — NOT the
+// users.id FK — so chat history survives even for unauthenticated users.
+
+model ChatConversation {
+  id        String   @id @default(uuid())
+  userId    String   // device UUID, matches x-user-id header
+  title     String   @default("محادثة جديدة")
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String   // "user" | "assistant"
+  text           String   @db.Text
+  usedModel      String?
+  createdAt      DateTime @default(now())
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatLimit {
+  userId    String   @id // device UUID
+  count     Int      @default(0)
+  date      String   // YYYY-MM-DD in the user's local timezone
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@map("chat_limits")
+}
