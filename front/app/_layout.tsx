@@ -2,6 +2,29 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, ErrorInfo } from "react";
+import {
+  useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+} from '@expo-google-fonts/poppins';
+import {
+  Cairo_400Regular,
+  Cairo_500Medium,
+  Cairo_600SemiBold,
+  Cairo_700Bold,
+  Cairo_800ExtraBold,
+} from '@expo-google-fonts/cairo';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+} from '@expo-google-fonts/inter';
+import { applyGlobalFont } from '../utils/fontSetup';
 import '../services/notificationForegroundSetup';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -425,6 +448,30 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  // ── Load Poppins (Latin) + Cairo (Arabic) globally ────────────────────
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+    Cairo_400Regular,
+    Cairo_500Medium,
+    Cairo_600SemiBold,
+    Cairo_700Bold,
+    Cairo_800ExtraBold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+  });
+
+  // Apply once fonts are registered so every <Text> defaults to Poppins.
+  useEffect(() => {
+    if (fontsLoaded) applyGlobalFont();
+  }, [fontsLoaded]);
+
   // Initialize Sentry before app rendering
   useEffect(() => {
     try {
@@ -575,6 +622,21 @@ export default function RootLayout() {
       logger.warn('Failed to navigate home:', e);
     }
   };
+
+  // Hold the UI behind the splash screen until Poppins is ready.
+  // The splash is already visible (we call preventAutoHideAsync above), so
+  // returning null here keeps the native splash up instead of flashing fallback
+  // system fonts. A safety fallback ensures we never block forever on a
+  // missing font download.
+  const [fontTimeout, setFontTimeout] = React.useState(false);
+  useEffect(() => {
+    if (fontsLoaded) return;
+    const t = setTimeout(() => setFontTimeout(true), 4000);
+    return () => clearTimeout(t);
+  }, [fontsLoaded]);
+  if (!fontsLoaded && !fontTimeout) {
+    return null;
+  }
 
   return (
     <ErrorBoundary onError={handleError} onGoHome={handleGoHome}>

@@ -1,8 +1,13 @@
 ﻿export { HomeHeader, HOME_HEADER_BODY_HEIGHT } from './HomeHeader';
 export { HomeHero } from './HomeHero';
 export { MatchList } from './MatchList';
+export type { MatchListItem, MatchStatus } from './MatchList';
 export { VideoList } from './VideoList';
+export type { VideoListItem } from './VideoList';
 export { PlayerList } from './PlayerList';
-export { TeamPitch } from './TeamPitch';
+export type { PlayerListItem } from './PlayerList';
+export { TeamPitch, detectFormation } from './TeamPitch';
+export type { PitchPlayerItem } from './TeamPitch';
 export { SectionHeader } from './SectionHeader';
 export { ScreenSection } from './ScreenSection';
+export { HomeSectionError } from './HomeSectionError';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -214,6 +215,10 @@ interface HistoryPanelProps {
   onDeleteConversation: (id: string) => Promise<void>;
   onNewChat: () => Promise<void>;
   isOnline: boolean; isLoading: boolean;
+  /** Display name — falls back to "كابتن" when omitted. */
+  displayName?: string | null;
+  /** Avatar URL (Cloudflare R2 typically). Falls back to first-letter avatar. */
+  avatar?: string | null;
 }
 
 export function HistoryPanel({
@@ -221,12 +226,24 @@ export function HistoryPanel({
   conversations, activeConversationId,
   onSelectConversation, onTogglePin, onRenameConversation, onDeleteConversation,
   onNewChat, isOnline, isLoading,
+  displayName, avatar,
 }: HistoryPanelProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [contextMenu, setContextMenu] = useState<{ conversation: Conversation } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [renameModal, setRenameModal] = useState<{ conversation: Conversation } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filtered conversations — local search, no backend call needed
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    const q = searchQuery.toLowerCase();
+    return conversations.filter(c => c.title.toLowerCase().includes(q));
+  }, [conversations, searchQuery]);
+
+  const pinned = filteredConversations.filter(c => c.isPinned);
+  const unpinned = filteredConversations.filter(c => !c.isPinned);
 
   // Mount / unmount control — keeps panel mounted during closing animation
   const [mounted, setMounted] = useState(isOpen);
@@ -270,9 +287,6 @@ export function HistoryPanel({
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
   }));
-
-  const pinned = conversations.filter(c => c.isPinned);
-  const unpinned = conversations.filter(c => !c.isPinned);
 
   if (!mounted) return null;
 
@@ -330,18 +344,40 @@ export function HistoryPanel({
                 <View style={styles.profileCardShine} pointerEvents="none" />
                 <View style={styles.profileLeft}>
                   <View style={styles.avatar}>
-                    <LinearGradient
-                      colors={['#8B5CF6', '#7C3AED']}
-                      style={StyleSheet.absoluteFill}
-                    />
-                    <Text style={styles.avatarText}>م</Text>
-                    <View style={styles.onlineDot} />
+                    {avatar ? (
+                      <Image
+                        source={{ uri: avatar }}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                      />
+                    ) : (
+                      <>
+                        <LinearGradient
+                          colors={['#8B5CF6', '#7C3AED']}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <Text style={styles.avatarText}>
+                          {(displayName?.trim()?.[0] ?? 'ك').toUpperCase()}
+                        </Text>
+                      </>
+                    )}
+                    <View style={[
+                      styles.onlineDot,
+                      !isOnline && { backgroundColor: '#EF4444' },
+                    ]} />
                   </View>
                   <View>
-                    <Text style={styles.profileName}>محمود</Text>
+                    <Text style={styles.profileName}>
+                      {displayName?.trim() || 'كابتن'}
+                    </Text>
                     <View style={styles.onlineRow}>
                       {isOnline && <OnlinePulse />}
-                      <Text style={styles.onlineText}>
+                      <Text style={[
+                        styles.onlineText,
+                        !isOnline && { color: '#FCA5A5' },
+                      ]}>
                         {isOnline ? 'نشط الآن' : 'غير متصل'}
                       </Text>
                     </View>
@@ -367,6 +403,29 @@ export function HistoryPanel({
                   <Text style={styles.newChatText}>+ محادثة جديدة</Text>
                 </LinearGradient>
               </Pressable>
+
+              {/* Search bar */}
+              <View style={styles.searchBar}>
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="ابحث في المحادثات..."
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  textAlign="right"
+                  returnKeyType="search"
+                  clearButtonMode="never"
+                />
+                {searchQuery.length > 0 && (
+                  <Pressable
+                    onPress={() => setSearchQuery('')}
+                    hitSlop={8}
+                    style={styles.searchClear}
+                  >
+                    <Text style={styles.searchClearText}>×</Text>
+                  </Pressable>
+                )}
+              </View>
 
               <ScrollView
                 style={styles.conversationsList}
@@ -409,11 +468,18 @@ export function HistoryPanel({
                   </>
                 )}
 
-                {conversations.length === 0 && (
+                {/* Empty state — no conversations at all, or no search results */}
+                {filteredConversations.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyEmoji}>💬</Text>
-                    <Text style={styles.emptyTitle}>لا توجد محادثات</Text>
-                    <Text style={styles.emptySub}>ابدأ محادثة جديدة مع 90Plus AI</Text>
+                    <Text style={styles.emptyEmoji}>{searchQuery.trim() ? '�' : '�💬'}</Text>
+                    <Text style={styles.emptyTitle}>
+                      {searchQuery.trim() ? 'مفيش نتائج' : 'لا توجد محادثات'}
+                    </Text>
+                    <Text style={styles.emptySub}>
+                      {searchQuery.trim()
+                        ? `مفيش محادثة بعنوان "${searchQuery.trim()}"`
+                        : 'ابدأ محادثة جديدة مع 90Plus AI'}
+                    </Text>
                   </View>
                 )}
               </ScrollView>
@@ -705,6 +771,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
     letterSpacing: 0.3,
+  },
+
+  // Search bar
+  searchBar: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 4,
+    minHeight: 40,
+  },
+  searchInput: {
+    flex: 1,
+    color: 'white',
+    fontSize: 13,
+    paddingVertical: 8,
+    includeFontPadding: false,
+  },
+  searchClear: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
+  },
+  searchClearText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 18,
+    lineHeight: 20,
   },
 
   // ── Rename Modal ──

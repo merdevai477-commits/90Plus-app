@@ -319,8 +319,8 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
             const [topViewsData, weeklyPlayersData, monthlyPlayersData] = await Promise.all([
                 // أهم فيديوهات (3 أيام)
                 rankingsService.getAllRankings(token || null, 5),
-                // أهم 5 لاعبين (أسبوعي)
-                rankingsService.getTopPlayers(token || null, 5, 'weekly'),
+                // أهم 7 لاعبين (أسبوعي) — Player of the week podium fits 7 slots
+                rankingsService.getTopPlayers(token || null, 7, 'weekly'),
                 // تشكيلة الشهر (11 لاعب)
                 rankingsService.getTopPlayers(token || null, 11, 'monthly'),
             ]);
@@ -338,7 +338,7 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
                 avatar: reel.user?.avatar || undefined,
             }));
 
-            // Transform weekly players (top 5)
+            // Transform weekly players (top 7)
             const players: Player[] = weeklyPlayersData.players.map(player => ({
                 id: player.id,
                 username: player.username,

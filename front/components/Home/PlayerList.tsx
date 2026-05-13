@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,10 @@ import Animated, {
   useSharedValue, withRepeat, withTiming, useAnimatedStyle, Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { User, Award } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
+import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
+import Svg, { Polygon } from 'react-native-svg';
+import { User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
 import {
@@ -263,25 +266,150 @@ function EmptyPlayerCard() {
   );
 }
 
-// ─── Empty Section — premium 3-ring pattern ──────────────────────────────────
-function EmptySection() {
+// ─── Empty Section — 4 ordered image cards (matches VideoList style) ────────
+// Image-led variant: the card is pure canvas for the artwork, no border/tint.
+// Cards are rendered in ranking order 1st → 2nd → 3rd → 4th.
+// Shared between the fully-empty state and the "partial fill" state where a
+// ─── Empty Section — 7 ordered image cards (Player of the week podium) ─────
+// Each card is the "ranked slot" artwork. When a real player fills a slot
+// we overlay their avatar (in the center ring), country flag (top-left square),
+// position (top-right hexagon), and name (bottom) on top of the same artwork.
+// When the slot is vacant, the artwork keeps its built-in "Waiting for you!" copy.
+const PODIUM_IMAGES = [
+  require('../../assets/images/1st.png'),
+  require('../../assets/images/2st.png'),
+  require('../../assets/images/3st.png'),
+  require('../../assets/images/4st.png'),
+  require('../../assets/images/5st.png'),
+  require('../../assets/images/6st.png'),
+  require('../../assets/images/7st.png'),
+] as const;
+
+/** Total fixed slots always rendered in the podium row. */
+const PODIUM_SLOTS = PODIUM_IMAGES.length;
+
+/** Rank-themed color used for the position hex + accent ring. */
+const RANK_ACCENT_COLORS = [
+  '#F5C518', // 1st — gold
+  '#C0C0C0', // 2nd — silver
+  '#CD7F32', // 3rd — bronze
+  '#A78BFA', // 4th — purple soft
+  '#60A5FA', // 5th — electric blue
+  '#34D399', // 6th — mint
+  '#F472B6', // 7th — pink
+] as const;
+
+interface EmptyPodiumSpec {
+  key: string;
+  image: import('react-native').ImageSourcePropType;
+}
+
+function EmptyPodiumCard({
+  spec,
+  player,
+  rank,
+  onPress,
+  accessibilityLabel,
+}: {
+  spec: EmptyPodiumSpec;
+  player?: PlayerRow | null;
+  rank: number;
+  onPress?: () => void;
+  accessibilityLabel: string;
+}) {
+  const accent = RANK_ACCENT_COLORS[rank - 1] ?? RANK_ACCENT_COLORS[0];
+  const occupied = Boolean(player);
+
   return (
-    <View style={styles.emptySection}>
-      <View style={styles.emptySectionGlow} />
-      <View style={styles.emptySectionIconWrap}>
-        <View style={styles.emptySectionRing2} />
-        <View style={styles.emptySectionRing1} />
-        <View style={styles.emptySectionIconBox}>
-          <Award size={22} color="rgba(167,139,250,0.55)" strokeWidth={2} />
-        </View>
-      </View>
-      <Text style={styles.emptySectionTitle}>No players ranked this week</Text>
-      <Text style={styles.emptySectionSub}>Rankings refresh every Monday</Text>
-      <View style={styles.emptySectionDivider} />
-      <View style={styles.emptySectionChip}>
-        <Text style={styles.emptySectionChipText}>Ratings refresh every Monday</Text>
-      </View>
-    </View>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={styles.emptyPodiumCard}
+    >
+      <Image
+        source={spec.image}
+        resizeMode="cover"
+        style={styles.emptyPodiumImage}
+      />
+
+      {occupied && player ? (
+        <>
+          {/* Top-left country flag (reserved square on the artwork) */}
+          {player.country ? (
+            <View style={styles.podiumFlagSlot}>
+              <Text style={styles.podiumFlagText}>{player.country}</Text>
+            </View>
+          ) : null}
+
+          {/* Top-right hexagon — player position */}
+          <View style={styles.podiumPositionHexWrap}>
+            <Svg
+              width="100%"
+              height="100%"
+              viewBox="0 0 100 100"
+              style={StyleSheet.absoluteFill}
+            >
+              {/* Regular hexagon centered in the viewBox */}
+              <Polygon
+                points="50,4 92,27 92,73 50,96 8,73 8,27"
+                fill="rgba(5,1,13,0.82)"
+                stroke={accent}
+                strokeWidth="4"
+              />
+            </Svg>
+            <Text
+              style={[styles.podiumPositionText, { color: accent }]}
+              numberOfLines={1}
+            >
+              {player.position}
+            </Text>
+          </View>
+
+          {/* Center circle — player avatar (no colored ring around it) */}
+          <View style={styles.podiumAvatarWrap} pointerEvents="none">
+            {player.photoUri ? (
+              <Image
+                source={{ uri: player.photoUri }}
+                style={styles.podiumAvatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.podiumAvatar, styles.podiumAvatarFallback]}>
+                <Text style={styles.podiumAvatarInitials}>
+                  {(player.name || '?').trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Name bar covering the built-in "Waiting for you!" copy.
+              Uses LiquidGlass on iOS 26+ and falls back to a BlurView
+              elsewhere, giving the pill a true transparent-glass look. */}
+          {(() => {
+            const NameWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+            const nameWrapperProps = isLiquidGlassSupported
+              ? ({ effect: 'clear' as const, interactive: false } as const)
+              : ({ intensity: 28, tint: 'dark' as const } as const);
+            return (
+              <NameWrapper
+                {...(nameWrapperProps as any)}
+                style={styles.podiumNameSlot}
+                pointerEvents="none"
+              >
+                <Text
+                  style={[styles.podiumName, { color: accent }]}
+                  numberOfLines={1}
+                >
+                  {player.name}
+                </Text>
+              </NameWrapper>
+            );
+          })()}
+        </>
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
@@ -297,20 +425,29 @@ interface PlayerListProps {
 
 export function PlayerList({ isLoading = false, players: playersProp, onPlayerPress, onViewAllPress }: PlayerListProps) {
   const router = useRouter();
-  const data = playersProp ?? players;
-  const hasPlayers = data.length > 0;
+  // Never fall back to hardcoded mock data — use empty array so the
+  // race-condition guard below works correctly.
+  const data = playersProp ?? [];
   const shimmerX = useShimmer();
-  const openRankHub = () => (onViewAllPress ? onViewAllPress() : router.push('/rank'));
+  const openRankHub = useCallback(
+    () => (onViewAllPress ? onViewAllPress() : router.push('/rank')),
+    [onViewAllPress, router],
+  );
+
+  // Skeleton only while first-time loading with no cached data.
+  // Otherwise always render the 7-slot podium row (real players fill first,
+  // remaining slots stay as "Waiting for you!" artwork).
+  const showSkeleton = isLoading && data.length === 0;
 
   return (
     <View style={styles.section}>
       <SectionHeader
         subtitle="Ratings hub"
-        title="Players of the week"
+        title="Player of the week"
         action="View all"
         onAction={openRankHub}
       />
-      {isLoading ? (
+      {showSkeleton ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -321,29 +458,38 @@ export function PlayerList({ isLoading = false, players: playersProp, onPlayerPr
           <SkeletonPlayerCard shimmerX={shimmerX} />
           <SkeletonPlayerCard shimmerX={shimmerX} />
         </ScrollView>
-      ) : hasPlayers ? (
+      ) : (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           removeClippedSubviews
         >
-          {data.map(p => (
-            <PlayerCard key={p.id} player={p} onOpenRank={() => onPlayerPress ? onPlayerPress(p) : openRankHub()} />
-          ))}
-          {/* Empty slot */}
-          <EmptyPlayerCard />
-        </ScrollView>
-      ) : (
-        // Show 3 empty cards when API returns no players
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <EmptyPlayerCard />
-          <EmptyPlayerCard />
-          <EmptyPlayerCard />
+          {PODIUM_IMAGES.map((image, i) => {
+            const rank = i + 1;
+            const player = data[i] ?? null;
+            return (
+              <EmptyPodiumCard
+                key={`rank-${rank}`}
+                spec={{ key: `rank-${rank}`, image }}
+                player={player}
+                rank={rank}
+                onPress={
+                  player
+                    ? () =>
+                        onPlayerPress
+                          ? onPlayerPress(player)
+                          : openRankHub()
+                    : openRankHub
+                }
+                accessibilityLabel={
+                  player
+                    ? `Rank ${rank}: ${player.name}`
+                    : `Rank ${rank} slot — waiting`
+                }
+              />
+            );
+          })}
         </ScrollView>
       )}
     </View>
@@ -516,53 +662,113 @@ const styles = StyleSheet.create({
   },
   emptyPositionText: { color: 'rgba(167,139,250,0.35)', fontSize: 9.5, fontWeight: '800' },
 
-  // ── Empty Section — premium ───────────────────────────────────────────────
-  emptySection: {
-    marginHorizontal: SCREEN_PADDING_H, paddingVertical: 44, paddingHorizontal: 24,
-    alignItems: 'center', borderRadius: 20,
-    backgroundColor: 'rgba(10,7,18,0.95)',
-    borderWidth: 0.5, borderColor: 'rgba(124,58,237,0.2)',
-    borderStyle: 'dashed', overflow: 'hidden', gap: 6,
+  // ── Empty Section — 7 ordered image cards (image-led, same as VideoList) ──
+  emptyPodiumCard: {
+    width: 155,
+    // Force all cards to the same aspect ratio (3:4 = 0.75) matching the
+    // 1st/2nd/3rd artwork. Cards 4–7 have a slightly taller source image
+    // (0.667) but cover + fixed aspect clips them to the same visual size.
+    aspectRatio: 0.75,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  emptySectionGlow: {
-    position: 'absolute', width: 200, height: 200, borderRadius: 100,
-    backgroundColor: 'rgba(76,29,149,0.12)', top: -60,
+  emptyPodiumImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
   },
-  emptySectionIconWrap: {
-    width: 72, height: 72, alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+
+  // ── Podium slot overlays (active when the slot is occupied) ──────────────
+  // Positions/sizes are translated from a 320×500 design reference down to
+  // the actual 155×220 card dimensions.
+  //   Scale X = 155/320 = 0.484
+  //   Scale Y = 220/500 = 0.440
+  podiumFlagSlot: {
+    position: 'absolute',
+    top:8,
+    left:1,       // 20 × 0.484
+    width: 49,      // 40 × 0.484 → 19, bumped for readability
+    height: 20,     // 28 × 0.44  → 12, bumped for readability
+    borderRadius: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0, 0, 0, 0)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  emptySectionRing2: {
-    position: 'absolute', width: 72, height: 72, borderRadius: 36,
-    borderWidth: 0.5, borderColor: 'rgba(124,58,237,0.15)', borderStyle: 'dashed',
+  podiumFlagText: {
+    fontSize: 16,
+    lineHeight: 15,
   },
-  emptySectionRing1: {
-    position: 'absolute', width: 56, height: 56, borderRadius: 28,
-    borderWidth: 0.5, borderColor: 'rgba(59,130,246,0.15)',
+  // Hexagon badge — drawn as an SVG polygon inside a square viewport.
+  podiumPositionHexWrap: {
+    position: 'absolute',
+    top: 13, // 20 × 0.44
+    right:11,     // 20 × 0.484
+    width: 25,      // 60 × 0.484
+    height: 20,     // 60 × 0.44  → 26, bumped to 30 so hex reads cleanly
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  emptySectionIconBox: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)',
-    alignItems: 'center', justifyContent: 'center',
+  podiumPositionText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.2,
   },
-  emptySectionTitle: {
-    color: 'rgba(167,139,250,0.8)', fontSize: 16, fontWeight: '700',
-    letterSpacing: -0.2, marginTop: 2,
+  // Avatar — no colored ring, just a plain circular mask.
+  podiumAvatarWrap: {
+    position: 'absolute',
+    top: 28,        // 80 × 0.44
+    left: 1,
+    right: 0,
+    alignItems: 'center',
   },
-  emptySectionSub: {
-    color: 'rgba(255,255,255,0.25)', fontSize: 12,
-    textAlign: 'center', lineHeight: 18,
+  podiumAvatar: {
+    width: 58,      // (90 × 2) × 0.484 ≈ 87; tightened to 78 so it fits
+    height: 68,     // within the ring slot cleanly on 155×220
+    borderRadius: 39,
+    backgroundColor: 'rgba(5,1,13,0.6)',
   },
-  emptySectionDivider: {
-    width: 40, height: 0.5,
-    backgroundColor: 'rgba(124,58,237,0.25)', marginVertical: 10,
+  podiumAvatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  emptySectionChip: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-    backgroundColor: 'rgba(124,58,237,0.1)',
-    borderWidth: 0.5, borderColor: 'rgba(124,58,237,0.25)',
+  podiumAvatarInitials: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
-  emptySectionChipText: {
-    color: 'rgba(167,139,250,0.6)', fontSize: 11, fontWeight: '600', letterSpacing: 0.3,
+  // Name bar — hides the baked-in "Waiting for you!" copy.
+  // Background is transparent because LiquidGlass / BlurView provides the tint.
+  podiumNameSlot: {
+    position: 'absolute',
+    bottom: 18,     // 100 × 0.44
+    left: 8,
+    right: 8,
+    height: 25,     // 50  × 0.44
+    paddingVertical: 2,
+    backgroundColor: 'transparent',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(54, 5, 95,00)',
+    overflow: 'hidden',
+  },
+  podiumName: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    // Subtle shadow keeps the colored text readable over the glass blur
+    // regardless of the artwork behind it.
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });

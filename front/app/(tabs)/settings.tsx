@@ -40,6 +40,7 @@ import ImprovedAccountDeletionModal from '../../components/common/ImprovedAccoun
 import { AccountDeletionService } from '../../services/accountDeletionService';
 import { toastManager } from '../../services/toastManager';
 import { APP_BG } from '../../constants/ui';
+import { useScreenFont } from '../../utils/fontSetup';
 
 const { width } = Dimensions.get('window');
 
@@ -55,6 +56,7 @@ const BUILD_NUMBER = '100';
 // ============================================================================
 
 export default function SettingsScreen() {
+  useScreenFont();
   // Context
   const { clearVideos } = useVideos();
   const {

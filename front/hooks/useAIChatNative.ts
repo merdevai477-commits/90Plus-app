@@ -2,18 +2,17 @@
  * useAIChatNative.ts
  * Core chat hook for React Native — SSE streaming via XMLHttpRequest.
  *
- * Talks to chat-backend (simple-server.ts). The backend streams SSE on /api/chat/stream (not WebSockets).
- * XMLHttpRequest exposes incremental responseText on React Native via onreadystatechange.
- *
- * Protocol:
- *   POST /api/chat/stream → SSE
- *   data: {"token": "..."}\n\n
- *   data: {"done": true, "remaining": N, "resetAt": "..."}\n\n
- *   data: {"error": "...", "done": true}\n\n
- *   HTTP 429 → {"error": "...", "code": "LIMIT_REACHED", "resetAt": "..."}
+ * Improvements over v1:
+ *  - x-user-timezone header on every request (timezone-aware daily reset)
+ *  - Streaming resume/retry: on disconnect, saves partial text as draft,
+ *    auto-retries up to 2 times with resumeFromToken offset
+ *  - deleteMessage now syncs with backend (cascade delete)
+ *  - Dynamic history window (token-aware, not fixed slice)
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Localization from 'expo-localization';
 import { API_CONFIG } from '../constants/theme';
 import { Storage } from '../services/chatStorageService';
 
@@ -39,27 +38,22 @@ export interface Conversation {
 
 // ─── SSE data shapes from backend ────────────────────────────────────────────
 
-interface SSEToken {
-  token: string;
-}
-
+interface SSEToken { token: string }
 interface SSEDone {
   done: true;
   remaining?: number;
   resetAt?: string;
   usedModel?: string;
 }
-
-interface SSEError {
-  error: string;
-  done?: boolean;
-}
-
+interface SSEError { error: string; done?: boolean }
 type SSEData = SSEToken | SSEDone | SSEError;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const BACKEND_URL = API_CONFIG.baseUrl;
+const MAX_STREAM_RETRIES = 2;
+const RETRY_DELAY_MS = 2000;
+const DRAFT_KEY_PREFIX = '@chat_draft_v1_';
 
 const INITIAL_MESSAGES: Message[] = [
   {
@@ -102,11 +96,8 @@ function parseSSEChunk(
   lastIndex: number,
 ): { events: SSEData[]; newIndex: number } {
   const newText = responseText.slice(lastIndex);
-
   const lastNewline = newText.lastIndexOf('\n');
-  if (lastNewline === -1) {
-    return { events: [], newIndex: lastIndex };
-  }
+  if (lastNewline === -1) return { events: [], newIndex: lastIndex };
 
   const completeText = newText.slice(0, lastNewline + 1);
   const lines = completeText.split('\n');
@@ -118,8 +109,7 @@ function parseSSEChunk(
       const jsonStr = trimmed.slice(6).trim();
       if (jsonStr) {
         try {
-          const parsed = JSON.parse(jsonStr) as SSEData;
-          events.push(parsed);
+          events.push(JSON.parse(jsonStr) as SSEData);
         } catch {
           // malformed line — skip
         }
@@ -130,13 +120,42 @@ function parseSSEChunk(
   return { events, newIndex: lastIndex + lastNewline + 1 };
 }
 
+/** Get the device's IANA timezone string (e.g. "Africa/Cairo"). */
+function getTimezone(): string {
+  try {
+    return Localization.getCalendars()[0]?.timeZone ?? 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+// ─── Hook options ─────────────────────────────────────────────────────────────
+
+export interface UseAIChatOptions {
+  /**
+   * Optional function invoked right before each outgoing request. Return a
+   * string to append to the server-built system prompt (the backend merges
+   * it on top of its own rules). Return null/undefined to skip personalization.
+   */
+  getSystemPromptSuffix?: () => string | null | undefined;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useAIChatNative() {
+export function useAIChatNative(options: UseAIChatOptions = {}) {
+  const { getSystemPromptSuffix } = options;
+  const suffixBuilderRef = useRef<UseAIChatOptions['getSystemPromptSuffix']>(getSystemPromptSuffix);
+  useEffect(() => {
+    suffixBuilderRef.current = getSystemPromptSuffix;
+  }, [getSystemPromptSuffix]);
+
   const userIdRef = useRef<string>('');
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const abortRef = useRef(false);
   const lastIndexRef = useRef(0);
+  // Track partial text for resume on disconnect
+  const partialTextRef = useRef<string>('');
+  const retryCountRef = useRef(0);
 
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -147,12 +166,13 @@ export function useAIChatNative() {
   const [messagesRemaining, setMessagesRemaining] = useState(5);
   const [resetTime, setResetTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Retry state for the reconnect banner
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // ─── Init ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     let mounted = true;
-
     const init = async () => {
       const id = await Storage.getUserId();
       if (!mounted) return;
@@ -160,9 +180,7 @@ export function useAIChatNative() {
       await fetchLimit();
       await bootstrapConversation();
     };
-
     init();
-
     return () => {
       mounted = false;
       abortXHR();
@@ -179,12 +197,19 @@ export function useAIChatNative() {
     }
   }, []);
 
+  // ─── Common headers ───────────────────────────────────────────────────────
+
+  const commonHeaders = useCallback((): Record<string, string> => ({
+    'x-user-id': userIdRef.current,
+    'x-user-timezone': getTimezone(),
+  }), []);
+
   // ─── REST helpers ─────────────────────────────────────────────────────────
 
   const fetchLimit = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/chat/limit`, {
-        headers: { 'x-user-id': userIdRef.current },
+        headers: commonHeaders(),
       });
       if (res.ok) {
         const data = await res.json() as { remaining: number; resetAt?: string };
@@ -196,37 +221,34 @@ export function useAIChatNative() {
     } catch {
       console.warn('[useAIChatNative] Backend not reachable, using local limit');
     }
-  }, []);
+  }, [commonHeaders]);
 
   const fetchConversations = useCallback(async (): Promise<Conversation[]> => {
     const res = await fetch(`${BACKEND_URL}/api/conversations`, {
-      headers: { 'x-user-id': userIdRef.current },
+      headers: commonHeaders(),
     });
     if (!res.ok) throw new Error('Failed to fetch conversations');
     const data = await res.json() as { conversations: Conversation[] };
     const convs = data.conversations ?? [];
     setConversations(convs);
     return convs;
-  }, []);
+  }, [commonHeaders]);
 
   const createConversation = useCallback(async (): Promise<Conversation> => {
     const res = await fetch(`${BACKEND_URL}/api/conversations`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': userIdRef.current,
-      },
+      headers: { 'Content-Type': 'application/json', ...commonHeaders() },
       body: JSON.stringify({ title: 'New chat' }),
     });
     if (!res.ok) throw new Error('Failed to create conversation');
     const data = await res.json() as { conversation: Conversation };
     return data.conversation;
-  }, []);
+  }, [commonHeaders]);
 
   const loadConversationMessages = useCallback(async (conversationId: string) => {
     const res = await fetch(
       `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
-      { headers: { 'x-user-id': userIdRef.current } },
+      { headers: commonHeaders() },
     );
     if (!res.ok) throw new Error('Failed to load messages');
     const data = await res.json() as {
@@ -242,7 +264,7 @@ export function useAIChatNative() {
       })),
     ];
     setMessages(loaded);
-  }, []);
+  }, [commonHeaders]);
 
   const bootstrapConversation = useCallback(async () => {
     try {
@@ -262,90 +284,44 @@ export function useAIChatNative() {
     } catch {
       console.warn('[useAIChatNative] Could not bootstrap conversations');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, createConversation, loadConversationMessages]);
 
-  // ─── Send Message via SSE (XMLHttpRequest) ────────────────────────────────
+  // ─── Core SSE sender (internal, supports resume) ──────────────────────────
 
-  const sendMessage = useCallback(async (text?: string) => {
-    const messageText = text ?? inputValue;
-    const trimmed = messageText.trim();
-
-    if (!trimmed || isLoading || messagesRemaining <= 0) return;
-
-    setError(null);
+  const _sendSSE = useCallback((
+    trimmed: string,
+    history: Array<{ role: string; content: string }>,
+    conversationId: string,
+    aiMessageId: string,
+    systemPromptSuffix: string | undefined,
+    resumeFromToken: number,
+  ) => {
     abortRef.current = false;
-    abortXHR();
-
-    // Optimistic: add user message immediately
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      text: trimmed,
-      time: now(),
-    };
-    setMessages(prev => [...prev, userMsg]);
-    setInputValue('');
-    setIsLoading(true);
-    setIsThinking(true);
-
-    // Optimistic counter decrement
-    setMessagesRemaining(prev => Math.max(0, prev - 1));
-
-    if (!currentConversationId) {
-      setError('No active conversation.');
-      setIsLoading(false);
-      setIsThinking(false);
-      setMessagesRemaining(prev => prev + 1);
-      return;
-    }
-
-    const aiMessageId = (Date.now() + 1).toString();
     lastIndexRef.current = 0;
-
-    // ── Build history from current messages (before the new user msg) ──────
-    const history = toHistoryFormat(
-      messages.filter(m => m.id !== userMsg.id).slice(1),
-    );
 
     const body = JSON.stringify({
       message: trimmed,
       history,
-      conversationId: currentConversationId,
+      conversationId,
+      ...(systemPromptSuffix ? { systemPromptSuffix } : {}),
+      ...(resumeFromToken > 0 ? { resumeFromToken } : {}),
     });
 
-    // ── XMLHttpRequest SSE streaming ──────────────────────────────────────
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
 
     xhr.open('POST', `${BACKEND_URL}/api/chat/stream`, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('x-user-id', userIdRef.current);
+    const headers = commonHeaders();
+    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
 
-    // Called repeatedly as data arrives
     xhr.onreadystatechange = () => {
       if (abortRef.current) return;
-
-      // HEADERS_RECEIVED — check for 429
-      if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
-        if (xhr.status === 429) {
-          try {
-            // Body might not be available yet — will handle in onload
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      // LOADING — streaming data is arriving
       if (xhr.readyState === XMLHttpRequest.LOADING || xhr.readyState === XMLHttpRequest.DONE) {
-        if (xhr.status === 429) return; // handled in onload
+        if (xhr.status === 429) return;
 
-        const { events, newIndex } = parseSSEChunk(
-          xhr.responseText,
-          lastIndexRef.current,
-        );
-
+        const { events, newIndex } = parseSSEChunk(xhr.responseText, lastIndexRef.current);
         if (newIndex === lastIndexRef.current) return;
         lastIndexRef.current = newIndex;
 
@@ -353,15 +329,13 @@ export function useAIChatNative() {
           if (abortRef.current) break;
 
           if ('token' in event && event.token) {
-            // First token — hide thinking indicator
             setIsThinking(false);
+            setIsRetrying(false);
+            partialTextRef.current += event.token;
             setMessages(prev => {
               const exists = prev.some(m => m.id === aiMessageId);
               if (!exists) {
-                return [
-                  ...prev,
-                  { id: aiMessageId, role: 'ai' as const, text: event.token, time: now() },
-                ];
+                return [...prev, { id: aiMessageId, role: 'ai' as const, text: event.token, time: now() }];
               }
               return prev.map(m =>
                 m.id === aiMessageId ? { ...m, text: m.text + event.token } : m,
@@ -371,19 +345,18 @@ export function useAIChatNative() {
 
           if ('done' in event && event.done) {
             const doneEvent = event as SSEDone;
-            if (doneEvent.remaining !== undefined) {
-              setMessagesRemaining(doneEvent.remaining);
-            }
-            if (doneEvent.resetAt) {
-              setResetTime(new Date(doneEvent.resetAt));
-            }
+            if (doneEvent.remaining !== undefined) setMessagesRemaining(doneEvent.remaining);
+            if (doneEvent.resetAt) setResetTime(new Date(doneEvent.resetAt));
             if (doneEvent.usedModel) {
               setMessages(prev =>
-                prev.map(m =>
-                  m.id === aiMessageId ? { ...m, usedModel: doneEvent.usedModel } : m,
-                ),
+                prev.map(m => m.id === aiMessageId ? { ...m, usedModel: doneEvent.usedModel } : m),
               );
             }
+            // Clear draft on success
+            if (conversationId) {
+              AsyncStorage.removeItem(`${DRAFT_KEY_PREFIX}${conversationId}`).catch(() => {});
+            }
+            retryCountRef.current = 0;
           }
 
           if ('error' in event && event.error && !('token' in event)) {
@@ -396,62 +369,119 @@ export function useAIChatNative() {
 
     xhr.onload = () => {
       if (abortRef.current) return;
-
-      // Handle 429 limit reached
       if (xhr.status === 429) {
         try {
-          const errData = JSON.parse(xhr.responseText) as {
-            error: string;
-            resetAt?: string;
-          };
+          const errData = JSON.parse(xhr.responseText) as { error: string; resetAt?: string };
           setMessagesRemaining(0);
           if (errData.resetAt) setResetTime(new Date(errData.resetAt));
-          setError('You’ve reached your daily message limit.');
+          setError('Youve reached your daily message limit.');
         } catch {
-          setError('You’ve reached your daily message limit.');
+          setError('Youve reached your daily message limit.');
           setMessagesRemaining(0);
         }
         setIsLoading(false);
         setIsThinking(false);
+        setIsRetrying(false);
         return;
       }
-
-      // Stream complete — refresh data in background
       setIsLoading(false);
       setIsThinking(false);
+      setIsRetrying(false);
       fetchConversations().catch(() => {});
       fetchLimit().catch(() => {});
     };
 
-    xhr.onerror = () => {
+    const handleDisconnect = () => {
       if (abortRef.current) return;
-      setError('Connection error. Please try again.');
-      setMessagesRemaining(prev => prev + 1);
-      setIsLoading(false);
-      setIsThinking(false);
+
+      const partial = partialTextRef.current;
+
+      // Save draft for resume
+      if (partial.length > 0 && conversationId) {
+        AsyncStorage.setItem(`${DRAFT_KEY_PREFIX}${conversationId}`, partial).catch(() => {});
+      }
+
+      if (retryCountRef.current < MAX_STREAM_RETRIES) {
+        retryCountRef.current++;
+        setIsRetrying(true);
+        setError(`انقطع الاتصال — إعادة المحاولة ${retryCountRef.current}/${MAX_STREAM_RETRIES}...`);
+
+        setTimeout(() => {
+          if (abortRef.current) return;
+          setError(null);
+          _sendSSE(trimmed, history, conversationId, aiMessageId, systemPromptSuffix, partial.length);
+        }, RETRY_DELAY_MS);
+      } else {
+        // All retries exhausted
+        setIsLoading(false);
+        setIsThinking(false);
+        setIsRetrying(false);
+        setMessagesRemaining(prev => prev + 1);
+        setError('فشل الاتصال بعد عدة محاولات. اضغط إعادة المحاولة.');
+        retryCountRef.current = 0;
+      }
     };
 
-    xhr.ontimeout = () => {
-      if (abortRef.current) return;
-      setError('Request timed out. Please try again.');
-      setMessagesRemaining(prev => prev + 1);
-      setIsLoading(false);
-      setIsThinking(false);
-    };
-
-    xhr.timeout = 60_000; // 60 seconds max
-
+    xhr.onerror = handleDisconnect;
+    xhr.ontimeout = handleDisconnect;
+    xhr.timeout = 60_000;
     xhr.send(body);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commonHeaders, fetchConversations, fetchLimit]);
+
+  // ─── Send Message ─────────────────────────────────────────────────────────
+
+  const sendMessage = useCallback(async (text?: string) => {
+    const messageText = text ?? inputValue;
+    const trimmed = messageText.trim();
+    if (!trimmed || isLoading || messagesRemaining <= 0) return;
+
+    setError(null);
+    abortRef.current = false;
+    abortXHR();
+    partialTextRef.current = '';
+    retryCountRef.current = 0;
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      text: trimmed,
+      time: now(),
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setInputValue('');
+    setIsLoading(true);
+    setIsThinking(true);
+    setMessagesRemaining(prev => Math.max(0, prev - 1));
+
+    if (!currentConversationId) {
+      setError('No active conversation.');
+      setIsLoading(false);
+      setIsThinking(false);
+      setMessagesRemaining(prev => prev + 1);
+      return;
+    }
+
+    const aiMessageId = (Date.now() + 1).toString();
+
+    const history = toHistoryFormat(
+      messages.filter(m => m.id !== userMsg.id).slice(1),
+    );
+
+    const systemPromptSuffix = (() => {
+      try {
+        const out = suffixBuilderRef.current?.();
+        return typeof out === 'string' && out.trim().length > 0 ? out : undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+
+    _sendSSE(trimmed, history, currentConversationId, aiMessageId, systemPromptSuffix, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    inputValue,
-    isLoading,
-    messagesRemaining,
-    currentConversationId,
-    messages,
-    abortXHR,
-    fetchConversations,
-    fetchLimit,
+    inputValue, isLoading, messagesRemaining, currentConversationId,
+    messages, abortXHR, _sendSSE,
   ]);
 
   // ─── Stop Generation ──────────────────────────────────────────────────────
@@ -459,10 +489,11 @@ export function useAIChatNative() {
   const stopGeneration = useCallback(() => {
     abortRef.current = true;
     abortXHR();
-    // Rollback optimistic counter
     setMessagesRemaining(prev => prev + 1);
     setIsLoading(false);
     setIsThinking(false);
+    setIsRetrying(false);
+    retryCountRef.current = 0;
   }, [abortXHR]);
 
   // ─── Retry ────────────────────────────────────────────────────────────────
@@ -485,11 +516,32 @@ export function useAIChatNative() {
     sendMessage(newText);
   }, [messages, sendMessage]);
 
-  // ─── Delete Message ───────────────────────────────────────────────────────
+  // ─── Delete Message (optimistic + backend sync) ───────────────────────────
 
-  const deleteMessage = useCallback((messageId: string) => {
+  const deleteMessage = useCallback(async (messageId: string) => {
+    // Optimistic: remove from UI immediately
     setMessages(prev => prev.filter(m => m.id !== messageId));
-  }, []);
+
+    if (!currentConversationId) return;
+
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/conversations/${currentConversationId}/messages/${messageId}`,
+        { method: 'DELETE', headers: commonHeaders() },
+      );
+      if (!res.ok) {
+        // Rollback: reload messages from server
+        await loadConversationMessages(currentConversationId);
+      }
+    } catch {
+      // Rollback on network error
+      try {
+        await loadConversationMessages(currentConversationId);
+      } catch {
+        // silent — UI already shows the optimistic state
+      }
+    }
+  }, [currentConversationId, commonHeaders, loadConversationMessages]);
 
   // ─── Clear Chat ───────────────────────────────────────────────────────────
 
@@ -500,7 +552,9 @@ export function useAIChatNative() {
     setInputValue('');
     setIsLoading(false);
     setIsThinking(false);
+    setIsRetrying(false);
     setError(null);
+    retryCountRef.current = 0;
     fetchLimit().catch(() => {});
   }, [abortXHR, fetchLimit]);
 
@@ -526,14 +580,11 @@ export function useAIChatNative() {
   ) => {
     await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': userIdRef.current,
-      },
+      headers: { 'Content-Type': 'application/json', ...commonHeaders() },
       body: JSON.stringify({ isPinned: !isPinned }),
     });
     await fetchConversations();
-  }, [fetchConversations]);
+  }, [fetchConversations, commonHeaders]);
 
   const renameConversation = useCallback(async (
     conversationId: string,
@@ -541,19 +592,16 @@ export function useAIChatNative() {
   ) => {
     await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': userIdRef.current,
-      },
+      headers: { 'Content-Type': 'application/json', ...commonHeaders() },
       body: JSON.stringify({ title }),
     });
     await fetchConversations();
-  }, [fetchConversations]);
+  }, [fetchConversations, commonHeaders]);
 
   const deleteConversation = useCallback(async (conversationId: string) => {
     await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
       method: 'DELETE',
-      headers: { 'x-user-id': userIdRef.current },
+      headers: commonHeaders(),
     });
     const after = await fetchConversations();
     if (currentConversationId === conversationId) {
@@ -569,10 +617,8 @@ export function useAIChatNative() {
       }
     }
   }, [
-    currentConversationId,
-    fetchConversations,
-    loadConversationMessages,
-    createConversation,
+    currentConversationId, fetchConversations,
+    loadConversationMessages, createConversation, commonHeaders,
   ]);
 
   const dismissError = useCallback(() => setError(null), []);
@@ -580,7 +626,6 @@ export function useAIChatNative() {
   // ─── Return ───────────────────────────────────────────────────────────────
 
   return {
-    // State
     messages,
     conversations,
     currentConversationId,
@@ -588,11 +633,11 @@ export function useAIChatNative() {
     setInputValue,
     isLoading,
     isThinking,
+    isRetrying,
     messagesRemaining,
     resetTime,
     error,
 
-    // Actions
     sendMessage,
     stopGeneration,
     retryLastMessage,
@@ -601,7 +646,6 @@ export function useAIChatNative() {
     clearChat,
     dismissError,
 
-    // Conversation management
     selectConversation,
     startNewConversation,
     togglePinConversation,

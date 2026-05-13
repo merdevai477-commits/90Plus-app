@@ -88,6 +88,17 @@ const BottomNav = () => {
   const isProfileStack =
     pathname?.includes('/notifications') ||
     pathname?.includes('/settings');
+
+  useEffect(() => {
+    const allRoutes = tabs.map(tab => tab.route);
+    prefetchRoutes(allRoutes).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Chat has its own floating header + input bar; the bottom nav would
+  // overlap the composer and break the keyboard-aware layout.
+  if (isChat) return null;
+
   const activeTab: TabName = (() => {
     if (isMatchDetails || isMatches) return 'Leagues';
     if (isChat) return 'AI';
@@ -109,11 +120,6 @@ const BottomNav = () => {
     : { intensity: 20, tint: "dark" as const };
 
   const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-
-  useEffect(() => {
-    const allRoutes = tabs.map(tab => tab.route);
-    prefetchRoutes(allRoutes).catch(() => {});
-  }, []);
 
   const handlePressIn = (tab: typeof tabs[number]) => {
     prefetchRoute(tab.route).catch(() => {});

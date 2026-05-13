@@ -2,7 +2,7 @@
 // Logo identity: Purple + Electric Blue + Gold on deep dark
 
 // ── Background ────────────────────────────────────────────────────────────────
-export const BG_BASE    = '#05010D';
+export const BG_BASE    = '#0A0612';
 export const BG_MID     = '#0A051A';
 export const BG_SURFACE = '#05010D';
 

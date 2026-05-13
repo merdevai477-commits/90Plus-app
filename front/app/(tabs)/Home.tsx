@@ -13,19 +13,11 @@ import {
     View,
     RefreshControl,
     StyleSheet,
-    useWindowDimensions,
+    Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/clerk-expo';
-import Animated, {
-    useSharedValue,
-    withRepeat,
-    withTiming,
-    useAnimatedStyle,
-    withDelay,
-    Easing,
-} from 'react-native-reanimated';
 
 import {
     HomeHeader,
@@ -37,11 +29,15 @@ import {
     TeamPitch,
     ScreenSection,
 } from '../../components/home';
+import type { MatchListItem } from '../../components/home/MatchList';
 import AdvancedSearchBar, { SearchResult } from '../../components/common/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
+import { HomeSectionError } from '../../components/home/HomeSectionError';
 import { useHomeStore } from '../../src/store/home.store';
-import { BG_BASE, BG_MID, BG_SURFACE } from '../../constants/tokens';
+import { APP_BG } from '../../constants/ui';
 import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useHomeLikes } from '../../hooks/useHomeLikes';
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
@@ -50,92 +46,14 @@ import { usePredictionsStore } from '../../src/store/usePredictionsStore';
 import { ProfileCompletionService } from '../../services/profileCompletion.service';
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 import { AuthService } from '../../src/services/authService';
+import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
+import { useScreenFont } from '../../utils/fontSetup';
 
 const API_URL = getApiUrl();
 
-// ─── Animated Ambient Glow Orbs (background atmosphere) ──────────────────────
-function AmbientGlow() {
-    const { width } = useWindowDimensions();
-
-    const orb1Opacity = useSharedValue(0.15);
-    const orb1Scale = useSharedValue(0.9);
-    const orb2Opacity = useSharedValue(0.1);
-    const orb2Scale = useSharedValue(0.85);
-    const orb3Opacity = useSharedValue(0.08);
-    const orb3Scale = useSharedValue(1.0);
-
-    useEffect(() => {
-        orb1Opacity.value = withRepeat(
-            withTiming(0.22, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            true,
-        );
-        orb1Scale.value = withRepeat(
-            withTiming(1.06, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            true,
-        );
-        orb2Opacity.value = withDelay(
-            1500,
-            withRepeat(
-                withTiming(0.14, { duration: 5500, easing: Easing.inOut(Easing.ease) }),
-                -1,
-                true,
-            ),
-        );
-        orb2Scale.value = withDelay(
-            1500,
-            withRepeat(
-                withTiming(1.06, { duration: 5500, easing: Easing.inOut(Easing.ease) }),
-                -1,
-                true,
-            ),
-        );
-        orb3Opacity.value = withDelay(
-            800,
-            withRepeat(
-                withTiming(0.12, { duration: 6000, easing: Easing.inOut(Easing.ease) }),
-                -1,
-                true,
-            ),
-        );
-        orb3Scale.value = withDelay(
-            800,
-            withRepeat(
-                withTiming(1.06, { duration: 6000, easing: Easing.inOut(Easing.ease) }),
-                -1,
-                true,
-            ),
-        );
-    }, []);
-
-    const orb1Style = useAnimatedStyle(() => ({
-        opacity: orb1Opacity.value,
-        transform: [{ scale: orb1Scale.value }],
-    }));
-    const orb2Style = useAnimatedStyle(() => ({
-        opacity: orb2Opacity.value,
-        transform: [{ scale: orb2Scale.value }],
-    }));
-    const orb3Style = useAnimatedStyle(() => ({
-        opacity: orb3Opacity.value,
-        transform: [{ scale: orb3Scale.value }],
-    }));
-
-    return (
-        <>
-            <Animated.View
-                pointerEvents="none"
-                style={[styles.orb, styles.orb1, { left: width / 2 - 175 }, orb1Style]}
-            />
-            <Animated.View pointerEvents="none" style={[styles.orb, styles.orb2, orb2Style]} />
-            <Animated.View pointerEvents="none" style={[styles.orb, styles.orb3, orb3Style]} />
-        </>
-    );
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
+    useScreenFont();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const [searchVisible, setSearchVisible] = useState(false);
@@ -153,6 +71,20 @@ export default function HomeScreen() {
     const [luckyWheelVisible, setLuckyWheelVisible] = useState(false);
     const isLoadingRef = useRef(false);
 
+    // ── Network status ────────────────────────────────────────────────────────
+    const { isOnline } = useNetworkStatus();
+
+    // ── Per-section error states ──────────────────────────────────────────────
+    const [matchesError, setMatchesError] = useState<string | null>(null);
+    const [rankingsError, setRankingsError] = useState<string | null>(null);
+
+    // ── Subscribed (pinned) fixture IDs ───────────────────────────────────────
+    const [subscribedIds, setSubscribedIds] = useState<Set<number>>(new Set());
+
+    // ── Persisted video likes ─────────────────────────────────────────────────
+    const { user } = useUser();
+    const { likedIds, toggleLike } = useHomeLikes(user?.id);
+
     // Open lucky wheel from push notification deep link
     const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
     const openLuckyWheelHandledRef = useRef(false);
@@ -162,10 +94,9 @@ export default function HomeScreen() {
             setLuckyWheelVisible(true);
             router.setParams({ openLuckyWheel: undefined });
         }
-    }, [params.openLuckyWheel]);
+    }, [params.openLuckyWheel, router]);
 
     const { isSignedIn, getToken } = useAuth();
-    const { user } = useUser();
 
     const fetchSpinWheelStatus = useCallback(async () => {
         try {
@@ -204,6 +135,9 @@ export default function HomeScreen() {
         }
     }, [getToken]);
 
+    // ── FIXED: fetchUserRank — returns the best rank across all categories ────
+    // The backend returns { views, shares, predictions, comments } — each is
+    // either a 1-10 rank or null. We pick the best (lowest number = best rank).
     const fetchUserRank = useCallback(async () => {
         try {
             const token = await getToken();
@@ -214,13 +148,26 @@ export default function HomeScreen() {
             if (response.ok) {
                 const data = await response.json();
                 if (data.status === 'SUCCESS' && data.data) {
-                    const rank =
-                        data.data.views ||
-                        data.data.shares ||
-                        data.data.predictions ||
-                        data.data.comments ||
-                        null;
-                    setUserInfo((prev) => ({ ...prev, rank }));
+                    const { views, shares, predictions, comments } = data.data as {
+                        views: number | null;
+                        shares: number | null;
+                        predictions: number | null;
+                        comments: number | null;
+                    };
+                    // Pick the best (lowest) rank across all categories, or null if none.
+                    const candidates = [views, shares, predictions, comments].filter(
+                        (v): v is number => v !== null && v !== undefined,
+                    );
+                    const bestRank = candidates.length > 0 ? Math.min(...candidates) : null;
+
+                    if (__DEV__ && bestRank === null) {
+                        logger.warn(
+                            '[Home] fetchUserRank: no rank found in any category. ' +
+                            'Backend returned:', JSON.stringify(data.data),
+                        );
+                    }
+
+                    setUserInfo((prev) => ({ ...prev, rank: bestRank }));
                 }
             }
         } catch (error) {
@@ -311,6 +258,18 @@ export default function HomeScreen() {
         }
     }, [getToken, isSignedIn]);
 
+    // ── Fetch subscribed fixture IDs (pinned matches) ─────────────────────────
+    const fetchSubscribedIds = useCallback(async () => {
+        try {
+            const token = await getToken();
+            if (!token || !isSignedIn) return;
+            const ids = await MatchSubscriptionsService.listIds(token);
+            setSubscribedIds(ids);
+        } catch {
+            // silent — bell state just won't show
+        }
+    }, [getToken, isSignedIn]);
+
     const {
         userMode,
         matches,
@@ -321,6 +280,7 @@ export default function HomeScreen() {
         fetchRankingsData,
         setUserMode,
         toggleFavorite,
+        loadingMatches,
         loadingRankings,
     } = useHomeStore();
 
@@ -382,7 +342,7 @@ export default function HomeScreen() {
 
     useMatchEventsMonitor();
 
-    // Refs to avoid stale closures
+    // Refs to avoid stale closures in useFocusEffect
     const fetchUserProfileRef = useRef(fetchUserProfile);
     const fetchSpinWheelStatusRef = useRef(fetchSpinWheelStatus);
     const fetchDailyQuizStatusRef = useRef(fetchDailyQuizStatus);
@@ -391,6 +351,7 @@ export default function HomeScreen() {
     const fetchHomeDataRef = useRef(fetchHomeData);
     const fetchRankingsDataRef = useRef(fetchRankingsData);
     const preloadProfileDataRef = useRef(preloadProfileData);
+    const fetchSubscribedIdsRef = useRef(fetchSubscribedIds);
     const getTokenRef = useRef(getToken);
     const setUserModeRef = useRef(setUserMode);
     const lastLoadTimeRef = useRef(0);
@@ -405,6 +366,7 @@ export default function HomeScreen() {
         fetchHomeDataRef.current = fetchHomeData;
         fetchRankingsDataRef.current = fetchRankingsData;
         preloadProfileDataRef.current = preloadProfileData;
+        fetchSubscribedIdsRef.current = fetchSubscribedIds;
         getTokenRef.current = getToken;
         setUserModeRef.current = setUserMode;
     }, [
@@ -416,6 +378,7 @@ export default function HomeScreen() {
         fetchHomeData,
         fetchRankingsData,
         preloadProfileData,
+        fetchSubscribedIds,
         getToken,
         setUserMode,
     ]);
@@ -454,38 +417,31 @@ export default function HomeScreen() {
                         return;
                     }
 
+                    // Critical — await these before showing content
                     const criticalPromises = [
-                        fetchHomeDataRef.current(token).catch((err: any) => {
+                        fetchHomeDataRef.current(token).catch((err: unknown) => {
                             logger.error('Error fetching home data:', err);
+                            if (isMounted) setMatchesError(String(err));
                             return null;
                         }),
-                        fetchUserProfileRef.current().catch((err: any) => {
+                        fetchUserProfileRef.current().catch((err: unknown) => {
                             logger.error('Error fetching user profile:', err);
                             return null;
                         }),
                     ];
 
+                    // Secondary — fire and forget
                     const secondaryPromises = [
-                        fetchRankingsDataRef.current(token).catch((err: any) => {
+                        fetchRankingsDataRef.current(token).catch((err: unknown) => {
                             logger.error('Error fetching rankings:', err);
+                            if (isMounted) setRankingsError(String(err));
                             return null;
                         }),
-                        fetchSpinWheelStatusRef.current().catch((err: any) => {
-                            logger.error('Error fetching spin status:', err);
-                            return null;
-                        }),
-                        fetchDailyQuizStatusRef.current().catch((err: any) => {
-                            logger.error('Error fetching quiz status:', err);
-                            return null;
-                        }),
-                        fetchPredictionsDataRef.current(token).catch((err: any) => {
-                            logger.error('Error fetching predictions:', err);
-                            return null;
-                        }),
-                        fetchUserRankRef.current().catch((err: any) => {
-                            logger.error('Error fetching user rank:', err);
-                            return null;
-                        }),
+                        fetchSpinWheelStatusRef.current().catch(() => null),
+                        fetchDailyQuizStatusRef.current().catch(() => null),
+                        fetchPredictionsDataRef.current(token).catch(() => null),
+                        fetchUserRankRef.current().catch(() => null),
+                        fetchSubscribedIdsRef.current().catch(() => null),
                     ];
 
                     await Promise.all(criticalPromises);
@@ -500,7 +456,7 @@ export default function HomeScreen() {
                 }
             };
 
-            loadData();
+            void loadData();
 
             return () => {
                 isMounted = false;
@@ -510,29 +466,36 @@ export default function HomeScreen() {
         }, []),
     );
 
-    const onRefresh = async () => {
+    const onRefresh = useCallback(async () => {
         setRefreshing(true);
+        setMatchesError(null);
+        setRankingsError(null);
         try {
             const token = await getToken();
             await Promise.all([
                 fetchHomeDataRef.current(token).catch(() => null),
                 fetchRankingsDataRef.current(token).catch(() => null),
                 fetchUserProfileRef.current().catch(() => null),
+                fetchSubscribedIdsRef.current().catch(() => null),
             ]);
         } catch (error) {
             logger.error('Error refreshing home screen:', error);
         } finally {
             setRefreshing(false);
         }
-    };
+    }, [getToken]);
 
     const handleSearchPress = useCallback(() => {
         setSearchVisible(true);
     }, []);
 
-    const handleSearchResult = (_result: SearchResult) => {
+    const handleSearchResult = useCallback((_result: SearchResult) => {
         setSearchVisible(false);
-    };
+    }, []);
+
+    const handleSearchClose = useCallback(() => {
+        setSearchVisible(false);
+    }, []);
 
     const handleMatchPress = useCallback(
         (matchId: string) => {
@@ -567,6 +530,67 @@ export default function HomeScreen() {
         [getToken, toggleFavorite],
     );
 
+    const handleViewAllMatches = useCallback(
+        () => router.navigate('/(tabs)/matches'),
+        [router],
+    );
+
+    const handleViewAllReels = useCallback(
+        () => router.push('/reels'),
+        [router],
+    );
+
+    const handleViewAllRank = useCallback(
+        () => router.push('/rank'),
+        [router],
+    );
+
+    const handleVideoPress = useCallback(
+        (videoId: string) =>
+            router.push({
+                pathname: '/reels',
+                params: { startFrom: videoId },
+            }),
+        [router],
+    );
+
+    const handlePlayerPress = useCallback(
+        (player: any) => {
+            if (player.username) {
+                router.push({
+                    pathname: '/user/[username]',
+                    params: { username: player.username },
+                });
+            }
+        },
+        [router],
+    );
+
+    const handlePitchPlayerPress = useCallback(
+        (player: any) => {
+            if (player.username) {
+                router.push({
+                    pathname: '/user/[username]',
+                    params: { username: player.username },
+                });
+            }
+        },
+        [router],
+    );
+
+    const handleLuckyWheelClose = useCallback(() => {
+        setLuckyWheelVisible(false);
+        void fetchSpinWheelStatus();
+    }, [fetchSpinWheelStatus]);
+
+    const handleLuckyWheelCoinsWon = useCallback(
+        (coins: number, newBalance: number) => {
+            logger.log(`Won ${coins} coins! New balance: ${newBalance}`);
+            void fetchSpinWheelStatus();
+        },
+        [fetchSpinWheelStatus],
+    );
+
     const displayMatches = useMemo(() => matches.slice(0, 3), [matches]);
 
     // ─── Adapters: store shape → design component shape ──────────────────────
@@ -576,7 +600,7 @@ export default function HomeScreen() {
         LB: '#60A5FA', RB: '#60A5FA', CB: '#3B82F6', GK: '#FFD700',
     };
 
-    const designMatches = useMemo(
+    const designMatches = useMemo<MatchListItem[]>(
         () =>
             displayMatches.map((m) => ({
                 id: m.id,
@@ -584,22 +608,42 @@ export default function HomeScreen() {
                     name: m.homeTeam,
                     shortName: m.homeTeam,
                     score: m.homeScore ?? 0,
+                    logo: m.homeLogo,
                 },
                 awayTeam: {
                     name: m.awayTeam,
                     shortName: m.awayTeam,
                     score: m.awayScore ?? 0,
+                    logo: m.awayLogo,
                 },
                 status: (m.isLive
                     ? 'LIVE'
                     : m.homeScore !== undefined && m.awayScore !== undefined
                       ? 'FT'
-                      : 'UPCOMING') as 'LIVE' | '1ST' | '2ND' | 'HT' | 'FT' | 'UPCOMING',
+                      : 'UPCOMING') as MatchListItem['status'],
                 minute: m.minute,
                 league: m.league,
                 kickoff: m.time,
+                // Pinned = user subscribed to this fixture via bell
+                isPinned: subscribedIds.has(m.fixtureId),
+                isFavorited: m.isFavorited,
             })),
-        [displayMatches],
+        [displayMatches, subscribedIds],
+    );
+
+    // Sort: pinned first, then live, then rest
+    const sortedDesignMatches = useMemo<MatchListItem[]>(
+        () =>
+            [...designMatches].sort((a, b) => {
+                if (a.isPinned && !b.isPinned) return -1;
+                if (!a.isPinned && b.isPinned) return 1;
+                const aLive = a.status === 'LIVE';
+                const bLive = b.status === 'LIVE';
+                if (aLive && !bLive) return -1;
+                if (!aLive && bLive) return 1;
+                return 0;
+            }),
+        [designMatches],
     );
 
     const designVideos = useMemo(
@@ -615,15 +659,17 @@ export default function HomeScreen() {
     );
 
     const designPlayers = useMemo(
-        () =>
-            players.map((p, idx) => {
+        () => {
+            const real = players.map((p, idx) => {
                 const pos = (p.position || 'CM').toUpperCase();
                 const color = POSITION_COLOR[pos] ?? '#8E54E9';
                 return {
                     id: idx + 1,
                     name: p.name,
                     team: p.team,
-                    country: '',
+                    // The store stores the user's country flag emoji in `team`
+                    // (see home.store.ts: `team: player.countryFlag || '🇪🇬'`).
+                    country: p.team,
                     position: pos,
                     positionColor: color,
                     weeklyRating: p.rating ? p.rating.toFixed(2) : '—',
@@ -632,50 +678,74 @@ export default function HomeScreen() {
                     photoUri: p.image,
                     username: p.username,
                 };
-            }),
+            });
+
+            // ─── TEST FIXTURE — remove when done ─────────────────────────
+            // Force a "mr.dev" test player into the 1st-place podium slot so
+            // we can visually verify the overlay pipeline (avatar + flag +
+            // position + name) against the bundled artwork.
+            const testAvatarUri = Image.resolveAssetSource(
+                require('../../assets/images/90Plus.png'),
+            ).uri;
+            const mrDev = {
+                id: 0,
+                name: 'mr.dev',
+                team: '🇪🇬',
+                country: '🇪🇬',
+                position: 'LW', // winger
+                positionColor: POSITION_COLOR.LW ?? '#11998E',
+                weeklyRating: '9.40',
+                overallRating: '9.40',
+                borderColor: POSITION_COLOR.LW ?? '#11998E',
+                photoUri: testAvatarUri,
+                username: 'mr.dev',
+            };
+            return [mrDev, ...real];
+        },
         [players],
     );
 
-    const designPitchPlayers = useMemo(() => {
-        const positions = [
-            { x: -1, y: 40 }, { x: 24, y: 1 }, { x: 14, y: 23 }, { x: 14, y: 56 },
-            { x: 25, y: 75 }, { x: 40, y: 46 }, { x: 54, y: 23 }, { x: 54, y: 64 },
-            { x: 82, y: 10 }, { x: 88, y: 45 }, { x: 82, y: 80 },
-        ];
-        return teamOfMonth.slice(0, 11).map((p, i) => ({
-            name: p.name,
-            short: (p.name || '??').slice(0, 3).toUpperCase(),
-            rating: Math.round((p.rating ?? 80) * 10) / 10,
-            position: p.position || 'CM',
-            x: positions[i]?.x ?? 50,
-            y: positions[i]?.y ?? 50,
-            username: p.username,
-        }));
-    }, [teamOfMonth]);
+    const designPitchPlayers = useMemo(
+        () =>
+            teamOfMonth.slice(0, 11).map((p) => ({
+                name: p.name,
+                short: (p.name || '??').slice(0, 3).toUpperCase(),
+                rating: Math.round((p.rating ?? 80) * 10) / 10,
+                position: p.position || 'CM',
+                username: p.username,
+            })),
+        [teamOfMonth],
+    );
 
-    const NAV_BOTTOM_PADDING = Math.max(insets.bottom, 16) + 56 + 24;
-    const headerOffset = insets.top + HOME_HEADER_BODY_HEIGHT + 2;
+    const NAV_BOTTOM_PADDING = Math.max(insets.bottom, 16) + 16 + 4;
+    const headerOffset = insets.top + HOME_HEADER_BODY_HEIGHT + -1;
 
     return (
         <View style={styles.container}>
             <StatusBar style="light" />
 
-            {/* Base background gradient */}
+            {/* Static ambient gradient — matches the neon-purple artwork palette */}
             <LinearGradient
-                colors={[BG_BASE, BG_MID, BG_SURFACE, BG_BASE]}
-                style={StyleSheet.absoluteFill}
+                colors={[
+              '#030008', '#05010F', '#080118', '#05010F', '#030008'
+                ]}
+                locations={[0, 0.25, 0.5, 0.75, 1]}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                locations={[0, 0.3, 0.7, 1]}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
             />
-
-            <AmbientGlow />
 
             <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={{
-                    paddingTop: headerOffset + 14,
-                    paddingBottom: NAV_BOTTOM_PADDING,
+                    paddingTop: headerOffset +10,
+                    // ─── MAX SCROLL BOTTOM ───────────────────────────────────
+                    // Change this number to control how far down the scroll goes.
+                    // 0   = ends exactly at the last element (image gets hidden behind BottomNav)
+                    // 70  = just enough clearance for the BottomNav
+                    // 96  = current value (comfortable spacing)
+                    paddingBottom: Math.max(insets.bottom, 0) + 46,
                 }}
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews
@@ -693,91 +763,103 @@ export default function HomeScreen() {
                     <HomeHero />
                 </ScreenSection>
 
+                {/* ── Matches ─────────────────────────────────────────────── */}
                 <ScreenSection>
-                    <MatchList
-                        matches={designMatches}
-                        onMatchPress={handleMatchPress}
-                        onViewAllPress={useCallback(
-                            () => router.navigate('/(tabs)/matches'),
-                            [router],
-                        )}
-                        onFavoritePress={handleFavoritePress}
-                        isLoading={matches.length === 0}
-                    />
+                    {matchesError && !loadingMatches && matches.length === 0 ? (
+                        <HomeSectionError
+                            sectionName="المباريات"
+                            detail={matchesError}
+                            isOffline={!isOnline}
+                            onRetry={() => {
+                                setMatchesError(null);
+                                getToken().then((t) => fetchHomeData(t)).catch(() => {});
+                            }}
+                        />
+                    ) : (
+                        <MatchList
+                            matches={sortedDesignMatches}
+                            onMatchPress={handleMatchPress}
+                            onViewAllPress={handleViewAllMatches}
+                            onFavoritePress={handleFavoritePress}
+                            isLoading={loadingMatches && matches.length === 0}
+                        />
+                    )}
                 </ScreenSection>
 
+                {/* ── Videos ──────────────────────────────────────────────── */}
                 <ScreenSection>
-                    <VideoList
-                        videos={designVideos}
-                        onVideoPress={useCallback(
-                            (videoId: string) =>
-                                router.push({
-                                    pathname: '/reels',
-                                    params: { startFrom: videoId },
-                                }),
-                            [router],
-                        )}
-                        onViewAllPress={useCallback(() => router.push('/reels'), [router])}
-                        isLoading={loadingRankings}
-                    />
+                    {rankingsError && !loadingRankings && videos.length === 0 ? (
+                        <HomeSectionError
+                            sectionName="الفيديوهات"
+                            detail={rankingsError}
+                            isOffline={!isOnline}
+                            onRetry={() => {
+                                setRankingsError(null);
+                                getToken().then((t) => fetchRankingsData(t)).catch(() => {});
+                            }}
+                        />
+                    ) : (
+                        <VideoList
+                            videos={designVideos}
+                            isOffline={!isOnline}
+                            likedIds={likedIds}
+                            onVideoPress={handleVideoPress}
+                            onToggleLike={toggleLike}
+                            onViewAllPress={handleViewAllReels}
+                            isLoading={loadingRankings && videos.length === 0}
+                        />
+                    )}
                 </ScreenSection>
 
+                {/* ── Players ─────────────────────────────────────────────── */}
                 <ScreenSection>
-                    <PlayerList
-                        players={designPlayers}
-                        onPlayerPress={useCallback(
-                            (player: any) => {
-                                if (player.username) {
-                                    router.push({
-                                        pathname: '/user/[username]',
-                                        params: { username: player.username },
-                                    });
-                                }
-                            },
-                            [router],
-                        )}
-                        onViewAllPress={useCallback(() => router.push('/rank'), [router])}
-                        isLoading={loadingRankings}
-                    />
+                    {rankingsError && !loadingRankings && players.length === 0 ? (
+                        <HomeSectionError
+                            sectionName="اللاعبين"
+                            detail={rankingsError}
+                            isOffline={!isOnline}
+                            onRetry={() => {
+                                setRankingsError(null);
+                                getToken().then((t) => fetchRankingsData(t)).catch(() => {});
+                            }}
+                        />
+                    ) : (
+                        <PlayerList
+                            players={designPlayers}
+                            onPlayerPress={handlePlayerPress}
+                            onViewAllPress={handleViewAllRank}
+                            isLoading={loadingRankings && players.length === 0}
+                        />
+                    )}
                 </ScreenSection>
 
-                <ScreenSection>
+                {/* ── Team of the Month ────────────────────────────────────── */}
+                <ScreenSection gapAfter={0}>
                     <TeamPitch
                         players={designPitchPlayers}
-                        onPlayerPress={useCallback(
-                            (player: any) => {
-                                if (player.username) {
-                                    router.push({
-                                        pathname: '/user/[username]',
-                                        params: { username: player.username },
-                                    });
-                                }
-                            },
-                            [router],
-                        )}
-                        onDetailsPress={useCallback(() => router.push('/rank'), [router])}
+                        isLoading={loadingRankings && teamOfMonth.length === 0}
+                        onPlayerPress={handlePitchPlayerPress}
+                        onDetailsPress={handleViewAllRank}
                     />
                 </ScreenSection>
             </ScrollView>
 
-            <HomeHeader userName={userInfo.username} onSearchPress={handleSearchPress} />
+            <HomeHeader
+                userName={userInfo.username}
+                onSearchPress={handleSearchPress}
+                isOffline={!isOnline}
+            />
 
             <AdvancedSearchBar
                 visible={searchVisible}
-                onClose={() => setSearchVisible(false)}
+                onClose={handleSearchClose}
                 onResultSelect={handleSearchResult}
             />
 
             <LuckyWheelModal
                 visible={luckyWheelVisible}
-                onClose={() => {
-                    setLuckyWheelVisible(false);
-                    fetchSpinWheelStatus();
-                }}
-                onCoinsWon={(coins, newBalance) => {
-                    logger.log(`Won ${coins} coins! New balance: ${newBalance}`);
-                    fetchSpinWheelStatus();
-                }}
+                onClose={handleLuckyWheelClose}
+                onCoinsWon={handleLuckyWheelCoinsWon}
             />
         </View>
     );
@@ -786,31 +868,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: BG_BASE,
+        backgroundColor: APP_BG,
     },
     scroll: { flex: 1 },
-    orb: {
-        position: 'absolute',
-        borderRadius: 999,
-    },
-    orb1: {
-        width: 350,
-        height: 350,
-        top: -80,
-        backgroundColor: 'rgba(76,29,149,0.28)',
-    },
-    orb2: {
-        width: 280,
-        height: 280,
-        top: 200,
-        right: -100,
-        backgroundColor: 'rgba(59,130,246,0.18)',
-    },
-    orb3: {
-        width: 250,
-        height: 250,
-        bottom: 200,
-        left: -80,
-        backgroundColor: 'rgba(91,33,182,0.14)',
-    },
 });

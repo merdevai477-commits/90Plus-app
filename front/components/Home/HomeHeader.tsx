@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     View,
@@ -34,6 +33,8 @@ interface HomeHeaderProps {
     onSettingsPress?: () => void;
     onSearchPress?: () => void;
     onNotificationPress?: () => void;
+    /** Show a small red dot on the bell when the device is offline. */
+    isOffline?: boolean;
 }
 
 export const HomeHeader = React.memo(function HomeHeader({
@@ -41,26 +42,27 @@ export const HomeHeader = React.memo(function HomeHeader({
     onSettingsPress,
     onSearchPress,
     onNotificationPress,
+    isOffline = false,
 }: HomeHeaderProps) {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { getToken } = useAuth();
     const { coins } = useCoins();
 
-    const [backendUnreadCount, setBackendUnreadCount] = useState(0);
-    const appState = useRef(AppState.currentState);
-    const lastFetchTime = useRef(0);
+    const [backendUnreadCount, setBackendUnreadCount] = useState<number>(0);
+    const appState = useRef<AppStateStatus>(AppState.currentState);
+    const lastFetchTime = useRef<number>(0);
 
     const { notifications: matchNotifications } = useHomeStore();
 
-    const localUnreadCount = useMemo(
+    const localUnreadCount = useMemo<number>(
         () => matchNotifications.filter((n) => !n.read).length,
         [matchNotifications],
     );
 
     const notificationCount = backendUnreadCount + localUnreadCount;
 
-    const fetchUnreadCount = useCallback(async () => {
+    const fetchUnreadCount = useCallback(async (): Promise<void> => {
         const now = Date.now();
         if (now - lastFetchTime.current < 60_000) return;
         lastFetchTime.current = now;
@@ -70,58 +72,56 @@ export const HomeHeader = React.memo(function HomeHeader({
             const count = await NotificationService.getUnreadCount(token);
             setBackendUnreadCount(count);
         } catch {
-            // silent
+            // silent — badge stays on last known value
         }
     }, [getToken]);
 
     useEffect(() => {
-        fetchUnreadCount();
+        void fetchUnreadCount();
         const subscription = AppState.addEventListener('change', (next: AppStateStatus) => {
             if (appState.current.match(/inactive|background/) && next === 'active') {
-                fetchUnreadCount();
+                void fetchUnreadCount();
             }
             appState.current = next;
         });
-        const interval = setInterval(fetchUnreadCount, 60_000);
+        const interval = setInterval(() => {
+            void fetchUnreadCount();
+        }, 60_000);
         return () => {
             subscription.remove();
             clearInterval(interval);
         };
     }, [fetchUnreadCount]);
 
-    const handleSettings = useCallback(() => {
-        Haptics.selectionAsync();
+    const handleSettings = useCallback((): void => {
+        void Haptics.selectionAsync();
         if (onSettingsPress) onSettingsPress();
         else router.push('/(tabs)/settings');
     }, [onSettingsPress, router]);
 
-    const handleSearch = useCallback(() => {
-        Haptics.selectionAsync();
+    const handleSearch = useCallback((): void => {
+        void Haptics.selectionAsync();
         if (onSearchPress) onSearchPress();
         else router.push('/(tabs)/matches');
     }, [onSearchPress, router]);
 
-    const handleNotifications = useCallback(() => {
-        Haptics.selectionAsync();
+    const handleNotifications = useCallback((): void => {
+        void Haptics.selectionAsync();
         if (onNotificationPress) onNotificationPress();
         else router.push('/notifications');
     }, [onNotificationPress, router]);
 
-    const handleCoinsPress = useCallback(() => {
-        Haptics.selectionAsync();
+    const handleCoinsPress = useCallback((): void => {
+        void Haptics.selectionAsync();
         router.push('/(tabs)/profile');
     }, [router]);
 
-    const HeaderWrapper: any = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-    const wrapperProps: any = isLiquidGlassSupported
-        ? { effect: 'clear', interactive: true }
-        : { intensity: 15, tint: 'dark' };
+    // LiquidGlassView / BlurView have very different prop surfaces — we
+    // branch at the JSX level instead of casting a shared wrapper.
+    const containerStyle = [styles.container, { paddingTop: insets.top }];
 
-    return (
-        <HeaderWrapper
-            {...wrapperProps}
-            style={[styles.container, { paddingTop: insets.top }]}
-        >
+    const content = (
+        <>
             <View style={styles.inner}>
                 <View style={styles.titleBlock}>
                     <Text style={styles.brand}>90PLUS</Text>
@@ -149,6 +149,8 @@ export const HomeHeader = React.memo(function HomeHeader({
                             hitSlop={8}
                             style={styles.toolBtn}
                             onPress={handleSettings}
+                            accessibilityRole="button"
+                            accessibilityLabel="Settings"
                         >
                             <Settings color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
                         </TouchableOpacity>
@@ -158,6 +160,8 @@ export const HomeHeader = React.memo(function HomeHeader({
                             hitSlop={8}
                             style={styles.toolBtn}
                             onPress={handleSearch}
+                            accessibilityRole="button"
+                            accessibilityLabel="Search"
                         >
                             <Search color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
                         </TouchableOpacity>
@@ -168,22 +172,44 @@ export const HomeHeader = React.memo(function HomeHeader({
                                 hitSlop={8}
                                 style={styles.toolBtn}
                                 onPress={handleNotifications}
+                                accessibilityRole="button"
+                                accessibilityLabel="Notifications"
                             >
                                 <Bell color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
                             </TouchableOpacity>
                             {notificationCount > 0 && (
                                 <View style={styles.badge}>
                                     <Text style={styles.badgeTxt}>
-                                        {notificationCount > 99 ? '99+' : notificationCount}
+                                        {notificationCount > 99 ? '99+' : String(notificationCount)}
                                     </Text>
                                 </View>
+                            )}
+                            {isOffline && notificationCount === 0 && (
+                                <View style={styles.offlineDot} accessibilityLabel="Offline" />
                             )}
                         </View>
                     </View>
                 </View>
             </View>
             <View style={styles.hairline} />
-        </HeaderWrapper>
+        </>
+    );
+
+    if (isLiquidGlassSupported) {
+        return (
+            <LiquidGlassView
+                effect="clear"
+                interactive
+                style={containerStyle}
+            >
+                {content}
+            </LiquidGlassView>
+        );
+    }
+    return (
+        <BlurView intensity={15} tint="dark" style={containerStyle}>
+            {content}
+        </BlurView>
     );
 });
 
@@ -268,6 +294,17 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(0,0,0,0.45)',
     },
     badgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
+    offlineDot: {
+        position: 'absolute',
+        top: 5,
+        right: 7,
+        width: 9,
+        height: 9,
+        borderRadius: 5,
+        backgroundColor: LIVE_RED,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.55)',
+    },
     hairline: {
         height: StyleSheet.hairlineWidth,
         marginHorizontal: SCREEN_PADDING_H,

@@ -21,6 +21,7 @@ import { offlineQueue } from '../../src/services/offlineQueue';
 import NetInfo from '@react-native-community/netinfo';
 import { useTranslation } from '../../src/i18n';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
+import { useScreenFont } from '../../utils/fontSetup';
 import type { Match } from '../../components/Matches/matchCardUtils';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -509,6 +510,7 @@ const LeagueCard = memo(function LeagueCard({
 });
 
 export default function MatchesHubScreenV2() {
+  useScreenFont();
   const params = useLocalSearchParams();
   const initialFilter = (params.filter as typeof FILTERS[number]) || 'All';
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>(initialFilter);

@@ -24,6 +24,7 @@ import RankHeader from '../../components/rank/RankHeader';
 import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
+import { useScreenFont } from '../../utils/fontSetup';
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const ACCENT = '#A855F7';
@@ -80,6 +81,7 @@ const TOP_11 = Array.from({ length: 11 }, (_, i) => ({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function RankScreen() {
+  useScreenFont();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -105,13 +107,13 @@ export default function RankScreen() {
             resizeMode="contain"
           />
           <LinearGradient
-            colors={['#05010D', '#05010D', 'rgba(5,1,13,0.9)', 'transparent']}
+            colors={['#030008', '#030008', 'rgba(3,0,8,0.0)', 'transparent']}
             style={s.heroBgGradLeft}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           />
           <LinearGradient
-            colors={['transparent', 'rgba(5,1,13,0.55)', '#05010D']}
+            colors={['transparent', 'rgba(10,6,18,0.55)', '#0A0612']}
             style={s.heroBgGradBottom}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
@@ -165,7 +167,7 @@ export default function RankScreen() {
               resizeMode="cover"
             />
             <LinearGradient
-              colors={['#05010D', 'transparent', '#05010D']}
+              colors={['#0A0612', 'transparent', '#0A0612']}
               style={StyleSheet.absoluteFill}
             />
           </View>

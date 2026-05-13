@@ -55,6 +55,7 @@ import { ProfileSavedGrid } from '../../components/profile/ProfileVideoGrid';
 import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from '../../components/common/ImagePreviewModal';
 import { CooldownBlockModal } from '../../components/common/CooldownBlockModal';
 import { useReelStatusPoller } from '../../hooks/useReelStatusPoller';
+import { useScreenFont } from '../../utils/fontSetup';
 
 const API_URL = getApiUrl();
 
@@ -203,6 +204,7 @@ const styles = StyleSheet.create({
 });
 
 export default function ProfileScreen() {
+  useScreenFont();
   const [activeTab, setActiveTab] = useState('videos');
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();

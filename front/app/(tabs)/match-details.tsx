@@ -23,6 +23,7 @@ import { FootballField } from '../../components/match-details/FootballField';
 import { matchArchiveService } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
 import LeagueIcon from '../../components/common/LeagueIcon';
+import { useScreenFont } from '../../utils/fontSetup';
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,6 +43,7 @@ interface MatchDetailsParams {
 }
 
 const MatchDetailsScreen = () => {
+  useScreenFont();
   const router = useRouter();
   const { t } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
