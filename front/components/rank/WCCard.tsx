@@ -1,4 +1,4 @@
-﻿import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronRight } from 'lucide-react-native';

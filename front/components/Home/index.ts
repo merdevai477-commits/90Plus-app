@@ -1,4 +1,4 @@
-﻿export { HomeHeader, HOME_HEADER_BODY_HEIGHT } from './HomeHeader';
+export { HomeHeader, HOME_HEADER_BODY_HEIGHT } from './HomeHeader';
 export { HomeHero } from './HomeHero';
 export { MatchList } from './MatchList';
 export type { MatchListItem, MatchStatus } from './MatchList';

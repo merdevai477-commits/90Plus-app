@@ -1,4 +1,4 @@
-﻿import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView } from 'expo-blur';
 import { Trophy } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';

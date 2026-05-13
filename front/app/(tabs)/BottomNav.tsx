@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions, Animated } from 'react-native';
 import { Home, Brain, User, BarChart3, Video, Sparkles } from 'lucide-react-native';
 import Svg, { Rect, Line, Circle } from 'react-native-svg';

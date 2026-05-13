@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 90Plus — Unified UI System
  *
  * Single source of truth for:

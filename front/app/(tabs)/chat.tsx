@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ChatScreen.tsx — 90Plus AI Chat (v3 — text input + retry banner)
  *
  * Key design decisions:
