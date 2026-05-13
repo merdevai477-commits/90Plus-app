@@ -37,7 +37,7 @@
       "autoIncrement": true,
       "channel": "production",
       "node": "22.15.0",
-      "prebuildCommand": "rm -rf ios android && npx expo prebuild --no-install --platform ios",
+      "prebuildCommand": "npx expo prebuild --clean --no-install --platform ios",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "SENTRY_ALLOW_FAILURE": "true",
