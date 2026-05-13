@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ChatScreen.tsx — 90Plus AI Chat (v3 — text input + retry banner)
  *
  * Key design decisions:
@@ -45,7 +45,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
-import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 import { useAIChatNative } from '../../hooks/useAIChatNative';
 import { useChatProfile, buildProfileSystemPromptSuffix } from '../../hooks/useChatProfile';

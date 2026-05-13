@@ -1,0 +1,44 @@
+/**
+ * Safe wrapper for @callstack/liquid-glass
+ *
+ * The package uses TurboModuleRegistry.getEnforcing() which throws a hard JS
+ * error at import time if the native module is not linked (e.g. on older iOS,
+ * Android, or when the Expo prebuild hasn't registered the module yet).
+ *
+ * This module catches that error and provides safe fallback values so the rest
+ * of the app can import from here instead of directly from the package.
+ */
+
+import type { ComponentType } from 'react';
+import type { ViewProps } from 'react-native';
+import { View } from 'react-native';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface LiquidGlassViewProps extends ViewProps {
+  effect?: 'clear' | 'regular' | 'prominent';
+  tint?: string;
+  tintColor?: string;
+  interactive?: boolean;
+}
+
+// ─── Safe import ──────────────────────────────────────────────────────────────
+
+let _LiquidGlassView: ComponentType<LiquidGlassViewProps> = View;
+let _isLiquidGlassSupported = false;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pkg = require('@callstack/liquid-glass') as {
+    LiquidGlassView: ComponentType<LiquidGlassViewProps>;
+    isLiquidGlassSupported: boolean;
+  };
+  _LiquidGlassView = pkg.LiquidGlassView ?? View;
+  _isLiquidGlassSupported = pkg.isLiquidGlassSupported ?? false;
+} catch {
+  // Native module not available — silently fall back to View / BlurView
+  _isLiquidGlassSupported = false;
+}
+
+export const LiquidGlassView: ComponentType<LiquidGlassViewProps> = _LiquidGlassView;
+export const isLiquidGlassSupported: boolean = _isLiquidGlassSupported;

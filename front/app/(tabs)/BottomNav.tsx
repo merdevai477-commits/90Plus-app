@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+﻿import React, { useRef, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions, Animated } from 'react-native';
 import { Home, Brain, User, BarChart3, Video, Sparkles } from 'lucide-react-native';
 import Svg, { Rect, Line, Circle } from 'react-native-svg';
@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { prefetchRoute, prefetchRoutes } from '../../utils/routePrefetcher';
 import { TAB_COLORS } from '../../constants/tokens';
-import { isLiquidGlassSupported, LiquidGlassView } from '@callstack/liquid-glass';
+import { isLiquidGlassSupported, LiquidGlassView } from '@/utils/liquidGlassSafe';
 
 const { width } = Dimensions.get('window');
 

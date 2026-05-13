@@ -1,4 +1,4 @@
-import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
+﻿import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView } from 'expo-blur';
 import { Play } from 'lucide-react-native';
 import React from 'react';

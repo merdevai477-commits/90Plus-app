@@ -33,6 +33,11 @@ import { useLanguage } from '../../contexts/LanguageContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// ─── Hoisted asset requires — Metro needs these at module top-level ──────────
+const IMG_NO_VIDEOS = require('../../assets/images/no videos yet.png') as ImageSourcePropType;
+const IMG_TRENDING  = require('../../assets/images/Treading highlights.png') as ImageSourcePropType;
+const IMG_CREATE    = require('../../assets/images/create contant.png') as ImageSourcePropType;
+
 // ─── Shared shimmer ───────────────────────────────────────────────────────────
 function useShimmer(): SharedValue<number> {
     const shimmerX = useSharedValue(-SCREEN_WIDTH);
@@ -286,7 +291,7 @@ function EmptySection({ onUpload }: { onUpload: () => void }): React.ReactElemen
             borderRgba: 'rgba(124,58,237,0.35)',
             title: t.home.emptyReelsNoVideosTitle,
             sub: t.home.emptyReelsNoVideosSub,
-            heroImage: require('../../assets/images/no videos yet.png'),
+            heroImage: IMG_NO_VIDEOS,
         },
         {
             key: 'trending',
@@ -296,7 +301,7 @@ function EmptySection({ onUpload }: { onUpload: () => void }): React.ReactElemen
             borderRgba: 'rgba(245,197,24,0.35)',
             title: t.home.emptyReelsTrendingTitle,
             sub: t.home.emptyReelsTrendingSub,
-            heroImage: require('../../assets/images/Treading highlights.png'),
+            heroImage: IMG_TRENDING,
         },
         {
             key: 'create',
@@ -306,7 +311,7 @@ function EmptySection({ onUpload }: { onUpload: () => void }): React.ReactElemen
             borderRgba: 'rgba(59,130,246,0.35)',
             title: t.home.emptyReelsCreateContentTitle,
             sub: t.home.emptyReelsCreateContentSub,
-            heroImage: require('../../assets/images/create contant.png'),
+            heroImage: IMG_CREATE,
         },
     ];
 

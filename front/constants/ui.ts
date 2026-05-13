@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 90Plus — Unified UI System
  *
  * Single source of truth for:
@@ -17,7 +17,7 @@
  */
 
 import { Platform } from 'react-native';
-import { isLiquidGlassSupported, LiquidGlassView } from '@callstack/liquid-glass';
+import { isLiquidGlassSupported, LiquidGlassView } from '@/utils/liquidGlassSafe';
 import { BlurView } from 'expo-blur';
 import { BG_BASE, BG_MID, BG_SURFACE, PURPLE_PRIMARY, PURPLE_DARK } from './tokens';
 

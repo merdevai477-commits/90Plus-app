@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationPermissionModal } from '../../components/common/NotificationPermissionModal';
 import '../../services/notificationForegroundSetup';
+import { getApiUrl } from '../../config/api.config';
 
 // Lazy-load expo-notifications. In Expo Go on SDK 53+ the module crashes at
 // import time because push-token auto-registration is no longer available —
@@ -98,7 +99,7 @@ export function usePushNotifications(): PushNotificationState {
         try {
             const authToken = await getTokenRef.current();
             if (!authToken) return;
-            const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-c88c.up.railway.app/api';
+            const apiUrl = getApiUrl();
             await fetch(`${apiUrl}/notifications/${notificationId}/opened`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
@@ -304,7 +305,7 @@ export function usePushNotifications(): PushNotificationState {
                 trackNotificationOpen(data.notificationId);
                 getTokenRef.current().then(token => {
                     if (!token) return;
-                    const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'https://90plus-app-production-c88c.up.railway.app/api';
+                    const apiUrl = getApiUrl();
                     fetch(`${apiUrl}/notifications/${data.notificationId}/read`, {
                         method: 'PUT',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

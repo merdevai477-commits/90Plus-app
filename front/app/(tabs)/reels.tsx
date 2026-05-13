@@ -1283,7 +1283,7 @@ const ReelsFeed: React.FC = () => {
             style={styles.noReelsButton}
             onPress={() => {
               haptic.trigger('light');
-              router.push('/(tabs)/rankings');
+              router.push('/(tabs)/rank');
             }}
             activeOpacity={0.8}
           >
