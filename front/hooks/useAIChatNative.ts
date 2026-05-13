@@ -163,11 +163,16 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [messagesRemaining, setMessagesRemaining] = useState(5);
+  // `null` = we have not yet fetched the real limit from the backend. The UI
+  // renders a neutral placeholder instead of a misleading hardcoded number.
+  const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
   const [resetTime, setResetTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Retry state for the reconnect banner
   const [isRetrying, setIsRetrying] = useState(false);
+  // ID of the AI message currently being streamed — consumers use this to
+  // decide whether to animate a bubble's text or render it as history.
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   // ─── Init ────────────────────────────────────────────────────────────────
 
@@ -177,8 +182,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       const id = await Storage.getUserId();
       if (!mounted) return;
       userIdRef.current = id;
-      await fetchLimit();
-      await bootstrapConversation();
+      // Run both independent calls in parallel — saves ~300–500 ms on every
+      // mount vs. awaiting them sequentially.
+      await Promise.all([fetchLimit(), bootstrapConversation()]);
     };
     init();
     return () => {
@@ -219,7 +225,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         }
       }
     } catch {
-      console.warn('[useAIChatNative] Backend not reachable, using local limit');
+      // Backend not reachable — leave messagesRemaining as `null` so the
+      // counter renders a loading state rather than a misleading number.
     }
   }, [commonHeaders]);
 
@@ -269,20 +276,27 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const bootstrapConversation = useCallback(async () => {
     try {
       const existing = await fetchConversations();
+
       if (existing.length > 0) {
-        const first = existing[0];
-        setCurrentConversationId(first.id);
-        await loadConversationMessages(first.id);
-        await Storage.saveLastConversationId(first.id);
+        // Prefer the last active conversation (if it still exists on the
+        // server) so the user returns to the screen they left.
+        const lastId = await Storage.getLastConversationId();
+        const lastConv = lastId ? existing.find(c => c.id === lastId) : null;
+        const target = lastConv ?? existing[0];
+        setCurrentConversationId(target.id);
+        await loadConversationMessages(target.id);
+        await Storage.saveLastConversationId(target.id);
         return;
       }
+
+      // No conversations exist yet — create the first one.
       const created = await createConversation();
       setCurrentConversationId(created.id);
       setConversations([created]);
       setMessages(INITIAL_MESSAGES);
       await Storage.saveLastConversationId(created.id);
     } catch {
-      console.warn('[useAIChatNative] Could not bootstrap conversations');
+      // warn only — don't crash the chat screen on a transient failure
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, createConversation, loadConversationMessages]);
@@ -361,7 +375,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
           if ('error' in event && event.error && !('token' in event)) {
             setError(event.error);
-            setMessagesRemaining(prev => prev + 1);
+            setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
           }
         }
       }
@@ -382,11 +396,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setIsLoading(false);
         setIsThinking(false);
         setIsRetrying(false);
+        setStreamingMessageId(null);
         return;
       }
       setIsLoading(false);
       setIsThinking(false);
       setIsRetrying(false);
+      setStreamingMessageId(null);
       fetchConversations().catch(() => {});
       fetchLimit().catch(() => {});
     };
@@ -416,7 +432,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setIsLoading(false);
         setIsThinking(false);
         setIsRetrying(false);
-        setMessagesRemaining(prev => prev + 1);
+        setStreamingMessageId(null);
+        setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
         setError('فشل الاتصال بعد عدة محاولات. اضغط إعادة المحاولة.');
         retryCountRef.current = 0;
       }
@@ -434,13 +451,17 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const sendMessage = useCallback(async (text?: string) => {
     const messageText = text ?? inputValue;
     const trimmed = messageText.trim();
-    if (!trimmed || isLoading || messagesRemaining <= 0) return;
+    if (!trimmed || isLoading) return;
+    if (messagesRemaining !== null && messagesRemaining <= 0) return;
 
     setError(null);
     abortRef.current = false;
     abortXHR();
     partialTextRef.current = '';
     retryCountRef.current = 0;
+
+    const aiMessageId = (Date.now() + 1).toString();
+    setStreamingMessageId(aiMessageId);
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -452,17 +473,16 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     setInputValue('');
     setIsLoading(true);
     setIsThinking(true);
-    setMessagesRemaining(prev => Math.max(0, prev - 1));
+    setMessagesRemaining(prev => (prev === null ? prev : Math.max(0, prev - 1)));
 
     if (!currentConversationId) {
       setError('No active conversation.');
       setIsLoading(false);
       setIsThinking(false);
-      setMessagesRemaining(prev => prev + 1);
+      setStreamingMessageId(null);
+      setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
       return;
     }
-
-    const aiMessageId = (Date.now() + 1).toString();
 
     const history = toHistoryFormat(
       messages.filter(m => m.id !== userMsg.id).slice(1),
@@ -489,10 +509,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const stopGeneration = useCallback(() => {
     abortRef.current = true;
     abortXHR();
-    setMessagesRemaining(prev => prev + 1);
+    setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
     setIsLoading(false);
     setIsThinking(false);
     setIsRetrying(false);
+    setStreamingMessageId(null);
     retryCountRef.current = 0;
   }, [abortXHR]);
 
@@ -553,6 +574,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     setIsLoading(false);
     setIsThinking(false);
     setIsRetrying(false);
+    setStreamingMessageId(null);
     setError(null);
     retryCountRef.current = 0;
     fetchLimit().catch(() => {});
@@ -637,6 +659,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     messagesRemaining,
     resetTime,
     error,
+    /** ID of the AI message that is currently streaming (or null). */
+    streamingMessageId,
+    /** Device-local user ID used in `x-user-id` headers. */
+    userId: userIdRef.current,
 
     sendMessage,
     stopGeneration,

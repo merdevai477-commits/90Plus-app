@@ -12,12 +12,15 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LimitReachedCountdown } from './LimitReachedCountdown';
 import { Colors, Radius, FontSize, Spacing, BlurIntensity } from '../../constants/theme';
+import { useTranslation } from '../../src/i18n';
 
 interface LimitReachedMessageProps {
   resetTime: Date;
 }
 
 export function LimitReachedMessage({ resetTime }: LimitReachedMessageProps) {
+  const { t } = useTranslation();
+
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
@@ -35,7 +38,7 @@ export function LimitReachedMessage({ resetTime }: LimitReachedMessageProps) {
 
         {/* Content */}
         <View style={styles.content}>
-          <Text style={styles.label}>Daily message limit reached</Text>
+          <Text style={styles.label}>{t.chat.limitReached}</Text>
 
           {/* Gradient countdown text */}
           <MaskedView
@@ -59,7 +62,7 @@ export function LimitReachedMessage({ resetTime }: LimitReachedMessageProps) {
             </LinearGradient>
           </MaskedView>
 
-          <Text style={styles.sublabel}>Resets after the countdown</Text>
+          <Text style={styles.sublabel}>{t.chat.limitResetsAfter}</Text>
         </View>
       </View>
     </Animated.View>

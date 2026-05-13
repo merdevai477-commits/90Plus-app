@@ -38,6 +38,28 @@ import { ConversationContextMenu } from './ConversationContextMenu';
 import { ConversationSkeleton, UserProfileSkeleton } from './SkeletonLoader';
 import { Colors, Gradients } from '../../constants/theme';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Format a conversation's `updatedAt` timestamp as a short Arabic
+ * relative-time label for the history sidebar. Handles invalid inputs
+ * defensively so a bad timestamp never breaks the list.
+ */
+function formatConversationDate(isoString: string): string {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return 'اليوم';
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return 'اليوم';
+  if (diffDays === 1) return 'أمس';
+  if (diffDays < 7) return `منذ ${diffDays} أيام`;
+  if (diffDays < 30) return `منذ ${Math.floor(diffDays / 7)} أسابيع`;
+  return `منذ ${Math.floor(diffDays / 30)} شهور`;
+}
+
 // ─── Background ───────────────────────────────────────────────────────────────
 
 export function AppBackground() {
@@ -207,7 +229,7 @@ export function HistoryItem({
 
 interface HistoryPanelProps {
   isOpen: boolean; onClose: () => void;
-  messagesRemaining: number; resetTime: Date | null;
+  messagesRemaining: number | null; resetTime: Date | null;
   conversations: Conversation[]; activeConversationId: string | null;
   onSelectConversation: (id: string) => Promise<void>;
   onTogglePin: (id: string, isPinned: boolean) => Promise<void>;
@@ -440,7 +462,7 @@ export function HistoryPanel({
                     <View style={styles.conversationsGroup}>
                       {pinned.map(c => (
                         <HistoryItem
-                          key={c.id} id={c.id} title={c.title} date="اليوم"
+                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt)}
                           isActive={c.id === activeConversationId} isPinned={c.isPinned}
                           onPress={() => onSelectConversation(c.id)}
                           onLongPress={() => setContextMenu({ conversation: c })}
@@ -458,7 +480,7 @@ export function HistoryPanel({
                     <View style={styles.conversationsGroup}>
                       {unpinned.map(c => (
                         <HistoryItem
-                          key={c.id} id={c.id} title={c.title} date="اليوم"
+                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt)}
                           isActive={c.id === activeConversationId} isPinned={c.isPinned}
                           onPress={() => onSelectConversation(c.id)}
                           onLongPress={() => setContextMenu({ conversation: c })}
@@ -471,7 +493,7 @@ export function HistoryPanel({
                 {/* Empty state — no conversations at all, or no search results */}
                 {filteredConversations.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyEmoji}>{searchQuery.trim() ? '�' : '�💬'}</Text>
+                    <Text style={styles.emptyEmoji}>{searchQuery.trim() ? '🔍' : '💬'}</Text>
                     <Text style={styles.emptyTitle}>
                       {searchQuery.trim() ? 'مفيش نتائج' : 'لا توجد محادثات'}
                     </Text>
