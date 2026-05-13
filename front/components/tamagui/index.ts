@@ -4,7 +4,6 @@
  */
 
 export {
-  Stack,
   XStack,
   YStack,
   ZStack,
@@ -36,7 +35,6 @@ export {
   styled,
   createStyledContext,
   withStaticProperties,
-  type StackProps,
   type XStackProps,
   type YStackProps,
   type TextProps,

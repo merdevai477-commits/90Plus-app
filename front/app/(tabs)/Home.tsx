@@ -660,7 +660,7 @@ export default function HomeScreen() {
 
     const designPlayers = useMemo(
         () => {
-            const real = players.map((p, idx) => {
+            return players.map((p, idx) => {
                 const pos = (p.position || 'CM').toUpperCase();
                 const color = POSITION_COLOR[pos] ?? '#8E54E9';
                 return {
@@ -679,28 +679,6 @@ export default function HomeScreen() {
                     username: p.username,
                 };
             });
-
-            // ─── TEST FIXTURE — remove when done ─────────────────────────
-            // Force a "mr.dev" test player into the 1st-place podium slot so
-            // we can visually verify the overlay pipeline (avatar + flag +
-            // position + name) against the bundled artwork.
-            const testAvatarUri = Image.resolveAssetSource(
-                require('../../assets/images/90Plus.png'),
-            ).uri;
-            const mrDev = {
-                id: 0,
-                name: 'mr.dev',
-                team: '🇪🇬',
-                country: '🇪🇬',
-                position: 'LW', // winger
-                positionColor: POSITION_COLOR.LW ?? '#11998E',
-                weeklyRating: '9.40',
-                overallRating: '9.40',
-                borderColor: POSITION_COLOR.LW ?? '#11998E',
-                photoUri: testAvatarUri,
-                username: 'mr.dev',
-            };
-            return [mrDev, ...real];
         },
         [players],
     );

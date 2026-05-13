@@ -1,4 +1,5 @@
 import { config as defaultConfig } from '@tamagui/config/v3'
+import { createAnimations } from '@tamagui/animations-react-native'
 import { createTamagui } from 'tamagui'
 
 // ============================================================================
@@ -254,7 +255,7 @@ const media = {
 // Animations — React Native Reanimated config
 // ============================================================================
 
-const animations = {
+const animations = createAnimations({
   bouncy: {
     type: 'spring',
     damping: 10,
@@ -278,7 +279,15 @@ const animations = {
     mass: 0.9,
     stiffness: 100,
   },
-}
+  // Tamagui requires a `default` animation as the fallback for any transition
+  // that doesn't specify an animation name explicitly.
+  default: {
+    type: 'spring',
+    damping: 20,
+    mass: 1.2,
+    stiffness: 250,
+  },
+})
 
 // ============================================================================
 // Shorthands — Convenient prop aliases

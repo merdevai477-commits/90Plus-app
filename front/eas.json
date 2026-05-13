@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "node": "20.18.0",
+      "node": "22.15.0",
       "ios": {
         "image": "latest"
       },
@@ -22,7 +22,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
-      "node": "20.18.0",
+      "node": "22.15.0",
       "ios": {
         "image": "latest"
       },
@@ -36,7 +36,7 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "node": "20.18.0",
+      "node": "22.15.0",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "SENTRY_ALLOW_FAILURE": "true",
