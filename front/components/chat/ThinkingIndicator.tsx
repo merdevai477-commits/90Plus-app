@@ -265,7 +265,7 @@ export function ThinkingIndicator({
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     marginVertical: Spacing.sm,
   },
   wrapper: {

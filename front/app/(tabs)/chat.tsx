@@ -1,5 +1,5 @@
 /**
- * ChatScreen.tsx — 90Plus AI Chat (v2 — voice input + retry banner)
+ * ChatScreen.tsx — 90Plus AI Chat (v3 — text input + retry banner)
  *
  * Key design decisions:
  *  - Personalized greeting from Clerk profile (falls back to "كابتن").
@@ -37,8 +37,6 @@ import { useRouter } from 'expo-router';
 import Animated, {
     useSharedValue,
     withSpring,
-    withRepeat,
-    withTiming,
     useAnimatedStyle,
     FadeIn,
     FadeOut,
@@ -46,7 +44,6 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import Svg, { Path } from 'react-native-svg';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 
@@ -70,7 +67,6 @@ import { useScreenFont } from '../../utils/fontSetup';
 
 const ACCENT = '#A855F7';
 const SCROLL_NEAR_BOTTOM_THRESHOLD = 100; // px
-const AUTO_SCROLL_ON_NEW_MSG_DELAY = 50; // ms
 const NUDGE_FLAG_PREFIX = '@chat_fifa_nudge_shown_v1_';
 
 // ─── Animated components ──────────────────────────────────────────────────────
@@ -140,12 +136,6 @@ export default function ChatScreen() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [nudgeText, setNudgeText] = useState<string | null>(null);
 
-    // ─── Voice recording ─────────────────────────────────────────────────────
-    const [isRecording, setIsRecording] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
-    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-    const recordingUri = useRef<string | null>(null);
-
     // Track whether user is near the bottom — used to auto-scroll on new msgs
     const isNearBottomRef = useRef(true);
     const lastMessageCountRef = useRef(0);
@@ -190,6 +180,7 @@ export default function ChatScreen() {
         messages, conversations, currentConversationId,
         inputValue, setInputValue, isLoading, isThinking, isRetrying,
         messagesRemaining, resetTime, error,
+        streamingMessageId,
         sendMessage, editMessage, deleteMessage, clearChat,
         selectConversation, startNewConversation,
         togglePinConversation, renameConversation, deleteConversation,
@@ -226,17 +217,21 @@ export default function ChatScreen() {
         };
     }, [profile, isFifaCardComplete]);
 
-    // ─── Keyboard tracking (smooth spring transition) ───────────────────────
+    // ─── Keyboard tracking ───────────────────────────────────────────────
+    // keyboardHeight is used for:
+    //   1) Auto-scrolling to the bottom when the keyboard opens.
+    //   2) Lifting the bottomArea on Android (see bottomPad below). iOS
+    //      relies on KeyboardAvoidingView instead of this value for layout.
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
         const onShow = (e: KeyboardEvent) => {
             setKeyboardHeight(e.endCoordinates.height);
-            // Scroll to bottom smoothly when keyboard opens
-            requestAnimationFrame(() => {
+            const delay = Platform.OS === 'ios' ? 0 : 100;
+            setTimeout(() => {
                 listRef.current?.scrollToEnd({ animated: true });
-            });
+            }, delay);
         };
         const onHide = () => setKeyboardHeight(0);
 
@@ -252,9 +247,11 @@ export default function ChatScreen() {
 
         if (newCount > prevCount) {
             if (isNearBottomRef.current) {
+                // Give the layout a beat to settle so we don't scroll to an
+                // intermediate height and end up short.
                 setTimeout(() => {
                     listRef.current?.scrollToEnd({ animated: true });
-                }, AUTO_SCROLL_ON_NEW_MSG_DELAY);
+                }, 80);
             } else {
                 setUnreadCount(c => c + (newCount - prevCount));
             }
@@ -264,9 +261,15 @@ export default function ChatScreen() {
 
     // ─── Derived flags ──────────────────────────────────────────────────────
     const hasMessages = messages.length > 1;
-    const bottomPad = keyboardHeight > 0
-        ? keyboardHeight + 8
-        : Math.max(insets.bottom, 16);
+    // softwareKeyboardLayoutMode = "pan" → the OS slides the whole window up
+    // so the focused input stays visible. We must NOT add keyboardHeight
+    // manually or the input will be lifted twice (double-gap above keyboard).
+    // We only need a small fixed gap to keep the input off the very bottom
+    // edge of the screen when the keyboard is closed.
+    const isKbOpen = keyboardHeight > 0;
+    const bottomPad = isKbOpen
+        ? 4
+        : Math.min(Math.max(insets.bottom, 8), 16);
 
     // ─── Handlers ───────────────────────────────────────────────────────────
     const handleSend = useCallback((textOverride?: string) => {
@@ -334,66 +337,14 @@ export default function ChatScreen() {
         router.push('/');
     }, [router]);
 
-    // ─── Voice recording handlers ────────────────────────────────────────────
-    const handleMicPress = useCallback(async () => {
-        if (isRecording) {
-            // Stop and transcribe
-            try {
-                await audioRecorder.stop();
-                const uri = audioRecorder.uri;
-                recordingUri.current = uri ?? null;
-                setIsRecording(false);
-
-                if (!uri) return;
-                setIsTranscribing(true);
-
-                // Upload to backend transcription endpoint
-                const formData = new FormData();
-                formData.append('audio', {
-                    uri,
-                    name: 'voice.m4a',
-                    type: 'audio/m4a',
-                } as any);
-
-                const { API_CONFIG } = await import('../../constants/theme');
-                const res = await fetch(`${API_CONFIG.baseUrl}/api/chat/transcribe`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: { 'x-user-id': 'voice' }, // userId not critical for transcription
-                });
-
-                if (res.ok) {
-                    const data = await res.json() as { text?: string };
-                    if (data.text?.trim()) {
-                        setInputValue(data.text.trim());
-                        setTimeout(() => inputRef.current?.focus(), 100);
-                    }
-                }
-            } catch (err) {
-                console.warn('[voice] transcription failed:', err);
-            } finally {
-                setIsTranscribing(false);
-            }
-        } else {
-            // Start recording
-            try {
-                const status = await AudioModule.requestRecordingPermissionsAsync();
-                if (!status.granted) return;
-                await audioRecorder.prepareToRecordAsync();
-                audioRecorder.record();
-                setIsRecording(true);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            } catch (err) {
-                console.warn('[voice] recording failed:', err);
-                setIsRecording(false);
-            }
-        }
-    }, [isRecording, audioRecorder, setInputValue]);
-
     // ─── Message renderer — memoized ─────────────────────────────────────────
     const renderMessage = useCallback(({ item: msg, index: i }: { item: any; index: number }) => {
         if (msg.role === 'ai') {
-            return <AIMessageBubble message={msg} index={i} />;
+            // History = any AI message that isn't the one currently streaming.
+            // This keeps the character-by-character animation on live replies
+            // while making previously-saved conversations render instantly.
+            const isHistory = msg.id !== streamingMessageId;
+            return <AIMessageBubble message={msg} index={i} isHistory={isHistory} />;
         }
         return (
             <UserMessageBubble
@@ -405,7 +356,7 @@ export default function ChatScreen() {
                 onCopy={() => ExpoClipboard.setStringAsync(msg.text).catch(() => {})}
             />
         );
-    }, [handleSend, handleStartEdit, deleteMessage]);
+    }, [handleSend, handleStartEdit, deleteMessage, streamingMessageId]);
 
     const keyExtractor = useCallback((item: any) => item.id, []);
 
@@ -509,6 +460,15 @@ export default function ChatScreen() {
             )}
 
             {/* ── Content ── */}
+            {/*
+             * Keyboard handling — platform-split lift:
+             *   iOS → KAV 'padding' lifts the container via paddingBottom.
+             *         bottomPad stays minimal (4 px above keyboard).
+             *   Android → KAV does nothing (behavior=undefined) because its
+             *         'height' mode fights with the system in edge-to-edge
+             *         mode. We lift the bottomArea manually by setting
+             *         bottom = keyboardHeight in JS. One source of truth.
+             */}
             <KeyboardAvoidingView
                 style={styles.contentWrap}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -533,12 +493,12 @@ export default function ChatScreen() {
                         onScroll={handleScroll}
                         scrollEventThrottle={16}
                         onContentSizeChange={() => {
+                            // Only auto-scroll when the user is already near
+                            // the bottom — prevents mid-read jumps when old
+                            // history grows or the keyboard resizes layout.
                             if (isNearBottomRef.current) {
                                 listRef.current?.scrollToEnd({ animated: false });
                             }
-                        }}
-                        onLayout={() => {
-                            listRef.current?.scrollToEnd({ animated: false });
                         }}
                         removeClippedSubviews={Platform.OS === 'android'}
                         maxToRenderPerBatch={10}
@@ -682,11 +642,6 @@ export default function ChatScreen() {
                                     underlineColorAndroid="transparent"
                                     selectionColor={Colors.purpleSoft}
                                 />
-                                <VoiceButton
-                                    isRecording={isRecording}
-                                    isTranscribing={isTranscribing}
-                                    onPress={handleMicPress}
-                                />
                                 <SendButton
                                     active={Boolean(inputValue.trim())}
                                     loading={isLoading}
@@ -702,59 +657,6 @@ export default function ChatScreen() {
                 </View>
             </KeyboardAvoidingView>
         </View>
-    );
-}
-
-// ─── Voice Button ─────────────────────────────────────────────────────────────
-
-function VoiceButton({
-    isRecording, isTranscribing, onPress,
-}: { isRecording: boolean; isTranscribing: boolean; onPress: () => void }) {
-    const pulse = useSharedValue(1);
-
-    useEffect(() => {
-        if (isRecording) {
-            pulse.value = withRepeat(
-                withTiming(1.25, { duration: 600 }),
-                -1,
-                true,
-            );
-        } else {
-            pulse.value = withTiming(1, { duration: 200 });
-        }
-    }, [isRecording, pulse]);
-
-    const pulseStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: pulse.value }],
-        opacity: isRecording ? 1 : 0.7,
-    }));
-
-    return (
-        <Pressable
-            onPress={onPress}
-            disabled={isTranscribing}
-            style={styles.voiceButton}
-            accessibilityRole="button"
-            accessibilityLabel={isRecording ? 'Stop recording' : 'Start voice input'}
-        >
-            <Animated.View style={pulseStyle}>
-                {isTranscribing ? (
-                    <SpinnerRing />
-                ) : (
-                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none"
-                        stroke={isRecording ? '#EF4444' : 'rgba(255,255,255,0.6)'}
-                        strokeWidth={2}
-                    >
-                        <Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                        <Path d="M19 10v2a7 7 0 0 1-14 0v-2" strokeLinecap="round" />
-                        <Path d="M12 19v4M8 23h8" strokeLinecap="round" />
-                    </Svg>
-                )}
-            </Animated.View>
-            {isRecording && (
-                <View style={styles.voiceRecordingDot} />
-            )}
-        </Pressable>
     );
 }
 
@@ -1163,25 +1065,5 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.5)',
         fontSize: 18,
         lineHeight: 20,
-    },
-
-    // ── Voice button ──
-    voiceButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 4,
-        flexShrink: 0,
-    },
-    voiceRecordingDot: {
-        position: 'absolute',
-        top: 4,
-        right: 4,
-        width: 7,
-        height: 7,
-        borderRadius: 3.5,
-        backgroundColor: '#EF4444',
     },
 });

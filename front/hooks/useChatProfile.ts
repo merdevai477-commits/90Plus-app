@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { AuthService, type UserProfile } from '../src/services/authService';
 
 const CACHE_KEY_PREFIX = '@chat_profile_v1_';
@@ -70,6 +70,7 @@ export interface UseChatProfileResult {
 
 export function useChatProfile(): UseChatProfileResult {
     const { getToken, userId } = useAuth();
+    const { user: clerkUser } = useUser();
     const [profile, setProfile] = useState<ChatProfileSlice | null>(null);
     const profileRef = useRef<ChatProfileSlice | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -96,7 +97,13 @@ export function useChatProfile(): UseChatProfileResult {
                     const entry = JSON.parse(raw) as CacheEntry;
                     const age = Date.now() - entry.cachedAt;
                     if (age < CACHE_TTL_MS && !cancelled) {
-                        updateProfile(entry.data);
+                        // Fall back to Clerk's imageUrl if the cached avatar is null.
+                        const cached = entry.data;
+                        if (!cached.avatar && clerkUser?.imageUrl) {
+                            updateProfile({ ...cached, avatar: clerkUser.imageUrl });
+                        } else {
+                            updateProfile(cached);
+                        }
                         setLoading(false);
                         return; // cache hit is fresh — no network call needed
                     }
@@ -116,6 +123,10 @@ export function useChatProfile(): UseChatProfileResult {
                 if (cancelled) return;
                 if (fresh) {
                     const slice = toSlice(fresh);
+                    // Fall back to Clerk's imageUrl when the backend avatar is null.
+                    if (!slice.avatar && clerkUser?.imageUrl) {
+                        slice.avatar = clerkUser.imageUrl;
+                    }
                     updateProfile(slice);
                     AsyncStorage.setItem(
                         cacheKey,
@@ -132,7 +143,7 @@ export function useChatProfile(): UseChatProfileResult {
         return () => {
             cancelled = true;
         };
-    }, [cacheKey, getToken, updateProfile]);
+    }, [cacheKey, getToken, updateProfile, clerkUser?.imageUrl]);
 
     const isFifaCardComplete = !!(
         profile &&

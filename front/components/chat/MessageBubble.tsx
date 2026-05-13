@@ -35,6 +35,14 @@ import { Message } from '../../hooks/useAIChatNative';
 interface MessageBubbleProps {
   message: Message;
   index?: number;
+  /**
+   * When true, the bubble skips the per-character typing animation and
+   * renders its full text instantly. Set on history messages (already
+   * persisted on the server) so reopening a conversation does not replay
+   * every message. Leave undefined/false for the currently-streaming
+   * assistant response.
+   */
+  isHistory?: boolean;
   onResend?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -205,7 +213,7 @@ export const TypingIndicator = React.memo(() => (
 
 // ─── AI Bubble ────────────────────────────────────────────────────────────────
 
-export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0 }: MessageBubbleProps) {
+export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false }: MessageBubbleProps) {
   const prevId = useRef<string | null>(null);
   const initialText = useRef<string | null>(null);
   const [visible, setVisible] = useState('');
@@ -224,6 +232,13 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
     if (prevId.current !== message.id) { prevId.current = message.id; initialText.current = null; }
     if (initialText.current === null) initialText.current = full;
 
+    // History message: render full text instantly, no animation.
+    if (isHistory) {
+      setVisible(full);
+      setDone(true);
+      return () => { mounted = false; };
+    }
+
     // Streaming: text arrives live — render as it comes
     if (initialText.current === '') {
       setVisible(full);
@@ -231,7 +246,7 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
       return () => { mounted = false; };
     }
 
-    // History: local typing animation — tuned for smoother reveal
+    // Non-history message that arrived fully-formed (e.g. resend): animate.
     setVisible(''); setDone(false);
     if (!full) { setDone(true); return () => { mounted = false; }; }
 
@@ -247,16 +262,16 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
       if (idx >= len) { clearInterval(timer); setDone(true); }
     }, iv);
     return () => { mounted = false; clearInterval(timer); };
-  }, [message.id]);
+  }, [message.id, isHistory]);
 
   const display = done ? (message.text ?? '') : visible;
   const isStreaming = initialText.current === '' && message.text !== '' && !done;
-  const showCursor = isStreaming || (!done && initialText.current !== '');
+  const showCursor = !isHistory && (isStreaming || (!done && initialText.current !== ''));
   const content = useMemo(() => renderMarkdown(display), [display]);
 
   return (
     <Animated.View
-      entering={FadeIn.withInitialValues({ transform: [{ translateX: 20 }], opacity: 0 })
+      entering={FadeIn.withInitialValues({ transform: [{ translateX: -20 }], opacity: 0 })
         .springify().stiffness(180).damping(14).delay(index * 40)}
       style={s.aiRow}
     >
@@ -317,7 +332,7 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
   return (
     <>
       <Animated.View
-        entering={FadeIn.withInitialValues({ transform: [{ translateX: -20 }], opacity: 0 })
+        entering={FadeIn.withInitialValues({ transform: [{ translateX: 20 }], opacity: 0 })
           .springify().stiffness(180).damping(14).delay(index * 40)}
         style={s.userRow}
       >
@@ -365,15 +380,15 @@ const s = StyleSheet.create({
   // ── AI row ──
   aiRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',   // bubble hugs right edge
+    justifyContent: 'flex-start',  // AI bubble hugs the left edge
     marginVertical: 6,
     paddingHorizontal: 12,
   },
   aiMaxW: { maxWidth: '82%' },
   aiBubble: {
     borderRadius: 18,
-    borderTopRightRadius: 4,      // small tail top-right
-    borderBottomRightRadius: 4,   // cleaner shape
+    borderTopLeftRadius: 4,        // small tail on the left
+    borderBottomLeftRadius: 4,     // cleaner shape
     borderWidth: 0.5,
     borderColor: 'rgba(167,139,250,0.35)',
     overflow: 'hidden',
@@ -405,22 +420,22 @@ const s = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255,255,255,0.35)',
     marginTop: 4,
-    textAlign: 'right',
-    paddingRight: 4,
+    textAlign: 'left',
+    paddingLeft: 4,
   },
 
   // ── User row ──
   userRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',  // bubble hugs left edge
+    justifyContent: 'flex-end',    // user bubble hugs the right edge
     marginVertical: 6,
     paddingHorizontal: 12,
   },
   userMaxW: { maxWidth: '78%' },
   userBubble: {
     borderRadius: 18,
-    borderTopLeftRadius: 4,        // small tail top-left
-    borderBottomLeftRadius: 4,     // cleaner shape
+    borderTopRightRadius: 4,       // small tail on the right
+    borderBottomRightRadius: 4,    // cleaner shape
     overflow: 'hidden',
     borderWidth: 0.5,
     borderColor: 'rgba(167,139,250,0.4)',
@@ -438,8 +453,8 @@ const s = StyleSheet.create({
   userBubbleInnerBorder: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 18,
-    borderTopLeftRadius: 4,
-    borderBottomLeftRadius: 4,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
     borderWidth: 0.5,
     borderColor: 'rgba(196,181,253,0.15)',
     zIndex: 2,
@@ -457,8 +472,8 @@ const s = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255,255,255,0.35)',
     marginTop: 4,
-    textAlign: 'left',
-    paddingLeft: 4,
+    textAlign: 'right',
+    paddingRight: 4,
   },
 
   // ── Typing indicator dots ──

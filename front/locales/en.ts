@@ -1388,6 +1388,12 @@ export const en = {
     replayVideo: 'Replay video',
     loadingVideos: 'Loading videos...',
   },
+
+  // AI Chat
+  chat: {
+    limitReached: 'Daily message limit reached',
+    limitResetsAfter: 'Resets after the countdown',
+  },
 };
 
 export default en;

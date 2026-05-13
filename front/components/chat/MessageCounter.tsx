@@ -19,7 +19,12 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MessageCounterProps {
-  messagesRemaining: number;
+  /**
+   * Remaining message count. `null` means the real limit has not been
+   * fetched yet — the pill renders a neutral placeholder instead of
+   * showing a misleading number.
+   */
+  messagesRemaining: number | null;
   total?: number;
 }
 
@@ -63,20 +68,38 @@ function getColors(remaining: number, total: number): CounterColors {
   };
 }
 
+/**
+ * Neutral palette for the "still loading" pill state.
+ */
+function getLoadingColors(): CounterColors {
+  return {
+    gradientColors: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)'] as const,
+    borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: 'rgba(255,255,255,0.1)',
+    textColor: 'rgba(255,255,255,0.6)',
+  };
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function MessageCounter({
   messagesRemaining,
   total = 5,
 }: MessageCounterProps) {
+  const isLoading = messagesRemaining === null;
+
   // ✅ useMemo — لا نعيد الحساب إلا عند تغيّر القيم
   const colors = useMemo(
-    () => getColors(messagesRemaining, total),
-    [messagesRemaining, total],
+    () => (isLoading ? getLoadingColors() : getColors(messagesRemaining, total)),
+    [isLoading, messagesRemaining, total],
   );
 
   // ✅ نص وصفي للـ accessibility
-  const accessibilityLabel = `${messagesRemaining} of ${total} messages remaining`;
+  const accessibilityLabel = isLoading
+    ? 'Loading message limit'
+    : `${messagesRemaining} of ${total} messages remaining`;
+
+  const displayText = isLoading ? '…' : `${messagesRemaining}/${total}`;
 
   return (
     /**
@@ -115,7 +138,7 @@ export function MessageCounter({
           />
 
           <Text style={[styles.text, { color: colors.textColor }]}>
-            {messagesRemaining}/{total}
+            {displayText}
           </Text>
         </LinearGradient>
       </View>

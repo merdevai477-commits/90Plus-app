@@ -1350,6 +1350,12 @@ export const ar = {
     replayVideo: 'إعادة تشغيل الفيديو',
     loadingVideos: 'جاري تحميل الفيديوهات...',
   },
+
+  // AI Chat
+  chat: {
+    limitReached: 'انتهت رسائلك اليومية',
+    limitResetsAfter: 'يتجدد بعد العد التنازلي',
+  },
 };
 
 export type TranslationKeys = typeof ar;
