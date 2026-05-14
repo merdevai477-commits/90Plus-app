@@ -488,8 +488,8 @@ export default function RootLayout() {
       const url = event.url;
       logger.debug('[DeepLink] Received:', url);
 
-      if (url.startsWith('90plus://reel/')) {
-        const reelId = url.replace('90plus://reel/', '');
+      if (url.startsWith('ninetyplus://reel/')) {
+        const reelId = url.replace('ninetyplus://reel/', '');
         if (reelId) {
           router.push({
             pathname: '/(tabs)/reels',

@@ -6,7 +6,7 @@
     "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
-    "scheme": "90plus",
+    "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
