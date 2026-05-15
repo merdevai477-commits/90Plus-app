@@ -10,6 +10,7 @@ import { moderateReelCaption, moderateComment } from '../middleware/content-mode
 import { filterUGCContent } from '../middleware/filter-content.middleware';
 import { enqueueNotification, enqueueSocialNotification } from '../queues/notification.queue';
 import { r2MediaStorage } from '../services/r2-media-storage.service';
+import { awardXp } from '../services/xp.service';
 
 const router = Router();
 
@@ -535,7 +536,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
         }
 
         // Create view record and increment count in a transaction
-        await prisma.$transaction([
+        const [, updatedReel] = await prisma.$transaction([
             prisma.reelView.create({
                 data: {
                     reelId: idStr,
@@ -544,9 +545,20 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
             }),
             prisma.reel.update({
                 where: { id: idStr },
-                data: { views: { increment: 1 } }
+                data: { views: { increment: 1 } },
+                select: { views: true, userId: true }
             })
         ]);
+
+        // ✅ XP Awards for reel owner on view milestones (non-blocking)
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        if (updatedReel.views === 100) {
+          awardXp({ userId: updatedReel.userId, action: 'REEL_VIEWS_100', idempotencyKey: `reel:${idStr}:views100`, timezone: tz, metadata: { reelId: idStr } }).catch((e) => logger.warn('XP views100 failed:', e));
+        } else if (updatedReel.views === 500) {
+          awardXp({ userId: updatedReel.userId, action: 'REEL_VIEWS_500', idempotencyKey: `reel:${idStr}:views500`, timezone: tz, metadata: { reelId: idStr } }).catch((e) => logger.warn('XP views500 failed:', e));
+        } else if (updatedReel.views === 1000) {
+          awardXp({ userId: updatedReel.userId, action: 'REEL_VIEWS_1000', idempotencyKey: `reel:${idStr}:views1000`, timezone: tz, metadata: { reelId: idStr } }).catch((e) => logger.warn('XP views1000 failed:', e));
+        }
 
         res.json({ status: 'SUCCESS' });
     } catch (error: any) {
@@ -614,6 +626,10 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
 
         // Notify reel owner
         if (reel.userId !== user.id) {
+            // ✅ XP Award to reel owner for receiving a like (non-blocking)
+            const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+            awardXp({ userId: reel.userId, action: 'REEL_RECEIVED_LIKE', dailyCap: 50, timezone: tz, metadata: { reelId: idStr, likerId: user.id } }).catch((e) => logger.warn('XP received_like failed:', e));
+
             // Get liker info for notification
             const liker = await prisma.user.findUnique({
                 where: { id: user.id },
@@ -1025,6 +1041,10 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
             });
         } else if (reel && reel.userId !== user.id && !parentId) {
             // This is a top-level comment - notify reel owner
+            // ✅ XP Award to reel owner for receiving a comment (non-blocking)
+            const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+            awardXp({ userId: reel.userId, action: 'REEL_RECEIVED_COMMENT', dailyCap: 30, timezone: tz, metadata: { reelId: idStr, commenterId: user.id } }).catch((e) => logger.warn('XP received_comment failed:', e));
+
             await enqueueSocialNotification({
                 userId: reel.userId,
                 actorId: user.id,
@@ -1808,6 +1828,10 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
 
         // Notify reel owner (if not self)
         if (reel.userId !== user.id) {
+            // ✅ XP Award to reel owner for receiving a share (non-blocking)
+            const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+            awardXp({ userId: reel.userId, action: 'REEL_RECEIVED_SHARE', dailyCap: 20, timezone: tz, metadata: { reelId: idStr, sharerId: user.id } }).catch((e) => logger.warn('XP received_share failed:', e));
+
             const sharer = await prisma.user.findUnique({
                 where: { id: user.id },
                 select: { username: true, displayName: true }

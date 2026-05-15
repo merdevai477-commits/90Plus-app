@@ -782,6 +782,10 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
             data: { followerId: currentUser.id },
         });
 
+        // ✅ XP Award to the followed user for receiving a follow (non-blocking)
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        awardXp({ userId: targetUser.id, action: 'RECEIVED_FOLLOW', dailyCap: 20, timezone: tz, metadata: { followerId: currentUser.id } }).catch((e) => logger.warn('XP received_follow failed:', e));
+
         // Send WebSocket follow event (Requirements: 21.4)
         WebSocketService.sendFollowUpdate(targetUser.id, {
             followerId: currentUser.id,
