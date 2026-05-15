@@ -131,6 +131,7 @@ app.use(
 
 // Morgan logging - custom format with proper spacing for readability
 // Format: METHOD /path STATUS RESPONSE_TIME
+// Skip logging for health check pings (Railway uptime monitoring)
 app.use(morgan((tokens, req, res) => {
     return [
         tokens.method(req, res),
@@ -138,6 +139,8 @@ app.use(morgan((tokens, req, res) => {
         tokens.status(req, res),
         tokens['response-time'](req, res), 'ms'
     ].join(' ');
+}, {
+    skip: (req) => req.url === '/' || req.url === '/health' || req.url === '/api/health',
 }));
 
 // Performance monitoring
@@ -160,20 +163,7 @@ if (!isProduction) {
     });
 }
 
-// Route verification middleware - logs route matching attempts
-app.use((req: Request, res: Response, next: NextFunction) => {
-    // Only log for quiz routes to avoid too much logging
-    if (req.path.includes('/quiz/')) {
-        logger.debug('Route verification - Quiz route request', {
-            method: req.method,
-            path: req.path,
-            originalUrl: req.originalUrl,
-            baseUrl: req.baseUrl,
-            url: req.url,
-        });
-    }
-    next();
-});
+
 
 // Upload timeout middleware - 15 minutes for upload routes
 const UPLOAD_TIMEOUT = 15 * 60 * 1000; // 15 minutes
@@ -224,7 +214,7 @@ import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import coinsRoutes from './routes/coins.routes';
-import quizRoutes from './routes/quiz.routes';
+
 import adminRoutes from './routes/admin.routes';
 import appVersionRoutes from './routes/app-version.routes';
 import supportRoutes from './routes/support.routes';
@@ -261,7 +251,7 @@ app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
 app.use(`${API_PREFIX}/chat`, lenientLimiter);
 app.use(`${API_PREFIX}/conversations`, lenientLimiter);
 app.use(`${API_PREFIX}/daily-spin`, lenientShellLimiter);
-app.use(`${API_PREFIX}/quiz/daily-status`, lenientShellLimiter);
+
 // All /predictions routes (GET-heavy from multiple tabs); POST still passes generalLimiter after.
 app.use(`${API_PREFIX}/predictions`, lenientPredictionsReadLimiter);
 // User/profile-related endpoints are called frequently by the app shell.
@@ -382,85 +372,7 @@ app.get('/support', (req, res) => {
     res.redirect('/support.html');
 });
 
-// Register quiz routes with error handling
-try {
-    // Log before registration
-    logger.info(`📝 Attempting to register quiz routes at ${API_PREFIX}/quiz`, {
-        apiPrefix: API_PREFIX,
-        routePath: `${API_PREFIX}/quiz`,
-        environment: process.env.NODE_ENV || 'development',
-    });
-    
-    app.use(`${API_PREFIX}/quiz`, quizRoutes);
-    
-    // Log successful registration with all available endpoints
-    const quizEndpoints = [
-        `${API_PREFIX}/quiz/health`,
-        `${API_PREFIX}/quiz/test-daily-status`,
-        `${API_PREFIX}/quiz/routes`,
-        `${API_PREFIX}/quiz/categories`,
-        `${API_PREFIX}/quiz/daily-status`,
-        `${API_PREFIX}/quiz/answers`,
-        `${API_PREFIX}/quiz/stats`,
-        `${API_PREFIX}/quiz/history`,
-        `${API_PREFIX}/quiz/:categoryId/start`,
-        `${API_PREFIX}/quiz/:categoryId/submit`,
-        `${API_PREFIX}/quiz/:categoryId/cooldown`,
-    ];
-    
-    logger.info(`✅ Quiz routes registered successfully`, {
-        routePath: `${API_PREFIX}/quiz`,
-        totalEndpoints: quizEndpoints.length,
-        endpoints: quizEndpoints,
-    });
-    
-    // Verify daily-status route is registered
-    setTimeout(() => {
-        const routeStack = app._router?.stack || [];
-        const quizRoutesInStack = routeStack.filter((layer: any) => 
-            layer.regexp && layer.regexp.toString().includes('quiz')
-        );
-        
-        // Check if daily-status route exists in router
-        const quizRouter = quizRoutesInStack.find((layer: any) => 
-            layer.name === 'router' || layer.handle === quizRoutes
-        );
-        
-        if (quizRouter && quizRouter.handle) {
-            const routerStack = quizRouter.handle.stack || [];
-            const dailyStatusRoute = routerStack.find((layer: any) => 
-                layer.route && layer.route.path === '/daily-status'
-            );
-            
-            if (dailyStatusRoute) {
-                logger.info('✅ /daily-status route verified in router stack');
-            } else {
-                logger.error('❌ /daily-status route NOT found in router stack!');
-                logger.error('Router stack routes:', routerStack
-                    .filter((l: any) => l.route)
-                    .map((l: any) => `${Object.keys(l.route.methods)[0].toUpperCase()} ${l.route.path}`)
-                );
-            }
-        }
-        
-        logger.debug('Quiz routes in Express stack', {
-            count: quizRoutesInStack.length,
-            layers: quizRoutesInStack.map((layer: any) => ({
-                path: layer.regexp?.toString(),
-                name: layer.name,
-            })),
-        });
-    }, 200);
-    
-} catch (error: any) {
-    logger.error(`❌ Failed to register quiz routes`, {
-        error: error.message,
-        stack: error.stack,
-        apiPrefix: API_PREFIX,
-        routePath: `${API_PREFIX}/quiz`,
-    });
-    // Continue even if quiz routes fail to register
-}
+
 
 // Metrics endpoint (for monitoring)
 app.get(`${API_PREFIX}/metrics`, getMetricsHandler);
@@ -640,33 +552,13 @@ app.use((req: Request, res: Response) => {
         userAgent: req.headers['user-agent'],
     });
     
-    // Log available routes for debugging
-    const availableQuizRoutes = [
-        `${API_PREFIX}/quiz/health`,
-        `${API_PREFIX}/quiz/test-daily-status`,
-        `${API_PREFIX}/quiz/routes`,
-        `${API_PREFIX}/quiz/categories`,
-        `${API_PREFIX}/quiz/daily-status`,
-        `${API_PREFIX}/quiz/answers`,
-        `${API_PREFIX}/quiz/stats`,
-        `${API_PREFIX}/quiz/history`,
-        `${API_PREFIX}/quiz/:categoryId/start`,
-        `${API_PREFIX}/quiz/:categoryId/submit`,
-        `${API_PREFIX}/quiz/:categoryId/cooldown`,
-    ];
-    
     res.status(404).json({
         status: 'ERROR',
         message: 'Route not found',
         path: req.path,
         method: req.method,
         originalUrl: req.originalUrl,
-        availableRoutes: {
-            quiz: availableQuizRoutes,
-        },
-        suggestion: req.path.includes('/quiz/') 
-            ? `Did you mean one of these quiz routes? ${availableQuizRoutes.join(', ')}`
-            : `Check available routes for ${req.path.split('/')[1] || 'root'}`,
+        suggestion: `Check available routes at ${API_PREFIX}/health`,
     });
 });
 
@@ -764,7 +656,7 @@ async function startServer() {
         }
 
         // ✅ Warmup: pre-heat DB connection pool + prefetch hot data to avoid
-        //    slow cold-start queries (CachedFixture, QuizCategory, Leagues, …)
+        //    slow cold-start queries (CachedFixture, Leagues, …)
         if (databaseConnected) {
             try {
                 const { warmupService } = await import('./services/warmup.service');
@@ -784,41 +676,6 @@ async function startServer() {
             logger.info(`📍 WebSocket: ws://0.0.0.0:${PORT}`);
             logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
             
-            // Verify quiz routes are registered
-            try {
-                const quizRoutesPath = require.resolve('./routes/quiz.routes');
-                logger.info(`✅ Quiz routes file found at: ${quizRoutesPath}`);
-                
-                // Log all quiz routes for verification
-                const quizRoutesList = [
-                    `${API_PREFIX}/quiz/health`,
-                    `${API_PREFIX}/quiz/test-daily-status`,
-                    `${API_PREFIX}/quiz/routes`,
-                    `${API_PREFIX}/quiz/categories`,
-                    `${API_PREFIX}/quiz/daily-status`,
-                    `${API_PREFIX}/quiz/answers`,
-                    `${API_PREFIX}/quiz/stats`,
-                    `${API_PREFIX}/quiz/history`,
-                    `${API_PREFIX}/quiz/:categoryId/start`,
-                    `${API_PREFIX}/quiz/:categoryId/submit`,
-                    `${API_PREFIX}/quiz/:categoryId/cooldown`,
-                ];
-                
-                logger.info(`✅ Quiz routes available:`, {
-                    totalRoutes: quizRoutesList.length,
-                    routes: quizRoutesList,
-                });
-                
-                // Verify route stack
-                const routeStack = app._router?.stack || [];
-                const quizRoutesInStack = routeStack.filter((layer: any) => 
-                    layer.regexp && layer.regexp.toString().includes('quiz')
-                );
-                
-                logger.info(`✅ Quiz routes in Express stack: ${quizRoutesInStack.length} layers found`);
-            } catch (error: any) {
-                logger.error(`❌ Quiz routes file not found: ${error.message}`);
-            }
 
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {

@@ -48,12 +48,14 @@ class BackgroundPreloadService {
         }
 
         this.isRunning = true;
-        logger.info('[BackgroundPreload] ✅ Service started');
+        logger.info('[BackgroundPreload] ✅ Service started (first run in 60s)');
 
-        // Run immediately on start
-        this.preloadTeams().catch(err => {
-            logger.error('[BackgroundPreload] Initial preload failed:', err);
-        });
+        // Delay first run by 60 seconds to let the server finish startup
+        setTimeout(() => {
+            this.preloadTeams().catch(err => {
+                logger.error('[BackgroundPreload] Initial preload failed:', err);
+            });
+        }, 60_000);
 
         // Then run periodically
         this.intervalId = setInterval(() => {
@@ -221,8 +223,8 @@ class BackgroundPreloadService {
                 });
 
                 for (const match of recentMatches) {
-                    if (match.homeTeamId) teamIds.add(match.homeTeamId);
-                    if (match.awayTeamId) teamIds.add(match.awayTeamId);
+                    if (match.homeTeamId && Number.isInteger(match.homeTeamId)) teamIds.add(match.homeTeamId);
+                    if (match.awayTeamId && Number.isInteger(match.awayTeamId)) teamIds.add(match.awayTeamId);
                 }
             } catch (error) {
                 logger.warn('[BackgroundPreload] Failed to fetch recent matches:', error);

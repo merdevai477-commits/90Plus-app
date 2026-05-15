@@ -84,28 +84,32 @@ function buildClient(apiKey: string, baseURL: string): OpenAI {
 }
 
 const PRIMARY: ProviderConfig | null = (() => {
-    const apiKey = process.env.AI_API_KEY ?? process.env.GOOGLE_AI_KEY ?? '';
+    const apiKey = process.env.AI_API_KEY ?? process.env.OPENROUTER_API_KEY ?? '';
     if (!apiKey) return null;
-    const baseURL = process.env.AI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta/openai';
+    const baseURL = process.env.AI_BASE_URL ?? process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
     return {
         name: 'primary',
         apiKey,
         baseURL,
-        model: process.env.AI_MODEL ?? 'gemini-2.5-flash',
+        model: process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.6-flash',
         client: buildClient(apiKey, baseURL),
     };
 })();
 
 const FALLBACK: ProviderConfig | null = (() => {
-    const apiKey = process.env.OPENROUTER_API_KEY ?? '';
+    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
     if (!apiKey) return null;
     const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    if (PRIMARY && PRIMARY.apiKey === apiKey && PRIMARY.baseURL === baseURL) return null;
+    // Use a different model as fallback (Gemini via OpenRouter)
+    const fallbackModel = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
+    const primaryModel = process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.6-flash';
+    // Only create fallback if we have a different model to fall back to
+    if (fallbackModel === primaryModel) return null;
     return {
         name: 'fallback',
         apiKey,
         baseURL,
-        model: process.env.OPENROUTER_MODEL ?? 'openai/gpt-oss-120b',
+        model: fallbackModel,
         client: buildClient(apiKey, baseURL),
     };
 })();

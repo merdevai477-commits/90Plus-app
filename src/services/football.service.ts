@@ -653,13 +653,17 @@ class FootballService {
   async getTeamsByIds(teamIds: number[]): Promise<any[]> {
     if (teamIds.length === 0) return [];
     
+    // Filter out invalid IDs (null, undefined, NaN, non-integer)
+    const validIds = teamIds.filter(id => Number.isInteger(id) && id > 0);
+    if (validIds.length === 0) return [];
+    
     // API-Football supports multiple IDs separated by '-'
     // Limit to 10 teams per request to avoid URL length issues
     const batchSize = 10;
     const batches: number[][] = [];
     
-    for (let i = 0; i < teamIds.length; i += batchSize) {
-      batches.push(teamIds.slice(i, i + batchSize));
+    for (let i = 0; i < validIds.length; i += batchSize) {
+      batches.push(validIds.slice(i, i + batchSize));
     }
 
     const allTeams: any[] = [];

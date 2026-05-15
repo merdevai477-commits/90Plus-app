@@ -125,7 +125,6 @@ export const generalLimiter = rateLimit({
         if (p.startsWith('/notifications')) return true;
         if (p.startsWith('/reels/rankings')) return true;
         if (p.startsWith('/daily-spin')) return true;
-        if (p.startsWith('/quiz/daily-status')) return true;
         // All prediction GETs are polled from multiple screens — use lenientShellLimiter only.
         if (req.method === 'GET' && p.startsWith('/predictions')) return true;
         // User-sync endpoints have their own per-route limiters.

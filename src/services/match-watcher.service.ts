@@ -45,15 +45,17 @@ export class MatchWatcherService {
 
         logger.info('🔄 Starting match watcher service (API-Football)...');
 
-        // Run immediately on start
-        this.checkMatches();
+        // Delay first run by 30 seconds to let the server finish startup
+        setTimeout(() => {
+            this.checkMatches();
+        }, 30_000);
 
         // Then run every 2 minutes
         this.intervalId = setInterval(() => {
             this.checkMatches();
         }, 2 * 60 * 1000); // 2 minutes
 
-        logger.info('✅ Match watcher started (checking every 2 minutes)');
+        logger.info('✅ Match watcher started (first check in 30s, then every 2 minutes)');
     }
 
     /**

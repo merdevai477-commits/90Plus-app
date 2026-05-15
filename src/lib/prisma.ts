@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
 // This value is enforced INSIDE the DATABASE_URL so Prisma respects it at driver level.
 const CONNECTION_POOL_SIZE = process.env.DATABASE_CONNECTION_POOL_SIZE
   ? parseInt(process.env.DATABASE_CONNECTION_POOL_SIZE, 10)
-  : 3;
+  : 10;
 
 /**
  * Build DATABASE_URL with connection pool limits enforced at the driver level.
@@ -76,8 +76,8 @@ const createPrismaClient = () => {
       const after = Date.now();
       const duration = after - before;
       
-      // Log slow queries (> 100ms)
-      if (duration > 100) {
+      // Log slow queries (> 500ms)
+      if (duration > 500) {
         logger.warn(`⚠️ Slow query detected: ${params.model}.${params.action} took ${duration}ms`);
       }
       
