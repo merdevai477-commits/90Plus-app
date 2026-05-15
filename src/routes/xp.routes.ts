@@ -11,6 +11,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 import { xpForLevel, xpForNextLevel, levelFromXp, levelTitle, grantStreakFreeze } from '../services/xp.service';
+import { addSseConnection, removeSseConnection } from '../services/xp-sse.service';
 
 const router = Router();
 
@@ -161,6 +162,50 @@ router.get('/curve', responseCacheMiddleware({ ttl: 60 * 60 * 1000 }), async (_r
   res.json({
     status: 'SUCCESS',
     data: { levels },
+  });
+});
+
+/**
+ * GET /api/xp/stream
+ * Server-Sent Events stream for real-time XP updates.
+ */
+router.get('/stream', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const clerkUserId = req.auth?.userId;
+  if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
+
+  const user = await prisma.user.findFirst({
+    where: { clerkUserId },
+    select: { id: true },
+  });
+
+  if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
+
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  res.flushHeaders();
+
+  // Register connection
+  addSseConnection(user.id, res);
+
+  // Send initial ping
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  // Heartbeat every 30s
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 30000);
+
+  // Cleanup on disconnect
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeSseConnection(user.id, res);
   });
 });
 

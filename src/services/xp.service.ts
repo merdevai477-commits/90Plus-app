@@ -8,6 +8,7 @@
 import { XpActionType, Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { pushXpUpdate } from './xp-sse.service';
 
 // ─── XP Values Map ──────────────────────────────────────────────────────────
 
@@ -247,6 +248,16 @@ export async function awardXp(input: AwardXpInput): Promise<AwardXpResult> {
 
     if (result.awarded > 0) {
       logger.info('XP awarded', { userId, action, amount: result.awarded, newXp: result.newXp, newLevel: result.newLevel, leveledUp: result.leveledUp });
+
+      // Push real-time update via SSE
+      pushXpUpdate(userId, {
+        xp: result.newXp,
+        level: result.newLevel,
+        xpGained: result.awarded,
+        action,
+        leveledUp: result.leveledUp,
+        newTitle: result.leveledUp ? levelTitle(result.newLevel) : undefined,
+      });
     }
 
     return result;
