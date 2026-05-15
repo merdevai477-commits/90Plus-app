@@ -38,6 +38,7 @@ export const XP_VALUES: Record<XpActionType, number> = {
   QUIZ_COMPLETED_HIGH: 20,
   DAILY_LOGIN: 5, // base; actual value comes from LOGIN_STREAK_TABLE
   ADMIN_ADJUSTMENT: 0,
+  STREAK_FREEZE_USED: 0,
 };
 
 // ─── Login Streak XP Table ──────────────────────────────────────────────────
@@ -354,12 +355,39 @@ export async function awardDailyLogin(userId: string, timezone: string): Promise
     }
 
     const yesterday = getYesterday(todayStr);
+    const twoDaysAgo = getYesterday(yesterday);
     let newCurrent: number;
 
     if (streak.lastLoginDate === yesterday) {
+      // Consecutive day — increment normally
       newCurrent = streak.current + 1;
+    } else if (streak.lastLoginDate === twoDaysAgo) {
+      // Missed exactly 1 day — check for streak freeze
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { streakFreezes: true } });
+      if (user.streakFreezes > 0) {
+        // Use a streak freeze
+        await prisma.user.update({ where: { id: userId }, data: { streakFreezes: { decrement: 1 } } });
+        newCurrent = streak.current + 1; // Keep streak intact
+
+        // Log the freeze usage as an XP transaction (0 XP)
+        await prisma.xpTransaction.create({
+          data: {
+            userId,
+            action: 'STREAK_FREEZE_USED',
+            amount: 0,
+            idempotencyKey: `streak-freeze:${yesterday}`,
+            metadata: { frozenDate: yesterday, streakDay: streak.current },
+          },
+        });
+
+        logger.info('Streak freeze used', { userId, frozenDate: yesterday, streakDay: streak.current });
+      } else {
+        // No freeze available — reset streak
+        newCurrent = 1;
+      }
     } else {
-      newCurrent = 1; // streak broken
+      // More than 2 days missed — reset streak (freeze only covers 1 day)
+      newCurrent = 1;
     }
 
     const newLongest = Math.max(streak.longest, newCurrent);
@@ -387,6 +415,21 @@ export async function awardDailyLogin(userId: string, timezone: string): Promise
     timezone,
     metadata: { streakDay: streak.current },
   });
+}
+
+/**
+ * Grant streak freeze items to a user.
+ * Used by admin endpoints or Lucky Wheel rewards.
+ */
+export async function grantStreakFreeze(userId: string, amount: number): Promise<{ newTotal: number }> {
+  if (amount <= 0) throw new Error('Amount must be positive');
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { streakFreezes: { increment: amount } },
+    select: { streakFreezes: true },
+  });
+  logger.info('Streak freeze granted', { userId, amount, newTotal: user.streakFreezes });
+  return { newTotal: user.streakFreezes };
 }
 
 // ─── Social Link Validation ─────────────────────────────────────────────────

@@ -81,6 +81,7 @@ model User {
   // Login Streak Tracking
   lastLoginDate        DateTime? // آخر تاريخ تسجيل دخول
   consecutiveLoginDays Int       @default(0) // عدد أيام الدخول المتتالية
+  streakFreezes        Int       @default(0) // عدد تجميدات السلسلة المتاحة
 
   // Push Notifications
   expoPushToken String? // Expo Push Token for notifications
@@ -1967,4 +1968,5 @@ enum XpActionType {
   QUIZ_COMPLETED_HIGH
   DAILY_LOGIN
   ADMIN_ADJUSTMENT
+  STREAK_FREEZE_USED
 }

@@ -5,11 +5,12 @@
 
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
+import { requireAdmin } from '../middleware/rbac.middleware';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
-import { xpForLevel, xpForNextLevel, levelFromXp, levelTitle } from '../services/xp.service';
+import { xpForLevel, xpForNextLevel, levelFromXp, levelTitle, grantStreakFreeze } from '../services/xp.service';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
 
     const user = await prisma.user.findFirst({
       where: { clerkUserId },
-      select: { id: true, xp: true, level: true },
+      select: { id: true, xp: true, level: true, streakFreezes: true },
     });
 
     if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
@@ -48,6 +49,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
         title: levelTitle(level),
         xpToNext,
         progressPct,
+        streakFreezes: user.streakFreezes,
         streak: {
           current: streak?.current ?? 0,
           longest: streak?.longest ?? 0,
@@ -144,6 +146,36 @@ router.get('/curve', responseCacheMiddleware({ ttl: 60 * 60 * 1000 }), async (_r
     status: 'SUCCESS',
     data: { levels },
   });
+});
+
+/**
+ * POST /api/xp/streak-freeze/grant
+ * Admin-only: grant streak freeze items to a user
+ */
+router.post('/streak-freeze/grant', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, amount } = req.body;
+
+    if (!userId || typeof userId !== 'string') {
+      sendError(req, res, ErrorCode.VALIDATION, 'userId is required');
+      return;
+    }
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      sendError(req, res, ErrorCode.VALIDATION, 'amount must be a positive number');
+      return;
+    }
+
+    const result = await grantStreakFreeze(userId, amount);
+
+    res.json({
+      status: 'SUCCESS',
+      data: result,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Internal server error';
+    logger.error('POST /api/xp/streak-freeze/grant error:', error);
+    sendError(req, res, ErrorCode.INTERNAL, msg);
+  }
 });
 
 export default router;
