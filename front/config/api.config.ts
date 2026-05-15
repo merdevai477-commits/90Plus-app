@@ -46,8 +46,8 @@ const CONFIG: Record<Environment, APIConfig> = {
     retryAttempts: 3,
   },
   production: {
-    baseUrl: 'https://90plus-app-production-c88c.up.railway.app/api',
-    wsUrl: 'wss://90plus-app-production-c88c.up.railway.app',
+    baseUrl: 'https://90plus-app-production-1808.up.railway.app/api',
+    wsUrl: 'wss://90plus-app-production-1808.up.railway.app',
     timeout: 30000, // ✅ CRITICAL: Increased to 30s
     uploadTimeout: 55 * 1000, // Railway gateway limits (keep under 60s)
     retryAttempts: 3,

@@ -168,7 +168,7 @@
       "fallbackToCacheTimeout": 0
     },
     "extra": {
-      "apiUrl": "https://90plus-app-production-c88c.up.railway.app/api",
+      "apiUrl": "https://90plus-app-production-1808.up.railway.app/api",
       "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
       "router": {
         "origin": false
