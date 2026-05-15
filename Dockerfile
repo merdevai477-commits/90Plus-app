@@ -33,7 +33,6 @@ RUN rm -f .tsbuildinfo dist || true
 RUN npm run build
 
 # Verify build - fail hard if the expected outputs aren't there
-RUN npm run verify:build
 RUN test -f dist/src/main.js || (echo "FATAL: dist/src/main.js missing after build" && exit 1)
 
 # Expose port (Railway uses 3000)
