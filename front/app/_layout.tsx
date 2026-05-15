@@ -69,6 +69,7 @@ const getWebSocketClient = async () => {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 450, fade: true });
 
 const queryClient = new QueryClient();
 
@@ -138,13 +139,13 @@ const tokenCache = {
 function ClerkGate({ children }: { children: React.ReactNode }) {
   const { isLoaded } = useAuth();
 
-  // Fix 3a: hide splash as soon as Clerk is ready
+  // Hide splash as soon as Clerk is ready
   useEffect(() => {
     if (!isLoaded) return;
     SplashScreen.hideAsync().catch(() => {});
   }, [isLoaded]);
 
-  // Absolute safety — hide splash after 5s no matter what (reduced from 10s)
+  // Absolute safety — hide splash after 5s no matter what
   useEffect(() => {
     const safetyTimer = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => {});
@@ -279,6 +280,15 @@ function WebSocketInitializer({ children }: { children: React.ReactNode }) {
 function PreloadInitializer({ children }: { children: React.ReactNode }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();
 
+  // Clerk's `getToken` returns a NEW function reference on every render, so we
+  // must not put it in the effect's dependency array — that would re-fire the
+  // effect (and its API calls) on every parent re-render, causing a tight
+  // request loop and a frozen UI. Stash it in a ref instead.
+  const getTokenRef = React.useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -313,9 +323,9 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
 
       // Prime /clerk/me memory cache before tabs mount — faster profile tab
-      if (isSignedIn && getToken) {
+      if (isSignedIn) {
         try {
-          const token = await getToken();
+          const token = await getTokenRef.current();
           if (token && !cancelled) {
             await AuthService.syncUserWithBackend(token).catch((e) =>
               logger.warn('[PreloadInitializer] Early profile sync failed (non-critical):', e)
@@ -346,8 +356,8 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
         logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
       });
 
-      if (isSignedIn && getToken) {
-        preloadManager.initialize(getToken).catch(err => {
+      if (isSignedIn) {
+        preloadManager.initialize(() => getTokenRef.current()).catch(err => {
           logger.warn('[PreloadInitializer] Failed to initialize preloading:', err);
         });
       }
@@ -361,7 +371,7 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
         preloadManager.cleanup();
       }
     };
-  }, [isSignedIn, isLoaded, getToken]);
+  }, [isSignedIn, isLoaded]);
 
   return <>{children}</>;
 }
@@ -590,7 +600,6 @@ export default function RootLayout() {
       logger.warn('[RootLayout] Search cache clear failed (non-critical):', err);
     });
 
-       SplashScreen.setOptions({ duration: 450, fade: true });
   }, []);
 
   const handleError = (error: Error, errorInfo: ErrorInfo) => {
@@ -651,38 +660,38 @@ export default function RootLayout() {
           <SentryUserTracker />
           <QueryClientProvider client={queryClient}>
             <PushNotificationSetup />
-            <WebSocketInitializer>
-              <PreloadInitializer>
-                <LanguageInitializer>
-                  <LanguageProvider>
-                    <SettingsProvider>
-                      <CoinsProvider>
-                        <VideosProvider>
-                          <ToastProvider>
-                            <ProfessionalToastProvider>
-                              <GestureHandlerRootView style={{ flex: 1 }}>
-                                <SafeAreaProvider>
-                                  <View style={{ flex: 1, backgroundColor: '#000' }}>
-                                    <GlobalOfflineBanner />
-                                    <StatusBar
-                                      barStyle="light-content"
-                                      backgroundColor="#000"
-                                    />
-                                    <ClerkGate>
+            <LanguageInitializer>
+              <LanguageProvider>
+                <SettingsProvider>
+                  <CoinsProvider>
+                    <VideosProvider>
+                      <ToastProvider>
+                        <ProfessionalToastProvider>
+                          <GestureHandlerRootView style={{ flex: 1 }}>
+                            <SafeAreaProvider>
+                              <View style={{ flex: 1, backgroundColor: '#000' }}>
+                                <GlobalOfflineBanner />
+                                <StatusBar
+                                  barStyle="light-content"
+                                  backgroundColor="#000"
+                                />
+                                <ClerkGate>
+                                  <WebSocketInitializer>
+                                    <PreloadInitializer>
                                       <RootLayoutNav />
-                                    </ClerkGate>
-                                  </View>
-                                </SafeAreaProvider>
-                              </GestureHandlerRootView>
-                            </ProfessionalToastProvider>
-                          </ToastProvider>
-                        </VideosProvider>
-                      </CoinsProvider>
-                    </SettingsProvider>
-                  </LanguageProvider>
-                </LanguageInitializer>
-              </PreloadInitializer>
-            </WebSocketInitializer>
+                                    </PreloadInitializer>
+                                  </WebSocketInitializer>
+                                </ClerkGate>
+                              </View>
+                            </SafeAreaProvider>
+                          </GestureHandlerRootView>
+                        </ProfessionalToastProvider>
+                      </ToastProvider>
+                    </VideosProvider>
+                  </CoinsProvider>
+                </SettingsProvider>
+              </LanguageProvider>
+            </LanguageInitializer>
           </QueryClientProvider>
         </ClerkProvider>
       </TamaguiProvider>

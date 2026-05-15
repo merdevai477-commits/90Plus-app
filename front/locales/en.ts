@@ -750,6 +750,80 @@ export const en = {
     beTheBest: 'Be the best',
     competeNow: 'Compete now',
     checkPosition: 'Check your position in the leaderboard!',
+
+    // Rank screen — main UI
+    competitions: {
+      title: 'Competitions',
+      tagline: 'Play. Compete. Win.',
+      subtitle: 'Join challenges and climb the ranks!',
+    },
+    allCompetitions: 'All Competitions',
+    topPlayers: 'Top Players',
+    viewAll: 'VIEW ALL',
+    playNow: 'Play Now',
+
+    // Empty / placeholder slots
+    emptySlot: 'Empty Slot',
+    emptySlotHint: 'Challenge to appear here',
+    futureChampion: 'Future Champion',
+    beTheFirst: 'Be the First!',
+    startNow: 'Start Now!',
+    createGlory: 'Create Glory!',
+
+    // Profile card / stats
+    xpSuffix: 'XP',
+    levelPrefix: 'Lv.',
+    globalRank: 'Global Rank',
+    leaderboardTitle: 'Top 11 Leaderboard',
+
+    // Accessibility
+    a11yProfileCard: 'Open my profile',
+    a11yCoinChip: 'Your coin balance',
+
+    // Competition cards
+    competitionNames: {
+      kingOfPredictions: {
+        title: 'King of Predictions',
+        sub: 'Predict matches and be the best!',
+        action: 'Predict Now',
+      },
+      engagementHero: {
+        title: 'Engagement Hero',
+        sub: 'Post your reels and lead the interaction charts!',
+        action: 'Post Now',
+      },
+      dailyQuiz: {
+        title: 'Daily Quiz',
+        sub: 'Answer daily questions and win points!',
+        action: 'Test Now',
+      },
+      shareAndEarn: {
+        title: 'Share & Earn',
+        sub: 'Share the app and climb the rankings!',
+        action: 'Share Now',
+      },
+    },
+
+    // World Cup card / modal
+    worldCup: {
+      headline: 'Create\nGlory',
+      body: 'Compete with others and reach\nthe top of the leaderboard!',
+      comingSoon: 'Coming Soon',
+      countdownLabel: 'World Cup starts in',
+      anticipate: 'ANTICIPATE',
+      brand: '90 PLUS WORLD CUP',
+      getReady: 'GET READY',
+      days: 'Days',
+      hours: 'Hours',
+      mins: 'Mins',
+      secs: 'Secs',
+    },
+
+    // Loading / error
+    errors: {
+      loadFailed: 'Could not load top players',
+      retry: 'Retry',
+    },
   },
 
   profile: {

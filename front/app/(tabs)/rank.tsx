@@ -1,95 +1,229 @@
+/**
+ * Rank tab screen
+ *
+ * Aggregates the Rank features:
+ * - profile strip (real user data via ProfileCard)
+ * - competitions carousel
+ * - World Cup countdown banner
+ * - Top Players podium + lower leaderboard from `/api/reels/rankings/top-players`
+ * - full Top-11 leaderboard modal
+ *
+ * When the API returns fewer than 11 ranked players, we pad each rank with a
+ * styled "empty slot" placeholder so the layout stays stable and the
+ * invariant "no fake/external avatars in the UI" is preserved.
+ */
+
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { ChevronRight, Trophy } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Image,
-  Platform,
+  I18nManager,
+  ImageSourcePropType,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import BottomNav from './BottomNav';
 import CompCard from '../../components/rank/CompCard';
-import LeaderboardModal from '../../components/rank/LeaderboardModal';
+import LeaderboardModal, {
+  LeaderboardEntry,
+} from '../../components/rank/LeaderboardModal';
 import PodiumCard from '../../components/rank/PodiumCard';
 import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
+import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkeletons';
 import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
+import { useTopPlayers, type TopPlayer } from '../../hooks/useTopPlayers';
+import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 
-// ─── Colors ───────────────────────────────────────────────────────────────────
 const ACCENT = '#A855F7';
+const PROFILE_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.png');
 
-// ─── Static Data ──────────────────────────────────────────────────────────────
-const COMPETITIONS = [
-  {
-    id: '1',
-    title: 'King of Predictions',
-    sub: 'Predict matches and be the best!',
-    actionText: 'Predict Now',
-    img: require('../../assets/images/football.png'),
-  },
-  {
-    id: '4',
-    title: 'Engagement Hero',
-    sub: 'Post your reels and lead the interaction charts!',
-    actionText: 'Post Now',
-    img: require('../../assets/images/growth.png'),
-  },
-  {
-    id: '3',
-    title: 'Daily Quiz',
-    sub: 'Answer daily questions and win points!',
-    actionText: 'Test Now',
-    img: require('../../assets/images/daily-quiz.png'),
-  },
-  {
-    id: '2',
-    title: 'Share & Earn',
-    sub: 'Share the app and climb the rankings!',
-    actionText: 'Share Now',
-    img: require('../../assets/images/share.png'),
-  },
-];
+interface PodiumSlot {
+  rank: number;
+  isPlaceholder: boolean;
+  name: string;
+  xpLabel: string;
+  avatar: ImageSourcePropType | string;
+  countryFlag: string | null;
+  position?: string;
+}
 
-const PODIUM = [
-  { rank: 2, name: 'Start Now!', xp: '-- XP', avatar: require('../../assets/images/plear 90Plus.png') },
-  { rank: 1, name: 'Be the First!', xp: '-- XP', avatar: require('../../assets/images/plear 90Plus.png') },
-  { rank: 3, name: 'Create Glory!', xp: '-- XP', avatar: require('../../assets/images/plear 90Plus.png') },
-];
+interface BoardSlot {
+  rank: number;
+  isPlaceholder: boolean;
+  id: string;
+  name: string;
+  role: string;
+  xpLabel: string;
+  avatar: string | null;
+}
 
-const LOWER = [
-  { rank: 4, name: 'Empty Slot', role: 'Challenge to appear here', xp: '-- XP', avatar: 'https://i.pravatar.cc/150?u=4' },
-  { rank: 5, name: 'Empty Slot', role: 'Challenge to appear here', xp: '-- XP', avatar: 'https://i.pravatar.cc/150?u=5' },
-];
+function buildPodiumSlot(
+  rank: number,
+  player: TopPlayer | undefined,
+  emptyName: string,
+  xpSuffix: string,
+): PodiumSlot {
+  if (player) {
+    return {
+      rank,
+      isPlaceholder: false,
+      name: (player.displayName ?? player.username) || emptyName,
+      xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
+      avatar: player.avatar ?? PROFILE_PLACEHOLDER,
+      countryFlag: player.countryFlag ?? null,
+      position: player.position,
+    };
+  }
+  return {
+    rank,
+    isPlaceholder: true,
+    name: emptyName,
+    xpLabel: `0 ${xpSuffix}`,
+    avatar: PROFILE_PLACEHOLDER,
+    countryFlag: null,
+  };
+}
 
-const TOP_11 = Array.from({ length: 11 }, (_, i) => ({
-  rank: i + 1,
-  name: i < 3 ? 'Future Champion' : `Player #${i + 1}`,
-  xp: '-- XP',
-  avatar: `https://i.pravatar.cc/150?u=${i + 1}`,
-}));
+function buildBoardSlot(
+  rank: number,
+  player: TopPlayer | undefined,
+  emptyName: string,
+  emptyHint: string,
+  xpSuffix: string,
+): BoardSlot {
+  if (player) {
+    return {
+      rank,
+      isPlaceholder: false,
+      id: player.id,
+      name: (player.displayName ?? player.username) || emptyName,
+      role: player.position || emptyHint,
+      xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
+      avatar: player.avatar,
+    };
+  }
+  return {
+    rank,
+    isPlaceholder: true,
+    id: `empty-${rank}`,
+    name: emptyName,
+    role: emptyHint,
+    xpLabel: `0 ${xpSuffix}`,
+    avatar: null,
+  };
+}
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function RankScreen() {
   useScreenFont();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t } = useTranslation();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSoonVisible, setIsSoonVisible] = useState(false);
 
+  const { players, isLoading, isError, refetch } = useTopPlayers({
+    limit: 11,
+    period: 'weekly',
+  });
+
+  const competitions = useMemo(
+    () => [
+      {
+        id: '1',
+        title: t.rank.competitionNames.kingOfPredictions.title,
+        sub: t.rank.competitionNames.kingOfPredictions.sub,
+        actionText: t.rank.competitionNames.kingOfPredictions.action,
+        img: require('../../assets/images/football.png') as ImageSourcePropType,
+      },
+      {
+        id: '4',
+        title: t.rank.competitionNames.engagementHero.title,
+        sub: t.rank.competitionNames.engagementHero.sub,
+        actionText: t.rank.competitionNames.engagementHero.action,
+        img: require('../../assets/images/growth.png') as ImageSourcePropType,
+      },
+      {
+        id: '3',
+        title: t.rank.competitionNames.dailyQuiz.title,
+        sub: t.rank.competitionNames.dailyQuiz.sub,
+        actionText: t.rank.competitionNames.dailyQuiz.action,
+        img: require('../../assets/images/daily-quiz.png') as ImageSourcePropType,
+      },
+      {
+        id: '2',
+        title: t.rank.competitionNames.shareAndEarn.title,
+        sub: t.rank.competitionNames.shareAndEarn.sub,
+        actionText: t.rank.competitionNames.shareAndEarn.action,
+        img: require('../../assets/images/share.png') as ImageSourcePropType,
+      },
+    ],
+    [t],
+  );
+
+  // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
+  const podiumSlots = useMemo<readonly PodiumSlot[]>(() => {
+    const find = (rank: number) => players.find(p => p.rank === rank);
+    const slot1 = buildPodiumSlot(1, find(1), t.rank.beTheFirst, t.rank.xpSuffix);
+    const slot2 = buildPodiumSlot(2, find(2), t.rank.startNow, t.rank.xpSuffix);
+    const slot3 = buildPodiumSlot(3, find(3), t.rank.createGlory, t.rank.xpSuffix);
+    return [slot2, slot1, slot3] as const;
+  }, [players, t]);
+
+  // ── Lower leaderboard (ranks 4, 5) ──
+  const lowerSlots = useMemo<readonly BoardSlot[]>(() => {
+    return [4, 5].map(rank => {
+      const player = players.find(p => p.rank === rank);
+      return buildBoardSlot(rank, player, t.rank.emptySlot, t.rank.emptySlotHint, t.rank.xpSuffix);
+    });
+  }, [players, t]);
+
+  // ── Full Top 11 (padded to 11 entries for the modal) ──
+  const top11Entries = useMemo<LeaderboardEntry[]>(() => {
+    return Array.from({ length: 11 }, (_, i) => {
+      const rank = i + 1;
+      const player = players.find(p => p.rank === rank);
+      if (player) {
+        return {
+          rank,
+          id: player.id,
+          displayName: (player.displayName ?? player.username) || t.rank.emptySlot,
+          username: player.username,
+          avatar: player.avatar,
+          xp: player.xp ?? 0,
+          isPlaceholder: false,
+        };
+      }
+      return {
+        rank,
+        id: `empty-${rank}`,
+        displayName: rank <= 3 ? t.rank.futureChampion : t.rank.emptySlot,
+        username: '',
+        avatar: null,
+        xp: 0,
+        isPlaceholder: true,
+      };
+    });
+  }, [players, t]);
+
+  const titleRowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
+  const secHeadDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
+  const viewAllDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
+
   return (
     <View style={s.root}>
-      {/* Floating Header */}
       <RankHeader topInset={insets.top} />
 
       <ScrollView
@@ -99,12 +233,13 @@ export default function RankScreen() {
           paddingBottom: Math.max(insets.bottom, 16) + 88,
         }}
       >
-        {/* ── Hero Block ── */}
+        {/* ── Hero block ── */}
         <View style={s.heroBlock}>
           <Image
             source={require('../../assets/images/90Plus world cup.png')}
             style={s.heroBgTrophy}
-            resizeMode="contain"
+            contentFit="contain"
+            cachePolicy="memory-disk"
           />
           <LinearGradient
             colors={['#030008', '#030008', 'rgba(3,0,8,0.0)', 'transparent']}
@@ -120,51 +255,57 @@ export default function RankScreen() {
           />
 
           <View style={s.heroText}>
-            <View style={s.titleRow}>
+            <View style={[s.titleRow, { flexDirection: titleRowDirection }]}>
               <View style={s.trophyIconBox}>
-                <Trophy size={20} color="#fff" fill="#fff" />
+                <Trophy size={20} color="#fff" />
               </View>
-              <Text style={s.pageTitle}>Competitions</Text>
+              <Text style={s.pageTitle}>{t.rank.competitions.title}</Text>
             </View>
-            <Text style={s.pageSub1}>Play. Compete. Win.</Text>
-            <Text style={s.pageSub2}>Join challenges and climb the ranks!</Text>
+            <Text style={s.pageSub1}>{t.rank.competitions.tagline}</Text>
+            <Text style={s.pageSub2}>{t.rank.competitions.subtitle}</Text>
           </View>
 
           <ProfileCard />
         </View>
 
-        {/* ── All Competitions ── */}
-        <View style={s.secHead}>
-          <Text style={s.secTitle}>All Competitions</Text>
+        {/* ── Competitions carousel ── */}
+        <View style={[s.secHead, { flexDirection: secHeadDirection }]}>
+          <Text style={s.secTitle}>{t.rank.allCompetitions}</Text>
         </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={s.hScroll}
         >
-          {COMPETITIONS.map(c => (
+          {competitions.map(c => (
             <CompCard
               key={c.id}
               {...c}
               onPress={() => {
-                if (c.id === '1') router.push({ pathname: '/matches', params: { filter: 'Predictions' } } as any);
-                else if (c.id === '3') router.push('/quiz' as any);
+                if (c.id === '1') {
+                  router.push({
+                    pathname: '/matches',
+                    params: { filter: 'Predictions' },
+                  } as never);
+                } else if (c.id === '3') {
+                  router.push('/quiz' as never);
+                }
               }}
             />
           ))}
         </ScrollView>
 
-        {/* ── World Cup Countdown ── */}
+        {/* ── World Cup banner ── */}
         <WCCard onPressSoon={() => setIsSoonVisible(true)} />
 
-        {/* ── Top Players & Leaderboard ── */}
+        {/* ── Top players ── */}
         <View style={s.bottomContentGroup}>
-          {/* Arena background */}
-          <View style={s.arenaBgContainerExtended}>
+          <View style={s.arenaBgContainerExtended} pointerEvents="none">
             <Image
               source={require('../../assets/images/arena.png')}
               style={s.arenaImgExtended}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
             />
             <LinearGradient
               colors={['#0A0612', 'transparent', '#0A0612']}
@@ -172,151 +313,301 @@ export default function RankScreen() {
             />
           </View>
 
-          <View style={s.secHead}>
-            <Text style={s.secTitle}>Top Players</Text>
+          <View style={[s.secHead, { flexDirection: secHeadDirection }]}>
+            <Text style={s.secTitle}>{t.rank.topPlayers}</Text>
           </View>
 
-          {/* Podium */}
-          <View style={s.podiumRow}>
-            {PODIUM.map(p => <PodiumCard key={p.rank} {...p} />)}
-          </View>
-
-          {/* Lower leaderboard rows */}
-          <View style={s.board}>
-            {LOWER.map((p, i) => {
-              const RowWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-              const rowProps = isLiquidGlassSupported
-                ? { effect: 'clear' as const, interactive: true }
-                : { intensity: 15, tint: 'dark' as const };
-
-              return (
-                <RowWrapper
-                  key={p.rank}
-                  {...(rowProps as any)}
-                  style={[s.boardRowGlass, i < LOWER.length - 1 && { marginBottom: 8 }]}
-                >
-                  <View style={s.rankBadgeSmall}>
-                    <Text style={s.boardRank}>{p.rank}</Text>
+          {isLoading ? (
+            <>
+              <PodiumSkeleton />
+              <View style={s.board}>
+                <BoardRowSkeleton />
+                <BoardRowSkeleton />
+              </View>
+            </>
+          ) : isError ? (
+            <View style={s.errorCard}>
+              <Text style={s.errorText}>{t.rank.errors.loadFailed}</Text>
+              <Pressable
+                onPress={() => {
+                  refetch();
+                }}
+                style={({ pressed }) => [s.errorRetry, pressed && { opacity: 0.85 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t.rank.errors.retry}
+              >
+                <Text style={s.errorRetryText}>{t.rank.errors.retry}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              {/* Podium */}
+              <View style={s.podiumRow}>
+                {podiumSlots.map((p, idx) => (
+                  <View
+                    key={`pod-${p.rank}`}
+                    style={
+                      // Overlap the outer cards behind the centered #1
+                      idx === 0
+                        ? { marginEnd: -15 }
+                        : idx === podiumSlots.length - 1
+                        ? { marginStart: -15 }
+                        : null
+                    }
+                  >
+                    <PodiumCard
+                      rank={p.rank}
+                      name={p.name}
+                      xp={p.xpLabel}
+                      avatar={p.avatar}
+                      countryFlag={p.countryFlag}
+                      position={p.position}
+                    />
                   </View>
-                  <Image source={{ uri: p.avatar }} style={s.boardAvatar} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.boardName}>{p.name}</Text>
-                    <Text style={s.boardRole}>{p.role}</Text>
-                  </View>
-                  <Text style={s.boardXp}>{p.xp}</Text>
-                </RowWrapper>
-              );
-            })}
-          </View>
+                ))}
+              </View>
 
-          {/* View All button */}
-          <TouchableOpacity
-            style={s.viewAllLeaderboardBtn}
+              {/* Lower rows */}
+              <View style={s.board}>
+                {lowerSlots.map((row, i) => {
+                  const RowWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+                  const rowProps = isLiquidGlassSupported
+                    ? { effect: 'clear' as const, interactive: true }
+                    : { intensity: 15, tint: 'dark' as const };
+                  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
+
+                  return (
+                    <RowWrapper
+                      key={row.id}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      {...(rowProps as any)}
+                      style={[
+                        s.boardRowGlass,
+                        { flexDirection: rowDirection },
+                        i < lowerSlots.length - 1 && { marginBottom: 8 },
+                      ]}
+                    >
+                      <View style={s.rankBadgeSmall}>
+                        <Text style={s.boardRank}>{row.rank}</Text>
+                      </View>
+                      <Image
+                        source={row.avatar ? { uri: row.avatar } : PROFILE_PLACEHOLDER}
+                        placeholder={PROFILE_PLACEHOLDER}
+                        style={s.boardAvatar}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.boardName} numberOfLines={1}>
+                          {row.name}
+                        </Text>
+                        <Text style={s.boardRole} numberOfLines={1}>
+                          {row.role}
+                        </Text>
+                      </View>
+                      <Text style={s.boardXp}>{row.xpLabel}</Text>
+                    </RowWrapper>
+                  );
+                })}
+              </View>
+            </>
+          )}
+
+          <Pressable
+            style={({ pressed }) => [s.viewAllLeaderboardBtn, pressed && { opacity: 0.85 }]}
             onPress={() => setIsModalVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t.rank.viewAll}
           >
             <LinearGradient
               colors={['rgba(168,85,247,0.2)', 'rgba(124,58,237,0.1)']}
-              style={s.viewAllLeaderboardGrad}
+              style={[s.viewAllLeaderboardGrad, { flexDirection: viewAllDirection }]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <Text style={s.viewAllLeaderboardTxt}>VIEW ALL</Text>
+              <Text style={s.viewAllLeaderboardTxt}>{t.rank.viewAll}</Text>
               <ChevronRight size={16} color={ACCENT} />
             </LinearGradient>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </ScrollView>
 
-      {/* ── Modals ── */}
       <LeaderboardModal
         visible={isModalVisible}
         onClose={() => setIsModalVisible(false)}
-        entries={TOP_11}
+        entries={top11Entries}
         topInset={insets.top}
       />
-      <SoonModal
-        visible={isSoonVisible}
-        onClose={() => setIsSoonVisible(false)}
-      />
+      <SoonModal visible={isSoonVisible} onClose={() => setIsSoonVisible(false)} />
 
       <BottomNav />
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: APP_BG },
 
   heroBlock: { overflow: 'hidden', paddingBottom: 20 },
   heroBgTrophy: {
-    position: 'absolute', top: 0, right: 0,
-    width: '90%', height: '100%', opacity: 0.95,
+    position: 'absolute',
+    top: 0,
+    end: 0,
+    width: '90%',
+    height: '100%',
+    opacity: 0.95,
   },
   heroBgGradLeft: {
-    position: 'absolute', top: 0, left: 0, bottom: 0, width: '62%',
+    position: 'absolute',
+    top: 0,
+    start: 0,
+    bottom: 0,
+    width: '62%',
   },
   heroBgGradBottom: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: 100,
+    position: 'absolute',
+    bottom: 0,
+    start: 0,
+    end: 0,
+    height: 100,
   },
   heroText: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12, zIndex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  titleRow: { alignItems: 'center', gap: 10, marginBottom: 8 },
   trophyIconBox: {
-    width: 44, height: 44, borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: 'rgba(39, 8, 94, 0.5)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.4)',
-    shadowColor: ACCENT, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.8, shadowRadius: 10, elevation: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.4)',
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 8,
   },
   pageTitle: { color: '#fff', fontSize: 34, fontWeight: '900' },
-  pageSub1: { color: 'rgba(255,255,255,0.85)', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  pageSub2: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
+  pageSub1: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  pageSub2: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
 
   secHead: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, marginTop: 28, marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: 28,
+    marginBottom: 14,
   },
   secTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
-  hScroll: { paddingLeft: 16, paddingRight: 8, gap: 12 },
+  hScroll: { paddingHorizontal: 16, gap: 12 },
 
   bottomContentGroup: {
-    marginTop: 10, paddingTop: 40, position: 'relative', paddingBottom: 20, overflow: 'hidden',
+    marginTop: 10,
+    paddingTop: 40,
+    position: 'relative',
+    paddingBottom: 20,
+    overflow: 'hidden',
   },
   arenaBgContainerExtended: {
-    position: 'absolute', top: -100, left: '0%', right: '0%', bottom: -110, zIndex: -1,
+    ...StyleSheet.absoluteFillObject,
   },
-  arenaImgExtended: { width: '120%', height: '115%', top: -200, opacity: 0.5 },
+  arenaImgExtended: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.5,
+  },
 
   podiumRow: {
-    flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center',
-    marginTop: 10, marginBottom: 20, gap: -15,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 20,
   },
 
   board: { paddingHorizontal: 16, marginTop: 10 },
   boardRowGlass: {
-    flexDirection: 'row', alignItems: 'center', padding: 12,
+    alignItems: 'center',
+    padding: 12,
     backgroundColor: 'rgba(255, 255, 255, 0)',
-    borderRadius: 18, borderWidth: 1, borderColor: 'rgba(241, 241, 241, 0)', gap: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(241, 241, 241, 0)',
+    gap: 12,
   },
   rankBadgeSmall: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(168, 85, 247, 0.2)', justifyContent: 'center', alignItems: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  boardRank: { color: '#888', fontSize: 16, fontWeight: '700', width: 24, textAlign: 'center' },
+  boardRank: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 16,
+    fontWeight: '700',
+    width: 24,
+    textAlign: 'center',
+  },
   boardAvatar: { width: 44, height: 44, borderRadius: 22 },
   boardName: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  boardRole: { color: '#555', fontSize: 12, marginTop: 2 },
+  boardRole: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    marginTop: 2,
+  },
   boardXp: { color: ACCENT, fontWeight: '800', fontSize: 14 },
 
+  errorCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.25)',
+    alignItems: 'center',
+    gap: 10,
+  },
+  errorText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center' },
+  errorRetry: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(168,85,247,0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.5)',
+  },
+  errorRetryText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+
   viewAllLeaderboardBtn: {
-    marginHorizontal: 16, marginTop: 16, borderRadius: 16, overflow: 'hidden',
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.3)',
   },
   viewAllLeaderboardGrad: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
   },
-  viewAllLeaderboardTxt: { color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  viewAllLeaderboardTxt: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
 });

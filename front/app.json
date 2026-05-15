@@ -3,7 +3,9 @@
     "name": "90Plus",
     "slug": "90plus",
     "version": "1.0.1",
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
@@ -27,6 +29,18 @@
             "NSPrivacyAccessedAPITypeReasons": [
               "35F9.1"
             ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "C617.1"
+            ]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "E174.1"
+            ]
           }
         ]
       },
@@ -40,6 +54,7 @@
         "NSPhotoLibraryAddUsageDescription": "تطبيق 90Plus يحتاج الإذن لحفظ وتنزيل بعض الفيديوهات والصور الكروية في هاتفك.",
         "NSUserNotificationsUsageDescription": "نرسل لك إشعارات بأهم الأحداث والمباريات وأهداف فريقك المفضل.",
         "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "يستخدم تطبيق 90Plus Face ID لحماية بيانات تسجيل الدخول الخاصة بك بشكل آمن.",
         "UIRequiredDeviceCapabilities": [],
         "UIDeviceFamily": [
           1,
@@ -133,8 +148,15 @@
       "expo-font",
       "expo-localization",
       "expo-secure-store",
-      "@sentry/react-native/expo",
       "@react-native-community/datetimepicker",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "90plus-mobile",
+          "organization": "90plus"
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {

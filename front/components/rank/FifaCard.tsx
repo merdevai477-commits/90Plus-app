@@ -1,8 +1,15 @@
-import React, { useEffect, memo } from 'react';
-import { View, StyleSheet, Text, Animated, Easing } from 'react-native';
+import React, { useEffect, memo, useState } from 'react';
+import { View, StyleSheet, Text, Animated, Easing, ImageSourcePropType } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path, ClipPath, Image as SvgImage } from 'react-native-svg';
+import Svg, {
+    Defs,
+    LinearGradient as SvgLinearGradient,
+    Stop,
+    Path,
+    ClipPath,
+    Image as SvgImage,
+} from 'react-native-svg';
 
 const useInternalSafeLoop = (from: number, to: number, duration: number) => {
     const animatedValue = React.useRef(new Animated.Value(from)).current;
@@ -21,12 +28,13 @@ const useInternalSafeLoop = (from: number, to: number, duration: number) => {
 };
 
 interface FifaCardProps {
-    playerImage?: any;
+    playerImage?: ImageSourcePropType;
     cardType?: 'gold' | 'silver' | 'bronze';
     scale?: number;
     onImageUpload?: () => void;
     uploadedImage?: string | null;
-    countryFlag?: string;
+    /** Either an ISO 2-letter country code (e.g. "br") or a flag emoji (e.g. "🇧🇷"). */
+    countryFlag?: string | null;
     onCountryPress?: () => void;
     position?: string;
     age?: string | number;
@@ -45,6 +53,11 @@ interface FifaCardProps {
 const WIDTH = 300;
 const HEIGHT = 460;
 
+// Detects regional indicator codepoints used by flag emoji.
+const EMOJI_FLAG_REGEX = /[\u{1F1E6}-\u{1F1FF}]/u;
+
+const FALLBACK_FLAG: ImageSourcePropType = require('../../assets/images/football.png');
+
 const FifaCard = memo(function FifaCard({
     playerImage,
     cardType = 'gold',
@@ -61,11 +74,17 @@ const FifaCard = memo(function FifaCard({
 
     const shimmer = useInternalSafeLoop(0, 1, 4000);
     const holo = useInternalSafeLoop(0, 1, 5000);
+    const [flagFailed, setFlagFailed] = useState(false);
 
     useEffect(() => {
         shimmer.start();
         holo.start();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        setFlagFailed(false);
+    }, [countryFlag]);
 
     const shimmerTranslate = shimmer.animatedValue.interpolate({
         inputRange: [0, 1],
@@ -97,6 +116,44 @@ const FifaCard = memo(function FifaCard({
     const bgFill = cardType === 'gold' ? '#080315' : (cardType === 'silver' ? '#D3D3D3' : '#CD7F32');
     const accentText = cardType === 'gold' ? '#FFD700' : '#000';
     const labelText = cardType === 'gold' ? 'rgba(255,215,0,0.6)' : 'rgba(0,0,0,0.6)';
+
+    // Flag rendering: emoji vs ISO code vs fallback
+    const flagValue = (countryFlag ?? '').trim();
+    const isEmojiFlag = !!flagValue && EMOJI_FLAG_REGEX.test(flagValue);
+    const isIsoCode = !!flagValue && !isEmojiFlag && flagValue.length <= 3;
+    const flagSize = { width: 44 * scale, height: 28 * scale };
+
+    const renderFlag = () => {
+        if (isEmojiFlag) {
+            return (
+                <Text
+                    style={{ fontSize: 28 * scale, lineHeight: 32 * scale }}
+                    accessibilityLabel="country-flag"
+                >
+                    {flagValue}
+                </Text>
+            );
+        }
+        if (isIsoCode && !flagFailed) {
+            return (
+                <Image
+                    source={{ uri: `https://flagcdn.com/w80/${flagValue.toLowerCase()}.png` }}
+                    style={[flagSize, { borderRadius: 3 * scale }]}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    onError={() => setFlagFailed(true)}
+                />
+            );
+        }
+        return (
+            <Image
+                source={FALLBACK_FLAG}
+                style={[flagSize, { borderRadius: 3 * scale, opacity: 0.6 }]}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+            />
+        );
+    };
 
     return (
         <View style={{ alignItems: 'center' }}>
@@ -135,7 +192,7 @@ const FifaCard = memo(function FifaCard({
                             y="12"
                             width="136"
                             height="218"
-                            href={uploadedImage ? { uri: uploadedImage } : playerImage}
+                            href={uploadedImage ? { uri: uploadedImage } : (playerImage as any)}
                             preserveAspectRatio="xMidYMid slice"
                             clipPath={`url(#quadrantClip-${cardType})`}
                         />
@@ -197,11 +254,7 @@ const FifaCard = memo(function FifaCard({
                     <Text style={[styles.posTxt, { fontSize: 32 * scale, marginBottom: 8 * scale, color: accentText }]}>
                         {position || '--'}
                     </Text>
-                    <Image
-                        source={{ uri: `https://flagcdn.com/w80/${countryFlag || 'br'}.png` }}
-                        style={{ width: 44 * scale, height: 28 * scale, borderRadius: 3 * scale }}
-                        contentFit="cover"
-                    />
+                    {renderFlag()}
                 </View>
 
                 {/* Stats */}

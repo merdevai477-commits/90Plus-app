@@ -730,6 +730,80 @@ export const ar = {
     beTheBest: 'كن الأفضل',
     competeNow: 'تنافس الآن',
     checkPosition: 'تحقق من موقعك في لوحة المتصدرين!',
+
+    // Rank screen — main UI
+    competitions: {
+      title: 'المسابقات',
+      tagline: 'العب. تنافس. اربح.',
+      subtitle: 'شارك في التحديات واصعد في الترتيب!',
+    },
+    allCompetitions: 'كل المسابقات',
+    topPlayers: 'أفضل اللاعبين',
+    viewAll: 'عرض الكل',
+    playNow: 'العب الآن',
+
+    // Empty / placeholder slots
+    emptySlot: 'مكان شاغر',
+    emptySlotHint: 'تحدّى للظهور هنا',
+    futureChampion: 'بطل المستقبل',
+    beTheFirst: 'كن الأول!',
+    startNow: 'ابدأ الآن!',
+    createGlory: 'اصنع المجد!',
+
+    // Profile card / stats
+    xpSuffix: 'نقطة',
+    levelPrefix: 'المستوى',
+    globalRank: 'الترتيب العالمي',
+    leaderboardTitle: 'قائمة الـ 11 الأوائل',
+
+    // Accessibility
+    a11yProfileCard: 'افتح ملفي الشخصي',
+    a11yCoinChip: 'رصيدك من الكوينز',
+
+    // Competition cards
+    competitionNames: {
+      kingOfPredictions: {
+        title: 'ملك التوقعات',
+        sub: 'توقّع نتائج المباريات وكن الأفضل!',
+        action: 'توقّع الآن',
+      },
+      engagementHero: {
+        title: 'بطل التفاعل',
+        sub: 'انشر ريلزك وتصدّر قوائم التفاعل!',
+        action: 'انشر الآن',
+      },
+      dailyQuiz: {
+        title: 'الكويز اليومي',
+        sub: 'أجب على الأسئلة اليومية واربح النقاط!',
+        action: 'جرّب الآن',
+      },
+      shareAndEarn: {
+        title: 'شارك واربح',
+        sub: 'شارك التطبيق واصعد في الترتيب!',
+        action: 'شارك الآن',
+      },
+    },
+
+    // World Cup card / modal
+    worldCup: {
+      headline: 'اصنع\nالمجد',
+      body: 'تنافس مع الآخرين واصعد إلى\nقمة لوحة المتصدرين!',
+      comingSoon: 'قريبًا',
+      countdownLabel: 'كأس العالم يبدأ خلال',
+      anticipate: 'استعد',
+      brand: '90 بلاس كأس العالم',
+      getReady: 'استعد الآن',
+      days: 'يوم',
+      hours: 'ساعة',
+      mins: 'دقيقة',
+      secs: 'ثانية',
+    },
+
+    // Loading / error
+    errors: {
+      loadFailed: 'تعذّر تحميل أفضل اللاعبين',
+      retry: 'إعادة المحاولة',
+    },
   },
 
   profile: {

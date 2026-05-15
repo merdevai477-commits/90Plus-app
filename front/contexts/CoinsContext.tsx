@@ -21,12 +21,19 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
   const { isSignedIn, getToken } = useAuth();
   const { user } = useUser();
 
+  // Clerk's `getToken` returns a NEW function reference on every render. Don't
+  // put it in effect dependency arrays directly — read it from a ref instead.
+  const getTokenRef = React.useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
   // تحميل الكوينات عند تغيير المستخدم
   useEffect(() => {
     if (isSignedIn && user?.id) {
       // Set the current user and token in CoinsService
       const setupCoins = async () => {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         CoinsService.setCurrentUser(user.id, token);
         CoinsService.setToken(token);
         await loadCoins();
@@ -38,13 +45,13 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
       setCoins(INITIAL_COINS);
       setLoading(false);
     }
-  }, [isSignedIn, user?.id, getToken]);
+  }, [isSignedIn, user?.id]);
 
   const loadCoins = useCallback(async () => {
     try {
       setLoading(true);
       // Update token before loading
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (token) {
         CoinsService.setToken(token);
       }
@@ -56,7 +63,7 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   const addCoins = async (amount: number) => {
     try {

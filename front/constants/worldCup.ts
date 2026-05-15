@@ -1,0 +1,35 @@
+/**
+ * FIFA World Cup 2026 — central source of truth for the countdown.
+ *
+ * Opening match: Thursday, June 11, 2026 — Estadio Azteca, Mexico City.
+ * Kickoff: 20:00 local (CDT, UTC-5) → 2026-06-12T01:00:00Z.
+ *
+ * The kickoff is anchored in UTC so every device sees the same remaining time
+ * regardless of the user's timezone or DST handling.
+ */
+export const WC_2026_KICKOFF_UTC: Date = new Date('2026-06-12T01:00:00Z');
+export const WC_2026_KICKOFF_MS: number = WC_2026_KICKOFF_UTC.getTime();
+
+export interface WorldCupTimeLeft {
+  days: number;
+  hours: number;
+  mins: number;
+  secs: number;
+}
+
+/**
+ * Time remaining until the World Cup 2026 opening kickoff.
+ * Returns a zeroed structure once the event has started.
+ */
+export function getWorldCupTimeLeft(now: number = Date.now()): WorldCupTimeLeft {
+  const diff = WC_2026_KICKOFF_MS - now;
+  if (diff <= 0) return { days: 0, hours: 0, mins: 0, secs: 0 };
+  return {
+    days: Math.floor(diff / 86_400_000),
+    hours: Math.floor((diff % 86_400_000) / 3_600_000),
+    mins: Math.floor((diff % 3_600_000) / 60_000),
+    secs: Math.floor((diff % 60_000) / 1_000),
+  };
+}
+
+export const padCountdown = (n: number): string => String(n).padStart(2, '0');
