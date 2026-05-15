@@ -1430,6 +1430,47 @@ export const ar = {
     limitReached: 'انتهت رسائلك اليومية',
     limitResetsAfter: 'يتجدد بعد العد التنازلي',
   },
+
+  // XP & Level System
+  xp: {
+    badge: { suffix: 'نقطة', levelPrefix: 'المستوى' },
+    titles: {
+      rookie: 'مبتدئ',
+      captain: 'كابتن',
+      striker: 'هداف',
+      star: 'نجم',
+      legend: 'أسطورة',
+      icon: 'أيقونة',
+      hallOfFame: 'قاعة المشاهير',
+    },
+    levelUpModal: {
+      headline: 'ترقية!',
+      youAreNow: 'أنت الآن المستوى {{level}}',
+      claim: 'استلم',
+      dismiss: 'إغلاق',
+    },
+    toasts: {
+      earned: '+{{amount}} نقطة خبرة',
+      firstAvatar: 'أول صورة بروفايل',
+      firstDisplayName: 'تم تعيين الاسم',
+      firstBio: 'تمت إضافة النبذة',
+      firstSocial: 'تمت إضافة رابط {{platform}}',
+      fifaField: 'تم حفظ تفاصيل البروفايل',
+      fifaComplete: 'البطاقة مكتملة!',
+      reelUpload: 'تم رفع الريل',
+      reelComment: 'تم نشر التعليق',
+      reelShare: 'تمت مشاركة الريل',
+      reelViews100: 'ريلك وصل 100 مشاهدة',
+      predictionExact: 'توقع دقيق!',
+      predictionWinner: 'توقع صحيح',
+      quizCorrect: 'إجابة صحيحة',
+      quizCompleted: 'تم إكمال الكويز',
+      dailyLogin: 'سلسلة دخول يومية {{day}}',
+    },
+    errors: {
+      capReached: 'وصلت للحد اليومي لهذا الإجراء',
+    },
+  },
 };
 
 export type TranslationKeys = typeof ar;

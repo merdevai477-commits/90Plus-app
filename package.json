@@ -45,7 +45,8 @@
     "test:r2:quick": "ts-node quick-test-r2.ts",
     "check:r2": "ts-node check-r2-bucket.ts",
     "test:mux": "ts-node --project tsconfig.scripts.json scripts/test-mux-upload.ts",
-    "test:mux:direct": "ts-node --project tsconfig.scripts.json scripts/test-mux-direct.ts"
+    "test:mux:direct": "ts-node --project tsconfig.scripts.json scripts/test-mux-direct.ts",
+    "backfill:xp": "ts-node src/scripts/backfill-xp.ts"
   },
   "keywords": [
     "football",

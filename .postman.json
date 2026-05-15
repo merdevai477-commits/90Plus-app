@@ -930,6 +930,233 @@
             "response": []
           }
         ]
+      },
+      {
+        "name": "XP & Levels",
+        "item": [
+          {
+            "name": "Get My XP",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/xp/me",
+                "host": ["{{base_url}}"],
+                "path": ["xp", "me"]
+              },
+              "description": "Get current user's XP, level, title, progress percentage, and login streak"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test(\"Status code is 200\", function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test(\"Response has SUCCESS status\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                    "});",
+                    "",
+                    "pm.test(\"Response contains XP data\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data).to.have.property(\"xp\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"level\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"title\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"xpToNext\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"progressPct\");",
+                    "    pm.expect(jsonData.data).to.have.property(\"streak\");",
+                    "});",
+                    "",
+                    "pm.test(\"XP is non-negative\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data.xp).to.be.at.least(0);",
+                    "});",
+                    "",
+                    "pm.test(\"Level is at least 1\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data.level).to.be.at.least(1);",
+                    "});",
+                    "",
+                    "pm.test(\"Progress percentage is 0-100\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data.progressPct).to.be.at.least(0);",
+                    "    pm.expect(jsonData.data.progressPct).to.be.at.most(100);",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get User XP (Public)",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/xp/users/:userId",
+                "host": ["{{base_url}}"],
+                "path": ["xp", "users", ":userId"],
+                "variable": [
+                  {
+                    "key": "userId",
+                    "value": "",
+                    "description": "Internal user ID"
+                  }
+                ]
+              },
+              "description": "Get public XP/level data for any user by their internal ID. Cached for 5 minutes."
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test(\"Status code is 200 or 404\", function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                    "});",
+                    "",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test(\"Response has SUCCESS status\", function () {",
+                    "        var jsonData = pm.response.json();",
+                    "        pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                    "    });",
+                    "",
+                    "    pm.test(\"Response contains public XP data\", function () {",
+                    "        var jsonData = pm.response.json();",
+                    "        pm.expect(jsonData.data).to.have.property(\"xp\");",
+                    "        pm.expect(jsonData.data).to.have.property(\"level\");",
+                    "        pm.expect(jsonData.data).to.have.property(\"title\");",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get My XP History",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/xp/me/history?limit=20",
+                "host": ["{{base_url}}"],
+                "path": ["xp", "me", "history"],
+                "query": [
+                  {
+                    "key": "limit",
+                    "value": "20",
+                    "description": "Max 50"
+                  }
+                ]
+              },
+              "description": "Get XP transaction history for the current user (action, amount, timestamp, metadata)"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test(\"Status code is 200\", function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test(\"Response has SUCCESS status\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                    "});",
+                    "",
+                    "pm.test(\"Response contains transactions array\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data).to.have.property(\"transactions\");",
+                    "    pm.expect(jsonData.data.transactions).to.be.an(\"array\");",
+                    "});",
+                    "",
+                    "pm.test(\"Transactions have required fields\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    if (jsonData.data.transactions.length > 0) {",
+                    "        var tx = jsonData.data.transactions[0];",
+                    "        pm.expect(tx).to.have.property(\"action\");",
+                    "        pm.expect(tx).to.have.property(\"amount\");",
+                    "        pm.expect(tx).to.have.property(\"createdAt\");",
+                    "    }",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get Level Curve",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/xp/curve",
+                "host": ["{{base_url}}"],
+                "path": ["xp", "curve"]
+              },
+              "description": "Get the full level curve (levels 1-50 with XP thresholds and titles). Cached for 1 hour."
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test(\"Status code is 200\", function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test(\"Response has SUCCESS status\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                    "});",
+                    "",
+                    "pm.test(\"Response contains 50 levels\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data).to.have.property(\"levels\");",
+                    "    pm.expect(jsonData.data.levels).to.be.an(\"array\");",
+                    "    pm.expect(jsonData.data.levels).to.have.lengthOf(50);",
+                    "});",
+                    "",
+                    "pm.test(\"Level 1 requires 0 XP\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    pm.expect(jsonData.data.levels[0].level).to.eql(1);",
+                    "    pm.expect(jsonData.data.levels[0].xpRequired).to.eql(0);",
+                    "});",
+                    "",
+                    "pm.test(\"XP requirements are monotonically increasing\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    var levels = jsonData.data.levels;",
+                    "    for (var i = 1; i < levels.length; i++) {",
+                    "        pm.expect(levels[i].xpRequired).to.be.above(levels[i-1].xpRequired);",
+                    "    }",
+                    "});",
+                    "",
+                    "pm.test(\"Each level has a title\", function () {",
+                    "    var jsonData = pm.response.json();",
+                    "    jsonData.data.levels.forEach(function(level) {",
+                    "        pm.expect(level).to.have.property(\"title\");",
+                    "        pm.expect(level.title).to.be.a(\"string\").and.not.empty;",
+                    "    });",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          }
+        ]
       }
     ]
   },

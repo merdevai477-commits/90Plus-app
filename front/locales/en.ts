@@ -1468,6 +1468,47 @@ export const en = {
     limitReached: 'Daily message limit reached',
     limitResetsAfter: 'Resets after the countdown',
   },
+
+  // XP & Level System
+  xp: {
+    badge: { suffix: 'XP', levelPrefix: 'Lv.' },
+    titles: {
+      rookie: 'Rookie',
+      captain: 'Captain',
+      striker: 'Striker',
+      star: 'Star',
+      legend: 'Legend',
+      icon: 'Icon',
+      hallOfFame: 'Hall of Fame',
+    },
+    levelUpModal: {
+      headline: 'LEVEL UP',
+      youAreNow: "You're now Level {{level}}",
+      claim: 'Claim',
+      dismiss: 'Dismiss',
+    },
+    toasts: {
+      earned: '+{{amount}} XP earned',
+      firstAvatar: 'First profile picture',
+      firstDisplayName: 'Display name set',
+      firstBio: 'Bio added',
+      firstSocial: '{{platform}} link added',
+      fifaField: 'Profile detail saved',
+      fifaComplete: 'Card complete!',
+      reelUpload: 'Reel uploaded',
+      reelComment: 'Comment posted',
+      reelShare: 'Reel shared',
+      reelViews100: 'Your reel hit 100 views',
+      predictionExact: 'Exact prediction!',
+      predictionWinner: 'Correct prediction',
+      quizCorrect: 'Correct answer',
+      quizCompleted: 'Quiz completed',
+      dailyLogin: 'Daily login streak {{day}}',
+    },
+    errors: {
+      capReached: "You've hit today's cap for that action",
+    },
+  },
 };
 
 export default en;

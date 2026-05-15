@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { clerkClient } from '@clerk/express';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { awardDailyLogin } from './xp.service';
 
 // ✅ Cache for Clerk API responses (5 minutes TTL)
 const clerkUserCache = new Map<string, { data: any; timestamp: number }>();
@@ -270,58 +271,9 @@ export class ClerkUserService {
      */
     private static async updateLoginStreak(userId: string): Promise<void> {
         try {
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { lastLoginDate: true, consecutiveLoginDays: true },
-            });
-
-            if (!user) {
-                return;
-            }
-
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            
-            // If user has never logged in, set to 1 day
-            if (!user.lastLoginDate) {
-                await prisma.user.update({
-                    where: { id: userId },
-                    data: {
-                        lastLoginDate: today,
-                        consecutiveLoginDays: 1,
-                    },
-                });
-                return;
-            }
-
-            const lastLogin = new Date(user.lastLoginDate);
-            const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
-            
-            // Calculate days difference
-            const daysDiff = Math.floor((today.getTime() - lastLoginDate.getTime()) / (1000 * 60 * 60 * 24));
-
-            let newStreak = user.consecutiveLoginDays;
-
-            if (daysDiff === 0) {
-                // Same day - no change needed
-                return;
-            } else if (daysDiff === 1) {
-                // Consecutive day - increment streak
-                newStreak = user.consecutiveLoginDays + 1;
-            } else {
-                // More than 1 day - reset streak to 1
-                newStreak = 1;
-            }
-
-            await prisma.user.update({
-                where: { id: userId },
-                data: {
-                    lastLoginDate: today,
-                    consecutiveLoginDays: newStreak,
-                },
-            });
-
-            logger.info(`Updated login streak for user ${userId}: ${newStreak} days`);
+            // Award daily login XP via the XP service (handles streak logic internally)
+            await awardDailyLogin(userId, 'UTC');
+            logger.info(`Updated login streak + XP for user ${userId}`);
         } catch (error) {
             logger.error('Error updating login streak:', error);
             // Don't throw - login streak update shouldn't fail the login

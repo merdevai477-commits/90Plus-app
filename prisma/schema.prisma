@@ -181,6 +181,11 @@ model User {
   bans                UserBan[]         @relation("UserBans")
   bansIssued          UserBan[]         @relation("BanIssuer")
 
+  // XP System
+  xpTransactions  XpTransaction[] @relation("UserXpTransactions")
+  xpDailyCaps     XpDailyCap[]    @relation("UserXpDailyCaps")
+  loginStreak     LoginStreak?    @relation("UserLoginStreak")
+
   @@index([email])
   @@index([username])
   @@index([level])
@@ -1886,4 +1891,80 @@ model ChatLimit {
 
   @@index([date])
   @@map("chat_limits")
+}
+
+// ============================================
+// XP & LEVEL SYSTEM
+// ============================================
+
+model XpTransaction {
+  id              String       @id @default(uuid())
+  userId          String
+  action          XpActionType
+  amount          Int          // can be negative for reversals
+  idempotencyKey  String?      // null for repeatable actions; set for one-time/per-resource awards
+  metadata        Json?        // e.g. { reelId, matchId, questionId }
+  createdAt       DateTime     @default(now())
+
+  user User @relation("UserXpTransactions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([action])
+  @@map("xp_transactions")
+}
+
+model XpDailyCap {
+  id     String       @id @default(uuid())
+  userId String
+  action XpActionType
+  date   String       // YYYY-MM-DD in user's timezone
+  count  Int          @default(0)
+
+  user User @relation("UserXpDailyCaps", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, action, date])
+  @@index([userId, date])
+  @@map("xp_daily_caps")
+}
+
+model LoginStreak {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  current       Int     @default(0)
+  longest       Int     @default(0)
+  lastLoginDate String? // YYYY-MM-DD in user's timezone
+
+  user User @relation("UserLoginStreak", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("login_streaks")
+}
+
+enum XpActionType {
+  PROFILE_AVATAR
+  PROFILE_DISPLAY_NAME
+  PROFILE_BIO
+  PROFILE_SOCIAL_INSTAGRAM
+  PROFILE_SOCIAL_TWITTER
+  PROFILE_SOCIAL_TIKTOK
+  PROFILE_SOCIAL_SNAPCHAT
+  PROFILE_FIFA_POSITION
+  PROFILE_FIFA_AGE
+  PROFILE_FIFA_HEIGHT
+  PROFILE_FIFA_WEIGHT
+  PROFILE_FIFA_FOOT
+  PROFILE_FIFA_COUNTRY
+  PROFILE_FIFA_CLUB
+  PROFILE_FIFA_BRAND
+  PROFILE_FIFA_COMPLETE
+  REEL_UPLOAD
+  REEL_COMMENT
+  REEL_SHARE
+  REEL_VIEWS_100
+  PREDICTION_EXACT
+  PREDICTION_WINNER
+  QUIZ_ANSWER_CORRECT
+  QUIZ_COMPLETED_HIGH
+  DAILY_LOGIN
+  ADMIN_ADJUSTMENT
 }

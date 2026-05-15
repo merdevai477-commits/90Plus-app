@@ -34,6 +34,7 @@ import * as Updates from 'expo-updates';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
 import { CoinsProvider } from "../contexts/CoinsContext";
+import { XpProvider } from "../contexts/XpContext";
 import { VideosProvider } from "../contexts/VideosContext";
 import { ToastProvider } from "../contexts/ToastContext";
 import { ProfessionalToastProvider } from '../contexts/ProfessionalToastContext';
@@ -214,6 +215,7 @@ function RootLayoutNav() {
   );
 }
 
+import { LevelUpModal } from "../components/common/LevelUpModal";
 import { Image } from "expo-image";
 import { CLUBS } from "../data/clubs";
 import { BRANDS } from "../data/brands";
@@ -664,6 +666,7 @@ export default function RootLayout() {
               <LanguageProvider>
                 <SettingsProvider>
                   <CoinsProvider>
+                    <XpProvider>
                     <VideosProvider>
                       <ToastProvider>
                         <ProfessionalToastProvider>
@@ -675,6 +678,7 @@ export default function RootLayout() {
                                   barStyle="light-content"
                                   backgroundColor="#000"
                                 />
+                                <LevelUpModal />
                                 <ClerkGate>
                                   <WebSocketInitializer>
                                     <PreloadInitializer>
@@ -688,6 +692,7 @@ export default function RootLayout() {
                         </ProfessionalToastProvider>
                       </ToastProvider>
                     </VideosProvider>
+                    </XpProvider>
                   </CoinsProvider>
                 </SettingsProvider>
               </LanguageProvider>

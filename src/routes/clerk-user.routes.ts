@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { ClerkUserService } from '../services/clerk-user.service';
 import { ProfileCompletionService } from '../services/profile-completion.service';
+import { awardXp, isValidSocialUrl, XpEvent } from '../services/xp.service';
+import { XpActionType } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
@@ -220,6 +222,24 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
         // Invalidate cache so /me returns fresh data
         invalidateUserCache(clerkUserId);
         
+        // ✅ XP Awards for profile updates
+        const xpEvents: XpEvent[] = [];
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        try {
+          // Display name first-time award
+          if (displayName && displayName.trim().length > 0) {
+            const r = await awardXp({ userId: user.id, action: 'PROFILE_DISPLAY_NAME', idempotencyKey: 'profile.displayName.first', timezone: tz });
+            if (r.awarded > 0) xpEvents.push({ action: 'PROFILE_DISPLAY_NAME', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+          }
+          // Bio first-time award (>= 20 chars)
+          if (bio && bio.length >= 20) {
+            const r = await awardXp({ userId: user.id, action: 'PROFILE_BIO', idempotencyKey: 'profile.bio.first', timezone: tz });
+            if (r.awarded > 0) xpEvents.push({ action: 'PROFILE_BIO', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+          }
+        } catch (xpErr) {
+          logger.error('XP award error in PUT /profile:', xpErr);
+        }
+
         // ✅ CRITICAL: Recalculate profile completion after profile update
         try {
           await ProfileCompletionService.getCompletionStatus(clerkUserId);
@@ -232,6 +252,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
             status: 'SUCCESS',
             message: 'Profile updated successfully',
             data: { user },
+            xpEvents,
         });
     } catch (error: any) {
         logger.error('Update profile error:', error);
@@ -370,6 +391,42 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
 
         // ✅ Invalidate Backend Cache to force refresh on next request
         invalidateUserCache(clerkUserId);
+
+        // ✅ XP Awards for FIFA card fields
+        const xpEvents: XpEvent[] = [];
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        try {
+          const user2 = await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true, position: true, age: true, height: true, weight: true, preferredFoot: true, countryFlag: true, clubLogo: true, brandLogo: true } });
+          if (user2) {
+            const fifaMap: Array<{ field: string; action: XpActionType; value: unknown }> = [
+              { field: 'position', action: 'PROFILE_FIFA_POSITION', value: user2.position },
+              { field: 'age', action: 'PROFILE_FIFA_AGE', value: user2.age },
+              { field: 'height', action: 'PROFILE_FIFA_HEIGHT', value: user2.height },
+              { field: 'weight', action: 'PROFILE_FIFA_WEIGHT', value: user2.weight },
+              { field: 'foot', action: 'PROFILE_FIFA_FOOT', value: user2.preferredFoot },
+              { field: 'country', action: 'PROFILE_FIFA_COUNTRY', value: user2.countryFlag },
+              { field: 'club', action: 'PROFILE_FIFA_CLUB', value: user2.clubLogo },
+              { field: 'brand', action: 'PROFILE_FIFA_BRAND', value: user2.brandLogo },
+            ];
+
+            let filledCount = 0;
+            for (const { field, action, value } of fifaMap) {
+              if (value !== null && value !== undefined) {
+                filledCount++;
+                const r = await awardXp({ userId: user2.id, action, idempotencyKey: `profile.fifa.${field}.first`, timezone: tz });
+                if (r.awarded > 0) xpEvents.push({ action, amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+              }
+            }
+
+            // FIFA complete bonus
+            if (filledCount === 8) {
+              const r = await awardXp({ userId: user2.id, action: 'PROFILE_FIFA_COMPLETE', idempotencyKey: 'profile.fifa.complete', timezone: tz });
+              if (r.awarded > 0) xpEvents.push({ action: 'PROFILE_FIFA_COMPLETE', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+            }
+          }
+        } catch (xpErr) {
+          logger.error('XP award error in PUT /card-profile:', xpErr);
+        }
         
         // ✅ CRITICAL: Invalidate profile completion cache to force recalculation
         try {
@@ -383,6 +440,7 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
             status: 'SUCCESS',
             message: 'Card profile updated successfully',
             data: { cardProfile: user },
+            xpEvents,
         });
     } catch (error: any) {
         logger.error('Update card profile error:', error);
@@ -1403,6 +1461,32 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
 
         // Invalidate cache
         invalidateUserCache(clerkUserId);
+
+        // ✅ XP Awards for social links
+        const xpEvents: XpEvent[] = [];
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        try {
+          const xpUser = await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } });
+          if (xpUser) {
+            const xpPlatforms: Record<string, XpActionType> = {
+              instagram: 'PROFILE_SOCIAL_INSTAGRAM',
+              twitter: 'PROFILE_SOCIAL_TWITTER',
+              tiktok: 'PROFILE_SOCIAL_TIKTOK',
+              snapchat: 'PROFILE_SOCIAL_SNAPCHAT',
+            };
+
+            for (const link of validLinks) {
+              const platform = link.platform.toLowerCase();
+              const action = xpPlatforms[platform];
+              if (action && link.url && isValidSocialUrl(platform, link.url)) {
+                const r = await awardXp({ userId: xpUser.id, action, idempotencyKey: `profile.social.${platform}.first`, timezone: tz });
+                if (r.awarded > 0) xpEvents.push({ action, amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+              }
+            }
+          }
+        } catch (xpErr) {
+          logger.error('XP award error in PUT /social-links:', xpErr);
+        }
         
         // ✅ CRITICAL: Recalculate profile completion after social links update
         try {
@@ -1416,6 +1500,7 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
             status: 'SUCCESS',
             message: 'Social links updated successfully',
             data: { socialLinks: (user as any).socialLinks || [] },
+            xpEvents,
         });
     } catch (error: any) {
         logger.error('Update social links error:', error);

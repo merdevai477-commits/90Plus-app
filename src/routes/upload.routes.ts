@@ -403,7 +403,18 @@ router.post(
         logger.error('Enqueue notification failed for avatar:', err);
       }
 
-      res.json({ status: 'SUCCESS', message: 'تم رفع صورة البروفايل بنجاح', data: { url: result.url, storagePath: result.key } });
+      // ✅ XP Award for first avatar
+      let xpEvents: Array<{ action: string; amount: number; leveledUp: boolean; newLevel: number }> = [];
+      try {
+        const { awardXp: awardXpFn } = await import('../services/xp.service');
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        const r = await awardXpFn({ userId: user.id, action: 'PROFILE_AVATAR', idempotencyKey: 'profile.avatar.first', timezone: tz });
+        if (r.awarded > 0) xpEvents.push({ action: 'PROFILE_AVATAR', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+      } catch (xpErr: any) {
+        logger.warn('[upload/avatar] XP award failed (non-fatal):', xpErr?.message);
+      }
+
+      res.json({ status: 'SUCCESS', message: 'تم رفع صورة البروفايل بنجاح', data: { url: result.url, storagePath: result.key }, xpEvents });
     } catch (error: any) {
       logger.error('Upload avatar error:', error);
       sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Upload failed');
@@ -768,6 +779,17 @@ router.post(
       // Fix 7: Increment quota AFTER successful upload
       await incrementQuota(user.id, videoFile.buffer.length + (thumbnailFile?.buffer.length ?? 0));
 
+      // ✅ XP Award for reel upload
+      let xpEvents: Array<{ action: string; amount: number; leveledUp: boolean; newLevel: number }> = [];
+      try {
+        const { awardXp: awardXpFn } = await import('../services/xp.service');
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        const r = await awardXpFn({ userId: user.id, action: 'REEL_UPLOAD', dailyCap: 3, timezone: tz });
+        if (r.awarded > 0) xpEvents.push({ action: 'REEL_UPLOAD', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+      } catch (xpErr: any) {
+        logger.warn('[upload/reel] XP award failed (non-fatal):', xpErr?.message);
+      }
+
       await UploadAnalyticsService.record({
         userId: user.id, type: 'REEL', status: 'SUCCESS',
         fileSizeMB, durationMs: Date.now() - startTime,
@@ -784,6 +806,7 @@ router.post(
           thumbnailUrl: muxThumbnailUrl,
           status: 'PROCESSING',
         },
+        xpEvents,
       });
     } catch (error: any) {
       logger.error('[upload/reel] Exception:', error?.message);

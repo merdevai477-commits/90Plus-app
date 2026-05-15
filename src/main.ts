@@ -232,6 +232,7 @@ import termsRoutes from './routes/terms.routes';
 import reportsRoutes from './routes/reports.routes';
 import gdprRoutes from './routes/gdpr.routes';
 import chatRoutes from './routes/chat.routes';
+import xpRoutes from './routes/xp.routes';
 import path from 'path';
 
 // Import services
@@ -299,6 +300,7 @@ app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
+app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
