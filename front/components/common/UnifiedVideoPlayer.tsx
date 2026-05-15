@@ -302,6 +302,12 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
   // -------- Signed-URL refresh on error --------
   const { getToken } = useAuth();
+  // Stable ref for getToken — avoids re-firing the error-recovery effect
+  // every parent render (Clerk returns a new function reference each render).
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
   const [errorDetails, setErrorDetails] = useState<string>('');
   // Track which (reel.id, url) pair we've already logged so we don't spam
   // the same failure message every render.
@@ -331,7 +337,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
       (async () => {
         try {
-          const token = await getToken();
+          const token = await getTokenRef.current();
           if (!token) return;
           const res = await fetch(`${getApiUrl()}/reels/${reel.id}/signed-url`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -373,7 +379,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         }
       })();
     }
-  }, [hasError, playerError, activeVideoUrl, reel.id, getToken, player, isActive]);
+  }, [hasError, playerError, activeVideoUrl, reel.id, player, isActive]);
 
   // -------- Manual retry / manual replay --------
   const handleRetry = useCallback(() => {

@@ -117,6 +117,13 @@ export default function CommentsModal({
     const haptic = useHaptic();
     const { getToken, userId: sessionUserId } = useAuth();
 
+    // Clerk's `getToken` returns a NEW function reference on every render,
+    // so don't put it in effect dep arrays — read it from a ref instead.
+    const getTokenRef = useRef(getToken);
+    useEffect(() => {
+        getTokenRef.current = getToken;
+    }, [getToken]);
+
     // Unified report system for comments/replies
     const {
         isVisible: isReportVisible,
@@ -243,6 +250,13 @@ export default function CommentsModal({
     const canReply = userRepliesCount < MAX_REPLIES_PER_USER;
 
     // ✅ FIX: Load comments from backend - use refs to prevent infinite loops
+    // `comments` prop is read from a ref to avoid re-firing on parent re-renders
+    // when the parent passes a new array reference each render.
+    const commentsPropRef = useRef(comments);
+    useEffect(() => {
+        commentsPropRef.current = comments;
+    }, [comments]);
+
     useEffect(() => {
         // Reset when modal closes - only reset refs, NOT state
         if (!visible) {
@@ -256,7 +270,8 @@ export default function CommentsModal({
         }
 
         // If comments are provided as props, mark as loaded
-        if (comments && comments.length > 0) {
+        const propsComments = commentsPropRef.current;
+        if (propsComments && propsComments.length > 0) {
             loadedReelIdRef.current = reelId;
             return;
         }
@@ -269,7 +284,7 @@ export default function CommentsModal({
         // Load comments from backend
         const loadComments = async () => {
             try {
-                const token = await getToken();
+                const token = await getTokenRef.current();
                 if (!token) return;
 
                 // Mark as loading immediately
@@ -302,7 +317,7 @@ export default function CommentsModal({
         };
 
         loadComments();
-    }, [visible, reelId, getToken, comments]);
+    }, [visible, reelId]);
 
     // Scroll to highlighted comment when modal opens or highlightCommentId changes
     // ✅ Use ref to avoid dependency on commentsWithReplies array (prevents infinite loop)

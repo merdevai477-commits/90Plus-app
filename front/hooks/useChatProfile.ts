@@ -73,6 +73,13 @@ export function useChatProfile(): UseChatProfileResult {
     const { user: clerkUser } = useUser();
     const [profile, setProfile] = useState<ChatProfileSlice | null>(null);
     const profileRef = useRef<ChatProfileSlice | null>(null);
+
+    // Clerk's getToken returns a NEW function reference on every render.
+    // Read it via a ref so the effect doesn't re-fire on every parent render.
+    const getTokenRef = useRef(getToken);
+    useEffect(() => {
+        getTokenRef.current = getToken;
+    }, [getToken]);
     const [loading, setLoading] = useState<boolean>(true);
     const cacheKey = userId ? `${CACHE_KEY_PREFIX}${userId}` : null;
 
@@ -114,7 +121,7 @@ export function useChatProfile(): UseChatProfileResult {
 
             // 2) Fresh fetch.
             try {
-                const token = await getToken();
+                const token = await getTokenRef.current();
                 if (!token || cancelled) {
                     setLoading(false);
                     return;
@@ -143,7 +150,7 @@ export function useChatProfile(): UseChatProfileResult {
         return () => {
             cancelled = true;
         };
-    }, [cacheKey, getToken, updateProfile, clerkUser?.imageUrl]);
+    }, [cacheKey, updateProfile, clerkUser?.imageUrl]);
 
     const isFifaCardComplete = !!(
         profile &&

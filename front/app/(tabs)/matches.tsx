@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, memo } from 'react';
+import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -527,6 +527,13 @@ export default function MatchesHubScreenV2() {
   const { getToken, userId } = useAuth();
   const { t: tObj, translate: t } = useTranslation();
 
+  // Clerk's getToken returns a NEW function reference on every render — store
+  // it in a ref so effects don't re-fire on every parent re-render.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
   // Tickets (remaining predictions)
   const [ticketsRemaining, setTicketsRemaining] = useState<number>(10);
   // Map of matchId -> prediction type already submitted
@@ -588,7 +595,7 @@ export default function MatchesHubScreenV2() {
     if (!PRED_CACHE_KEY || !TICKETS_CACHE_KEY) return;
     const loadPredictionsData = async () => {
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) return;
         const [remaining, userPreds] = await Promise.all([
           PredictionsService.getRemainingPredictions(token),
@@ -609,7 +616,7 @@ export default function MatchesHubScreenV2() {
       }
     };
     loadPredictionsData();
-  }, [getToken, PRED_CACHE_KEY, TICKETS_CACHE_KEY]);
+  }, [PRED_CACHE_KEY, TICKETS_CACHE_KEY]);
 
   // Reset bell state when the signed-in user changes.
   useEffect(() => {
@@ -622,7 +629,7 @@ export default function MatchesHubScreenV2() {
     let cancelled = false;
     (async () => {
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) return;
         const ids = await MatchSubscriptionsService.listIds(token);
         if (cancelled) return;
@@ -634,7 +641,7 @@ export default function MatchesHubScreenV2() {
     return () => {
       cancelled = true;
     };
-  }, [getToken, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (params.filter && FILTERS.includes(params.filter as any)) {
