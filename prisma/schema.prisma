@@ -82,6 +82,7 @@ model User {
   lastLoginDate        DateTime? // آخر تاريخ تسجيل دخول
   consecutiveLoginDays Int       @default(0) // عدد أيام الدخول المتتالية
   streakFreezes        Int       @default(0) // عدد تجميدات السلسلة المتاحة
+  lastActiveAt         DateTime? // آخر نشاط XP (لحساب فترة الراحة)
 
   // Push Notifications
   expoPushToken String? // Expo Push Token for notifications

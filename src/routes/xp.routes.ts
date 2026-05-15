@@ -25,7 +25,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
 
     const user = await prisma.user.findFirst({
       where: { clerkUserId },
-      select: { id: true, xp: true, level: true, streakFreezes: true },
+      select: { id: true, xp: true, level: true, streakFreezes: true, lastActiveAt: true },
     });
 
     if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
@@ -41,6 +41,13 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
       ? Math.min(100, Math.round(((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100))
       : 100;
 
+    // Rest period: inactive for 14+ days
+    const REST_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000;
+    const isResting = user.lastActiveAt
+      ? (Date.now() - new Date(user.lastActiveAt).getTime()) > REST_THRESHOLD_MS
+      : false;
+    const restingSince = isResting ? user.lastActiveAt : null;
+
     res.json({
       status: 'SUCCESS',
       data: {
@@ -50,6 +57,8 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
         xpToNext,
         progressPct,
         streakFreezes: user.streakFreezes,
+        isResting,
+        restingSince,
         streak: {
           current: streak?.current ?? 0,
           longest: streak?.longest ?? 0,
@@ -73,10 +82,15 @@ router.get('/users/:userId', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), as
 
     const user = await prisma.user.findUnique({
       where: { id: userIdStr },
-      select: { xp: true, level: true },
+      select: { xp: true, level: true, lastActiveAt: true },
     });
 
     if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
+
+    const REST_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000;
+    const isResting = user.lastActiveAt
+      ? (Date.now() - new Date(user.lastActiveAt).getTime()) > REST_THRESHOLD_MS
+      : false;
 
     res.json({
       status: 'SUCCESS',
@@ -84,6 +98,8 @@ router.get('/users/:userId', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), as
         xp: user.xp,
         level: user.level,
         title: levelTitle(user.level),
+        isResting,
+        restingSince: isResting ? user.lastActiveAt : null,
       },
     });
   } catch (error: any) {

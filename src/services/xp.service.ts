@@ -208,7 +208,7 @@ export async function awardXp(input: AwardXpInput): Promise<AwardXpResult> {
       // 4. Increment user XP and recompute level
       const updatedUser = await tx.user.update({
         where: { id: userId },
-        data: { xp: { increment: amount } },
+        data: { xp: { increment: amount }, lastActiveAt: new Date() },
         select: { xp: true, level: true },
       });
 
