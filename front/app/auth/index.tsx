@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -103,7 +104,20 @@ export default function RegisterScreen() {
           {terms ? <Text style={styles.chkMark}>✓</Text> : null}
         </TouchableOpacity>
         <Text style={styles.termsTxt}>
-          I agree to the <Text style={styles.link}>Terms and Conditions</Text>
+          I agree to the{' '}
+          <Text
+            style={styles.link}
+            onPress={() => Linking.openURL('https://90plus-app-production.up.railway.app/terms')}
+          >
+            Terms and Conditions
+          </Text>
+          {' '}and{' '}
+          <Text
+            style={styles.link}
+            onPress={() => Linking.openURL('https://90plus-app-production.up.railway.app/privacy')}
+          >
+            Privacy Policy
+          </Text>
         </Text>
       </View>
 
