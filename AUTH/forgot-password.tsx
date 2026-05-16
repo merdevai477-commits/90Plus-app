@@ -1,49 +1,33 @@
 import React, { useState } from 'react';
-import { Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Mail } from 'lucide-react-native';
 import { AuthScreenShell, AuthTextField, AUTH_ACCENT } from '@/src/components/auth';
 import { TEXT_PRIMARY, TEXT_SECONDARY } from '@/constants/tokens';
-import { useSignIn } from '@clerk/clerk-expo';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const { signIn, isLoaded } = useSignIn();
   const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const submit = async () => {
+  const submit = () => {
     if (!email.includes('@')) {
       Alert.alert('Notice', 'Enter a valid email address.');
       return;
     }
-    if (!isLoaded) return;
-
-    setIsSubmitting(true);
-    try {
-      await signIn.create({
-        strategy: 'reset_password_email_code',
-        identifier: email.trim(),
-      });
-      Alert.alert(
-        'Check your email',
-        `A reset code has been sent to ${email}.`,
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-    } catch (err: any) {
-      const msg = err?.errors?.[0]?.longMessage || err?.message || 'Failed to send reset email';
-      Alert.alert('Error', msg);
-    } finally {
-      setIsSubmitting(false);
-    }
+    Alert.alert(
+      'Coming soon',
+      `A reset link will be sent to ${email} when the API is enabled.`,
+      [{ text: 'OK', onPress: () => router.back() }]
+    );
   };
 
   return (
     <AuthScreenShell heroMode="none">
       <Text style={styles.heroTitle}>Forgot password</Text>
       <Text style={styles.sub}>
-        We&apos;ll send a code to reset your password. Make sure the email is tied to your account.
+        We&apos;ll send a link to choose a new password. Make sure the email is tied to your
+        account.
       </Text>
 
       <AuthTextField
@@ -56,23 +40,18 @@ export default function ForgotPasswordScreen() {
         containerStyle={styles.mt}
       />
 
-      <TouchableOpacity
-        style={[styles.primaryWrap, isSubmitting && { opacity: 0.6 }]}
-        activeOpacity={0.92}
-        onPress={submit}
-        disabled={isSubmitting}
-      >
+      <TouchableOpacity style={styles.primaryWrap} activeOpacity={0.92} onPress={submit}>
         <LinearGradient
           colors={[AUTH_ACCENT, '#5b21b6']}
           style={styles.primary}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
-          <Text style={styles.primaryTxt}>{isSubmitting ? 'Sending...' : 'Send reset link'}</Text>
+          <Text style={styles.primaryTxt}>Send reset link</Text>
         </LinearGradient>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.back} onPress={() => router.replace('/auth/login')}>
+      <TouchableOpacity style={styles.back} onPress={() => router.replace('/login')}>
         <Text style={styles.backTxt}>Back to login</Text>
       </TouchableOpacity>
     </AuthScreenShell>
@@ -80,8 +59,20 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  heroTitle: { fontSize: 24, fontWeight: '800', color: TEXT_PRIMARY, marginBottom: 10, textAlign: 'left' },
-  sub: { fontSize: 14, lineHeight: 20, color: TEXT_SECONDARY, marginBottom: 8, textAlign: 'left' },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  sub: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: TEXT_SECONDARY,
+    marginBottom: 8,
+    textAlign: 'left',
+  },
   mt: { marginTop: 16 },
   primaryWrap: { marginTop: 24, borderRadius: 14, overflow: 'hidden' },
   primary: { paddingVertical: 16, alignItems: 'center' },

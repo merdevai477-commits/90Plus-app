@@ -21,7 +21,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { setAudioModeAsync } from 'expo-audio';
 import { logger } from '../services/logger';
 
 // Track which videos are loaded and ready for playback control.
@@ -83,7 +82,7 @@ function safePause(player: any, id: string): void {
   } catch (error: any) {
     const msg = error?.message || 'unknown';
     if (!msg.includes('released') && !msg.includes('already')) {
-      console.warn(`[AudioManager] Error pausing video ${id}:`, msg);
+      logger.warn(`[AudioManager] Error pausing video ${id}:`, msg);
     }
   }
 }
@@ -100,7 +99,7 @@ function safePlay(player: any, id: string): void {
   } catch (error: any) {
     const msg = error?.message || 'unknown';
     if (!msg.includes('released') && !msg.includes('already')) {
-      console.warn(`[AudioManager] Error resuming video ${id}:`, msg);
+      logger.warn(`[AudioManager] Error resuming video ${id}:`, msg);
     }
   }
 }
@@ -172,20 +171,9 @@ export const useReelsAudioManager = ({
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
 
-    // Configure the audio session once per mount.
-    (async () => {
-      try {
-        await setAudioModeAsync({
-          allowsRecording: false,
-          shouldPlayInBackground: false,
-          playsInSilentMode: true,
-          interruptionMode: 'duckOthers',
-          shouldRouteThroughEarpiece: false,
-        });
-      } catch (error) {
-        console.warn('[AudioManager] Error configuring audio session:', error);
-      }
-    })();
+    // Audio session is already configured globally at app startup via configureAudioVideo()
+    // in videoConfig.ts (called from _layout.tsx). No need to reconfigure here —
+    // doing so can cause audio session interruptions with other screens.
 
     return () => {
       subscription.remove();

@@ -4,14 +4,15 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ProfileController } from '../controllers/profile.controller';
 import { moderateBio } from '../middleware/content-moderation.middleware';
+import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
 const router = Router();
 
 /**
  * GET /api/profile/me
- * Get current user profile
+ * Get current user profile (cached per-user, 2min TTL)
  */
-router.get('/me', requireAuth, ProfileController.getMyProfile);
+router.get('/me', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 1000 }), ProfileController.getMyProfile);
 
 /**
  * PATCH /api/profile/me
@@ -38,50 +39,6 @@ router.put('/avatar', requireAuth, async (req: Request, res: Response): Promise<
             return;
         }
 
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, lastAvatarChange: true }
-        });
-
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        // Check 7 days cooldown (Requirement 10.2)
-        if (user.lastAvatarChange) {
-            const daysSinceLastChange = Math.floor(
-                (Date.now() - new Date(user.lastAvatarChange).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            if (daysSinceLastChange < AVATAR_CHANGE_COOLDOWN_DAYS) {
-                const daysRemaining = AVATAR_CHANGE_COOLDOWN_DAYS - daysSinceLastChange;
-                
-                // Create notification on rejection (Requirement 10.4)
-                await prisma.notification.create({
-                    data: {
-                        userId: user.id,
-                        type: 'GENERAL',
-                        title: 'تغيير صورة البروفايل',
-                        message: `لا يمكنك تغيير صورة البروفايل الآن. يرجى الانتظار ${daysRemaining} يوم.`,
-                        data: { 
-                            type: 'AVATAR_COOLDOWN',
-                            daysRemaining,
-                            cooldownDays: AVATAR_CHANGE_COOLDOWN_DAYS
-                        }
-                    }
-                });
-                
-                // Return remaining days on rejection (Requirement 10.3)
-                res.status(429).json({
-                    status: 'ERROR',
-                    code: 'COOLDOWN_ACTIVE',
-                    message: `يمكنك تغيير صورة البروفايل بعد ${daysRemaining} يوم`,
-                    daysRemaining
-                });
-                return;
-            }
-        }
-
         const { avatarUrl, storagePath } = req.body;
 
         if (!avatarUrl) {
@@ -89,15 +46,55 @@ router.put('/avatar', requireAuth, async (req: Request, res: Response): Promise<
             return;
         }
 
-        // Record the change timestamp (Requirement 10.1)
-        await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                avatar: avatarUrl,
-                avatarStoragePath: storagePath,
-                lastAvatarChange: new Date()
+        // Use transaction to prevent race condition on cooldown check
+        const result = await prisma.$transaction(async (tx) => {
+            const user = await tx.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, lastAvatarChange: true }
+            });
+
+            if (!user) {
+                return { error: 'NOT_FOUND' } as const;
             }
+
+            // Check 7 days cooldown (Requirement 10.2)
+            if (user.lastAvatarChange) {
+                const daysSinceLastChange = Math.floor(
+                    (Date.now() - new Date(user.lastAvatarChange).getTime()) / (1000 * 60 * 60 * 24)
+                );
+                if (daysSinceLastChange < AVATAR_CHANGE_COOLDOWN_DAYS) {
+                    const daysRemaining = AVATAR_CHANGE_COOLDOWN_DAYS - daysSinceLastChange;
+                    return { error: 'COOLDOWN', daysRemaining, userId: user.id } as const;
+                }
+            }
+
+            // Record the change timestamp (Requirement 10.1)
+            await tx.user.update({
+                where: { id: user.id },
+                data: {
+                    avatar: avatarUrl,
+                    avatarStoragePath: storagePath,
+                    lastAvatarChange: new Date()
+                }
+            });
+
+            return { error: null } as const;
         });
+
+        if (result.error === 'NOT_FOUND') {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        if (result.error === 'COOLDOWN') {
+            res.status(429).json({
+                status: 'ERROR',
+                code: 'COOLDOWN_ACTIVE',
+                message: `يمكنك تغيير صورة البروفايل بعد ${result.daysRemaining} يوم`,
+                daysRemaining: result.daysRemaining
+            });
+            return;
+        }
 
         res.json({
             status: 'SUCCESS',
@@ -122,50 +119,6 @@ router.put('/cover', requireAuth, async (req: Request, res: Response): Promise<v
             return;
         }
 
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId },
-            select: { id: true, lastCoverChange: true }
-        });
-
-        if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
-            return;
-        }
-
-        // Check 15 days cooldown (Requirement 11.2)
-        if (user.lastCoverChange) {
-            const daysSinceLastChange = Math.floor(
-                (Date.now() - new Date(user.lastCoverChange).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            if (daysSinceLastChange < COVER_CHANGE_COOLDOWN_DAYS) {
-                const daysRemaining = COVER_CHANGE_COOLDOWN_DAYS - daysSinceLastChange;
-                
-                // Create notification on rejection (Requirement 11.4)
-                await prisma.notification.create({
-                    data: {
-                        userId: user.id,
-                        type: 'GENERAL',
-                        title: 'تغيير صورة الغلاف',
-                        message: `لا يمكنك تغيير صورة الغلاف الآن. يرجى الانتظار ${daysRemaining} يوم.`,
-                        data: { 
-                            type: 'COVER_COOLDOWN',
-                            daysRemaining,
-                            cooldownDays: COVER_CHANGE_COOLDOWN_DAYS
-                        }
-                    }
-                });
-                
-                // Return remaining days on rejection (Requirement 11.3)
-                res.status(429).json({
-                    status: 'ERROR',
-                    code: 'COOLDOWN_ACTIVE',
-                    message: `يمكنك تغيير صورة الغلاف بعد ${daysRemaining} يوم`,
-                    daysRemaining
-                });
-                return;
-            }
-        }
-
         const { coverUrl, storagePath } = req.body;
 
         if (!coverUrl) {
@@ -173,15 +126,55 @@ router.put('/cover', requireAuth, async (req: Request, res: Response): Promise<v
             return;
         }
 
-        // Record the change timestamp (Requirement 11.1)
-        await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                coverImage: coverUrl,
-                coverStoragePath: storagePath,
-                lastCoverChange: new Date()
+        // Use transaction to prevent race condition on cooldown check
+        const result = await prisma.$transaction(async (tx) => {
+            const user = await tx.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true, lastCoverChange: true }
+            });
+
+            if (!user) {
+                return { error: 'NOT_FOUND' } as const;
             }
+
+            // Check 15 days cooldown (Requirement 11.2)
+            if (user.lastCoverChange) {
+                const daysSinceLastChange = Math.floor(
+                    (Date.now() - new Date(user.lastCoverChange).getTime()) / (1000 * 60 * 60 * 24)
+                );
+                if (daysSinceLastChange < COVER_CHANGE_COOLDOWN_DAYS) {
+                    const daysRemaining = COVER_CHANGE_COOLDOWN_DAYS - daysSinceLastChange;
+                    return { error: 'COOLDOWN', daysRemaining, userId: user.id } as const;
+                }
+            }
+
+            // Record the change timestamp (Requirement 11.1)
+            await tx.user.update({
+                where: { id: user.id },
+                data: {
+                    coverImage: coverUrl,
+                    coverStoragePath: storagePath,
+                    lastCoverChange: new Date()
+                }
+            });
+
+            return { error: null } as const;
         });
+
+        if (result.error === 'NOT_FOUND') {
+            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            return;
+        }
+
+        if (result.error === 'COOLDOWN') {
+            res.status(429).json({
+                status: 'ERROR',
+                code: 'COOLDOWN_ACTIVE',
+                message: `يمكنك تغيير صورة الغلاف بعد ${result.daysRemaining} يوم`,
+                daysRemaining: result.daysRemaining
+            });
+            return;
+        }
 
         res.json({
             status: 'SUCCESS',
@@ -300,8 +293,12 @@ router.put('/username', requireAuth, async (req: Request, res: Response): Promis
 
 /**
  * POST /api/profile/:username/view
- * Increment profile view count
+ * Increment profile view count (deduplicated per viewer per 5 minutes)
  */
+// Simple in-memory dedup for profile views (viewer:target → timestamp)
+const profileViewDedup = new Map<string, number>();
+const PROFILE_VIEW_DEDUP_TTL = 5 * 60 * 1000; // 5 minutes
+
 router.post('/:username/view', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         // Ensure username is a string (handle array case)
@@ -319,6 +316,23 @@ router.post('/:username/view', requireAuth, async (req: Request, res: Response):
             return;
         }
 
+        // Deduplicate: same viewer can only count once per 5 minutes
+        const dedupKey = `${clerkUserId}:${username}`;
+        const lastView = profileViewDedup.get(dedupKey);
+        if (lastView && Date.now() - lastView < PROFILE_VIEW_DEDUP_TTL) {
+            res.json({ status: 'SUCCESS', message: 'View already counted recently' });
+            return;
+        }
+        profileViewDedup.set(dedupKey, Date.now());
+
+        // Evict old entries periodically (keep map bounded)
+        if (profileViewDedup.size > 10000) {
+            const now = Date.now();
+            for (const [key, ts] of profileViewDedup) {
+                if (now - ts > PROFILE_VIEW_DEDUP_TTL) profileViewDedup.delete(key);
+            }
+        }
+
         await prisma.user.update({
             where: { username },
             data: { profileViews: { increment: 1 } }
@@ -331,15 +345,30 @@ router.post('/:username/view', requireAuth, async (req: Request, res: Response):
     }
 });
 
-// Simple in-memory cache for analytics (5 minutes TTL)
+// Simple in-memory cache for analytics (5 minutes TTL, max 500 entries)
 const analyticsCache = new Map<string, { data: any; timestamp: number }>();
 const ANALYTICS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const ANALYTICS_CACHE_MAX_SIZE = 500;
+
+// Evict oldest entries when cache exceeds max size
+const evictAnalyticsCacheIfNeeded = () => {
+    if (analyticsCache.size >= ANALYTICS_CACHE_MAX_SIZE) {
+        // Delete oldest 10% of entries
+        const toDelete = Math.ceil(ANALYTICS_CACHE_MAX_SIZE * 0.1);
+        const keys = analyticsCache.keys();
+        for (let i = 0; i < toDelete; i++) {
+            const key = keys.next().value;
+            if (key !== undefined) analyticsCache.delete(key);
+        }
+    }
+};
 
 /**
  * GET /api/profile/analytics
  * Get current user's analytics - SUPER OPTIMIZED with caching
+ * Uses response cache middleware (per-user, 2min TTL) to prevent 499 timeouts
  */
-router.get('/analytics', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/analytics', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -354,7 +383,7 @@ router.get('/analytics', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Single optimized query to get all analytics at once
+        // Optimized: Use parallel queries with aggregation instead of loading all reels
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: {
@@ -368,17 +397,6 @@ router.get('/analytics', requireAuth, async (req: Request, res: Response): Promi
                         reels: true,
                     }
                 },
-                reels: {
-                    select: {
-                        views: true,
-                        _count: {
-                            select: {
-                                likes: true,
-                                comments: true,
-                            }
-                        }
-                    }
-                }
             }
         });
 
@@ -387,41 +405,47 @@ router.get('/analytics', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Calculate totals from the single query result
-        let totalLikes = 0;
-        let totalViews = 0;
-        let totalComments = 0;
-        
-        for (const reel of user.reels) {
-            totalViews += reel.views;
-            totalLikes += reel._count.likes;
-            totalComments += reel._count.comments;
-        }
-
-        // Only this needs a separate query (recent followers)
+        // Run aggregation queries in parallel for speed
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
-        
-        const recentFollowers = await prisma.follow.count({
-            where: {
-                followingId: user.id,
-                createdAt: { gte: weekAgo }
-            }
-        });
+
+        const [viewsAgg, likesCount, commentsCount, recentFollowers] = await Promise.all([
+            // Sum all reel views using aggregate (no row loading)
+            prisma.reel.aggregate({
+                where: { userId: user.id },
+                _sum: { views: true },
+            }),
+            // Count total likes across all user's reels
+            prisma.like.count({
+                where: { reel: { userId: user.id } },
+            }),
+            // Count total comments across all user's reels
+            prisma.comment.count({
+                where: { reel: { userId: user.id } },
+            }),
+            // Recent followers (last 7 days)
+            prisma.follow.count({
+                where: {
+                    followingId: user.id,
+                    createdAt: { gte: weekAgo }
+                }
+            }),
+        ]);
 
         const analyticsData = {
             profileViews: user.profileViews,
             followersCount: user._count.followers,
             followingCount: user._count.following,
             reelsCount: user._count.reels,
-            totalLikes,
-            totalViews,
-            totalComments,
+            totalLikes: likesCount,
+            totalViews: viewsAgg._sum.views || 0,
+            totalComments: commentsCount,
             recentFollowers,
             memberSince: user.createdAt,
         };
 
-        // Save to cache
+        // Save to cache (with eviction to prevent unbounded growth)
+        evictAnalyticsCacheIfNeeded();
         analyticsCache.set(clerkUserId, { data: analyticsData, timestamp: Date.now() });
 
         res.json({ status: 'SUCCESS', data: analyticsData });
@@ -435,8 +459,9 @@ router.get('/analytics', requireAuth, async (req: Request, res: Response): Promi
  * GET /api/profile/cooldowns
  * Get remaining cooldowns for avatar, cover, reel upload, and delete limits
  * Requirements: 13.4, 13.5, 13.6, 13.7
+ * Uses response cache middleware (per-user, 1min TTL) to prevent 499 timeouts
  */
-router.get('/cooldowns', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/cooldowns', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {

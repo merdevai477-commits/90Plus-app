@@ -27,6 +27,7 @@ import multer from 'multer';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import path from 'path';
+import { strictLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
@@ -161,14 +162,39 @@ const uploadImage = multer({
   },
 });
 
+// Reel upload uses disk storage to avoid holding 50MB in RAM per concurrent upload.
+// Files are written to OS temp dir and cleaned up after processing.
+import os from 'os';
+import fs from 'fs';
+const REEL_UPLOAD_DIR = path.join(os.tmpdir(), '90plus-reel-uploads');
+// Ensure the dir exists (sync at startup — fine for a one-time operation)
+if (!fs.existsSync(REEL_UPLOAD_DIR)) {
+  fs.mkdirSync(REEL_UPLOAD_DIR, { recursive: true });
+}
+
 const uploadReel = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 55 * 1024 * 1024 },
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, REEL_UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const ext = path.extname(file.originalname) || '.mp4';
+      cb(null, `reel-${uniqueSuffix}${ext}`);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (_req, file, cb) => {
     const mt = (file.mimetype || '').toLowerCase();
     cb(null, mt.startsWith('video/') || mt.startsWith('image/'));
   },
 });
+
+/** Helper: read file from disk into buffer and clean up the temp file */
+async function readAndCleanupTempFile(filePath: string): Promise<Buffer> {
+  const buffer = await fs.promises.readFile(filePath);
+  // Clean up temp file (fire-and-forget)
+  fs.promises.unlink(filePath).catch(() => undefined);
+  return buffer;
+}
 
 // ─── Cooldown constants ───────────────────────────────────────────────────────
 
@@ -554,6 +580,7 @@ router.post(
 router.post(
   '/reel',
   requireAuth,
+  strictLimiter, // Rate limit: prevent upload spam that exhausts server memory
   uploadReel.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]),
   validateUploadFieldsMagicBytes, // Fix 5
   validateVideoDuration,
@@ -572,13 +599,31 @@ router.post(
       const thumbnailFile = files['thumbnail']?.[0];
 
       if (!videoFile) { sendError(res, 400, 'NO_FILE', 'No video provided'); return; }
-      if (videoFile.buffer.length === 0) {
+      
+      // With disk storage, use videoFile.size and videoFile.path instead of .buffer
+      const videoFileSize = videoFile.size || 0;
+      if (videoFileSize === 0) {
+        // Clean up temp file
+        if (videoFile.path) fs.promises.unlink(videoFile.path).catch(() => undefined);
         sendError(res, 400, 'EMPTY_FILE', 'ملف الفيديو فارغ أو معطوب.');
         return;
       }
-      if (videoFile.buffer.length > 50 * 1024 * 1024) {
+      if (videoFileSize > 50 * 1024 * 1024) {
+        if (videoFile.path) fs.promises.unlink(videoFile.path).catch(() => undefined);
         sendError(res, 413, 'FILE_TOO_LARGE', 'Video file is too large. Maximum size is 50MB.');
         return;
+      }
+
+      // Read video from disk into memory only when ready to upload to Mux
+      // This keeps RAM usage bounded (one file at a time per request)
+      const videoBuffer = await readAndCleanupTempFile(videoFile.path);
+      // Attach buffer for compatibility with downstream code that uses videoFile.buffer
+      (videoFile as any).buffer = videoBuffer;
+
+      // Read thumbnail from disk if present (small file, safe in memory)
+      if (thumbnailFile?.path) {
+        const thumbBuffer = await readAndCleanupTempFile(thumbnailFile.path);
+        (thumbnailFile as any).buffer = thumbBuffer;
       }
 
       const begin = await beginReelUploadForClerkUser(clerkUserId);
@@ -680,11 +725,16 @@ router.post(
 
       let muxUploadResponse: Awaited<ReturnType<typeof fetch>>;
       try {
+        // Timeout: 120s max for uploading to Mux (prevents stalled connections from holding memory)
+        const uploadAbortController = new AbortController();
+        const uploadTimeout = setTimeout(() => uploadAbortController.abort(), 120_000);
         muxUploadResponse = await fetch(uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': videoFile.mimetype },
           body: videoFile.buffer,
+          signal: uploadAbortController.signal,
         });
+        clearTimeout(uploadTimeout);
       } catch (fetchErr: any) {
         // Fix 2 + Fix 6: Network error during Mux PUT — clean up everything
         logger.error('[upload/reel] Mux PUT network error — cleaning up:', fetchErr?.message);

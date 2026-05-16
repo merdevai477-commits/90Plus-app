@@ -25,6 +25,36 @@ import {
 } from '../src/services/authService';
 import { logger } from '../services/logger';
 
+// ─── In-Memory Profile Cache (instant load like matches page) ───────────────
+// Persists across navigations within the same app session.
+// AsyncStorage is still used as the durable layer, but this avoids the
+// async deserialization cost on every tab focus.
+const profileMemoryCache = new Map<string, { data: ProfileCacheData; timestamp: number }>();
+const MEMORY_CACHE_TTL = 2 * 60 * 1000; // 2 minutes — same as PROFILE_UI_REFRESH_INTERVAL_MS
+
+function getFromMemoryCache(key: string): ProfileCacheData | null {
+  const entry = profileMemoryCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > MEMORY_CACHE_TTL) {
+    profileMemoryCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setMemoryCache(key: string, data: ProfileCacheData): void {
+  profileMemoryCache.set(key, { data, timestamp: Date.now() });
+}
+
+/**
+ * Exported for use by PreloadManager — allows preloaded data to be
+ * written directly into the memory cache so the profile opens with
+ * zero latency (no AsyncStorage read needed).
+ */
+export function setProfileMemoryCache(key: string, data: ProfileCacheData): void {
+  setMemoryCache(key, data);
+}
+
 // Extended user data type for profile screen
 export interface ProfileUserData {
   id: string; // User ID for badges and other features
@@ -61,6 +91,10 @@ export interface ProfileUserData {
   favoriteBrand?: string; // Brand name in Arabic
   coverImage?: string;
   consecutiveLoginDays?: number; // أيام تسجيل الدخول المتتالية
+  // Level & XP fields for LevelCard
+  level?: number;
+  xp?: number;
+  coins?: number;
 }
 
 // Video type for profile
@@ -72,6 +106,7 @@ export interface ProfileVideo {
   likes: number;
   shares: number;
   duration: string;
+  status?: 'READY' | 'PROCESSING';
   createdAt: Date;
 }
 
@@ -175,19 +210,25 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     return CACHE_KEYS.PROFILE_DATA; // Fallback to base key if no user ID
   }, [clerkUserId]);
   
-  // State
-  const [userData, setUserData] = useState<ProfileUserData | null>(null);
-  const [followStats, setFollowStats] = useState<FollowStats | null>(null);
-  const [videos, setVideos] = useState<ProfileVideo[]>([]);
-  const [analytics, setAnalytics] = useState<ProfileAnalytics | null>(null);
-  const [cooldowns, setCooldowns] = useState<CooldownsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // ─── INSTANT LOAD: Initialize state SYNCHRONOUSLY from memory cache ───
+  // This is the key to "faster than a blink" — no async, no skeleton frame.
+  // The matches page uses this exact pattern.
+  const initialMemData = useMemo(() => getFromMemoryCache(cacheKey), [cacheKey]);
+  const hasInitialData = !!initialMemData?.userData;
+  
+  // State — pre-populated from memory cache if available
+  const [userData, setUserData] = useState<ProfileUserData | null>(initialMemData?.userData || null);
+  const [followStats, setFollowStats] = useState<FollowStats | null>(initialMemData?.followStats || null);
+  const [videos, setVideos] = useState<ProfileVideo[]>(initialMemData?.videos || []);
+  const [analytics, setAnalytics] = useState<ProfileAnalytics | null>(initialMemData?.analytics || null);
+  const [cooldowns, setCooldowns] = useState<CooldownsResponse | null>(initialMemData?.cooldowns || null);
+  const [isLoading, setIsLoading] = useState(!hasInitialData); // No loading if we have memory data
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isCacheHit, setIsCacheHit] = useState(false);
+  const [isCacheHit, setIsCacheHit] = useState(hasInitialData);
   const [error, setError] = useState<string | null>(null);
   
   // Refs to track loading state and callbacks (to avoid infinite loops)
-  const hasLoadedRef = useRef(false);
+  const hasLoadedRef = useRef(hasInitialData);
   const isLoadingRef = useRef(false);
   const onCacheHitRef = useRef(onCacheHit);
   const onFreshDataLoadedRef = useRef(onFreshDataLoaded);
@@ -198,16 +239,41 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
   /**
    * Load cached data immediately (Requirement 2.1)
-   * Validates that cached data is valid before using it
+   * Checks in-memory cache first (instant), then falls back to AsyncStorage.
    */
   const loadFromCache = useCallback(async (): Promise<boolean> => {
     try {
-      // ✅ allowStale: true - show expired cache rather than nothing
+      // ✅ Try memory cache first (synchronous, instant — like matches page)
+      const memCached = getFromMemoryCache(cacheKey);
+      if (memCached && memCached.userData && memCached.userData.username && memCached.userData.id) {
+        // Restore dates
+        if (memCached.userData) {
+          memCached.userData.createdAt = new Date(memCached.userData.createdAt);
+          if (memCached.userData.lastUsernameChange) {
+            memCached.userData.lastUsernameChange = new Date(memCached.userData.lastUsernameChange);
+          }
+        }
+        if (memCached.videos) {
+          memCached.videos = memCached.videos.map(v => ({
+            ...v,
+            createdAt: new Date(v.createdAt)
+          }));
+        }
+        setUserData(memCached.userData);
+        setFollowStats(memCached.followStats);
+        setVideos(memCached.videos || []);
+        setAnalytics(memCached.analytics);
+        setCooldowns(memCached.cooldowns);
+        setIsCacheHit(true);
+        onCacheHitRef.current?.();
+        return true;
+      }
+
+      // ✅ Fallback: AsyncStorage (allowStale: true - show expired cache rather than nothing)
       const cachedData = await cacheService.get<ProfileCacheData>(cacheKey, true);
       
       if (cachedData) {
         // Validate cached data - ensure userData exists and has required fields
-        // This prevents showing stale data from a different user after logout/login
         if (!cachedData.userData || !cachedData.userData.username || !cachedData.userData.id) {
           console.warn('[useProfileCache] Invalid cached data detected (missing user info), clearing cache');
           await cacheService.invalidate(cacheKey);
@@ -234,6 +300,8 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         setAnalytics(cachedData.analytics);
         setCooldowns(cachedData.cooldowns);
         setIsCacheHit(true);
+        // Promote to memory cache for next time
+        setMemoryCache(cacheKey, cachedData);
         onCacheHitRef.current?.();
         return true;
       }
@@ -246,9 +314,13 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
   /**
    * Save data to cache (Requirement 2.5)
+   * Writes to both memory cache (instant) and AsyncStorage (durable).
    */
   const saveToCache = useCallback(async (data: ProfileCacheData): Promise<void> => {
     try {
+      // Save to memory cache first (instant for next navigation)
+      setMemoryCache(cacheKey, data);
+      // Then persist to AsyncStorage
       await cacheService.set(cacheKey, data, CACHE_TTL.PROFILE);
     } catch (err) {
       console.error('[useProfileCache] Error saving to cache:', err);
@@ -285,6 +357,9 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       brandLogo: (user as any).brandLogo || undefined,
       coverImage: (user as any).coverImage || undefined,
       consecutiveLoginDays: (user as any).consecutiveLoginDays || 0,
+      level: (user as any).level || 1,
+      xp: (user as any).xp || 0,
+      coins: (user as any).coins || 0,
     };
   }, []);
 
@@ -300,6 +375,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       likes: r.likes,
       shares: 0,
       duration: '0:00',
+      status: r.status,
       createdAt: new Date(r.createdAt),
     }));
   }, []);
@@ -530,6 +606,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
     try {
       // Step 1: Try to load from cache first (Requirement 2.1)
+      // Skip if we already have data from synchronous memory cache init
       if (!forceRefresh && !hasLoadedRef.current) {
         const hasCachedData = await loadFromCache();
         

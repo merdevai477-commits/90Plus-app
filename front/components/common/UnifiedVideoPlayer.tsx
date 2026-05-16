@@ -350,10 +350,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
             setActiveVideoUrl(newUrl);
             setErrorDetails('');
             try {
-              await player.replaceAsync(buildVideoSource(newUrl));
+              player.replace(buildVideoSource(newUrl));
               if (isActive) player.play();
             } catch (replaceErr) {
-              logger.warn('[UnifiedVideoPlayer] replaceAsync failed:', replaceErr);
+              logger.warn('[UnifiedVideoPlayer] replace failed:', replaceErr);
             }
           }
         } catch (refreshErr) {
@@ -388,10 +388,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     setLoadTimedOut(false);
     setActiveVideoUrl(reel.videoUrl);
     try {
-      player.replaceAsync(buildVideoSource(reel.videoUrl));
+      player.replace(buildVideoSource(reel.videoUrl));
       if (isActive) player.play();
     } catch (e) {
-      logger.warn('[UnifiedVideoPlayer] handleRetry replaceAsync failed:', e);
+      logger.warn('[UnifiedVideoPlayer] handleRetry replace failed:', e);
     }
   }, [reel.videoUrl, player, isActive]);
 

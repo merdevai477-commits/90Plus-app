@@ -33,6 +33,7 @@ import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCac
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
+import LevelCard from '../../components/profile/LevelCard';
 import { getApiUrl } from '../../config/api.config';
 import { compressImage } from '@/utils/imageCompressor';
 import { logger } from '../../utils/logger';
@@ -79,6 +80,19 @@ const getSpacing = (base: number) => {
   if (isSmallScreen) return base * 0.8;
   if (isLargeScreen) return base * 1.2;
   return base;
+};
+
+/**
+ * XP required to go from currentLevel to currentLevel+1.
+ * Mirrors backend xp.service.ts formula.
+ */
+const xpForLevel = (level: number): number => {
+  if (level <= 1) return 0;
+  if (level === 2) return 290;
+  return 40 + 125 * level * (level - 1);
+};
+const getXpForNextLevel = (currentLevel: number): number => {
+  return xpForLevel(currentLevel + 1) - xpForLevel(currentLevel);
 };
 
 // Types for profile handlers
@@ -286,14 +300,13 @@ export default function ProfileScreen() {
   // Log cache errors
   useEffect(() => {
     if (cacheError) {
-      console.error('[ProfileScreen] ❌ Cache error:', cacheError);
       logger.error('Profile cache error:', cacheError);
     }
   }, [cacheError]);
 
   // Log loading state changes
   useEffect(() => {
-    console.log('[ProfileScreen] 📊 State:', {
+    logger.debug('[ProfileScreen] State:', {
       isLoading,
       hasUserData: !!cachedUserData,
       isCacheHit,
@@ -318,9 +331,9 @@ export default function ProfileScreen() {
       lastAutoRetryAtRef.current = now;
       autoRetryCountRef.current += 1;
       const retryTimeout = setTimeout(() => {
-        console.log(`[ProfileScreen] 🔄 Auto-retry #${autoRetryCountRef.current} after error (${retryDelay}ms delay)`);
+        logger.debug(`[ProfileScreen] Auto-retry #${autoRetryCountRef.current} after error (${retryDelay}ms delay)`);
         refreshCache(true).catch(err => {
-          console.error('[ProfileScreen] ❌ Auto-retry failed:', err);
+          logger.error('[ProfileScreen] Auto-retry failed:', err);
         });
       }, retryDelay);
 
@@ -361,19 +374,18 @@ export default function ProfileScreen() {
     return () => clearInterval(interval);
   }, [cacheError, cachedUserData, isLoading]);
 
-  // CRITICAL FIX: Timeout fallback if loading takes too long
+  // CRITICAL FIX: Timeout fallback if loading takes too long (first-ever launch only)
   const hasForcedRefreshRef = useRef(false);
   useEffect(() => {
     if (isLoading && !cachedUserData && !hasForcedRefreshRef.current) {
       const timeout = setTimeout(() => {
-        console.error('[ProfileScreen] ⏰ Loading timeout - forcing refresh');
         logger.error('Profile loading timeout - forcing refresh');
         hasForcedRefreshRef.current = true;
         refreshCache(true).catch(err => {
-          console.error('[ProfileScreen] ❌ Refresh failed:', err);
+          logger.error('[ProfileScreen] Refresh failed:', err);
           toastManager.showError(t.common.error, t.profile.refreshFailedMessage);
         });
-      }, 30000);
+      }, 15000);
 
       return () => clearTimeout(timeout);
     }
@@ -558,6 +570,8 @@ export default function ProfileScreen() {
         // Never fall back to thumbnail — that's an image URL and would
         // cause "Failed to load video" in the player.
         const videoUrl = isPlayableVideoUrl(rawVideoUrl) ? rawVideoUrl : '';
+        // Backend returns status: 'PROCESSING' for reels still being encoded
+        const isProcessing = video.status === 'PROCESSING' || (!videoUrl && !video.isUploading);
         return {
           id: video.id,
           thumbnail: video.thumbnail || video.uri,
@@ -565,13 +579,14 @@ export default function ProfileScreen() {
           views: video.views || '0',
           duration: video.duration || '',
           isUploading: video.isUploading || false,
+          isProcessing,
           uploadProgress: video.uploadProgress,
         };
       })
-      // Hide rows that are neither currently uploading nor have a usable
-      // video URL yet (e.g. Mux is still processing). They'll reappear
-      // once the webhook fills in videoUrl and the cache refreshes.
-      .filter((v: any) => v.isUploading || v.videoUrl.length > 0);
+      // Hide rows that have no video URL and are NOT currently uploading
+      // or processing. PROCESSING reels (Mux still encoding) should appear
+      // with a processing overlay so the user sees their upload immediately.
+      .filter((v: any) => v.isUploading || v.isProcessing || v.videoUrl.length > 0);
   }, [cachedVideos, uploadedVideos]);
   
   const analytics = cachedAnalytics;
@@ -1326,13 +1341,13 @@ export default function ProfileScreen() {
               alignItems: 'center'
             }}
             onPress={async () => {
-              console.log('[ProfileScreen] 🔄 Manual retry triggered');
+              logger.debug('[ProfileScreen] Manual retry triggered');
               autoRetryCountRef.current = 0; // Reset counter on manual retry
               try {
                 await refreshCache(true);
                 toastManager.showInfo(t.profile.updating, t.profile.reloadingData);
               } catch (err) {
-                console.error('[ProfileScreen] ❌ Manual retry failed:', err);
+                logger.error('[ProfileScreen] Manual retry failed:', err);
                 toastManager.showError(t.profile.refreshFailedTitle, t.profile.retryFailed);
               }
             }}
@@ -1353,7 +1368,7 @@ export default function ProfileScreen() {
               borderColor: 'rgba(255,255,255,0.2)'
             }}
             onPress={() => {
-              console.log('[ProfileScreen] 🚪 Navigating to auth');
+              logger.debug('[ProfileScreen] Navigating to auth');
               router.replace('/auth');
             }}
           >
@@ -1523,6 +1538,16 @@ export default function ProfileScreen() {
               compact={true}
             />
           </View>
+        )}
+
+        {/* Level & XP Card */}
+        {userData?.level != null && (
+          <LevelCard
+            level={userData.level || 1}
+            currentXP={(userData.xp || 0) - xpForLevel(userData.level || 1)}
+            maxXP={getXpForNextLevel(userData.level || 1)}
+            coins={userData.coins || 0}
+          />
         )}
 
         <ActionButtons
@@ -1705,7 +1730,7 @@ export default function ProfileScreen() {
         visible={isClubModalVisible}
         onClose={() => setIsClubModalVisible(false)}
         onSelect={async (selectedClub) => {
-          console.log('🏆 [ClubPicker] Selected club:', selectedClub.nameAr);
+          logger.debug('[ClubPicker] Selected club:', selectedClub.nameAr);
           
           await localProfileStorage.saveProfileData({
             clubLogo: selectedClub.logo,
@@ -1730,8 +1755,6 @@ export default function ProfileScreen() {
           
           toastManager.showInfo(t.profile.updating, t.profile.updatingClub.replace('{club}', selectedClub.nameAr));
           
-          console.log('✅ [ClubPicker] UI updated, sending to backend...');
-          
           // Send to backend with optimistic updates
           const result = await updateFavorites({ 
             favoriteClub: selectedClub.nameAr,
@@ -1744,8 +1767,6 @@ export default function ProfileScreen() {
             // Mark club step as completed
             await markStepCompleted('club');
           }
-          
-          console.log('✅ [ClubPicker] Backend update completed');
         }}
       />
 

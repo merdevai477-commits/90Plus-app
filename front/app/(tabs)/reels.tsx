@@ -312,8 +312,11 @@ const ReelsFeed: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [noReelsMessage, setNoReelsMessage] = useState(false);
   const hasLoadedRef = useRef(false);
+  // Abort controller to cancel in-flight retries when component re-focuses
+  const retryAbortRef = useRef<AbortController | null>(null);
   const viewedReelsRef = useRef<Set<string>>(new Set());
   const VIEWED_REELS_STORAGE_KEY = '@viewed_reels';
+  const MAX_VIEWED_REELS_STORED = 500; // Cap to prevent unbounded AsyncStorage growth
 
   const videoRefs = useRef<Map<string, any>>(new Map());
   const flatListRef = useRef<FlatList>(null);
@@ -553,7 +556,14 @@ const ReelsFeed: React.FC = () => {
         const delay = RETRY_DELAYS[attemptNumber];
         logger.debug(`[ReelsFeed] Retrying in ${delay}ms (${attemptNumber + 1}/${MAX_RETRIES})`);
 
+        // Cancel any previous retry chain before starting a new one
+        if (retryAbortRef.current) retryAbortRef.current.abort();
+        const controller = new AbortController();
+        retryAbortRef.current = controller;
+
         setTimeout(() => {
+          // Don't retry if this chain was cancelled
+          if (controller.signal.aborted) return;
           loadReelsFromBackend(cursor, skipCache, attemptNumber + 1);
         }, delay);
 
@@ -727,7 +737,17 @@ const ReelsFeed: React.FC = () => {
     // Mark as viewed immediately to prevent duplicate API calls
     viewedReelsRef.current.add(reelId);
 
-    // Save to AsyncStorage
+    // Cap the set to prevent unbounded growth
+    if (viewedReelsRef.current.size > MAX_VIEWED_REELS_STORED) {
+      const entries = Array.from(viewedReelsRef.current);
+      // Remove oldest 20% of entries
+      const toRemove = Math.ceil(MAX_VIEWED_REELS_STORED * 0.2);
+      for (let i = 0; i < toRemove; i++) {
+        viewedReelsRef.current.delete(entries[i]);
+      }
+    }
+
+    // Save to AsyncStorage (capped)
     try {
       const viewedArray = Array.from(viewedReelsRef.current);
       await AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray));
@@ -769,12 +789,21 @@ const ReelsFeed: React.FC = () => {
 
 
 
-  // Video Ref Management
+  // Video Ref Management — prune stale entries to prevent memory leak
   const handleVideoRef = useCallback((ref: any, id: string) => {
     if (ref) {
       videoRefs.current.set(id, ref);
     } else {
       videoRefs.current.delete(id);
+    }
+    // Prune: keep only refs for reels currently in the window (max 10)
+    // This prevents unbounded growth during long scroll sessions
+    if (videoRefs.current.size > 10) {
+      const keys = Array.from(videoRefs.current.keys());
+      const toRemove = keys.slice(0, keys.length - 10);
+      for (const key of toRemove) {
+        videoRefs.current.delete(key);
+      }
     }
   }, []);
 

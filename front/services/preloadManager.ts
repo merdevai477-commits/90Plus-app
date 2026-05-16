@@ -30,6 +30,7 @@ import {
 import { ApiFootballService } from './apiFootball';
 import { logger } from './logger';
 import { preloadVideo, preloadVideos, isVideoPreloaded, clearPreloadedVideos } from '../utils/videoPreloader';
+import { setProfileMemoryCache } from '../hooks/useProfileCache';
 
 // Screen names that can be preloaded
 export type ScreenName = 'profile' | 'reels' | 'notifications' | 'matches' | 'rankings' | 'home';
@@ -334,6 +335,9 @@ class PreloadManagerClass {
             brandLogo: (userResult as any).brandLogo || undefined,
             coverImage: (userResult as any).coverImage || undefined,
             consecutiveLoginDays: (userResult as any).consecutiveLoginDays || 0,
+            level: (userResult as any).level || 1,
+            xp: (userResult as any).xp || 0,
+            coins: (userResult as any).coins || 0,
           },
           followStats: statsResult,
           videos: reels.map(r => ({
@@ -344,6 +348,7 @@ class PreloadManagerClass {
             likes: r.likes,
             shares: 0,
             duration: '0:00',
+            status: r.status,
             createdAt: new Date(r.createdAt),
           })),
           analytics: null,
@@ -353,6 +358,8 @@ class PreloadManagerClass {
         // ✅ Save with user-specific key (clerkUserId) so useProfileCache can find it directly
         const userSpecificKey = getUserCacheKey(CACHE_KEYS.PROFILE_DATA, userResult.clerkUserId);
         await cacheService.set(userSpecificKey, profileData, CACHE_TTL.PROFILE);
+        // ✅ Also populate the in-memory cache for INSTANT profile load (zero async)
+        setProfileMemoryCache(userSpecificKey, profileData);
         logger.debug('[PreloadManager] ✅ Profile preloaded with key:', userSpecificKey);
       }
     } catch (error: any) {

@@ -770,6 +770,7 @@ export interface UserReel {
     views: string;
     likes: number;
     comments: number;
+    status?: 'READY' | 'PROCESSING'; // Backend returns status for owner's reels
     createdAt: string;
 }
 

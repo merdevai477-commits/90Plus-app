@@ -20,6 +20,7 @@ import { router } from 'expo-router';
 import { useTranslation } from '../../src/i18n';
 import MiniProfileCard from './MiniProfileCard';
 import * as Haptics from 'expo-haptics';
+import { logger } from '../../utils/logger';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -55,13 +56,27 @@ export default function FollowersListModal({
     const [followers, setFollowers] = useState<FollowUser[]>([]);
     const [following, setFollowing] = useState<FollowUser[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [followersPage, setFollowersPage] = useState(0);
+    const [followingPage, setFollowingPage] = useState(0);
+    const [hasMoreFollowers, setHasMoreFollowers] = useState(true);
+    const [hasMoreFollowing, setHasMoreFollowing] = useState(true);
     const { getToken } = useAuth();
     const { t } = useTranslation();
+
+    const PAGE_SIZE = 30;
 
     useEffect(() => {
         if (visible) {
             setActiveTab(initialTab);
+            // Reset pagination state
+            setFollowers([]);
+            setFollowing([]);
+            setFollowersPage(0);
+            setFollowingPage(0);
+            setHasMoreFollowers(true);
+            setHasMoreFollowing(true);
             loadData();
         }
     }, [visible, initialTab]);
@@ -72,17 +87,65 @@ export default function FollowersListModal({
             const token = await getToken();
             if (token) {
                 const [followersData, followingData] = await Promise.all([
-                    FollowService.getFollowers(token, userId),
-                    FollowService.getFollowing(token, userId),
+                    FollowService.getFollowers(token, userId, PAGE_SIZE, 0),
+                    FollowService.getFollowing(token, userId, PAGE_SIZE, 0),
                 ]);
                 setFollowers(followersData || []);
                 setFollowing(followingData || []);
+                setFollowersPage(1);
+                setFollowingPage(1);
+                setHasMoreFollowers((followersData || []).length >= PAGE_SIZE);
+                setHasMoreFollowing((followingData || []).length >= PAGE_SIZE);
             }
         } catch (error) {
             console.error('Error loading follow data:', error);
         }
         setIsLoading(false);
     };
+
+    const loadMoreFollowers = useCallback(async () => {
+        if (!hasMoreFollowers || isLoadingMore) return;
+        setIsLoadingMore(true);
+        try {
+            const token = await getToken();
+            if (token) {
+                const offset = followersPage * PAGE_SIZE;
+                const moreData = await FollowService.getFollowers(token, userId, PAGE_SIZE, offset);
+                if (moreData && moreData.length > 0) {
+                    setFollowers(prev => [...prev, ...moreData]);
+                    setFollowersPage(prev => prev + 1);
+                    setHasMoreFollowers(moreData.length >= PAGE_SIZE);
+                } else {
+                    setHasMoreFollowers(false);
+                }
+            }
+        } catch (error) {
+            logger.error('Error loading more followers:', error);
+        }
+        setIsLoadingMore(false);
+    }, [hasMoreFollowers, isLoadingMore, followersPage, getToken, userId]);
+
+    const loadMoreFollowing = useCallback(async () => {
+        if (!hasMoreFollowing || isLoadingMore) return;
+        setIsLoadingMore(true);
+        try {
+            const token = await getToken();
+            if (token) {
+                const offset = followingPage * PAGE_SIZE;
+                const moreData = await FollowService.getFollowing(token, userId, PAGE_SIZE, offset);
+                if (moreData && moreData.length > 0) {
+                    setFollowing(prev => [...prev, ...moreData]);
+                    setFollowingPage(prev => prev + 1);
+                    setHasMoreFollowing(moreData.length >= PAGE_SIZE);
+                } else {
+                    setHasMoreFollowing(false);
+                }
+            }
+        } catch (error) {
+            logger.error('Error loading more following:', error);
+        }
+        setIsLoadingMore(false);
+    }, [hasMoreFollowing, isLoadingMore, followingPage, getToken, userId]);
 
     const handleFollow = async (targetUserId: string) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -237,6 +300,16 @@ export default function FollowersListModal({
                             renderItem={renderUserCard}
                             contentContainerStyle={styles.listContent}
                             showsVerticalScrollIndicator={false}
+                            onEndReached={() => {
+                                if (activeTab === 'followers') loadMoreFollowers();
+                                else loadMoreFollowing();
+                            }}
+                            onEndReachedThreshold={0.5}
+                            ListFooterComponent={isLoadingMore ? (
+                                <View style={{ padding: 16, alignItems: 'center' }}>
+                                    <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                </View>
+                            ) : null}
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>

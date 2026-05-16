@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useTranslation } from '../../src/i18n';
 
 interface ContentTabsProps {
     activeTab: string;
@@ -13,12 +14,13 @@ interface ContentTabsProps {
 }
 
 const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCount, savedCount = 0, isOwnProfile = true }: ContentTabsProps) {
+    const { t } = useTranslation();
     const tabs = [
-        { id: 'videos', label: 'الفيديوهات', icon: 'grid-outline', count: videoCount },
+        { id: 'videos', label: t.profile.videos || 'الفيديوهات', icon: 'grid-outline', count: videoCount },
         // تاب المحفوظات يظهر فقط لصاحب البروفايل
-        ...(isOwnProfile ? [{ id: 'saved', label: 'المحفوظات', icon: 'bookmark-outline', count: savedCount }] : []),
+        ...(isOwnProfile ? [{ id: 'saved', label: t.profile.saved || 'المحفوظات', icon: 'bookmark-outline', count: savedCount }] : []),
         // تاب التحليلات يظهر فقط لصاحب البروفايل
-        ...(isOwnProfile ? [{ id: 'analytics', label: 'التحليلات', icon: 'analytics-outline' }] : []),
+        ...(isOwnProfile ? [{ id: 'analytics', label: t.profile.analytics || 'التحليلات', icon: 'analytics-outline' }] : []),
     ];
 
     return (

@@ -197,6 +197,16 @@ export default function ReelUploadModal({
             // This is required because ImagePicker.duration may not be reliable
             const duration = await extractDurationFromUrl(asset.uri);
 
+            // File size validation — reject before wasting upload bandwidth
+            const MAX_FILE_SIZE_MB = 50;
+            if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                toastManager.showWarning(
+                    'حجم الفيديو كبير جداً',
+                    `الحد الأقصى لحجم الفيديو ${MAX_FILE_SIZE_MB} ميجابايت. حاول اختيار فيديو أصغر.`
+                );
+                return;
+            }
+
             // Validation Logic - Requirements 2.6, 2.7, 2.8
             // Skip validation if duration is null (Expo Go / expo-av not available)
             if (duration === null) {
@@ -279,25 +289,13 @@ export default function ReelUploadModal({
             onClose();
 
         } catch (error) {
-            const newVideo = {
-                id: `temp_${Date.now()}`,
-                uri: videoAsset.uri,
-                caption: caption,
-                likes: 0,
-                views: 0,
-                thumbnail: thumbnailUri || videoAsset.uri,
-                isUploading: true,
-            };
-
-            onUpload(newVideo);
+            // ✅ FIX: Do NOT call onUpload on error — this was creating ghost videos
+            // that appear as perpetually uploading. Just show error and reset state.
+            logger.error('[ReelUploadModal] Upload preparation failed:', error);
+            toastManager.showError('فشل الرفع', 'حدث خطأ أثناء تحضير الفيديو. حاول مرة أخرى.');
             setIsUploading(false);
             setUploadStage('idle');
             uploadProgress.value = 0;
-            setVideoAsset(null);
-            setCaption('');
-            setThumbnailUri(null);
-            setFrameOptions([]);
-            // حذف المسودة بعد الرفع
             await clearDraft();
             onClose();
         }
@@ -439,7 +437,7 @@ export default function ReelUploadModal({
                         value={caption}
                         onChangeText={setCaption}
                         multiline
-                        maxLength={100}
+                        maxLength={500}
                         editable={!uploadLocked}
                     />
 

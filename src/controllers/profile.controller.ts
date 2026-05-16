@@ -83,6 +83,20 @@ export class ProfileController {
 
       const { displayName, bio, favoriteTeam, socials, location } = req.body;
 
+      // Input validation
+      if (displayName !== undefined && (typeof displayName !== 'string' || displayName.length > 50)) {
+        res.status(400).json({ status: 'ERROR', message: 'Display name must be 50 characters or less' });
+        return;
+      }
+      if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) {
+        res.status(400).json({ status: 'ERROR', message: 'Bio must be 500 characters or less' });
+        return;
+      }
+      if (favoriteTeam !== undefined && (typeof favoriteTeam !== 'string' || favoriteTeam.length > 100)) {
+        res.status(400).json({ status: 'ERROR', message: 'Favorite team must be 100 characters or less' });
+        return;
+      }
+
       const currentUser = await prisma.user.findUnique({
         where: { clerkUserId },
         select: { settings: true },
@@ -259,6 +273,32 @@ export class ProfileController {
 
       const { age, height, weight, foot, position, country } = req.body;
 
+      // Input validation
+      if (age !== undefined && (typeof age !== 'number' || age < 5 || age > 100)) {
+        res.status(400).json({ status: 'ERROR', message: 'Age must be between 5 and 100' });
+        return;
+      }
+      if (height !== undefined && (typeof height !== 'number' || height < 50 || height > 250)) {
+        res.status(400).json({ status: 'ERROR', message: 'Height must be between 50 and 250 cm' });
+        return;
+      }
+      if (weight !== undefined && (typeof weight !== 'number' || weight < 20 || weight > 200)) {
+        res.status(400).json({ status: 'ERROR', message: 'Weight must be between 20 and 200 kg' });
+        return;
+      }
+      if (foot !== undefined && !['R', 'L', 'B'].includes(foot)) {
+        res.status(400).json({ status: 'ERROR', message: 'Foot must be R, L, or B' });
+        return;
+      }
+      if (position !== undefined && (typeof position !== 'string' || position.length > 30)) {
+        res.status(400).json({ status: 'ERROR', message: 'Position must be 30 characters or less' });
+        return;
+      }
+      if (country !== undefined && (typeof country !== 'string' || country.length > 50)) {
+        res.status(400).json({ status: 'ERROR', message: 'Country must be 50 characters or less' });
+        return;
+      }
+
       const user = await prisma.user.findUnique({
         where: { clerkUserId },
         select: { settings: true },
@@ -296,10 +336,34 @@ export class ProfileController {
       const username = req.params.username as string;
       const clerkUserId = req.auth?.userId;
 
-      // ✅ Fix 2: use include instead of select to get _count
+      // ✅ Fix 2: use select to whitelist only public fields (prevent data leaks)
       const user = await prisma.user.findUnique({
         where: { username },
-        include: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatar: true,
+          bio: true,
+          coins: true,
+          level: true,
+          xp: true,
+          isVerified: true,
+          isDeveloper: true,
+          favoriteTeam: true,
+          createdAt: true,
+          position: true,
+          countryFlag: true,
+          age: true,
+          height: true,
+          weight: true,
+          preferredFoot: true,
+          clubLogo: true,
+          brandLogo: true,
+          coverImage: true,
+          socialLinks: true,
+          consecutiveLoginDays: true,
+          profileViews: true,
           _count: {
             select: {
               followers: true,
@@ -316,6 +380,7 @@ export class ProfileController {
       }
 
       let isFollowing = false;
+      let isFollowingMe = false;
       if (clerkUserId) {
         const currentUser = await prisma.user.findUnique({
           where: { clerkUserId },
@@ -323,32 +388,38 @@ export class ProfileController {
         });
 
         if (currentUser) {
-          const follow = await prisma.follow.findUnique({
-            where: {
-              followerId_followingId: {
-                followerId: currentUser.id,
-                followingId: user.id,
+          const [followRecord, reverseFollowRecord] = await Promise.all([
+            prisma.follow.findUnique({
+              where: {
+                followerId_followingId: {
+                  followerId: currentUser.id,
+                  followingId: user.id,
+                },
               },
-            },
-          });
-          isFollowing = !!follow;
+            }),
+            prisma.follow.findUnique({
+              where: {
+                followerId_followingId: {
+                  followerId: user.id,
+                  followingId: currentUser.id,
+                },
+              },
+            }),
+          ]);
+          isFollowing = !!followRecord;
+          isFollowingMe = !!reverseFollowRecord;
         }
       }
-
-      // ✅ استبعاد الحقول الحساسة قبل الإرسال
-      const { email: _email, clerkUserId: _clerkUserId, avatarStoragePath: _avatarStoragePath, ...publicData } = user as any;
-      void _email;
-      void _clerkUserId;
-      void _avatarStoragePath;
 
       res.json({
         status: 'SUCCESS',
         data: {
-          ...publicData,
+          ...user,
           followersCount: user._count.followers,
           followingCount: user._count.following,
           videosCount: user._count.reels,
           isFollowing,
+          isFollowingMe,
         },
       });
     } catch (error) {

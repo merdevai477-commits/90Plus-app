@@ -305,12 +305,12 @@ const ProfileEditModal = memo(function ProfileEditModal({ visible, onClose, init
                                     placeholder={t.profile.bioPlaceholder}
                                     placeholderTextColor="#666"
                                     multiline
-                                    maxLength={150}
+                                    maxLength={500}
                                     returnKeyType="done"
                                     blurOnSubmit={true}
                                 />
-                                <Text style={[styles.charCount, bio.length >= 140 && { color: '#FFA500' }]}>
-                                    {bio.length}/150
+                                <Text style={[styles.charCount, bio.length >= 450 && { color: '#FFA500' }]}>
+                                    {bio.length}/500
                                 </Text>
                             </View>
 

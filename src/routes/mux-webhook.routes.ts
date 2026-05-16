@@ -147,10 +147,18 @@ async function handleAssetReady(event: any): Promise<void> {
     const { getRedisClient } = await import('../lib/redis');
     const redis = getRedisClient();
     if (redis) {
-      const feedKeys = await redis.keys('reels:feed:*');
-      if (feedKeys.length > 0) {
-        await redis.del(...feedKeys);
-        logger.info(`[MuxWebhook] Invalidated ${feedKeys.length} feed cache keys for reel ${reel.id}`);
+      // Use SCAN instead of KEYS to avoid blocking Redis in production
+      let cursor = '0';
+      const keysToDelete: string[] = [];
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'reels:feed:*', 'COUNT', 100);
+        cursor = nextCursor;
+        keysToDelete.push(...keys);
+      } while (cursor !== '0');
+      
+      if (keysToDelete.length > 0) {
+        await redis.del(...keysToDelete);
+        logger.info(`[MuxWebhook] Invalidated ${keysToDelete.length} feed cache keys for reel ${reel.id}`);
       }
     }
   } catch (cacheErr: any) {
@@ -162,8 +170,8 @@ async function handleAssetReady(event: any): Promise<void> {
   // for up to 3 minutes).
   try {
     const { clearReelsFeedCache } = await import('./reels.routes');
-    clearReelsFeedCache();
-    logger.info(`[MuxWebhook] Cleared in-process feed cache for reel ${reel.id}`);
+    await clearReelsFeedCache();
+    logger.info(`[MuxWebhook] Cleared feed cache for reel ${reel.id}`);
   } catch (cacheErr: any) {
     logger.warn('[MuxWebhook] In-process feed cache clear failed (non-critical):', cacheErr?.message);
   }
@@ -247,12 +255,16 @@ async function handleAssetErrored(event: any): Promise<void> {
   const uploadId: string | undefined = event.data?.upload_id;
   const errors = event.data?.errors;
 
+  // Guard: if neither uploadId nor assetId is available, we can't identify the reel
+  if (!uploadId && !assetId) {
+    logger.error('[MuxWebhook] handleAssetErrored called without uploadId or assetId — cannot identify reel');
+    return;
+  }
+
   const reel = await prisma.reel.findFirst({
     where: uploadId
       ? { muxUploadId: uploadId }
-      : assetId
-        ? { muxAssetId: assetId }
-        : undefined,
+      : { muxAssetId: assetId },
     select: { id: true, userId: true },
   });
 

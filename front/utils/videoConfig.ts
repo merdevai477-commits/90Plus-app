@@ -59,7 +59,7 @@ export const configureAudioVideo = async (): Promise<void> => {
 export const FALLBACK_VIDEOS = [
   'https://www.w3schools.com/html/mov_bbb.mp4',
   'https://www.w3schools.com/html/movie.mp4',
-  'https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_30fps_normal.mp4.zip',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
 ];
 
 /** Basic URL sanity-check for user-supplied video URLs. */

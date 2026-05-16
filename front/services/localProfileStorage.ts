@@ -140,25 +140,37 @@ class LocalProfileStorageService {
   }
 
   /**
-   * Merge server data with local data (local takes precedence for UI elements)
+   * Merge server data with local data.
+   * Server data wins if it was updated MORE RECENTLY than local storage.
+   * Local data wins only if it's newer (written after last sync).
+   * This prevents stale local data from overriding server updates on other devices.
    */
-  async mergeWithServerData(serverData: any): Promise<any> {
+  async mergeWithServerData(serverData: any, serverUpdatedAt?: Date | string): Promise<any> {
     const localData = await this.getProfileData();
     
+    // If server data has a more recent timestamp, server wins for all fields
+    const serverTime = serverUpdatedAt ? new Date(serverUpdatedAt).getTime() : 0;
+    const localTime = localData.lastUpdated || 0;
+    
+    // Server is newer → server wins (prevents stale local from overriding multi-device changes)
+    if (serverTime > localTime) {
+      return serverData;
+    }
+    
+    // Local is newer → local overrides only non-null fields
     return {
       ...serverData,
-      // Local data overrides server data for UI elements
-      countryFlag: localData.countryFlag ?? serverData.countryFlag,
-      country: localData.country ?? serverData.country,
-      clubLogo: localData.clubLogo ?? serverData.clubLogo,
-      favoriteTeam: localData.favoriteTeam ?? serverData.favoriteTeam,
-      brandLogo: localData.brandLogo ?? serverData.brandLogo,
-      favoriteBrand: localData.favoriteBrand ?? serverData.favoriteBrand,
-      position: localData.position ?? serverData.position,
+      countryFlag: localData.countryFlag || serverData.countryFlag,
+      country: localData.country || serverData.country,
+      clubLogo: localData.clubLogo || serverData.clubLogo,
+      favoriteTeam: localData.favoriteTeam || serverData.favoriteTeam,
+      brandLogo: localData.brandLogo || serverData.brandLogo,
+      favoriteBrand: localData.favoriteBrand || serverData.favoriteBrand,
+      position: localData.position || serverData.position,
       age: localData.age ?? serverData.age,
       height: localData.height ?? serverData.height,
       weight: localData.weight ?? serverData.weight,
-      preferredFoot: localData.preferredFoot ?? serverData.preferredFoot,
+      preferredFoot: localData.preferredFoot || serverData.preferredFoot,
     };
   }
 }

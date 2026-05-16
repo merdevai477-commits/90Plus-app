@@ -16,18 +16,15 @@ import {
   TEXT_MUTED,
   TEXT_SECONDARY,
 } from '@/constants/tokens';
-import { useSignUp } from '@clerk/clerk-expo';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { signUp, setActive, isLoaded } = useSignUp();
   const [terms, setTerms] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const submit = async () => {
+  const submit = () => {
     if (!terms) {
       Alert.alert('Notice', 'Please accept the Terms & Conditions.');
       return;
@@ -36,31 +33,10 @@ export default function RegisterScreen() {
       Alert.alert('Notice', 'Fill all fields (password at least 6 characters).');
       return;
     }
-    if (!isLoaded) return;
-
-    setIsSubmitting(true);
-    try {
-      const result = await signUp.create({
-        emailAddress: email.trim(),
-        password,
-        firstName: name.trim().split(' ')[0],
-        lastName: name.trim().split(' ').slice(1).join(' ') || undefined,
-      });
-
-      if (result.status === 'complete' && result.createdSessionId) {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)/Home');
-      } else {
-        // Email verification needed
-        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        router.push('/auth/onboarding');
-      }
-    } catch (err: any) {
-      const msg = err?.errors?.[0]?.longMessage || err?.message || 'Registration failed';
-      Alert.alert('Error', msg);
-    } finally {
-      setIsSubmitting(false);
-    }
+    Alert.alert(
+      'Coming soon',
+      'Registration will connect to the API. This screen is UI-only for now.'
+    );
   };
 
   return (
@@ -107,19 +83,14 @@ export default function RegisterScreen() {
         </Text>
       </View>
 
-      <TouchableOpacity
-        style={[styles.primaryWrap, isSubmitting && { opacity: 0.6 }]}
-        activeOpacity={0.92}
-        onPress={submit}
-        disabled={isSubmitting}
-      >
+      <TouchableOpacity style={styles.primaryWrap} activeOpacity={0.92} onPress={submit}>
         <LinearGradient
           colors={[AUTH_ACCENT, '#5b21b6']}
           style={styles.primary}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
-          <Text style={styles.primaryTxt}>{isSubmitting ? 'Creating...' : 'Sign Up'}</Text>
+          <Text style={styles.primaryTxt}>Sign Up</Text>
         </LinearGradient>
       </TouchableOpacity>
 
@@ -136,7 +107,7 @@ export default function RegisterScreen() {
         </TouchableOpacity>
       </View>
 
-      <Pressable style={styles.footer} onPress={() => router.push('/auth/login')}>
+      <Pressable style={styles.footer} onPress={() => router.replace('/login')}>
         <Text style={styles.footerMuted}>
           Already have an account? <Text style={styles.linkBold}>Login</Text>
         </Text>
@@ -158,21 +129,49 @@ function Divider() {
 const styles = StyleSheet.create({
   gapTop: { marginTop: 12 },
   termsWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 18, gap: 10 },
-  chk: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: AUTH_ACCENT, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
+  chk: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: AUTH_ACCENT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
   chkOn: { backgroundColor: 'rgba(124,58,237,0.25)' },
   chkMark: { color: TEXT_PRIMARY, fontSize: 12, fontWeight: '900', marginTop: -1 },
   termsTxt: { flex: 1, fontSize: 13, color: TEXT_SECONDARY, lineHeight: 18 },
   link: { color: AUTH_ACCENT, fontWeight: '700' },
+
   primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
   primary: { paddingVertical: 16, alignItems: 'center' },
   primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
+
   divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 22, gap: 12 },
   divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
   divTxt: { fontSize: 12, color: TEXT_MUTED, fontWeight: '600' },
+
   socialRow: { flexDirection: 'row', gap: 10 },
-  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, paddingVertical: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  googleG: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
+  social: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  googleG: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#4285F4',
+  },
   socialTxt: { fontSize: 14, fontWeight: '700', color: TEXT_SECONDARY },
+
   footer: { marginTop: 5, alignItems: 'center', paddingBottom: 12 },
   footerMuted: { fontSize: 14, color: TEXT_MUTED },
   linkBold: { color: AUTH_ACCENT, fontWeight: '800' },

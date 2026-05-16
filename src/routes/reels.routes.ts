@@ -25,17 +25,51 @@ const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم
 const REELS_PER_PAGE = 5;
 const MAX_COMMENTS_PREVIEW = 3;
 
-// Cache for reels feed (180 seconds TTL - increased from 30s to reduce DB load)
-const feedCache = new Map<string, { data: any; timestamp: number }>();
+// Cache for reels feed — uses Redis for multi-instance consistency.
+// Falls back to in-process Map if Redis is unavailable.
+const feedCacheFallback = new Map<string, { data: any; timestamp: number }>();
 const FEED_CACHE_TTL = 180 * 1000; // 180 seconds (3 minutes)
+const FEED_CACHE_REDIS_PREFIX = 'reels:feed:';
+
+async function getFeedFromCache(key: string): Promise<any | null> {
+    try {
+        const redisResult = await redisCacheService.get<any>(`${FEED_CACHE_REDIS_PREFIX}${key}`);
+        if (redisResult) return redisResult;
+    } catch {
+        // Redis unavailable — try fallback
+    }
+    const fallback = feedCacheFallback.get(key);
+    if (fallback && Date.now() - fallback.timestamp < FEED_CACHE_TTL) {
+        return fallback.data;
+    }
+    return null;
+}
+
+async function setFeedCache(key: string, data: any): Promise<void> {
+    try {
+        await redisCacheService.set(`${FEED_CACHE_REDIS_PREFIX}${key}`, data, FEED_CACHE_TTL);
+    } catch {
+        // Redis unavailable — use fallback
+    }
+    feedCacheFallback.set(key, { data, timestamp: Date.now() });
+    // Bound the fallback map
+    if (feedCacheFallback.size > 200) {
+        const oldest = feedCacheFallback.keys().next().value;
+        if (oldest !== undefined) feedCacheFallback.delete(oldest);
+    }
+}
 
 /**
- * Clear all entries of the in-process feed cache. Called by the Mux webhook
- * when a new reel becomes READY so the feed shows the new video immediately
- * instead of waiting for the 3-minute TTL to expire.
+ * Clear all entries of the feed cache (both Redis and in-process).
+ * Called by the Mux webhook when a new reel becomes READY.
  */
-export function clearReelsFeedCache(): void {
-    feedCache.clear();
+export async function clearReelsFeedCache(): Promise<void> {
+    feedCacheFallback.clear();
+    try {
+        await redisCacheService.delPattern(`${FEED_CACHE_REDIS_PREFIX}*`);
+    } catch {
+        // Non-critical — cache will expire naturally
+    }
 }
 
 // Cache for user IDs (5 minutes TTL)
@@ -77,9 +111,9 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
 
         // Check feed cache (only for first page without cursor)
         const cacheKey = `feed_${currentUserId}_${cursor || 'first'}_${take}`;
-        const cached = feedCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < FEED_CACHE_TTL) {
-            res.json(cached.data);
+        const cached = await getFeedFromCache(cacheKey);
+        if (cached) {
+            res.json(cached);
             return;
         }
 
@@ -229,7 +263,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         };
 
         // Save to cache
-        feedCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+        await setFeedCache(cacheKey, responseData);
 
         res.json(responseData);
     } catch (error: any) {
@@ -3196,9 +3230,9 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
 
         // Check feed cache (only for first page without cursor)
         const cacheKey = `feed_${currentUserId}_${cursor || 'first'}_${take}`;
-        const cached = feedCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < FEED_CACHE_TTL) {
-            res.json(cached.data);
+        const cached = await getFeedFromCache(cacheKey);
+        if (cached) {
+            res.json(cached);
             return;
         }
 
@@ -3320,7 +3354,7 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
             }
         };
 
-        feedCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+        await setFeedCache(cacheKey, responseData);
         res.json(responseData);
     } catch (error: any) {
         logger.error('Get reels feed error:', error);

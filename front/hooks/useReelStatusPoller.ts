@@ -55,11 +55,11 @@ export function useReelStatusPoller(
     if (!reelId || !isMountedRef.current) return;
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token || !isMountedRef.current) return;
       const res = await fetch(`${getApiUrl()}/upload/reels/${reelId}/status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return;
+      if (!res.ok || !isMountedRef.current) return;
       const json = await res.json();
       const data = json?.data;
       if (!data || !isMountedRef.current) return;
@@ -73,6 +73,7 @@ export function useReelStatusPoller(
       else if (hasMuxPlayback || data.muxUploadId) newStage = 'processing';
       else newStage = 'uploading';
 
+      if (!isMountedRef.current) return; // Final check before setState
       setStage(newStage);
       setVideoUrl(data.videoUrl ?? null);
       setThumbnailUrl(data.thumbnailUrl ?? null);

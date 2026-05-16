@@ -20,6 +20,7 @@ interface VideoItem {
     views: string;
     duration: string;
     isUploading?: boolean;
+    isProcessing?: boolean;
     uploadProgress?: number;
 }
 
@@ -93,6 +94,16 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                             <View style={[styles.progressBar, { width: `${item.uploadProgress}%` }]} />
                         </View>
                     )}
+                </View>
+            )}
+
+            {/* Processing Overlay — Mux is still encoding the video */}
+            {!item.isUploading && item.isProcessing && (
+                <View style={styles.uploadingOverlay}>
+                    <View style={styles.uploadingContent}>
+                        <ActivityIndicator size="small" color="#FFA500" />
+                        <Text style={styles.uploadingText}>جاري المعالجة...</Text>
+                    </View>
                 </View>
             )}
 
