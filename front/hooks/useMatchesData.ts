@@ -18,9 +18,17 @@ export interface GroupedMatches {
   matches: Match[];
 }
 
+/** Country → Leagues → Matches hierarchy */
+export interface CountryGroup {
+  country: string;
+  countryFlag: string | null;
+  leagues: GroupedMatches[];
+}
+
 export interface UseMatchesDataResult {
   matches: Match[];
   groupedMatches: GroupedMatches[];
+  countryGroups: CountryGroup[];
   loading: boolean;
   error: string | null;
   isDataStale: boolean;
@@ -79,6 +87,68 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 // ✅ Throttle background refresh - track last background fetch per date
 // Raised from 2 min to 5 min — with 100 req/day Free plan, 2 min was too aggressive.
 const BACKGROUND_REFRESH_THROTTLE = 5 * 60 * 1000; // 5 minutes minimum between background refreshes
+
+/**
+ * Country sort priority:
+ * 1. England, Spain, Italy, France, Germany (top 5 leagues)
+ * 2. Middle East countries (alphabetical)
+ * 3. Everything else (alphabetical)
+ */
+const COUNTRY_PRIORITY: Record<string, number> = {
+  'England': 1,
+  'Spain': 2,
+  'Italy': 3,
+  'France': 4,
+  'Germany': 5,
+};
+
+const MIDDLE_EAST_COUNTRIES = new Set([
+  'Saudi-Arabia', 'Egypt', 'UAE', 'Qatar', 'Kuwait', 'Bahrain',
+  'Oman', 'Jordan', 'Iraq', 'Syria', 'Lebanon', 'Palestine',
+  'Yemen', 'Libya', 'Tunisia', 'Algeria', 'Morocco', 'Sudan',
+  'Turkey',
+]);
+
+function getCountrySortKey(country: string): string {
+  const priority = COUNTRY_PRIORITY[country];
+  if (priority) return `0${priority}`; // Top 5: "01" to "05"
+  if (MIDDLE_EAST_COUNTRIES.has(country)) return `1${country}`; // Middle East: "1Egypt"
+  return `2${country}`; // Rest: "2Argentina"
+}
+
+/**
+ * Groups matches by country, then by league within each country.
+ */
+const groupMatchesByCountry = (matches: Match[]): CountryGroup[] => {
+  // First group by league (existing logic)
+  const leagueGroups = groupMatchesByLeague(matches);
+
+  // Then group leagues by country
+  const countryMap = new Map<string, { flag: string | null; leagues: GroupedMatches[] }>();
+
+  for (const group of leagueGroups) {
+    // Get country from the first match in the group
+    const firstMatch = group.matches[0];
+    const country = firstMatch?.league?.country || 'World';
+    const flag = firstMatch?.league?.countryFlag || null;
+
+    if (!countryMap.has(country)) {
+      countryMap.set(country, { flag, leagues: [] });
+    }
+    countryMap.get(country)!.leagues.push(group);
+  }
+
+  // Convert to array and sort by priority
+  const result: CountryGroup[] = Array.from(countryMap.entries())
+    .map(([country, data]) => ({
+      country,
+      countryFlag: data.flag,
+      leagues: data.leagues,
+    }))
+    .sort((a, b) => getCountrySortKey(a.country).localeCompare(getCountrySortKey(b.country)));
+
+  return result;
+};
 
 /**
  * Groups matches by league
@@ -168,6 +238,9 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
   // Group matches by league
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
+
+  // Group matches by country → league hierarchy
+  const countryGroups = useMemo(() => groupMatchesByCountry(matches), [matches]);
 
   // Fix PERF-7: .length is O(1) — no useMemo needed
   const matchesCount = matches.length;
@@ -272,6 +345,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
             if (m.homeTeam?.logo) logosToPrefetch.add(m.homeTeam.logo);
             if (m.awayTeam?.logo) logosToPrefetch.add(m.awayTeam.logo);
             if (m.league?.logo) logosToPrefetch.add(m.league.logo);
+            if (m.league?.countryFlag) logosToPrefetch.add(m.league.countryFlag);
           });
           const urls = Array.from(logosToPrefetch).slice(0, 100);
           if (urls.length > 0) {
@@ -430,6 +504,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   return {
     matches,
     groupedMatches,
+    countryGroups,
     loading,
     error,
     isDataStale,

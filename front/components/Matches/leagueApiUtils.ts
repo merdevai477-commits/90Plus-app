@@ -91,6 +91,8 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
     id: fixture.league.id,
     name: fixture.league.name,
     logo: fixture.league.logo,
+    country: fixture.league.country,
+    countryFlag: fixture.league.flag,
   };
 
   return {

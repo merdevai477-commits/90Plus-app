@@ -546,7 +546,7 @@ export default function MatchesHubScreenV2() {
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
   // Real matches data from backend
-  const { groupedMatches, loading, error, refetch } = useMatchesData(selectedDate);
+  const { groupedMatches, countryGroups, loading, error, refetch } = useMatchesData(selectedDate);
 
   // ─── Instant hydration from local cache ────────────────────────────────────
   // Cache keys are SCOPED TO userId so a logout→login on the same device

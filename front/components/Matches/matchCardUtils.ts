@@ -22,6 +22,8 @@ export interface LeagueInfo {
   id: number;
   name: string;
   logo: string;
+  country?: string;
+  countryFlag?: string | null;
 }
 
 export interface Match {
