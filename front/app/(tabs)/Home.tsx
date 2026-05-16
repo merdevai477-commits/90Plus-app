@@ -41,7 +41,6 @@ import { useHomeLikes } from '../../hooks/useHomeLikes';
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
-import { getDailyQuizStatus, DailyQuizStatus } from '../../services/quizApi';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
 import { ProfileCompletionService } from '../../services/profileCompletion.service';
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
@@ -66,7 +65,6 @@ export default function HomeScreen() {
         rank: null as number | null,
         spinWheelAvailable: true,
         nextSpinTime: undefined as Date | undefined,
-        dailyQuizStatus: null as DailyQuizStatus | null,
     });
     const [luckyWheelVisible, setLuckyWheelVisible] = useState(false);
     const isLoadingRef = useRef(false);
@@ -122,16 +120,6 @@ export default function HomeScreen() {
             }
         } catch (error) {
             logger.error('Error fetching spin status:', error);
-        }
-    }, [getToken]);
-
-    const fetchDailyQuizStatus = useCallback(async () => {
-        try {
-            if (!getToken) return;
-            const status = await getDailyQuizStatus(getToken);
-            setUserInfo((prev) => ({ ...prev, dailyQuizStatus: status }));
-        } catch (error) {
-            logger.error('Error fetching daily quiz status:', error);
         }
     }, [getToken]);
 
@@ -345,7 +333,6 @@ export default function HomeScreen() {
     // Refs to avoid stale closures in useFocusEffect
     const fetchUserProfileRef = useRef(fetchUserProfile);
     const fetchSpinWheelStatusRef = useRef(fetchSpinWheelStatus);
-    const fetchDailyQuizStatusRef = useRef(fetchDailyQuizStatus);
     const fetchUserRankRef = useRef(fetchUserRank);
     const fetchPredictionsDataRef = useRef(fetchPredictionsData);
     const fetchHomeDataRef = useRef(fetchHomeData);
@@ -360,7 +347,6 @@ export default function HomeScreen() {
     useEffect(() => {
         fetchUserProfileRef.current = fetchUserProfile;
         fetchSpinWheelStatusRef.current = fetchSpinWheelStatus;
-        fetchDailyQuizStatusRef.current = fetchDailyQuizStatus;
         fetchUserRankRef.current = fetchUserRank;
         fetchPredictionsDataRef.current = fetchPredictionsData;
         fetchHomeDataRef.current = fetchHomeData;
@@ -372,7 +358,6 @@ export default function HomeScreen() {
     }, [
         fetchUserProfile,
         fetchSpinWheelStatus,
-        fetchDailyQuizStatus,
         fetchUserRank,
         fetchPredictionsData,
         fetchHomeData,
@@ -438,7 +423,6 @@ export default function HomeScreen() {
                             return null;
                         }),
                         fetchSpinWheelStatusRef.current().catch(() => null),
-                        fetchDailyQuizStatusRef.current().catch(() => null),
                         fetchPredictionsDataRef.current(token).catch(() => null),
                         fetchUserRankRef.current().catch(() => null),
                         fetchSubscribedIdsRef.current().catch(() => null),
