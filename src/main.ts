@@ -693,6 +693,18 @@ async function startServer() {
                         const { startLuckyWheelNotifier } = await import('./services/lucky-wheel-notifier.service');
                         startLuckyWheelNotifier();
 
+                        // ✅ Start prediction ticket renewal notifier (daily at 8 AM Egypt)
+                        const { startPredictionTicketNotifier } = await import('./services/prediction-ticket-notifier.service');
+                        startPredictionTicketNotifier();
+
+                        // ✅ Start cooldown expiry notifier (hourly check)
+                        const { startCooldownExpiryNotifier } = await import('./services/cooldown-expiry-notifier.service');
+                        startCooldownExpiryNotifier();
+
+                        // ✅ Start daily quiz renewal notifier (daily at 9 AM Egypt)
+                        const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
+                        startDailyQuizNotifier();
+
                         // ✅ Initialize receipt queue
                         const { getReceiptQueue } = await import('./queues/receipt.queue');
                         getReceiptQueue();

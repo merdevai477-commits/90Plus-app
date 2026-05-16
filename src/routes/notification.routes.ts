@@ -531,4 +531,122 @@ router.post('/:id/opened', requireAuth, verifyNotificationOwnership, async (req:
     }
 });
 
+// ─── TEST: Send test push notification to current user ───────────────────────
+/**
+ * POST /api/notifications/test-push
+ * Sends a test push notification to the current user (Developer only).
+ * Body: { type?: string } — optional notification type to test
+ */
+router.post('/test-push', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true, expoPushToken: true, pushNotificationsConsent: true, isDeveloper: true },
+        });
+        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+        if (!user.isDeveloper) { res.status(403).json({ status: 'ERROR', message: 'Developer access only' }); return; }
+
+        if (!user.expoPushToken) {
+            res.status(400).json({ status: 'ERROR', message: 'No push token registered. Open the app on a real device first.' });
+            return;
+        }
+
+        const { type = 'all' } = req.body;
+
+        const tests: Array<{ type: string; title: string; body: string; data: any }> = [];
+
+        if (type === 'all' || type === 'prediction_ticket') {
+            tests.push({
+                type: 'PREDICTION_TICKET_RENEWAL',
+                title: '🎟️ تذاكرك اتجددت!',
+                body: 'عندك 10 تذاكر توقع جديدة. توقع نتيجة المباريات واكسب عملات! ⚽',
+                data: { type: 'PREDICTION_TICKET_RENEWAL', screen: '/(tabs)/matches' },
+            });
+        }
+        if (type === 'all' || type === 'cooldown_avatar') {
+            tests.push({
+                type: 'COOLDOWN_EXPIRED',
+                title: '📸 غيّر صورتك!',
+                body: 'الكولداون خلص — تقدر تغير صورة بروفايلك دلوقتي!',
+                data: { type: 'COOLDOWN_EXPIRED', cooldownType: 'avatar', screen: '/(tabs)/profile' },
+            });
+        }
+        if (type === 'all' || type === 'cooldown_reel') {
+            tests.push({
+                type: 'COOLDOWN_EXPIRED',
+                title: '🎬 ارفع فيديو جديد!',
+                body: 'تقدر ترفع فيديو جديد دلوقتي. شارك موهبتك مع الجمهور!',
+                data: { type: 'COOLDOWN_EXPIRED', cooldownType: 'reel', screen: '/(tabs)/profile' },
+            });
+        }
+        if (type === 'all' || type === 'quiz_renewal') {
+            tests.push({
+                type: 'QUIZ_RENEWAL',
+                title: '🧠 اختبار جديد جاهز!',
+                body: 'اختبار اليوم في انتظارك. اثبت معرفتك بالكرة واكسب XP!',
+                data: { type: 'QUIZ_RENEWAL', screen: '/(tabs)/quiz' },
+            });
+        }
+        if (type === 'all' || type === 'lucky_wheel') {
+            tests.push({
+                type: 'LUCKY_WHEEL',
+                title: '🎡 عجلة الحظ جاهزة!',
+                body: 'حظك النهارده ينتظرك، العب دلوقتي!',
+                data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
+            });
+        }
+        if (type === 'all' || type === 'match_goal') {
+            tests.push({
+                type: 'MATCH_UPDATE',
+                title: '⚽ هدف!',
+                body: 'الأهلي سجل! الأهلي 1 - 0 الزمالك',
+                data: { type: 'MATCH_GOAL', matchId: 99999, screen: '/(tabs)/matches' },
+            });
+        }
+        if (type === 'all' || type === 'prediction_result') {
+            tests.push({
+                type: 'PREDICTION_RESULT',
+                title: '🎯 توقع صحيح!',
+                body: 'تهانينا! توقعك كان صحيحاً 🎉\nالأهلي vs الزمالك\n+10 تذاكر',
+                data: { type: 'PREDICTION_RESULT', isCorrect: true, screen: '/(tabs)/matches' },
+            });
+        }
+        if (type === 'all' || type === 're_engagement') {
+            tests.push({
+                type: 'RE_ENGAGEMENT',
+                title: '⚽ الكرة بتنادي عليك!',
+                body: 'رجع التطبيق وشوف أحدث مباريات وتوقعات النهارده 🔥',
+                data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/Home' },
+            });
+        }
+
+        // Send all test notifications
+        const { default: PushNotificationService } = await import('../services/push-notification.service');
+        const results = await Promise.allSettled(
+            tests.map(t => PushNotificationService.sendNotification({
+                to: user.expoPushToken!,
+                title: t.title,
+                body: t.body,
+                data: t.data,
+                channelId: 'general',
+            }))
+        );
+
+        const success = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+
+        res.json({
+            status: 'SUCCESS',
+            message: `Sent ${success} test notifications (${failed} failed)`,
+            data: { sent: tests.map(t => t.type), success, failed },
+        });
+    } catch (error: any) {
+        logger.error('Test push error:', error);
+        res.status(500).json({ status: 'ERROR', message: error.message });
+    }
+});
+
 export default router;
