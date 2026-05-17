@@ -4,9 +4,7 @@
  * Displays the logged-in user's avatar, display name, level and XP progress
  * on the Rank screen. Tapping the card navigates to the user's own profile.
  *
- * Level/XP are intentionally placeholder values (Lv. 1, 0/100) until the
- * scoring system is defined. They are exposed as props so swapping to real
- * data later is a one-line change.
+ * Consumes XpContext for real-time level/XP data.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -25,6 +23,7 @@ import {
 } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
+import { useXp } from '../../contexts/XpContext';
 
 const ACCENT = '#A855F7';
 const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
@@ -34,24 +33,30 @@ export interface ProfileCardProps {
   displayName?: string | null;
   /** Optional avatar url override (Cloudflare R2). */
   avatarUrl?: string | null;
-  /** User level. Placeholder until scoring system is finalized. */
+  /** User level override (falls back to XpContext). */
   level?: number;
-  /** Current XP toward the next level. */
+  /** Current XP override (falls back to XpContext). */
   xp?: number;
-  /** XP required to reach the next level. */
+  /** XP required to reach the next level override (falls back to XpContext). */
   xpToNextLevel?: number;
 }
 
 const ProfileCard: React.FC<ProfileCardProps> = ({
   displayName,
   avatarUrl,
-  level = 1,
-  xp = 0,
-  xpToNextLevel = 100,
+  level: levelProp,
+  xp: xpProp,
+  xpToNextLevel: xpToNextProp,
 }) => {
   const router = useRouter();
   const { user } = useUser();
   const { t } = useTranslation();
+  const xpCtx = useXp();
+
+  // Use props if provided, otherwise fall back to XpContext real data
+  const level = levelProp ?? xpCtx.level;
+  const xp = xpProp ?? xpCtx.xp;
+  const xpToNextLevel = xpToNextProp ?? xpCtx.xpToNext;
 
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
