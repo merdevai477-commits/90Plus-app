@@ -495,7 +495,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         
         return; // Exit early - videos loading in background
       } else {
-        console.error('[useProfileCache] ❌ No user data received from backend');
+        console.warn('[useProfileCache] ⚠️ No user data received from backend (server may be starting)');
         
         // ✅ FIX: Check if we have cached data to show - ALWAYS prefer cache over error screen
         const cachedData = await cacheService.get<ProfileCacheData>(cacheKey, true); // allowStale

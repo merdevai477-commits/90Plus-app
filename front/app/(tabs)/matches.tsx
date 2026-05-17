@@ -428,7 +428,7 @@ const LeagueCard = memo(function LeagueCard({
   const previewFixtures = hasMore ? group.fixtures.slice(0, PREVIEW_COUNT) : group.fixtures;
 
   return (
-    <>
+    <View>
       <View style={styles.leagueCard}>
         {/* Header — tap to toggle accordion */}
         <TouchableOpacity
@@ -505,7 +505,7 @@ const LeagueCard = memo(function LeagueCard({
         subscribingFixtureId={subscribingFixtureId}
         onToggleSubscription={onToggleSubscription}
       />
-    </>
+    </View>
   );
 });
 

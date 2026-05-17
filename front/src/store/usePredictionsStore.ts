@@ -126,7 +126,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                     }
                 }
             } catch (error) {
-                console.error('Error fetching user data:', error);
+                console.warn('⚠️ Could not fetch predictions data (server may be starting):', (error as any)?.message || error);
             } finally {
                 set({ isLoading: false });
                 fetchUserDataInFlight = null;

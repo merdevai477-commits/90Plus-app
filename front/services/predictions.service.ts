@@ -109,10 +109,13 @@ export const PredictionsService = {
 
         const result = await response.json();
         if (result.success && result.data) return result.data;
-        throw new PredictionApiError('E010', 'Invalid response format', response.status);
+        // Return safe defaults instead of crashing
+        logger.warn('Predictions remaining: invalid response format, using defaults');
+        return { remaining: 5, total: 5, coins: 0 } as PredictionRemaining;
       } catch (error) {
         logger.error('Error getting remaining predictions:', error);
-        throw error;
+        // Return safe defaults when backend is unreachable
+        return { remaining: 5, total: 5, coins: 0 } as PredictionRemaining;
       } finally {
         _inFlightRemaining = null;
       }
@@ -186,10 +189,13 @@ export const PredictionsService = {
 
         const result = await response.json();
         if (result.success && result.data) return result.data;
-        throw new PredictionApiError('E010', 'Invalid response format', response.status);
+        // Return empty defaults instead of crashing
+        logger.warn('User predictions: invalid response format, using empty defaults');
+        return { predictions: [], predictionsMap: {} };
       } catch (error) {
         logger.error('Error getting user predictions:', error);
-        throw error;
+        // Return empty defaults when backend is unreachable
+        return { predictions: [], predictionsMap: {} };
       } finally {
         _inFlightUserPreds = null;
       }
