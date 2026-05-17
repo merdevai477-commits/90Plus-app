@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,31 @@ import {
   StyleSheet,
   Alert,
   Linking,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { CircleUserRound, Mail, Lock, Apple } from 'lucide-react-native';
+import { CircleUserRound, Mail, Lock, Apple, ShieldCheck, X } from 'lucide-react-native';
 import { AuthScreenShell, AuthTextField, AUTH_ACCENT } from '@/src/components/auth';
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
   TEXT_SECONDARY,
+  PURPLE_PRIMARY,
+  PURPLE_SOFT,
+  PURPLE_GLOW,
+  BG_BASE,
+  BORDER_ARENA,
+  RADIUS_LG,
 } from '@/constants/tokens';
 import { useSignUp } from '@clerk/clerk-expo';
+
+const OTP_LENGTH = 6;
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -27,6 +41,13 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Verification modal state
+  const [showVerification, setShowVerification] = useState(false);
+  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const submit = async () => {
     if (!terms) {
@@ -52,15 +73,101 @@ export default function RegisterScreen() {
         await setActive({ session: result.createdSessionId });
         router.replace('/(tabs)/Home');
       } else {
-        // Email verification needed
+        // Email verification needed — show glass modal
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        router.push('/auth/onboarding');
+        setOtp(Array(OTP_LENGTH).fill(''));
+        setShowVerification(true);
+        startResendCooldown();
       }
     } catch (err: any) {
       const msg = err?.errors?.[0]?.longMessage || err?.message || 'Registration failed';
       Alert.alert('Error', msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const startResendCooldown = () => {
+    setResendCooldown(60);
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleOtpChange = (value: string, index: number) => {
+    if (value.length > 1) {
+      // Handle paste
+      const chars = value.replace(/[^0-9]/g, '').split('').slice(0, OTP_LENGTH);
+      const newOtp = [...otp];
+      chars.forEach((char, i) => {
+        if (index + i < OTP_LENGTH) {
+          newOtp[index + i] = char;
+        }
+      });
+      setOtp(newOtp);
+      const nextIndex = Math.min(index + chars.length, OTP_LENGTH - 1);
+      inputRefs.current[nextIndex]?.focus();
+      return;
+    }
+
+    const newOtp = [...otp];
+    newOtp[index] = value.replace(/[^0-9]/g, '');
+    setOtp(newOtp);
+
+    if (value && index < OTP_LENGTH - 1) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyPress = (key: string, index: number) => {
+    if (key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+      const newOtp = [...otp];
+      newOtp[index - 1] = '';
+      setOtp(newOtp);
+    }
+  };
+
+  const handleVerify = async () => {
+    const code = otp.join('');
+    if (code.length !== OTP_LENGTH) {
+      Alert.alert('Notice', 'Please enter the full verification code.');
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      const result = await signUp!.attemptEmailAddressVerification({ code });
+
+      if (result.status === 'complete' && result.createdSessionId) {
+        await setActive({ session: result.createdSessionId });
+        setShowVerification(false);
+        router.replace('/auth/onboarding');
+      } else {
+        Alert.alert('Error', 'Verification incomplete. Please try again.');
+      }
+    } catch (err: any) {
+      const msg = err?.errors?.[0]?.longMessage || err?.message || 'Invalid code';
+      Alert.alert('Verification Failed', msg);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    try {
+      await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
+      startResendCooldown();
+      Alert.alert('Sent', 'A new verification code has been sent to your email.');
+    } catch (err: any) {
+      Alert.alert('Error', 'Failed to resend code. Try again.');
     }
   };
 
@@ -154,6 +261,116 @@ export default function RegisterScreen() {
           Already have an account? <Text style={styles.linkBold}>Login</Text>
         </Text>
       </Pressable>
+
+      {/* ── Email Verification Glass Modal ───────────────────────────────── */}
+      <Modal
+        visible={showVerification}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              {/* Glow effect behind card */}
+              <LinearGradient
+                colors={['rgba(124,58,237,0.15)', 'rgba(59,130,246,0.08)', 'transparent']}
+                style={styles.modalGlow}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+              />
+
+              {/* Close button */}
+              <TouchableOpacity
+                style={styles.modalClose}
+                onPress={() => setShowVerification(false)}
+                activeOpacity={0.7}
+              >
+                <X size={20} color={TEXT_MUTED} strokeWidth={2} />
+              </TouchableOpacity>
+
+              {/* Icon */}
+              <View style={styles.modalIconWrap}>
+                <LinearGradient
+                  colors={[PURPLE_PRIMARY, '#5b21b6']}
+                  style={styles.modalIcon}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <ShieldCheck size={28} color="#fff" strokeWidth={2} />
+                </LinearGradient>
+              </View>
+
+              {/* Title */}
+              <Text style={styles.modalTitle}>Verify your email</Text>
+              <Text style={styles.modalSubtitle}>
+                We sent a {OTP_LENGTH}-digit code to{'\n'}
+                <Text style={styles.modalEmail}>{email}</Text>
+              </Text>
+
+              {/* OTP inputs */}
+              <View style={styles.otpRow}>
+                {otp.map((digit, i) => (
+                  <TextInput
+                    key={i}
+                    ref={(ref) => { inputRefs.current[i] = ref; }}
+                    style={[styles.otpInput, digit ? styles.otpInputFilled : null]}
+                    value={digit}
+                    onChangeText={(v) => handleOtpChange(v, i)}
+                    onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, i)}
+                    keyboardType="number-pad"
+                    maxLength={i === 0 ? OTP_LENGTH : 1}
+                    selectTextOnFocus
+                    autoFocus={i === 0}
+                  />
+                ))}
+              </View>
+
+              {/* Verify button */}
+              <TouchableOpacity
+                activeOpacity={0.92}
+                onPress={handleVerify}
+                disabled={isVerifying || otp.join('').length !== OTP_LENGTH}
+                style={[
+                  styles.verifyWrap,
+                  otp.join('').length !== OTP_LENGTH && { opacity: 0.5 },
+                ]}
+              >
+                <LinearGradient
+                  colors={[PURPLE_PRIMARY, '#5b21b6']}
+                  style={styles.verifyBtn}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isVerifying ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.verifyTxt}>Verify & Continue</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Resend */}
+              <TouchableOpacity
+                onPress={handleResend}
+                disabled={resendCooldown > 0}
+                activeOpacity={0.7}
+                style={styles.resendRow}
+              >
+                <Text style={styles.resendTxt}>
+                  {resendCooldown > 0
+                    ? `Resend code in ${resendCooldown}s`
+                    : "Didn't receive it? Resend code"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </AuthScreenShell>
   );
 }
@@ -221,4 +438,137 @@ const styles = StyleSheet.create({
   footer: { marginTop: 5, alignItems: 'center', paddingBottom: 12 },
   footerMuted: { fontSize: 14, color: TEXT_MUTED },
   linkBold: { color: AUTH_ACCENT, fontWeight: '800' },
+
+  // ── Verification Modal ────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: 'rgba(12,8,20,0.97)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.25)',
+    paddingHorizontal: 24,
+    paddingTop: 36,
+    paddingBottom: 28,
+    alignItems: 'center',
+    overflow: 'hidden',
+    // Depth shadow
+    shadowColor: '#7c3aed',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 40,
+    elevation: 24,
+  },
+  modalGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalIconWrap: {
+    marginBottom: 18,
+    borderRadius: 22,
+    shadowColor: '#7c3aed',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  modalIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    letterSpacing: -0.3,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalEmail: {
+    color: PURPLE_SOFT,
+    fontWeight: '700',
+  },
+
+  // OTP
+  otpRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 24,
+  },
+  otpInput: {
+    width: 46,
+    height: 54,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    color: TEXT_PRIMARY,
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  otpInputFilled: {
+    borderColor: 'rgba(124,58,237,0.5)',
+    backgroundColor: 'rgba(124,58,237,0.08)',
+  },
+
+  // Verify button
+  verifyWrap: {
+    width: '100%',
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  verifyBtn: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyTxt: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+  },
+
+  // Resend
+  resendRow: {
+    paddingVertical: 6,
+  },
+  resendTxt: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    fontWeight: '600',
+  },
 });
