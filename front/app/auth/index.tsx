@@ -148,7 +148,7 @@ export default function RegisterScreen() {
       if (result.status === 'complete' && result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
         setShowVerification(false);
-        router.replace('/auth/onboarding');
+        router.replace('/(tabs)/Home');
       } else {
         Alert.alert('Error', 'Verification incomplete. Please try again.');
       }
