@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, ErrorInfo } from "react";
+import '../global.css';
 import {
   useFonts,
   Poppins_400Regular,

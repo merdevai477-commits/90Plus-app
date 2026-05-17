@@ -3,10 +3,8 @@ module.exports = function (api) {
 
   return {
     presets: [
-      ['babel-preset-expo', { jsxImportSource: 'react' }],
+      ['babel-preset-expo', { jsxImportSource: 'nativewind' }],
     ],
-    // No plugins needed here — babel-preset-expo automatically includes:
-    //   - react-native-reanimated/plugin (when reanimated is installed)
-    //   - react-native-worklets/plugin (since Expo SDK 54)
+    plugins: ['nativewind/babel'],
   };
 };
