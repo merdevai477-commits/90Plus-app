@@ -1,540 +1,674 @@
-import React, { useEffect, useRef, memo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Animated, Easing } from 'react-native';
+/**
+ * ProfileCard — FIFA-style FC25 card
+ *
+ * Visual: deep purple/indigo card body with gold border, inner gold rim,
+ * cracked-glass purple wings, animated radial purple aura behind.
+ * Typography: Inter (700 / 800 / 900) for sharp, premium readability.
+ * Animations: Reanimated 4 (rotating aura, sweeping shimmer, gold rim pulse).
+ */
+
+import React, { memo, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Path, ClipPath, Image as SvgImage } from 'react-native-svg';
-import { useSafeLoop } from '../../hooks/useSafeAnimation';
-import { usePerformanceMonitor } from '../../hooks/usePerformanceMonitor';
+import Svg, {
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  RadialGradient as SvgRadialGradient,
+  Stop,
+  Path,
+  ClipPath,
+  Image as SvgImage,
+} from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
 
 interface ProfileCardProps {
-    playerImage: any;
-    cardType?: 'gold' | 'icon' | 'toty';
-    scale?: number;
-    onImageUpload?: () => void;
-    uploadedImage?: string | null;
-    countryFlag?: string;
-    onCountryPress?: () => void;
-    position?: string;
-    age?: string | number;
-    height?: string | number;
-    weight?: string | number;
-    foot?: string;
-    onPositionPress?: () => void;
-    onStatsPress?: () => void;
-    clubLogo?: string;
-    onClubPress?: () => void;
-    brandLogo?: string;
-    onBrandPress?: () => void;
-    // Loading states
-    isAvatarUploading?: boolean;
-    isCountryUpdating?: boolean;
-    isClubUpdating?: boolean;
-    isBrandUpdating?: boolean;
-    isStatsUpdating?: boolean;
+  playerImage?: any;
+  cardType?: 'gold' | 'icon' | 'toty';
+  scale?: number;
+  onImageUpload?: () => void;
+  uploadedImage?: string | null;
+  countryFlag?: string;
+  onCountryPress?: () => void;
+  position?: string;
+  age?: string | number;
+  height?: string | number;
+  weight?: string | number;
+  foot?: string;
+  onPositionPress?: () => void;
+  onStatsPress?: () => void;
+  clubLogo?: string;
+  onClubPress?: () => void;
+  brandLogo?: string;
+  onBrandPress?: () => void;
+  isAvatarUploading?: boolean;
+  isCountryUpdating?: boolean;
+  isClubUpdating?: boolean;
+  isBrandUpdating?: boolean;
+  isStatsUpdating?: boolean;
 }
 
+// Card dimensions in viewBox units
 const WIDTH = 300;
 const HEIGHT = 460;
-const gradientColors = ['#a17f37', '#FFD700', '#a17f37']; // Gold Gradient
 
-// ✅ PERFORMANCE: Memoize component to prevent unnecessary re-renders
+// ── Color palette (matches reference image) ──────────────────────────────────
+const PURPLE_DEEP = '#1A0B2E';      // card inner background
+const PURPLE_DARK = '#2D1B4E';      // card mid
+const PURPLE_MID = '#4C1D95';       // accents
+const PURPLE_GLOW = '#7C3AED';      // outer glow
+const PURPLE_LIGHT = '#A78BFA';     // highlights
+const GOLD_PRIMARY = '#F5C518';     // border + position text
+const GOLD_DARK = '#A17F37';
+const GOLD_LIGHT = '#FFE066';
+const TEXT_WHITE = '#FFFFFF';
+
+// ── Inter font helpers ───────────────────────────────────────────────────────
+const FONT_700 = 'Inter_700Bold';
+const FONT_800 = 'Inter_800ExtraBold';
+const FONT_900 = 'Inter_800ExtraBold'; // 900 not loaded, use 800 as heaviest
+
 const ProfileCard = memo(function ProfileCard({
-    playerImage,
-    cardType = 'gold',
-    scale = 0.66,
-    onImageUpload,
-    uploadedImage,
-    countryFlag,
-    onCountryPress,
-    position,
-    onPositionPress,
-    age,
-    height,
-    weight,
-    foot,
-    onStatsPress,
-    clubLogo,
-    onClubPress,
-    brandLogo,
-    onBrandPress,
-    isAvatarUploading = false,
-    isCountryUpdating = false,
-    isClubUpdating = false,
-    isBrandUpdating = false,
-    isStatsUpdating = false,
+  scale = 0.66,
+  onImageUpload,
+  uploadedImage,
+  countryFlag,
+  onCountryPress,
+  position,
+  onPositionPress,
+  age,
+  height,
+  weight,
+  foot,
+  onStatsPress,
+  clubLogo,
+  onClubPress,
+  brandLogo,
+  onBrandPress,
 }: ProfileCardProps) {
-    // ✅ FIXED: Use safe animation hooks to prevent memory leaks
-    const shimmer = useSafeLoop(0, 1, 4000, {
-        easing: Easing.bezier(0.4, 0.0, 0.2, 1),
-        useNativeDriver: true,
-        debug: false,
-    });
-    
-    const holo = useSafeLoop(0, 1, 5000, {
-        easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
-        useNativeDriver: true,
-        debug: false,
-    });
-    
-    // ✅ PERFORMANCE: Monitor component performance
-    usePerformanceMonitor({
-        componentName: 'ProfileCard',
-        enabled: __DEV__, // Only in development
-        memoryWarningThreshold: 50,
-        memoryCriticalThreshold: 100,
-        // Shimmer + holographic animations drive many legitimate renders
-        // on a long-lived profile screen; bump the threshold so we only
-        // flag truly pathological cases.
-        maxRenderCount: 500,
-        debug: false,
-    });
+  // ── Reanimated shared values ────────────────────────────────────────────
+  const auraRotation = useSharedValue(0);
+  const auraPulse = useSharedValue(0);
+  const shimmerProgress = useSharedValue(0);
+  const goldPulse = useSharedValue(0);
 
-    // ✅ FIXED: Start animations on mount with proper cleanup
-    useEffect(() => {
-        shimmer.start();
-        holo.start();
-        
-        // Cleanup is handled automatically by useSafeLoop
-    }, []);
-
-    const shimmerTranslate = shimmer.animatedValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: [-400 * scale, 700 * scale], // Wider sweep
-    });
-
-    const shimmerOpacity = shimmer.animatedValue.interpolate({
-        inputRange: [0, 0.3, 0.7, 1],
-        outputRange: [0, 0.8, 0.8, 0], // Fade in/out
-    });
-
-    const holoOpacity = holo.animatedValue.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: [0.1, 0.25, 0.1], // Subtle pulsing
-    });
-
-    const cardWidth = WIDTH * scale;
-    const cardHeight = HEIGHT * scale;
-
-    return (
-        <View style={[styles.container, { width: cardWidth, height: cardHeight }]}>
-            {/* Stronger Glow Effect */}
-            <View style={[styles.glow, { width: cardWidth, height: cardHeight }]} />
-
-            {/* FIFA Card Shape with Gradient Border */}
-            <Svg width={cardWidth} height={cardHeight} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={styles.cardSvg}>
-                {/* ... existing SVG content ... */}
-                <Defs>
-                    <SvgLinearGradient id="borderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <Stop offset="0%" stopColor={gradientColors[0]} stopOpacity="1" />
-                        <Stop offset="50%" stopColor="#FFF" stopOpacity="1" />
-                        <Stop offset="100%" stopColor={gradientColors[2]} stopOpacity="1" />
-                    </SvgLinearGradient>
-                    <ClipPath id="quadrantClip">
-                        <Path d="M150 12 L286 37 L286 230 L150 230 Z" />
-                    </ClipPath>
-                </Defs>
-
-                {/* FIFA Card Border Path */}
-                <Path
-                    d="M150 8 L290 35 L290 380 L240 420 L150 452 L60 420 L10 380 L10 35 Z"
-                    fill="url(#borderGradient)"
-                />
-
-                {/* Inner Card Background */}
-                <Path
-                    d="M150 12 L286 37 L286 378 L238 418 L150 448 L62 418 L14 378 L14 37 Z"
-                    fill="#FFB700"
-                />
-
-                {/* User Image - Rendered HERE inside the same SVG to share Defs/ClipPath */}
-                {uploadedImage && (
-                    <SvgImage
-                        x="150"
-                        y="12"
-                        width="136"
-                        height="218"
-                        href={{ uri: uploadedImage }}
-                        preserveAspectRatio="xMidYMid slice"
-                        clipPath="url(#quadrantClip)"
-                    />
-                )}
-            </Svg>
-
-            {/* Professional Shimmer & Holographic Overlay */}
-            <View style={[styles.shimmerContainer, { width: cardWidth, height: cardHeight }]}>
-                {/* Gold Shimmer - Professional sweep */}
-                <Animated.View
-                    style={[
-                        styles.shimmer,
-                        {
-                            opacity: shimmerOpacity,
-                            transform: [
-                                { translateX: shimmerTranslate },
-                                { rotate: '25deg' } // Diagonal sweep
-                            ]
-                        }
-                    ]}
-                >
-                    <LinearGradient
-                        colors={[
-                            'transparent',
-                            'rgba(255, 255, 255, 0.15)',
-                            'rgba(255, 223, 0, 0.4)', // Gold highlight
-                            'rgba(255, 255, 255, 0.15)',
-                            'transparent'
-                        ]}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                    />
-                </Animated.View>
-
-                {/* Subtle Holographic Rainbow Effect */}
-                <Animated.View
-                    style={[
-                        styles.holoEffect,
-                        {
-                            opacity: holoOpacity,
-                        }
-                    ]}
-                >
-                    <LinearGradient
-                        colors={[
-                            'rgba(255, 215, 0, 0.15)',   // Gold
-                            'rgba(255, 140, 0, 0.1)',    // Dark Orange
-                            'rgba(255, 215, 0, 0.15)',   // Gold
-                            'rgba(184, 134, 11, 0.1)',   // Dark Goldenrod
-                        ]}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                    />
-                </Animated.View>
-            </View>
-
-            {/* Top-Right Quadrant: Touch Area (Transparent Overlay) */}
-            <TouchableOpacity
-                style={[styles.quadrantContainer, {
-                    top: 12 * scale,
-                    left: 150 * scale,
-                    width: 136 * scale,
-                    height: 218 * scale,
-                }]}
-                onPress={onImageUpload}
-                activeOpacity={0.8}
-            >
-                {!uploadedImage && (
-                    <View style={styles.uploadPlaceholder}>
-                        <View style={styles.plusHorz} />
-                        <View style={styles.plusVert} />
-                    </View>
-                )}
-            </TouchableOpacity>
-
-            {/* Top-Left Quadrant: Info Area */}
-            <View style={[styles.quadrantContainer, {
-                top: 12 * scale,
-                left: 14 * scale,
-                width: 136 * scale,
-                height: 218 * scale,
-                borderTopLeftRadius: 36 * scale,
-                justifyContent: 'center',
-                alignItems: 'center',
-            }]}>
-                <TouchableOpacity onPress={onPositionPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Text style={{
-                        fontSize: 28 * scale,
-                        fontWeight: '900',
-                        color: '#000',
-                        marginBottom: 10 * scale,
-                        textAlign: 'center'
-                    }}>
-                        {position || '--'}
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={onCountryPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    {(() => {
-                        // Try to get country code from emoji or use as-is
-                        const code = countryFlag ? (
-                            // Check if it's an emoji flag
-                            countryFlag.length <= 4 && countryFlag.codePointAt(0)! >= 0x1F1E6
-                                ? (() => {
-                                    const codePoints = [...countryFlag];
-                                    if (codePoints.length === 2) {
-                                        const first = codePoints[0].codePointAt(0)!;
-                                        const second = codePoints[1].codePointAt(0)!;
-                                        if (first >= 0x1F1E6 && first <= 0x1F1FF && second >= 0x1F1E6 && second <= 0x1F1FF) {
-                                            return String.fromCharCode(first - 0x1F1E6 + 65, second - 0x1F1E6 + 65).toLowerCase();
-                                        }
-                                    }
-                                    return null;
-                                })()
-                                : countryFlag.toLowerCase()
-                        ) : null;
-
-                        if (code && code.length === 2) {
-                            return (
-                                <Image
-                                    source={{ uri: `https://flagcdn.com/w80/${code}.png` }}
-                                    style={{ width: 36 * scale, height: 25 * scale, borderRadius: 3 * scale }}
-                                    contentFit="cover"
-                                    cachePolicy="memory-disk"
-                                    priority="high"
-                                    transition={200}
-                                />
-                            );
-                        }
-                        return (
-                            <Text style={{ fontSize: 40 * scale, color: '#000', fontWeight: 'bold' }}>
-                                {countryFlag || '--'}
-                            </Text>
-                        );
-                    })()}
-                </TouchableOpacity>
-
-                <View style={{ flexDirection: 'row', marginTop: 5 * scale, gap: 5 * scale }}>
-                    <TouchableOpacity onPress={onClubPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        {clubLogo ? (
-                            <Image
-                                source={{ uri: clubLogo }}
-                                style={{ width: 30 * scale, height: 30 * scale }}
-                                contentFit="contain"
-                                cachePolicy="memory-disk"
-                                priority="high"
-                                transition={200}
-                            />
-                        ) : (
-                            <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale, backgroundColor: '#000' }]}>
-                                <Text style={{ fontSize: 16 * scale, color: '#FFD700' }}>⚽</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={onBrandPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        {brandLogo ? (
-                            <Image
-                                source={{ uri: brandLogo }}
-                                style={{ width: 30 * scale, height: 30 * scale }}
-                                contentFit="contain"
-                                cachePolicy="memory-disk"
-                                priority="high"
-                                transition={200}
-                            />
-                        ) : (
-                            <View style={[styles.miniPlaceholder, { width: 30 * scale, height: 30 * scale, backgroundColor: '#000' }]}>
-                                <Text style={{ fontSize: 16 * scale, color: '#FFD700' }}>👟</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            {/* Player Image Container - Centered - REMOVED/HIDDEN as per request, image is now in top-right */}
-            {/* 
-            <View style={[styles.imageContainer, { ... }]}> ... </View> 
-            */}
-
-            {/* Bottom half: Premium Stats Grid */}
-            {/* Position: below the horizontal line (y=230) */}
-            <View style={{
-                position: 'absolute',
-                top: 180 * scale,
-                left: 14 * scale,
-                width: 272 * scale, // 286 - 14
-                height: 148 * scale, // 378 - 230 (approx end of straight part)
-                justifyContent: 'center',
-                alignItems: 'center',
-                // backgroundColor: 'rgba(0,0,0,0.1)' // Debug
-            }}>
-                {/* Name & Username */}
-                {/* Note: Name is usually outside card in previous design, but user said "make it look premium". 
-                    If stats are inside, name should be outside? 
-                    Actually, user sketch shows name below card. 
-                    So inside this area we put the requested: Age, Weight, Height, Foot
-                */}
-
-                <TouchableOpacity style={styles.statsContainer} onPress={onStatsPress}>
-                    {/* Row 1: Age & Height */}
-                    <View style={styles.statsRow}>
-                        <View style={[styles.statItem, { paddingTop: 79 }]}>
-                            <Text style={styles.statLabel}>AGE</Text>
-                            <Text style={styles.statValue}>{age || '--'}</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={[styles.statItem, { paddingTop: 79 }]}>
-                            <Text style={styles.statLabel}>HGT</Text>
-                            <Text style={styles.statValue}>{height || '--'}</Text>
-                        </View>
-                    </View>
-
-                    {/* Divider between rows */}
-                    <View style={styles.rowDivider} />
-
-                    {/* Row 2: Weight & Foot */}
-                    <View style={styles.statsRow}>
-                        <View style={[styles.statItem, { paddingTop: 0 }]}>
-                            <Text style={styles.statLabel}>WGT</Text>
-                            <Text style={styles.statValue}>{weight || '--'}</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={[styles.statItem, { paddingTop: 0 }]}>
-                            <Text style={styles.statLabel}>FOOT</Text>
-                            <Text style={styles.statValue}>{foot || '--'}</Text>
-                        </View>
-                    </View>
-                </TouchableOpacity>
-            </View>
-        </View>
+  useEffect(() => {
+    // Slow rotation of background aura (12 seconds full rotation)
+    auraRotation.value = withRepeat(
+      withTiming(1, { duration: 12000, easing: Easing.linear }),
+      -1,
+      false
     );
+
+    // Aura breathing (in/out)
+    auraPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+
+    // Diagonal shimmer sweep across card
+    shimmerProgress.value = withRepeat(
+      withTiming(1, { duration: 4500, easing: Easing.inOut(Easing.cubic) }),
+      -1,
+      false
+    );
+
+    // Gold border subtle pulse
+    goldPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const cardWidth = WIDTH * scale;
+  const cardHeight = HEIGHT * scale;
+
+  // ── Animated styles ─────────────────────────────────────────────────────
+  const auraStyle = useAnimatedStyle(() => ({
+    transform: [
+      { rotate: `${auraRotation.value * 360}deg` as const },
+      { scale: interpolate(auraPulse.value, [0, 1], [1, 1.08]) },
+    ] as any,
+    opacity: interpolate(auraPulse.value, [0, 1], [0.55, 0.85]),
+  }));
+
+  const shimmerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      shimmerProgress.value,
+      [0, 0.4, 0.6, 1],
+      [0, 0.7, 0.7, 0]
+    ),
+    transform: [
+      {
+        translateX: interpolate(
+          shimmerProgress.value,
+          [0, 1],
+          [-cardWidth * 0.8, cardWidth * 1.2]
+        ),
+      },
+      { rotate: '20deg' as const },
+    ] as any,
+  }));
+
+  const goldGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(goldPulse.value, [0, 1], [0.4, 0.85]),
+  }));
+
+  // ── Country flag rendering ──────────────────────────────────────────────
+  const renderFlag = () => {
+    const flagValue = (countryFlag ?? '').trim();
+    if (!flagValue) {
+      return <Text style={[s.flagPlaceholder, { fontSize: 32 * scale }]}>🌍</Text>;
+    }
+
+    // Emoji flag
+    if (/[\u{1F1E6}-\u{1F1FF}]/u.test(flagValue)) {
+      const codePoints = [...flagValue];
+      if (codePoints.length === 2) {
+        const first = codePoints[0].codePointAt(0)!;
+        const second = codePoints[1].codePointAt(0)!;
+        if (first >= 0x1F1E6 && first <= 0x1F1FF) {
+          const code = String.fromCharCode(
+            first - 0x1F1E6 + 65,
+            second - 0x1F1E6 + 65
+          ).toLowerCase();
+          return (
+            <Image
+              source={{ uri: `https://flagcdn.com/w80/${code}.png` }}
+              style={{ width: 36 * scale, height: 26 * scale, borderRadius: 3 * scale }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          );
+        }
+      }
+      return <Text style={{ fontSize: 32 * scale }}>{flagValue}</Text>;
+    }
+
+    // ISO code
+    if (flagValue.length <= 3) {
+      return (
+        <Image
+          source={{ uri: `https://flagcdn.com/w80/${flagValue.toLowerCase()}.png` }}
+          style={{ width: 36 * scale, height: 26 * scale, borderRadius: 3 * scale }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+        />
+      );
+    }
+
+    return <Text style={{ fontSize: 32 * scale }}>{flagValue}</Text>;
+  };
+
+  return (
+    <View style={[s.outer, { width: cardWidth * 1.45, height: cardHeight * 1.25 }]}>
+      {/* ── Animated rotating purple aura behind card ─────────────────── */}
+      <Animated.View
+        style={[
+          s.auraWrap,
+          { width: cardWidth * 1.45, height: cardHeight * 1.25 },
+          auraStyle as any,
+        ]}
+        pointerEvents="none"
+      >
+        <Svg
+          width={cardWidth * 1.45}
+          height={cardHeight * 1.25}
+          viewBox="0 0 100 100"
+        >
+          <Defs>
+            <SvgRadialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor={PURPLE_GLOW} stopOpacity="0.65" />
+              <Stop offset="40%" stopColor={PURPLE_MID} stopOpacity="0.4" />
+              <Stop offset="75%" stopColor={PURPLE_DARK} stopOpacity="0.2" />
+              <Stop offset="100%" stopColor={PURPLE_DEEP} stopOpacity="0" />
+            </SvgRadialGradient>
+          </Defs>
+          <Path
+            d="M50 5 L75 15 L90 35 L95 55 L85 78 L65 90 L50 95 L35 90 L15 78 L5 55 L10 35 L25 15 Z"
+            fill="url(#auraGrad)"
+          />
+        </Svg>
+      </Animated.View>
+
+      {/* ── Card body ────────────────────────────────────────────────── */}
+      <View style={[s.cardContainer, { width: cardWidth, height: cardHeight }]}>
+        {/* Gold border pulse glow */}
+        <Animated.View
+          style={[
+            s.goldGlow,
+            { width: cardWidth, height: cardHeight },
+            goldGlowStyle as any,
+          ]}
+          pointerEvents="none"
+        />
+
+        {/* Main card SVG */}
+        <Svg
+          width={cardWidth}
+          height={cardHeight}
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          style={s.cardSvg}
+        >
+          <Defs>
+            {/* Outer gold border gradient */}
+            <SvgLinearGradient id="goldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor={GOLD_DARK} stopOpacity="1" />
+              <Stop offset="35%" stopColor={GOLD_LIGHT} stopOpacity="1" />
+              <Stop offset="65%" stopColor={GOLD_PRIMARY} stopOpacity="1" />
+              <Stop offset="100%" stopColor={GOLD_DARK} stopOpacity="1" />
+            </SvgLinearGradient>
+
+            {/* Inner card body — deep purple gradient */}
+            <SvgLinearGradient id="cardBody" x1="0%" y1="0%" x2="50%" y2="100%">
+              <Stop offset="0%" stopColor="#1F0F3A" stopOpacity="1" />
+              <Stop offset="50%" stopColor={PURPLE_DEEP} stopOpacity="1" />
+              <Stop offset="100%" stopColor="#0F051F" stopOpacity="1" />
+            </SvgLinearGradient>
+
+            {/* Subtle inner overlay glow */}
+            <SvgRadialGradient id="innerGlow" cx="50%" cy="35%" r="60%">
+              <Stop offset="0%" stopColor={PURPLE_GLOW} stopOpacity="0.2" />
+              <Stop offset="60%" stopColor={PURPLE_MID} stopOpacity="0.05" />
+              <Stop offset="100%" stopColor="#000" stopOpacity="0" />
+            </SvgRadialGradient>
+
+            {/* Player image clip */}
+            <ClipPath id="playerClip">
+              <Path d="M150 12 L286 37 L286 230 L150 230 Z" />
+            </ClipPath>
+          </Defs>
+
+          {/* Gold outer border */}
+          <Path
+            d="M150 8 L290 35 L290 380 L240 420 L150 452 L60 420 L10 380 L10 35 Z"
+            fill="url(#goldBorder)"
+          />
+
+          {/* Inner card body (deep purple) */}
+          <Path
+            d="M150 14 L284 39 L284 376 L238 416 L150 446 L62 416 L16 376 L16 39 Z"
+            fill="url(#cardBody)"
+          />
+
+          {/* Inner glow overlay */}
+          <Path
+            d="M150 14 L284 39 L284 376 L238 416 L150 446 L62 416 L16 376 L16 39 Z"
+            fill="url(#innerGlow)"
+          />
+
+          {/* Player image (top right) */}
+          {uploadedImage && (
+            <SvgImage
+              x="150"
+              y="14"
+              width="134"
+              height="216"
+              href={{ uri: uploadedImage }}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath="url(#playerClip)"
+            />
+          )}
+
+          {/* Inner thin gold rim line above stats */}
+          <Path
+            d="M40 285 L260 285"
+            stroke={GOLD_PRIMARY}
+            strokeOpacity="0.45"
+            strokeWidth="1"
+          />
+        </Svg>
+
+        {/* ── Diagonal shimmer sweep ──────────────────────────────── */}
+        <View
+          style={[s.shimmerMask, { width: cardWidth, height: cardHeight }]}
+          pointerEvents="none"
+        >
+          <Animated.View style={[s.shimmerBar, shimmerStyle as any]}>
+            <LinearGradient
+              colors={[
+                'transparent',
+                'rgba(255,224,102,0.0)',
+                'rgba(255,255,255,0.18)',
+                'rgba(245,197,24,0.35)',
+                'rgba(255,255,255,0.18)',
+                'transparent',
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        </View>
+
+        {/* ── Top-Left: Position + Flag + Logos column ─────────────── */}
+        <View
+          style={[
+            s.leftColumn,
+            {
+              top: 18 * scale,
+              left: 24 * scale,
+              width: 110 * scale,
+              height: 210 * scale,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={onPositionPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text
+              style={[
+                s.positionText,
+                {
+                  fontSize: 38 * scale,
+                  textShadowRadius: 8 * scale,
+                },
+              ]}
+            >
+              {position || '--'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onCountryPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginTop: 16 * scale }}
+          >
+            {renderFlag()}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onClubPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginTop: 12 * scale }}
+          >
+            {clubLogo ? (
+              <Image
+                source={{ uri: clubLogo }}
+                style={{ width: 32 * scale, height: 32 * scale }}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View
+                style={[
+                  s.miniPlaceholder,
+                  { width: 32 * scale, height: 32 * scale },
+                ]}
+              >
+                <Text style={{ fontSize: 16 * scale }}>⚽</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onBrandPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginTop: 10 * scale }}
+          >
+            {brandLogo ? (
+              <Image
+                source={{ uri: brandLogo }}
+                style={{ width: 30 * scale, height: 30 * scale }}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View
+                style={[
+                  s.miniPlaceholder,
+                  { width: 30 * scale, height: 30 * scale },
+                ]}
+              >
+                <Text style={{ fontSize: 14 * scale }}>👟</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Top-Right: Player image upload area ──────────────────── */}
+        <TouchableOpacity
+          style={[
+            s.imageArea,
+            {
+              top: 14 * scale,
+              left: 150 * scale,
+              width: 134 * scale,
+              height: 216 * scale,
+            },
+          ]}
+          onPress={onImageUpload}
+          activeOpacity={0.85}
+        >
+          {!uploadedImage && (
+            <View style={s.uploadPlaceholder}>
+              <View
+                style={[
+                  s.plusH,
+                  { width: 14 * scale, height: 2 * scale, backgroundColor: GOLD_PRIMARY },
+                ]}
+              />
+              <View
+                style={[
+                  s.plusV,
+                  { width: 2 * scale, height: 14 * scale, backgroundColor: GOLD_PRIMARY },
+                ]}
+              />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* ── Bottom: Stats grid ──────────────────────────────────── */}
+        <TouchableOpacity
+          style={[
+            s.statsContainer,
+            {
+              top: 248 * scale,
+              left: 30 * scale,
+              right: 30 * scale,
+              height: 160 * scale,
+            },
+          ]}
+          onPress={onStatsPress}
+          activeOpacity={0.9}
+        >
+          <View style={s.statsRow}>
+            <View style={s.statItem}>
+              <Text style={[s.statLabel, { fontSize: 11 * scale }]}>AGE</Text>
+              <Text style={[s.statValue, { fontSize: 26 * scale }]}>
+                {age || '--'}
+              </Text>
+            </View>
+            <View style={[s.statDivider, { height: 50 * scale }]} />
+            <View style={s.statItem}>
+              <Text style={[s.statLabel, { fontSize: 11 * scale }]}>HGT</Text>
+              <Text style={[s.statValue, { fontSize: 26 * scale }]}>
+                {height || '--'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[s.rowDivider, { width: '85%' }]} />
+
+          <View style={s.statsRow}>
+            <View style={s.statItem}>
+              <Text style={[s.statLabel, { fontSize: 11 * scale }]}>WGT</Text>
+              <Text style={[s.statValue, { fontSize: 26 * scale }]}>
+                {weight || '--'}
+              </Text>
+            </View>
+            <View style={[s.statDivider, { height: 50 * scale }]} />
+            <View style={s.statItem}>
+              <Text style={[s.statLabel, { fontSize: 11 * scale }]}>FOOT</Text>
+              <Text style={[s.statValue, { fontSize: 26 * scale }]}>
+                {(foot || '--').toString().toUpperCase()}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 });
 
-// ✅ PERFORMANCE: Export memoized component as default
 export default ProfileCard;
 
-const styles = StyleSheet.create({
-    container: {
-        position: 'relative',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.5,
-        shadowRadius: 40,
-        elevation: 20,
-        // Force LTR direction to prevent card layout from flipping in RTL languages
-        writingDirection: 'ltr',
-    },
-    cardSvg: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-    },
-    imageContainer: {
-        position: 'absolute',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    playerImage: {
-        width: '100%',
-        height: '100%',
-    },
-    imageOverlay: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '50%',
-        backgroundColor: 'transparent',
-    },
-    quadrantContainer: {
-        position: 'absolute',
-        overflow: 'hidden',
-        zIndex: 5,
-    },
-    uploadPlaceholder: {
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(0,0,0,0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    plusHorz: {
-        width: 12,
-        height: 2,
-        backgroundColor: '#000',
-        position: 'absolute'
-    },
-    plusVert: {
-        width: 2,
-        height: 12,
-        backgroundColor: '#000',
-        position: 'absolute'
-    },
-    statsContainer: {
-        width: '100%',
-        paddingHorizontal: 20,
-        flexDirection: 'column',
-        justifyContent: 'center',
-        paddingVertical: 10, // Added padding
-    },
-    statsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        marginVertical: 8, // Increased from 4
-        writingDirection: 'ltr', // Prevent RTL flip
-    },
-    statItem: {
-        alignItems: 'center',
-        flex: 1,
-    },
-    statLabel: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: 'rgba(0,0,0,0.5)',
-        marginBottom: 4, // Increased from 2
-        letterSpacing: 1, // Added for premium feel
-        writingDirection: 'ltr',
-    },
-    statValue: {
-        fontSize: 17, // Slight increase
-        fontWeight: '900',
-        color: '#000',
-        lineHeight: 20, // Constrain line height
-        writingDirection: 'ltr',
-    },
-    miniPlaceholder: {
-        backgroundColor: 'rgba(0,0,0,0.1)',
-        borderRadius: 50,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    statDivider: {
-        width: 1,
-        height: 24, // Increased from 20
-        backgroundColor: 'rgba(0,0,0,0.1)',
-        marginHorizontal: 10,
-    },
-    rowDivider: {
-        height: 1,
-        width: '80%',
-        backgroundColor: 'rgba(0,0,0,0.1)',
-        alignSelf: 'center',
-        marginVertical: 6, // Increased from 4
-    },
-    shimmerContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        zIndex: 2,
-        overflow: 'hidden',
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        borderBottomLeftRadius: 16,
-        borderBottomRightRadius: 16,
-        pointerEvents: 'none',
-    },
-    shimmer: {
-        width: '80%',
-        height: '300%',
-        position: 'absolute',
-        top: '-100%',
-        left: '-40%',
-    },
-    holoEffect: {
-        ...StyleSheet.absoluteFillObject,
-        zIndex: 1,
-    },
-    glow: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        borderRadius: 20,
-        shadowColor: '#FFD700',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
-        shadowRadius: 60,
-        elevation: 60,
-        zIndex: -1,
-    }
+// ── Styles ──────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  outer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    writingDirection: 'ltr',
+  },
+  auraWrap: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardContainer: {
+    position: 'relative',
+    shadowColor: PURPLE_GLOW,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 24,
+    writingDirection: 'ltr',
+  },
+  cardSvg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  goldGlow: {
+    position: 'absolute',
+    borderRadius: 20,
+    shadowColor: GOLD_PRIMARY,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 18,
+    elevation: 14,
+  },
+
+  // Shimmer
+  shimmerMask: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    overflow: 'hidden',
+    zIndex: 3,
+  },
+  shimmerBar: {
+    position: 'absolute',
+    top: '-50%',
+    left: 0,
+    width: '50%',
+    height: '200%',
+  },
+
+  // Left column (position + flag + logos)
+  leftColumn: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    zIndex: 5,
+  },
+  positionText: {
+    fontFamily: FONT_900,
+    fontWeight: '900',
+    color: GOLD_PRIMARY,
+    textAlign: 'center',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(245,197,24,0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  flagPlaceholder: {
+    color: TEXT_WHITE,
+  },
+  miniPlaceholder: {
+    backgroundColor: 'rgba(124,58,237,0.15)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245,197,24,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Image area
+  imageArea: {
+    position: 'absolute',
+    overflow: 'hidden',
+    zIndex: 4,
+  },
+  uploadPlaceholder: {
+    flex: 1,
+    backgroundColor: 'rgba(124,58,237,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusH: { position: 'absolute' },
+  plusV: { position: 'absolute' },
+
+  // Stats
+  statsContainer: {
+    position: 'absolute',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingVertical: 6,
+    writingDirection: 'ltr',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontFamily: FONT_800,
+    fontWeight: '800',
+    color: GOLD_PRIMARY,
+    letterSpacing: 1.5,
+    marginBottom: 2,
+    writingDirection: 'ltr',
+  },
+  statValue: {
+    fontFamily: FONT_900,
+    fontWeight: '900',
+    color: TEXT_WHITE,
+    letterSpacing: 0.5,
+    writingDirection: 'ltr',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: 'rgba(245,197,24,0.25)',
+    marginHorizontal: 8,
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: 'rgba(245,197,24,0.25)',
+    alignSelf: 'center',
+    marginVertical: 4,
+  },
 });
