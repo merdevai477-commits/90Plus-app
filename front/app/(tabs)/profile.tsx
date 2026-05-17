@@ -379,7 +379,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (isLoading && !cachedUserData && !hasForcedRefreshRef.current) {
       const timeout = setTimeout(() => {
-        logger.error('Profile loading timeout - forcing refresh');
+        logger.warn('Profile loading slow - attempting refresh');
         hasForcedRefreshRef.current = true;
         refreshCache(true).catch(err => {
           logger.error('[ProfileScreen] Refresh failed:', err);

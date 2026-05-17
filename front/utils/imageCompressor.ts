@@ -39,8 +39,17 @@ export interface CompressedImage {
  */
 export async function getImageSize(uri: string): Promise<{ width: number; height: number; size: number }> {
   try {
-    const info = await FileSystem.getInfoAsync(uri);
-    const size = info.exists ? (info.size || 0) : 0;
+    // Use FileSystem.getInfoAsync — handle both new and legacy API
+    let size = 0;
+    try {
+      const info = await FileSystem.getInfoAsync(uri, { size: true });
+      size = info.exists ? (info.size || 0) : 0;
+    } catch (fsError: any) {
+      // If getInfoAsync fails (deprecated in newer expo), estimate size as 0
+      // The upload will still work, we just won't know exact file size
+      logger.debug('[imageCompressor] getInfoAsync unavailable, proceeding without file size');
+      size = 0;
+    }
     
     // Get dimensions using ImageManipulator
     const imageInfo = await ImageManipulator.manipulateAsync(uri, [], { compress: 1 });
@@ -51,9 +60,8 @@ export async function getImageSize(uri: string): Promise<{ width: number; height
       size,
     };
   } catch (error) {
-    logger.error('[imageCompressor] Failed to get image size', {
+    logger.warn('[imageCompressor] Failed to get image size, using defaults', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      uri,
     });
     return { width: 0, height: 0, size: 0 };
   }
@@ -139,8 +147,14 @@ export async function compressImage(
     );
     
     // Get compressed size
-    const compressedInfo = await FileSystem.getInfoAsync(result.uri);
-    const compressedSize = compressedInfo.exists ? (compressedInfo.size || 0) : 0;
+    let compressedSize = 0;
+    try {
+      const compressedInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
+      compressedSize = compressedInfo.exists ? (compressedInfo.size || 0) : 0;
+    } catch {
+      // If getInfoAsync fails, estimate from compression ratio
+      compressedSize = Math.round(originalSize * 0.4); // Assume ~60% compression
+    }
     
     const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100;
     const duration = Date.now() - startTime;
