@@ -105,10 +105,12 @@ class MatchesBatchService {
       }
 
       // Cache each date's matches individually for granular access
+      // Limit to top 300 matches per day to avoid filling SQLite storage
       for (const [date, fixtures] of fixturesByDate) {
+        const limitedFixtures = fixtures.slice(0, 300);
         await cacheService.set(
           getMatchesCacheKey(date),
-          fixtures,
+          limitedFixtures,
           MATCHES_CONFIG.CACHE_TTL
         );
       }

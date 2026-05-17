@@ -409,7 +409,7 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
                 );
 
                 if (validCachedMatches.length < cachedMatches.length) {
-                    logger.warn(`⚠️ Filtered out ${cachedMatches.length - validCachedMatches.length} invalid fixtures`);
+                    logger.debug(`Filtered out ${cachedMatches.length - validCachedMatches.length} fixtures without required fields`);
                 }
 
                 // Map cached matches to UI format

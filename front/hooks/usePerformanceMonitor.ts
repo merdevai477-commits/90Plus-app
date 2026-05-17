@@ -227,7 +227,9 @@ export function usePerformanceMonitor(
     // this threshold naturally; repeating the log every 5s is noise.
     if (renderCount >= maxRenderCount && !hasWarnedRenderCount.current) {
       hasWarnedRenderCount.current = true;
-      logger.warn(`[${componentName}] ⚠️ High render count: ${renderCount} (threshold: ${maxRenderCount})`);
+      if (__DEV__) {
+        logger.debug(`[${componentName}] Render count reached ${renderCount} (threshold: ${maxRenderCount})`);
+      }
     }
   }, [
     enabled,

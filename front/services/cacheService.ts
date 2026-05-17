@@ -15,8 +15,8 @@ const CACHE_PREFIX = '@cache_';
 const DEFAULT_TTL = 5 * 60 * 1000;
 
 // Maximum number of cache entries (for LRU eviction)
-// ✅ INCREASED: Was 50, now 100 to reduce eviction frequency
-const MAX_CACHE_ENTRIES = 100;
+// ✅ Reduced to prevent SQLITE_FULL errors on low-storage devices
+const MAX_CACHE_ENTRIES = 50;
 
 /**
  * Module-level in-memory store for large object caches (e.g. reels feed).
@@ -672,6 +672,9 @@ class CacheService {
    * More efficient than caching one by one.
    */
   async batchCache(items: Array<{ key: string; data: any; ttl?: number }>): Promise<void> {
+    // Evict BEFORE inserting to prevent SQLITE_FULL
+    await this.evictIfNeeded();
+
     const entries: [string, string][] = items.map(item => {
       const cacheKey = this.getCacheKey(item.key);
       const entry: CacheEntry<any> = {
@@ -683,27 +686,19 @@ class CacheService {
     });
 
     try {
-      await AsyncStorage.multiSet(entries);
-      await this.evictIfNeeded();
+      // Limit batch size to avoid overwhelming storage
+      const maxBatchSize = 10;
+      for (let i = 0; i < entries.length; i += maxBatchSize) {
+        const chunk = entries.slice(i, i + maxBatchSize);
+        await AsyncStorage.multiSet(chunk);
+      }
     } catch (error: any) {
-      // ✅ FIX: Handle SQLITE_FULL error in batch operations
       if (error?.message?.includes('SQLITE_FULL') || error?.message?.includes('database or disk is full')) {
         console.warn(`[CacheService] ⚠️ Storage full in batch! Aggressive cleanup...`);
-        // Aggressive cleanup
-        await this.evictIfNeeded(20); // Keep only 20 newest entries
-        // Retry with smaller batch
-        try {
-          // Try again with first 5 items only
-          const limitedEntries = entries.slice(0, Math.min(5, entries.length));
-          await AsyncStorage.multiSet(limitedEntries);
-          console.log(`[CacheService] ✅ Retry successful with ${limitedEntries.length} items`);
-        } catch (retryError) {
-          console.error(`[CacheService] ❌ Batch retry failed, silently ignoring`);
-          // Silent fail - don't crash the app
-        }
+        await this.evictIfNeeded(15);
+        // Silent fail — cache miss is better than crash
       } else {
-        console.error('[CacheService] Error in batch cache:', error);
-        // Silent fail for cache errors
+        console.warn('[CacheService] Error in batch cache:', error?.message);
       }
     }
   }
