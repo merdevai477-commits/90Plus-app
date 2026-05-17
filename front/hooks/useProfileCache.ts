@@ -414,9 +414,9 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
       logger.debug('[useProfileCache] Token obtained, fetching data');
 
-      // FULLY PARALLEL: Fetch ALL data at once including videos
-      // We get username from cache or use 'me' endpoint pattern
-      const [userResult, statsResult, analyticsResult, cooldownsResult] = await Promise.all([
+      // CRITICAL PATH: Only fetch what's needed to show the profile immediately.
+      // analytics + cooldowns are deferred to background — they don't block the UI.
+      const [userResult, statsResult] = await Promise.all([
         AuthService.syncUserWithBackend(token).catch(err => {
           console.error('[useProfileCache] ❌ Error fetching user:', err);
           return null;
@@ -425,21 +425,11 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           console.error('[useProfileCache] ⚠️ Error fetching stats:', err);
           return null;
         }),
-        ProfileService.getAnalytics(token).catch(err => {
-          console.error('[useProfileCache] ⚠️ Error fetching analytics:', err);
-          return null;
-        }),
-        ProfileService.getCooldowns(token).catch(err => {
-          console.error('[useProfileCache] ⚠️ Error fetching cooldowns:', err);
-          return null;
-        }),
       ]);
 
       logger.debug('[useProfileCache] Data fetched:', {
         hasUser: !!userResult,
         hasStats: !!statsResult,
-        hasAnalytics: !!analyticsResult,
-        hasCooldowns: !!cooldownsResult,
       });
 
       let newUserData: ProfileUserData | null = null;
@@ -460,40 +450,55 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         
         logger.debug('[useProfileCache] User data valid, updating state');
         
-        // Update state IMMEDIATELY - don't wait for videos
-        // Batch all state updates to prevent 5 separate re-renders
+        // Update state IMMEDIATELY with critical data — don't wait for analytics/cooldowns/videos
         setUserData(newUserData);
         if (statsResult) setFollowStats(statsResult);
-        if (analyticsResult) setAnalytics(analyticsResult);
-        if (cooldownsResult) setCooldowns(cooldownsResult);
         
         // Mark as loaded IMMEDIATELY so UI shows
         hasLoadedRef.current = true;
         setIsLoading(false);
         onFreshDataLoadedRef.current?.();
         
-        logger.debug('[useProfileCache] State updated, fetching videos in background');
+        logger.debug('[useProfileCache] State updated, fetching secondary data in background');
+
+        // ── BACKGROUND: analytics + cooldowns + videos (non-blocking) ──────
+        // These don't block the initial render. They update state when ready.
+        const bgToken = token; // capture for closure
+        const bgUserData = newUserData;
+
+        Promise.all([
+          ProfileService.getAnalytics(bgToken).catch(err => {
+            logger.warn('[useProfileCache] ⚠️ Error fetching analytics (bg):', err);
+            return null;
+          }),
+          ProfileService.getCooldowns(bgToken).catch(err => {
+            logger.warn('[useProfileCache] ⚠️ Error fetching cooldowns (bg):', err);
+            return null;
+          }),
+          AuthService.getUserReels(bgToken, userResult.username).catch(err => {
+            logger.warn('[useProfileCache] ⚠️ Error loading videos (bg):', err);
+            return [] as any[];
+          }),
+        ]).then(([analyticsResult, cooldownsResult, reels]) => {
+          if (analyticsResult) setAnalytics(analyticsResult);
+          if (cooldownsResult) setCooldowns(cooldownsResult);
+
+          newVideos = transformReels(reels ?? []);
+          setVideos(newVideos);
+
+          // Persist complete data to cache
+          const cacheData: ProfileCacheData = {
+            userData: bgUserData,
+            followStats: statsResult,
+            videos: newVideos,
+            analytics: analyticsResult,
+            cooldowns: cooldownsResult,
+          };
+          saveToCache(cacheData);
+          logger.debug('[useProfileCache] Background data loaded and cached');
+        });
         
-        // Fetch videos in background (non-blocking for UI)
-        AuthService.getUserReels(token, userResult.username)
-          .then(reels => {
-            logger.debug('[useProfileCache] Videos loaded:', reels.length);
-            newVideos = transformReels(reels);
-            setVideos(newVideos);
-            
-            // Update cache with complete data
-            const cacheData: ProfileCacheData = {
-              userData: newUserData,
-              followStats: statsResult,
-              videos: newVideos,
-              analytics: analyticsResult,
-              cooldowns: cooldownsResult,
-            };
-            saveToCache(cacheData);
-          })
-          .catch(err => console.error('[useProfileCache] ⚠️ Error loading videos:', err));
-        
-        return; // Exit early - videos loading in background
+        return; // Exit early — background tasks running
       } else {
         console.warn('[useProfileCache] ⚠️ No user data received from backend (server may be starting)');
         

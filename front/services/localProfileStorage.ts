@@ -144,12 +144,18 @@ class LocalProfileStorageService {
    * Server data wins if it was updated MORE RECENTLY than local storage.
    * Local data wins only if it's newer (written after last sync).
    * This prevents stale local data from overriding server updates on other devices.
+   *
+   * @param serverData   - The full user object returned by the API.
+   * @param serverUpdatedAt - Optional explicit timestamp. When omitted the
+   *   method falls back to `serverData.updatedAt` so callers don't need to
+   *   extract it manually.
    */
   async mergeWithServerData(serverData: any, serverUpdatedAt?: Date | string): Promise<any> {
     const localData = await this.getProfileData();
     
-    // If server data has a more recent timestamp, server wins for all fields
-    const serverTime = serverUpdatedAt ? new Date(serverUpdatedAt).getTime() : 0;
+    // Resolve server timestamp: explicit param → serverData.updatedAt → 0
+    const resolvedServerTs = serverUpdatedAt ?? serverData?.updatedAt;
+    const serverTime = resolvedServerTs ? new Date(resolvedServerTs).getTime() : 0;
     const localTime = localData.lastUpdated || 0;
     
     // Server is newer → server wins (prevents stale local from overriding multi-device changes)

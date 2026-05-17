@@ -1,8 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 interface PredictionStats {
   correct?: number;
@@ -23,107 +26,177 @@ interface Props {
   predictionStats: PredictionStats | null;
 }
 
+interface StatCardProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  value: string | number;
+  label: string;
+  gradientColors: readonly [string, string];
+  glowColor: string;
+}
+
+function StatCard({ icon, value, label, gradientColors, glowColor }: StatCardProps) {
+  const GlassCard = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+  const glassProps = isLiquidGlassSupported
+    ? { effect: 'clear' as const, interactive: false }
+    : { intensity: 15, tint: 'dark' as const };
+
+  return (
+    <View style={[styles.card, { shadowColor: glowColor }]}>
+      <GlassCard {...(glassProps as any)} style={StyleSheet.absoluteFill} />
+      {/* Colored tint overlay */}
+      <LinearGradient
+        colors={gradientColors}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      <View style={[styles.iconCircle, { backgroundColor: `${glowColor}22` }]}>
+        <Ionicons name={icon} size={22} color={glowColor} />
+      </View>
+      <Text style={[styles.cardValue, { color: glowColor }]}>{value}</Text>
+      <Text style={styles.cardLabel}>{label}</Text>
+    </View>
+  );
+}
+
 export const ProfileAnalyticsTab: React.FC<Props> = ({ analytics, predictionStats }) => {
   const { t } = useTranslation();
 
+  const fmt = (n?: number): string => {
+    if (!n) return '0';
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return String(n);
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{t.profile.videoAnalytics}</Text>
-
-      <View style={styles.grid}>
-        <View style={styles.card}>
-          <Ionicons name="eye-outline" size={28} color={ProfileTheme.colors.neonBlue} />
-          <Text style={styles.value}>{analytics?.totalViews || 0}</Text>
-          <Text style={styles.label}>{t.profile.views}</Text>
-        </View>
-        <View style={styles.card}>
-          <Ionicons name="heart-outline" size={28} color="#FF6B6B" />
-          <Text style={styles.value}>{analytics?.totalLikes || 0}</Text>
-          <Text style={styles.label}>{t.profile.likes}</Text>
-        </View>
-        <View style={styles.card}>
-          <Ionicons name="chatbubble-outline" size={28} color={ProfileTheme.colors.neonGreen} />
-          <Text style={styles.value}>{analytics?.totalComments || 0}</Text>
-          <Text style={styles.label}>{t.profile.comments}</Text>
-        </View>
-        <View style={styles.card}>
-          <Ionicons name="person-add-outline" size={28} color="#9B59B6" />
-          <Text style={styles.value}>{analytics?.recentFollowers || 0}</Text>
-          <Text style={styles.label}>{t.profile.newFollowers}</Text>
-        </View>
+      {/* ── Video analytics ─────────────────────────────────────── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>📹 {t.profile.videoAnalytics}</Text>
       </View>
 
-      <View style={styles.section}>
+      <View style={styles.grid}>
+        <StatCard
+          icon="eye-outline"
+          value={fmt(analytics?.totalViews)}
+          label={t.profile.views}
+          gradientColors={['rgba(0,217,255,0.08)', 'rgba(0,217,255,0.03)']}
+          glowColor={ProfileTheme.colors.neonBlue}
+        />
+        <StatCard
+          icon="heart-outline"
+          value={fmt(analytics?.totalLikes)}
+          label={t.profile.likes}
+          gradientColors={['rgba(255,107,107,0.08)', 'rgba(255,107,107,0.03)']}
+          glowColor="#FF6B6B"
+        />
+        <StatCard
+          icon="chatbubble-outline"
+          value={fmt(analytics?.totalComments)}
+          label={t.profile.comments}
+          gradientColors={['rgba(50,205,50,0.08)', 'rgba(50,205,50,0.03)']}
+          glowColor={ProfileTheme.colors.neonGreen}
+        />
+        <StatCard
+          icon="person-add-outline"
+          value={fmt(analytics?.recentFollowers)}
+          label={t.profile.newFollowers}
+          gradientColors={['rgba(155,89,182,0.08)', 'rgba(155,89,182,0.03)']}
+          glowColor="#9B59B6"
+        />
+      </View>
+
+      {/* ── Prediction stats ─────────────────────────────────────── */}
+      <View style={[styles.sectionHeader, { marginTop: 28 }]}>
         <Text style={styles.sectionTitle}>📊 {t.profile.predictionStats}</Text>
-        <View style={styles.grid}>
-          <View style={[styles.card, { borderColor: '#22c55e', borderWidth: 1 }]}>
-            <Ionicons name="checkmark-circle" size={28} color="#22c55e" />
-            <Text style={[styles.value, { color: '#22c55e' }]}>{predictionStats?.correct || 0}</Text>
-            <Text style={styles.label}>{t.profile.correctPredictions}</Text>
-          </View>
-          <View style={[styles.card, { borderColor: '#ef4444', borderWidth: 1 }]}>
-            <Ionicons name="close-circle" size={28} color="#ef4444" />
-            <Text style={[styles.value, { color: '#ef4444' }]}>{predictionStats?.incorrect || 0}</Text>
-            <Text style={styles.label}>{t.profile.wrongPredictions}</Text>
-          </View>
-          <View style={[styles.card, { borderColor: '#f59e0b', borderWidth: 1 }]}>
-            <Ionicons name="time" size={28} color="#f59e0b" />
-            <Text style={[styles.value, { color: '#f59e0b' }]}>{predictionStats?.pending || 0}</Text>
-            <Text style={styles.label}>{t.profile.pendingPredictions}</Text>
-          </View>
-          <View style={[styles.card, { borderColor: '#3b82f6', borderWidth: 1 }]}>
-            <Ionicons name="analytics" size={28} color="#3b82f6" />
-            <Text style={[styles.value, { color: '#3b82f6' }]}>{predictionStats?.accuracy || 0}%</Text>
-            <Text style={styles.label}>{t.profile.successRate}</Text>
-          </View>
-        </View>
+      </View>
+
+      <View style={styles.grid}>
+        <StatCard
+          icon="checkmark-circle"
+          value={predictionStats?.correct ?? 0}
+          label={t.profile.correctPredictions}
+          gradientColors={['rgba(34,197,94,0.1)', 'rgba(34,197,94,0.04)']}
+          glowColor="#22c55e"
+        />
+        <StatCard
+          icon="close-circle"
+          value={predictionStats?.incorrect ?? 0}
+          label={t.profile.wrongPredictions}
+          gradientColors={['rgba(239,68,68,0.1)', 'rgba(239,68,68,0.04)']}
+          glowColor="#ef4444"
+        />
+        <StatCard
+          icon="time"
+          value={predictionStats?.pending ?? 0}
+          label={t.profile.pendingPredictions}
+          gradientColors={['rgba(245,158,11,0.1)', 'rgba(245,158,11,0.04)']}
+          glowColor="#f59e0b"
+        />
+        <StatCard
+          icon="analytics"
+          value={`${predictionStats?.accuracy ?? 0}%`}
+          label={t.profile.successRate}
+          gradientColors={['rgba(59,130,246,0.1)', 'rgba(59,130,246,0.04)']}
+          glowColor="#3b82f6"
+        />
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 20 },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  container: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  sectionHeader: {
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
     color: ProfileTheme.colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 20,
+    letterSpacing: 0.3,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 12,
   },
   card: {
     width: '47%',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 18,
+    overflow: 'hidden',
+    padding: 18,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    marginBottom: 0,
+    borderColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.04)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  value: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: ProfileTheme.colors.textPrimary,
-    marginTop: 8,
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  label: {
-    fontSize: 14,
-    color: ProfileTheme.colors.textSecondary,
-    marginTop: 4,
+  cardValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    marginBottom: 4,
+    letterSpacing: -0.5,
   },
-  section: { marginTop: 24 },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: ProfileTheme.colors.textPrimary,
-    marginBottom: 12,
-    textAlign: 'right',
+  cardLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

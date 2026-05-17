@@ -1,115 +1,132 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 interface StatsRowProps {
-    followers: string;
-    following: string;
-    videos: string;
-    onFollowersPress?: () => void;
-    onFollowingPress?: () => void;
-    onVideosPress?: () => void;
+  followers: string;
+  following: string;
+  videos: string;
+  onFollowersPress?: () => void;
+  onFollowingPress?: () => void;
+  onVideosPress?: () => void;
 }
 
-const StatsRow = memo(function StatsRow({ 
-    followers, 
-    following, 
-    videos,
-    onFollowersPress,
-    onFollowingPress,
-    onVideosPress,
+const StatsRow = memo(function StatsRow({
+  followers,
+  following,
+  videos,
+  onFollowersPress,
+  onFollowingPress,
+  onVideosPress,
 }: StatsRowProps) {
-    const { t } = useTranslation();
-    
-    return (
-        <View style={styles.container}>
-            <StatCard 
-                label={t.profile.followers} 
-                value={followers} 
-                onPress={onFollowersPress}
-            />
-            <StatCard 
-                label={t.profile.following} 
-                value={following} 
-                onPress={onFollowingPress}
-            />
-            <StatCard 
-                label={t.profile.videos} 
-                value={videos} 
-                onPress={onVideosPress}
-            />
-        </View>
-    );
+  const { t } = useTranslation();
+
+  const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+  const glassProps = isLiquidGlassSupported
+    ? { effect: 'clear' as const, interactive: false }
+    : { intensity: 18, tint: 'dark' as const };
+
+  return (
+    <View style={styles.container}>
+      <GlassWrapper {...(glassProps as any)} style={StyleSheet.absoluteFill} />
+      <StatCard
+        label={t.profile.followers}
+        value={followers}
+        accentColor={ProfileTheme.colors.neonBlue}
+        onPress={onFollowersPress}
+      />
+      <View style={styles.divider} />
+      <StatCard
+        label={t.profile.following}
+        value={following}
+        accentColor={ProfileTheme.colors.neonGreen}
+        onPress={onFollowingPress}
+      />
+      <View style={styles.divider} />
+      <StatCard
+        label={t.profile.videos}
+        value={videos}
+        accentColor={ProfileTheme.colors.gold}
+        onPress={onVideosPress}
+      />
+    </View>
+  );
 });
 
 export default StatsRow;
 
-function StatCard({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
-    const handlePress = () => {
-        if (onPress) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onPress();
-        }
-    };
+interface StatCardProps {
+  label: string;
+  value: string;
+  accentColor: string;
+  onPress?: () => void;
+}
 
-    const content = (
-        <LinearGradient
-            colors={[ProfileTheme.colors.glassWhite, 'transparent']}
-            style={styles.statCard}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-        >
-            <Text style={styles.statValue}>{value}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
-        </LinearGradient>
-    );
-
+function StatCard({ label, value, accentColor, onPress }: StatCardProps) {
+  const handlePress = () => {
     if (onPress) {
-        return (
-            <TouchableOpacity style={styles.touchable} onPress={handlePress} activeOpacity={0.7}>
-                {content}
-            </TouchableOpacity>
-        );
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress();
     }
+  };
 
-    return <View style={styles.touchable}>{content}</View>;
+  const inner = (
+    <View style={styles.statInner}>
+      <Text style={[styles.statValue, { color: accentColor }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.statTouchable} onPress={handlePress} activeOpacity={0.7}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.statTouchable}>{inner}</View>;
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        marginBottom: 30,
-        gap: 12,
-    },
-    touchable: {
-        flex: 1,
-    },
-    statCard: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-        backgroundColor: 'rgba(0,0,0,0.3)',
-    },
-    statValue: {
-        color: '#FFF',
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 4,
-        textShadowColor: ProfileTheme.colors.neonBlue,
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 8,
-    },
-    statLabel: {
-        color: ProfileTheme.colors.textSecondary,
-        fontSize: 12,
-        fontWeight: '500',
-    },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 28,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  divider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  statTouchable: {
+    flex: 1,
+  },
+  statInner: {
+    alignItems: 'center',
+    paddingVertical: 18,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 3,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
 });

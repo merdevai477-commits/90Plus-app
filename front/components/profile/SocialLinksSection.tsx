@@ -1,168 +1,213 @@
 import React from 'react';
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    StyleSheet,
-    Linking,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Linking,
 } from 'react-native';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
+import { logger } from '../../utils/logger';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
-// Social media icons with proper FontAwesome icons
 interface SocialIconConfig {
-    icon: keyof typeof FontAwesome.glyphMap | keyof typeof Ionicons.glyphMap;
-    iconLibrary: 'FontAwesome' | 'Ionicons';
-    color: string;
+  icon: keyof typeof FontAwesome.glyphMap | keyof typeof Ionicons.glyphMap;
+  iconLibrary: 'FontAwesome' | 'Ionicons';
+  colors: readonly [string, string];
 }
 
 const SOCIAL_ICONS: Record<string, SocialIconConfig> = {
-    instagram: { icon: 'instagram', iconLibrary: 'FontAwesome', color: '#E4405F' },
-    twitter: { icon: 'twitter', iconLibrary: 'FontAwesome', color: '#1DA1F2' },
-    tiktok: { icon: 'musical-notes', iconLibrary: 'Ionicons', color: '#FFFFFF' }, // White for better visibility on dark background
-    youtube: { icon: 'youtube-play', iconLibrary: 'FontAwesome', color: '#FF0000' },
-    facebook: { icon: 'facebook', iconLibrary: 'FontAwesome', color: '#1877F2' },
-    snapchat: { icon: 'snapchat', iconLibrary: 'FontAwesome', color: '#FFFC00' },
-    linkedin: { icon: 'linkedin', iconLibrary: 'FontAwesome', color: '#0A66C2' },
-    website: { icon: 'globe', iconLibrary: 'Ionicons', color: '#22c55e' },
+  instagram: {
+    icon: 'instagram',
+    iconLibrary: 'FontAwesome',
+    colors: ['#833AB4', '#FD1D1D'],
+  },
+  twitter: {
+    icon: 'twitter',
+    iconLibrary: 'FontAwesome',
+    colors: ['#1DA1F2', '#0d8ecf'],
+  },
+  tiktok: {
+    icon: 'musical-notes',
+    iconLibrary: 'Ionicons',
+    colors: ['#010101', '#69C9D0'],
+  },
+  youtube: {
+    icon: 'youtube-play',
+    iconLibrary: 'FontAwesome',
+    colors: ['#FF0000', '#cc0000'],
+  },
+  facebook: {
+    icon: 'facebook',
+    iconLibrary: 'FontAwesome',
+    colors: ['#1877F2', '#0d5dbf'],
+  },
+  snapchat: {
+    icon: 'snapchat',
+    iconLibrary: 'FontAwesome',
+    colors: ['#FFFC00', '#e6e300'],
+  },
+  linkedin: {
+    icon: 'linkedin',
+    iconLibrary: 'FontAwesome',
+    colors: ['#0A66C2', '#084d94'],
+  },
+  website: {
+    icon: 'globe',
+    iconLibrary: 'Ionicons',
+    colors: ['#22c55e', '#16a34a'],
+  },
 };
 
 interface SocialLink {
-    platform: string;
-    url: string;
-    username?: string;
+  platform: string;
+  url: string;
+  username?: string;
 }
 
 interface SocialLinksSectionProps {
-    links: SocialLink[];
-    isOwnProfile?: boolean;
-    onEditPress?: () => void;
+  links: SocialLink[];
+  isOwnProfile?: boolean;
+  onEditPress?: () => void;
 }
 
 export default function SocialLinksSection({
-    links,
-    isOwnProfile = false,
-    onEditPress,
+  links,
+  isOwnProfile = false,
+  onEditPress,
 }: SocialLinksSectionProps) {
-    const { t } = useTranslation();
-
-    const handleLinkPress = async (link: SocialLink) => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        try {
-            const canOpen = await Linking.canOpenURL(link.url);
-            if (canOpen) {
-                await Linking.openURL(link.url);
-            }
-        } catch (error) {
-            console.error('Error opening link:', error);
-        }
-    };
-
-    if (links.length === 0 && !isOwnProfile) {
-        return null;
+  const handleLinkPress = async (link: SocialLink) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const canOpen = await Linking.canOpenURL(link.url);
+      if (canOpen) await Linking.openURL(link.url);
+    } catch (error) {
+      logger.error('Error opening social link', { url: link.url, error });
     }
+  };
 
-    return (
-        <View style={styles.container}>
-            {links.length > 0 ? (
-                <View style={styles.linksRow}>
-                    {links.map((link, index) => {
-                        const social = SOCIAL_ICONS[link.platform.toLowerCase()] || SOCIAL_ICONS.website;
-                        const IconComponent = social.iconLibrary === 'FontAwesome' ? FontAwesome : Ionicons;
-                        return (
-                            <TouchableOpacity
-                                key={index}
-                                style={[styles.linkButton, { borderColor: social.color }]}
-                                onPress={() => handleLinkPress(link)}
-                                activeOpacity={0.7}
-                            >
-                                <IconComponent
-                                    name={social.icon as any}
-                                    size={20}
-                                    color={social.color}
-                                />
-                            </TouchableOpacity>
-                        );
-                    })}
-                    {isOwnProfile && links.length < 5 && (
-                        <TouchableOpacity
-                            style={[styles.addButton, { backgroundColor: 'transparent' }]}
-                            onPress={onEditPress}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={styles.addIcon}>+</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            ) : isOwnProfile ? (
-                 <TouchableOpacity
-                    style={styles.emptyDashedButton}
-                    onPress={onEditPress}
-                    activeOpacity={0.8}
+  if (links.length === 0 && !isOwnProfile) return null;
+
+  return (
+    <View style={styles.container}>
+      {links.length > 0 ? (
+        <View style={styles.row}>
+          {links.map((link, index) => {
+            const social =
+              SOCIAL_ICONS[link.platform.toLowerCase()] ?? SOCIAL_ICONS.website;
+            const IconComp =
+              social.iconLibrary === 'FontAwesome' ? FontAwesome : Ionicons;
+            return (
+              <TouchableOpacity
+                key={index}
+                onPress={() => handleLinkPress(link)}
+                activeOpacity={0.75}
+                style={styles.iconWrap}
+              >
+                <LinearGradient
+                  colors={social.colors}
+                  style={styles.iconGrad}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                    <Ionicons name="add-circle-outline" size={20} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.emptyDashedText}>أضف حساباتك 📱</Text>
-                </TouchableOpacity>
-            ) : null}
+                  <IconComp name={social.icon as any} size={18} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Add more button */}
+          {isOwnProfile && links.length < 5 && (
+            <TouchableOpacity
+              style={styles.addWrap}
+              onPress={onEditPress}
+              activeOpacity={0.7}
+            >
+              <View style={styles.addInner}>
+                <Ionicons name="add" size={20} color="rgba(255,255,255,0.5)" />
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
-    );
+      ) : isOwnProfile ? (
+        (() => {
+          const EmptyGlass = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+          const emptyProps = isLiquidGlassSupported
+            ? { effect: 'clear' as const, interactive: true }
+            : { intensity: 20, tint: 'dark' as const };
+          return (
+            <TouchableOpacity onPress={onEditPress} activeOpacity={0.8} style={styles.emptyBtnWrap}>
+              <EmptyGlass {...(emptyProps as any)} style={StyleSheet.absoluteFill} />
+              <Ionicons name="add-circle-outline" size={18} color="rgba(255,255,255,0.6)" />
+              <Text style={styles.emptyText}>أضف حساباتك على السوشيال ميديا</Text>
+            </TouchableOpacity>
+          );
+        })()
+      ) : null}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 20,
-        marginTop: 4,
-        marginBottom: 12,
-        alignItems: 'center',
-    },
-    linksRow: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 10,
-        flexWrap: 'wrap',
-        alignItems: 'center',
-    },
-    linkButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.06)', // Glassmorphism
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1.5,
-    },
-    addButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
-        borderStyle: 'dashed',
-    },
-    addIcon: {
-        fontSize: 24,
-        color: 'rgba(255,255,255,0.6)',
-    },
-    emptyDashedButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 24,
-        borderRadius: 20, // Modern pill shape
-        backgroundColor: 'rgba(255,255,255,0.04)', // Very subtle glass
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.15)',
-        borderStyle: 'dashed',
-    },
-    emptyDashedText: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 14,
-        fontWeight: '600',
-    },
+  container: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconWrap: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  iconGrad: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addWrap: {},
+  addInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  emptyBtnWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderStyle: 'dashed',
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.04)',
+  },
+  emptyText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
 });

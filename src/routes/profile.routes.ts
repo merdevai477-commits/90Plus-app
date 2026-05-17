@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { ProfileController } from '../controllers/profile.controller';
 import { moderateBio } from '../middleware/content-moderation.middleware';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { writeLimiter, strictLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/me', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 1000 }), 
  * PATCH /api/profile/me
  * Update current user profile
  */
-router.patch('/me', requireAuth, moderateBio, ProfileController.updateMyProfile);
+router.patch('/me', requireAuth, writeLimiter, moderateBio, ProfileController.updateMyProfile);
 
 // Constants - Strict Cooldown Rules
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;   // صورة البروفايل: مرة كل 7 أيام (Requirement 10)
@@ -31,7 +32,7 @@ const REEL_UPLOAD_COOLDOWN_DAYS = 1;      // الريلز: مرة كل يوم
  * Update profile avatar (7 days cooldown)
  * Requirements: 10.1, 10.2, 10.3, 10.4
  */
-router.put('/avatar', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/avatar', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -111,7 +112,7 @@ router.put('/avatar', requireAuth, async (req: Request, res: Response): Promise<
  * Update cover image (15 days cooldown)
  * Requirements: 11.1, 11.2, 11.3, 11.4
  */
-router.put('/cover', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/cover', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
@@ -191,7 +192,7 @@ router.put('/cover', requireAuth, async (req: Request, res: Response): Promise<v
  * Update username (15 days cooldown)
  * Requirements: 12.1, 12.2
  */
-router.put('/username', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {

@@ -202,6 +202,9 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
       if (status) {
         setCompletionStatus(status);
         setRetryCount(0); // Reset retry count on success
+        // Reset loop counter on success so the safeguard only fires on
+        // actual tight loops, not on legitimate periodic fetches.
+        loopIterationCountRef.current = 0;
         logger.debug('[useProfileCompletion] ✅ Completion status loaded:', {
           percentage: status.percentage,
           completedSteps: status.completedSteps,

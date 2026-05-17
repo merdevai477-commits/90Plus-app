@@ -2,8 +2,10 @@ import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 interface ContentTabsProps {
     activeTab: string;
@@ -23,14 +25,15 @@ const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCou
         ...(isOwnProfile ? [{ id: 'analytics', label: t.profile.analytics || 'التحليلات', icon: 'analytics-outline' }] : []),
     ];
 
+    const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+    const glassProps = isLiquidGlassSupported
+      ? { effect: 'clear' as const, interactive: false }
+      : { intensity: 20, tint: 'dark' as const };
+
     return (
         <View style={styles.container}>
-            <LinearGradient
-                colors={[ProfileTheme.colors.glassBlack, 'rgba(20,20,20,0.95)']}
-                style={styles.tabsWrapper}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
+            <View style={styles.tabsWrapper}>
+                <GlassWrapper {...(glassProps as any)} style={StyleSheet.absoluteFill} />
                 {tabs.map((tab) => {
                     const isActive = activeTab === tab.id;
                     return (
@@ -72,7 +75,7 @@ const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCou
                         </TouchableOpacity>
                     );
                 })}
-            </LinearGradient>
+            </View>
         </View>
     );
 });
@@ -90,6 +93,8 @@ const styles = StyleSheet.create({
         padding: 4,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
+        overflow: 'hidden',
+        backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(0,0,0,0.6)',
     },
     tab: {
         flex: 1,

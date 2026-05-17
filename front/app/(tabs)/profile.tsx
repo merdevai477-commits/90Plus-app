@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import ReelUploadModal from '../../components/common/ReelUploadModal';
@@ -15,7 +16,7 @@ import ContentTabs from '../../components/profile/ContentTabs';
 import VideoGrid from '../../components/profile/VideoGrid';
 import ActionButtons from '../../components/profile/ActionButtons';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
-import { CoinsBadge } from '../../components/common/CoinsBadge';
+import ProfileTopBar from '../../components/profile/ProfileTopBar';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
 import { useAuth, useUser } from '@clerk/clerk-expo';
@@ -141,12 +142,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     zIndex: 10,
   },
-  coinsBadgeContainer: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 1000,
-  },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -219,6 +214,7 @@ const styles = StyleSheet.create({
 
 export default function ProfileScreen() {
   useScreenFont();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('videos');
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
@@ -710,7 +706,9 @@ export default function ProfileScreen() {
   refreshCacheRef.current = refreshCache;
 
   // Throttle refresh calls to prevent request storms (iOS/Android focus + AppState + preload)
-  const lastUiRefreshAtRef = useRef<number>(0);
+  // Initialize to now so the first useFocusEffect call is suppressed — the hook's
+  // own useEffect already fires refresh() on mount.
+  const lastUiRefreshAtRef = useRef<number>(Date.now());
   const maybeRefreshProfile = useCallback((reason: 'focus' | 'app_active') => {
     const now = Date.now();
     if (isOffline) return;
@@ -1403,10 +1401,8 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Coins Badge */}
-      <View style={styles.coinsBadgeContainer}>
-        <CoinsBadge />
-      </View>
+      {/* Fixed top bar — 90PLUS brand + purple coin badge */}
+      <ProfileTopBar topInset={insets.top} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
