@@ -13,6 +13,11 @@ import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
 
+// Fix: BigInt cannot be serialized by JSON.stringify by default
+// This adds a global toJSON so any BigInt field is safely converted to Number
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
 
 // Load environment variables
 dotenv.config();
