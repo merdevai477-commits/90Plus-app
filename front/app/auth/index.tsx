@@ -94,32 +94,31 @@ export default function RegisterScreen() {
         containerStyle={styles.gapTop}
       />
 
-      <View style={styles.termsWrap}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          hitSlop={6}
-          onPress={() => setTerms((v) => !v)}
-          style={[styles.chk, terms && styles.chkOn]}
-        >
-          {terms ? <Text style={styles.chkMark}>✓</Text> : null}
-        </TouchableOpacity>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setTerms((v) => !v)}
+        style={[styles.termsRow, terms && styles.termsRowActive]}
+      >
+        <View style={[styles.termsCircle, terms && styles.termsCircleOn]}>
+          {terms && <Text style={styles.termsCheck}>✓</Text>}
+        </View>
         <Text style={styles.termsTxt}>
-          I agree to the{' '}
+          By signing up, I agree to the{' '}
           <Text
-            style={styles.link}
+            style={styles.termsLink}
             onPress={() => Linking.openURL('https://90plus-app-production.up.railway.app/terms')}
           >
-            Terms and Conditions
+            Terms
           </Text>
-          {' '}and{' '}
+          {' & '}
           <Text
-            style={styles.link}
+            style={styles.termsLink}
             onPress={() => Linking.openURL('https://90plus-app-production.up.railway.app/privacy')}
           >
             Privacy Policy
           </Text>
         </Text>
-      </View>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.primaryWrap, isSubmitting && { opacity: 0.6 }]}
@@ -171,12 +170,44 @@ function Divider() {
 
 const styles = StyleSheet.create({
   gapTop: { marginTop: 12 },
-  termsWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 18, gap: 10 },
-  chk: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: AUTH_ACCENT, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
-  chkOn: { backgroundColor: 'rgba(124,58,237,0.25)' },
-  chkMark: { color: TEXT_PRIMARY, fontSize: 12, fontWeight: '900', marginTop: -1 },
-  termsTxt: { flex: 1, fontSize: 13, color: TEXT_SECONDARY, lineHeight: 18 },
-  link: { color: AUTH_ACCENT, fontWeight: '700' },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: 12,
+  },
+  termsRowActive: {
+    backgroundColor: 'rgba(124,58,237,0.08)',
+    borderColor: 'rgba(124,58,237,0.3)',
+  },
+  termsCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  termsCircleOn: {
+    borderColor: AUTH_ACCENT,
+    backgroundColor: AUTH_ACCENT,
+  },
+  termsCheck: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: -1,
+  },
+  termsTxt: { flex: 1, fontSize: 13, color: TEXT_MUTED, lineHeight: 19 },
+  termsLink: { color: AUTH_ACCENT, fontWeight: '700', textDecorationLine: 'underline' },
   primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
   primary: { paddingVertical: 16, alignItems: 'center' },
   primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
