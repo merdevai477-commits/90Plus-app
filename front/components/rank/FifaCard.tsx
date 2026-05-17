@@ -114,8 +114,8 @@ const FifaCard = memo(function FifaCard({
 
     const gradientColors = getColors();
     const bgFill = cardType === 'gold' ? '#080315' : (cardType === 'silver' ? '#D3D3D3' : '#CD7F32');
-    const accentText = cardType === 'gold' ? '#FFD700' : '#000';
-    const labelText = cardType === 'gold' ? 'rgba(255,215,0,0.6)' : 'rgba(0,0,0,0.6)';
+    const accentText = cardType === 'gold' ? '#A78BFA' : '#000';
+    const labelText = cardType === 'gold' ? 'rgba(167,139,250,0.6)' : 'rgba(0,0,0,0.6)';
 
     // Flag rendering: emoji vs ISO code vs fallback
     const flagValue = (countryFlag ?? '').trim();
@@ -272,19 +272,19 @@ const FifaCard = memo(function FifaCard({
                                 <Text style={[styles.clearStatLabel, { color: labelText }]}>AGE</Text>
                                 <Text style={[styles.clearStatValue, { color: accentText }]}>{age}</Text>
                             </View>
-                            <View style={[styles.clearStatDivider, cardType === 'gold' && { backgroundColor: 'rgba(255,215,0,0.15)' }]} />
+                            <View style={[styles.clearStatDivider, cardType === 'gold' && { backgroundColor: 'rgba(124,58,237,0.2)' }]} />
                             <View style={styles.clearStatBox}>
                                 <Text style={[styles.clearStatLabel, { color: labelText }]}>HGT</Text>
                                 <Text style={[styles.clearStatValue, { color: accentText }]}>{height}</Text>
                             </View>
                         </View>
-                        <View style={[styles.clearStatsSeparator, cardType === 'gold' && { backgroundColor: 'rgba(255,215,0,0.1)' }]} />
+                        <View style={[styles.clearStatsSeparator, cardType === 'gold' && { backgroundColor: 'rgba(124,58,237,0.15)' }]} />
                         <View style={styles.clearStatsRow}>
                             <View style={styles.clearStatBox}>
                                 <Text style={[styles.clearStatLabel, { color: labelText }]}>WGT</Text>
                                 <Text style={[styles.clearStatValue, { color: accentText }]}>{weight}</Text>
                             </View>
-                            <View style={[styles.clearStatDivider, cardType === 'gold' && { backgroundColor: 'rgba(255,215,0,0.15)' }]} />
+                            <View style={[styles.clearStatDivider, cardType === 'gold' && { backgroundColor: 'rgba(124,58,237,0.2)' }]} />
                             <View style={styles.clearStatBox}>
                                 <Text style={[styles.clearStatLabel, { color: labelText }]}>FOOT</Text>
                                 <Text style={[styles.clearStatValue, { color: accentText }]}>{foot?.toUpperCase()}</Text>
