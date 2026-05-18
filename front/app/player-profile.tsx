@@ -23,6 +23,7 @@ import { logger } from '../utils/logger';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 import TeamBadge from '../components/common/TeamBadge';
 import { getAPIConfig } from '../config/api.config';
+import { useTranslation } from '../src/i18n';
 
 const { width, height } = Dimensions.get('window');
 
@@ -175,6 +176,7 @@ export default function PlayerProfileScreen() {
     const router = useRouter();
     const params = useLocalSearchParams() as unknown as PlayerParams;
     const insets = useSafeAreaInsets();
+    const { t } = useTranslation();
 
     const [player, setPlayer] = useState<PlayerData | null>(null);
     const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -309,7 +311,7 @@ export default function PlayerProfileScreen() {
                 await cachePlayer(playerId, playerData);
                 await addToRecentlyViewed(playerData.player);
             } else {
-                setError('Player not found');
+                setError(t.playerProfile.playerNotFound);
             }
         } catch (err: any) {
             logger.error('Failed to load player:', err);
@@ -441,7 +443,7 @@ export default function PlayerProfileScreen() {
             <View style={styles.errorContainer}>
                 <StatusBar barStyle="light-content" />
                 <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
-                <Text style={styles.errorText}>{error || 'Player not found'}</Text>
+                <Text style={styles.errorText}>{error || t.playerProfile.playerNotFound}</Text>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Text style={styles.backButtonText}>Go Back</Text>
                 </TouchableOpacity>
@@ -575,7 +577,7 @@ export default function PlayerProfileScreen() {
                     {/* SECTION 1: Personal Information */}
                     {/* ============================================ */}
                     <View style={styles.infoSection}>
-                        <Text style={styles.sectionTitle}>Personal Information</Text>
+                        <Text style={styles.sectionTitle}>{t.playerProfile?.personalInfo || 'Personal Information'}</Text>
                         <View style={styles.infoCardContainer}>
                             <View style={styles.infoGrid}>
                                 <View style={styles.infoGridItem}>
@@ -677,7 +679,7 @@ export default function PlayerProfileScreen() {
                     {stats && (
                         <View style={styles.infoSection}>
                             <Text style={styles.sectionTitle}>
-                                Season Statistics {stats.league?.season ? `(${stats.league.season}/${stats.league.season + 1})` : ''}
+                                {t.playerProfile?.seasonStats || 'Season Statistics'} {stats.league?.season ? `(${stats.league.season}/${stats.league.season + 1})` : ''}
                             </Text>
                             <View style={styles.statsCard}>
                                 <View style={styles.statRow}>
@@ -858,7 +860,7 @@ export default function PlayerProfileScreen() {
                     {/* ============================================ */}
                     {allTeams.length > 1 && (
                         <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>Career Teams</Text>
+                            <Text style={styles.sectionTitle}>{t.playerProfile?.careerTeams || 'Career Teams'}</Text>
                             <View style={styles.teamsGrid}>
                                 {allTeams.map((team) => (
                                     <View key={team.id} style={styles.careerTeamCard}>

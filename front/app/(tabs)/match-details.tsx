@@ -724,7 +724,7 @@ const MatchDetailsScreen = () => {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="business-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>No stadium information available</Text>
+          <Text style={styles.emptyStateText}>{t.matchDetails.noStadiumInfo || 'No stadium information available'}</Text>
         </View>
       );
     }
@@ -767,13 +767,13 @@ const MatchDetailsScreen = () => {
             {venueData.capacity && (
               <View style={styles.stadiumDetail}>
                 <Ionicons name="people" size={16} color="#888" />
-                <Text style={styles.stadiumDetailText}>Capacity: {venueData.capacity.toLocaleString()}</Text>
+                <Text style={styles.stadiumDetailText}>{t.matchDetails.capacity || 'Capacity'}: {venueData.capacity.toLocaleString()}</Text>
               </View>
             )}
             {venueData.surface && (
               <View style={styles.stadiumDetail}>
                 <Ionicons name="football" size={16} color="#888" />
-                <Text style={styles.stadiumDetailText}>Surface: {venueData.surface}</Text>
+                <Text style={styles.stadiumDetailText}>{t.matchDetails.surface || 'Surface'}: {venueData.surface}</Text>
               </View>
             )}
           </View>
@@ -875,7 +875,7 @@ const MatchDetailsScreen = () => {
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
-    { key: 'stadium', label: 'Stadium', icon: 'business' as const },
+    { key: 'stadium', label: t.matchDetails.stadium || 'Stadium', icon: 'business' as const },
   ];
 
   return (
