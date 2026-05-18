@@ -38,10 +38,27 @@ router.get('/teams/african-logos', SHARED_CACHE_24H, FootballController.getAfric
 
 // ============================================
 // GET /api/football/fixtures
-// Get fixtures with filters
-// Query params: live, date, league, season, team, last, next, from, to, status, id, ids
+// Get fixtures with filters — smart TTL based on date param
+// Past dates: 24h cache | Today: 60s | Future: 5min | No date: 30s
 // ============================================
-router.get('/fixtures', FootballController.getFixtures);
+router.get('/fixtures', (req, res, next) => {
+  const dateParam = req.query.date as string | undefined;
+  if (dateParam) {
+    const today = new Date().toISOString().split('T')[0];
+    if (dateParam < today) {
+      // Past date — permanent-ish cache (24h)
+      return SHARED_CACHE_24H(req, res, next);
+    } else if (dateParam === today) {
+      // Today — refresh every 60s
+      return SHARED_CACHE_60S(req, res, next);
+    } else {
+      // Future date — 5min cache
+      return SHARED_CACHE_5MIN(req, res, next);
+    }
+  }
+  // No date filter (live/other) — 30s
+  return SHARED_CACHE_30S(req, res, next);
+}, FootballController.getFixtures);
 
 // GET /api/football/search
 // Unified search across players, teams, leagues

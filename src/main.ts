@@ -156,6 +156,14 @@ import { metricsMiddleware, getMetricsHandler } from './middleware/metrics.middl
 import { createErrorResponse } from './utils/errorSanitizer';
 app.use(metricsMiddleware);
 
+// ============================================
+// CLERK GLOBAL MIDDLEWARE
+// Must be applied BEFORE any requireAuth usage so that request.auth
+// is populated as a function on every request.
+// ============================================
+import { clerkMiddleware } from '@clerk/express';
+app.use(clerkMiddleware());
+
 // App version check middleware (before routes)
 import { checkAppVersion } from './middleware/app-version.middleware';
 app.use(checkAppVersion);
