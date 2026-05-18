@@ -344,4 +344,24 @@ router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
     }
 });
 
+// ============================================
+// POST /api/matches/archive
+// Accept finished match archive from client (best-effort, no-op on backend)
+// The frontend stores archives in AsyncStorage; this endpoint exists to
+// prevent 404 errors. Future: store in a dedicated cache table.
+// ============================================
+router.post('/archive', async (_req: Request, res: Response): Promise<void> => {
+    // Accept and acknowledge — local AsyncStorage is the primary store
+    res.json({ status: 'SUCCESS', message: 'Archive received' });
+});
+
+// ============================================
+// GET /api/matches/archive/:matchId
+// Get a specific archived match (returns 404 if not in backend cache)
+// ============================================
+router.get('/archive/:matchId', async (_req: Request, res: Response): Promise<void> => {
+    // Backend archive not yet implemented — client falls back to local storage
+    res.status(404).json({ status: 'ERROR', message: 'Archive not found in backend cache' });
+});
+
 export default router;
