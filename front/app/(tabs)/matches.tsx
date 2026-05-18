@@ -1406,6 +1406,17 @@ export default function MatchesHubScreenV2() {
                         next.setHours(0, 0, 0, 0);
                         setSelectedDate(next);
                         setShowCalendar(false);
+
+                        // Auto-switch filter based on selected date
+                        const todayMidnight = new Date();
+                        todayMidnight.setHours(0, 0, 0, 0);
+                        if (next.getTime() < todayMidnight.getTime()) {
+                          setFilter('Finished');
+                        } else if (next.getTime() > todayMidnight.getTime()) {
+                          setFilter('Upcoming');
+                        } else {
+                          setFilter('All');
+                        }
                       }}
                     >
                       {isSelected && (
