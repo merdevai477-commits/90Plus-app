@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,14 @@ import TeamBadge from '../../components/common/TeamBadge';
 import LeagueIcon from '../../components/common/LeagueIcon';
 import { useScreenFont } from '../../utils/fontSetup';
 import { Image as ExpoImage } from 'expo-image';
+import {
+  EventsSkeleton,
+  LineupsSkeleton,
+  StatsSkeleton,
+  FormSkeleton,
+  StandingsSkeleton,
+  useShimmer,
+} from '../../components/match-details/MatchDetailsSkeleton';
 
 const { width, height } = Dimensions.get('window');
 
@@ -48,6 +56,7 @@ const MatchDetailsScreen = () => {
   const router = useRouter();
   const { t } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
+  const shimmerX = useShimmer();
 
   // Safety check for translations
   if (!t || !t.matchDetails) {
@@ -82,6 +91,9 @@ const MatchDetailsScreen = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [standingsError, setStandingsError] = useState<string | null>(null);
 
+  // Track which tabs have already loaded their data (lazy loading)
+  const loadedTabsRef = useRef<Set<string>>(new Set());
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -102,6 +114,7 @@ const MatchDetailsScreen = () => {
     setStatsLoading(false);
     setFormLoading(false);
     setStandingsLoading(false);
+    loadedTabsRef.current = new Set(); // reset lazy-load tracking
 
     loadMatchDetails();
 
@@ -134,141 +147,132 @@ const MatchDetailsScreen = () => {
       setLoading(true);
       setError(null);
 
-      // Reset specific loading states
-      setLineupsLoading(true);
-      setStatsLoading(true);
-      setFormLoading(true);
-      setStandingsLoading(true);
+      // ── FAST PATH: Only load events + fixture details on open ──────────────
+      // Lineups, stats, form, standings load lazily when their tab is tapped.
+      const [eventsData, fixtureData] = await Promise.allSettled([
+        ApiFootballService.getFixtureEvents(fixtureId),
+        ApiFootballService.getFixtureById(fixtureId),
+      ]);
 
-      console.log('🏁 Loading match details for fixture:', fixtureId);
+      if (eventsData.status === 'fulfilled') setEvents(eventsData.value);
+      if (fixtureData.status === 'fulfilled' && fixtureData.value) {
+        const details = fixtureData.value;
+        setFixture(details);
 
-      // 1. Start all independent requests in parallel
-      const eventsPromise = ApiFootballService.getFixtureEvents(fixtureId);
-      const lineupsPromise = ApiFootballService.getFixtureLineups(fixtureId);
-      const statsPromise = ApiFootballService.getFixtureStatistics(fixtureId);
-      const fixtureDetailsPromise = ApiFootballService.getFixtureById(fixtureId);
+        // Archive finished matches in background (non-blocking)
+        const finishedStatuses = ['FT', 'AET', 'PEN'];
+        if (finishedStatuses.includes(details.fixture.status.short)) {
+          Promise.allSettled([
+            ApiFootballService.getFixtureLineups(fixtureId),
+            ApiFootballService.getFixtureStatistics(fixtureId),
+            eventsData.status === 'fulfilled'
+              ? Promise.resolve(eventsData.value)
+              : ApiFootballService.getFixtureEvents(fixtureId),
+          ]).then(([lineupsRes, statsRes, eventsRes]) => {
+            try {
+              matchArchiveService.archiveMatchFromData(
+                details,
+                lineupsRes.status === 'fulfilled' ? lineupsRes.value : [],
+                statsRes.status === 'fulfilled' ? statsRes.value : [],
+                eventsRes.status === 'fulfilled' ? eventsRes.value : [],
+              );
+            } catch { /* non-fatal */ }
+          }).catch(() => {});
+        }
+      }
 
-      // 2. Handle Events (Priority for initial render)
-      eventsPromise
-        .then(data => {
-          console.log('✅ Events loaded:', data.length);
-          setEvents(data);
-          setLoading(false); // Show screen as soon as events are ready
-        })
-        .catch(err => {
-          console.error('❌ Events error:', err);
-          // Don't block the UI, just log
-          setLoading(false);
-        });
-
-      // 3. Handle Lineups
-      lineupsPromise
-        .then(data => {
-          console.log('✅ Lineups loaded:', data.length);
-          setLineups(data);
-        })
-        .catch(err => {
-          console.error('❌ Lineups error:', err);
-          setLineupsError(err?.message || 'فشل تحميل التشكيلات');
-        })
-        .finally(() => setLineupsLoading(false));
-
-      // 4. Handle Statistics
-      statsPromise
-        .then(data => {
-          console.log('✅ Stats loaded:', data.length);
-          setStatistics(data);
-        })
-        .catch(err => {
-          console.error('❌ Stats error:', err);
-          setStatsError(err?.message || 'فشل تحميل الإحصائيات');
-        })
-        .finally(() => setStatsLoading(false));
-
-      // 5. Handle Fixture Details -> Form & Standings + Archive finished matches
-      fixtureDetailsPromise
-        .then(async (details) => {
-          if (details) {
-            setFixture(details);
-            const homeId = details.teams.home.id;
-            const awayId = details.teams.away.id;
-            const leagueId = details.league.id;
-            const season = details.league.season;
-
-            // Archive finished matches (Requirement 6.1, 6.6)
-            const finishedStatuses = ['FT', 'AET', 'PEN'];
-            if (finishedStatuses.includes(details.fixture.status.short)) {
-              // Archive in background - don't block UI
-              Promise.all([lineupsPromise, statsPromise, eventsPromise])
-                .then(async ([lineupsData, statsData, eventsData]) => {
-                  try {
-                    await matchArchiveService.archiveMatchFromData(
-                      details,
-                      lineupsData,
-                      statsData,
-                      eventsData
-                    );
-                    console.log('✅ Match archived successfully:', fixtureId);
-                  } catch (archiveErr) {
-                    console.warn('⚠️ Failed to archive match:', archiveErr);
-                  }
-                })
-                .catch(err => {
-                  console.warn('⚠️ Could not archive match - missing data:', err);
-                });
-            }
-
-            // Fetch Form (Last 5 Matches) in parallel
-            Promise.allSettled([
-              ApiFootballService.getTeamLastFixtures(homeId, 5),
-              ApiFootballService.getTeamLastFixtures(awayId, 5)
-            ]).then(([homeResult, awayResult]) => {
-              if (homeResult.status === 'fulfilled') setHomeLastFixtures(homeResult.value);
-              if (awayResult.status === 'fulfilled') setAwayLastFixtures(awayResult.value);
-            }).finally(() => setFormLoading(false));
-
-            // Fetch Standings
-            ApiFootballService.getStandings(leagueId, season)
-              .then(data => {
-                console.log('✅ Standings loaded:', data.length);
-                setStandings(data);
-              })
-              .catch(err => {
-                console.error('❌ Standings error:', err);
-                setStandingsError(err?.message || 'فشل تحميل الترتيب');
-              })
-              .finally(() => setStandingsLoading(false));
-
-            // Fetch Venue Info
-            if (details.fixture.venue?.id) {
-              setVenueLoading(true);
-              ApiFootballService.getVenueInfo(details.fixture.venue.id)
-                .then(data => {
-                  console.log('✅ Venue loaded');
-                  setVenue(data);
-                })
-                .catch(err => {
-                  console.error('❌ Venue error:', err);
-                })
-                .finally(() => setVenueLoading(false));
-            }
-          } else {
-            setFormLoading(false);
-            setStandingsLoading(false);
-          }
-        })
-        .catch(err => {
-          console.error('❌ Fixture details error:', err);
-          setFormLoading(false);
-          setStandingsLoading(false);
-        });
-
+      setLoading(false);
     } catch (err: any) {
-      console.error('❌ Error initializing match details:', err);
       setError(err?.message || 'فشل تحميل تفاصيل المباراة');
       setLoading(false);
     }
   };
+
+  // ── Lazy loaders — called when a tab is first activated ───────────────────
+  const loadLineupsIfNeeded = useCallback(async () => {
+    if (loadedTabsRef.current.has('lineups')) return;
+    loadedTabsRef.current.add('lineups');
+    setLineupsLoading(true);
+    try {
+      const data = await ApiFootballService.getFixtureLineups(fixtureId);
+      setLineups(data);
+    } catch (err: any) {
+      setLineupsError(err?.message || 'فشل تحميل التشكيلات');
+    } finally {
+      setLineupsLoading(false);
+    }
+  }, [fixtureId]);
+
+  const loadStatsIfNeeded = useCallback(async () => {
+    if (loadedTabsRef.current.has('stats')) return;
+    loadedTabsRef.current.add('stats');
+    setStatsLoading(true);
+    try {
+      const data = await ApiFootballService.getFixtureStatistics(fixtureId);
+      setStatistics(data);
+    } catch (err: any) {
+      setStatsError(err?.message || 'فشل تحميل الإحصائيات');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [fixtureId]);
+
+  const loadFormIfNeeded = useCallback(async () => {
+    if (loadedTabsRef.current.has('form') || !fixture) return;
+    loadedTabsRef.current.add('form');
+    setFormLoading(true);
+    try {
+      const homeId = fixture.teams.home.id;
+      const awayId = fixture.teams.away.id;
+      const [homeRes, awayRes] = await Promise.allSettled([
+        ApiFootballService.getTeamLastFixtures(homeId, 5),
+        ApiFootballService.getTeamLastFixtures(awayId, 5),
+      ]);
+      if (homeRes.status === 'fulfilled') setHomeLastFixtures(homeRes.value);
+      if (awayRes.status === 'fulfilled') setAwayLastFixtures(awayRes.value);
+    } catch { /* silent */ }
+    finally { setFormLoading(false); }
+  }, [fixtureId, fixture]);
+
+  const loadStandingsIfNeeded = useCallback(async () => {
+    if (loadedTabsRef.current.has('standings') || !fixture) return;
+    loadedTabsRef.current.add('standings');
+    setStandingsLoading(true);
+    try {
+      const data = await ApiFootballService.getStandings(
+        fixture.league.id,
+        fixture.league.season,
+      );
+      setStandings(data);
+    } catch (err: any) {
+      setStandingsError(err?.message || 'فشل تحميل الترتيب');
+    } finally {
+      setStandingsLoading(false);
+    }
+  }, [fixtureId, fixture]);
+
+  const loadVenueIfNeeded = useCallback(async () => {
+    if (loadedTabsRef.current.has('stadium') || !fixture?.fixture.venue?.id) return;
+    loadedTabsRef.current.add('stadium');
+    setVenueLoading(true);
+    try {
+      const data = await ApiFootballService.getVenueInfo(fixture.fixture.venue.id);
+      setVenue(data);
+    } catch { /* silent */ }
+    finally { setVenueLoading(false); }
+  }, [fixtureId, fixture]);
+
+  // ── Tab change handler — triggers lazy load ───────────────────────────────
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab as any);
+    switch (tab) {
+      case 'lineups':   loadLineupsIfNeeded(); break;
+      case 'stats':     loadStatsIfNeeded(); break;
+      case 'form':      loadFormIfNeeded(); break;
+      case 'standings': loadStandingsIfNeeded(); break;
+      case 'stadium':   loadVenueIfNeeded(); break;
+    }
+  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
 
   const parseFormation = (formation: string | null): number[] => {
     if (!formation) return [];
@@ -410,12 +414,7 @@ const MatchDetailsScreen = () => {
   // Render Lineups Tab
   const renderLineups = () => {
     if (lineupsLoading) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#A855F7" />
-          <Text style={styles.emptyStateText}>{t.common.loading}</Text>
-        </View>
-      );
+      return <LineupsSkeleton shimmerX={shimmerX} />;
     }
 
     if (lineupsError) {
@@ -544,12 +543,7 @@ const MatchDetailsScreen = () => {
   // Render Statistics Tab
   const renderStatistics = () => {
     if (statsLoading) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#A855F7" />
-          <Text style={styles.emptyStateText}>{t.common.loading}</Text>
-        </View>
-      );
+      return <StatsSkeleton shimmerX={shimmerX} />;
     }
 
     if (statsError) {
@@ -712,12 +706,7 @@ const MatchDetailsScreen = () => {
 
   const renderStadium = () => {
     if (venueLoading) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#A855F7" />
-          <Text style={styles.emptyStateText}>{t.common.loading}</Text>
-        </View>
-      );
+      return <StatsSkeleton shimmerX={shimmerX} />;
     }
 
     if (!venue && !fixture?.fixture.venue) {
@@ -784,12 +773,7 @@ const MatchDetailsScreen = () => {
 
   const renderStandings = () => {
     if (standingsLoading) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#A855F7" />
-          <Text style={styles.emptyStateText}>{t.common.loading}</Text>
-        </View>
-      );
+      return <StandingsSkeleton shimmerX={shimmerX} />;
     }
 
     if (standingsError) {
@@ -850,8 +834,24 @@ const MatchDetailsScreen = () => {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#A855F7" />
-        <Text style={styles.loadingText}>{t.common.loading}</Text>
+        <View style={{ paddingHorizontal: 20, paddingTop: 100 }}>
+          {/* Header skeleton */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e1b4b' }} />
+            <View style={{ flex: 1, marginHorizontal: 16, height: 16, borderRadius: 8, backgroundColor: '#1e1b4b' }} />
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e1b4b' }} />
+          </View>
+          {/* Score card skeleton */}
+          <View style={{ height: 160, borderRadius: 24, backgroundColor: '#1e1b4b', marginBottom: 16 }} />
+          {/* Tabs skeleton */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+            {[80, 80, 90, 80, 70, 80].map((w, i) => (
+              <View key={i} style={{ width: w, height: 36, borderRadius: 12, backgroundColor: '#1e1b4b' }} />
+            ))}
+          </View>
+          {/* Events skeleton */}
+          <EventsSkeleton shimmerX={shimmerX} />
+        </View>
       </View>
     );
   }
@@ -887,6 +887,8 @@ const MatchDetailsScreen = () => {
         <TouchableOpacity
           style={styles.backButtonRound}
           onPress={() => router.push('/(tabs)/matches' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="العودة إلى المباريات"
         >
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -918,7 +920,7 @@ const MatchDetailsScreen = () => {
         <ModernTabs
           tabs={tabs}
           activeTab={activeTab}
-          onTabChange={(tab) => setActiveTab(tab as any)}
+          onTabChange={handleTabChange}
         />
 
         {/* Content */}

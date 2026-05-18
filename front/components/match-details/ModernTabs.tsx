@@ -35,6 +35,9 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabCh
               style={[styles.tab, isActive && styles.activeTab]}
               onPress={() => onTabChange(tab.key)}
               activeOpacity={0.8}
+              accessibilityRole="tab"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.tabText, isActive && styles.activeTabText]}>
                 {tab.label}
