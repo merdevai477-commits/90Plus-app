@@ -45,6 +45,23 @@ interface PredictionsState {
     // Predictions map (matchId -> prediction)
     userPredictions: { [matchId: string]: UserPrediction };
 
+    // Full predictions list (for "My Predictions" screen)
+    allPredictions: Array<{
+        id: string;
+        apiMatchId: number;
+        predictionType: string;
+        homeTeam: string | null;
+        awayTeam: string | null;
+        homeTeamLogo: string | null;
+        awayTeamLogo: string | null;
+        matchDate: string | null;
+        leagueName: string | null;
+        isCorrect: boolean | null;
+        coinsWon: number | null;
+        coinsSpent: number;
+        createdAt: string;
+    }>;
+
     // Match prediction counts
     matchPredictionCounts: { [matchId: string]: number };
 
@@ -81,6 +98,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     remainingPredictions: 5,
     totalDailyPredictions: 5,
     userPredictions: {},
+    allPredictions: [],
     matchPredictionCounts: {},
     stats: {
         total: 0,
@@ -146,7 +164,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         fetchUserPredictionsInFlight = (async () => {
             try {
                 const response = await fetchWithTimeout(`${getApiUrl()}/predictions/user`, {
-                    timeout: 30000, // 30s to tolerate Railway cold-starts
+                    timeout: 30000,
                     retries: 1,
                     retryDelay: 1500,
                     headers: {
@@ -158,7 +176,10 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success) {
-                        set({ userPredictions: data.data.predictionsMap || {} });
+                        set({
+                            userPredictions: data.data.predictionsMap || {},
+                            allPredictions: data.data.predictions || [],
+                        });
                     }
                 }
             } catch (error) {
@@ -201,14 +222,10 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
             return { success: false, error: 'Not authenticated' };
         }
 
-        const { remainingPredictions, userCoins } = get();
+        const { remainingPredictions } = get();
 
         if (remainingPredictions <= 0) {
             return { success: false, error: 'Daily limit reached' };
-        }
-
-        if (userCoins < 5) {
-            return { success: false, error: 'Insufficient coins' };
         }
 
         try {
@@ -244,7 +261,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                                 homeScore: prediction.homeScore || 0,
                                 awayScore: prediction.awayScore || 0,
                             },
-                            coinsSpent: 5,
+                            coinsSpent: 0,
                             createdAt: new Date().toISOString(),
                         },
                     },
@@ -311,6 +328,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
             remainingPredictions: 5,
             totalDailyPredictions: 5,
             userPredictions: {},
+            allPredictions: [],
             matchPredictionCounts: {},
             isLoading: false,
             isSubmitting: false,

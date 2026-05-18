@@ -11,8 +11,10 @@
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { NotificationService } from './notification.service';
+import { awardXp } from './xp.service';
 
 const CORRECT_PREDICTION_REWARD = 10; // coins for correct prediction
+const CORRECT_PREDICTION_XP_ACTION = 'PREDICTION_WINNER'; // XP action key (10 XP per correct prediction)
 
 export class PredictionResolverService {
 
@@ -84,7 +86,19 @@ export class PredictionResolverService {
                         }),
                     ]);
 
-                    logger.info(`💰 Awarded ${CORRECT_PREDICTION_REWARD} coins to user ${prediction.userId} for correct prediction`);
+                    // ✅ Award XP for correct prediction (daily cap 5 to prevent farming)
+                    try {
+                        await awardXp({
+                            userId: prediction.userId,
+                            action: CORRECT_PREDICTION_XP_ACTION,
+                            dailyCap: 5,
+                            timezone: 'UTC',
+                        });
+                    } catch (xpErr: any) {
+                        logger.warn(`⚠️ XP award failed for user ${prediction.userId} (non-fatal):`, xpErr?.message);
+                    }
+
+                    logger.info(`💰 Awarded ${CORRECT_PREDICTION_REWARD} coins + XP to user ${prediction.userId} for correct prediction`);
                     
                     // ✅ Send push notification for correct prediction
                     try {
