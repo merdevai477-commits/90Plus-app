@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions, Image, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import PlayerAvatar from '../common/PlayerAvatar';
+import { Image as ExpoImage } from 'expo-image';
 
 const { width } = Dimensions.get('window');
 const FIELD_WIDTH = width - 40; // Full width minus padding
@@ -117,12 +116,15 @@ export const FootballField: React.FC<FootballFieldProps> = ({
                   onPress={() => onPlayerPress?.(player)}
                   activeOpacity={onPlayerPress ? 0.7 : 1}
                 >
-                  {/* Player Circle */}
-                  <PlayerAvatar
-                    name={player.name}
-                    position={player.pos}
-                    size={40}
-                  />
+                  {/* Player Photo */}
+                  <View style={styles.playerCircleContainer}>
+                    <ExpoImage
+                      source={{ uri: player.photo || `https://media.api-sports.io/football/players/${player.id}.png` }}
+                      style={styles.playerImage}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                    />
+                  </View>
 
                   {/* Player Name */}
                   <Text style={styles.playerNameText} numberOfLines={1}>
@@ -320,7 +322,7 @@ const styles = StyleSheet.create({
   playerImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
+    borderRadius: 20,
   },
   playerNameText: {
     color: '#9ca3af', // Gray text

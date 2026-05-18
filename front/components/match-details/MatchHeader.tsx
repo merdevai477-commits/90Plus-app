@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, Image, StyleSheet, Animated, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { LiveTimer } from '../common/LiveTimer';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -70,7 +69,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
         <View style={styles.topStatus}>
           {isLive && (
             <View style={styles.liveContainer}>
-              <Ionicons name="videocam" size={14} color="#ef4444" />
+              <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
               <Text style={styles.liveText}>LIVE</Text>
             </View>
           )}
@@ -151,6 +150,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
   },
   liveText: {
     color: '#ef4444',

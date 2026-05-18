@@ -10,6 +10,7 @@ import {
     Animated,
     StatusBar,
     RefreshControl,
+    Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -482,12 +483,22 @@ export default function PlayerProfileScreen() {
                         { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
                     ]}
                 >
-                    <PlayerAvatar
-                        name={player.player.name}
-                        position={games?.position || null}
-                        size={width * 0.5}
-                        colors={teamColors}
-                    />
+                    {player.player.photo || params.photo ? (
+                        <View style={styles.playerPhotoCircle}>
+                            <Image
+                                source={{ uri: player.player.photo || params.photo || `https://media.api-sports.io/football/players/${playerId}.png` }}
+                                style={styles.playerPhotoImage}
+                                resizeMode="cover"
+                            />
+                        </View>
+                    ) : (
+                        <PlayerAvatar
+                            name={player.player.name}
+                            position={games?.position || null}
+                            size={width * 0.5}
+                            colors={teamColors}
+                        />
+                    )}
                 </Animated.View>
             </LinearGradient>
 
@@ -953,6 +964,19 @@ const styles = StyleSheet.create({
         right: 0,
         alignItems: 'center',
         zIndex: 5,
+    },
+    playerPhotoCircle: {
+        width: width * 0.4,
+        height: width * 0.4,
+        borderRadius: width * 0.2,
+        overflow: 'hidden',
+        backgroundColor: 'rgba(168,85,247,0.2)',
+        borderWidth: 3,
+        borderColor: 'rgba(168,85,247,0.4)',
+    },
+    playerPhotoImage: {
+        width: '100%',
+        height: '100%',
     },
     playerPhoto: {
         width: width * 0.75,
