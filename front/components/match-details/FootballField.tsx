@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Image, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image as ExpoImage } from 'expo-image';
 
 const { width } = Dimensions.get('window');
 const FIELD_WIDTH = width - 40; // Full width minus padding
@@ -118,12 +117,19 @@ export const FootballField: React.FC<FootballFieldProps> = ({
                 >
                   {/* Player Photo */}
                   <View style={styles.playerCircleContainer}>
-                    <ExpoImage
-                      source={{ uri: player.photo || `https://media.api-sports.io/football/players/${player.id}.png` }}
-                      style={styles.playerImage}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
+                    {player.id ? (
+                      <Image
+                        source={{ uri: player.photo || `https://media.api-sports.io/football/players/${player.id}.png` }}
+                        style={styles.playerImage}
+                        defaultSource={require('../../assets/images/football.png')}
+                      />
+                    ) : (
+                      <View style={[styles.playerImage, styles.placeholderParams]}>
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+                          {player.number || '?'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {/* Player Name */}
