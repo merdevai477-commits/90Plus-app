@@ -23,6 +23,7 @@ import { Image } from 'expo-image';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
+import { useTranslation } from '../../src/i18n';
 
 // LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
 // Don't even enable it on Android.
@@ -59,6 +60,7 @@ const LeagueSection = memo(function LeagueSection({
     setExpanded(prev => !prev);
   }, []);
 
+  const { translate: t } = useTranslation();
   const matchCount = league.matches.length;
   const hasMore = matchCount > MATCHES_PREVIEW_COUNT;
 
@@ -97,7 +99,9 @@ const LeagueSection = memo(function LeagueSection({
           ))}
           {hasMore && onViewAll && (
             <TouchableOpacity style={styles.viewAllBtn} onPress={onViewAll} activeOpacity={0.7}>
-              <Text style={styles.viewAllText}>عرض الكل ({matchCount})</Text>
+              <Text style={styles.viewAllText}>
+                {t('matches.screen.viewAll').replace('{{count}}', String(matchCount))}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
