@@ -24,6 +24,7 @@ import { matchArchiveService } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
 import LeagueIcon from '../../components/common/LeagueIcon';
 import { useScreenFont } from '../../utils/fontSetup';
+import { Image as ExpoImage } from 'expo-image';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,7 +53,7 @@ const MatchDetailsScreen = () => {
   if (!t || !t.matchDetails) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
-        <ActivityIndicator size="large" color="#22c55e" />
+        <ActivityIndicator size="large" color="#A855F7" />
       </View>
     );
   }
@@ -290,14 +291,21 @@ const MatchDetailsScreen = () => {
     return positions[pos || ''] || String(pos || '') || t.common?.unknown || 'Unknown';
   };
 
-  // Player Card Component with image error handling
+  // Player Card Component with proper player photo
   const PlayerCard = ({ player, number, position }: { player: any; number: number; position: string | null }) => {
+    const playerPhoto = player.photo || `https://media.api-sports.io/football/players/${player.id}.png`;
     return (
       <View style={styles.playerCard}>
         <View style={styles.playerNumber}>
           <Text style={styles.playerNumberText}>{number}</Text>
         </View>
-        <TeamBadge name={player.name} logo={player.photo} size={40} color="transparent" />
+        <ExpoImage
+          source={{ uri: playerPhoto }}
+          style={styles.playerPhoto}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          placeholder={require('../../assets/images/football.png')}
+        />
         <View style={{ justifyContent: 'center', alignItems: 'center' }}>
           <Text style={styles.playerName} numberOfLines={2}>{player.name}</Text>
           <Text style={styles.playerPosition}>{getPositionName(position)}</Text>
@@ -404,7 +412,7 @@ const MatchDetailsScreen = () => {
     if (lineupsLoading) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#22c55e" />
+          <ActivityIndicator size="large" color="#A855F7" />
           <Text style={styles.emptyStateText}>{t.common.loading}</Text>
         </View>
       );
@@ -447,7 +455,6 @@ const MatchDetailsScreen = () => {
               number: item.player.number,
               pos: item.player.pos,
               grid: item.player.grid,
-              // API-Football lineups endpoint might not return photo, so we construct it
               photo: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png`
             }));
 
@@ -471,7 +478,7 @@ const MatchDetailsScreen = () => {
                   formation={formation}
                   players={fieldPlayers}
                   teamName={lineup.team.name}
-                  teamColor={index === 0 ? params.homeTeam === lineup.team.name ? '#22c55e' : '#3b82f6' : params.awayTeam === lineup.team.name ? '#3b82f6' : '#22c55e'}
+                  teamColor={index === 0 ? params.homeTeam === lineup.team.name ? '#A855F7' : '#3b82f6' : params.awayTeam === lineup.team.name ? '#3b82f6' : '#A855F7'}
                   onPlayerPress={(player) => {
                     if (player.id) {
                       router.push({
@@ -503,12 +510,19 @@ const MatchDetailsScreen = () => {
                               params: {
                                 id: item.player.id.toString(),
                                 name: item.player.name,
+                                photo: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png`,
                                 teamName: lineup.team.name,
                                 teamLogo: lineup.team.logo,
                               }
                             } as any);
                           }}
                         >
+                          <ExpoImage
+                            source={{ uri: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png` }}
+                            style={{ width: 28, height: 28, borderRadius: 14 }}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                          />
                           <Text style={styles.substituteNumber}>{item.player.number || '-'}</Text>
                           <View style={styles.substituteInfo}>
                             <Text style={styles.substituteName} numberOfLines={1}>{item.player.name}</Text>
@@ -532,7 +546,7 @@ const MatchDetailsScreen = () => {
     if (statsLoading) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#22c55e" />
+          <ActivityIndicator size="large" color="#A855F7" />
           <Text style={styles.emptyStateText}>{t.common.loading}</Text>
         </View>
       );
@@ -700,7 +714,7 @@ const MatchDetailsScreen = () => {
     if (venueLoading) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#22c55e" />
+          <ActivityIndicator size="large" color="#A855F7" />
           <Text style={styles.emptyStateText}>{t.common.loading}</Text>
         </View>
       );
@@ -772,7 +786,7 @@ const MatchDetailsScreen = () => {
     if (standingsLoading) {
       return (
         <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#22c55e" />
+          <ActivityIndicator size="large" color="#A855F7" />
           <Text style={styles.emptyStateText}>{t.common.loading}</Text>
         </View>
       );
@@ -836,7 +850,7 @@ const MatchDetailsScreen = () => {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#22c55e" />
+        <ActivityIndicator size="large" color="#A855F7" />
         <Text style={styles.loadingText}>{t.common.loading}</Text>
       </View>
     );
@@ -872,11 +886,11 @@ const MatchDetailsScreen = () => {
       <View style={styles.customHeader}>
         <TouchableOpacity
           style={styles.backButtonRound}
-          onPress={() => router.back()}
+          onPress={() => router.push('/(tabs)/matches' as any)}
         >
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Live Match</Text>
+        <Text style={styles.headerTitle}>{t.matchDetails.title || 'Match Details'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -982,7 +996,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   substituteNumber: {
-    color: '#22c55e',
+    color: '#A855F7',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -1023,7 +1037,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: '#22c55e',
+    backgroundColor: '#A855F7',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 20,
@@ -1050,10 +1064,10 @@ const styles = StyleSheet.create({
 
   refreshButton: {
     padding: 8,
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.3)',
+    borderColor: 'rgba(168, 85, 247, 0.3)',
   },
   matchHeader: {
     alignItems: 'center',
@@ -1096,7 +1110,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   matchTime: {
-    color: '#22c55e',
+    color: '#A855F7',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -1134,7 +1148,7 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   activeTab: {
-    backgroundColor: '#22c55e',
+    backgroundColor: '#A855F7',
   },
   tabText: {
     color: '#666',
@@ -1198,7 +1212,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   formationText: {
-    color: '#22c55e',
+    color: '#A855F7',
     fontSize: 14,
     marginBottom: 2,
   },
@@ -1232,7 +1246,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#22c55e',
+    backgroundColor: '#A855F7',
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -1241,7 +1255,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   playerNumberText: {
-    color: '#000',
+    color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -1334,7 +1348,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   statBarHome: {
-    backgroundColor: '#22c55e',
+    backgroundColor: '#A855F7',
   },
   statBarAway: {
     backgroundColor: '#3b82f6',
@@ -1437,7 +1451,7 @@ const styles = StyleSheet.create({
   },
   eventHome: {
     borderLeftWidth: 3,
-    borderLeftColor: '#22c55e',
+    borderLeftColor: '#A855F7',
   },
   eventAway: {
     borderLeftWidth: 3,
@@ -1512,7 +1526,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#252525',
   },
   standingsRowHighlighted: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
     borderRadius: 8,
     marginHorizontal: -5,
     paddingHorizontal: 5,
