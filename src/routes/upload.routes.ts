@@ -581,7 +581,7 @@ router.post(
   '/reel',
   requireAuth,
   strictLimiter, // Rate limit: prevent upload spam that exhausts server memory
-  uploadReel.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]),
+  uploadReel.fields([{ name: 'video', maxCount: 1 }]),
   validateUploadFieldsMagicBytes, // Fix 5
   validateVideoDuration,
   async (req: Request, res: Response): Promise<void> => {
@@ -596,14 +596,11 @@ router.post(
 
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
       const videoFile = files['video']?.[0];
-      const thumbnailFile = files['thumbnail']?.[0];
 
       if (!videoFile) { sendError(res, 400, 'NO_FILE', 'No video provided'); return; }
       
-      // With disk storage, use videoFile.size and videoFile.path instead of .buffer
       const videoFileSize = videoFile.size || 0;
       if (videoFileSize === 0) {
-        // Clean up temp file
         if (videoFile.path) fs.promises.unlink(videoFile.path).catch(() => undefined);
         sendError(res, 400, 'EMPTY_FILE', 'ملف الفيديو فارغ أو معطوب.');
         return;
@@ -614,17 +611,8 @@ router.post(
         return;
       }
 
-      // Read video from disk into memory only when ready to upload to Mux
-      // This keeps RAM usage bounded (one file at a time per request)
       const videoBuffer = await readAndCleanupTempFile(videoFile.path);
-      // Attach buffer for compatibility with downstream code that uses videoFile.buffer
       (videoFile as any).buffer = videoBuffer;
-
-      // Read thumbnail from disk if present (small file, safe in memory)
-      if (thumbnailFile?.path) {
-        const thumbBuffer = await readAndCleanupTempFile(thumbnailFile.path);
-        (thumbnailFile as any).buffer = thumbBuffer;
-      }
 
       const begin = await beginReelUploadForClerkUser(clerkUserId);
       if (!begin.ok) { res.status(begin.status).json(begin.payload); return; }
@@ -633,19 +621,13 @@ router.post(
       const user = { id: begin.userId };
 
       // Fix 7: Quota check BEFORE upload
-      const totalSize = videoFile.buffer.length + (thumbnailFile?.buffer.length ?? 0);
+      const totalSize = videoFile.buffer.length;
       const quotaOk = await checkQuota(user.id, totalSize, res);
       if (!quotaOk) return;
 
       const fileSizeMB = videoFile.buffer.length / 1e6;
       logger.info(`[upload/reel] Starting Mux upload (${fileSizeMB.toFixed(2)} MB)`);
 
-      // ── 1. Create a Mux direct upload URL ────────────────────────────────────
-      // We need the reelId for passthrough, so create the DB record first with a
-      // placeholder videoUrl, then update after we have the Mux upload ID.
-      // Actually: create the reel first (status PROCESSING), then upload to Mux.
-
-      // Parse metadata early so we can create the reel record
       let hashtags: string[] = [];
       let mentions: string[] = [];
       let caption: string | null = null;
@@ -656,39 +638,18 @@ router.post(
         mentions = mj ? (typeof mj === 'string' ? JSON.parse(mj) : mj) : [];
       } catch { /* non-fatal */ }
 
-      // ── 2. Upload thumbnail to R2 if provided (Mux handles video thumbnails) ─
-      let thumbnailUrl: string | null = null;
-      let thumbnailPath: string | null = null;
-
-      if (thumbnailFile) {
-        try {
-          const thumbName = sanitizeOriginalName(thumbnailFile.originalname, 'thumb.jpg');
-          const thumbResult = await r2MediaStorage.uploadPublic(
-            'thumbnails', user.id, thumbnailFile.buffer, thumbName, thumbnailFile.mimetype,
-          );
-          if (thumbResult.success && thumbResult.url && thumbResult.key) {
-            thumbnailUrl = thumbResult.url;
-            thumbnailPath = thumbResult.key;
-          }
-        } catch (thumbErr: any) {
-          logger.warn('[upload/reel] Thumbnail upload failed (non-fatal):', thumbErr?.message);
-        }
-      }
-
-      // ── 3. Create Mux upload URL ──────────────────────────────────────────────
-      // (Raw video storage removed for performance - Mux handles storage directly)
+      // ── 2. Create placeholder reel (thumbnail from Mux auto-generated) ────────
       let rawVideoStoragePath: null = null;
 
-      // We need reelId for passthrough — create a temporary placeholder reel first
       const placeholderReel = await prisma.reel.create({
         data: {
           userId: user.id,
           videoUrl: '',           // will be updated by webhook
-          thumbnail: thumbnailUrl,
-          thumbnailStoragePath: thumbnailPath,
+          thumbnail: null,        // Mux auto-generates thumbnail via webhook
+          thumbnailStoragePath: null,
           caption,
           status: 'PROCESSING',
-          fileSizeBytes: videoFile.buffer.length + (thumbnailFile?.buffer.length ?? 0),
+          fileSizeBytes: videoFile.buffer.length,
           ...(rawVideoStoragePath ? { videoStoragePath: rawVideoStoragePath } : {}),
         },
       });
@@ -705,12 +666,6 @@ router.post(
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch((e: any) =>
           logger.warn('[upload/reel] Failed to delete placeholder reel:', e?.message),
         );
-        if (thumbnailPath) {
-          await r2MediaStorage.deleteObject(thumbnailPath).catch((e: any) =>
-            logger.warn('[upload/reel] Failed to delete orphaned thumbnail:', e?.message),
-          );
-          await decrementQuota(user.id, thumbnailFile?.buffer.length ?? 0);
-        }
         sendError(res, 502, 'MUX_UNAVAILABLE', 'خدمة معالجة الفيديو غير متاحة حالياً. حاول مرة أخرى.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
@@ -739,10 +694,6 @@ router.post(
         // Fix 2 + Fix 6: Network error during Mux PUT — clean up everything
         logger.error('[upload/reel] Mux PUT network error — cleaning up:', fetchErr?.message);
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch(() => undefined);
-        if (thumbnailPath) {
-          await r2MediaStorage.deleteObject(thumbnailPath).catch(() => undefined);
-          await decrementQuota(user.id, thumbnailFile?.buffer.length ?? 0);
-        }
         sendError(res, 502, 'MUX_UPLOAD_FAILED', 'فشل رفع الفيديو إلى خادم المعالجة. حاول مرة أخرى.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
@@ -757,10 +708,6 @@ router.post(
         // Fix 2 + Fix 6: Mux rejected the upload — clean up everything
         logger.error(`[upload/reel] Mux upload rejected (${muxUploadResponse.status}) — cleaning up: ${errText}`);
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch(() => undefined);
-        if (thumbnailPath) {
-          await r2MediaStorage.deleteObject(thumbnailPath).catch(() => undefined);
-          await decrementQuota(user.id, thumbnailFile?.buffer.length ?? 0);
-        }
         sendError(res, 502, 'MUX_UPLOAD_REJECTED', 'رفض خادم المعالجة الفيديو. تأكد من صحة الملف وحاول مرة أخرى.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
@@ -776,7 +723,6 @@ router.post(
       // videoUrl will be set to the HLS URL by the webhook when asset is ready.
       // For now, set it to the Mux thumbnail URL so the feed doesn't show blank.
       const provisionalVideoUrl = ''; // webhook will fill this in
-      const muxThumbnailUrl = thumbnailUrl; // use R2 thumbnail if provided; Mux auto-thumb otherwise
 
       await prisma.reel.update({
         where: { id: placeholderReel.id },
@@ -827,7 +773,7 @@ router.post(
       reelUploadCommitted = true;
 
       // Fix 7: Increment quota AFTER successful upload
-      await incrementQuota(user.id, videoFile.buffer.length + (thumbnailFile?.buffer.length ?? 0));
+      await incrementQuota(user.id, videoFile.buffer.length);
 
       // ✅ XP Award for reel upload
       let xpEvents: Array<{ action: string; amount: number; leveledUp: boolean; newLevel: number }> = [];
@@ -853,7 +799,7 @@ router.post(
         data: {
           reelId: placeholderReel.id,
           muxUploadId: uploadId,
-          thumbnailUrl: muxThumbnailUrl,
+          thumbnailUrl: null,
           status: 'PROCESSING',
         },
         xpEvents,

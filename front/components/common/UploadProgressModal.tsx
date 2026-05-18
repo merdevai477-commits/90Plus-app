@@ -12,6 +12,8 @@ export const UploadProgressModal: React.FC<UploadProgressModalProps> = ({
     progress,
     message = 'جاري الرفع...'
 }) => {
+    // Clamp progress to [0, 100] — guard against any calculation drift
+    const safeProgress = Math.min(Math.max(Math.round(progress), 0), 100);
     return (
         <Modal
             visible={visible}
@@ -25,10 +27,10 @@ export const UploadProgressModal: React.FC<UploadProgressModalProps> = ({
                     
                     {/* Progress Bar */}
                     <View style={styles.progressBarContainer}>
-                        <View style={[styles.progressBar, { width: `${progress}%` }]} />
+                        <View style={[styles.progressBar, { width: `${safeProgress}%` }]} />
                     </View>
                     
-                    <Text style={styles.percentage}>{Math.round(progress)}%</Text>
+                    <Text style={styles.percentage}>{safeProgress}%</Text>
                 </View>
             </View>
         </Modal>

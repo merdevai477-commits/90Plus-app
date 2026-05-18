@@ -15,6 +15,10 @@ import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
+// Brand purple accent
+const PURPLE = '#A855F7';
+const PURPLE_DARK = '#7C3AED';
+
 interface CooldownInfo {
   canChange: boolean;
   daysRemaining: number;
@@ -39,6 +43,25 @@ function cooldownMessage(c: CooldownInfo): string {
   if (c.daysRemaining > 0)
     return `يمكنك رفع فيديو جديد بعد ${c.daysRemaining} يوم و ${c.hoursRemaining} ساعة`;
   return `يمكنك رفع فيديو جديد بعد ${c.hoursRemaining} ساعة`;
+}
+
+// Reusable glass button wrapper
+function GlassBtn({
+  style,
+  children,
+}: {
+  style?: any;
+  children: React.ReactNode;
+}) {
+  const Wrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+  const props = isLiquidGlassSupported
+    ? { effect: 'clear' as const, interactive: true }
+    : { intensity: 28, tint: 'dark' as const };
+  return (
+    <Wrapper {...(props as any)} style={[styles.btn, style]}>
+      {children}
+    </Wrapper>
+  );
 }
 
 export default function ActionButtons({
@@ -77,58 +100,56 @@ export default function ActionButtons({
 
   return (
     <View style={styles.container}>
-      {/* Upload / cooldown button */}
+
+      {/* ── Upload button — liquid glass ─────────────────────────── */}
       <TouchableOpacity
         onPress={handleUploadPress}
         activeOpacity={0.82}
         style={styles.uploadWrap}
       >
         {reelUploadActive ? (
-          <LinearGradient
-            colors={['rgba(34,197,94,0.3)', 'rgba(22,163,74,0.15)']}
-            style={[styles.btn, styles.uploadingBtn]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
+          /* Uploading state — green tint */
+          <GlassBtn style={styles.uploadingBtn}>
+            <LinearGradient
+              colors={['rgba(34,197,94,0.25)', 'rgba(22,163,74,0.1)']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
             <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
             <Text style={[styles.btnText, { color: ProfileTheme.colors.neonGreen }]} numberOfLines={1}>
               {reelUploadProgress > 0
                 ? `جاري الرفع ${Math.round(reelUploadProgress)}٪`
                 : 'جاري الرفع…'}
             </Text>
-          </LinearGradient>
+          </GlassBtn>
         ) : isOnCooldown && uploadCooldown ? (
-          (() => {
-            const GlassBtn = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-            const glassP = isLiquidGlassSupported
-              ? { effect: 'clear' as const, interactive: true }
-              : { intensity: 40, tint: 'dark' as const };
-            return (
-              <GlassBtn {...(glassP as any)} style={[styles.btn, styles.cooldownBtn]}>
-                <Ionicons name="time-outline" size={17} color="#FF6B6B" />
-                <Text style={[styles.btnText, { color: '#FF6B6B' }]}>
-                  {formatCooldown(uploadCooldown)}
-                </Text>
-              </GlassBtn>
-            );
-          })()
+          /* Cooldown state — red tint */
+          <GlassBtn style={styles.cooldownBtn}>
+            <LinearGradient
+              colors={['rgba(239,68,68,0.2)', 'rgba(220,38,38,0.08)']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+            <Ionicons name="time-outline" size={17} color="#FF6B6B" />
+            <Text style={[styles.btnText, { color: '#FF6B6B' }]}>
+              {formatCooldown(uploadCooldown)}
+            </Text>
+          </GlassBtn>
         ) : (
-          <LinearGradient
-            colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.05)']}
-            style={styles.btn}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons name="add-circle-outline" size={17} color="#fff" />
+          /* Normal state — pure liquid glass, no tint */
+          <GlassBtn style={styles.uploadNormalBtn}>
+            <Ionicons name="add-circle-outline" size={17} color="rgba(255,255,255,0.9)" />
             <Text style={styles.btnText}>{t.profile.uploadVideo}</Text>
-          </LinearGradient>
+          </GlassBtn>
         )}
       </TouchableOpacity>
 
-      {/* Share button */}
+      {/* ── Share button — purple gradient ───────────────────────── */}
       <TouchableOpacity onPress={onSharePress} activeOpacity={0.82} style={styles.shareWrap}>
         <LinearGradient
-          colors={['#0EA5E9', '#2563EB']}
+          colors={[PURPLE, PURPLE_DARK]}
           style={[styles.btn, styles.shareBtn]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -138,16 +159,16 @@ export default function ActionButtons({
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* QR button */}
+      {/* ── QR button — purple tint ───────────────────────────────── */}
       {onQRPress && (
         <TouchableOpacity onPress={onQRPress} activeOpacity={0.82}>
           <LinearGradient
-            colors={['rgba(255,215,0,0.22)', 'rgba(255,165,0,0.1)']}
+            colors={[`${PURPLE}33`, `${PURPLE_DARK}1A`]}
             style={[styles.btn, styles.qrBtn]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Ionicons name="qr-code" size={18} color="#FFD700" />
+            <Ionicons name="qr-code" size={18} color={PURPLE} />
           </LinearGradient>
         </TouchableOpacity>
       )}
@@ -178,6 +199,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     minHeight: 48,
+    overflow: 'hidden',
   },
   btnText: {
     color: '#fff',
@@ -185,23 +207,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  /* Upload variants */
+  uploadNormalBtn: {
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   uploadingBtn: {
     borderColor: 'rgba(34,197,94,0.35)',
   },
   cooldownBtn: {
-    borderColor: 'rgba(255,107,107,0.35)',
-    overflow: 'hidden',
+    borderColor: 'rgba(239,68,68,0.3)',
   },
+
+  /* Share */
   shareBtn: {
-    borderColor: 'rgba(14,165,233,0.4)',
-    shadowColor: '#0EA5E9',
+    borderColor: 'rgba(168,85,247,0.4)',
+    shadowColor: '#A855F7',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 5,
   },
+
+  /* QR */
   qrBtn: {
-    borderColor: 'rgba(255,215,0,0.3)',
+    borderColor: 'rgba(168,85,247,0.3)',
     width: 48,
     paddingHorizontal: 0,
     flex: undefined,

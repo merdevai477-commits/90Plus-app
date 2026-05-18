@@ -40,6 +40,7 @@ import CommentsModal from '../../components/common/CommentsModal';
 import { useAuth } from '@clerk/clerk-expo';
 import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
 import { useFollowStore } from '../../src/store/useFollowStore';
+import { useReelUploadEventsStore } from '../../src/store/useReelUploadEventsStore';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // videoPreloader is now handled by preloadManager
@@ -626,6 +627,25 @@ const ReelsFeed: React.FC = () => {
       }
     }, []) // ✅ Empty deps - use refs to avoid re-creating callback
   );
+
+  // ✅ Listen for cross-screen reel-ready events: when the profile screen
+  // detects a freshly uploaded reel finished Mux processing, it bumps the
+  // store's `readyTick`. We invalidate the feed cache and refetch so the new
+  // reel appears immediately without waiting for tab focus / pull-to-refresh.
+  const readyTick = useReelUploadEventsStore(s => s.readyTick);
+  useEffect(() => {
+    if (readyTick === 0) return; // initial value, not a real event
+    (async () => {
+      try {
+        await cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {});
+        await loadReelsFromBackend(undefined, true);
+      } catch (err) {
+        logger.warn('[ReelsFeed] Failed to refresh after reel ready event:', err);
+      }
+    })();
+    // loadReelsFromBackend captures stable refs; watching only the tick is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyTick]);
 
   // Reload when hashtag changes
   useEffect(() => {

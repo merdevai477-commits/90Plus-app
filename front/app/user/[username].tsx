@@ -9,137 +9,281 @@ import {
   ActivityIndicator,
   RefreshControl,
   Animated,
+  Modal,
+  I18nManager,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Zap } from 'lucide-react-native';
 
-// Same components as profile.tsx
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
 import StatsRow from '../../components/profile/StatsRow';
 import VideoGrid from '../../components/profile/VideoGrid';
+import UserInfo from '../../components/profile/UserInfo';
+import BadgesDisplay from '../../components/profile/BadgesDisplay';
+import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { AuthService, SearchUserResult, FollowService, UserReel, ProfileService } from '../../src/services/authService';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import {
+  AuthService,
+  SearchUserResult,
+  FollowService,
+  UserReel,
+  ProfileService,
+} from '../../src/services/authService';
 import { useFollowStore } from '../../src/store/useFollowStore';
 import { useToast } from '../../contexts/ToastContext';
 import { globalState } from '../../globalState';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
 import { useVideos, Comment } from '../../contexts/VideosContext';
-import BadgesDisplay from '../../components/profile/BadgesDisplay';
-import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { BlockService } from '../../services/blockService';
-import { Alert } from 'react-native';
+import { cacheService, CACHE_TTL } from '../../services/cacheService';
 import { useTranslation } from '../../src/i18n';
 
+// Cache keys for the public-profile screen
+const USER_PROFILE_CACHE = 'user_profile';
+const USER_VIDEOS_CACHE  = 'user_videos';
+
+// ─── XP helpers (mirrors backend formula) ────────────────────────────────────
+const xpForLevel = (level: number): number => {
+  if (level <= 1) return 0;
+  if (level === 2) return 290;
+  return 40 + 125 * level * (level - 1);
+};
+
+const ACCENT = '#A855F7';
+const ACCENT_DARK = '#7C3AED';
+
+// ─── Top bar ──────────────────────────────────────────────────────────────────
+function UserTopBar({
+  topInset,
+  level,
+  xp,
+  onBack,
+}: {
+  topInset: number;
+  level?: number;
+  xp?: number;
+  onBack: () => void;
+}) {
+  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
+
+  const xpDisplay = xp != null ? (xp >= 1000 ? `${(xp / 1000).toFixed(1)}K` : String(xp)) : '—';
+
+  return (
+    <GlassContainer
+      intensity={20}
+      tint="dark"
+      effect="regular"
+      style={[
+        tb.container,
+        { paddingTop: topInset + 10, flexDirection: rowDirection },
+      ]}
+    >
+      {/* Back button */}
+      <TouchableOpacity onPress={onBack} style={tb.backBtn} hitSlop={12}>
+        <Ionicons name="arrow-back" size={18} color="rgba(255,255,255,0.85)" />
+      </TouchableOpacity>
+
+      {/* LVL badge */}
+      {level != null && (
+        <View style={tb.lvlBadge}>
+          <Text style={tb.lvlLabel}>LVL</Text>
+          <Text style={tb.lvlNumber}>{level}</Text>
+        </View>
+      )}
+
+      {/* XP chip */}
+      <View style={tb.xpChip}>
+        <Zap size={13} color={ACCENT} fill={ACCENT} />
+        <Text style={tb.xpTxt}>{xpDisplay} XP</Text>
+      </View>
+    </GlassContainer>
+  );
+}
+
+const tb = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    top: 0,
+    start: 0,
+    end: 0,
+    zIndex: 200,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(5,1,13,0.0)',
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  lvlBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(168,85,247,0.18)',
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.4)',
+  },
+  lvlLabel: {
+    color: 'rgba(168,85,247,0.9)',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  lvlNumber: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  xpChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.3)',
+    gap: 5,
+  },
+  xpTxt: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+});
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { getToken } = useAuth();
   const toast = useToast();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { reelComments, addComment, toggleCommentLike } = useVideos();
 
-  // User data state
   const [user, setUser] = useState<SearchUserResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Videos state
   const [userVideos, setUserVideos] = useState<UserReel[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
-
-  // Video player modal
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<UserReel | null>(null);
-
-  // Block state
   const [isBlocked, setIsBlocked] = useState(false);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
+  const [isBlockModalVisible, setIsBlockModalVisible] = useState(false);
 
-  // Animation for follow button
   const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const loadUserProfile = useCallback(async () => {
-    if (!username) {
-      setError('اسم المستخدم غير موجود');
-      setIsLoading(false);
-      return;
-    }
-
-    // Check if viewing own profile - redirect to profile tab
-    // Improved detection: case-insensitive username and ID comparison
-    const isOwnProfile = 
-      (globalState.userProfile?.username?.toLowerCase() === username?.toLowerCase()) ||
-      (globalState.userProfile?.id && user?.id && String(globalState.userProfile.id) === String(user.id));
-    
-    if (isOwnProfile) {
-      router.replace('/(tabs)/profile');
-      return;
-    }
-
-    try {
-      const token = await getToken();
-      if (!token) {
-        setError('يرجى تسجيل الدخول');
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('🔍 Loading user profile for:', username);
-      const userData = await AuthService.getUserByUsername(token, username);
-      console.log('✅ User data loaded:', userData);
-      
-      if (userData) {
-        setUser(userData);
-        setError(null);
-      } else {
-        console.warn('⚠️ No user data returned');
-        setError('المستخدم غير موجود');
-      }
-    } catch (err: any) {
-      console.error('❌ Error loading user profile:', err);
-      console.error('Error details:', err.message, err.stack);
-      setError('حدث خطأ أثناء تحميل البروفايل');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [username, getToken]);
-
-  const loadUserVideos = useCallback(async () => {
-    if (!username) return;
-
-    setIsLoadingVideos(true);
-    try {
-      const token = await getToken();
-      if (token) {
-        const reels = await AuthService.getUserReels(token, username);
-        setUserVideos(reels);
-      }
-    } catch (err) {
-      console.error('Error loading user videos:', err);
-    } finally {
-      setIsLoadingVideos(false);
-    }
-  }, [username, getToken]);
-
-  // Track if initial load is done
   const hasLoadedRef = useRef(false);
   const hasRecordedViewRef = useRef(false);
 
-  // Record profile view (once per session)
+  const { follow, unfollow } = useFollowStore();
+
+  // ── Data loading (cache-first for instant render) ──────────────────────────
+  const loadUserProfile = useCallback(async (skipCache = false) => {
+    if (!username) { setError('اسم المستخدم غير موجود'); setIsLoading(false); return; }
+
+    const isOwn =
+      globalState.userProfile?.username?.toLowerCase() === username?.toLowerCase();
+    if (isOwn) { router.replace('/(tabs)/profile'); return; }
+
+    // Cache-first: paint cached profile instantly while we revalidate.
+    const cacheKey = `${USER_PROFILE_CACHE}_${username.toLowerCase()}`;
+    if (!skipCache) {
+      try {
+        const cached = await cacheService.get<SearchUserResult>(cacheKey);
+        if (cached) {
+          setUser(cached);
+          setError(null);
+          setIsLoading(false); // show cached profile NOW
+        }
+      } catch { /* silent */ }
+    }
+
+    try {
+      const token = await getToken();
+      if (!token) { setError('يرجى تسجيل الدخول'); setIsLoading(false); return; }
+      const userData = await AuthService.getUserByUsername(token, username);
+      if (userData) {
+        setUser(userData);
+        setError(null);
+        // Refresh cache (5 min TTL — reasonable for non-self profiles).
+        cacheService.set(cacheKey, userData, 5 * 60 * 1000).catch(() => {});
+      } else {
+        setError('المستخدم غير موجود');
+      }
+    } catch {
+      // Only surface error if we have nothing on screen at all.
+      setUser(prev => {
+        if (!prev) setError('حدث خطأ أثناء تحميل البروفايل');
+        return prev;
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [username, getToken]);
+
+  const loadUserVideos = useCallback(async (skipCache = false) => {
+    if (!username) return;
+
+    const cacheKey = `${USER_VIDEOS_CACHE}_${username.toLowerCase()}`;
+
+    if (!skipCache) {
+      try {
+        const cached = await cacheService.get<UserReel[]>(cacheKey);
+        if (cached && cached.length > 0) {
+          setUserVideos(cached);
+          // Don't show spinner — we already have content.
+          setIsLoadingVideos(false);
+        } else {
+          setIsLoadingVideos(true);
+        }
+      } catch {
+        setIsLoadingVideos(true);
+      }
+    } else {
+      setIsLoadingVideos(true);
+    }
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const reels = await AuthService.getUserReels(token, username);
+      setUserVideos(reels);
+      cacheService.set(cacheKey, reels, 2 * 60 * 1000).catch(() => {});
+    } catch { /* silent */ }
+    finally { setIsLoadingVideos(false); }
+  }, [username, getToken]);
+
   const recordProfileView = useCallback(async () => {
     if (!username || hasRecordedViewRef.current) return;
     hasRecordedViewRef.current = true;
-    
     try {
       const token = await getToken();
-      if (token) {
-        ProfileService.recordProfileView(token, username);
-      }
-    } catch (err) {
-      // Silent fail - not critical
-    }
+      if (token) ProfileService.recordProfileView(token, username);
+    } catch { /* silent */ }
   }, [username, getToken]);
 
   useEffect(() => {
@@ -149,261 +293,202 @@ export default function UserProfileScreen() {
       loadUserVideos();
       recordProfileView();
     }
-  }, [username]); // Only reload when username changes
+  }, [username]);
 
-  // Don't use useFocusEffect to avoid infinite loops
-  // Pull to refresh handles manual refresh
+  useEffect(() => {
+    const check = async () => {
+      if (!user) return;
+      try {
+        const token = await getToken();
+        if (token) setIsBlocked(await BlockService.isUserBlocked(user.id, token));
+      } catch { /* silent */ }
+    };
+    check();
+  }, [user?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadUserProfile(), loadUserVideos()]);
+    await Promise.all([loadUserProfile(true), loadUserVideos(true)]);
     setRefreshing(false);
   };
 
-  // Animate button press
-  const animateButtonPress = () => {
+  // ── Follow / Unfollow ───────────────────────────────────────────────────────
+  const animateBtn = () => {
     Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
+      Animated.timing(scaleAnim, { toValue: 0.93, duration: 90, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 90, useNativeDriver: true }),
     ]).start();
   };
 
-  // Use global follow store
-  const { follow, unfollow } = useFollowStore();
-
-  // Perform follow action with Optimistic UI
   const performFollow = async () => {
     if (!user) return;
-    
-    // Save previous state for rollback
-    const previousState = { isFollowing: user.isFollowing, followersCount: user.followersCount };
-    
-    // Optimistic update - instant UI change
-    follow(user.id); // Update global store
-    setUser(prev => prev ? {
-      ...prev,
-      isFollowing: true,
-      followersCount: (prev.followersCount || 0) + 1,
-    } : null);
-    
-    // API call in background
+    const prev = { isFollowing: user.isFollowing, followersCount: user.followersCount };
+    follow(user.id);
+    setUser(p => p ? { ...p, isFollowing: true, followersCount: (p.followersCount || 0) + 1 } : null);
     try {
       const token = await getToken();
-      if (!token) {
-        // Rollback on error
-        unfollow(user.id);
-        setUser(prev => prev ? { ...prev, ...previousState } : null);
-        toast.showError('خطأ', 'يرجى تسجيل الدخول');
-        return;
-      }
-
-      const result = await FollowService.followUser(token, user.username);
-      if (!result.success) {
-        // Rollback on failure
-        unfollow(user.id);
-        setUser(prev => prev ? { ...prev, ...previousState } : null);
-        toast.showError('خطأ', result.error || 'فشل المتابعة');
-      }
-      // Success - UI already updated, no need to do anything
-    } catch (err) {
-      console.error('Follow error:', err);
-      // Rollback on error
-      unfollow(user.id);
-      setUser(prev => prev ? { ...prev, ...previousState } : null);
-      toast.showError('خطأ', 'حدث خطأ');
-    }
+      if (!token) { unfollow(user.id); setUser(p => p ? { ...p, ...prev } : null); return; }
+      const res = await FollowService.followUser(token, user.username);
+      if (!res.success) { unfollow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
+    } catch { unfollow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
   };
 
-  // Perform unfollow action with Optimistic UI
   const performUnfollow = async () => {
     if (!user) return;
-    
-    // Save previous state for rollback
-    const previousState = { isFollowing: user.isFollowing, followersCount: user.followersCount };
-    
-    // Optimistic update - instant UI change
-    unfollow(user.id); // Update global store
-    setUser(prev => prev ? {
-      ...prev,
-      isFollowing: false,
-      followersCount: Math.max((prev.followersCount || 0) - 1, 0),
-    } : null);
-
-    // API call in background
+    const prev = { isFollowing: user.isFollowing, followersCount: user.followersCount };
+    unfollow(user.id);
+    setUser(p => p ? { ...p, isFollowing: false, followersCount: Math.max((p.followersCount || 0) - 1, 0) } : null);
     try {
       const token = await getToken();
-      if (!token) {
-        // Rollback on error
-        follow(user.id);
-        setUser(prev => prev ? { ...prev, ...previousState } : null);
-        toast.showError('خطأ', 'يرجى تسجيل الدخول');
-        return;
-      }
-
-      const result = await FollowService.unfollowUser(token, user.username);
-      if (!result.success) {
-        // Rollback on failure
-        follow(user.id);
-        setUser(prev => prev ? { ...prev, ...previousState } : null);
-        toast.showError('خطأ', result.error || 'فشل إلغاء المتابعة');
-      }
-      // Success - UI already updated, no need to do anything
-    } catch (err) {
-      console.error('Unfollow error:', err);
-      // Rollback on error
-      follow(user.id);
-      setUser(prev => prev ? { ...prev, ...previousState } : null);
-      toast.showError('خطأ', 'حدث خطأ');
-    }
+      if (!token) { follow(user.id); setUser(p => p ? { ...p, ...prev } : null); return; }
+      const res = await FollowService.unfollowUser(token, user.username);
+      if (!res.success) { follow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
+    } catch { follow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
   };
 
   const handleFollow = () => {
     if (!user) return;
-
-    // Animate button
-    animateButtonPress();
-
-    if (user.isFollowing) {
-      // Unfollow instantly without confirmation
-      performUnfollow();
-    } else {
-      // Follow instantly
-      performFollow();
-    }
+    animateBtn();
+    user.isFollowing ? performUnfollow() : performFollow();
   };
 
-  const handleVideoPress = (video: any) => {
-    setSelectedVideo(video);
-    setIsVideoPlayerVisible(true);
-  };
-
-  // Block/Unblock user
-  const handleBlockUser = async () => {
+  // ── Block ───────────────────────────────────────────────────────────────────
+  const handleBlockUser = () => {
     if (!user) return;
-
-    const blockAction = isBlocked ? 'إلغاء الحظر' : 'حظر';
-    const blockTitle = isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم';
-    const blockMessage = isBlocked 
-      ? `هل تريد إلغاء حظر @${user.username}؟\n\nسيتمكن من رؤية محتواك والتفاعل معه مرة أخرى.`
-      : `هل تريد حظر @${user.username}؟\n\nلن يتمكن من رؤية محتواك أو التفاعل معه، وسيتم إلغاء المتابعة تلقائياً.`;
-
-    Alert.alert(
-      blockTitle,
-      blockMessage,
-      [
-        { 
-          text: 'إلغاء', 
-          style: 'cancel',
-          onPress: () => console.log('Block action cancelled')
-        },
-        {
-          text: blockAction,
-          style: isBlocked ? 'default' : 'destructive',
-          onPress: async () => {
-            setIsBlockLoading(true);
-            try {
-              const token = await getToken();
-              if (!token) {
-                toast.showError('خطأ', 'يرجى تسجيل الدخول');
-                return;
-              }
-
-              if (isBlocked) {
-                // Unblock user
-                await BlockService.unblockUser(user.id, token);
-                setIsBlocked(false);
-                toast.showSuccess('✅ تم بنجاح', `تم إلغاء حظر @${user.username}`);
-              } else {
-                // Block user
-                await BlockService.blockUser(user.id, token);
-                setIsBlocked(true);
-                
-                // Unfollow if following
-                if (user.isFollowing) {
-                  await performUnfollow();
-                }
-                
-                toast.showSuccess('✅ تم بنجاح', `تم حظر @${user.username}`);
-              }
-            } catch (error: any) {
-              console.error('Block error:', error);
-              const errorMessage = error?.message || 'حدث خطأ أثناء العملية';
-              toast.showError('خطأ', errorMessage);
-            } finally {
-              setIsBlockLoading(false);
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+    setIsBlockModalVisible(true);
   };
 
-  // Check if user is blocked on load
-  useEffect(() => {
-    const checkBlockStatus = async () => {
-      if (!user) return;
-      try {
-        const token = await getToken();
-        if (token) {
-          const blocked = await BlockService.isUserBlocked(user.id, token);
-          setIsBlocked(blocked);
-        }
-      } catch (error) {
-        console.error('Check block status error:', error);
+  const confirmBlock = async () => {
+    if (!user) return;
+    setIsBlockModalVisible(false);
+    setIsBlockLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      if (isBlocked) {
+        await BlockService.unblockUser(user.id, token);
+        setIsBlocked(false);
+      } else {
+        await BlockService.blockUser(user.id, token);
+        setIsBlocked(true);
+        if (user.isFollowing) await performUnfollow();
       }
-    };
-    checkBlockStatus();
-  }, [user?.id]);
+    } catch { /* silent */ }
+    finally { setIsBlockLoading(false); }
+  };
 
-  // Loading state
+  // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
-        <ActivityIndicator size="large" color={ProfileTheme.colors.neonGreen} />
-        <Text style={styles.loadingText}>جاري التحميل...</Text>
+      <View style={[s.container, s.center]}>
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator size="large" color={ACCENT} />
+        <Text style={s.loadingTxt}>جاري التحميل...</Text>
       </View>
     );
   }
 
-  // Error state
   if (error || !user) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
-        <Ionicons name="person-outline" size={64} color="#666" />
-        <Text style={styles.errorText}>{error || 'المستخدم غير موجود'}</Text>
-        <TouchableOpacity style={styles.backButtonLarge} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>العودة</Text>
+      <View style={[s.container, s.center]}>
+        <StatusBar barStyle="light-content" />
+        <Ionicons name="person-outline" size={64} color="#555" />
+        <Text style={s.errorTxt}>{error || 'المستخدم غير موجود'}</Text>
+        <TouchableOpacity style={s.backBtnLarge} onPress={() => router.back()}>
+          <Text style={s.backBtnTxt}>العودة</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Format videos for VideoGrid component
-const formattedVideos = userVideos.map(v => ({
-  id: v.id,
-  uri: v.uri,
-  thumbnail: v.thumbnail,
-  views: v.views,
-  likes: v.likes,
-  duration: (v as any).duration ?? 0,
-}));
+  // Derive XP relative to current level
+  const userLevel = user.level ?? 1;
+  const userXp = user.xp ?? 0;
+  const relativeXp = Math.max(0, userXp - xpForLevel(userLevel));
+
+  // Social links
+  const socialLinks = Array.isArray((user as any).socialLinks)
+    ? (user as any).socialLinks
+        .map((l: any) => ({ platform: l.platform || 'website', url: l.url || '', username: l.username }))
+        .filter((l: any) => l.url.trim() !== '')
+    : [];
+
+  const formattedVideos = userVideos.map(v => ({
+    id: v.id,
+    uri: v.uri,
+    thumbnail: v.thumbnail,
+    views: v.views,
+    likes: v.likes,
+    duration: (v as any).duration ?? 0,
+  }));
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+    <View style={s.container}>
+      <StatusBar barStyle="light-content" />
 
-      {/* Video Player Modal */}
+      {/* ── Block confirmation modal ──────────────────────────────── */}
+      <Modal
+        visible={isBlockModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsBlockModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            {/* Icon */}
+            <View style={[s.modalIconWrap, isBlocked ? s.modalIconUnblock : s.modalIconBlock]}>
+              <Ionicons
+                name={isBlocked ? 'checkmark-circle' : 'ban'}
+                size={28}
+                color={isBlocked ? ACCENT : '#ef4444'}
+              />
+            </View>
+
+            {/* Title */}
+            <Text style={s.modalTitle}>
+              {isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم'}
+            </Text>
+
+            {/* Body */}
+            <Text style={s.modalBody}>
+              {isBlocked
+                ? `هل تريد إلغاء حظر @${user.username}؟`
+                : `هل تريد حظر @${user.username}؟\nلن يتمكن من رؤية محتواك أو التفاعل معك.`}
+            </Text>
+
+            {/* Buttons */}
+            <View style={s.modalBtns}>
+              <TouchableOpacity
+                style={s.modalCancelBtn}
+                onPress={() => setIsBlockModalVisible(false)}
+                activeOpacity={0.75}
+              >
+                <Text style={s.modalCancelTxt}>إلغاء</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.modalConfirmBtn, isBlocked ? s.modalConfirmUnblock : s.modalConfirmBlock]}
+                onPress={confirmBlock}
+                activeOpacity={0.8}
+              >
+                <Text style={s.modalConfirmTxt}>
+                  {isBlocked ? 'إلغاء الحظر' : 'حظر'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Fixed top bar */}
+      <UserTopBar
+        topInset={insets.top}
+        level={userLevel}
+        xp={relativeXp}
+        onBack={() => router.back()}
+      />
+
+      {/* Video player */}
       <VideoPlayerModal
         visible={isVideoPlayerVisible}
         videoUrl={selectedVideo?.uri || null}
@@ -412,205 +497,171 @@ const formattedVideos = userVideos.map(v => ({
         username={user.username}
         reelId={selectedVideo?.id}
         comments={reelComments[selectedVideo?.id || ''] || []}
-        onAddComment={(comment: Comment) => { if (selectedVideo) addComment(selectedVideo.id, comment); }}
-        onToggleLike={(commentId: string) => { if (selectedVideo) toggleCommentLike(selectedVideo.id, commentId); }}
+        onAddComment={(c: Comment) => { if (selectedVideo) addComment(selectedVideo.id, c); }}
+        onToggleLike={(id: string) => { if (selectedVideo) toggleCommentLike(selectedVideo.id, id); }}
       />
-
-      {/* Back Button - Fixed Position */}
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={24} color="#fff" />
-      </TouchableOpacity>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={s.scroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={ProfileTheme.colors.neonGreen}
-            colors={[ProfileTheme.colors.neonGreen]}
+            tintColor={ACCENT}
+            colors={[ACCENT]}
             progressBackgroundColor={ProfileTheme.colors.deepBlack}
           />
         }
       >
-        {/* Cover Image - Same as profile */}
-        <ProfileHeader />
+        {/* Cover */}
+        <ProfileHeader
+          coverImage={(user as any).coverImage ? { uri: (user as any).coverImage } : undefined}
+        />
 
-        {/* FIFA Card - Read-only for other users (no onPress handlers) */}
-        <View style={styles.profileCardContainer}>
+        {/* FIFA Card — read-only */}
+        <View style={s.cardContainer}>
           <ProfileCard
-            playerImage={user.avatar ? { uri: user.avatar } : { uri: 'https://picsum.photos/200' }}
+            playerImage={user.avatar ? { uri: user.avatar } : undefined}
             cardType="gold"
             scale={0.60}
-            uploadedImage={user.avatar}
-            countryFlag={user.countryFlag || '🇪🇬'}
-            position={user.position || 'RW'}
-            age={user.age?.toString() || '22'}
-            height={user.height?.toString() || '180'}
-            weight={user.weight?.toString() || '70'}
-            foot={user.preferredFoot || 'R'}
-            clubLogo={user.clubLogo || undefined}
-            brandLogo={user.brandLogo || undefined}
-            // No onPress handlers - read only for other users
+            uploadedImage={user.avatar || null}
+            countryFlag={(user as any).countryFlag || '🌍'}
+            position={(user as any).position || 'ST'}
+            age={(user as any).age?.toString()}
+            height={(user as any).height?.toString()}
+            weight={(user as any).weight?.toString()}
+            foot={(user as any).preferredFoot || 'R'}
+            clubLogo={(user as any).clubLogo || undefined}
+            brandLogo={(user as any).brandLogo || undefined}
           />
         </View>
 
-        {/* User Info - Custom for other users (no edit button) */}
-        <View style={styles.userInfoContainer}>
-          {/* Name & Badges */}
-          <View style={styles.nameRow}>
-            <Text style={styles.name}>{user.displayName || user.username}</Text>
-            {user.isDeveloper && (
-              <View style={styles.developerBadge}>
-                <Ionicons name="code-slash" size={14} color="#3b82f6" />
-              </View>
-            )}
-            {user.isVerified && !user.isDeveloper && (
-              <Ionicons name="checkmark-circle" size={24} color={ProfileTheme.colors.neonGreen} />
-            )}
+        {/* User info — reuse same component, no edit handlers */}
+        <UserInfo
+          name={user.displayName || user.username}
+          username={user.username}
+          bio={user.bio || undefined}
+          location={(user as any).country || (user as any).location || ''}
+          team={user.favoriteTeam || ''}
+          isVerified={user.isVerified}
+          isDeveloper={user.isDeveloper}
+          clubLogo={(user as any).clubLogo || undefined}
+          consecutiveLoginDays={(user as any).consecutiveLoginDays || 0}
+          // No edit handlers for other users
+        />
+
+        {/* Badges */}
+        {user.id && !String(user.id).startsWith('user_') && (
+          <View style={s.badgesWrap}>
+            <BadgesDisplay userId={user.id} token={null} compact />
           </View>
+        )}
 
-          {/* Username */}
-          <Text style={styles.username}>@{user.username}</Text>
+        {/* Social links */}
+        {socialLinks.length > 0 && (
+          <SocialLinksSection links={socialLinks} isOwnProfile={false} />
+        )}
 
-          {/* Location & Team */}
-          <View style={styles.detailsRow}>
-            <View style={styles.detailItem}>
-              <Ionicons name="location-outline" size={16} color={ProfileTheme.colors.textSecondary} />
-              <Text style={styles.detailText}>{user.country || user.location || 'مصر'}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Ionicons name="football" size={16} color={ProfileTheme.colors.neonGreen} />
-              <Text style={styles.detailText}>{user.favoriteTeam || 'لم يحدد'}</Text>
-            </View>
-          </View>
-
-          {/* Bio */}
-          {user.bio && (
-            <Text style={styles.bio}>{user.bio}</Text>
-          )}
-
-          {/* Badges Display - الميداليات */}
-          {user.id && (
-            <View style={styles.badgesContainer}>
-              <BadgesDisplay 
-                userId={user.id} 
-                token={null} 
-                compact={true} 
-              />
-            </View>
-          )}
-
-          {/* Social Links Section - الروابط الاجتماعية */}
-          {user.socialLinks && Array.isArray(user.socialLinks) && user.socialLinks.length > 0 && (
-            <View style={styles.socialLinksContainer}>
-              <SocialLinksSection
-                links={user.socialLinks
-                  .map((link: any) => ({
-                    platform: link.platform || 'website',
-                    url: link.url || '',
-                    username: link.username,
-                  }))
-                  .filter((link: any) => link.url && link.url.trim() !== '')}
-                isOwnProfile={false}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* Follow Button & More Options */}
-        <View style={styles.followButtonContainer}>
-          <Animated.View style={{ transform: [{ scale: scaleAnim }], flex: 1 }}>
-            <TouchableOpacity
-              style={[styles.followButton, user.isFollowing && styles.followingButton]}
-              onPress={handleFollow}
-              activeOpacity={0.9}
-            >
+        {/* ── Follow + Block buttons ─────────────────────────────── */}
+        <View style={s.actionRow}>
+          {/* Follow button */}
+          <Animated.View style={[s.followWrap, { transform: [{ scale: scaleAnim }] }]}>
+            <TouchableOpacity onPress={handleFollow} activeOpacity={0.85} style={s.followTouchable}>
               {user.isFollowing ? (
-                <View style={styles.followingContent}>
-                  <Ionicons 
-                    name="checkmark" 
-                    size={20} 
-                    color={ProfileTheme.colors.neonGreen} 
-                  />
-                  <Text style={styles.followingText}>متابَع</Text>
-                </View>
+                /* Following state — glass */
+                (() => {
+                  const G = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+                  const gp = isLiquidGlassSupported
+                    ? { effect: 'clear' as const, interactive: true }
+                    : { intensity: 30, tint: 'dark' as const };
+                  return (
+                    <G {...(gp as any)} style={s.followingBtn}>
+                      <LinearGradient
+                        colors={['rgba(168,85,247,0.15)', 'rgba(124,58,237,0.08)']}
+                        style={StyleSheet.absoluteFill}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      />
+                      <Ionicons name="checkmark" size={18} color={ACCENT} />
+                      <Text style={s.followingTxt}>متابَع</Text>
+                    </G>
+                  );
+                })()
               ) : (
-                <View style={styles.followGradient}>
-                  <Ionicons 
-                    name={user.isFollowingMe ? "people" : "person-add"} 
-                    size={20} 
-                    color="#000" 
+                /* Follow state — purple gradient */
+                <LinearGradient
+                  colors={[ACCENT, ACCENT_DARK]}
+                  style={s.followBtn}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons
+                    name={user.isFollowingMe ? 'people' : 'person-add'}
+                    size={18}
+                    color="#fff"
                   />
-                  <Text style={styles.followText}>
+                  <Text style={s.followTxt}>
                     {user.isFollowingMe ? 'رد المتابعة' : 'متابعة'}
                   </Text>
-                </View>
+                </LinearGradient>
               )}
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Block Button */}
+          {/* Block button */}
           <TouchableOpacity
-            style={[styles.blockButton, isBlocked && styles.blockedButton]}
+            style={[s.blockBtn, isBlocked && s.blockedBtn]}
             onPress={handleBlockUser}
             disabled={isBlockLoading}
-            activeOpacity={0.7}
+            activeOpacity={0.75}
           >
             {isBlockLoading ? (
-              <View style={styles.blockLoadingContainer}>
-                <ActivityIndicator size="small" color="#fff" />
-              </View>
+              <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <View style={styles.blockButtonContent}>
-                <Ionicons 
-                  name={isBlocked ? "checkmark-circle" : "ban"} 
-                  size={20} 
-                  color={isBlocked ? ProfileTheme.colors.neonGreen : "#ef4444"} 
-                />
-                {isBlocked && (
-                  <Text style={styles.blockButtonText}>محظور</Text>
-                )}
-              </View>
+              <Ionicons
+                name={isBlocked ? 'checkmark-circle' : 'ban'}
+                size={20}
+                color={isBlocked ? ACCENT : '#ef4444'}
+              />
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Stats Row - Same as profile */}
+        {/* Stats */}
         <StatsRow
           followers={(user.followersCount || 0).toString()}
           following={(user.followingCount || 0).toString()}
           videos={(user.reelsCount || 0).toString()}
         />
 
-        {/* Videos Section Title */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>الفيديوهات</Text>
+        {/* Videos section */}
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>الفيديوهات</Text>
+          {userVideos.length > 0 && (
+            <View style={s.countBadge}>
+              <Text style={s.countTxt}>{userVideos.length}</Text>
+            </View>
+          )}
         </View>
 
-        {/* Loading videos indicator */}
-        {isLoadingVideos && (
-          <View style={styles.loadingVideos}>
-            <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+        {isLoadingVideos ? (
+          <View style={s.loadingVideos}>
+            <ActivityIndicator size="small" color={ACCENT} />
           </View>
-        )}
-
-        {/* Video Grid - Same as profile */}
-        <VideoGrid
-          videos={formattedVideos}
-          onVideoPress={handleVideoPress}
-          onVideoLongPress={() => {}}
-          onDeleteVideo={() => {}}
-          isDeleteMode={false}
-        />
-
-        {/* Empty state if no videos */}
-        {!isLoadingVideos && userVideos.length === 0 && (
-          <View style={styles.emptyVideos}>
-            <Ionicons name="videocam-outline" size={48} color="#666" />
-            <Text style={styles.emptyText}>لا يوجد فيديوهات بعد</Text>
+        ) : userVideos.length === 0 ? (
+          <View style={s.emptyVideos}>
+            <Ionicons name="videocam-outline" size={48} color="#444" />
+            <Text style={s.emptyTxt}>لا يوجد فيديوهات بعد</Text>
           </View>
+        ) : (
+          <VideoGrid
+            videos={formattedVideos}
+            onVideoPress={v => { setSelectedVideo(v as any); setIsVideoPlayerVisible(true); }}
+            onVideoLongPress={() => {}}
+            onDeleteVideo={() => {}}
+            isDeleteMode={false}
+          />
         )}
 
         <View style={{ height: 100 }} />
@@ -619,230 +670,216 @@ const formattedVideos = userVideos.map(v => ({
   );
 }
 
-const styles = StyleSheet.create({
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: ProfileTheme.colors.deepBlack,
-    position: 'relative',
   },
-  scrollContent: {
-    paddingBottom: 20,
-  },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: ProfileTheme.colors.textSecondary,
-    fontSize: 16,
-    marginTop: 16,
-  },
-  errorText: {
-    color: '#888',
-    fontSize: 18,
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 1000,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backButtonLarge: {
+  center: { justifyContent: 'center', alignItems: 'center' },
+  scroll: { paddingBottom: 20 },
+
+  loadingTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 15, marginTop: 14 },
+  errorTxt: { color: '#888', fontSize: 17, marginTop: 16, marginBottom: 24 },
+  backBtnLarge: {
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: ProfileTheme.colors.neonGreen,
-    borderRadius: 12,
+    backgroundColor: ACCENT,
+    borderRadius: 14,
   },
-  backButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  profileCardContainer: {
+  backBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  /* Card */
+  cardContainer: {
     alignItems: 'center',
     marginTop: -300,
     marginBottom: 20,
     zIndex: 10,
   },
-  // User Info Styles (simplified version without edit)
-  userInfoContainer: {
+
+  /* Badges */
+  badgesWrap: {
+    alignItems: 'center',
+    marginVertical: 8,
     paddingHorizontal: 20,
-    marginBottom: 20,
-    alignItems: 'center',
   },
-  nameRow: {
+
+  /* Action row */
+  actionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  name: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: ProfileTheme.colors.textPrimary,
-    textShadowColor: ProfileTheme.colors.neonBlue,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  developerBadge: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    padding: 6,
-    borderRadius: 12,
-  },
-  username: {
-    fontSize: 16,
-    color: ProfileTheme.colors.textSecondary,
-    marginBottom: 16,
-    textAlign: 'center',
-    letterSpacing: 1,
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    gap: 12,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  detailText: {
-    color: ProfileTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  bio: {
-    fontSize: 16,
-    color: '#DDD',
-    lineHeight: 24,
-    textAlign: 'center',
-    maxWidth: '90%',
-  },
-  // Follow Button Styles
-  followButtonContainer: {
     paddingHorizontal: 20,
     marginBottom: 24,
-    flexDirection: 'row',
     gap: 12,
-    height: 50,
+    alignItems: 'center',
   },
-  followButton: {
-    flex: 1,
-    borderRadius: 25,
+  followWrap: { flex: 1 },
+  followTouchable: { borderRadius: 16, overflow: 'hidden' },
+
+  followBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     height: 50,
+    borderRadius: 16,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  followTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  followingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: ProfileTheme.colors.neonGreen,
+    borderWidth: 1.5,
+    borderColor: 'rgba(168,85,247,0.4)',
   },
-  followingButton: {
-    borderColor: ProfileTheme.colors.neonGreen,
-    backgroundColor: ProfileTheme.colors.deepBlack,
-  },
-  blockButton: {
+  followingTxt: { color: ACCENT, fontSize: 15, fontWeight: '800' },
+
+  blockBtn: {
     width: 50,
     height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 2,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239,68,68,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  blockedButton: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    borderColor: 'rgba(34, 197, 94, 0.3)',
-    width: 80,
+  blockedBtn: {
+    backgroundColor: 'rgba(168,85,247,0.1)',
+    borderColor: 'rgba(168,85,247,0.3)',
   },
-  blockLoadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  blockButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  blockButtonText: {
-    color: ProfileTheme.colors.neonGreen,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  followGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 46,
-  },
-  followingContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 46,
-  },
-  followText: {
-    color: '#000',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  followingText: {
-    color: ProfileTheme.colors.neonGreen,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  // Section Header
+
+  /* Section header */
   sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 14,
+    gap: 10,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: ProfileTheme.colors.textPrimary,
-    textAlign: 'right',
-  },
-  // Loading Videos
-  loadingVideos: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  // Empty Videos
-  emptyVideos: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    color: '#666',
     fontSize: 16,
-    marginTop: 12,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
-  badgesContainer: {
+  countBadge: {
+    backgroundColor: 'rgba(168,85,247,0.18)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.3)',
+  },
+  countTxt: { color: ACCENT, fontSize: 11, fontWeight: '700' },
+
+  loadingVideos: { paddingVertical: 24, alignItems: 'center' },
+  emptyVideos: { alignItems: 'center', paddingVertical: 60 },
+  emptyTxt: { color: '#555', fontSize: 15, marginTop: 12 },
+
+  /* Block modal */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    paddingHorizontal: 32,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#0E0025',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.25)',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 20,
+  },
+  modalIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalIconBlock: {
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239,68,68,0.3)',
+  },
+  modalIconUnblock: {
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(168,85,247,0.3)',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalBody: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  modalBtns: {
+    flexDirection: 'row',
+    gap: 12,
     width: '100%',
   },
-  socialLinksContainer: {
-    paddingHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 8,
+  modalCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelTxt: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalConfirmBlock: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239,68,68,0.5)',
+  },
+  modalConfirmUnblock: {
+    backgroundColor: 'rgba(168,85,247,0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(168,85,247,0.5)',
+  },
+  modalConfirmTxt: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

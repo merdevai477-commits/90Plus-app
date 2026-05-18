@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy | 90Plus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-0: #080608;
+        --bg-1: #0d0a14;
+        --ink: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.55);
+        --accent: #7c3aed;
+        --accent-2: #a78bfa;
+        --card: rgba(13, 10, 20, 0.92);
+        --border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 22px 64px rgba(124, 58, 237, 0.2);
+        --chip: rgba(124, 58, 237, 0.18);
+        --chip-text: rgba(255, 255, 255, 0.85);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Work Sans", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(900px 520px at 10% -10%, rgba(124, 58, 237, 0.25), transparent 60%),
+          radial-gradient(720px 420px at 90% 0%, rgba(76, 29, 149, 0.35), transparent 60%),
+          radial-gradient(700px 500px at 50% 115%, rgba(91, 33, 182, 0.2), transparent 70%),
+          linear-gradient(180deg, var(--bg-0), var(--bg-1));
+        min-height: 100vh;
+      }
+
+      .page {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .grain {
+        position: fixed;
+        inset: 0;
+        opacity: 0.12;
+        background-image: repeating-linear-gradient(
+          120deg,
+          rgba(255, 255, 255, 0.035),
+          rgba(255, 255, 255, 0.035) 1px,
+          transparent 1px,
+          transparent 6px
+        );
+        pointer-events: none;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 28px 7vw 10px;
+      }
+
+      .brand {
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+
+      nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 500;
+        margin-left: 18px;
+      }
+
+      nav a.active {
+        color: var(--accent);
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px 7vw 80px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        margin-bottom: 30px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        font-weight: 600;
+      }
+
+      h1 {
+        font-family: "Fraunces", serif;
+        font-size: clamp(32px, 4vw, 48px);
+        margin: 0;
+      }
+
+      .lead {
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 620px;
+      }
+
+      .meta {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 6px;
+      }
+
+      .toc a {
+        font-size: 13px;
+        color: var(--accent-2);
+        text-decoration: none;
+        background: var(--chip);
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(124, 58, 237, 0.35);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 22px 24px;
+        box-shadow: var(--shadow);
+        margin-bottom: 18px;
+      }
+
+      h2 {
+        font-family: "Fraunces", serif;
+        font-size: 22px;
+        margin: 0 0 12px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        line-height: 1.7;
+      }
+
+      ul {
+        margin: 0 0 8px 18px;
+        padding: 0;
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--chip-text);
+        font-weight: 600;
+        font-size: 12px;
+        border: 1px solid rgba(124, 58, 237, 0.35);
+      }
+
+      .callout {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(124, 58, 237, 0.16);
+        border: 1px solid rgba(124, 58, 237, 0.35);
+        color: var(--ink);
+      }
+
+      .callout strong {
+        color: var(--accent-2);
+      }
+
+      main a {
+        color: var(--accent-2);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      nav a,
+      .toc a {
+        text-decoration: none;
+      }
+
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 24px 0 40px;
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(10px);
+        animation: reveal 0.6s ease forwards;
+      }
+
+      .delay-1 { animation-delay: 0.05s; }
+      .delay-2 { animation-delay: 0.12s; }
+      .delay-3 { animation-delay: 0.2s; }
+      .delay-4 { animation-delay: 0.3s; }
+
+      @keyframes reveal {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 720px) {
+        header {
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        nav a {
+          margin-left: 0;
+          margin-right: 12px;
+        }
+
+        .meta {
+          flex-direction: column;
+          gap: 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="grain"></div>
+      <header>
+        <div class="brand">90Plus</div>
+        <nav>
+          <a href="terms.html">Terms</a>
+          <a class="active" href="privacy.html">Privacy</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero reveal">
+          <div class="eyebrow">Legal</div>
+          <h1>Privacy Policy</h1>
+          <p class="lead">
+            This Privacy Policy explains how 90Plus collects, uses, and shares
+            information when you use the Service.
+          </p>
+          <div class="meta">
+            <span>Effective date: [Effective Date]</span>
+            <span>Last updated: [Last Updated]</span>
+          </div>
+          <div class="toc">
+            <a href="#overview">Overview</a>
+            <a href="#collect">Information We Collect</a>
+            <a href="#use">How We Use Information</a>
+            <a href="#ai">AI Processing</a>
+            <a href="#basis">Legal Bases</a>
+            <a href="#cookies">Cookies and Analytics</a>
+            <a href="#share">Sharing</a>
+            <a href="#transfers">International Transfers</a>
+            <a href="#retention">Retention</a>
+            <a href="#rights">Your Rights</a>
+            <a href="#security">Security</a>
+            <a href="#children">Children</a>
+            <a href="#changes">Changes</a>
+            <a href="#contact">Contact</a>
+          </div>
+        </section>
+
+        <section id="overview" class="card reveal delay-1">
+          <div class="pill">Overview</div>
+          <p>
+            This policy explains what we collect, why we collect it, and how we
+            use it to operate and improve 90Plus. By using the Service, you
+            agree to this Privacy Policy and our
+            <a href="terms.html">Terms and Conditions</a>.
+          </p>
+          <div class="callout">
+            <strong>Short version:</strong> We use your data to deliver features
+            you request, keep the Service secure, and improve performance.
+          </div>
+        </section>
+
+        <section id="collect" class="card reveal delay-1">
+          <h2>Information We Collect</h2>
+          <div class="grid two">
+            <div>
+              <div class="pill">You Provide</div>
+              <ul>
+                <li>Account details like name, email, and profile data.</li>
+                <li>Messages or content you submit in the Service.</li>
+                <li>Support requests and feedback.</li>
+              </ul>
+            </div>
+            <div>
+              <div class="pill">Automatic</div>
+              <ul>
+                <li>Usage data such as pages viewed and features used.</li>
+                <li>Device and log data like IP address and OS version.</li>
+                <li>Approximate location based on IP address.</li>
+              </ul>
+            </div>
+            <div>
+              <div class="pill">From Partners</div>
+              <ul>
+                <li>Sign-in providers if you choose social login.</li>
+                <li>Payment confirmations for subscriptions or purchases.</li>
+                <li>Analytics providers that help measure performance.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="use" class="card reveal delay-2">
+          <h2>How We Use Information</h2>
+          <ul>
+            <li>Provide and maintain the Service.</li>
+            <li>Personalize content and improve user experience.</li>
+            <li>Communicate with you about updates and support.</li>
+            <li>Protect the Service, prevent abuse, and enforce policies.</li>
+          </ul>
+        </section>
+
+        <section id="ai" class="card reveal delay-2">
+          <h2>AI Processing</h2>
+          <p>
+            We may process prompts, messages, and related metadata to provide
+            AI features such as chat, recommendations, or summaries. We use this
+            information to deliver outputs, improve quality, and keep the
+            Service safe.
+          </p>
+        </section>
+
+        <section id="basis" class="card reveal delay-2">
+          <h2>Legal Bases (Where Applicable)</h2>
+          <p>
+            Depending on your location, we may process personal data based on
+            contractual necessity, legitimate interests, your consent, or to
+            comply with legal obligations.
+          </p>
+        </section>
+
+        <section id="cookies" class="card reveal delay-2">
+          <h2>Cookies and Analytics</h2>
+          <p>
+            We may use cookies, SDKs, and similar technologies to remember
+            settings, understand usage, and improve performance. You can manage
+            these controls through your browser or device settings where
+            available.
+          </p>
+        </section>
+
+        <section id="share" class="card reveal delay-2">
+          <h2>Sharing and Disclosure</h2>
+          <p>We may share information with:</p>
+          <ul>
+            <li>Service providers who help us operate the Service.</li>
+            <li>Law enforcement or regulators when required by law.</li>
+            <li>Business partners in the event of a merger or acquisition.</li>
+          </ul>
+        </section>
+
+        <section id="transfers" class="card reveal delay-3">
+          <h2>International Transfers</h2>
+          <p>
+            Your information may be processed in countries other than where you
+            live. We take steps to protect data in line with applicable laws.
+          </p>
+        </section>
+
+        <section id="retention" class="card reveal delay-3">
+          <h2>Data Retention</h2>
+          <p>
+            We keep information for as long as needed to provide the Service and
+            comply with legal obligations. Retention periods depend on data type
+            and purpose.
+          </p>
+        </section>
+
+        <section id="rights" class="card reveal delay-3">
+          <h2>Your Rights and Choices</h2>
+          <ul>
+            <li>Access, correct, or delete your account information.</li>
+            <li>Opt out of certain communications.</li>
+            <li>Request data export where available.</li>
+          </ul>
+          <p>
+            Depending on your location, you may have additional rights. To make
+            a request, contact us at [Contact Email].
+          </p>
+        </section>
+
+        <section id="security" class="card reveal delay-4">
+          <h2>Security</h2>
+          <p>
+            We use reasonable safeguards to protect your information. No system
+            is completely secure, so please use the Service responsibly.
+          </p>
+        </section>
+
+        <section id="children" class="card reveal delay-4">
+          <h2>Children's Privacy</h2>
+          <p>
+            The Service is not directed to children under 13. If you believe a
+            child has provided personal data, contact us so we can take action.
+          </p>
+        </section>
+
+        <section id="changes" class="card reveal delay-4">
+          <h2>Changes to This Policy</h2>
+          <p>
+            We may update this Privacy Policy from time to time. If changes are
+            material, we will provide notice as required by law.
+          </p>
+        </section>
+
+        <section id="contact" class="card reveal delay-4">
+          <h2>Contact</h2>
+          <p>
+            If you have questions about this Privacy Policy, contact us at
+            [Contact Email].
+          </p>
+        </section>
+      </main>
+
+      <footer>
+        90Plus Legal - Please replace bracketed placeholders before publishing.
+      </footer>
+    </div>
+  </body>
+</html>

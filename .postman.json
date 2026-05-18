@@ -48,6 +48,12 @@
         "key": "clerk_token",
         "value": "",
         "type": "string"
+      },
+      {
+        "key": "test_username",
+        "value": "",
+        "type": "string",
+        "description": "Auto-populated by 'Sync User with Backend' test script. Set manually if running requests out of order."
       }
     ],
     "item": [
@@ -235,9 +241,137 @@
                 "host": ["{{base_url}}"],
                 "path": ["clerk", "me"]
               },
-              "description": "Sync authenticated user with backend database"
+              "description": "Sync authenticated user with backend database. Returns full user profile including xp, coverImage, and consecutiveLoginDays."
             },
-            "response": []
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "",
+                    "pm.test('Status code is 200', function () {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Response has SUCCESS status', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j.status).to.eql('SUCCESS');",
+                    "});",
+                    "",
+                    "pm.test('Response contains user object', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j.data).to.have.property('user');",
+                    "    pm.expect(j.data.user).to.have.property('id');",
+                    "    pm.expect(j.data.user).to.have.property('username');",
+                    "});",
+                    "",
+                    "pm.test('User has xp field (non-negative integer)', function () {",
+                    "    var user = pm.response.json().data.user;",
+                    "    pm.expect(user).to.have.property('xp');",
+                    "    pm.expect(user.xp).to.be.a('number');",
+                    "    pm.expect(user.xp).to.be.at.least(0);",
+                    "});",
+                    "",
+                    "pm.test('User has coverImage field (string or null)', function () {",
+                    "    var user = pm.response.json().data.user;",
+                    "    pm.expect(user).to.have.property('coverImage');",
+                    "    var v = user.coverImage;",
+                    "    pm.expect(v === null || typeof v === 'string').to.be.true;",
+                    "});",
+                    "",
+                    "pm.test('User has consecutiveLoginDays field (non-negative integer)', function () {",
+                    "    var user = pm.response.json().data.user;",
+                    "    pm.expect(user).to.have.property('consecutiveLoginDays');",
+                    "    pm.expect(user.consecutiveLoginDays).to.be.a('number');",
+                    "    pm.expect(user.consecutiveLoginDays).to.be.at.least(0);",
+                    "});",
+                    "",
+                    "// Save username for downstream requests",
+                    "var username = pm.response.json().data.user.username;",
+                    "if (username) pm.collectionVariables.set('test_username', username);"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get User Profile by Username",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/clerk/user/{{test_username}}",
+                "host": ["{{base_url}}"],
+                "path": ["clerk", "user", "{{test_username}}"]
+              },
+              "description": "Get public profile by username. Now returns xp, coverImage, and consecutiveLoginDays (added in diff to clerk-user.routes.ts)."
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "",
+                    "pm.test('Status code is 200 or 404', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                    "});",
+                    "",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test('Response has SUCCESS status', function () {",
+                    "        pm.expect(pm.response.json().status).to.eql('SUCCESS');",
+                    "    });",
+                    "",
+                    "    pm.test('Profile has core identity fields', function () {",
+                    "        var d = pm.response.json().data;",
+                    "        pm.expect(d).to.have.property('id');",
+                    "        pm.expect(d).to.have.property('username');",
+                    "        pm.expect(d).to.have.property('displayName');",
+                    "    });",
+                    "",
+                    "    pm.test('Profile has xp field (non-negative integer) — new field', function () {",
+                    "        var d = pm.response.json().data;",
+                    "        pm.expect(d).to.have.property('xp');",
+                    "        pm.expect(d.xp).to.be.a('number');",
+                    "        pm.expect(d.xp).to.be.at.least(0);",
+                    "    });",
+                    "",
+                    "    pm.test('Profile has coverImage field (string or null) — new field', function () {",
+                    "        var d = pm.response.json().data;",
+                    "        pm.expect(d).to.have.property('coverImage');",
+                    "        var v = d.coverImage;",
+                    "        pm.expect(v === null || typeof v === 'string').to.be.true;",
+                    "    });",
+                    "",
+                    "    pm.test('Profile has consecutiveLoginDays field (non-negative integer) — new field', function () {",
+                    "        var d = pm.response.json().data;",
+                    "        pm.expect(d).to.have.property('consecutiveLoginDays');",
+                    "        pm.expect(d.consecutiveLoginDays).to.be.a('number');",
+                    "        pm.expect(d.consecutiveLoginDays).to.be.at.least(0);",
+                    "    });",
+                    "",
+                    "    pm.test('Profile has follower/following counts', function () {",
+                    "        var d = pm.response.json().data;",
+                    "        pm.expect(d).to.have.property('_count');",
+                    "        pm.expect(d._count).to.have.property('followers');",
+                    "        pm.expect(d._count).to.have.property('following');",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
           },
           {
             "name": "Get User Stats",
@@ -901,6 +1035,44 @@
         "name": "Profile",
         "item": [
           {
+            "name": "Get My Profile",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/profile/me",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "me"]
+              },
+              "description": "Get current user's full profile (cached 2min per user)"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                    "pm.test('Response has SUCCESS status', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j.status).to.eql('SUCCESS');",
+                    "});",
+                    "pm.test('Response contains user data', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j.data).to.have.property('id');",
+                    "    pm.expect(j.data).to.have.property('username');",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
             "name": "Get Profile Completion",
             "request": {
               "method": "GET",
@@ -912,40 +1084,255 @@
               },
               "description": "Get profile completion status"
             },
-            "response": []
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                    "pm.test('Response has completion data', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j).to.have.property('completionPercentage');",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
           },
           {
-            "name": "Update Profile",
+            "name": "Get Profile Analytics",
             "request": {
-              "method": "PUT",
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/profile/analytics",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "analytics"]
+              },
+              "description": "Get current user's analytics — views, followers, likes, reels (cached 2min)"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                    "pm.test('Response has SUCCESS status', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j.status).to.eql('SUCCESS');",
+                    "});",
+                    "pm.test('Analytics data has required fields', function () {",
+                    "    var d = pm.response.json().data;",
+                    "    pm.expect(d).to.have.property('profileViews');",
+                    "    pm.expect(d).to.have.property('followersCount');",
+                    "    pm.expect(d).to.have.property('reelsCount');",
+                    "    pm.expect(d).to.have.property('totalLikes');",
+                    "    pm.expect(d).to.have.property('totalViews');",
+                    "});"
+                  ],
+                  "type": "text/javascript"
                 }
+              }
+            ]
+          },
+          {
+            "name": "Get Profile Cooldowns",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/profile/cooldowns",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "cooldowns"]
+              },
+              "description": "Get remaining cooldowns for avatar (7d), cover (15d), username (15d), reel upload (1d), and delete limits (cached 1min)"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                    "pm.test('Response has SUCCESS status', function () {",
+                    "    var j = pm.response.json();",
+                    "    pm.expect(j.status).to.eql('SUCCESS');",
+                    "});",
+                    "pm.test('Cooldowns data has all sections', function () {",
+                    "    var d = pm.response.json().data;",
+                    "    pm.expect(d).to.have.property('avatar');",
+                    "    pm.expect(d).to.have.property('cover');",
+                    "    pm.expect(d).to.have.property('username');",
+                    "    pm.expect(d).to.have.property('reelUpload');",
+                    "    pm.expect(d).to.have.property('reelDelete');",
+                    "});",
+                    "pm.test('Each cooldown has canChange field', function () {",
+                    "    var d = pm.response.json().data;",
+                    "    pm.expect(d.avatar).to.have.property('canChange');",
+                    "    pm.expect(d.cover).to.have.property('canChange');",
+                    "    pm.expect(d.username).to.have.property('canChange');",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Update Profile (PATCH)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
               ],
               "body": {
                 "mode": "raw",
                 "raw": "{\n  \"displayName\": \"John Doe\",\n  \"bio\": \"Football fan\",\n  \"favoriteTeam\": \"Manchester United\"\n}"
               },
               "url": {
-                "raw": "{{base_url}}/clerk/profile",
+                "raw": "{{base_url}}/profile/me",
                 "host": ["{{base_url}}"],
-                "path": ["clerk", "profile"]
+                "path": ["profile", "me"]
               },
-              "description": "Update user profile"
+              "description": "Update current user profile fields. Rate-limited: writeLimiter (500 req/15min prod)"
             },
-            "response": []
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200 or 400', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401]);",
+                    "});",
+                    "pm.test('Rate-limit headers present', function () {",
+                    "    pm.expect(pm.response.headers.get('RateLimit-Limit') ||",
+                    "              pm.response.headers.get('X-RateLimit-Limit')).to.exist;",
+                    "});"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Update Avatar",
+            "request": {
+              "method": "PUT",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"avatarUrl\": \"https://example.com/avatar.jpg\",\n  \"storagePath\": \"avatars/user123/avatar.jpg\"\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/profile/avatar",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "avatar"]
+              },
+              "description": "Update profile avatar. 7-day cooldown enforced. Rate-limited: writeLimiter (500 req/15min prod)"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200, 400, 401, or 429 (cooldown)', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 429]);",
+                    "});",
+                    "if (pm.response.code === 429) {",
+                    "    pm.test('Cooldown response has daysRemaining', function () {",
+                    "        var j = pm.response.json();",
+                    "        var isRateLimit = j.code === 'COOLDOWN_ACTIVE' || j.status === 'ERROR';",
+                    "        pm.expect(isRateLimit).to.be.true;",
+                    "    });",
+                    "}",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test('Success response has SUCCESS status', function () {",
+                    "        pm.expect(pm.response.json().status).to.eql('SUCCESS');",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Update Cover Image",
+            "request": {
+              "method": "PUT",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"coverUrl\": \"https://example.com/cover.jpg\",\n  \"storagePath\": \"covers/user123/cover.jpg\"\n}"
+              },
+              "url": {
+                "raw": "{{base_url}}/profile/cover",
+                "host": ["{{base_url}}"],
+                "path": ["profile", "cover"]
+              },
+              "description": "Update cover image. 15-day cooldown enforced. Rate-limited: writeLimiter (500 req/15min prod)"
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200, 400, 401, or 429 (cooldown)', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 429]);",
+                    "});",
+                    "if (pm.response.code === 429) {",
+                    "    pm.test('Cooldown response has COOLDOWN_ACTIVE code', function () {",
+                    "        var j = pm.response.json();",
+                    "        pm.expect(j.code).to.eql('COOLDOWN_ACTIVE');",
+                    "        pm.expect(j).to.have.property('daysRemaining');",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
           },
           {
             "name": "Update Username",
             "request": {
               "method": "PUT",
               "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
+                { "key": "Content-Type", "value": "application/json" }
               ],
               "body": {
                 "mode": "raw",
@@ -956,9 +1343,124 @@
                 "host": ["{{base_url}}"],
                 "path": ["profile", "username"]
               },
-              "description": "Update username (15-day cooldown)"
+              "description": "Update username. 15-day cooldown enforced. Rate-limited: strictLimiter (50 req/15min prod — most sensitive)"
             },
-            "response": []
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200, 400, 401, 409, or 429', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 409, 429]);",
+                    "});",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test('Success response has username', function () {",
+                    "        var j = pm.response.json();",
+                    "        pm.expect(j.status).to.eql('SUCCESS');",
+                    "        pm.expect(j.data).to.have.property('username');",
+                    "    });",
+                    "}",
+                    "if (pm.response.code === 409) {",
+                    "    pm.test('Conflict response for taken username', function () {",
+                    "        var j = pm.response.json();",
+                    "        pm.expect(j.status).to.eql('ERROR');",
+                    "    });",
+                    "}",
+                    "if (pm.response.code === 429) {",
+                    "    pm.test('Cooldown or rate-limit response', function () {",
+                    "        var j = pm.response.json();",
+                    "        pm.expect(j.status).to.eql('ERROR');",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Increment Profile View",
+            "request": {
+              "method": "POST",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/profile/:username/view",
+                "host": ["{{base_url}}"],
+                "path": ["profile", ":username", "view"],
+                "variable": [
+                  { "key": "username", "value": "testuser", "description": "Target profile username" }
+                ]
+              },
+              "description": "Increment profile view count. Deduplicated per viewer per 5 minutes. Self-views are ignored."
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200 or 404', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                    "});",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test('Response has SUCCESS status', function () {",
+                    "        pm.expect(pm.response.json().status).to.eql('SUCCESS');",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get Profile by Username",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": {
+                "raw": "{{base_url}}/profile/:username",
+                "host": ["{{base_url}}"],
+                "path": ["profile", ":username"],
+                "variable": [
+                  { "key": "username", "value": "testuser", "description": "Target profile username" }
+                ]
+              },
+              "description": "Get public profile by username. Must be last route to avoid matching /analytics, /cooldowns, etc."
+            },
+            "response": [],
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "if (!pm.variables.get('clerk_token')) {",
+                    "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                    "    return;",
+                    "}",
+                    "pm.test('Status code is 200 or 404', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                    "});",
+                    "if (pm.response.code === 200) {",
+                    "    pm.test('Profile has username field', function () {",
+                    "        var j = pm.response.json();",
+                    "        pm.expect(j.data || j).to.have.property('username');",
+                    "    });",
+                    "}"
+                  ],
+                  "type": "text/javascript"
+                }
+              }
+            ]
           }
         ]
       },

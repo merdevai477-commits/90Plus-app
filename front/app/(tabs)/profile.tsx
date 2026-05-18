@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
@@ -34,7 +34,6 @@ import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCac
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
-import LevelCard from '../../components/profile/LevelCard';
 import { getApiUrl } from '../../config/api.config';
 import { compressImage } from '@/utils/imageCompressor';
 import { logger } from '../../utils/logger';
@@ -46,6 +45,7 @@ import BrandPickerModal from '../../components/common/BrandPickerModal';
 import StatsEditModal, { Stats } from '../../components/common/StatsEditModal';
 import ProfileEditModal from '../../components/profile/ProfileEditModal';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
+import { useReelUploadEventsStore } from '../../src/store/useReelUploadEventsStore';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import QRCodeModal from '../../components/profile/QRCodeModal';
 import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOptimisticProfile';
@@ -58,11 +58,14 @@ import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from
 import { CooldownBlockModal } from '../../components/common/CooldownBlockModal';
 import { useReelStatusPoller } from '../../hooks/useReelStatusPoller';
 import { useScreenFont } from '../../utils/fontSetup';
+import { BlurView } from 'expo-blur';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const API_URL = getApiUrl();
 
 /** Minimum gap between automatic profile API refreshes (tab focus / app resume) */
-const PROFILE_UI_REFRESH_INTERVAL_MS = 120_000;
+const PROFILE_UI_REFRESH_INTERVAL_MS = 30_000; // 30s — fast enough to feel live, gentle enough to skip duplicate fetches
 
 // Get screen dimensions for responsive design
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -209,6 +212,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 8,
     paddingHorizontal: 20,
+  },
+});
+
+// ── Completion pill styles (outside main StyleSheet for clarity) ─────────────
+const completionStyles = StyleSheet.create({
+  wrapper: {
+    paddingHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 14,
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.3)',
+    backgroundColor: 'transparent',
+    gap: 12,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  iconDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(168,85,247,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.3)',
+  },
+  label: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  right: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  barBg: {
+    width: 60,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    backgroundColor: '#A855F7',
+    borderRadius: 2,
+  },
+  pct: {
+    color: '#A855F7',
+    fontSize: 12,
+    fontWeight: '800',
+    minWidth: 32,
+    textAlign: 'right',
   },
 });
 
@@ -421,6 +492,36 @@ export default function ProfileScreen() {
   const [pollingReelId, setPollingReelId] = useState<string | null>(null);
   const reelStatus = useReelStatusPoller(pollingReelId, getToken, !!pollingReelId);
 
+  // Cross-screen event store — notifies the reels feed when a reel becomes READY
+  const markReelReady = useReelUploadEventsStore(s => s.markReady);
+  const markReelFailed = useReelUploadEventsStore(s => s.markFailed);
+
+  // ✅ FIX: When a polled reel finishes processing, refresh the profile videos
+  // grid AND signal the reels feed so it invalidates its cache.
+  // Without this, freshly uploaded reels stayed hidden until tab focus + 10s
+  // throttle window passed.
+  useEffect(() => {
+    if (!pollingReelId) return;
+    if (reelStatus.stage === 'ready') {
+      (async () => {
+        try {
+          await cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {});
+          if (userData?.username) {
+            await loadVideos(userData.username, true);
+          }
+          markReelReady(pollingReelId);
+        } finally {
+          setPollingReelId(null);
+        }
+      })();
+    } else if (reelStatus.stage === 'failed') {
+      markReelFailed(pollingReelId);
+      setPollingReelId(null);
+    }
+    // loadVideos is stable from useProfileCache; userData?.username only flips on auth change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reelStatus.stage, pollingReelId]);
+
   // Loading states for profile operations
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
@@ -443,6 +544,7 @@ export default function ProfileScreen() {
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
   const [isTasksModalVisible, setIsTasksModalVisible] = useState(false);
+  const [isCompletionDetailVisible, setIsCompletionDetailVisible] = useState(false);
 
   // Cover image state
   const [coverImage, setCoverImageState] = useState<string | null>(globalState.localCover || null);
@@ -538,6 +640,7 @@ export default function ProfileScreen() {
     const cached = cachedVideos || [];
     const uploaded = uploadedVideos || [];
 
+    // Merge uploaded videos first (they have priority for optimistic updates)
     const allVideos = [...uploaded, ...cached];
 
     // O(n) deduplication using Map instead of O(n²) reduce+find
@@ -567,7 +670,9 @@ export default function ProfileScreen() {
         // cause "Failed to load video" in the player.
         const videoUrl = isPlayableVideoUrl(rawVideoUrl) ? rawVideoUrl : '';
         // Backend returns status: 'PROCESSING' for reels still being encoded
-        const isProcessing = video.status === 'PROCESSING' || (!videoUrl && !video.isUploading);
+        // Also treat FAILED status so user can see and retry
+        const isProcessing = video.status === 'PROCESSING' || (!videoUrl && !video.isUploading && video.status !== 'FAILED');
+        const isFailed = video.status === 'FAILED';
         return {
           id: video.id,
           thumbnail: video.thumbnail || video.uri,
@@ -576,13 +681,13 @@ export default function ProfileScreen() {
           duration: video.duration || '',
           isUploading: video.isUploading || false,
           isProcessing,
+          isFailed,
           uploadProgress: video.uploadProgress,
+          status: video.status,
         };
       })
-      // Hide rows that have no video URL and are NOT currently uploading
-      // or processing. PROCESSING reels (Mux still encoding) should appear
-      // with a processing overlay so the user sees their upload immediately.
-      .filter((v: any) => v.isUploading || v.isProcessing || v.videoUrl.length > 0);
+      // Show: uploading, processing, failed, or ready (has videoUrl)
+      .filter((v: any) => v.isUploading || v.isProcessing || v.isFailed || v.videoUrl.length > 0);
   }, [cachedVideos, uploadedVideos]);
   
   const analytics = cachedAnalytics;
@@ -1141,14 +1246,15 @@ export default function ProfileScreen() {
       const mentions = caption.match(/@[\w]+/g) || [];
 
       const syncReelProgress = (progress: number) => {
+        const safeProgress = Math.min(Math.max(Math.round(progress), 0), 100);
         let label = t.profile.preparingUpload;
-        if (progress >= 20 && progress < 90) label = t.profile.uploadingVideo;
-        else if (progress >= 90 && progress < 100) label = t.profile.processingVideo;
-        else if (progress >= 100) label = t.profile.uploadSuccessPhase;
-        setVideoUploadProgress(progress);
+        if (safeProgress >= 20 && safeProgress < 90) label = t.profile.uploadingVideo;
+        else if (safeProgress >= 90 && safeProgress < 100) label = t.profile.processingVideo;
+        else if (safeProgress >= 100) label = t.profile.uploadSuccessPhase;
+        setVideoUploadProgress(safeProgress);
         setVideoUploadMessage(label);
-        setReelUploadUi({ active: true, progress, phaseLabel: label });
-        void reelUploadNotification.updateProgress(progress, label);
+        setReelUploadUi({ active: true, progress: safeProgress, phaseLabel: label });
+        void reelUploadNotification.updateProgress(safeProgress, label);
       };
 
       setReelUploadUi({ active: true, progress: 0, phaseLabel: t.profile.preparingUpload });
@@ -1401,8 +1507,8 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Fixed top bar — 90PLUS brand + purple coin badge */}
-      <ProfileTopBar topInset={insets.top} />
+      {/* Fixed top bar — 90PLUS brand + LVL badge + purple coin badge */}
+      <ProfileTopBar topInset={insets.top} level={userData?.level ?? undefined} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1467,56 +1573,48 @@ export default function ProfileScreen() {
           consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
         />
 
-        {/* Profile Completion Card - FIXED: No more infinite loop */}
-        {completionStatus && completionStatus.percentage < 100 && (
-          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                borderRadius: 16,
-                padding: 16,
-                borderWidth: 1,
-                borderColor: 'rgba(34, 197, 94, 0.3)',
-              }}
-              onPress={() => {
-                // Show completion details
-                Alert.alert(
-                  t.profile.completeYourProfile,
-                  `${t.profile.completedPercentage.replace('{percentage}', String(completionStatus.percentage))}\n\n${t.profile.remainingSteps}:\n${completionStatus.missingRequiredSteps.map(step => `• ${step}`).join('\n')}`,
-                  [{ text: t.profile.okay, style: 'default' }]
-                );
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: ProfileTheme.colors.textPrimary, fontSize: 16, fontWeight: 'bold', marginBottom: 4 }}>
-                    {t.profile.completeYourProfile}
-                  </Text>
-                  <Text style={{ color: ProfileTheme.colors.textSecondary, fontSize: 14 }}>
-                    {`${completionStatus.completedSteps} ${t.profile.of} ${completionStatus.totalSteps} ${t.profile.stepsCompleted}`}
-                  </Text>
-                </View>
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: ProfileTheme.colors.neonGreen, fontSize: 24, fontWeight: 'bold' }}>
-                    {completionStatus.percentage}%
-                  </Text>
-                </View>
-              </View>
-              
-              {/* Progress Bar */}
-              <View style={{ marginTop: 12, height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' }}>
-                <View 
-                  style={{ 
-                    height: '100%', 
-                    width: `${completionStatus.percentage}%`, 
-                    backgroundColor: ProfileTheme.colors.neonGreen,
-                    borderRadius: 4,
-                  }} 
+        {/* Profile Completion — compact liquid glass pill */}
+        {completionStatus && completionStatus.percentage < 100 && (() => {
+          const GlassCompletion = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+          const glassP = isLiquidGlassSupported
+            ? { effect: 'clear' as const, interactive: true }
+            : { intensity: 22, tint: 'dark' as const };
+          const pct = completionStatus.percentage;
+          return (
+            <View style={completionStyles.wrapper}>
+              <TouchableOpacity
+                style={completionStyles.pill}
+                activeOpacity={0.82}
+                onPress={() => setIsCompletionDetailVisible(true)}
+              >
+                <GlassCompletion {...(glassP as any)} style={StyleSheet.absoluteFill} />
+                {/* Purple-to-cyan tint */}
+                <LinearGradient
+                  colors={['rgba(124,58,237,0.18)', 'rgba(0,217,255,0.08)']}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                 />
-              </View>
-            </TouchableOpacity>
-          </View>
-        )}
+
+                {/* Left: icon + label */}
+                <View style={completionStyles.left}>
+                  <View style={completionStyles.iconDot}>
+                    <Ionicons name="checkmark-done" size={12} color="#A855F7" />
+                  </View>
+                  <Text style={completionStyles.label}>{t.profile.completeYourProfile}</Text>
+                </View>
+
+                {/* Right: progress bar + percentage */}
+                <View style={completionStyles.right}>
+                  <View style={completionStyles.barBg}>
+                    <View style={[completionStyles.barFill, { width: `${pct}%` as any }]} />
+                  </View>
+                  <Text style={completionStyles.pct}>{pct}%</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         {/* Social Links Section */}
         <SocialLinksSection
@@ -1534,16 +1632,6 @@ export default function ProfileScreen() {
               compact={true}
             />
           </View>
-        )}
-
-        {/* Level & XP Card */}
-        {userData?.level != null && (
-          <LevelCard
-            level={userData.level || 1}
-            currentXP={(userData.xp || 0) - xpForLevel(userData.level || 1)}
-            maxXP={getXpForNextLevel(userData.level || 1)}
-            coins={userData.coins || 0}
-          />
         )}
 
         <ActionButtons
@@ -2046,6 +2134,168 @@ export default function ProfileScreen() {
         displayName={userData?.displayName || undefined}
         avatar={localImage || userData?.avatar || undefined}
       />
+
+      {/* ── Profile Completion Detail Modal — full-screen blur ──── */}
+      {isCompletionDetailVisible && completionStatus && (() => {
+        const pct = completionStatus.percentage;
+        const allSteps = completionStatus.steps ?? [];
+        return (
+          <Modal
+            visible={isCompletionDetailVisible}
+            transparent
+            animationType="fade"
+            statusBarTranslucent
+            onRequestClose={() => setIsCompletionDetailVisible(false)}
+          >
+            {/* Full-screen blur backdrop */}
+            <BlurView intensity={55} tint="dark" style={{ flex: 1 }}>
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(5,1,13,0.45)' }}>
+
+                {/* Sheet */}
+                <View style={{
+                  backgroundColor: 'rgba(10,4,22,0.97)',
+                  borderTopLeftRadius: 32,
+                  borderTopRightRadius: 32,
+                  paddingTop: 0,
+                  paddingHorizontal: 24,
+                  paddingBottom: insets.bottom + 24,
+                  maxHeight: '88%',
+                  borderTopWidth: 1,
+                  borderColor: 'rgba(168,85,247,0.25)',
+                  overflow: 'hidden',
+                }}>
+                  {/* Purple top accent line */}
+                  <LinearGradient
+                    colors={['#A855F7', '#7C3AED', 'transparent']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
+                  />
+
+                  {/* Drag handle */}
+                  <View style={{ alignItems: 'center', paddingTop: 14, marginBottom: 20 }}>
+                    <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(168,85,247,0.4)' }} />
+                  </View>
+
+                  {/* Header */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                    <View>
+                      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 0.2 }}>
+                        {t.profile.completeYourProfile}
+                      </Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 3 }}>
+                        {`${completionStatus.completedSteps} ${t.profile.of} ${completionStatus.totalSteps} ${t.profile.stepsCompleted}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setIsCompletionDetailVisible(false)}
+                      style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+                    >
+                      <Ionicons name="close" size={17} color="rgba(255,255,255,0.75)" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Big percentage + progress bar */}
+                  <View style={{ alignItems: 'center', marginBottom: 28 }}>
+                    <Text style={{ color: '#A855F7', fontSize: 56, fontWeight: '900', letterSpacing: -3, lineHeight: 60 }}>{pct}%</Text>
+                    <View style={{ width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 4, marginTop: 16, overflow: 'hidden' }}>
+                      <LinearGradient
+                        colors={['#A855F7', '#7C3AED', '#4F46E5']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{ height: '100%', width: `${pct}%`, borderRadius: 4 }}
+                      />
+                    </View>
+                  </View>
+
+                  {/* All steps list */}
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                    {allSteps.map((step, i) => (
+                      <View
+                        key={step.id ?? i}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingVertical: 13,
+                          paddingHorizontal: 16,
+                          marginBottom: 8,
+                          borderRadius: 16,
+                          backgroundColor: step.completed
+                            ? 'rgba(168,85,247,0.1)'
+                            : 'rgba(255,255,255,0.04)',
+                          borderWidth: 1,
+                          borderColor: step.completed
+                            ? 'rgba(168,85,247,0.3)'
+                            : 'rgba(255,255,255,0.07)',
+                        }}
+                      >
+                        {/* Status icon */}
+                        <View style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: step.completed
+                            ? 'rgba(168,85,247,0.25)'
+                            : 'rgba(255,255,255,0.06)',
+                          marginRight: 14,
+                          borderWidth: 1,
+                          borderColor: step.completed
+                            ? 'rgba(168,85,247,0.5)'
+                            : 'rgba(255,255,255,0.1)',
+                        }}>
+                          <Ionicons
+                            name={step.completed ? 'checkmark' : 'ellipse-outline'}
+                            size={14}
+                            color={step.completed ? '#A855F7' : 'rgba(255,255,255,0.3)'}
+                          />
+                        </View>
+
+                        {/* Label */}
+                        <Text style={{
+                          flex: 1,
+                          color: step.completed ? '#fff' : 'rgba(255,255,255,0.55)',
+                          fontSize: 14,
+                          fontWeight: step.completed ? '700' : '500',
+                        }}>
+                          {step.label}
+                        </Text>
+
+                        {/* Required badge */}
+                        {step.required && !step.completed && (
+                          <View style={{
+                            backgroundColor: 'rgba(168,85,247,0.15)',
+                            borderRadius: 8,
+                            paddingHorizontal: 7,
+                            paddingVertical: 3,
+                            borderWidth: 1,
+                            borderColor: 'rgba(168,85,247,0.3)',
+                          }}>
+                            <Text style={{ color: '#A855F7', fontSize: 10, fontWeight: '700' }}>مطلوب</Text>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+
+                  {/* Close button */}
+                  <TouchableOpacity onPress={() => setIsCompletionDetailVisible(false)} activeOpacity={0.85}>
+                    <LinearGradient
+                      colors={['#A855F7', '#7C3AED']}
+                      style={{ height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#A855F7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 }}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{t.profile.okay}</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </BlurView>
+          </Modal>
+        );
+      })()}
     </View>
   );
 }

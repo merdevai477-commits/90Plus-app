@@ -341,6 +341,7 @@ export const en = {
       all: 'All',
       live: 'Live',
       upcoming: 'Upcoming',
+      international: 'International',
       finished: 'Finished',
       favorites: 'Favorites',
       predictions: 'Predictions',

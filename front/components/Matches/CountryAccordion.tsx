@@ -1,23 +1,32 @@
 /**
  * CountryAccordion
  *
- * Renders the Country → League → Matches nested accordion for the matches screen.
- * - Country header: flag + name (collapsible)
- * - League section: logo + name + first 2 matches + "View All" button
- * - Performance: uses memo + stable callbacks, no unnecessary re-renders
+ * Country → League → Matches nested accordion for the matches screen.
+ *
+ * Performance notes (the screen used to feel instant — keep it that way):
+ *  - Both country *and* league sections start COLLAPSED. Expanding the
+ *    country alone never paints any match cards; the user has to also
+ *    open a league. This caps the worst-case render budget on first
+ *    paint to ~5 country headers (TOP5 default-expanded).
+ *  - LayoutAnimation runs on iOS only. On Android the legacy
+ *    LayoutAnimation pipeline blocks the JS thread for ~200–300ms per
+ *    toggle and stutters mid-scroll, so we just snap on Android.
+ *  - Images use cachePolicy="memory-disk" with NO transition and NO
+ *    recyclingKey. expo-image already keys its memory cache by URI;
+ *    setting recyclingKey={uri} forces a re-decode per cell which is
+ *    the opposite of what we want.
  */
 
 import React, { memo, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
+// Don't even enable it on Android.
+const ANIMATE_TOGGLE = Platform.OS === 'ios';
 
 const MATCHES_PREVIEW_COUNT = 2;
 
@@ -38,26 +47,38 @@ const LeagueSection = memo(function LeagueSection({
   renderMatchCard: (match: Match, index: number) => React.ReactNode;
   onViewAll?: () => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
-  const hasMore = league.matches.length > MATCHES_PREVIEW_COUNT;
-  const visibleMatches = expanded ? league.matches.slice(0, MATCHES_PREVIEW_COUNT) : [];
+  // Leagues start COLLAPSED — opening a country shouldn't paint a wall of
+  // match cards. The user explicitly asked for this and it's also much
+  // faster on first paint.
+  const [expanded, setExpanded] = useState(false);
 
   const toggle = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (ANIMATE_TOGGLE) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
     setExpanded(prev => !prev);
   }, []);
+
+  const matchCount = league.matches.length;
+  const hasMore = matchCount > MATCHES_PREVIEW_COUNT;
 
   return (
     <View style={styles.leagueSection}>
       {/* League Header */}
       <TouchableOpacity style={styles.leagueHeader} onPress={toggle} activeOpacity={0.7}>
         {league.leagueLogo ? (
-          <Image source={{ uri: league.leagueLogo }} style={styles.leagueLogo} contentFit="contain" cachePolicy="memory-disk" />
+          <Image
+            source={{ uri: league.leagueLogo }}
+            style={styles.leagueLogo}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            priority="low"
+          />
         ) : (
           <View style={[styles.leagueLogo, styles.placeholderLogo]} />
         )}
         <Text style={styles.leagueName} numberOfLines={1}>{league.leagueName}</Text>
-        <Text style={styles.matchCount}>{league.matches.length}</Text>
+        <Text style={styles.matchCount}>{matchCount}</Text>
         {expanded ? (
           <ChevronUp size={14} color="rgba(255,255,255,0.4)" />
         ) : (
@@ -65,15 +86,18 @@ const LeagueSection = memo(function LeagueSection({
         )}
       </TouchableOpacity>
 
-      {/* Match Cards */}
+      {/* Match Cards — only rendered when this league is expanded.
+          Slicing a small array is cheaper than mounting cards we won't show. */}
       {expanded && (
         <View style={styles.matchesContainer}>
-          {visibleMatches.map((match, i) => (
-            <View key={match.id}>{renderMatchCard(match, i)}</View>
+          {league.matches.slice(0, MATCHES_PREVIEW_COUNT).map((match, i) => (
+            // Fallback to index if the API ever returns a match without
+            // a stable id — keeps React's reconciler happy either way.
+            <View key={match.id ?? `m-${i}`}>{renderMatchCard(match, i)}</View>
           ))}
           {hasMore && onViewAll && (
             <TouchableOpacity style={styles.viewAllBtn} onPress={onViewAll} activeOpacity={0.7}>
-              <Text style={styles.viewAllText}>عرض الكل ({league.matches.length})</Text>
+              <Text style={styles.viewAllText}>عرض الكل ({matchCount})</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -92,18 +116,28 @@ export const CountryAccordion = memo(function CountryAccordion({
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const toggle = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (ANIMATE_TOGGLE) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
     setExpanded(prev => !prev);
   }, []);
 
-  const totalMatches = countryGroup.leagues.reduce((sum, l) => sum + l.matches.length, 0);
+  // Sum is O(leagues) — cheap, no useMemo needed.
+  let totalMatches = 0;
+  for (const l of countryGroup.leagues) totalMatches += l.matches.length;
 
   return (
     <View style={styles.countryContainer}>
       {/* Country Header */}
       <TouchableOpacity style={styles.countryHeader} onPress={toggle} activeOpacity={0.7}>
         {countryGroup.countryFlag ? (
-          <Image source={{ uri: countryGroup.countryFlag }} style={styles.countryFlag} contentFit="contain" cachePolicy="memory-disk" />
+          <Image
+            source={{ uri: countryGroup.countryFlag }}
+            style={styles.countryFlag}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            priority="low"
+          />
         ) : (
           <Text style={styles.flagEmoji}>🌍</Text>
         )}
@@ -116,7 +150,9 @@ export const CountryAccordion = memo(function CountryAccordion({
         )}
       </TouchableOpacity>
 
-      {/* Leagues (visible when expanded) */}
+      {/* Leagues are only mounted when the country is expanded. This is the
+          single biggest win — non-expanded countries pay zero cost beyond
+          their header. */}
       {expanded && (
         <View style={styles.leaguesWrapper}>
           {countryGroup.leagues.map(league => (

@@ -179,7 +179,7 @@ export class StorageService {
     static async uploadReel(
         token: string, 
         videoUri: string, 
-        thumbnailUri?: string,
+        _thumbnailUri?: string,
         caption?: string,
         hashtags?: string[],
         mentions?: string[],
@@ -203,25 +203,12 @@ export class StorageService {
             } as any);
 
             // ✅ Show "Uploading..."
-            if (onProgress) onProgress(15);
-
-            // Add thumbnail if provided
-            if (thumbnailUri) {
-                const thumbFilename = thumbnailUri.split('/').pop() || 'thumb.jpg';
-                formData.append('thumbnail', {
-                    uri: thumbnailUri,
-                    name: thumbFilename,
-                    type: 'image/jpeg',
-                } as any);
-            }
+            if (onProgress) onProgress(20);
 
             // Add metadata
             if (caption) formData.append('caption', caption);
             if (hashtags) formData.append('hashtags', JSON.stringify(hashtags));
             if (mentions) formData.append('mentions', JSON.stringify(mentions));
-
-            // ✅ Show "Uploading..."
-            if (onProgress) onProgress(20);
 
             // Get upload timeout from config (15 minutes)
             const { getAPIConfig } = require('../../config/api.config');
@@ -235,7 +222,7 @@ export class StorageService {
                 
                 // ✅ IMPROVED: Better progress tracking
                 const progressHandler = (event: ProgressEvent) => {
-                    if (event.lengthComputable && onProgress) {
+                    if (event.lengthComputable && event.total > 0 && onProgress) {
                         // 20% for preparation, 70% for upload, 10% for processing
                         const uploadProgress = 20 + (event.loaded / event.total) * 70;
                         const progressValue = Math.min(Math.round(uploadProgress), 90);

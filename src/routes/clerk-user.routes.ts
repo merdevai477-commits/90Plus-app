@@ -610,6 +610,7 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
                 isVerified: true,
                 isDeveloper: true,
                 level: true,
+                xp: true,
                 favoriteTeam: true,
                 createdAt: true,
                 position: true,
@@ -621,7 +622,9 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
                 preferredFoot: true,
                 clubLogo: true,
                 brandLogo: true,
+                coverImage: true,
                 socialLinks: true,
+                consecutiveLoginDays: true,
                 _count: {
                     select: {
                         followers: true,

@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Terms and Conditions | 90Plus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-0: #080608;
+        --bg-1: #0d0a14;
+        --ink: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.55);
+        --accent: #7c3aed;
+        --accent-2: #a78bfa;
+        --card: rgba(13, 10, 20, 0.92);
+        --border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 22px 64px rgba(124, 58, 237, 0.2);
+        --chip: rgba(124, 58, 237, 0.18);
+        --chip-text: rgba(255, 255, 255, 0.85);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Work Sans", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(900px 520px at 10% -10%, rgba(124, 58, 237, 0.25), transparent 60%),
+          radial-gradient(720px 420px at 90% 0%, rgba(76, 29, 149, 0.35), transparent 60%),
+          radial-gradient(700px 500px at 50% 115%, rgba(91, 33, 182, 0.2), transparent 70%),
+          linear-gradient(180deg, var(--bg-0), var(--bg-1));
+        min-height: 100vh;
+      }
+
+      .page {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .grain {
+        position: fixed;
+        inset: 0;
+        opacity: 0.12;
+        background-image: repeating-linear-gradient(
+          120deg,
+          rgba(255, 255, 255, 0.035),
+          rgba(255, 255, 255, 0.035) 1px,
+          transparent 1px,
+          transparent 6px
+        );
+        pointer-events: none;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 28px 7vw 10px;
+      }
+
+      .brand {
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+
+      nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 500;
+        margin-left: 18px;
+      }
+
+      nav a.active {
+        color: var(--accent);
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px 7vw 80px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        margin-bottom: 30px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        font-weight: 600;
+      }
+
+      h1 {
+        font-family: "Fraunces", serif;
+        font-size: clamp(32px, 4vw, 48px);
+        margin: 0;
+      }
+
+      .lead {
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 620px;
+      }
+
+      .meta {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 6px;
+      }
+
+      .toc a {
+        font-size: 13px;
+        color: var(--accent-2);
+        text-decoration: none;
+        background: var(--chip);
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(124, 58, 237, 0.35);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 22px 24px;
+        box-shadow: var(--shadow);
+        margin-bottom: 18px;
+      }
+
+      h2 {
+        font-family: "Fraunces", serif;
+        font-size: 22px;
+        margin: 0 0 12px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        line-height: 1.7;
+      }
+
+      ul {
+        margin: 0 0 8px 18px;
+        padding: 0;
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--chip-text);
+        font-weight: 600;
+        font-size: 12px;
+        border: 1px solid rgba(124, 58, 237, 0.35);
+      }
+
+      .callout {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(124, 58, 237, 0.16);
+        border: 1px solid rgba(124, 58, 237, 0.35);
+        color: var(--ink);
+      }
+
+      .callout strong {
+        color: var(--accent-2);
+      }
+
+      main a {
+        color: var(--accent-2);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      nav a,
+      .toc a {
+        text-decoration: none;
+      }
+
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 24px 0 40px;
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(10px);
+        animation: reveal 0.6s ease forwards;
+      }
+
+      .delay-1 { animation-delay: 0.05s; }
+      .delay-2 { animation-delay: 0.12s; }
+      .delay-3 { animation-delay: 0.2s; }
+      .delay-4 { animation-delay: 0.3s; }
+
+      @keyframes reveal {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 720px) {
+        header {
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        nav a {
+          margin-left: 0;
+          margin-right: 12px;
+        }
+
+        .meta {
+          flex-direction: column;
+          gap: 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="grain"></div>
+      <header>
+        <div class="brand">90Plus</div>
+        <nav>
+          <a class="active" href="terms.html">Terms</a>
+          <a href="privacy.html">Privacy</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero reveal">
+          <div class="eyebrow">Legal</div>
+          <h1>Terms and Conditions</h1>
+          <p class="lead">
+            These Terms and Conditions govern your access to and use of the 90Plus
+            app, websites, and related services (the Service).
+          </p>
+          <div class="meta">
+            <span>Effective date: [Effective Date]</span>
+            <span>Last updated: [Last Updated]</span>
+          </div>
+          <div class="toc">
+            <a href="#overview">Overview</a>
+            <a href="#accounts">Accounts</a>
+            <a href="#use">Acceptable Use</a>
+            <a href="#content">User Content</a>
+            <a href="#ip">Intellectual Property</a>
+            <a href="#ai">AI Outputs</a>
+            <a href="#health">Training and Health</a>
+            <a href="#third-party">Third-Party</a>
+            <a href="#beta">Beta Features</a>
+            <a href="#payments">Payments</a>
+            <a href="#changes">Changes</a>
+            <a href="#termination">Termination</a>
+            <a href="#legal">Legal</a>
+          </div>
+        </section>
+
+        <section id="overview" class="card reveal delay-1">
+          <div class="pill">Summary</div>
+          <p>
+            The Service is operated by [Company Name] (we, us, our). By accessing
+            or using the Service, you agree to these Terms. If you do not agree,
+            do not use the Service.
+          </p>
+          <p>
+            90Plus provides football insights, training and recovery guidance,
+            quizzes, and AI chat tools. Features may vary by region, device, or
+            subscription tier and can change over time.
+          </p>
+          <div class="grid two">
+            <div>
+              <h2>Eligibility</h2>
+              <p>
+                You must be at least 13 years old to use the Service. If you are
+                under 18, you must have permission from a parent or legal
+                guardian.
+              </p>
+            </div>
+            <div>
+              <h2>Changes</h2>
+              <p>
+                We may update these Terms from time to time. Continued use means
+                you accept the updated Terms.
+              </p>
+            </div>
+            <div>
+              <h2>Privacy</h2>
+              <p>
+                Our data practices are described in the
+                <a href="privacy.html">Privacy Policy</a>.
+              </p>
+            </div>
+          </div>
+          <div class="callout">
+            <strong>Quick take:</strong> Use 90Plus responsibly, verify AI
+            outputs, and never share your account credentials.
+          </div>
+        </section>
+
+        <section id="accounts" class="card reveal delay-2">
+          <h2>Accounts and Security</h2>
+          <ul>
+            <li>Provide accurate and current information.</li>
+            <li>Keep your login credentials secure.</li>
+            <li>Do not share your account or access tokens.</li>
+            <li>Notify us if you suspect unauthorized access.</li>
+            <li>You are responsible for all activity under your account.</li>
+          </ul>
+        </section>
+
+        <section id="use" class="card reveal delay-2">
+          <h2>Acceptable Use</h2>
+          <p>You agree not to:</p>
+          <ul>
+            <li>Use the Service for unlawful, harmful, or abusive activity.</li>
+            <li>Harass, threaten, or impersonate others.</li>
+            <li>Attempt to access systems or data you are not authorized to use.</li>
+            <li>Upload malware, spam, or content that violates others' rights.</li>
+            <li>Scrape, overload, or disrupt the Service.</li>
+            <li>Reverse engineer or interfere with Service operations.</li>
+          </ul>
+        </section>
+
+        <section id="content" class="card reveal delay-3">
+          <h2>User Content</h2>
+          <p>
+            You retain ownership of content you submit. You grant us a limited
+            license to host, store, reproduce, and display your content to
+            provide and improve the Service.
+          </p>
+          <ul>
+            <li>You must have the rights needed to share your content.</li>
+            <li>We may remove content that violates these Terms or policies.</li>
+            <li>We may use content to operate and improve AI features.</li>
+          </ul>
+        </section>
+
+        <section id="ip" class="card reveal delay-3">
+          <h2>Intellectual Property</h2>
+          <p>
+            The Service, including its design, branding, and software, is owned
+            by [Company Name] or its licensors. You receive a limited,
+            non-exclusive, non-transferable license to use the Service for
+            personal, non-commercial purposes.
+          </p>
+        </section>
+
+        <section id="ai" class="card reveal delay-3">
+          <h2>AI Outputs</h2>
+          <p>
+            The Service may generate AI outputs. These outputs can be incorrect
+            or incomplete and are provided for informational purposes only. You
+            are responsible for how you use them.
+          </p>
+          <ul>
+            <li>Verify critical information before acting on it.</li>
+            <li>AI outputs are not professional advice.</li>
+            <li>Similar prompts can produce similar outputs for others.</li>
+          </ul>
+        </section>
+
+        <section id="health" class="card reveal delay-3">
+          <h2>Training, Nutrition, and Recovery</h2>
+          <p>
+            Training, nutrition, and recovery suggestions are for general
+            informational purposes only. They are not medical advice and do not
+            replace guidance from qualified professionals.
+          </p>
+          <ul>
+            <li>Stop any activity that causes pain or discomfort.</li>
+            <li>Consult a professional before major training changes.</li>
+            <li>Results vary based on individual circumstances.</li>
+          </ul>
+        </section>
+
+        <section id="third-party" class="card reveal delay-3">
+          <h2>Third-Party Services</h2>
+          <p>
+            The Service may rely on third-party tools such as analytics, payment
+            processors, or content providers. Their terms and privacy policies
+            apply to their services.
+          </p>
+        </section>
+
+        <section id="beta" class="card reveal delay-3">
+          <h2>Beta Features</h2>
+          <p>
+            Some features may be labeled beta or experimental. They may change
+            or be removed without notice and are provided "as is" with no
+            guarantees of stability.
+          </p>
+        </section>
+
+        <section id="payments" class="card reveal delay-3">
+          <h2>Payments and Subscriptions</h2>
+          <p>
+            If the Service includes paid features, you agree to pay fees and
+            taxes shown at checkout. Payments are processed by third-party
+            providers. Refunds follow applicable law and the provider's
+            policies.
+          </p>
+          <ul>
+            <li>Subscriptions may renew automatically unless canceled.</li>
+            <li>Trials convert to paid plans unless canceled before the end date.</li>
+            <li>Pricing or plan features may change with notice.</li>
+          </ul>
+        </section>
+
+        <section id="changes" class="card reveal delay-4">
+          <h2>Changes to the Service</h2>
+          <p>
+            We may modify, suspend, or discontinue parts of the Service at any
+            time. We will try to provide notice for material changes when
+            reasonable.
+          </p>
+        </section>
+
+        <section id="termination" class="card reveal delay-4">
+          <h2>Termination</h2>
+          <p>
+            We may suspend or terminate access if you violate these Terms or if
+            required to protect the Service or other users.
+          </p>
+          <ul>
+            <li>You may stop using the Service at any time.</li>
+            <li>We may retain records as required by law.</li>
+          </ul>
+        </section>
+
+        <section id="legal" class="card reveal delay-4">
+          <h2>Disclaimers and Liability</h2>
+          <ul>
+            <li>The Service is provided "as is" and "as available".</li>
+            <li>We do not warrant uninterrupted or error-free operation.</li>
+            <li>To the maximum extent permitted by law, we are not liable for
+                indirect, incidental, or consequential damages.</li>
+            <li>You agree to indemnify us for claims arising from your misuse.</li>
+          </ul>
+          <p>
+            These Terms are governed by the laws of [Jurisdiction]. Any disputes
+            will be resolved in the courts of [Jurisdiction].
+          </p>
+          <p>
+            Contact us at [Contact Email] for questions about these Terms.
+          </p>
+        </section>
+      </main>
+
+      <footer>
+        90Plus Legal - Please replace bracketed placeholders before publishing.
+      </footer>
+    </div>
+  </body>
+</html>

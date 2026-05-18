@@ -21,7 +21,9 @@ interface VideoItem {
     duration: string;
     isUploading?: boolean;
     isProcessing?: boolean;
+    isFailed?: boolean;
     uploadProgress?: number;
+    status?: string;
 }
 
 interface VideoGridProps {
@@ -103,6 +105,17 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                     <View style={styles.uploadingContent}>
                         <ActivityIndicator size="small" color="#FFA500" />
                         <Text style={styles.uploadingText}>جاري المعالجة...</Text>
+                    </View>
+                </View>
+            )}
+
+            {/* Failed Overlay — Mux processing failed */}
+            {!item.isUploading && item.isFailed && (
+                <View style={styles.failedOverlay}>
+                    <View style={styles.uploadingContent}>
+                        <Ionicons name="alert-circle" size={24} color="#FF4444" />
+                        <Text style={styles.failedText}>فشل المعالجة</Text>
+                        <Text style={styles.retryText}>اضغط لإعادة المحاولة</Text>
                     </View>
                 </View>
             )}
@@ -222,6 +235,24 @@ const styles = StyleSheet.create({
     progressBar: {
         height: '100%',
         backgroundColor: ProfileTheme.colors.neonGreen,
+    },
+    failedOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 5,
+    },
+    failedText: {
+        color: '#FF4444',
+        fontSize: 12,
+        fontWeight: '700',
+        marginTop: 4,
+    },
+    retryText: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 10,
+        marginTop: 2,
     },
     placeholderContainer: {
         backgroundColor: VIDEO_THUMBNAIL_PLACEHOLDER.backgroundColor,

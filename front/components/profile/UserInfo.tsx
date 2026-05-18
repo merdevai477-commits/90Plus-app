@@ -127,62 +127,78 @@ const UserInfo = memo(function UserInfo({
       {/* Username */}
       <Text style={styles.username}>@{username}</Text>
 
-      {/* ── Location + Club pills ─────────────────────────────────── */}
+      {/* ── Location + Club pills — liquid glass ─────────────────── */}
       <View style={styles.pillsRow}>
-        <TouchableOpacity
-          style={[
-            styles.pill,
-            location && location.trim() !== '' && styles.pillActive,
-          ]}
-          onPress={onEditPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="location-outline"
-            size={14}
-            color={
-              location && location.trim() !== ''
-                ? ProfileTheme.colors.neonGreen
-                : 'rgba(255,255,255,0.4)'
-            }
-          />
-          <Text
-            style={[
-              styles.pillText,
-              (!location || location.trim() === '') && styles.pillTextEmpty,
-            ]}
-            numberOfLines={1}
-          >
-            {location && location.trim() !== '' ? location : 'اختر بلدك'}
-          </Text>
-        </TouchableOpacity>
+        {(() => {
+          const PillGlass = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+          const pillGlassProps = isLiquidGlassSupported
+            ? { effect: 'clear' as const, interactive: true }
+            : { intensity: 22, tint: 'dark' as const };
+          const hasLocation = location && location.trim() !== '';
+          const hasTeam = !!team;
+          return (
+            <>
+              <TouchableOpacity onPress={onEditPress} activeOpacity={0.75} style={styles.pillWrap}>
+                <PillGlass {...(pillGlassProps as any)} style={StyleSheet.absoluteFill} />
+                <LinearGradient
+                  colors={
+                    hasLocation
+                      ? ['rgba(50,205,50,0.15)', 'rgba(50,205,50,0.05)']
+                      : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']
+                  }
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                <Ionicons
+                  name="location-outline"
+                  size={14}
+                  color={hasLocation ? ProfileTheme.colors.neonGreen : 'rgba(255,255,255,0.4)'}
+                />
+                <Text
+                  style={[styles.pillText, !hasLocation && styles.pillTextEmpty]}
+                  numberOfLines={1}
+                >
+                  {hasLocation ? location : 'اختر بلدك'}
+                </Text>
+              </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.pill, team && styles.pillActive]}
-          onPress={onEditPress}
-          activeOpacity={0.7}
-        >
-          {clubLogo ? (
-            <Image
-              source={{ uri: clubLogo }}
-              style={styles.clubLogo}
-              contentFit="contain"
-              cachePolicy="memory-disk"
-            />
-          ) : (
-            <Ionicons
-              name="football-outline"
-              size={14}
-              color={team ? ProfileTheme.colors.gold : 'rgba(255,255,255,0.4)'}
-            />
-          )}
-          <Text
-            style={[styles.pillText, !team && styles.pillTextEmpty]}
-            numberOfLines={1}
-          >
-            {team || 'اختر ناديك'}
-          </Text>
-        </TouchableOpacity>
+              <TouchableOpacity onPress={onEditPress} activeOpacity={0.75} style={styles.pillWrap}>
+                <PillGlass {...(pillGlassProps as any)} style={StyleSheet.absoluteFill} />
+                <LinearGradient
+                  colors={
+                    hasTeam
+                      ? ['rgba(168,85,247,0.18)', 'rgba(124,58,237,0.08)']
+                      : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']
+                  }
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                {clubLogo ? (
+                  <Image
+                    source={{ uri: clubLogo }}
+                    style={styles.clubLogo}
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                  />
+                ) : (
+                  <Ionicons
+                    name="football-outline"
+                    size={14}
+                    color={hasTeam ? '#A855F7' : 'rgba(255,255,255,0.4)'}
+                  />
+                )}
+                <Text
+                  style={[styles.pillText, !hasTeam && styles.pillTextEmpty]}
+                  numberOfLines={1}
+                >
+                  {team || 'اختر ناديك'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          );
+        })()}
       </View>
 
       {/* ── Bio ──────────────────────────────────────────────────── */}
@@ -324,20 +340,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
-  pill: {
+  pillWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  pillActive: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    minWidth: 90,
   },
   pillText: {
     color: '#fff',

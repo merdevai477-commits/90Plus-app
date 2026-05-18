@@ -737,6 +737,7 @@ export interface SearchUserResult {
     isVerified: boolean;
     isDeveloper: boolean;
     level: number;
+    xp?: number;
     favoriteTeam: string | null;
     createdAt?: string;
     followersCount?: number;

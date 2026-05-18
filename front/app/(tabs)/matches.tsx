@@ -6,7 +6,7 @@ import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { Bell, ChevronDown, Calendar, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
 import BottomNav from './BottomNav';
@@ -23,10 +23,43 @@ import { useTranslation } from '../../src/i18n';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { useScreenFont } from '../../utils/fontSetup';
 import type { Match } from '../../components/Matches/matchCardUtils';
+import { CountryAccordion } from '../../components/Matches/CountryAccordion';
+import type { CountryGroup } from '../../hooks/useMatchesData';
+
+// Top 5 European leagues' countries — these accordions start expanded by default.
+const TOP5_COUNTRIES: ReadonlySet<string> = new Set(['England', 'Spain', 'Italy', 'France', 'Germany']);
+
+// Convert a Match (from useMatchesData) into the Fixture shape used by MatchRow.
+// Single source of truth for this mapping — used both in the legacy `groups`
+// memo and in the new country-grouped renderer.
+function matchToFixture(m: Match): Fixture {
+  return {
+    id: m.id,
+    home: m.homeTeam?.name || 'Home',
+    away: m.awayTeam?.name || 'Away',
+    homeLogo: m.homeTeam?.logo || '',
+    awayLogo: m.awayTeam?.logo || '',
+    homeScore: m.score?.home ?? 0,
+    awayScore: m.score?.away ?? 0,
+    status: mapStatus(m.status),
+    minute: m.minute,
+    live: m.status === 'live',
+    time: m.time,
+    leagueName: m.league?.name,
+    leagueLogo: m.league?.logo,
+    matchDate: m.fixtureDate,
+  };
+}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const FILTERS = ['All', 'Live', 'Upcoming', 'Finished', 'Predictions'] as const;
+// Stable separator components — declared at module scope so they keep the
+// same identity across renders. Inline arrow components on FlashList
+// invalidate cell types on every render and tank performance.
+const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
+const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
+
+const FILTERS = ['All', 'Live', 'Upcoming', 'International', 'Finished', 'Predictions'] as const;
 
 // Translation keys for the filter tab labels. Kept in lock-step with FILTERS
 // above — if a filter is added here, add its label key in locales/*.ts.
@@ -34,9 +67,25 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
   All: 'matches.tabs.all',
   Live: 'matches.tabs.live',
   Upcoming: 'matches.tabs.upcoming',
+  International: 'matches.tabs.international',
   Finished: 'matches.tabs.finished',
   Predictions: 'matches.tabs.predictions',
 };
+
+// Country values the API returns for international competitions. Anything in
+// this set gets pulled OUT of the country accordions on All/Live/Upcoming/
+// Finished and shown only inside the dedicated "International" tab.
+const INTL_COUNTRIES: ReadonlySet<string> = new Set([
+  'World',
+  'Europe',
+  'Africa',
+  'South-America',
+  'South America',
+  'North-America',
+  'North America',
+  'Asia',
+  'Oceania',
+]);
 
 // Map API match status to display status
 function mapStatus(status: string): 'LIVE' | 'FT' | 'UPCOMING' {
@@ -174,6 +223,7 @@ const MatchRow = memo(function MatchRow({
   isSubscribed,
   isSubscribing,
   onToggleSubscription,
+  onOpenDetails,
 }: {
   fixture: Fixture;
   showPreds: boolean;
@@ -183,6 +233,7 @@ const MatchRow = memo(function MatchRow({
   isSubscribed: boolean;
   isSubscribing: boolean;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
+  onOpenDetails: (fixture: Fixture) => void;
 }) {
   const existingPrediction = predictedMatches[fixture.id] ?? null;
   const isSubmitting = submittingId === fixture.id;
@@ -195,7 +246,14 @@ const MatchRow = memo(function MatchRow({
   return (
     <View style={styles.rowWrapCol}>
       <View style={styles.rowWrap}>
-        <View style={styles.rowBody}>
+        {/* Tapping anywhere on the team/score area opens match-details.
+            The bell button is intentionally OUTSIDE this Touchable so it
+            doesn't navigate when the user only wanted to subscribe. */}
+        <TouchableOpacity
+          style={styles.rowBody}
+          activeOpacity={0.75}
+          onPress={() => onOpenDetails(fixture)}
+        >
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
               {fixture.homeLogo ? (
@@ -203,9 +261,7 @@ const MatchRow = memo(function MatchRow({
                   source={{ uri: fixture.homeLogo }}
                   style={styles.teamLogo}
                   contentFit="contain"
-                  transition={150}
                   cachePolicy="memory-disk"
-                  recyclingKey={fixture.homeLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
@@ -236,9 +292,7 @@ const MatchRow = memo(function MatchRow({
                   source={{ uri: fixture.awayLogo }}
                   style={styles.teamLogo}
                   contentFit="contain"
-                  transition={150}
                   cachePolicy="memory-disk"
-                  recyclingKey={fixture.awayLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
@@ -248,7 +302,7 @@ const MatchRow = memo(function MatchRow({
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{fixture.away}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.rowIcon}
           activeOpacity={0.7}
@@ -319,6 +373,7 @@ function LeagueAllMatchesModal({
   subscribedFixtures,
   subscribingFixtureId,
   onToggleSubscription,
+  onOpenDetails,
 }: {
   group: LeagueGroup | null;
   visible: boolean;
@@ -330,6 +385,7 @@ function LeagueAllMatchesModal({
   subscribedFixtures: ReadonlySet<string>;
   subscribingFixtureId: string | null;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
+  onOpenDetails: (fixture: Fixture) => void;
 }) {
   if (!group) return null;
   return (
@@ -387,6 +443,7 @@ function LeagueAllMatchesModal({
                   isSubscribed={subscribedFixtures.has(item.id)}
                   isSubscribing={subscribingFixtureId === item.id}
                   onToggleSubscription={onToggleSubscription}
+                  onOpenDetails={onOpenDetails}
                 />
               )}
               showsVerticalScrollIndicator={false}
@@ -411,6 +468,7 @@ const LeagueCard = memo(function LeagueCard({
   subscribedFixtures,
   subscribingFixtureId,
   onToggleSubscription,
+  onOpenDetails,
 }: {
   group: LeagueGroup;
   filter: string;
@@ -420,6 +478,7 @@ const LeagueCard = memo(function LeagueCard({
   subscribedFixtures: ReadonlySet<string>;
   subscribingFixtureId: string | null;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
+  onOpenDetails: (fixture: Fixture) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -443,7 +502,8 @@ const LeagueCard = memo(function LeagueCard({
                   source={{ uri: group.leagueLogo }}
                   style={styles.leagueLogo}
                   contentFit="contain"
-                  transition={150}
+                  cachePolicy="memory-disk"
+                  priority="low"
                 />
               ) : null}
             </View>
@@ -464,9 +524,9 @@ const LeagueCard = memo(function LeagueCard({
         {/* Expanded content */}
         {isExpanded && (
           <View>
-            {previewFixtures.map((fixture) => (
+            {previewFixtures.map((fixture, i) => (
               <MatchRow
-                key={fixture.id}
+                key={fixture.id ?? `f-${i}`}
                 fixture={fixture}
                 showPreds={filter === 'Predictions'}
                 onPredict={onPredict}
@@ -475,6 +535,7 @@ const LeagueCard = memo(function LeagueCard({
                 isSubscribed={subscribedFixtures.has(fixture.id)}
                 isSubscribing={subscribingFixtureId === fixture.id}
                 onToggleSubscription={onToggleSubscription}
+                onOpenDetails={onOpenDetails}
               />
             ))}
             {hasMore && (
@@ -504,6 +565,7 @@ const LeagueCard = memo(function LeagueCard({
         subscribedFixtures={subscribedFixtures}
         subscribingFixtureId={subscribingFixtureId}
         onToggleSubscription={onToggleSubscription}
+        onOpenDetails={onOpenDetails}
       />
     </View>
   );
@@ -524,6 +586,7 @@ export default function MatchesHubScreenV2() {
     return today;
   });
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { getToken, userId } = useAuth();
   const { t: tObj, translate: t } = useTranslation();
 
@@ -547,6 +610,9 @@ export default function MatchesHubScreenV2() {
 
   // Real matches data from backend
   const { groupedMatches, countryGroups, loading, error, refetch } = useMatchesData(selectedDate);
+
+  // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
+  const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
 
   // ─── Instant hydration from local cache ────────────────────────────────────
   // Cache keys are SCOPED TO userId so a logout→login on the same device
@@ -655,22 +721,7 @@ export default function MatchesHubScreenV2() {
       id: String(g.leagueId),
       league: g.leagueName,
       leagueLogo: g.leagueLogo || '',
-      fixtures: g.matches.map((m: Match): Fixture => ({
-        id: m.id,
-        home: m.homeTeam?.name || 'Home',
-        away: m.awayTeam?.name || 'Away',
-        homeLogo: m.homeTeam?.logo || '',
-        awayLogo: m.awayTeam?.logo || '',
-        homeScore: m.score?.home ?? 0,
-        awayScore: m.score?.away ?? 0,
-        status: mapStatus(m.status),
-        minute: m.minute,
-        live: m.status === 'live',
-        time: m.time,
-        leagueName: m.league?.name,
-        leagueLogo: m.league?.logo,
-        matchDate: m.fixtureDate,
-      })),
+      fixtures: g.matches.map(matchToFixture),
     }));
 
     // Apply filter
@@ -685,6 +736,60 @@ export default function MatchesHubScreenV2() {
     }
     return allGroups;
   }, [groupedMatches, filter]);
+
+  // Filter helper applied to a Match list. Mirrors the per-fixture predicates
+  // used in the legacy `groups` memo so both views stay perfectly in sync.
+  const matchPassesFilter = useCallback(
+    (m: Match): boolean => {
+      if (filter === 'Live') return m.status === 'live';
+      if (filter === 'Upcoming' || filter === 'Predictions') {
+        // Treat UPCOMING / NS / TBD / PST all as "not yet kicked off".
+        return m.status !== 'live' && m.status !== 'finished';
+      }
+      if (filter === 'Finished') return m.status === 'finished';
+      return true;
+    },
+    [filter],
+  );
+
+  // Country → League hierarchy after filtering. Drops empty leagues and
+  // empty countries so the accordion list only renders sections with data.
+  // International competitions (World/Europe/Africa/...) are pulled out and
+  // shown in their own tab — keeps the country list clean and country-only.
+  const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
+    return countryGroups
+      .filter(cg => !INTL_COUNTRIES.has(cg.country))
+      .map(cg => {
+        const leagues = cg.leagues
+          .map(l => ({ ...l, matches: l.matches.filter(matchPassesFilter) }))
+          .filter(l => l.matches.length > 0);
+        return { ...cg, leagues };
+      })
+      .filter(cg => cg.leagues.length > 0);
+  }, [countryGroups, matchPassesFilter]);
+
+  // International competitions, flattened into one list of LeagueGroup so
+  // the dedicated tab can reuse the existing LeagueCard component
+  // (tap a league → expand → see matches), exactly like the user asked for.
+  // Status filtering is intentionally NOT applied here — the International
+  // tab is its own filter, so we show every international match for the
+  // selected date.
+  const internationalLeagueGroups = useMemo<LeagueGroup[]>(() => {
+    const out: LeagueGroup[] = [];
+    for (const cg of countryGroups) {
+      if (!INTL_COUNTRIES.has(cg.country)) continue;
+      for (const league of cg.leagues) {
+        if (league.matches.length === 0) continue;
+        out.push({
+          id: String(league.leagueId),
+          league: league.leagueName,
+          leagueLogo: league.leagueLogo || '',
+          fixtures: league.matches.map(matchToFixture),
+        });
+      }
+    }
+    return out;
+  }, [countryGroups]);
 
   // Handle prediction submission
   //
@@ -922,6 +1027,88 @@ export default function MatchesHubScreenV2() {
     [userId, getToken, t],
   );
 
+  // Open the full match-details screen for a fixture. Mirrors the params
+  // shape used everywhere else in the app (Home.tsx, team-profile.tsx) so
+  // match-details.tsx finds exactly what it expects:
+  //   - fixtureId is the only field actually used to fetch real data
+  //     (events, lineups, statistics, fixture details, standings, venue)
+  //   - the rest are display-only fallbacks for the header before the API
+  //     responses come back.
+  const handleOpenMatchDetails = useCallback(
+    (fixture: Fixture) => {
+      router.push({
+        pathname: '/(tabs)/match-details',
+        params: {
+          fixtureId: fixture.id,
+          homeTeam: fixture.home,
+          awayTeam: fixture.away,
+          homeLogo: fixture.homeLogo || '',
+          awayLogo: fixture.awayLogo || '',
+          homeScore: fixture.status === 'UPCOMING' ? '' : String(fixture.homeScore),
+          awayScore: fixture.status === 'UPCOMING' ? '' : String(fixture.awayScore),
+          league: fixture.leagueName || '',
+          leagueLogo: fixture.leagueLogo || '',
+          date: fixture.matchDate
+            ? new Date(fixture.matchDate).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0],
+          time: fixture.time || '',
+          status:
+            fixture.status === 'LIVE' ? 'live'
+            : fixture.status === 'FT' ? 'finished'
+            : 'upcoming',
+        },
+      });
+    },
+    [router],
+  );
+
+  // Stable per-match renderer used by CountryAccordion. Matches the
+  // existing MatchRow look exactly — same predictions + bell behavior
+  // wired through. Memoized so identity stays stable across re-renders
+  // unless one of its dependencies actually changes.
+  const renderCountryMatchCard = useCallback(
+    (match: Match): React.ReactNode => {
+      const fixture = matchToFixture(match);
+      return (
+        <MatchRow
+          fixture={fixture}
+          showPreds={filter === 'Predictions'}
+          onPredict={handlePredict}
+          submittingId={submittingId}
+          predictedMatches={predictedMatches}
+          isSubscribed={subscribedFixtures.has(fixture.id)}
+          isSubscribing={subscribingFixtureId === fixture.id}
+          onToggleSubscription={handleToggleSubscription}
+          onOpenDetails={handleOpenMatchDetails}
+        />
+      );
+    },
+    [
+      filter,
+      handlePredict,
+      submittingId,
+      predictedMatches,
+      subscribedFixtures,
+      subscribingFixtureId,
+      handleToggleSubscription,
+      handleOpenMatchDetails,
+    ],
+  );
+
+  // Open the full-list bottom sheet for a league when the user taps
+  // "View All" inside a CountryAccordion. Reuses the same modal that
+  // LeagueCard already drives, so behavior stays identical.
+  const handleViewAllLeague = useCallback((leagueId: number) => {
+    setViewAllLeagueId(String(leagueId));
+  }, []);
+
+  // The currently-open "View All" league (resolved from `groups` so the
+  // modal renders in the LeagueGroup shape it already expects).
+  const viewAllLeagueGroup = useMemo<LeagueGroup | null>(() => {
+    if (!viewAllLeagueId) return null;
+    return groups.find(g => g.id === viewAllLeagueId) ?? null;
+  }, [viewAllLeagueId, groups]);
+
   // ─── Calendar grid (driven by selectedDate — always in sync) ──────────────
   // `calendarGrid` is the array of cells to render. Each cell is either a
   // day number (1..daysInMonth) or `null` for a leading blank so the first
@@ -1004,6 +1191,68 @@ export default function MatchesHubScreenV2() {
 
   const FloatingHeader = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
+  // Filter chips + calendar button. Reused by every FlashList branch below.
+  // Memoized so the header doesn't re-mount on unrelated state changes.
+  const listHeaderNode = useMemo(() => (
+    <View style={styles.listHeader}>
+      <View style={styles.tabsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
+          {FILTERS.map((f) => {
+            const active = filter === f;
+            return (
+              <TouchableOpacity key={f} onPress={() => setFilter(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
+                {isLiquidGlassSupported ? (
+                  <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
+                ) : (
+                  <BlurView intensity={25} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
+                )}
+                {active && (
+                  <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
+                )}
+                <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{t(FILTER_LABEL_KEYS[f])}</Text>
+                {f === 'Live' && !active && <View style={styles.liveDot} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+        <TouchableOpacity style={styles.calendarBtn} onPress={() => setShowCalendar(true)} activeOpacity={0.7}>
+          {isLiquidGlassSupported ? (
+            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
+          ) : (
+            <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+          <Calendar size={18} color="rgba(255,255,255,0.8)" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  ), [filter, t]);
+
+  const listEmptyNode = useMemo(() => {
+    if (loading) {
+      return (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
+          <Text style={styles.loadingTxt}>{t('matches.screen.loading')}</Text>
+        </View>
+      );
+    }
+    if (error) {
+      return (
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorTxt}>⚠️ {error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={refetch} activeOpacity={0.7}>
+            <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
+      </View>
+    );
+  }, [loading, error, refetch, t]);
+
   return (
     <View style={{ flex: 1, backgroundColor: APP_BG }}>
       <FloatingHeader
@@ -1022,83 +1271,99 @@ export default function MatchesHubScreenV2() {
         <View style={{ flex: 1 }} />
         {headerRight}
       </FloatingHeader>
-      {/* FlashList — virtualized, JS-thread friendly, no nested scroll */}
-      <FlashList
-        data={groups}
-        keyExtractor={g => g.id}
-        renderItem={({ item }) => (
-          <LeagueCard
-            group={item}
-            filter={filter}
-            onPredict={handlePredict}
-            submittingId={submittingId}
-            predictedMatches={predictedMatches}
-            subscribedFixtures={subscribedFixtures}
-            subscribingFixtureId={subscribingFixtureId}
-            onToggleSubscription={handleToggleSubscription}
-          />
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-        showsVerticalScrollIndicator={false}
-        // Pull-to-refresh intentionally disabled: `useMatchesData` already
-        // refetches on a 60s interval while the screen is mounted AND
-        // transparently background-refreshes when Redis/API cache expires.
-        // Exposing onRefresh encourages users to spam it, which would
-        // burn API quota fast on the Free plan.
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <View style={styles.tabsRow}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
-                {FILTERS.map((f) => {
-                  const active = filter === f;
-                  return (
-                    <TouchableOpacity key={f} onPress={() => setFilter(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
-                      {isLiquidGlassSupported ? (
-                        <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
-                      ) : (
-                        <BlurView intensity={25} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
-                      )}
-                      {active && (
-                        <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
-                      )}
-                      <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{t(FILTER_LABEL_KEYS[f])}</Text>
-                      {f === 'Live' && filter !== 'Live' && <View style={styles.liveDot} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-              <TouchableOpacity style={styles.calendarBtn} onPress={() => setShowCalendar(true)} activeOpacity={0.7}>
-                {isLiquidGlassSupported ? (
-                  <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
-                ) : (
-                  <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-                )}
-                <Calendar size={18} color="rgba(255,255,255,0.8)" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        }
-        ListEmptyComponent={
-          loading ? (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-              <Text style={styles.loadingTxt}>{t('matches.screen.loading')}</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorWrap}>
-              <Text style={styles.errorTxt}>⚠️ {error}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={refetch} activeOpacity={0.7}>
-                <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
-            </View>
-          )
-        }
+      {/* FlashList — virtualized, JS-thread friendly, no nested scroll.
+          Three rendering modes:
+            - Predictions: legacy LeagueGroup flow (every league + prediction buttons)
+            - International: LeagueCard per international competition (no
+              country layer — taps a competition → expands → shows matches)
+            - Default (All/Live/Upcoming/Finished): Country → League accordions */}
+      {filter === 'Predictions' ? (
+        <FlashList
+          data={groups}
+          keyExtractor={g => g.id}
+          renderItem={({ item }) => (
+            <LeagueCard
+              group={item}
+              filter={filter}
+              onPredict={handlePredict}
+              submittingId={submittingId}
+              predictedMatches={predictedMatches}
+              subscribedFixtures={subscribedFixtures}
+              subscribingFixtureId={subscribingFixtureId}
+              onToggleSubscription={handleToggleSubscription}
+              onOpenDetails={handleOpenMatchDetails}
+            />
+          )}
+          ItemSeparatorComponent={ITEM_SEPARATOR_10}
+          drawDistance={250}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeaderNode}
+          ListEmptyComponent={listEmptyNode}
+        />
+      ) : filter === 'International' ? (
+        <FlashList
+          data={internationalLeagueGroups}
+          keyExtractor={g => g.id}
+          renderItem={({ item }) => (
+            <LeagueCard
+              group={item}
+              filter={filter}
+              onPredict={handlePredict}
+              submittingId={submittingId}
+              predictedMatches={predictedMatches}
+              subscribedFixtures={subscribedFixtures}
+              subscribingFixtureId={subscribingFixtureId}
+              onToggleSubscription={handleToggleSubscription}
+              onOpenDetails={handleOpenMatchDetails}
+            />
+          )}
+          ItemSeparatorComponent={ITEM_SEPARATOR_10}
+          drawDistance={250}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeaderNode}
+          ListEmptyComponent={listEmptyNode}
+        />
+      ) : (
+        <FlashList
+          data={filteredCountryGroups}
+          keyExtractor={cg => cg.country}
+          renderItem={({ item }) => (
+            <CountryAccordion
+              countryGroup={item}
+              renderMatchCard={renderCountryMatchCard}
+              onViewAllLeague={handleViewAllLeague}
+              defaultExpanded={TOP5_COUNTRIES.has(item.country)}
+            />
+          )}
+          // Smaller draw distance keeps fewer cells in memory while
+          // scrolling fast, which matters because each country can mount
+          // a chunk of leagues + match rows when expanded.
+          drawDistance={250}
+          ItemSeparatorComponent={ITEM_SEPARATOR_8}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeaderNode}
+          ListEmptyComponent={listEmptyNode}
+        />
+      )}
+
+      {/* "View All" league bottom sheet — driven by CountryAccordion taps. */}
+      <LeagueAllMatchesModal
+        group={viewAllLeagueGroup}
+        visible={!!viewAllLeagueGroup}
+        onClose={() => setViewAllLeagueId(null)}
+        filter={filter}
+        onPredict={handlePredict}
+        submittingId={submittingId}
+        predictedMatches={predictedMatches}
+        subscribedFixtures={subscribedFixtures}
+        subscribingFixtureId={subscribingFixtureId}
+        onToggleSubscription={handleToggleSubscription}
+        onOpenDetails={handleOpenMatchDetails}
       />
+
 
       {/* Calendar Modal */}
       <Modal visible={showCalendar} transparent animationType="fade">

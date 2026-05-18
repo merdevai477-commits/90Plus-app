@@ -349,6 +349,7 @@ export const ar = {
       all: 'الكل',
       live: 'مباشر',
       upcoming: 'قادمة',
+      international: 'دولية',
       finished: 'انتهت',
       favorites: 'المفضلة',
       predictions: 'التوقعات',
