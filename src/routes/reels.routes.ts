@@ -232,6 +232,26 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
 
         const nextCursor = hasMore ? playableData[playableData.length - 1]?.id ?? data[data.length - 1]?.id : null;
 
+        // ✅ Resolve mentioned user IDs → usernames in a single batched query
+        // so the public payload never leaks internal Prisma user IDs.
+        const allMentionedUserIds = Array.from(
+            new Set(
+                playableData.flatMap((r: any) =>
+                    (r.mentions ?? []).map((m: any) => m.mentionedUserId).filter(Boolean),
+                ),
+            ),
+        );
+        const mentionUsernameMap = new Map<string, string>();
+        if (allMentionedUserIds.length > 0) {
+            const mentionedUsers = await prisma.user.findMany({
+                where: { id: { in: allMentionedUserIds } },
+                select: { id: true, username: true },
+            });
+            for (const u of mentionedUsers) {
+                if (u.username) mentionUsernameMap.set(u.id, u.username);
+            }
+        }
+
         // Format response
         const formattedReels = playableData.map((reel: any) => {
             return {
@@ -246,7 +266,9 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
             isSaved: Array.isArray(reel.savedBy) && reel.savedBy.length > 0,
             hashtags: reel.hashtags.map((h: any) => h.hashtag.name),
-            mentions: reel.mentions.map((m: any) => m.mentionedUserId),
+            mentions: (reel.mentions ?? [])
+                .map((m: any) => mentionUsernameMap.get(m.mentionedUserId))
+                .filter(Boolean),
             previewComments: reel.comments,
             user: reel.user,
             createdAt: reel.createdAt,
@@ -641,22 +663,25 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
             return;
         }
 
-        // Check if already liked
-        const existingLike = await prisma.like.findUnique({
-            where: { userId_reelId: { userId: user.id, reelId: idStr } }
+        // ✅ Use upsert to avoid the find→create race that produced wrong
+        // likesCount when the user double-taps faster than the network
+        // round-trip. createMany with skipDuplicates would also work; upsert
+        // is the simplest and atomic.
+        const upsertResult = await prisma.like.upsert({
+            where: { userId_reelId: { userId: user.id, reelId: idStr } },
+            create: { userId: user.id, reelId: idStr },
+            update: {}, // already liked — no-op
+            select: { createdAt: true },
         });
+        const wasNewLike = upsertResult.createdAt.getTime() > Date.now() - 5_000;
 
-        if (existingLike) {
-            const likesCount = await prisma.like.count({ where: { reelId: idStr } });
+        const likesCount = await prisma.like.count({ where: { reelId: idStr } });
+
+        // Only fire notifications and XP on a brand-new like (not a re-tap).
+        if (!wasNewLike) {
             res.json({ status: 'SUCCESS', data: { likesCount }, message: 'Already liked' });
             return;
         }
-
-        await prisma.like.create({
-            data: { userId: user.id, reelId: idStr }
-        });
-
-        const likesCount = await prisma.like.count({ where: { reelId: idStr } });
 
         // Notify reel owner
         if (reel.userId !== user.id) {
@@ -736,7 +761,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
  * DELETE /api/reels/:id/like
  * Unlike a reel
  */
-router.delete('/:id/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const idStr = ensureString(id);
@@ -1654,7 +1679,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
  * POST /api/reels/:id/save
  * Save a reel to user's saved list
  */
-router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/save', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const idStr = ensureString(id);
@@ -1706,7 +1731,7 @@ router.post('/:id/save', requireAuth, async (req: Request, res: Response): Promi
  * DELETE /api/reels/:id/save
  * Remove a reel from user's saved list
  */
-router.delete('/:id/save', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id/save', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const idStr = ensureString(id);
@@ -1816,7 +1841,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
  * POST /api/reels/:id/share
  * Record a share action
  */
-router.post('/:id/share', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const idStr = ensureString(id);
@@ -1844,10 +1869,39 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
             return;
         }
 
+        // ✅ Dedupe shares within a 5-minute window per (user, reel) so a
+        // user can't bump the counter or spam the owner with notifications
+        // by repeatedly tapping share. Mirrors the like-batching pattern.
+        let shouldNotifyOwner = true;
+        try {
+            const { getRedisClient } = await import('../lib/redis');
+            const redis = getRedisClient();
+            if (redis) {
+                const dedupeKey = `share:dedupe:${user.id}:${idStr}`;
+                const exists = await redis.set(dedupeKey, '1', 'EX', 300, 'NX');
+                if (exists !== 'OK') {
+                    // Already shared within the window — return current count without
+                    // recording another row or firing another notification.
+                    const currentReel = await prisma.reel.findUnique({
+                        where: { id: idStr },
+                        select: { sharesCount: true },
+                    });
+                    res.json({
+                        status: 'SUCCESS',
+                        data: { sharesCount: currentReel?.sharesCount ?? reel.sharesCount },
+                        message: 'Already counted',
+                    });
+                    return;
+                }
+            }
+        } catch (dedupeErr: any) {
+            logger.warn('[reels/share] dedupe check failed (non-fatal):', dedupeErr?.message);
+        }
+
         // Record share
         await prisma.reelShare.create({
-            data: { 
-                userId: user.id, 
+            data: {
+                userId: user.id,
                 reelId: idStr,
                 platform: platform || 'unknown'
             }
@@ -1861,7 +1915,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response): Prom
         });
 
         // Notify reel owner (if not self)
-        if (reel.userId !== user.id) {
+        if (reel.userId !== user.id && shouldNotifyOwner) {
             // ✅ XP Award to reel owner for receiving a share (non-blocking)
             const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
             awardXp({ userId: reel.userId, action: 'REEL_RECEIVED_SHARE', dailyCap: 20, timezone: tz, metadata: { reelId: idStr, sharerId: user.id } }).catch((e) => logger.warn('XP received_share failed:', e));
@@ -3327,6 +3381,25 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
         const data = hasMore ? reels.slice(0, -1) : reels;
         const nextCursor = hasMore ? data[data.length - 1]?.id : null;
 
+        // ✅ Resolve mentioned user IDs → usernames so we don't leak internal IDs.
+        const allMentionedUserIds = Array.from(
+            new Set(
+                data.flatMap((r: any) =>
+                    (r.mentions ?? []).map((m: any) => m.mentionedUserId).filter(Boolean),
+                ),
+            ),
+        );
+        const mentionUsernameMap = new Map<string, string>();
+        if (allMentionedUserIds.length > 0) {
+            const mentionedUsers = await prisma.user.findMany({
+                where: { id: { in: allMentionedUserIds } },
+                select: { id: true, username: true },
+            });
+            for (const u of mentionedUsers) {
+                if (u.username) mentionUsernameMap.set(u.id, u.username);
+            }
+        }
+
         const formattedReels = data.map((reel: any) => ({
             id: reel.id,
             videoUrl: reel.videoUrl,
@@ -3339,7 +3412,9 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
             isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
             isSaved: Array.isArray(reel.savedBy) && reel.savedBy.length > 0,
             hashtags: reel.hashtags.map((h: any) => h.hashtag.name),
-            mentions: reel.mentions.map((m: any) => m.mentionedUserId),
+            mentions: (reel.mentions ?? [])
+                .map((m: any) => mentionUsernameMap.get(m.mentionedUserId))
+                .filter(Boolean),
             previewComments: reel.comments,
             user: reel.user,
             createdAt: reel.createdAt,
@@ -3503,7 +3578,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
 
         const reel = await prisma.reel.findUnique({
             where: { id: reelId },
-            select: { id: true, userId: true, videoStoragePath: true, processedVideoKey: true, isDeleted: true },
+            select: { id: true, userId: true, videoStoragePath: true, processedVideoKey: true, isDeleted: true, muxPlaybackId: true, videoUrl: true },
         });
 
         if (!reel || reel.isDeleted) {
@@ -3518,6 +3593,19 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
 
         if (!currentUser || currentUser.id !== reel.userId) {
             res.status(403).json({ status: 'ERROR', message: 'Access denied' });
+            return;
+        }
+
+        // ✅ Mux reels: return the public HLS URL (no signing needed). The
+        // legacy R2-only signed-URL path was returning 404 for every reel
+        // uploaded after the Mux migration, breaking the player's URL-refresh
+        // recovery flow.
+        if (reel.muxPlaybackId) {
+            const muxUrl = reel.videoUrl || `https://stream.mux.com/${reel.muxPlaybackId}.m3u8`;
+            res.json({
+                status: 'SUCCESS',
+                data: { reelId, signedUrl: muxUrl, expiresIn: null, isMux: true },
+            });
             return;
         }
 

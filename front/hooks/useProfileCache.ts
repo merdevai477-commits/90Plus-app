@@ -106,7 +106,9 @@ export interface ProfileVideo {
   likes: number;
   shares: number;
   duration: string;
-  status?: 'READY' | 'PROCESSING';
+  status?: 'READY' | 'PROCESSING' | 'FAILED';
+  isProcessing?: boolean;
+  isFailed?: boolean;
   createdAt: Date;
 }
 
@@ -376,6 +378,10 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
       shares: 0,
       duration: '0:00',
       status: r.status,
+      // ✅ Surface processing/failed status as flags so VideoGrid renders the
+      // overlay (instead of showing "No Preview" while Mux is still encoding).
+      isProcessing: r.status === 'PROCESSING',
+      isFailed: r.status === 'FAILED',
       createdAt: new Date(r.createdAt),
     }));
   }, []);

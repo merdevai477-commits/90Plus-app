@@ -203,13 +203,16 @@ export const useReelsAudioManager = ({
     }, []),
   );
 
-  /** Pause everything and clear the tracking set on unmount. */
+  /** Pause everything and clear the tracking set + refs on unmount. */
   useEffect(() => {
     return () => {
       pauseAllVideos();
       clearLoadedVideos();
+      // ✅ Drop refs to released players so any straggler resume path
+      // (e.g. a delayed AppState handler) doesn't target a stale instance.
+      videoRefs.current.clear();
     };
-  }, [pauseAllVideos]);
+  }, [pauseAllVideos, videoRefs]);
 
   return {
     pauseAllVideos,

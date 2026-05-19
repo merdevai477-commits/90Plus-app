@@ -214,8 +214,11 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     currentOffsetFromLive: null,
   });
 
-  // `playToEnd` fires once when the video hits the end — count replays off that.
-  useEvent(player, 'playToEnd', undefined);
+  // `playToEnd` fires once when the video hits the end — count replays off
+  // that. We register a single listener via `addListener` below; the previous
+  // additional `useEvent(player, 'playToEnd', undefined)` line was a redundant
+  // subscription that caused the end-of-video logic to run twice and exhaust
+  // the auto-replay budget after a single play.
   useEffect(() => {
     if (!player) return;
     const sub = player.addListener('playToEnd', () => {

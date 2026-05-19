@@ -183,13 +183,24 @@ async function handleAssetReady(event: any): Promise<void> {
   });
   if (reelWithRaw?.videoStoragePath) {
     const { r2MediaStorage } = await import('../services/r2-media-storage.service');
-    r2MediaStorage.deleteObject(reelWithRaw.videoStoragePath).catch((err: any) =>
-      logger.warn(`[MuxWebhook] Raw video R2 delete failed for reel ${reel.id}:`, err?.message),
-    );
-    await prisma.reel.update({
-      where: { id: reel.id },
-      data: { videoStoragePath: null },
-    });
+    const pathToDelete = reelWithRaw.videoStoragePath;
+    // ✅ Only null out videoStoragePath after the R2 delete actually
+    // succeeds, otherwise we lose the reference and the orphan-cleanup
+    // sweeper has nothing to retry against.
+    r2MediaStorage
+      .deleteObject(pathToDelete)
+      .then(async (ok) => {
+        if (ok) {
+          await prisma.reel
+            .update({ where: { id: reel.id }, data: { videoStoragePath: null } })
+            .catch((e: any) => logger.warn(`[MuxWebhook] Failed to null videoStoragePath for ${reel.id}:`, e?.message));
+        } else {
+          logger.warn(`[MuxWebhook] R2 delete returned false for ${pathToDelete} — leaving videoStoragePath set for retry`);
+        }
+      })
+      .catch((err: any) =>
+        logger.warn(`[MuxWebhook] Raw video R2 delete failed for reel ${reel.id} — keeping videoStoragePath for retry:`, err?.message),
+      );
   }
 
   logger.info(`[MuxWebhook] Reel ${reel.id} is READY — playbackId: ${playbackId}`);

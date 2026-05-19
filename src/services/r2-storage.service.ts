@@ -24,6 +24,15 @@ const r2Client = new S3Client({
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || '90plus-exports';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || ''; // https://exports.90plus.app
 
+function requirePublicUrl(): string {
+  if (!PUBLIC_URL) {
+    throw new Error(
+      'R2_PUBLIC_URL is not configured — refusing to return relative URLs that will not open',
+    );
+  }
+  return PUBLIC_URL;
+}
+
 // ============================================================================
 // Upload Data Export File
 // ============================================================================
@@ -48,8 +57,8 @@ export async function uploadDataExport(
 
     await r2Client.send(command);
 
-    // Generate public URL
-    const url = `${PUBLIC_URL}/${fileName}`;
+    // Generate public URL — fail loudly if R2_PUBLIC_URL is missing
+    const url = `${requirePublicUrl()}/${fileName}`;
 
     logger.info(`[R2] Data export uploaded: ${fileName} (${size} bytes)`);
 
@@ -124,7 +133,7 @@ export async function uploadFile(
 
     await r2Client.send(command);
 
-    const url = `${PUBLIC_URL}/${fileName}`;
+    const url = `${requirePublicUrl()}/${fileName}`;
 
     logger.info(`[R2] File uploaded: ${fileName}`);
 

@@ -164,13 +164,19 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 singleTapTimer.current = null;
             }
             handleDoubleTap(event);
-        } else {
-            // Single tap - wait to see if it's double
-            singleTapTimer.current = setTimeout(() => {
-                setIsPaused(prev => !prev);
-                singleTapTimer.current = null;
-            }, 300);
+            // ✅ Reset so the next tap starts a fresh single/double cycle.
+            // Without this, three rapid taps fire two double-tap handlers
+            // (and two like requests) because the third tap is still within
+            // 300ms of the second.
+            lastTapRef.current = 0;
+            return;
         }
+
+        // Single tap - wait to see if it's double
+        singleTapTimer.current = setTimeout(() => {
+            setIsPaused(prev => !prev);
+            singleTapTimer.current = null;
+        }, 300);
 
         lastTapRef.current = now;
     };

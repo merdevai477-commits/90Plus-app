@@ -987,8 +987,13 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
       }
     }
 
-    // Prefer processedVideoUrl (legacy R2) or videoUrl (Mux HLS set by webhook)
-    const videoUrl = reel.processedVideoUrl || reel.videoUrl || null;
+    // ✅ Prefer the Mux HLS URL when a Mux playback ID exists. Some legacy
+    // reels keep both `processedVideoUrl` (old R2 transcode) and the new
+    // Mux `videoUrl` populated; preferring `processedVideoUrl` would serve
+    // the stale R2 mp4 and bypass Mux's adaptive HLS.
+    const videoUrl = reel.muxPlaybackId
+      ? (reel.videoUrl || reel.processedVideoUrl || null)
+      : (reel.processedVideoUrl || reel.videoUrl || null);
 
     // Thumbnail: use stored thumbnail or Mux auto-thumbnail
     const thumbnailUrl = reel.thumbnail ||

@@ -904,10 +904,16 @@ const ReelsFeed: React.FC = () => {
         }
       }
     } catch (error) {
-      // ROLLBACK on failure - restore previous state
+      // ROLLBACK on failure — restore the previous state for THIS reel only,
+      // using a functional setState so we don't clobber concurrent updates
+      // from other reels or fast follow-up taps.
       logger.error('Error syncing like, rolling back:', error);
-      updateReelState(wasLiked, prevLikes);
-      toggleReelLike(reelId); // Rollback the toggle too
+      setReels(prev => prev.map(r =>
+        r.id === reelId ? { ...r, liked: wasLiked, likes: prevLikes } : r,
+      ));
+      setBackendReels(prev => prev.map(r =>
+        r.id === reelId ? { ...r, liked: wasLiked, likes: prevLikes } : r,
+      ));
     }
   }, [toggleReelLike, haptic, getToken, reels, likingReels]);
 
@@ -930,7 +936,9 @@ const ReelsFeed: React.FC = () => {
     const currentReel = reels.find(r => r.id === reelId);
     const wasSaved = currentReel?.saved ?? false;
 
-    // Optimistic UI update
+    // Optimistic UI update — use functional setState so the rollback path
+    // never restores stale values when the user taps multiple times in quick
+    // succession.
     const updateSaveState = (saved: boolean) => {
       setReels(prev => prev.map(reel =>
         reel.id === reelId ? { ...reel, saved } : reel
@@ -942,8 +950,13 @@ const ReelsFeed: React.FC = () => {
 
     updateSaveState(!wasSaved);
 
-    // Show toast
-    Alert.alert('', wasSaved ? t.reels.unsaved : t.reels.saved, [{ text: t.common.done }]);
+    // ✅ Use the non-blocking toast instead of Alert.alert which steals focus
+    // and pauses video playback.
+    if (wasSaved) {
+      toastManager.showInfo(t.reels.unsaved, '');
+    } else {
+      toastManager.showSuccess(t.reels.saved, '');
+    }
 
     // Sync with backend
     try {
@@ -960,7 +973,7 @@ const ReelsFeed: React.FC = () => {
       logger.error('Error syncing save, rolling back:', error);
       updateSaveState(wasSaved);
     }
-  }, [haptic, reels, getToken, t.reels.unsaved, t.reels.saved, t.common.done]);
+  }, [haptic, reels, getToken, t.reels.unsaved, t.reels.saved]);
 
   // Handle Add Comment
   const handleAddComment = useCallback((reelId: string, comment: Comment) => {
