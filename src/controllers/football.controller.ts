@@ -1643,9 +1643,12 @@ export class FootballController {
       const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
       const result = await getTopClubsByCountry(country, forceRefresh);
 
+      // ✅ Use `response` field (not `data`) because fetchFromProxy on the
+      // frontend unwraps `data.response` from every football endpoint.
       res.json({
         status: 'SUCCESS',
-        data: {
+        results: result.clubs.length,
+        response: {
           country,
           clubs: result.clubs,
           source: result.source,
@@ -1668,7 +1671,8 @@ export class FootballController {
       const countries = getSupportedCountries();
       res.json({
         status: 'SUCCESS',
-        data: { countries, count: countries.length },
+        results: countries.length,
+        response: { countries, count: countries.length },
       });
     } catch (error) {
       FootballController.handleError(res, error);
