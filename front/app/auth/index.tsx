@@ -239,14 +239,14 @@ export default function RegisterScreen() {
           By signing up, I agree to the{' '}
           <Text
             style={styles.termsLink}
-            onPress={() => Linking.openURL('https://90plus-app-production.up.railway.app/terms')}
+            onPress={() => Linking.openURL('https://90plus-app-production-1808.up.railway.app/terms')}
           >
             Terms
           </Text>
           {' & '}
           <Text
             style={styles.termsLink}
-            onPress={() => Linking.openURL('https://90plus-app-production.up.railway.app/privacy')}
+            onPress={() => Linking.openURL('https://90plus-app-production-1808.up.railway.app/privacy')}
           >
             Privacy Policy
           </Text>
