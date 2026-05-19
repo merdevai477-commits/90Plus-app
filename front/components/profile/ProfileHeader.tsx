@@ -1,9 +1,7 @@
 import React, { memo } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 
 const { width } = Dimensions.get('window');
@@ -47,14 +45,6 @@ const ProfileHeader = memo(function ProfileHeader({ coverImage, onPress }: Profi
           locations={[0, 0.35, 0.6, 0.82, 1]}
           style={styles.gradient}
         />
-
-        {/* Camera edit hint — bottom-right corner */}
-        <View style={styles.editHintContainer}>
-          <BlurView intensity={60} tint="dark" style={styles.editHintBlur}>
-            <Ionicons name="camera" size={15} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.editHintText}>تغيير</Text>
-          </BlurView>
-        </View>
       </TouchableOpacity>
     </View>
   );
@@ -80,24 +70,5 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '75%',
-  },
-  editHintContainer: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  editHintBlur: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  editHintText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

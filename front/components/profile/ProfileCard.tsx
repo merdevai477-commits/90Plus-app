@@ -193,10 +193,10 @@ const ProfileCard = memo(function ProfileCard({
         <Image
           source={AROUND_CARD}
           style={[s.aroundCard, {
-            width: cardWidth * 1.55,
-            height: cardHeight * 1.35,
-            left: -cardWidth * 0.275,
-            top: -cardHeight * 0.175,
+            width: cardWidth * 3.399,
+            height: cardHeight * 1.175,
+            left: -cardWidth * 1.215,
+            top: -cardHeight * 0.121,
           }]}
           contentFit="contain"
           cachePolicy="memory-disk"
