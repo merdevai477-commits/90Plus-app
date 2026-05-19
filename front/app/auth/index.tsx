@@ -18,6 +18,7 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { CircleUserRound, Mail, Lock, Apple, ShieldCheck, X } from 'lucide-react-native';
 import { AuthScreenShell, AuthTextField, AUTH_ACCENT } from '@/src/components/auth';
+import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
@@ -41,6 +42,31 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
+
+  const { startGoogle, startApple } = useOAuthFlow({
+    onError: () => setOauthLoading(null),
+  });
+
+  const handleGooglePress = async (): Promise<void> => {
+    if (oauthLoading) return;
+    setOauthLoading('google');
+    try {
+      await startGoogle();
+    } finally {
+      setOauthLoading(null);
+    }
+  };
+
+  const handleApplePress = async (): Promise<void> => {
+    if (oauthLoading) return;
+    setOauthLoading('apple');
+    try {
+      await startApple();
+    } finally {
+      setOauthLoading(null);
+    }
+  };
 
   // Verification modal state
   const [showVerification, setShowVerification] = useState(false);
@@ -246,13 +272,35 @@ export default function RegisterScreen() {
       <Divider />
 
       <View style={styles.socialRow}>
-        <TouchableOpacity activeOpacity={0.9} style={styles.social}>
-          <Text style={styles.googleG}>G</Text>
-          <Text style={styles.socialTxt} numberOfLines={1}>Google</Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
+          onPress={handleGooglePress}
+          disabled={!!oauthLoading}
+        >
+          {oauthLoading === 'google' ? (
+            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
+          ) : (
+            <>
+              <Text style={styles.googleG}>G</Text>
+              <Text style={styles.socialTxt} numberOfLines={1}>Google</Text>
+            </>
+          )}
         </TouchableOpacity>
-        <TouchableOpacity activeOpacity={0.9} style={styles.social}>
-          <Apple color={TEXT_PRIMARY} size={20} />
-          <Text style={styles.socialTxt} numberOfLines={1}>Apple</Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
+          onPress={handleApplePress}
+          disabled={!!oauthLoading}
+        >
+          {oauthLoading === 'apple' ? (
+            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
+          ) : (
+            <>
+              <Apple color={TEXT_PRIMARY} size={20} />
+              <Text style={styles.socialTxt} numberOfLines={1}>Apple</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
 

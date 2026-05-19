@@ -277,10 +277,14 @@ export class FootballController {
 
   /**
    * GET /api/football/fixtures/live - Get live fixtures
-   * ✅ Uses memory cache with 5 minutes TTL to reduce API calls
+   * Cache TTL: 30 seconds — short enough that the displayed minute stays
+   * within ±30s of the real upstream, long enough to avoid hammering the
+   * upstream API on every poll. The previous 5-minute cache caused the
+   * displayed minute to lag the real match by up to 3 minutes, which users
+   * compared to TV broadcasts and reported as a bug.
    */
   private static liveFixturesCache: { data: any[]; timestamp: number } | null = null;
-  private static readonly LIVE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private static readonly LIVE_CACHE_TTL = 30 * 1000; // 30 seconds
 
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
     try {

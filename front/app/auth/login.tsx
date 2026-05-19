@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Mail, Lock, Apple } from 'lucide-react-native';
 import { AuthScreenShell, AuthTextField, AUTH_ACCENT } from '@/src/components/auth';
+import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
 import { TEXT_PRIMARY, TEXT_MUTED, TEXT_SECONDARY } from '@/constants/tokens';
 import { useSignIn } from '@clerk/clerk-expo';
 
@@ -13,6 +14,31 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
+
+  const { startGoogle, startApple } = useOAuthFlow({
+    onError: () => setOauthLoading(null),
+  });
+
+  const handleGooglePress = async (): Promise<void> => {
+    if (oauthLoading) return;
+    setOauthLoading('google');
+    try {
+      await startGoogle();
+    } finally {
+      setOauthLoading(null);
+    }
+  };
+
+  const handleApplePress = async (): Promise<void> => {
+    if (oauthLoading) return;
+    setOauthLoading('apple');
+    try {
+      await startApple();
+    } finally {
+      setOauthLoading(null);
+    }
+  };
 
   const submit = async () => {
     if (!email.trim() || password.length < 6) {
@@ -89,13 +115,35 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.socialRow}>
-        <TouchableOpacity activeOpacity={0.9} style={styles.social}>
-          <Text style={styles.googleG}>G</Text>
-          <Text style={styles.socialTxt}>Google</Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
+          onPress={handleGooglePress}
+          disabled={!!oauthLoading}
+        >
+          {oauthLoading === 'google' ? (
+            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
+          ) : (
+            <>
+              <Text style={styles.googleG}>G</Text>
+              <Text style={styles.socialTxt}>Google</Text>
+            </>
+          )}
         </TouchableOpacity>
-        <TouchableOpacity activeOpacity={0.9} style={styles.social}>
-          <Apple color={TEXT_PRIMARY} size={20} />
-          <Text style={styles.socialTxt}>Apple</Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
+          onPress={handleApplePress}
+          disabled={!!oauthLoading}
+        >
+          {oauthLoading === 'apple' ? (
+            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
+          ) : (
+            <>
+              <Apple color={TEXT_PRIMARY} size={20} />
+              <Text style={styles.socialTxt}>Apple</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
 

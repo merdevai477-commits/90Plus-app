@@ -41,6 +41,7 @@ import { ToastProvider } from "../contexts/ToastContext";
 import { ProfessionalToastProvider } from '../contexts/ProfessionalToastContext';
 import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -48,6 +49,10 @@ import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { logger } from "../services/logger";
 import { preloadManager } from "../services/preloadManager";
+
+// ✅ Required for OAuth redirects to close the in-app browser and resume the
+// JS thread. Must be called once at module scope before any OAuth flow runs.
+WebBrowser.maybeCompleteAuthSession();
 import { AuthService } from "../src/services/authService";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import * as Sentry from '@sentry/react-native';

@@ -1,14 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { RadioTower, FileText, BarChart2 } from 'lucide-react-native';
+import { Smartphone, Sparkles, Brain } from 'lucide-react-native';
 import { AUTH_ACCENT } from './AuthTokens';
 import { TEXT_PRIMARY, TEXT_SECONDARY } from '../../../constants/tokens';
 
 const FEATS = [
-  { Icon: RadioTower, label: 'Live Scores' },
-  { Icon: FileText, label: 'Breaking\nNews' },
-  { Icon: BarChart2, label: 'Stats &\nAnalysis' },
+  // Mobile-first football experience
+  { Icon: Smartphone, label: 'Mobile\nApp' },
+  // AI chat powered football assistant
+  { Icon: Sparkles, label: 'AI\nChat' },
+  // Daily quiz / brain-teaser
+  { Icon: Brain, label: 'Daily\nQuiz' },
 ];
 
 export function AuthHeroBlock({ compact }: { compact?: boolean }) {

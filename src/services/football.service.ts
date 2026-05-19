@@ -27,7 +27,10 @@ interface CacheEntry {
 // Cache TTL values in milliseconds
 // ✅ OPTIMIZED for Free Plan (100 requests/day): Aggressive caching
 const CACHE_TTL = {
-  LIVE: 2 * 60 * 1000,                // 2 minutes for live matches (reduced API calls)
+  // Live matches: 30 seconds. Anything longer makes the displayed minute
+  // visibly lag what users see on TV (the previous 2-minute TTL caused
+  // up to 2-minute drift on the elapsed clock).
+  LIVE: 30 * 1000,
   SHORT: 30 * 60 * 1000,              // 30 minutes for upcoming matches
   MEDIUM: 2 * 60 * 60 * 1000,         // 2 hours for standings, stats
   LONG: 7 * 24 * 60 * 60 * 1000,      // 7 days for teams, leagues, players
