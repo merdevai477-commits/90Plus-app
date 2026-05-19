@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { footballService, FootballApiError } from '../services/football.service';
 import { matchCacheService, FixtureFromAPI } from '../services/match-cache.service';
 import { footballDataCacheService } from '../services/football-data-cache.service';
+import { getTopClubsByCountry, getSupportedCountries } from '../services/top-clubs.service';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 
@@ -1612,6 +1613,62 @@ export class FootballController {
         status: 'SUCCESS',
         results: 1,
         response: [team],
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/teams/top-by-country
+   * Returns the top 5 clubs for a country, backed by `cached_teams` (refreshed
+   * from API-Football at most once every 7 days per country).
+   *
+   * Query params:
+   *   - country (required): country name (e.g. 'England', 'Egypt')
+   *   - refresh (optional): 'true' forces a refresh from API
+   */
+  static async getTopClubsByCountry(req: Request, res: Response): Promise<void> {
+    try {
+      const country = (req.query.country as string | undefined)?.trim();
+      if (!country) {
+        res.status(400).json({
+          status: 'ERROR',
+          code: 'E001',
+          message: 'country query param is required',
+        });
+        return;
+      }
+
+      const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+      const result = await getTopClubsByCountry(country, forceRefresh);
+
+      res.json({
+        status: 'SUCCESS',
+        data: {
+          country,
+          clubs: result.clubs,
+          source: result.source,
+          count: result.clubs.length,
+        },
+      });
+    } catch (error) {
+      logger.error('Error in getTopClubsByCountry:', error);
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/teams/top-supported-countries
+   * Returns the list of countries we have a primary-league mapping for.
+   * Useful for the picker UI to render the country tabs/filters.
+   */
+  static async getTopSupportedCountries(_req: Request, res: Response): Promise<void> {
+    try {
+      const countries = getSupportedCountries();
+      res.json({
+        status: 'SUCCESS',
+        data: { countries, count: countries.length },
       });
     } catch (error) {
       FootballController.handleError(res, error);
