@@ -100,7 +100,30 @@ async function fetchFromApi(country: string): Promise<TopClub[]> {
               };
             })
             .filter((x): x is TopClub => x !== null);
-          if (clubs.length > 0) return clubs;
+          if (clubs.length >= TOP_N) return clubs;
+          // Got some but not enough — break out and supplement from fallback
+          if (clubs.length > 0) {
+            // Supplement from /teams?country fallback
+            try {
+              const result = await footballService.getTeamsByCountry(country);
+              const rows: ApiTeamRow[] = Array.isArray(result?.teams) ? (result.teams as ApiTeamRow[]) : [];
+              const existingIds = new Set(clubs.map((c) => c.teamId));
+              const extra = rows
+                .filter((r) => r.team?.id && r.team?.name && !r.team?.national && !existingIds.has(r.team!.id!))
+                .slice(0, TOP_N - clubs.length)
+                .map((r): TopClub => ({
+                  teamId: r.team!.id!,
+                  name: r.team!.name!,
+                  logo: r.team!.logo ?? null,
+                  country: r.team!.country ?? country,
+                  founded: r.team!.founded ?? null,
+                  venueName: r.venue?.name ?? null,
+                }));
+              return [...clubs, ...extra].slice(0, TOP_N);
+            } catch {
+              return clubs; // return what we have
+            }
+          }
         }
       } catch (err: any) {
         logger.warn(`[top-clubs] Standings lookup failed for ${country} (league ${leagueId}, season ${season}):`, err?.message);
