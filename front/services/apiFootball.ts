@@ -1569,15 +1569,23 @@ export const ApiFootballService = {
     venueName: string | null;
   }[]> {
     try {
-      const params: Record<string, string> = { country };
-      if (forceRefresh) params.refresh = 'true';
-      const result = await fetchFromProxy<{
-        country: string;
-        clubs: any[];
-        source: string;
-        count: number;
-      }>('/teams/top-by-country', params);
-      return Array.isArray(result?.clubs) ? result.clubs : [];
+      // ✅ Direct fetch instead of fetchFromProxy because the response shape
+      // uses { status, results, response: { clubs } } which fetchFromProxy
+      // unwraps to the inner object. We need to handle both the old cached
+      // shape (data field) and the new shape (response field) gracefully.
+      const baseUrl = getApiUrl();
+      const url = `${baseUrl}/football/teams/top-by-country?country=${encodeURIComponent(country)}${forceRefresh ? '&refresh=true' : ''}`;
+      const res = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!res.ok) {
+        logger.error(`[getTopClubsByCountry] HTTP ${res.status}`);
+        return [];
+      }
+      const json = await res.json();
+      // Handle both shapes: { response: { clubs } } and { data: { clubs } }
+      const clubs = json?.response?.clubs ?? json?.data?.clubs ?? [];
+      return Array.isArray(clubs) ? clubs : [];
     } catch (error) {
       logger.error('[getTopClubsByCountry] Failed:', error);
       return [];
