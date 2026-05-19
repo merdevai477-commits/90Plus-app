@@ -42,8 +42,8 @@ export async function getImageSize(uri: string): Promise<{ width: number; height
     // Use FileSystem.getInfoAsync — handle both new and legacy API
     let size = 0;
     try {
-      const info = await FileSystem.getInfoAsync(uri, { size: true });
-      size = info.exists ? (info.size || 0) : 0;
+      const info = await FileSystem.getInfoAsync(uri);
+      size = info.exists ? ((info as { size?: number }).size ?? 0) : 0;
     } catch (fsError: any) {
       // If getInfoAsync fails (deprecated in newer expo), estimate size as 0
       // The upload will still work, we just won't know exact file size
@@ -80,13 +80,18 @@ export async function compressImage(
     // Get original size
     const originalInfo = await getImageSize(uri);
     const originalSize = originalInfo.size;
-    
-    // Skip compression if image is already small
-    if (originalSize < 100 * 1024) { // < 100KB
+    const knownSize = originalSize > 0;
+
+    // Skip compression only if we KNOW the image is already small. When
+    // FileSystem.getInfoAsync returns 0 (deprecated API on newer Expo) we
+    // can't trust the size, so we fall through to compression rather than
+    // skipping — otherwise we'd ship full-resolution camera output (5–10MB)
+    // and uploads would time out on flaky mobile networks.
+    if (knownSize && originalSize < 100 * 1024) { // < 100KB, confirmed
       logger.info('[imageCompressor] Image already small, skipping compression', {
         originalSize: formatFileSize(originalSize),
       });
-      
+
       return {
         uri,
         width: originalInfo.width,
@@ -104,7 +109,11 @@ export async function compressImage(
     let maxHeight = options?.maxHeight || 1080;
     
     if (!quality) {
-      if (originalSize < 500 * 1024) { // 100KB-500KB
+      if (!knownSize) {
+        // Unknown size (getInfoAsync deprecated/unavailable) — apply
+        // medium-heavy compression that's safe for camera output.
+        quality = 0.5;
+      } else if (originalSize < 500 * 1024) { // 100KB-500KB
         quality = 0.8; // light compression
       } else if (originalSize < 2 * 1024 * 1024) { // 500KB-2MB
         quality = 0.6; // medium compression
@@ -121,9 +130,11 @@ export async function compressImage(
     const enableWebP = options?.enableWebP ?? Platform.OS === 'android';
     const format = options?.format || (enableWebP ? 'webp' : 'jpeg');
     
-    // Calculate resize dimensions while maintaining aspect ratio
+    // Calculate resize dimensions while maintaining aspect ratio.
+    // When original size is unknown we always resize down to maxWidth/maxHeight
+    // to guarantee the upload payload is bounded.
     const actions: ImageManipulator.Action[] = [];
-    if (originalInfo.width > maxWidth || originalInfo.height > maxHeight) {
+    if (!knownSize || originalInfo.width > maxWidth || originalInfo.height > maxHeight) {
       actions.push({
         resize: {
           width: maxWidth,
@@ -149,8 +160,8 @@ export async function compressImage(
     // Get compressed size
     let compressedSize = 0;
     try {
-      const compressedInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
-      compressedSize = compressedInfo.exists ? (compressedInfo.size || 0) : 0;
+      const compressedInfo = await FileSystem.getInfoAsync(result.uri);
+      compressedSize = compressedInfo.exists ? ((compressedInfo as { size?: number }).size ?? 0) : 0;
     } catch {
       // If getInfoAsync fails, estimate from compression ratio
       compressedSize = Math.round(originalSize * 0.4); // Assume ~60% compression

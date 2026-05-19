@@ -161,7 +161,31 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
             return;
         }
 
-        const { username, displayName, bio, favoriteTeam } = req.body;
+        const {
+            username,
+            displayName,
+            bio,
+            favoriteTeam,
+            // ✅ Extra profile fields previously dropped silently
+            favoriteClub,
+            favoriteBrand,
+            clubLogo,
+            brandLogo,
+            country,
+            countryFlag,
+            position,
+        } = req.body;
+
+        // Light validation for the extra fields (mirrors /card-profile)
+        const validPositions = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'];
+        if (position && !validPositions.includes(position)) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'Invalid position',
+                code: 'E001',
+            });
+            return;
+        }
 
         // Validate username if provided
         if (username) {
@@ -211,17 +235,35 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
             }
         }
 
-        // Update user
+        // Update user (username/displayName/bio/favoriteTeam via service)
         const user = await ClerkUserService.updateUser(clerkUserId, {
             username,
             displayName,
             bio,
-            favoriteTeam,
+            favoriteTeam: favoriteTeam ?? favoriteClub, // accept either; favoriteClub is a frontend alias
         });
+
+        // ✅ FIX: Persist extra profile fields that the frontend sends from
+        // ClubPickerModal / BrandPickerModal / position picker. Previously these
+        // were silently dropped, so completion % and XP never updated.
+        const extraData: Record<string, unknown> = {};
+        if (favoriteBrand !== undefined && favoriteBrand !== null) extraData.favoriteBrand = favoriteBrand;
+        if (clubLogo !== undefined && clubLogo !== null) extraData.clubLogo = clubLogo;
+        if (brandLogo !== undefined && brandLogo !== null) extraData.brandLogo = brandLogo;
+        if (country !== undefined && country !== null) extraData.country = country;
+        if (countryFlag !== undefined && countryFlag !== null) extraData.countryFlag = countryFlag;
+        if (position !== undefined && position !== null) extraData.position = position;
+
+        if (Object.keys(extraData).length > 0) {
+            await prisma.user.update({
+                where: { clerkUserId },
+                data: extraData,
+            });
+        }
 
         // Invalidate cache so /me returns fresh data
         invalidateUserCache(clerkUserId);
-        
+
         // ✅ XP Awards for profile updates
         const xpEvents: XpEvent[] = [];
         const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
@@ -236,17 +278,39 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
             const r = await awardXp({ userId: user.id, action: 'PROFILE_BIO', idempotencyKey: 'profile.bio.first', timezone: tz });
             if (r.awarded > 0) xpEvents.push({ action: 'PROFILE_BIO', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
           }
+
+          // ✅ FIX: XP awards for FIFA-card fields submitted via /clerk/profile.
+          // These mirror the awards in PUT /clerk/card-profile so the user gets
+          // credit no matter which endpoint persisted the field.
+          if (Object.keys(extraData).length > 0) {
+            const fifaXpMap: Array<{ field: keyof typeof extraData; action: XpActionType; idempotency: string }> = [
+              { field: 'position', action: 'PROFILE_FIFA_POSITION', idempotency: 'profile.fifa.position.first' },
+              { field: 'countryFlag', action: 'PROFILE_FIFA_COUNTRY', idempotency: 'profile.fifa.country.first' },
+              { field: 'clubLogo', action: 'PROFILE_FIFA_CLUB', idempotency: 'profile.fifa.club.first' },
+              { field: 'brandLogo', action: 'PROFILE_FIFA_BRAND', idempotency: 'profile.fifa.brand.first' },
+            ];
+
+            for (const { field, action, idempotency } of fifaXpMap) {
+              const value = extraData[field];
+              if (value !== undefined && value !== null && String(value).trim() !== '') {
+                const r = await awardXp({ userId: user.id, action, idempotencyKey: idempotency, timezone: tz });
+                if (r.awarded > 0) xpEvents.push({ action, amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+              }
+            }
+          }
         } catch (xpErr) {
           logger.error('XP award error in PUT /profile:', xpErr);
         }
 
-        // ✅ CRITICAL: Recalculate profile completion after profile update
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after profile update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+        // ✅ Recalculate profile completion in background — don't block the
+        // HTTP response on a DB read+write that the client doesn't need
+        // immediately. The frontend re-fetches /api/profile/completion on its
+        // own AppState change / refresh.
+        setImmediate(() => {
+          ProfileCompletionService.getCompletionStatus(clerkUserId)
+            .then(() => logger.info('✅ Profile completion recalculated after profile update'))
+            .catch((err) => logger.error('Failed to recalculate profile completion:', err));
+        });
 
         res.json({
             status: 'SUCCESS',
@@ -298,14 +362,38 @@ router.post('/preferences', requireAuth, async (req: Request, res: Response): Pr
 
         // Invalidate cache
         invalidateUserCache(clerkUserId);
-        
-        // ✅ CRITICAL: Recalculate profile completion after preferences update
+
+        // ✅ XP Awards for first-time onboarding choices (mirror /card-profile)
+        const xpEvents: XpEvent[] = [];
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
         try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after preferences update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
+          const dbUser = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true, clubLogo: true, brandLogo: true, countryFlag: true },
+          });
+          if (dbUser) {
+            const fifaXpMap: Array<{ value: unknown; action: XpActionType; idempotency: string }> = [
+              { value: dbUser.clubLogo, action: 'PROFILE_FIFA_CLUB', idempotency: 'profile.fifa.club.first' },
+              { value: dbUser.brandLogo, action: 'PROFILE_FIFA_BRAND', idempotency: 'profile.fifa.brand.first' },
+              { value: dbUser.countryFlag, action: 'PROFILE_FIFA_COUNTRY', idempotency: 'profile.fifa.country.first' },
+            ];
+            for (const { value, action, idempotency } of fifaXpMap) {
+              if (value !== null && value !== undefined && String(value).trim() !== '') {
+                const r = await awardXp({ userId: dbUser.id, action, idempotencyKey: idempotency, timezone: tz });
+                if (r.awarded > 0) xpEvents.push({ action, amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+              }
+            }
+          }
+        } catch (xpErr) {
+          logger.error('XP award error in POST /preferences:', xpErr);
         }
+
+        // ✅ Recalculate profile completion in background
+        setImmediate(() => {
+          ProfileCompletionService.getCompletionStatus(clerkUserId)
+            .then(() => logger.info('✅ Profile completion recalculated after preferences update'))
+            .catch((err) => logger.error('Failed to recalculate profile completion:', err));
+        });
 
         logger.info('✅ User preferences saved:', clerkUserId);
 
@@ -313,6 +401,7 @@ router.post('/preferences', requireAuth, async (req: Request, res: Response): Pr
             status: 'SUCCESS',
             message: 'Preferences saved successfully',
             data: { user },
+            xpEvents,
         });
     } catch (error: any) {
         logger.error('Save preferences error:', error);
@@ -428,13 +517,13 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
           logger.error('XP award error in PUT /card-profile:', xpErr);
         }
         
-        // ✅ CRITICAL: Invalidate profile completion cache to force recalculation
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after card profile update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+        // ✅ Recalculate profile completion in background — don't block the
+        // HTTP response on the heavy DB read+write.
+        setImmediate(() => {
+          ProfileCompletionService.getCompletionStatus(clerkUserId)
+            .then(() => logger.info('✅ Profile completion recalculated after card profile update'))
+            .catch((err) => logger.error('Failed to recalculate profile completion:', err));
+        });
 
         res.json({
             status: 'SUCCESS',
@@ -1469,7 +1558,8 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
         // Invalidate cache
         invalidateUserCache(clerkUserId);
 
-        // ✅ XP Awards for social links
+        // ✅ XP Awards for social links — issued in parallel so 5 links don't
+        // serialise into 5 sequential transactions on the request thread.
         const xpEvents: XpEvent[] = [];
         const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
         try {
@@ -1482,26 +1572,38 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
               snapchat: 'PROFILE_SOCIAL_SNAPCHAT',
             };
 
-            for (const link of validLinks) {
-              const platform = link.platform.toLowerCase();
-              const action = xpPlatforms[platform];
-              if (action && link.url && isValidSocialUrl(platform, link.url)) {
-                const r = await awardXp({ userId: xpUser.id, action, idempotencyKey: `profile.social.${platform}.first`, timezone: tz });
-                if (r.awarded > 0) xpEvents.push({ action, amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
+            const awards = await Promise.all(
+              validLinks
+                .filter((link) => xpPlatforms[link.platform.toLowerCase()] && link.url && isValidSocialUrl(link.platform.toLowerCase(), link.url))
+                .map(async (link) => {
+                  const platform = link.platform.toLowerCase();
+                  const action = xpPlatforms[platform];
+                  try {
+                    const r = await awardXp({ userId: xpUser.id, action, idempotencyKey: `profile.social.${platform}.first`, timezone: tz });
+                    return { action, awarded: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel };
+                  } catch (innerErr) {
+                    logger.error(`[social-links] awardXp ${action} failed:`, innerErr);
+                    return null;
+                  }
+                }),
+            );
+
+            for (const a of awards) {
+              if (a && a.awarded > 0) {
+                xpEvents.push({ action: a.action, amount: a.awarded, leveledUp: a.leveledUp, newLevel: a.newLevel });
               }
             }
           }
         } catch (xpErr) {
           logger.error('XP award error in PUT /social-links:', xpErr);
         }
-        
-        // ✅ CRITICAL: Recalculate profile completion after social links update
-        try {
-          await ProfileCompletionService.getCompletionStatus(clerkUserId);
-          logger.info('✅ Profile completion recalculated after social links update');
-        } catch (err) {
-          logger.error('Failed to recalculate profile completion:', err);
-        }
+
+        // ✅ Recalculate profile completion in background — non-blocking.
+        setImmediate(() => {
+          ProfileCompletionService.getCompletionStatus(clerkUserId)
+            .then(() => logger.info('✅ Profile completion recalculated after social links update'))
+            .catch((err) => logger.error('Failed to recalculate profile completion:', err));
+        });
 
         res.json({
             status: 'SUCCESS',

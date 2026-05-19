@@ -400,47 +400,57 @@ router.post(
 
       invalidateUserCache(clerkUserId);
 
-      try {
-        const { ProfileCompletionService } = await import('../services/profile-completion.service');
-        await ProfileCompletionService.getCompletionStatus(clerkUserId);
-      } catch (err) {
-        logger.error('Profile completion recalc failed:', err);
-      }
+      // ✅ FIX: Move heavy post-upload work off the request path so the
+      // client gets the new avatar URL immediately. Profile completion
+      // recompute, notification enqueue, XP award, and analytics each issue
+      // ≥1 DB round-trip — running them inline used to add 1–3 seconds to
+      // every avatar upload on flaky mobile networks.
+      const respondedAt = Date.now();
+      res.json({
+        status: 'SUCCESS',
+        message: 'تم رفع صورة البروفايل بنجاح',
+        data: { url: result.url, storagePath: result.key },
+        xpEvents: [], // populated server-side; client refetches /me to get authoritative XP
+      });
 
-      try {
-        await UploadAnalyticsService.record({
-          userId: user.id, type: 'AVATAR', status: 'SUCCESS',
-          fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
-        });
-      } catch (err) {
-        logger.error('Upload analytics failed:', err);
-      }
+      setImmediate(async () => {
+        try {
+          const { ProfileCompletionService } = await import('../services/profile-completion.service');
+          await ProfileCompletionService.getCompletionStatus(clerkUserId);
+        } catch (err) {
+          logger.error('[upload/avatar] Profile completion recalc failed:', err);
+        }
 
-      try {
-        const { enqueueNotification } = await import('../queues/notification.queue');
-        await enqueueNotification({
-          userId: user.id,
-          title: '🖼️ صورة البروفايل',
-          message: 'تم تحديث صورة البروفايل بنجاح!',
-          type: 'GENERAL',
-          data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' }
-        });
-      } catch (err) {
-        logger.error('Enqueue notification failed for avatar:', err);
-      }
+        try {
+          await UploadAnalyticsService.record({
+            userId: user.id, type: 'AVATAR', status: 'SUCCESS',
+            fileSizeMB: file.buffer.length / 1e6, durationMs: respondedAt - startTime,
+          });
+        } catch (err) {
+          logger.error('[upload/avatar] Upload analytics failed:', err);
+        }
 
-      // ✅ XP Award for first avatar
-      let xpEvents: Array<{ action: string; amount: number; leveledUp: boolean; newLevel: number }> = [];
-      try {
-        const { awardXp: awardXpFn } = await import('../services/xp.service');
-        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
-        const r = await awardXpFn({ userId: user.id, action: 'PROFILE_AVATAR', idempotencyKey: 'profile.avatar.first', timezone: tz });
-        if (r.awarded > 0) xpEvents.push({ action: 'PROFILE_AVATAR', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
-      } catch (xpErr: any) {
-        logger.warn('[upload/avatar] XP award failed (non-fatal):', xpErr?.message);
-      }
+        try {
+          const { enqueueNotification } = await import('../queues/notification.queue');
+          await enqueueNotification({
+            userId: user.id,
+            title: '🖼️ صورة البروفايل',
+            message: 'تم تحديث صورة البروفايل بنجاح!',
+            type: 'GENERAL',
+            data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' },
+          });
+        } catch (err) {
+          logger.error('[upload/avatar] Enqueue notification failed for avatar:', err);
+        }
 
-      res.json({ status: 'SUCCESS', message: 'تم رفع صورة البروفايل بنجاح', data: { url: result.url, storagePath: result.key }, xpEvents });
+        try {
+          const { awardXp: awardXpFn } = await import('../services/xp.service');
+          const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+          await awardXpFn({ userId: user.id, action: 'PROFILE_AVATAR', idempotencyKey: 'profile.avatar.first', timezone: tz });
+        } catch (xpErr: any) {
+          logger.warn('[upload/avatar] XP award failed (non-fatal):', xpErr?.message);
+        }
+      });
     } catch (error: any) {
       logger.error('Upload avatar error:', error);
       sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Upload failed');
@@ -848,12 +858,14 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
 
     if (!reel) { sendError(res, 404, 'NOT_FOUND', 'Reel not found'); return; }
 
-    // Poll-fallback: if the reel has been PROCESSING for >30s, ask Mux directly
+    // Poll-fallback: if the reel has been PROCESSING for >10s, ask Mux directly
     // and self-heal the DB in case the webhook was missed or delayed.
+    // Lowered from 30s → 10s so the client poller (3s interval) can recover
+    // from a missed webhook within ~13s instead of ~33s.
     const processingTooLong =
       reel.status === 'PROCESSING' &&
       reel.muxUploadId &&
-      Date.now() - new Date(reel.createdAt).getTime() > 30_000;
+      Date.now() - new Date(reel.createdAt).getTime() > 10_000;
 
     if (processingTooLong) {
       try {
@@ -900,6 +912,40 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
               clearReelsFeedCache();
             } catch { /* non-critical */ }
 
+            // ✅ Webhook-equivalent: also bust Redis feed cache + send the
+            // "video ready" notification, since this code path runs only when
+            // the webhook did not fire (or has not arrived yet). Without this
+            // the user never gets a notification when self-heal recovers.
+            try {
+              const { getRedisClient } = await import('../lib/redis');
+              const redis = getRedisClient();
+              if (redis) {
+                let cursor = '0';
+                const keysToDelete: string[] = [];
+                do {
+                  const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'reels:feed:*', 'COUNT', 100);
+                  cursor = nextCursor;
+                  keysToDelete.push(...keys);
+                } while (cursor !== '0');
+                if (keysToDelete.length > 0) {
+                  await redis.del(...keysToDelete);
+                }
+              }
+            } catch { /* non-critical */ }
+
+            try {
+              const { NotificationService } = await import('../services/notification.service');
+              await NotificationService.createNotification({
+                userId: reel.userId,
+                title: '✅ فيديوهك جاهز!',
+                message: 'تم معالجة فيديوهك بنجاح وهو متاح الآن للمشاهدة',
+                type: 'VIDEO_PROCESSED',
+                data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'READY', muxPlaybackId: playbackId },
+              });
+            } catch (notifyErr: any) {
+              logger.warn('[upload/status] Self-heal notification failed:', notifyErr?.message);
+            }
+
             logger.info(`[upload/status] Self-healed reel ${reel.id} → READY via poll fallback`);
           }
         } else if (asset?.status === 'errored') {
@@ -920,6 +966,20 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
             },
           });
           logger.warn(`[upload/status] Reel ${reel.id} marked FAILED via poll fallback`);
+
+          // ✅ Notify uploader that processing failed (webhook-equivalent)
+          try {
+            const { NotificationService } = await import('../services/notification.service');
+            await NotificationService.createNotification({
+              userId: reel.userId,
+              title: '❌ فشل رفع الفيديو',
+              message: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+              type: 'VIDEO_PROCESSED',
+              data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'FAILED' },
+            });
+          } catch (notifyErr: any) {
+            logger.warn('[upload/status] Self-heal failure notification failed:', notifyErr?.message);
+          }
         }
       } catch (pollErr: any) {
         logger.warn(`[upload/status] Poll fallback failed for reel ${reelId}: ${pollErr?.message}`);
