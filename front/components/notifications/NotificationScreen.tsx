@@ -132,7 +132,27 @@ export default function NotificationScreen() {
       }
       case 'MATCH_UPDATE':
       case 'MATCH_FAVORITE':
-        router.push('/(tabs)/Home');
+        if ((data as any)?.matchId || (data as any)?.fixtureId) {
+          router.push({
+            pathname: '/(tabs)/match-details',
+            params: {
+              fixtureId: String((data as any).matchId || (data as any).fixtureId),
+              homeTeam: (data as any).homeTeam || '',
+              awayTeam: (data as any).awayTeam || '',
+              homeLogo: (data as any).homeTeamLogo || '',
+              awayLogo: (data as any).awayTeamLogo || '',
+              homeScore: (data as any).homeScore || '',
+              awayScore: (data as any).awayScore || '',
+              league: (data as any).leagueName || '',
+              leagueLogo: '',
+              date: (data as any).matchDate || new Date().toISOString().split('T')[0],
+              time: '',
+              status: 'live',
+            },
+          });
+        } else {
+          router.push('/(tabs)/Home');
+        }
         break;
       default:
         break;

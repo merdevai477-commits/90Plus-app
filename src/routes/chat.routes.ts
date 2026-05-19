@@ -202,6 +202,22 @@ const CORE_BEHAVIOR_PROMPT = `
 - لو الموضوع طويل، نظّم الرد في نقاط أو فقرات مختصرة لكن انهِ الفكرة كاملة.
 - ابدأ بالمعلومة الأهم أولاً حتى لو انقطعت الإجابة لأي سبب يكون المستخدم عرف المهم.
 
+تنسيق الجداول (Markdown):
+- استخدم جدول Markdown دائمًا لأي محتوى مقسم على أيام أو أعمدة، مثل:
+  • نظام غذائي أسبوعي/يومي.
+  • خطة تمرين مقسمة على أيام.
+  • تاريخ لاعب (الفرق، السنوات، الأرقام).
+  • تاريخ نادي (المواسم، البطولات، المدربين).
+  • قائمة الألقاب أو المنتخب (البطولة، الموسم، النتيجة).
+  • أي مقارنة بين عناصر متعددة.
+- صياغة الجدول الصحيحة:
+  | العمود الأول | العمود الثاني | العمود الثالث |
+  |---|---|---|
+  | قيمة | قيمة | قيمة |
+- استخدم رؤوس أعمدة قصيرة (كلمة أو اثنين).
+- اضبط القيم في خلية واحدة لكل صف — لا تكسر الصفوف بأسطر متعددة.
+- أضف فقرة قصيرة قبل أو بعد الجدول للسياق إذا لزم.
+
 قيود النطاق:
 - نطاقك فقط: كرة القدم، التمارين، الإحماء، الاستشفاء، والتغذية الرياضية.
 - لا تقدم أخبار رياضية أو انتقالات — اعتذر واقترح مصادر موثوقة.
@@ -539,9 +555,17 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 (targetConversation.title === 'محادثة جديدة' || !targetConversation.title) &&
                 total <= 2
             ) {
-                const titleCandidate = trimmedMessage.split(/\s+/).slice(0, 4).join(' ');
+                // Generate a clean title from the first user message — first
+                // 5 meaningful words, trimmed to 50 chars max. Avoid the
+                // generic fallback unless the message itself is unusable.
+                const cleaned = trimmedMessage
+                    .replace(/[\n\r]+/g, ' ')
+                    .replace(/[?!.,،؟]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                const titleCandidate = cleaned.split(/\s+/).slice(0, 5).join(' ').slice(0, 50);
                 await updateConversation(userId, targetConversation.id, {
-                    title: titleCandidate || 'محادثة جديدة',
+                    title: titleCandidate.length >= 2 ? titleCandidate : 'محادثة جديدة',
                 });
             }
 

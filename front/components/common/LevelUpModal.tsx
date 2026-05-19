@@ -4,7 +4,7 @@ import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { subscribeLevelUp, drainLevelUpQueue } from '../../contexts/XpContext';
-import { useLanguageStore } from '../../src/i18n';
+import { useTranslation } from '../../src/i18n';
 
 interface LevelUpEvent {
   previousLevel: number;
@@ -15,7 +15,7 @@ interface LevelUpEvent {
 export const LevelUpModal: React.FC = () => {
   const [event, setEvent] = useState<LevelUpEvent | null>(null);
   const [visible, setVisible] = useState(false);
-  const t = useLanguageStore((s) => s.t);
+  const { t } = useTranslation();
 
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);

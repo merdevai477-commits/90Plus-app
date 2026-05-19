@@ -643,7 +643,27 @@ export default function NotificationsScreen() {
                         break;
                     case 'MATCH_UPDATE':
                     case 'MATCH_FAVORITE':
-                        router.push('/(tabs)/matches');
+                        if (data.matchId || data.fixtureId) {
+                            router.push({
+                                pathname: '/(tabs)/match-details',
+                                params: {
+                                    fixtureId: String(data.matchId || data.fixtureId),
+                                    homeTeam: data.homeTeam || '',
+                                    awayTeam: data.awayTeam || '',
+                                    homeLogo: data.homeTeamLogo || '',
+                                    awayLogo: data.awayTeamLogo || '',
+                                    homeScore: data.homeScore || '',
+                                    awayScore: data.awayScore || '',
+                                    league: data.leagueName || '',
+                                    leagueLogo: '',
+                                    date: data.matchDate || new Date().toISOString().split('T')[0],
+                                    time: '',
+                                    status: 'live',
+                                },
+                            });
+                        } else {
+                            router.push('/(tabs)/matches');
+                        }
                         break;
                     default:
                         break;

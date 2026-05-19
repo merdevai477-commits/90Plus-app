@@ -35,7 +35,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
 }) => {
   const { t } = useLanguage();
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const isLive = status === 'live' || statusShort?.includes('1H') || statusShort?.includes('2H');
+  const isLive = status === 'live' || ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(statusShort || '');
 
   useEffect(() => {
     if (isLive) {

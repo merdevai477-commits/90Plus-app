@@ -54,7 +54,7 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
             const [subscription, user] = await Promise.all([
                 prisma.favoriteMatch.findUnique({
                     where: { userId_apiMatchId: { userId, apiMatchId: fixtureId } },
-                    select: { notifiedStart: true, matchDate: true },
+                    select: { notifiedStart: true, matchDate: true, homeTeamLogo: true, awayTeamLogo: true, leagueName: true },
                 }),
                 prisma.user.findUnique({
                     where: { id: userId },
@@ -83,7 +83,12 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                     type: 'MATCH_START',
                     fixtureId: String(fixtureId),
                     matchId: String(fixtureId),
-                    screen: '/(tabs)/matches',
+                    homeTeam,
+                    awayTeam,
+                    homeTeamLogo: subscription.homeTeamLogo || '',
+                    awayTeamLogo: subscription.awayTeamLogo || '',
+                    leagueName: subscription.leagueName || '',
+                    screen: '/(tabs)/match-details',
                 },
                 channelId: 'match-updates',
             });

@@ -592,6 +592,17 @@ export const ar = {
     questionNumber: 'السؤال رقم',
     of: 'من',
     loading: 'جاري التحميل...',
+    // Premium quiz screen
+    nextQuestion: 'السؤال التالي',
+    skip: 'تخطي',
+    useHint: 'استخدم التلميح',
+    hintCostLabel: 'تكلف 10 كوينز',
+    hintAvailable: 'تلميح واحد متاح',
+    questionsLeft: 'أسئلة متبقية',
+    complete: 'مكتمل',
+    difficultyEasy: 'سهل',
+    difficultyMedium: 'متوسط',
+    difficultyHard: 'صعب',
   },
 
   luckyWheel: {

@@ -99,6 +99,18 @@ const MatchDetailsScreen = () => {
 
   const fixtureId = parseInt(params.fixtureId || '0');
 
+  // Determine if the match is live based on fixture status or params
+  const isLive = useCallback(() => {
+    if (fixture) {
+      const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+      return liveStatuses.includes(fixture.fixture.status.short);
+    }
+    return params.status === 'live';
+  }, [fixture, params.status]);
+
+  // Live polling interval ref
+  const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     // Reset state immediately when fixtureId changes to prevent stale data
     setEvents([]);
@@ -136,6 +148,54 @@ const MatchDetailsScreen = () => {
     ]).start();
   }, [fixtureId]);
 
+  // Live match polling: refresh fixture data + events every 30 seconds
+  useEffect(() => {
+    // Clear any existing interval
+    if (livePollingRef.current) {
+      clearInterval(livePollingRef.current);
+      livePollingRef.current = null;
+    }
+
+    if (!isLive() || !fixtureId) return;
+
+    const pollLiveData = async () => {
+      try {
+        const [eventsData, fixtureData] = await Promise.allSettled([
+          ApiFootballService.getFixtureEvents(fixtureId),
+          ApiFootballService.getFixtureById(fixtureId),
+        ]);
+
+        if (eventsData.status === 'fulfilled') setEvents(eventsData.value);
+        if (fixtureData.status === 'fulfilled' && fixtureData.value) {
+          setFixture(fixtureData.value);
+
+          // If match just finished, stop polling
+          const finishedStatuses = ['FT', 'AET', 'PEN'];
+          if (finishedStatuses.includes(fixtureData.value.fixture.status.short)) {
+            if (livePollingRef.current) {
+              clearInterval(livePollingRef.current);
+              livePollingRef.current = null;
+            }
+            // Reset stats tab so it reloads with final data
+            loadedTabsRef.current.delete('stats');
+          }
+        }
+      } catch {
+        // Silent fail — don't disrupt the UI for a background poll
+      }
+    };
+
+    // Poll every 10 seconds for live matches
+    livePollingRef.current = setInterval(pollLiveData, 10_000);
+
+    return () => {
+      if (livePollingRef.current) {
+        clearInterval(livePollingRef.current);
+        livePollingRef.current = null;
+      }
+    };
+  }, [fixtureId, fixture?.fixture?.status?.short, params.status]);
+
   const loadMatchDetails = async () => {
     if (!fixtureId) {
       setError('معرف المباراة غير صحيح');
@@ -154,7 +214,9 @@ const MatchDetailsScreen = () => {
         ApiFootballService.getFixtureById(fixtureId),
       ]);
 
-      if (eventsData.status === 'fulfilled') setEvents(eventsData.value);
+      if (eventsData.status === 'fulfilled' && eventsData.value) {
+        setEvents(eventsData.value);
+      }
       if (fixtureData.status === 'fulfilled' && fixtureData.value) {
         const details = fixtureData.value;
         setFixture(details);
@@ -179,6 +241,10 @@ const MatchDetailsScreen = () => {
             } catch { /* non-fatal */ }
           }).catch(() => {});
         }
+      } else if (fixtureData.status === 'rejected') {
+        // If fixture fetch failed entirely, show error but don't block the screen
+        // The params still provide basic display info (team names, scores)
+        setError(fixtureData.reason?.message || 'فشل تحميل تفاصيل المباراة');
       }
 
       setLoading(false);
@@ -899,14 +965,18 @@ const MatchDetailsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Modern Header (Score Card) */}
         <MatchHeader
-          homeTeam={params.homeTeam}
-          awayTeam={params.awayTeam}
-          homeLogo={params.homeLogo}
-          awayLogo={params.awayLogo}
-          homeScore={params.homeScore}
-          awayScore={params.awayScore}
-          status={params.status}
-          league={params.league}
+          homeTeam={fixture?.teams?.home?.name || params.homeTeam}
+          awayTeam={fixture?.teams?.away?.name || params.awayTeam}
+          homeLogo={fixture?.teams?.home?.logo || params.homeLogo}
+          awayLogo={fixture?.teams?.away?.logo || params.awayLogo}
+          homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : params.homeScore}
+          awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : params.awayScore}
+          status={fixture ? (
+            ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(fixture.fixture.status.short) ? 'live'
+            : ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short) ? 'finished'
+            : 'upcoming'
+          ) : params.status}
+          league={fixture?.league?.name || params.league}
           date={params.date}
           time={params.time}
           statusShort={fixture?.fixture.status.short}

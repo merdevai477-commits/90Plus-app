@@ -142,7 +142,24 @@ export function usePushNotifications(): PushNotificationState {
                 r.push({ pathname: '/(tabs)/Home', params: { openLuckyWheel: 'true' } });
             } else if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type === 'MATCH_START' || type === 'MATCH_END' || type === 'MATCH_HALFTIME' || type?.includes('MATCH')) {
                 if (data.matchId || data.fixtureId) {
-                    r.push({ pathname: '/(tabs)/matches', params: { matchId: String(data.matchId || data.fixtureId) } });
+                    const fId = String(data.matchId || data.fixtureId);
+                    r.push({
+                        pathname: '/(tabs)/match-details',
+                        params: {
+                            fixtureId: fId,
+                            homeTeam: data.homeTeam || '',
+                            awayTeam: data.awayTeam || '',
+                            homeLogo: data.homeTeamLogo || '',
+                            awayLogo: data.awayTeamLogo || '',
+                            homeScore: data.homeScore || '',
+                            awayScore: data.awayScore || '',
+                            league: data.leagueName || '',
+                            leagueLogo: '',
+                            date: data.matchDate || new Date().toISOString().split('T')[0],
+                            time: '',
+                            status: type === 'MATCH_END' ? 'finished' : 'live',
+                        },
+                    });
                 } else {
                     r.push('/(tabs)/matches');
                 }

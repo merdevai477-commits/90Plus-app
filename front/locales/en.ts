@@ -533,6 +533,17 @@ export const en = {
     questionNumber: 'Question',
     of: 'of',
     loading: 'Loading...',
+    // Premium quiz screen
+    nextQuestion: 'Next Question',
+    skip: 'Skip',
+    useHint: 'Use Hint',
+    hintCostLabel: 'costs 10 coins',
+    hintAvailable: '1 hint available',
+    questionsLeft: 'questions left',
+    complete: 'Complete',
+    difficultyEasy: 'Easy',
+    difficultyMedium: 'Medium',
+    difficultyHard: 'Hard',
   },
 
   // Lucky Wheel

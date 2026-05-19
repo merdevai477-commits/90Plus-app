@@ -26,7 +26,6 @@ import {
     Platform,
     Keyboard,
     KeyboardEvent,
-    KeyboardAvoidingView,
     NativeScrollEvent,
     NativeSyntheticEvent,
 } from 'react-native';
@@ -66,7 +65,7 @@ import { useScreenFont } from '../../utils/fontSetup';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ACCENT = '#A855F7';
-const SCROLL_NEAR_BOTTOM_THRESHOLD = 100; // px
+const SCROLL_NEAR_BOTTOM_THRESHOLD = 120; // px
 const NUDGE_FLAG_PREFIX = '@chat_fifa_nudge_shown_v1_';
 
 // ─── Animated components ──────────────────────────────────────────────────────
@@ -253,23 +252,40 @@ export default function ChatScreen() {
                     listRef.current?.scrollToEnd({ animated: true });
                 }, 80);
             } else {
-                setUnreadCount(c => c + (newCount - prevCount));
+                // Count only AI-authored deltas as unread — the user's own
+                // outbound message shouldn't count against them.
+                const added = messages.slice(prevCount, newCount);
+                const aiAdded = added.filter(m => m.role === 'ai').length;
+                if (aiAdded > 0) setUnreadCount(c => c + aiAdded);
             }
         }
         lastMessageCountRef.current = newCount;
     }, [messages.length]);
 
+    // While the assistant is streaming and the user has scrolled away, keep
+    // the unread badge visible (≥1) so they know fresh content is landing.
+    useEffect(() => {
+        if (!streamingMessageId) return;
+        if (isNearBottomRef.current) return;
+        setUnreadCount(c => (c < 1 ? 1 : c));
+    }, [streamingMessageId, messages]);
+
     // ─── Derived flags ──────────────────────────────────────────────────────
     const hasMessages = messages.length > 1;
-    // softwareKeyboardLayoutMode = "pan" → the OS slides the whole window up
-    // so the focused input stays visible. We must NOT add keyboardHeight
-    // manually or the input will be lifted twice (double-gap above keyboard).
-    // We only need a small fixed gap to keep the input off the very bottom
-    // edge of the screen when the keyboard is closed.
+    // Keyboard handling — single source of truth, no KeyboardAvoidingView.
+    //   Android: app.json sets softwareKeyboardLayoutMode = "pan", so the OS
+    //            pans the whole window up to keep the focused input visible.
+    //            We do NOT add keyboardHeight on top of that or we get a
+    //            double-lift / stretched screen.
+    //   iOS:     no native pan — we lift the absolute-positioned bottomArea
+    //            ourselves by setting `bottom = keyboardHeight + smallGap`.
     const isKbOpen = keyboardHeight > 0;
+    const baseInset = Math.max(insets.bottom, 12);
     const bottomPad = isKbOpen
-        ? 4
-        : Math.min(Math.max(insets.bottom, 8), 16);
+        ? Platform.OS === 'ios'
+            ? keyboardHeight + 4    // iOS: lift manually above the keyboard
+            : 4                     // Android: OS pan already lifted us
+        : baseInset;
 
     // ─── Handlers ───────────────────────────────────────────────────────────
     const handleSend = useCallback((textOverride?: string) => {
@@ -379,6 +395,13 @@ export default function ChatScreen() {
                 onSelectConversation={async (id) => {
                     await selectConversation(id);
                     setIsPanelOpen(false);
+                    // After loading the new history, pin to the bottom so
+                    // the most recent exchange is visible.
+                    isNearBottomRef.current = true;
+                    setUnreadCount(0);
+                    requestAnimationFrame(() => {
+                        listRef.current?.scrollToEnd({ animated: false });
+                    });
                 }}
                 onTogglePin={togglePinConversation}
                 onRenameConversation={renameConversation}
@@ -461,19 +484,15 @@ export default function ChatScreen() {
 
             {/* ── Content ── */}
             {/*
-             * Keyboard handling — platform-split lift:
-             *   iOS → KAV 'padding' lifts the container via paddingBottom.
-             *         bottomPad stays minimal (4 px above keyboard).
-             *   Android → KAV does nothing (behavior=undefined) because its
-             *         'height' mode fights with the system in edge-to-edge
-             *         mode. We lift the bottomArea manually by setting
-             *         bottom = keyboardHeight in JS. One source of truth.
+             * Keyboard handling lives in the bottomArea below — we lift the
+             * input bar manually by `bottom = keyboardHeight + 4` on iOS,
+             * and rely on Android's "pan" mode (set in app.json) to handle
+             * the system slide. We deliberately do NOT use
+             * KeyboardAvoidingView: combining KAV with android pan mode
+             * stretched the screen, and on iOS it double-lifted the input
+             * above the keyboard.
              */}
-            <KeyboardAvoidingView
-                style={styles.contentWrap}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={0}
-            >
+            <View style={styles.contentWrap}>
                 {!hasMessages ? (
                     <WelcomeScreen
                         onPickChip={handleSend}
@@ -484,21 +503,39 @@ export default function ChatScreen() {
                     <FlatList
                         ref={listRef}
                         style={[styles.messagesList, { marginTop: insets.top + 64 }]}
-                        contentContainerStyle={[styles.messagesContent, { paddingBottom: bottomPad + 100 }]}
+                        contentContainerStyle={[
+                            styles.messagesContent,
+                            // Reserve space for the input bar (~52px) + the
+                            // current bottomPad (which already includes
+                            // safe-area + keyboard lift on iOS) + 24 px
+                            // breathing room. Don't add insets.bottom again
+                            // here — bottomPad already factors it in.
+                            { paddingBottom: 52 + bottomPad + 24 },
+                        ]}
                         keyboardShouldPersistTaps="handled"
-                        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+                        keyboardDismissMode="interactive"
+                        automaticallyAdjustKeyboardInsets={false}
                         data={displayMessages}
                         keyExtractor={keyExtractor}
                         renderItem={renderMessage}
                         onScroll={handleScroll}
                         scrollEventThrottle={16}
                         onContentSizeChange={() => {
-                            // Only auto-scroll when the user is already near
-                            // the bottom — prevents mid-read jumps when old
-                            // history grows or the keyboard resizes layout.
-                            if (isNearBottomRef.current) {
-                                listRef.current?.scrollToEnd({ animated: false });
+                            // Auto-scroll while the user is at the bottom OR
+                            // while the assistant is actively streaming (so
+                            // every flushed chunk keeps the latest text in
+                            // view). Never force-scroll mid-history-read.
+                            if (isNearBottomRef.current || streamingMessageId) {
+                                requestAnimationFrame(() => {
+                                    listRef.current?.scrollToEnd({ animated: false });
+                                });
                             }
+                        }}
+                        onLayout={() => {
+                            // First render after data arrives — pin to bottom.
+                            requestAnimationFrame(() => {
+                                listRef.current?.scrollToEnd({ animated: false });
+                            });
                         }}
                         removeClippedSubviews={Platform.OS === 'android'}
                         maxToRenderPerBatch={10}
@@ -655,7 +692,7 @@ export default function ChatScreen() {
                         <Text style={styles.footerText}>powered by mr.dev ai</Text>
                     </View>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </View>
     );
 }
@@ -844,7 +881,7 @@ const styles = StyleSheet.create({
     },
     welcomeHero: {
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 12,
     },
     welcomeTitle: {
         fontSize: 30, fontWeight: '800',
@@ -865,14 +902,15 @@ const styles = StyleSheet.create({
 
     chipGrid: {
         width: '100%',
-        marginTop: 4,
-        gap: 8,
+        marginTop: 8,
+        gap: 10,
     },
     chipRow: {
         flexDirection: 'row-reverse',
         justifyContent: 'center',
-        gap: 8,
-        marginBottom: 8,
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 4,
     },
 
     // ── Messages ──

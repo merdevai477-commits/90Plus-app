@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 const CARD_W = width - 40;
@@ -42,10 +43,16 @@ const ShimmerBar = ({
       <View
         style={{
           flex: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.15), transparent)',
           backgroundColor: 'rgba(168,85,247,0.12)',
         }}
-      />
+      >
+        <LinearGradient
+          colors={['transparent', 'rgba(168,85,247,0.15)', 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
     </Animated.View>
   </View>
 );
