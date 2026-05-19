@@ -71,7 +71,11 @@ const getCacheTTL = (dateString: string): number => {
   if (isPast) {
     return 60 * 60 * 1000; // 60 minutes for past matches
   } else if (isToday) {
-    return 2 * 60 * 1000; // 2 minutes for today's matches
+    // Today's matches include live games — keep cache TTL aligned with the
+    // backend's 30s live-fixtures cache so the displayed elapsed minute stays
+    // visibly in sync with TV broadcasts. Previous 2-minute TTL added up to
+    // 2 extra minutes of drift on top of the backend cache.
+    return 30 * 1000; // 30 seconds for today's matches
   } else {
     return 30 * 60 * 1000; // 30 minutes for future matches
   }
@@ -85,8 +89,11 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 };
 
 // ✅ Throttle background refresh - track last background fetch per date
-// Raised from 2 min to 5 min — with 100 req/day Free plan, 2 min was too aggressive.
-const BACKGROUND_REFRESH_THROTTLE = 5 * 60 * 1000; // 5 minutes minimum between background refreshes
+// 60 seconds — matches the backend live-fixtures cache (30s) plus a small
+// buffer to keep the elapsed minute within ~60-90s of the upstream API
+// without burning through the Free plan quota. Previous 5-minute throttle
+// added up to 5 minutes of drift on top of the backend cache.
+const BACKGROUND_REFRESH_THROTTLE = 60 * 1000; // 60 seconds
 
 /**
  * Country sort priority:
