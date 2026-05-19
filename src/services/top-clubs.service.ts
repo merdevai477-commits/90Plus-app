@@ -27,7 +27,7 @@ export interface TopClub {
 }
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const TOP_N = 5;
+const TOP_N = 10;
 const DEFAULT_SEASON = new Date().getFullYear();
 
 /**
@@ -78,30 +78,33 @@ async function fetchFromApi(country: string): Promise<TopClub[]> {
   const leagueId = COUNTRY_TOP_LEAGUE[key];
 
   // Path 1 — country has a known primary league: use standings for ranking.
+  // Try current year first, then fall back to previous year (the API may not
+  // have standings for the current season yet, especially early in the year).
   if (leagueId) {
-    try {
-      const standings = await footballService.getStandings(leagueId, DEFAULT_SEASON);
-      if (Array.isArray(standings) && standings.length > 0) {
-        const top = standings.slice(0, TOP_N);
-        // Standings rows give us team id/name/logo but no venue / country —
-        // we can still persist what we have and the UI only needs id+logo+name.
-        return top
-          .map((row: StandingTeam): TopClub | null => {
-            const t = row.team;
-            if (!t?.id || !t?.name) return null;
-            return {
-              teamId: t.id,
-              name: t.name,
-              logo: t.logo ?? null,
-              country,
-              founded: null,
-              venueName: null,
-            };
-          })
-          .filter((x): x is TopClub => x !== null);
+    for (const season of [DEFAULT_SEASON, DEFAULT_SEASON - 1, DEFAULT_SEASON - 2]) {
+      try {
+        const standings = await footballService.getStandings(leagueId, season);
+        if (Array.isArray(standings) && standings.length >= TOP_N) {
+          const top = standings.slice(0, TOP_N);
+          const clubs = top
+            .map((row: StandingTeam): TopClub | null => {
+              const t = row.team;
+              if (!t?.id || !t?.name) return null;
+              return {
+                teamId: t.id,
+                name: t.name,
+                logo: t.logo ?? null,
+                country,
+                founded: null,
+                venueName: null,
+              };
+            })
+            .filter((x): x is TopClub => x !== null);
+          if (clubs.length > 0) return clubs;
+        }
+      } catch (err: any) {
+        logger.warn(`[top-clubs] Standings lookup failed for ${country} (league ${leagueId}, season ${season}):`, err?.message);
       }
-    } catch (err: any) {
-      logger.warn(`[top-clubs] Standings lookup failed for ${country} (league ${leagueId}):`, err?.message);
     }
   }
 
