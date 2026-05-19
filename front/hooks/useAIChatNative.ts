@@ -453,6 +453,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const piece = queue.splice(0, stepCount).join('');
     if (!piece) return;
 
+    // First visible word lands now — kill the thinking indicator. We compare
+    // against a non-whitespace check so leading newlines/spaces don't count
+    // as "first word".
+    if (piece.trim().length > 0) {
+      setIsThinking(false);
+    }
+
     setMessages(prev =>
       prev.map(m =>
         m.id === id
@@ -580,7 +587,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           if (abortRef.current) break;
 
           if ('token' in event && event.token) {
-            setIsThinking(false);
+            // We deliberately do NOT flip isThinking off here. The thinking
+            // indicator should only disappear once the typing renderer has
+            // painted the first visible word — which can happen a tick or
+            // two after the first SSE token arrives. typingTick handles
+            // that flip via setIsThinking(false) on first paint.
             setIsRetrying(false);
             partialTextRef.current += event.token;
             // Push into the typing queue. The renderer (typingTick) reveals

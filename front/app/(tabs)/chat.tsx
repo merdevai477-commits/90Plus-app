@@ -356,6 +356,14 @@ export default function ChatScreen() {
     // ─── Message renderer — memoized ─────────────────────────────────────────
     const renderMessage = useCallback(({ item: msg, index: i }: { item: any; index: number }) => {
         if (msg.role === 'ai') {
+            // Skip the empty assistant placeholder while we're still waiting
+            // for the first visible token. The ThinkingIndicator covers this
+            // gap — rendering the bubble too early produces an ugly empty pill.
+            // Once any text is in the message, fall through and render normally.
+            const text = (msg.text ?? '').toString();
+            if (msg.isStreaming && text.trim().length === 0) {
+                return null;
+            }
             // History = any AI message that isn't the one currently streaming.
             // This keeps the character-by-character animation on live replies
             // while making previously-saved conversations render instantly.
@@ -757,8 +765,7 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
         >
-            {/* Glow orb behind hero */}
-            <View style={styles.welcomeGlow} pointerEvents="none" />
+            {/* Hero block — no decorative glow orb (removed by request) */}
 
             <Animated.View
                 entering={FadeIn.duration(400)}
@@ -870,14 +877,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         alignItems: 'center',
         paddingBottom: 140,
-    },
-    welcomeGlow: {
-        position: 'absolute',
-        top: 40, alignSelf: 'center',
-        width: 280, height: 280,
-        borderRadius: 140,
-        backgroundColor: Colors.purpleDeep,
-        opacity: 0.4,
     },
     welcomeHero: {
         alignItems: 'center',
