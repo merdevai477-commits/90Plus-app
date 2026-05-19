@@ -818,7 +818,8 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
     try {
         const { id } = req.params;
         const idStr = ensureString(id);
-        const { limit = '20' } = req.query;
+        const { limit = '20', cursor } = req.query;
+        const take = Math.min(parseInt(limit as string) || 20, 50);
 
         const clerkUserId = req.auth?.userId;
         const currentUser = clerkUserId
@@ -826,78 +827,82 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
             : null;
         const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
 
-        // Get top-level comments (no parentId, not deleted)
-        const comments = await prisma.comment.findMany({
-            where: {
-                reelId: idStr,
-                parentId: null,
-                isDeleted: false,
-                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
-            },
-            take: Math.min(parseInt(limit as string), 50),
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                content: true,
-                createdAt: true,
-                user: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatar: true,
-                        isVerified: true,
-                    }
-                },
-                replies: {
-                    where: {
-                        isDeleted: false,
-                        ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+        const baseWhere = {
+            reelId: idStr,
+            parentId: null,
+            isDeleted: false,
+            ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+        };
+
+        // ✅ Run the page fetch and the total count in parallel so the
+        // response time is bounded by the slower of the two queries
+        // instead of their sum.
+        const [comments, totalCount] = await Promise.all([
+            prisma.comment.findMany({
+                where: baseWhere,
+                take: take + 1, // fetch one extra to detect hasMore
+                ...(cursor ? { cursor: { id: ensureString(cursor as string) }, skip: 1 } : {}),
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    content: true,
+                    createdAt: true,
+                    user: {
+                        select: {
+                            id: true,
+                            username: true,
+                            displayName: true,
+                            avatar: true,
+                            isVerified: true,
+                        }
                     },
-                    take: 3,
-                    orderBy: { createdAt: 'asc' },
-                    select: {
-                        id: true,
-                        content: true,
-                        createdAt: true,
-                        user: {
-                            select: {
-                                id: true,
-                                username: true,
-                                displayName: true,
-                                avatar: true,
-                                isVerified: true,
+                    replies: {
+                        where: {
+                            isDeleted: false,
+                            ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+                        },
+                        take: 3,
+                        orderBy: { createdAt: 'asc' },
+                        select: {
+                            id: true,
+                            content: true,
+                            createdAt: true,
+                            user: {
+                                select: {
+                                    id: true,
+                                    username: true,
+                                    displayName: true,
+                                    avatar: true,
+                                    isVerified: true,
+                                }
                             }
                         }
+                    },
+                    _count: {
+                        select: { replies: true }
                     }
-                },
-                _count: {
-                    select: { replies: true }
                 }
-            }
-        });
+            }),
+            prisma.comment.count({ where: baseWhere }),
+        ]);
 
-        const totalCount = await prisma.comment.count({
-            where: {
-                reelId: idStr,
-                parentId: null,
-                isDeleted: false,
-                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
-            }
-        });
+        const hasMore = comments.length > take;
+        const pageData = hasMore ? comments.slice(0, -1) : comments;
+        const nextCursor = hasMore ? pageData[pageData.length - 1]?.id ?? null : null;
 
         // Format response
-        const formattedComments = comments.map((c: any) => ({
+        const formattedComments = pageData.map((c: any) => ({
             ...c,
             repliesCount: c._count.replies,
-            _count: undefined
+            _count: undefined,
         }));
 
         res.json({
             status: 'SUCCESS',
-            data: { comments: formattedComments, totalCount }
+            data: { comments: formattedComments, totalCount, nextCursor, hasMore }
         });
     } catch (error: any) {
+        logger.error('Get comments error:', error);
         res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
@@ -1029,111 +1034,145 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
             }
         }
 
-        // Process mentions in comments
+        // Process mentions in comments — batch into a single query so 5
+        // mentions don't serialise into 10 round-trips to Postgres.
         if (parsedMentions && parsedMentions.length > 0) {
-            for (const username of parsedMentions) {
-                const mentionedUser = await prisma.user.findUnique({
-                    where: { username: username.replace(/^@/, '') },
-                    select: { id: true, username: true, displayName: true, avatar: true }
+            const usernames = parsedMentions
+                .map((u) => u.replace(/^@/, '').toLowerCase())
+                .filter(Boolean);
+            const uniqueUsernames = Array.from(new Set(usernames));
+
+            if (uniqueUsernames.length > 0) {
+                const mentionedUsers = await prisma.user.findMany({
+                    where: { username: { in: uniqueUsernames } },
+                    select: { id: true, username: true, displayName: true, avatar: true },
                 });
 
-                if (mentionedUser && mentionedUser.id !== user.id) {
-                    // Create CommentMention record
-                    await prisma.commentMention.create({
-                        data: {
+                const targets = mentionedUsers.filter((u) => u.id !== user.id);
+
+                if (targets.length > 0) {
+                    // Batch-create CommentMention rows
+                    await prisma.commentMention.createMany({
+                        data: targets.map((u) => ({
                             commentId: comment.id,
-                            mentionedUserId: mentionedUser.id
-                        }
+                            mentionedUserId: u.id,
+                        })),
+                        skipDuplicates: true,
                     });
 
-                    await enqueueSocialNotification({
-                        userId: mentionedUser.id,
-                        actorId: user.id,
-                        title: 'تم الإشارة إليك في تعليق',
-                        message: `قام ${user.displayName || user.username} بالإشارة إليك في تعليق`,
-                        type: 'MENTION',
-                        data: {
-                            reelId: idStr,
-                            commentId: comment.id,
-                            parentCommentId: parentId || null,
-                        },
-                    });
+                    // Fan-out notifications in parallel; the queue itself
+                    // ensures delivery is async.
+                    await Promise.all(
+                        targets.map((mentionedUser) =>
+                            enqueueSocialNotification({
+                                userId: mentionedUser.id,
+                                actorId: user.id,
+                                title: 'تم الإشارة إليك في تعليق',
+                                message: `قام ${user.displayName || user.username} بالإشارة إليك في تعليق`,
+                                type: 'MENTION',
+                                data: {
+                                    reelId: idStr,
+                                    commentId: comment.id,
+                                    parentCommentId: parentId || null,
+                                },
+                            }),
+                        ),
+                    );
                 }
             }
         }
 
-        // Get reel info
-        const reel = await prisma.reel.findUnique({
-            where: { id: idStr },
-            select: { userId: true }
-        });
-
-        if (parentComment && parentComment.userId !== user.id) {
-            // This is a reply - notify the parent comment owner
-            await enqueueSocialNotification({
-                userId: parentComment.userId,
-                actorId: user.id,
-                title: 'رد جديد',
-                message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
-                type: 'REPLY',
-                data: { 
-                    reelId: idStr, 
-                    commentId: comment.id,
-                    parentCommentId: parentId,
-                },
-            });
-
-            // Send WebSocket reply event (Requirements: 21.3)
-            WebSocketService.sendReply(parentComment.userId, {
-                reelId: idStr,
-                parentCommentId: parentId,
-                reply: {
-                    id: comment.id,
-                    content: comment.content,
-                    user: {
-                        id: user.id,
-                        username: user.username,
-                        avatar: user.avatar || undefined,
-                    },
-                    createdAt: comment.createdAt.toISOString(),
-                },
-            });
-        } else if (reel && reel.userId !== user.id && !parentId) {
-            // This is a top-level comment - notify reel owner
-            // ✅ XP Award to reel owner for receiving a comment (non-blocking)
-            const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
-            awardXp({ userId: reel.userId, action: 'REEL_RECEIVED_COMMENT', dailyCap: 30, timezone: tz, metadata: { reelId: idStr, commenterId: user.id } }).catch((e) => logger.warn('XP received_comment failed:', e));
-
-            await enqueueSocialNotification({
-                userId: reel.userId,
-                actorId: user.id,
-                title: 'تعليق جديد',
-                message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
-                type: 'COMMENT',
-                data: { 
-                    reelId: idStr, 
-                    commentId: comment.id,
-                },
-            });
-
-            // Send WebSocket comment event (Requirements: 21.3, 21.9)
-            WebSocketService.sendComment(reel.userId, {
-                reelId: idStr,
-                comment: {
-                    id: comment.id,
-                    content: comment.content,
-                    user: {
-                        id: user.id,
-                        username: user.username,
-                        avatar: user.avatar || undefined,
-                    },
-                    createdAt: comment.createdAt.toISOString(),
-                },
+        // Get reel info — only when we still need it (top-level comments).
+        // For replies we already have the parent comment.
+        let reel: { userId: string } | null = null;
+        if (!parentComment) {
+            reel = await prisma.reel.findUnique({
+                where: { id: idStr },
+                select: { userId: true },
             });
         }
 
-        // Invalidate cache for feed, this reel, and comments
-        {
+        // ✅ Defer the WebSocket + notification + XP fan-out to setImmediate
+        // so the HTTP response returns to the client immediately. The frontend
+        // already inserts the comment optimistically; the side-effects don't
+        // need to block the request.
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        setImmediate(() => {
+            (async () => {
+                try {
+                    if (parentComment && parentComment.userId !== user.id) {
+                        // Reply notification → parent author
+                        await enqueueSocialNotification({
+                            userId: parentComment.userId,
+                            actorId: user.id,
+                            title: 'رد جديد',
+                            message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
+                            type: 'REPLY',
+                            data: {
+                                reelId: idStr,
+                                commentId: comment.id,
+                                parentCommentId: parentId,
+                            },
+                        });
+
+                        WebSocketService.sendReply(parentComment.userId, {
+                            reelId: idStr,
+                            parentCommentId: parentId,
+                            reply: {
+                                id: comment.id,
+                                content: comment.content,
+                                user: {
+                                    id: user.id,
+                                    username: user.username,
+                                    avatar: user.avatar || undefined,
+                                },
+                                createdAt: comment.createdAt.toISOString(),
+                            },
+                        });
+                    } else if (reel && reel.userId !== user.id && !parentId) {
+                        // Top-level comment → reel owner
+                        awardXp({
+                            userId: reel.userId,
+                            action: 'REEL_RECEIVED_COMMENT',
+                            dailyCap: 30,
+                            timezone: tz,
+                            metadata: { reelId: idStr, commenterId: user.id },
+                        }).catch((e) => logger.warn('XP received_comment failed:', e));
+
+                        await enqueueSocialNotification({
+                            userId: reel.userId,
+                            actorId: user.id,
+                            title: 'تعليق جديد',
+                            message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
+                            type: 'COMMENT',
+                            data: {
+                                reelId: idStr,
+                                commentId: comment.id,
+                            },
+                        });
+
+                        WebSocketService.sendComment(reel.userId, {
+                            reelId: idStr,
+                            comment: {
+                                id: comment.id,
+                                content: comment.content,
+                                user: {
+                                    id: user.id,
+                                    username: user.username,
+                                    avatar: user.avatar || undefined,
+                                },
+                                createdAt: comment.createdAt.toISOString(),
+                            },
+                        });
+                    }
+                } catch (sideEffectErr: any) {
+                    logger.warn('[reels/comments] Background notification failed:', sideEffectErr?.message);
+                }
+            })();
+        });
+
+        // Invalidate cache for feed, this reel, and comments (also background)
+        setImmediate(async () => {
             const results = await Promise.allSettled([
                 clearResponseCache('/reels/feed'),
                 redisCacheService.delPattern('reels:feed:*'),
@@ -1145,10 +1184,11 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                     logger.warn(`Reels cache invalidation failed [comment] index=${i}:`, r.reason);
                 }
             });
-        }
+        });
 
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
+        logger.error('Add comment error:', error);
         res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
     }
 });
@@ -1397,7 +1437,7 @@ router.get('/trending-hashtags', async (req: Request, res: Response): Promise<vo
  * POST /api/reels/comments/:commentId/like
  * Like a comment or reply
  */
-router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/comments/:commentId/like', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
         const commentIdStr = ensureString(commentId);
@@ -1424,36 +1464,38 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
             return;
         }
 
-        // Check if already liked
-        const existingLike = await prisma.commentLike.findUnique({
-            where: { userId_commentId: { userId: user.id, commentId: commentIdStr } }
+        // ✅ Atomic upsert avoids the find→create race that produced wrong
+        // counts on rapid double-taps.
+        const upsertResult = await prisma.commentLike.upsert({
+            where: { userId_commentId: { userId: user.id, commentId: commentIdStr } },
+            create: { userId: user.id, commentId: commentIdStr },
+            update: {},
+            select: { createdAt: true },
         });
+        const wasNewLike = upsertResult.createdAt.getTime() > Date.now() - 5_000;
 
-        if (existingLike) {
-            const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
+        const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
+
+        if (!wasNewLike) {
             res.json({ status: 'SUCCESS', data: { likesCount }, message: 'Already liked' });
             return;
         }
 
-        await prisma.commentLike.create({
-            data: { userId: user.id, commentId: commentIdStr }
-        });
-
-        const likesCount = await prisma.commentLike.count({ where: { commentId: commentIdStr } });
-
-        // Notify comment owner (if not self)
+        // Notify comment owner (if not self) — non-blocking
         if (comment.userId !== user.id) {
-            await enqueueSocialNotification({
-                userId: comment.userId,
-                actorId: user.id,
-                title: '❤️ إعجاب على تعليقك',
-                message: `أعجب ${user.displayName || user.username} بتعليقك`,
-                type: 'COMMENT_LIKE',
-                data: {
-                    commentId: commentIdStr,
-                    reelId: comment.reelId,
-                    screen: '/(tabs)/reels',
-                },
+            setImmediate(() => {
+                enqueueSocialNotification({
+                    userId: comment.userId,
+                    actorId: user.id,
+                    title: '❤️ إعجاب على تعليقك',
+                    message: `أعجب ${user.displayName || user.username} بتعليقك`,
+                    type: 'COMMENT_LIKE',
+                    data: {
+                        commentId: commentIdStr,
+                        reelId: comment.reelId,
+                        screen: '/(tabs)/reels',
+                    },
+                }).catch((e) => logger.warn('[comment-like] notify failed:', e?.message));
             });
         }
 
@@ -1468,7 +1510,7 @@ router.post('/comments/:commentId/like', requireAuth, async (req: Request, res: 
  * DELETE /api/reels/comments/:commentId/like
  * Unlike a comment or reply
  */
-router.delete('/comments/:commentId/like', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/comments/:commentId/like', requireAuth, writeLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         const { commentId } = req.params;
         const commentIdStr = ensureString(commentId);
