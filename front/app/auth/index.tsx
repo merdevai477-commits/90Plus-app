@@ -371,9 +371,20 @@ export default function RegisterScreen() {
                     onChangeText={(v) => handleOtpChange(v, i)}
                     onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, i)}
                     keyboardType="number-pad"
-                    maxLength={i === 0 ? OTP_LENGTH : 1}
+                    // ✅ All cells use maxLength=1 so the box never has to
+                    // scroll text horizontally (which used to make the cells
+                    // visibly jitter as the user typed). Paste is still
+                    // handled by handleOtpChange — on iOS the full pasted
+                    // value lands in the focused cell as a single change
+                    // regardless of maxLength=1, so we can detect it via
+                    // `value.length > 1` and distribute it.
+                    maxLength={1}
+                    textContentType="oneTimeCode"
+                    autoComplete="sms-otp"
+                    returnKeyType={i === OTP_LENGTH - 1 ? 'done' : 'next'}
                     selectTextOnFocus
                     autoFocus={i === 0}
+                    allowFontScaling={false}
                   />
                 ))}
               </View>
@@ -584,8 +595,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     color: TEXT_PRIMARY,
     fontSize: 22,
+    // ✅ Explicit lineHeight + padding:0 + includeFontPadding:false +
+    // textAlignVertical:'center' kill the per-keystroke vertical jump
+    // Android's TextInput baseline does when the cell switches between
+    // empty and filled font metrics.
+    lineHeight: 26,
     fontWeight: '800',
     textAlign: 'center',
+    padding: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   otpInputFilled: {
     borderColor: 'rgba(124,58,237,0.5)',
