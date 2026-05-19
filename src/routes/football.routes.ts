@@ -36,6 +36,16 @@ router.get('/teams/all-logos', FootballController.getAllTeamLogos);
 // Get logos for 10 major African teams
 router.get('/teams/african-logos', SHARED_CACHE_24H, FootballController.getAfricanTeamLogos);
 
+// GET /api/football/teams/top-supported-countries
+// Returns the list of countries we have a primary-league mapping for. Used by
+// the club-picker UI to render country tabs.
+router.get('/teams/top-supported-countries', SHARED_CACHE_24H, FootballController.getTopSupportedCountries);
+
+// GET /api/football/teams/top-by-country
+// Returns the top 5 clubs for a country (cached for 7 days in cached_teams).
+// Query: ?country=England[&refresh=true]
+router.get('/teams/top-by-country', SHARED_CACHE_1H, FootballController.getTopClubsByCountry);
+
 // ============================================
 // GET /api/football/fixtures
 // Get fixtures with filters — smart TTL based on date param
@@ -259,3 +269,8 @@ router.get('/standings/:leagueId', SHARED_CACHE_1H, async (req, res) => {
 });
 
 export default router;
+
+// Force Railway redeploy: ensures the new /teams/top-by-country and
+// /teams/top-supported-countries routes registered above are bundled into
+// dist/. The previous deploy ran an older build that lacked these routes,
+// so requests fell through to /teams/:id and returned "Invalid team ID".
