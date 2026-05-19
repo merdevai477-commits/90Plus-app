@@ -1,77 +1,174 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * ClubPickerModal
+ *
+ * Lets the user pick a club from real API-Football data, organised by
+ * country. Top 5 clubs per country are returned by the backend and
+ * persisted in `cached_teams`, refreshed at most once every 7 days.
+ *
+ * The picker is country-first: the user picks a country tab, the modal
+ * fetches the top 5 for that country, and shows real logos. Selection
+ * returns the canonical TopClub shape so the profile screen can save
+ * `clubLogo` (logo URL) and `favoriteTeam` (team name) to the backend.
+ */
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { TOP_5_LEAGUES_CLUBS, TopClub, getClubsByLeague, getAllLeagues } from '../../data/top5LeaguesClubs';
+import { ApiFootballService } from '../../services/apiFootball';
 import { logger } from '../../utils/logger';
+
+export interface TopClub {
+    id: number;
+    teamId: number;
+    name: string;
+    nameAr: string;
+    logo: string | null;
+    league: string;
+    country: string;
+}
 
 interface ClubPickerModalProps {
     visible: boolean;
     onClose: () => void;
     onSelect: (club: TopClub) => void;
-    selectedClubId?: string | number;  // ✅ Accept both string and number
+    selectedClubId?: string | number;
 }
+
+// Country labels (English key → Arabic display).
+// The English keys are the same strings the backend's COUNTRY_TOP_LEAGUE
+// map keys against (lowercased server-side), so the order here drives the
+// tab order as well.
+const COUNTRY_LABELS_AR: Record<string, string> = {
+    england: 'إنجلترا',
+    spain: 'إسبانيا',
+    italy: 'إيطاليا',
+    germany: 'ألمانيا',
+    france: 'فرنسا',
+    netherlands: 'هولندا',
+    portugal: 'البرتغال',
+    belgium: 'بلجيكا',
+    turkey: 'تركيا',
+    saudi: 'السعودية',
+    egypt: 'مصر',
+    morocco: 'المغرب',
+    algeria: 'الجزائر',
+    tunisia: 'تونس',
+    brazil: 'البرازيل',
+    argentina: 'الأرجنتين',
+    usa: 'الولايات المتحدة',
+    mexico: 'المكسيك',
+};
+
+const DEFAULT_COUNTRY_ORDER = [
+    'england',
+    'spain',
+    'italy',
+    'germany',
+    'france',
+    'saudi',
+    'egypt',
+    'morocco',
+    'algeria',
+    'tunisia',
+    'turkey',
+    'portugal',
+    'netherlands',
+    'belgium',
+    'brazil',
+    'argentina',
+    'usa',
+    'mexico',
+];
 
 export default function ClubPickerModal({ visible, onClose, onSelect, selectedClubId }: ClubPickerModalProps) {
     const [search, setSearch] = useState('');
-    const [selectedLeague, setSelectedLeague] = useState<string>('all');
-    const [loading, setLoading] = useState(false);
+    const [selectedCountry, setSelectedCountry] = useState<string>('england');
+    const [clubsByCountry, setClubsByCountry] = useState<Record<string, TopClub[]>>({});
+    const [loadingCountry, setLoadingCountry] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    // ✅ Use local clubs from top 5 leagues
-    const clubs = selectedLeague === 'all' 
-        ? TOP_5_LEAGUES_CLUBS 
-        : getClubsByLeague(selectedLeague);
+    const fetchCountryClubs = useCallback(async (countryKey: string) => {
+        if (clubsByCountry[countryKey]) return; // already loaded
+        setLoadingCountry(countryKey);
+        setError(null);
+        try {
+            const apiCountry = countryKey === 'saudi' ? 'Saudi-Arabia' :
+                countryKey === 'usa' ? 'USA' :
+                // Capitalise first letter; backend lookup is case-insensitive
+                countryKey.charAt(0).toUpperCase() + countryKey.slice(1);
 
-    const leagues = ['all', ...getAllLeagues()];
+            const clubs = await ApiFootballService.getTopClubsByCountry(apiCountry);
 
-    const filteredClubs = clubs.filter(c => 
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.nameAr.includes(search) ||
-        c.league.toLowerCase().includes(search.toLowerCase())
-    );
+            const mapped: TopClub[] = clubs.map((c) => ({
+                id: c.teamId,
+                teamId: c.teamId,
+                name: c.name,
+                nameAr: c.name, // backend returns localised name when available
+                logo: c.logo,
+                league: COUNTRY_LABELS_AR[countryKey] ?? countryKey,
+                country: c.country ?? apiCountry,
+            }));
 
-    const getLeagueDisplayName = (league: string) => {
-        const leagueNames: Record<string, string> = {
-            'all': 'الكل',
-            'Premier League': 'الدوري الإنجليزي',
-            'La Liga': 'الدوري الإسباني',
-            'Serie A': 'الدوري الإيطالي',
-            'Bundesliga': 'الدوري الألماني',
-            'Ligue 1': 'الدوري الفرنسي',
-        };
-        return leagueNames[league] || league;
-    };
+            setClubsByCountry((prev) => ({ ...prev, [countryKey]: mapped }));
+
+            if (mapped.length === 0) {
+                setError('لم نجد أندية لهذا البلد. حاول بلد آخر.');
+            }
+        } catch (err: any) {
+            logger.error('[ClubPickerModal] Failed to load clubs for', countryKey, err?.message);
+            setError('فشل تحميل الأندية. تحقق من اتصالك وحاول مرة أخرى.');
+        } finally {
+            setLoadingCountry(null);
+        }
+    }, [clubsByCountry]);
+
+    // Load initial country when modal opens
+    useEffect(() => {
+        if (visible) {
+            fetchCountryClubs(selectedCountry);
+        }
+    }, [visible, selectedCountry, fetchCountryClubs]);
+
+    // Filtered list for the active country + search
+    const filteredClubs = useMemo(() => {
+        const list = clubsByCountry[selectedCountry] ?? [];
+        if (!search.trim()) return list;
+        const q = search.trim().toLowerCase();
+        return list.filter((c) =>
+            c.name.toLowerCase().includes(q) || c.nameAr.includes(search),
+        );
+    }, [clubsByCountry, selectedCountry, search]);
 
     const renderClubItem = ({ item }: { item: TopClub }) => {
-        // TopClub is a local (fictional) club model; it only has `id`.
-        // `selectedClubId` can be string|number, so normalize to string for comparison.
         const isSelected = String(selectedClubId ?? '') === String(item.id);
-        // ✅ Apple compliance: always show emoji, never real club logos (trademark issue)
-        const isEmoji = !item.logo?.startsWith('http') && !item.logo?.startsWith('/');
-        const displayLogo = isEmoji ? item.logo : null; // ignore real URLs
-
         return (
             <TouchableOpacity
-                style={[
-                    styles.item,
-                    isSelected && styles.selectedItem
-                ]}
+                style={[styles.item, isSelected && styles.selectedItem]}
                 onPress={() => {
                     onSelect(item);
                     onClose();
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={item.name}
             >
-                {displayLogo ? (
-                    <Text style={styles.logoEmoji}>{displayLogo}</Text>
+                {item.logo ? (
+                    <Image
+                        source={{ uri: item.logo }}
+                        style={styles.logo}
+                        contentFit="contain"
+                        cachePolicy="memory-disk"
+                        transition={200}
+                    />
                 ) : (
                     <View style={styles.logoFallback}>
                         <Text style={styles.logoFallbackText}>{item.name.charAt(0)}</Text>
                     </View>
                 )}
                 <Text style={styles.itemName} numberOfLines={2}>{item.nameAr}</Text>
-                <Text style={styles.leagueName} numberOfLines={1}>{getLeagueDisplayName(item.league)}</Text>
+                <Text style={styles.leagueName} numberOfLines={1}>{item.league}</Text>
                 {isSelected && (
                     <View style={styles.checkmark}>
                         <Ionicons name="checkmark" size={14} color="#22c55e" />
@@ -110,44 +207,56 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                         />
                     </View>
 
-                    {/* League Filter */}
+                    {/* Country filter (horizontal tabs) */}
                     <View style={styles.leagueFilter}>
                         <FlashList
-                            data={leagues}
+                            data={DEFAULT_COUNTRY_ORDER}
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             keyExtractor={(item) => item}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[
-                                        styles.leagueButton,
-                                        selectedLeague === item && styles.leagueButtonActive
-                                    ]}
-                                    onPress={() => setSelectedLeague(item)}
-                                >
-                                    <Text style={[
-                                        styles.leagueButtonText,
-                                        selectedLeague === item && styles.leagueButtonTextActive
-                                    ]}>
-                                        {getLeagueDisplayName(item)}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
+                            renderItem={({ item }) => {
+                                const isActive = selectedCountry === item;
+                                return (
+                                    <TouchableOpacity
+                                        style={[styles.leagueButton, isActive && styles.leagueButtonActive]}
+                                        onPress={() => {
+                                            setSelectedCountry(item);
+                                            setSearch('');
+                                        }}
+                                        accessibilityRole="tab"
+                                    >
+                                        <Text style={[styles.leagueButtonText, isActive && styles.leagueButtonTextActive]}>
+                                            {COUNTRY_LABELS_AR[item] ?? item}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            }}
                         />
                     </View>
 
-                    <FlashList
-                        data={filteredClubs}
-                        keyExtractor={(item) => item.id.toString()}
-                        numColumns={3}
-                        contentContainerStyle={styles.listContent}
-                        renderItem={renderClubItem}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Text style={styles.emptyText}>لا توجد أندية</Text>
-                            </View>
-                        }
-                    />
+                    {loadingCountry === selectedCountry ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color="#22c55e" />
+                            <Text style={styles.loadingText}>جاري تحميل الأندية...</Text>
+                        </View>
+                    ) : error && filteredClubs.length === 0 ? (
+                        <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyText}>{error}</Text>
+                        </View>
+                    ) : (
+                        <FlashList
+                            data={filteredClubs}
+                            keyExtractor={(item) => String(item.id)}
+                            numColumns={3}
+                            contentContainerStyle={styles.listContent}
+                            renderItem={renderClubItem}
+                            ListEmptyComponent={
+                                <View style={styles.emptyContainer}>
+                                    <Text style={styles.emptyText}>لا توجد أندية</Text>
+                                </View>
+                            }
+                        />
+                    )}
                 </View>
             </View>
         </Modal>
@@ -192,9 +301,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         height: 44,
     },
-    searchIcon: {
-        marginRight: 8,
-    },
+    searchIcon: { marginRight: 8 },
     searchInput: {
         flex: 1,
         color: '#FFF',
@@ -214,17 +321,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    leagueButtonActive: {
-        backgroundColor: '#22c55e',
-    },
+    leagueButtonActive: { backgroundColor: '#22c55e' },
     leagueButtonText: {
         color: '#FFF',
         fontSize: 14,
         fontWeight: '600',
     },
-    leagueButtonTextActive: {
-        color: '#000',
-    },
+    leagueButtonTextActive: { color: '#000' },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -235,9 +338,7 @@ const styles = StyleSheet.create({
         marginTop: 10,
         fontSize: 14,
     },
-    listContent: {
-        paddingBottom: 40,
-    },
+    listContent: { paddingBottom: 40 },
     item: {
         flex: 1,
         margin: 5,
@@ -257,14 +358,6 @@ const styles = StyleSheet.create({
     logo: {
         width: 50,
         height: 50,
-        marginBottom: 8,
-    },
-    logoEmoji: {
-        fontSize: 30,
-        width: 50,
-        height: 50,
-        textAlign: 'center',
-        lineHeight: 50,
         marginBottom: 8,
     },
     logoFallback: {
@@ -310,5 +403,6 @@ const styles = StyleSheet.create({
     emptyText: {
         color: '#888',
         fontSize: 16,
+        textAlign: 'center',
     },
 });

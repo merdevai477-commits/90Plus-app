@@ -1555,6 +1555,51 @@ export const ApiFootballService = {
   },
 
   /**
+   * Get the top 5 clubs for a country, backed by `cached_teams` on the
+   * server (refreshed at most once every 7 days per country). Used by the
+   * club-picker modal so users can choose real clubs from API-Football
+   * with their actual logos instead of static fictional placeholders.
+   */
+  async getTopClubsByCountry(country: string, forceRefresh = false): Promise<{
+    teamId: number;
+    name: string;
+    logo: string | null;
+    country: string;
+    founded: number | null;
+    venueName: string | null;
+  }[]> {
+    try {
+      const params: Record<string, string> = { country };
+      if (forceRefresh) params.refresh = 'true';
+      const result = await fetchFromProxy<{
+        country: string;
+        clubs: any[];
+        source: string;
+        count: number;
+      }>('/teams/top-by-country', params);
+      return Array.isArray(result?.clubs) ? result.clubs : [];
+    } catch (error) {
+      logger.error('[getTopClubsByCountry] Failed:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get the list of countries the club-picker supports out of the box.
+   */
+  async getTopSupportedCountries(): Promise<string[]> {
+    try {
+      const result = await fetchFromProxy<{ countries: string[]; count: number }>(
+        '/teams/top-supported-countries',
+      );
+      return Array.isArray(result?.countries) ? result.countries : [];
+    } catch (error) {
+      logger.error('[getTopSupportedCountries] Failed:', error);
+      return [];
+    }
+  },
+
+  /**
    * Get team squad
    */
   async getTeamSquad(teamId: number): Promise<any[]> {
