@@ -67,15 +67,13 @@ const getCacheTTL = (dateString: string): number => {
   const today = new Date().toISOString().split('T')[0];
   const isPast = dateString < today;
   const isToday = dateString === today;
-  
+
   if (isPast) {
     return 60 * 60 * 1000; // 60 minutes for past matches
   } else if (isToday) {
-    // Today's matches include live games — keep cache TTL aligned with the
-    // backend's 30s live-fixtures cache so the displayed elapsed minute stays
-    // visibly in sync with TV broadcasts. Previous 2-minute TTL added up to
-    // 2 extra minutes of drift on top of the backend cache.
-    return 30 * 1000; // 30 seconds for today's matches
+    // Today's matches include live games. We refresh the UI every 8s so
+    // memory cache must be at least that fresh.
+    return 8 * 1000; // 8 seconds for today's matches
   } else {
     return 30 * 60 * 1000; // 30 minutes for future matches
   }
@@ -88,12 +86,11 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
   return age < ttl;
 };
 
-// ✅ Throttle background refresh - track last background fetch per date
-// 60 seconds — matches the backend live-fixtures cache (30s) plus a small
-// buffer to keep the elapsed minute within ~60-90s of the upstream API
-// without burning through the Free plan quota. Previous 5-minute throttle
-// added up to 5 minutes of drift on top of the backend cache.
-const BACKGROUND_REFRESH_THROTTLE = 60 * 1000; // 60 seconds
+// ✅ Throttle background refresh - track last background fetch per date.
+// 6s aligns with the 8s UI poll while preventing duplicate concurrent fetches
+// when the user switches dates rapidly. Backend `/fixtures` for today is
+// shared-cached for 8s, so this won't multiply API quota usage.
+const BACKGROUND_REFRESH_THROTTLE = 6 * 1000; // 6 seconds
 
 /**
  * Country sort priority:
@@ -464,7 +461,9 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
       setMatches(fetchedMatches);
       setIsDataStale(false); // background refresh succeeded
 
-      const cacheTTL = isTodayFlag ? 2 * 60 * 1000 : 3 * 24 * 60 * 60 * 1000; // 3 days for future
+      // Today: short TTL so the disk cache doesn't override fresh polls.
+      // Future: 3 days. Past dates handled by the foreground fetch.
+      const cacheTTL = isTodayFlag ? 8 * 1000 : 3 * 24 * 60 * 60 * 1000;
       const cacheKey = getMatchesCacheKey(dateStr);
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });
@@ -487,17 +486,16 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   }, [dateString, isToday, isPastDate]); // Re-fetch when date changes or when isToday/isPastDate change (e.g. at midnight)
 
   // ─── Silent auto-refresh ────────────────────────────────────────────────
-  // Instead of exposing pull-to-refresh (which users spam and burns quota),
-  // we schedule a background tick based on how "live" the current day is:
-  //   - today  → every 60s (live scores can update frequently)
+  // Schedule a background tick based on how "live" the current day is:
+  //   - today  → every 8 s (live scores, requested cadence)
   //   - future → every 5 minutes (fixtures rarely change last-minute)
   //   - past   → no refresh at all (permanent cache)
   //
-  // The call goes through `fetchDataInBackground` which is already throttled
-  // (BACKGROUND_REFRESH_THROTTLE = 5min), so we won't double-fire.
+  // The call goes through `fetchDataInBackground` which is throttled at 6s
+  // so we won't double-fire if the user quickly toggles tabs.
   useEffect(() => {
     if (isPastDate) return; // finished — nothing to refresh
-    const intervalMs = isToday ? 60_000 : 5 * 60_000;
+    const intervalMs = isToday ? 8_000 : 5 * 60_000;
     const id = setInterval(() => {
       fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
     }, intervalMs);

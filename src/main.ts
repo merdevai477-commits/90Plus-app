@@ -695,11 +695,45 @@ async function startServer() {
                     const plan = (process.env.FOOTBALL_API_PLAN || '').toLowerCase();
                     const isFreePlan = !plan || plan === 'free';
 
+                    // ── Always-on watchers ───────────────────────────────
+                    // These two services are essential to user-visible
+                    // behaviour:
+                    //   - MatchWatcher delivers goal/halftime/match-end push
+                    //     notifications that users explicitly subscribed to.
+                    //   - PredictionWatcher resolves predictions, awards
+                    //     coins + XP, and sends the result notification.
+                    // Both already short-circuit on quota exhaustion via
+                    // footballService.fetchFromApi (returns [] until the
+                    // cooldown window expires), so running them on Free plan
+                    // is safe — they degrade rather than burn the quota.
+                    MatchWatcherService.start();
+                    PredictionWatcherService.start();
+
+                    // ── Always-on queues & verification ──────────────────
+                    // These have nothing to do with API-Football quota; they
+                    // process push receipts and notification fan-out, which
+                    // we want even on free plan so social/system pushes
+                    // still flow through Bull (with retries) instead of the
+                    // fire-and-forget in-process fallback.
+                    try {
+                        const { getReceiptQueue } = await import('./queues/receipt.queue');
+                        getReceiptQueue();
+
+                        const { getNotificationQueue } = await import('./queues/notification.queue');
+                        getNotificationQueue();
+
+                        const { getMatchStartReminderQueue } = await import('./queues/match-start-reminder.queue');
+                        getMatchStartReminderQueue();
+
+                        const { verifyFCMConfiguration } = await import('./services/push-notification.service');
+                        verifyFCMConfiguration();
+                    } catch (queueErr) {
+                        logger.warn('Failed to initialise notification queues (non-fatal):', queueErr);
+                    }
+
                     if (isFreePlan) {
-                        logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined - disabling match watchers to avoid quota exhaustion');
+                        logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined — heavy watchers (league preloader, preload, etc.) disabled to preserve quota. Match + prediction watchers still run with circuit-breaker protection.');
                     } else {
-                        MatchWatcherService.start();
-                        PredictionWatcherService.start(); // ✅ Start prediction watcher
                         LeagueMatchWatcherService.start(); // ✅ Start league match watcher
 
                         // ✅ Start lucky wheel daily notifier
@@ -717,22 +751,6 @@ async function startServer() {
                         // ✅ Start daily quiz renewal notifier (daily at 9 AM Egypt)
                         const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
                         startDailyQuizNotifier();
-
-                        // ✅ Initialize receipt queue
-                        const { getReceiptQueue } = await import('./queues/receipt.queue');
-                        getReceiptQueue();
-                        
-                        // ✅ Initialize notification queue so processors and cron jobs start immediately
-                        const { getNotificationQueue } = await import('./queues/notification.queue');
-                        getNotificationQueue();
-
-                        // ✅ Initialize match-start reminder queue (delayed push when a subscribed match kicks off)
-                        const { getMatchStartReminderQueue } = await import('./queues/match-start-reminder.queue');
-                        getMatchStartReminderQueue();
-
-                        // ✅ Verify FCM/APNs configuration on startup
-                        const { verifyFCMConfiguration } = await import('./services/push-notification.service');
-                        verifyFCMConfiguration();
                     }
                     
                     // ✅ Start football background service for API optimization

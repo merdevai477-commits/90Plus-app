@@ -27,10 +27,11 @@ interface CacheEntry {
 // Cache TTL values in milliseconds
 // ✅ OPTIMIZED for Free Plan (100 requests/day): Aggressive caching
 const CACHE_TTL = {
-  // Live matches: 30 seconds. Anything longer makes the displayed minute
-  // visibly lag what users see on TV (the previous 2-minute TTL caused
-  // up to 2-minute drift on the elapsed clock).
-  LIVE: 30 * 1000,
+  // Live matches: 8 seconds. Matches the UI poll cadence so the elapsed
+  // minute and live score stay within ~8s of API-Football. Upstream calls
+  // are still throttled by the route-level shared cache and the rate
+  // limiter below.
+  LIVE: 8 * 1000,
   SHORT: 30 * 60 * 1000,              // 30 minutes for upcoming matches
   MEDIUM: 2 * 60 * 60 * 1000,         // 2 hours for standings, stats
   LONG: 7 * 24 * 60 * 60 * 1000,      // 7 days for teams, leagues, players
@@ -655,34 +656,32 @@ class FootballService {
 
   async getTeamsByIds(teamIds: number[]): Promise<any[]> {
     if (teamIds.length === 0) return [];
-    
-    // Filter out invalid IDs (null, undefined, NaN, non-integer)
-    const validIds = teamIds.filter(id => Number.isInteger(id) && id > 0);
+
+    // Filter out invalid IDs (null, undefined, NaN, non-integer) and dedupe
+    const validIds = Array.from(
+      new Set(teamIds.filter(id => Number.isInteger(id) && id > 0))
+    );
     if (validIds.length === 0) return [];
-    
-    // API-Football supports multiple IDs separated by '-'
-    // Limit to 10 teams per request to avoid URL length issues
-    const batchSize = 10;
-    const batches: number[][] = [];
-    
-    for (let i = 0; i < validIds.length; i += batchSize) {
-      batches.push(validIds.slice(i, i + batchSize));
-    }
 
+    // ⚠️ API-Football's /teams endpoint requires `id` to be a single integer.
+    // Passing multiple IDs (e.g. "33-34-35") returns:
+    //   { id: "The Id field must contain an integer." }
+    // So we must issue one request per team, in bounded-concurrency batches.
+    const concurrency = 5;
     const allTeams: any[] = [];
-    
-    // Fetch all batches in parallel
-    const batchPromises = batches.map(batch => {
-      const idsParam = batch.join('-');
-      return this.fetchFromApi<any[]>('/teams', { id: idsParam });
-    });
 
-    const batchResults = await Promise.all(batchPromises);
-    
-    // Flatten results
-    for (const batchResult of batchResults) {
-      if (Array.isArray(batchResult)) {
-        allTeams.push(...batchResult);
+    for (let i = 0; i < validIds.length; i += concurrency) {
+      const slice = validIds.slice(i, i + concurrency);
+      const results = await Promise.allSettled(
+        slice.map(id => this.fetchFromApi<any[]>('/teams', { id }))
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+          allTeams.push(...result.value);
+        } else if (result.status === 'rejected') {
+          logger.warn('Failed to fetch team by id:', result.reason);
+        }
       }
     }
 

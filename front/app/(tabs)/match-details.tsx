@@ -185,8 +185,8 @@ const MatchDetailsScreen = () => {
       }
     };
 
-    // Poll every 10 seconds for live matches
-    livePollingRef.current = setInterval(pollLiveData, 10_000);
+    // Poll every 8 seconds for live matches (matches the home list cadence)
+    livePollingRef.current = setInterval(pollLiveData, 8_000);
 
     return () => {
       if (livePollingRef.current) {
@@ -980,6 +980,8 @@ const MatchDetailsScreen = () => {
           date={params.date}
           time={params.time}
           statusShort={fixture?.fixture.status.short}
+          elapsed={fixture?.fixture.status.elapsed ?? undefined}
+          stoppage={(fixture?.fixture.status as any)?.extra ?? null}
           startTimestamp={fixture?.fixture.status.short === '2H'
             ? (fixture?.fixture.periods.second || undefined)
             : (fixture?.fixture.periods.first || undefined)

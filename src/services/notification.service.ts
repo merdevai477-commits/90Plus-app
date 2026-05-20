@@ -240,7 +240,13 @@ export class NotificationService {
         homeScore: number,
         awayScore: number,
         scoringTeam: 'home' | 'away',
-        matchId: number
+        matchId: number,
+        extras?: {
+            homeTeamLogo?: string | null;
+            awayTeamLogo?: string | null;
+            leagueName?: string | null;
+            matchDate?: Date | string | null;
+        }
     ) {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchGoals) return null;
@@ -258,13 +264,22 @@ export class NotificationService {
             channelId: 'match-updates',
             data: {
                 type: 'MATCH_GOAL',
-                matchId,
-                fixtureId: matchId,
+                matchId: String(matchId),
+                fixtureId: String(matchId),
                 homeTeam,
                 awayTeam,
+                homeTeamLogo: extras?.homeTeamLogo ?? '',
+                awayTeamLogo: extras?.awayTeamLogo ?? '',
+                leagueName: extras?.leagueName ?? '',
+                matchDate: extras?.matchDate
+                    ? (extras.matchDate instanceof Date
+                        ? extras.matchDate.toISOString().split('T')[0]
+                        : String(extras.matchDate))
+                    : '',
                 homeScore,
                 awayScore,
                 scoringTeam,
+                screen: '/(tabs)/match-details',
                 priority: 'high', // Ensures iOS/Android don't silently drop this notification
             }
         });
@@ -278,7 +293,13 @@ export class NotificationService {
         pushToken: string | null,
         homeTeam: string,
         awayTeam: string,
-        matchId: number
+        matchId: number,
+        extras?: {
+            homeTeamLogo?: string | null;
+            awayTeamLogo?: string | null;
+            leagueName?: string | null;
+            matchDate?: Date | string | null;
+        }
     ) {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchStart) return null;
@@ -292,12 +313,23 @@ export class NotificationService {
             title,
             message,
             type: NotificationType.MATCH_UPDATE,
+            channelId: 'match-updates',
             data: {
                 type: 'MATCH_START',
-                matchId,
-                fixtureId: matchId,
+                matchId: String(matchId),
+                fixtureId: String(matchId),
                 homeTeam,
-                awayTeam
+                awayTeam,
+                homeTeamLogo: extras?.homeTeamLogo ?? '',
+                awayTeamLogo: extras?.awayTeamLogo ?? '',
+                leagueName: extras?.leagueName ?? '',
+                matchDate: extras?.matchDate
+                    ? (extras.matchDate instanceof Date
+                        ? extras.matchDate.toISOString().split('T')[0]
+                        : String(extras.matchDate))
+                    : '',
+                screen: '/(tabs)/match-details',
+                priority: 'high',
             }
         });
     }
@@ -312,7 +344,13 @@ export class NotificationService {
         awayTeam: string,
         homeScore: number,
         awayScore: number,
-        matchId: number
+        matchId: number,
+        extras?: {
+            homeTeamLogo?: string | null;
+            awayTeamLogo?: string | null;
+            leagueName?: string | null;
+            matchDate?: Date | string | null;
+        }
     ) {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchHalftime) return null;
@@ -326,14 +364,25 @@ export class NotificationService {
             title,
             message,
             type: NotificationType.MATCH_UPDATE,
+            channelId: 'match-updates',
             data: {
                 type: 'MATCH_HALFTIME',
-                matchId,
-                fixtureId: matchId,
+                matchId: String(matchId),
+                fixtureId: String(matchId),
                 homeTeam,
                 awayTeam,
+                homeTeamLogo: extras?.homeTeamLogo ?? '',
+                awayTeamLogo: extras?.awayTeamLogo ?? '',
+                leagueName: extras?.leagueName ?? '',
+                matchDate: extras?.matchDate
+                    ? (extras.matchDate instanceof Date
+                        ? extras.matchDate.toISOString().split('T')[0]
+                        : String(extras.matchDate))
+                    : '',
                 homeScore,
-                awayScore
+                awayScore,
+                screen: '/(tabs)/match-details',
+                priority: 'high',
             }
         });
     }
@@ -348,7 +397,13 @@ export class NotificationService {
         awayTeam: string,
         homeScore: number,
         awayScore: number,
-        matchId: number
+        matchId: number,
+        extras?: {
+            homeTeamLogo?: string | null;
+            awayTeamLogo?: string | null;
+            leagueName?: string | null;
+            matchDate?: Date | string | null;
+        }
     ) {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchEnd) return null;
@@ -366,14 +421,25 @@ export class NotificationService {
             title,
             message,
             type: NotificationType.MATCH_UPDATE,
+            channelId: 'match-updates',
             data: {
                 type: 'MATCH_END',
-                matchId,
-                fixtureId: matchId,
+                matchId: String(matchId),
+                fixtureId: String(matchId),
                 homeTeam,
                 awayTeam,
+                homeTeamLogo: extras?.homeTeamLogo ?? '',
+                awayTeamLogo: extras?.awayTeamLogo ?? '',
+                leagueName: extras?.leagueName ?? '',
+                matchDate: extras?.matchDate
+                    ? (extras.matchDate instanceof Date
+                        ? extras.matchDate.toISOString().split('T')[0]
+                        : String(extras.matchDate))
+                    : '',
                 homeScore,
-                awayScore
+                awayScore,
+                screen: '/(tabs)/match-details',
+                priority: 'high',
             }
         });
     }
@@ -381,12 +447,26 @@ export class NotificationService {
     /**
      * Send prediction result notification
      * ✅ NEW: Notify users about their prediction results
+     * When `match` metadata is provided, the notification deep-links to the
+     * match-details screen so the user lands on the right match. Otherwise it
+     * falls back to the matches hub.
      */
     static async sendPredictionResultNotification(
         userId: string,
         isCorrect: boolean,
         matchInfo: string,
-        coinsWon: number
+        coinsWon: number,
+        match?: {
+            fixtureId?: number | string | null;
+            homeTeam?: string | null;
+            awayTeam?: string | null;
+            homeTeamLogo?: string | null;
+            awayTeamLogo?: string | null;
+            leagueName?: string | null;
+            matchDate?: Date | string | null;
+            homeScore?: number | null;
+            awayScore?: number | null;
+        }
     ) {
         try {
             const [user, prefs] = await Promise.all([
@@ -404,6 +484,13 @@ export class NotificationService {
                 ? `تهانينا! توقعك كان صحيحاً 🎉\n${matchInfo}\n+${coinsWon} تذاكر`
                 : `للأسف توقعك كان خاطئاً\n${matchInfo}\nجرب حظك في المباراة الجاية! 🎯`;
 
+            const fixtureId = match?.fixtureId != null ? String(match.fixtureId) : '';
+            const matchDate = match?.matchDate
+                ? (match.matchDate instanceof Date
+                    ? match.matchDate.toISOString().split('T')[0]
+                    : String(match.matchDate))
+                : '';
+
             return this.createNotification({
                 userId,
                 pushToken: (user?.pushNotificationsConsent && user?.expoPushToken) ? user.expoPushToken : null,
@@ -415,7 +502,20 @@ export class NotificationService {
                     isCorrect,
                     matchInfo,
                     coinsWon,
-                    screen: '/(tabs)/matches',
+                    // Always include — empty strings when unavailable so the
+                    // mobile deep-link handler can decide whether to open
+                    // match-details or fall back to /(tabs)/matches.
+                    matchId: fixtureId,
+                    fixtureId,
+                    homeTeam: match?.homeTeam ?? '',
+                    awayTeam: match?.awayTeam ?? '',
+                    homeTeamLogo: match?.homeTeamLogo ?? '',
+                    awayTeamLogo: match?.awayTeamLogo ?? '',
+                    leagueName: match?.leagueName ?? '',
+                    matchDate,
+                    homeScore: match?.homeScore ?? null,
+                    awayScore: match?.awayScore ?? null,
+                    screen: fixtureId ? '/(tabs)/match-details' : '/(tabs)/matches',
                 }
             });
         } catch (error) {

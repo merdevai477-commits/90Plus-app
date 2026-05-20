@@ -76,6 +76,12 @@ class FootballDataCacheService {
         COACHES: 7 * 24 * 60 * 60 * 1000,  // 7 days
         VENUES: 30 * 24 * 60 * 60 * 1000,  // 30 days
         ROUNDS: 60 * 60 * 1000,         // 1 hour
+        // ✅ Empty-result TTL: when API returns no lineups/events/stats for a
+        // match (often the case for lower-tier leagues, or transiently when
+        // the API quota is exhausted), we cache the empty array briefly so we
+        // don't poison long-lived caches. The next request after this window
+        // will re-hit the API.
+        EMPTY: 2 * 60 * 1000, // 2 minutes
     };
 
     // ============================================
@@ -449,8 +455,13 @@ class FootballDataCacheService {
             try {
                 const lineups = await footballService.getFixtureLineups(fixtureId);
 
-                // Cache in Redis and memory
-                const ttl = isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH;
+                // Cache in Redis and memory.
+                // Empty results get a short TTL so we don't poison the cache
+                // when the API is rate-limited or hasn't ingested data yet.
+                const isEmpty = !Array.isArray(lineups) || lineups.length === 0;
+                const ttl = isEmpty
+                    ? this.TTL.EMPTY
+                    : (isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH);
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: lineups,
                     timestamp: Date.now(),
@@ -459,8 +470,10 @@ class FootballDataCacheService {
                 await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
                 this.lineupsCache.set(fixtureId, cacheEntry);
 
-                // ✅ If finished, update fullData in DB (permanent, shared for all users)
-                if (isFinished && lineups?.length) {
+                // ✅ If finished AND non-empty, update fullData in DB
+                // (permanent, shared for all users). Don't persist empty
+                // arrays — the API may backfill later.
+                if (isFinished && !isEmpty && lineups?.length) {
                     await this.updateFixtureFullData(fixtureId, { lineups });
                     logger.debug(`💾 Lineups ${fixtureId} stored in DB (shared for all users)`);
                 }
@@ -518,8 +531,13 @@ class FootballDataCacheService {
         logger.debug(`📡 Fetching statistics for fixture ${fixtureId}`);
         const statistics = await footballService.getFixtureStatistics(fixtureId);
 
-        // Cache in Redis and memory
-        const ttl = isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH;
+        // Empty results get a short TTL so we re-hit the API soon. Otherwise
+        // a single transient empty response (e.g. quota cooldown) would lock
+        // the cache for hours.
+        const isEmpty = !Array.isArray(statistics) || statistics.length === 0;
+        const ttl = isEmpty
+            ? this.TTL.EMPTY
+            : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
         const cacheEntry: MemoryCacheEntry<any> = {
             data: statistics,
             timestamp: Date.now(),
@@ -528,7 +546,7 @@ class FootballDataCacheService {
         await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
         this.statisticsCache.set(fixtureId, cacheEntry);
 
-        if (isFinished && statistics?.length) {
+        if (isFinished && !isEmpty && statistics?.length) {
             await this.updateFixtureFullData(fixtureId, { statistics });
         }
 
@@ -586,8 +604,11 @@ class FootballDataCacheService {
             try {
                 const events = await footballService.getFixtureEvents(fixtureId);
 
-                // Cache in Redis and memory
-                const ttl = isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH;
+                // Empty results get a short TTL — same reasoning as lineups.
+                const isEmpty = !Array.isArray(events) || events.length === 0;
+                const ttl = isEmpty
+                    ? this.TTL.EMPTY
+                    : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: events,
                     timestamp: Date.now(),
@@ -596,8 +617,8 @@ class FootballDataCacheService {
                 await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
                 this.eventsCache.set(fixtureId, cacheEntry);
 
-                // ✅ If finished, update fullData in DB (permanent, shared for all users)
-                if (isFinished && events?.length) {
+                // Persist only non-empty event sets for finished matches.
+                if (isFinished && !isEmpty && events?.length) {
                     await this.updateFixtureFullData(fixtureId, { events });
                     logger.debug(`💾 Events ${fixtureId} stored in DB (shared for all users)`);
                 }

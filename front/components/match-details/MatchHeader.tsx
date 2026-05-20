@@ -1,10 +1,21 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, Animated, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LiveTimer } from '../common/LiveTimer';
-import { useLanguage } from '../../contexts/LanguageContext';
-
-const { width } = Dimensions.get('window');
+import Animated, {
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
+import {
+  PURPLE_PRIMARY,
+  PURPLE_SOFT,
+  BLUE_PRIMARY,
+  LIVE_RED,
+  TEXT_PRIMARY,
+  TEXT_MUTED,
+} from '../../constants/tokens';
 
 interface MatchHeaderProps {
   homeTeam: string;
@@ -17,8 +28,52 @@ interface MatchHeaderProps {
   league: string;
   date: string;
   time: string;
+  /** Period start timestamp (seconds). Currently unused — minute comes from `elapsed`. */
   startTimestamp?: number;
+  /** API-Football short status (1H, 2H, HT, FT, NS, ...). */
   statusShort?: string;
+  /** Live elapsed minute from API. */
+  elapsed?: number | null;
+  /** Stoppage time minutes (when API supplies extra time). */
+  stoppage?: number | null;
+}
+
+const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+const FINISHED_STATUSES = ['FT', 'AET', 'PEN'];
+
+// ─── Pulsing live dot — identical to Home card ────────────────────────────
+function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    pulse.value = withRepeat(withTiming(0.3, { duration: 800 }), -1, true);
+  }, [pulse]);
+  const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  return (
+    <Animated.View
+      style={[{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }, style]}
+    />
+  );
+}
+
+// ─── Team logo (with initials fallback) ──────────────────────────────────
+function TeamLogo({ name, uri }: { name: string; uri?: string }): React.ReactElement {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={styles.teamLogoImg}
+        contentFit="contain"
+        transition={150}
+        cachePolicy="memory-disk"
+        recyclingKey={uri}
+      />
+    );
+  }
+  return (
+    <View style={styles.teamAvatar}>
+      <Text style={styles.teamAvatarText}>{name.slice(0, 2).toUpperCase()}</Text>
+    </View>
+  );
 }
 
 export const MatchHeader: React.FC<MatchHeaderProps> = ({
@@ -30,207 +85,301 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   awayScore,
   status,
   league,
-  startTimestamp,
+  time,
   statusShort,
+  elapsed,
+  stoppage,
 }) => {
-  const { t } = useLanguage();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const isLive = status === 'live' || ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(statusShort || '');
+  const short = statusShort || '';
+  const isHalftime = short === 'HT';
+  const isLive =
+    LIVE_STATUSES.includes(short) || (status === 'live' && !isHalftime);
+  const isFinished = FINISHED_STATUSES.includes(short) || status === 'finished';
+  const isUpcoming = !isLive && !isFinished && !isHalftime;
+  const isStoppage = isLive && !!stoppage && stoppage > 0;
 
-  useEffect(() => {
-    if (isLive) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    }
-  }, [isLive]);
+  const minuteLabel = (() => {
+    if (isHalftime) return 'HT';
+    if (!isLive) return '';
+    if (typeof elapsed === 'number' && elapsed > 0) return `${elapsed}'`;
+    if (short === '1H') return "1'";
+    if (short === '2H') return "46'";
+    return short || 'LIVE';
+  })();
+
+  const sepText = isLive
+    ? isStoppage
+      ? `+${stoppage}`
+      : minuteLabel
+    : isFinished
+    ? 'FT'
+    : isHalftime
+    ? 'HT'
+    : '–';
 
   return (
-    <View style={styles.container}>
-      {/* Title Header is handled in parent, this is the Score Card */}
-      <LinearGradient
-        colors={['#4c1d95', '#2e1065', '#0f0720']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.card}
+    <View style={styles.wrapper}>
+      <View
+        style={[
+          styles.card,
+          isLive && styles.cardLive,
+          isStoppage && styles.cardStoppage,
+        ]}
       >
-        {/* Top Status */}
-        <View style={styles.topStatus}>
-          {isLive && (
-            <View style={styles.liveContainer}>
-              <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
-              <Text style={styles.liveText}>LIVE</Text>
+        {/* Left accent bar — matches Home card */}
+        {isLive ? (
+          <LinearGradient
+            colors={
+              isStoppage
+                ? ([LIVE_RED, LIVE_RED] as const)
+                : ([PURPLE_PRIMARY, BLUE_PRIMARY] as const)
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.accentBar}
+          />
+        ) : (
+          <View
+            style={[
+              styles.accentBar,
+              {
+                backgroundColor: isUpcoming
+                  ? 'rgba(124,58,237,0.4)'
+                  : 'rgba(255,255,255,0.1)',
+              },
+            ]}
+          />
+        )}
+
+        {/* Top row: league + status pill */}
+        <View style={styles.cardTop}>
+          <View style={styles.cardTopLeft}>
+            <Text style={styles.leagueText} numberOfLines={1}>
+              {league}
+            </Text>
+          </View>
+
+          {isLive ? (
+            <View style={[styles.liveMinuteContainer, styles.liveMinuteBorder]}>
+              <Text style={[styles.minuteText, isStoppage && { color: LIVE_RED }]}>
+                {minuteLabel}
+                {isStoppage ? (
+                  <Text style={styles.stoppageInline}> +{stoppage}</Text>
+                ) : null}
+              </Text>
+              <PulsingDot color={LIVE_RED} />
             </View>
+          ) : isHalftime ? (
+            <View style={styles.htBadge}>
+              <Text style={styles.htText}>HT</Text>
+            </View>
+          ) : isFinished ? (
+            <View style={styles.ftBadge}>
+              <Text style={styles.ftText}>FT</Text>
+            </View>
+          ) : (
+            <Text style={styles.kickoffText}>{time}</Text>
           )}
         </View>
 
-        {/* Teams and Score Row */}
-        <View style={styles.matchRow}>
-          {/* Home Team */}
-          <View style={styles.teamContainer}>
-            <View style={styles.logoContainer}>
-              <Image source={{ uri: homeLogo }} style={styles.teamLogo} />
-            </View>
-            <Text style={styles.teamName} numberOfLines={1}>{homeTeam}</Text>
+        {/* Teams + score */}
+        <View style={styles.teamsRow}>
+          <View style={styles.teamCol}>
+            <TeamLogo name={homeTeam} uri={homeLogo} />
+            <Text style={styles.teamName} numberOfLines={1}>
+              {homeTeam}
+            </Text>
           </View>
 
-          {/* Center Info */}
-          <View style={styles.centerInfo}>
-            {isLive ? (
-              <View style={styles.timeInfo}>
-                <Text style={styles.periodText}>{statusShort || '1ST'}</Text>
-                {!!startTimestamp && (
-                  <LiveTimer startTime={startTimestamp} status={statusShort || ''} style={styles.timerText} />
-                )}
+          <View style={styles.scoreArea}>
+            {isUpcoming ? (
+              <View style={styles.vsContainer}>
+                <Text style={styles.vsText}>VS</Text>
+                <Text style={styles.kickoffLarge}>{time}</Text>
               </View>
-            ) : status === 'finished' ? (
-              <Text style={styles.periodText}>{t.matchDetails.statusFinished}</Text>
             ) : (
-              <Text style={styles.periodText}>{t.matchDetails.statusUpcoming}</Text>
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreNum}>{homeScore || '0'}</Text>
+                <View style={styles.scoreSep}>
+                  <Text
+                    style={[
+                      styles.sepMinute,
+                      {
+                        color: isLive
+                          ? isStoppage
+                            ? LIVE_RED
+                            : PURPLE_SOFT
+                          : 'rgba(255,255,255,0.3)',
+                      },
+                    ]}
+                  >
+                    {sepText}
+                  </Text>
+                  {isLive ? (
+                    <LinearGradient
+                      colors={
+                        isStoppage
+                          ? ([LIVE_RED, LIVE_RED] as const)
+                          : ([PURPLE_PRIMARY, BLUE_PRIMARY] as const)
+                      }
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.liveBar}
+                    />
+                  ) : null}
+                </View>
+                <Text style={styles.scoreNum}>{awayScore || '0'}</Text>
+              </View>
             )}
-
-            <View style={styles.scoreContainer}>
-              <Text style={styles.scoreText}>{homeScore || '0'}</Text>
-              <Text style={styles.scoreDivider}>:</Text>
-              <Text style={styles.scoreText}>{awayScore || '0'}</Text>
-            </View>
           </View>
 
-          {/* Away Team */}
-          <View style={styles.teamContainer}>
-            <View style={styles.logoContainer}>
-              <Image source={{ uri: awayLogo }} style={styles.teamLogo} />
-            </View>
-            <Text style={styles.teamName} numberOfLines={1}>{awayTeam}</Text>
+          <View style={styles.teamCol}>
+            <TeamLogo name={awayTeam} uri={awayLogo} />
+            <Text style={styles.teamName} numberOfLines={1}>
+              {awayTeam}
+            </Text>
           </View>
         </View>
-
-
-      </LinearGradient>
+      </View>
     </View>
   );
 };
 
+// ─── Styles — mirrors front/components/home/MatchList.tsx MatchCard ─────────
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 10,
+  wrapper: {
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 12,
   },
   card: {
-    borderRadius: 24,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
     width: '100%',
-    shadowColor: '#4c1d95',
-    shadowOffset: { width: 0, height: 8 },
+    borderRadius: 16,
+    backgroundColor: 'rgba(18,12,28,0.98)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.07)',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  cardLive: {
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+    borderColor: 'rgba(124,58,237,0.2)',
+  },
+  cardStoppage: {
+    shadowColor: LIVE_RED,
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(239,68,68,0.25)',
   },
-  topStatus: {
-    alignItems: 'center',
-    marginBottom: 10,
-    height: 20,
-  },
-  liveContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ef4444',
-  },
-  liveText: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  matchRow: {
+  accentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+
+  // Top row
+  cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
-  teamContainer: {
-    alignItems: 'center',
-    width: '30%',
-    gap: 8,
-  },
-  logoContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  teamLogo: {
-    width: 48,
-    height: 48,
-    resizeMode: 'contain',
-  },
-  teamName: {
-    color: '#fff',
-    fontSize: 14,
+  cardTopLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  leagueText: {
+    color: TEXT_MUTED,
+    fontSize: 11,
     fontWeight: '600',
-    textAlign: 'center',
+    letterSpacing: 0.3,
+    flexShrink: 1,
   },
-  centerInfo: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '40%',
-    gap: 4,
+  liveMinuteContainer: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  liveMinuteBorder: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(59,130,246,0.3)',
+    backgroundColor: 'rgba(59,130,246,0.06)',
   },
-  timeInfo: {
-    alignItems: 'center',
+  minuteText: { color: PURPLE_SOFT, fontSize: 11, fontWeight: '700' },
+  stoppageInline: { color: LIVE_RED, fontSize: 11, fontWeight: '900' },
+  ftBadge: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  periodText: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    marginBottom: 4,
+  ftText: { color: TEXT_MUTED, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  htBadge: {
+    backgroundColor: 'rgba(245,197,24,0.12)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(245,197,24,0.3)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  timerText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  scoreContainer: {
+  htText: { color: '#F5C518', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  kickoffText: { color: PURPLE_SOFT, fontSize: 11, fontWeight: '600' },
+
+  // Teams row
+  teamsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
     gap: 8,
   },
-  scoreText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
+  teamCol: { flex: 1, alignItems: 'center', gap: 8 },
+  teamLogoImg: { width: 56, height: 56 },
+  teamAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(124,58,237,0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(167,139,250,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  scoreDivider: {
-    color: '#9ca3af',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: -4,
+  teamAvatarText: { color: PURPLE_SOFT, fontSize: 14, fontWeight: '800' },
+  teamName: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    maxWidth: 110,
   },
+
+  // Score area
+  scoreArea: { alignItems: 'center', justifyContent: 'center', minWidth: 130 },
+  vsContainer: { alignItems: 'center', gap: 4 },
+  vsText: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  kickoffLarge: { color: PURPLE_SOFT, fontSize: 14, fontWeight: '600' },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  scoreNum: {
+    color: TEXT_PRIMARY,
+    fontSize: 42,
+    fontWeight: '900',
+    letterSpacing: -1,
+    lineHeight: 48,
+    textShadowColor: 'rgba(255,255,255,0.15)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  scoreSep: { alignItems: 'center', gap: 4 },
+  sepMinute: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
+  liveBar: { width: 32, height: 2, borderRadius: 1 },
 });

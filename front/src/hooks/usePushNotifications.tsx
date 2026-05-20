@@ -151,8 +151,9 @@ export function usePushNotifications(): PushNotificationState {
                             awayTeam: data.awayTeam || '',
                             homeLogo: data.homeTeamLogo || '',
                             awayLogo: data.awayTeamLogo || '',
-                            homeScore: data.homeScore || '',
-                            awayScore: data.awayScore || '',
+                            // Preserve 0-0 instead of coercing it to ''
+                            homeScore: data.homeScore != null ? String(data.homeScore) : '',
+                            awayScore: data.awayScore != null ? String(data.awayScore) : '',
                             league: data.leagueName || '',
                             leagueLogo: '',
                             date: data.matchDate || new Date().toISOString().split('T')[0],
@@ -179,7 +180,30 @@ export function usePushNotifications(): PushNotificationState {
                     r.push('/notifications');
                 }
             } else if (type === 'PREDICTION_RESULT') {
-                r.push('/(tabs)/matches');
+                // Prefer match-details when the backend included a fixtureId
+                // in the payload; fall back to the matches hub.
+                const fId = data.matchId || data.fixtureId;
+                if (fId) {
+                    r.push({
+                        pathname: '/(tabs)/match-details',
+                        params: {
+                            fixtureId: String(fId),
+                            homeTeam: data.homeTeam || '',
+                            awayTeam: data.awayTeam || '',
+                            homeLogo: data.homeTeamLogo || '',
+                            awayLogo: data.awayTeamLogo || '',
+                            homeScore: data.homeScore != null ? String(data.homeScore) : '',
+                            awayScore: data.awayScore != null ? String(data.awayScore) : '',
+                            league: data.leagueName || '',
+                            leagueLogo: '',
+                            date: data.matchDate || new Date().toISOString().split('T')[0],
+                            time: '',
+                            status: 'finished',
+                        },
+                    });
+                } else {
+                    r.push('/(tabs)/matches');
+                }
             } else if (type === 'VIDEO_PROCESSED') {
                 if (data.reelId) {
                     r.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId } });

@@ -202,6 +202,16 @@ export class MatchWatcherService {
             // STATUSES IN API-FOOTBALL:
             // TBD, NS (Not Started), 1H, HT, 2H, ET, BT, P (Penalty), FT, AET, PEN
 
+            // Match metadata bundle reused across all notification calls below
+            // so the push deep-links to match-details with logos & league
+            // already populated.
+            const matchMeta = {
+                homeTeamLogo: favorite.homeTeamLogo,
+                awayTeamLogo: favorite.awayTeamLogo,
+                leagueName: favorite.leagueName,
+                matchDate: favorite.matchDate,
+            };
+
             // Check for match start (NS -> 1H or LIVE)
             if (!favorite.notifiedStart && ['1H', 'LIVE', 'HT'].includes(status) && !['1H', 'LIVE', 'HT', '2H'].includes(lastStatus || '')) {
                 logger.info(`📢 Sending match start notification for match ${matchId}`);
@@ -210,7 +220,8 @@ export class MatchWatcherService {
                     effectivePushToken,
                     favorite.homeTeam,
                     favorite.awayTeam,
-                    matchId
+                    matchId,
+                    matchMeta
                 );
 
                 await prisma.favoriteMatch.update({
@@ -230,7 +241,8 @@ export class MatchWatcherService {
                     homeScore,
                     awayScore,
                     'home',
-                    matchId
+                    matchId,
+                    matchMeta
                 );
             }
 
@@ -244,7 +256,8 @@ export class MatchWatcherService {
                     homeScore,
                     awayScore,
                     'away',
-                    matchId
+                    matchId,
+                    matchMeta
                 );
             }
 
@@ -258,7 +271,8 @@ export class MatchWatcherService {
                     favorite.awayTeam,
                     homeScore,
                     awayScore,
-                    matchId
+                    matchId,
+                    matchMeta
                 );
             }
 
@@ -272,7 +286,8 @@ export class MatchWatcherService {
                     favorite.awayTeam,
                     homeScore,
                     awayScore,
-                    matchId
+                    matchId,
+                    matchMeta
                 );
 
                 // Resolve predictions for this match (awards coins for correct predictions)

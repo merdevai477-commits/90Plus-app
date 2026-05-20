@@ -107,7 +107,18 @@ export class PredictionResolverService {
                             prediction.userId,
                             true, // isCorrect
                             matchInfo,
-                            CORRECT_PREDICTION_REWARD
+                            CORRECT_PREDICTION_REWARD,
+                            {
+                                fixtureId: apiMatchId,
+                                homeTeam: prediction.homeTeam,
+                                awayTeam: prediction.awayTeam,
+                                homeTeamLogo: prediction.homeTeamLogo,
+                                awayTeamLogo: prediction.awayTeamLogo,
+                                leagueName: prediction.leagueName,
+                                matchDate: prediction.matchDate,
+                                homeScore,
+                                awayScore,
+                            }
                         );
                         logger.debug(`📱 Sent correct prediction notification to user ${prediction.userId}`);
                     } catch (notifError) {
@@ -122,7 +133,18 @@ export class PredictionResolverService {
                             prediction.userId,
                             false, // isCorrect
                             matchInfo,
-                            0
+                            0,
+                            {
+                                fixtureId: apiMatchId,
+                                homeTeam: prediction.homeTeam,
+                                awayTeam: prediction.awayTeam,
+                                homeTeamLogo: prediction.homeTeamLogo,
+                                awayTeamLogo: prediction.awayTeamLogo,
+                                leagueName: prediction.leagueName,
+                                matchDate: prediction.matchDate,
+                                homeScore,
+                                awayScore,
+                            }
                         );
                         logger.debug(`📱 Sent incorrect prediction notification to user ${prediction.userId}`);
                     } catch (notifError) {
