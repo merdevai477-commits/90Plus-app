@@ -100,6 +100,15 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
   const getTokenRef = useRef(getToken);
   useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
 
+  // Track the last level we observed so we can detect passive level-ups
+  // (e.g. XP that was awarded server-side by a cron / queue and arrived via
+  // the next polling tick rather than via `handleXpEvents`). The first
+  // payload after sign-in only seeds this ref — it never fires the modal.
+  const lastSeenLevelRef = useRef<number | null>(null);
+  // Suppress the next auto-emit when `handleXpEvents` already emitted a
+  // level-up — otherwise the user would see the modal twice.
+  const suppressNextAutoLevelUpRef = useRef(false);
+
   const fetchXpData = useCallback(async () => {
     if (!isSignedIn) {
       setLoading(false);
@@ -116,9 +125,28 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       if (!res.ok) return;
       const json = await res.json();
       if (json.status === 'SUCCESS' && json.data) {
+        const newLevel: number = json.data.level;
+        const newTitleVal: string = json.data.title;
+
+        // Detect a passive level-up: skip the very first payload (seed only).
+        const previous = lastSeenLevelRef.current;
+        if (previous != null && newLevel > previous) {
+          if (suppressNextAutoLevelUpRef.current) {
+            // Already fired by handleXpEvents — clear the flag.
+            suppressNextAutoLevelUpRef.current = false;
+          } else {
+            emitLevelUp({
+              previousLevel: previous,
+              newLevel,
+              newTitle: newTitleVal || levelTitle(newLevel),
+            });
+          }
+        }
+        lastSeenLevelRef.current = newLevel;
+
         setXp(json.data.xp);
-        setLevel(json.data.level);
-        setTitle(json.data.title);
+        setLevel(newLevel);
+        setTitle(newTitleVal);
         setXpToNext(json.data.xpToNext);
         setProgressPct(json.data.progressPct);
         setStreak(json.data.streak || { current: 0, longest: 0 });
@@ -142,6 +170,9 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       setProgressPct(0);
       setStreak({ current: 0, longest: 0 });
       setLoading(false);
+      // Reset level-tracking so the next sign-in seeds fresh.
+      lastSeenLevelRef.current = null;
+      suppressNextAutoLevelUpRef.current = false;
     }
   }, [isSignedIn, user?.id, fetchXpData]);
 
@@ -170,9 +201,12 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
 
         throw new Error('NO_EVENTSOURCE');
       } catch {
-        // Fallback: poll every 60s
+        // Fallback: poll every 20s while the app is foregrounded so a
+        // server-awarded level-up shows the modal within ~20s instead of
+        // ~60s. Foreground/background is handled by the AppState listener
+        // below, which calls fetchXpData() immediately on resume.
         if (!cancelled) {
-          pollInterval = setInterval(fetchXpData, 60000);
+          pollInterval = setInterval(fetchXpData, 20000);
         }
       }
     };
@@ -207,6 +241,9 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
           newLevel: event.newLevel,
           newTitle: event.newTitle || levelTitle(event.newLevel),
         });
+        // Tell the next fetchXpData() not to re-emit when it observes the
+        // same level transition — otherwise the modal would fire twice.
+        suppressNextAutoLevelUpRef.current = true;
       }
     }
 

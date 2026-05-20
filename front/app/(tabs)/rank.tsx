@@ -134,7 +134,7 @@ export default function RankScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSoonVisible, setIsSoonVisible] = useState(false);
 
-  const { players, isLoading, isError, refetch } = useTopPlayers({
+  const { players, isLoading, isError } = useTopPlayers({
     limit: 11,
     period: 'weekly',
   });
@@ -326,18 +326,11 @@ export default function RankScreen() {
               </View>
             </>
           ) : isError ? (
+            // Quietly show an empty leaderboard. The list refetches on tab
+            // focus / mount so a manual retry button would just be noise —
+            // the user explicitly asked for it to be removed.
             <View style={s.errorCard}>
               <Text style={s.errorText}>{t.rank.errors.loadFailed}</Text>
-              <Pressable
-                onPress={() => {
-                  refetch();
-                }}
-                style={({ pressed }) => [s.errorRetry, pressed && { opacity: 0.85 }]}
-                accessibilityRole="button"
-                accessibilityLabel={t.rank.errors.retry}
-              >
-                <Text style={s.errorRetryText}>{t.rank.errors.retry}</Text>
-              </Pressable>
             </View>
           ) : (
             <>
@@ -577,18 +570,8 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(168,85,247,0.25)',
     alignItems: 'center',
-    gap: 10,
   },
   errorText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center' },
-  errorRetry: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(168,85,247,0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.5)',
-  },
-  errorRetryText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 
   viewAllLeaderboardBtn: {
     marginHorizontal: 16,

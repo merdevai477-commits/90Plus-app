@@ -4,16 +4,23 @@
  * Displays the logged-in user's avatar, display name, level and XP progress
  * on the Rank screen. Tapping the card navigates to the user's own profile.
  *
- * Consumes XpContext for real-time level/XP data.
+ * Avatar source priority:
+ *   1. R2 avatar from `/api/profile/me` (set when the user uploads in Profile)
+ *   2. Clerk imageUrl (Clerk-hosted fallback)
+ *   3. Local placeholder asset
+ *
+ * This mirrors how the Profile screen resolves the avatar so both surfaces
+ * always show the same image — the previous implementation only read
+ * `useUser().imageUrl`, which returned the Clerk avatar even after the user
+ * had uploaded a new one to R2.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useUser } from '@clerk/clerk-expo';
-import React, { useMemo } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useMemo } from 'react';
 import {
   I18nManager,
   Pressable,
@@ -24,6 +31,7 @@ import {
 
 import { useTranslation } from '../../src/i18n';
 import { useXp } from '../../contexts/XpContext';
+import { useMyProfileBasics } from '../../hooks/useMyProfileBasics';
 
 const ACCENT = '#A855F7';
 const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
@@ -31,7 +39,7 @@ const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
 export interface ProfileCardProps {
   /** Optional override for the user's display name. */
   displayName?: string | null;
-  /** Optional avatar url override (Cloudflare R2). */
+  /** Optional avatar url override (e.g. screenshot mode). */
   avatarUrl?: string | null;
   /** User level override (falls back to XpContext). */
   level?: number;
@@ -49,27 +57,37 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   xpToNextLevel: xpToNextProp,
 }) => {
   const router = useRouter();
-  const { user } = useUser();
   const { t } = useTranslation();
   const xpCtx = useXp();
+  const { data: profile, refetch: refetchProfile } = useMyProfileBasics();
 
-  // Use props if provided, otherwise fall back to XpContext real data
-  const level = levelProp ?? xpCtx.level;
-  const xp = xpProp ?? xpCtx.xp;
-  const xpToNextLevel = xpToNextProp ?? xpCtx.xpToNext;
+  // Refresh basics every time the rank tab regains focus so a freshly
+  // uploaded avatar shows up immediately without waiting for the React Query
+  // staleTime to elapse.
+  useFocusEffect(
+    useCallback(() => {
+      refetchProfile();
+    }, [refetchProfile]),
+  );
+
+  // Use props if provided, otherwise XpContext (live SSE/poll), else profile data
+  const level = levelProp ?? xpCtx.level ?? profile?.level ?? 1;
+  const xp = xpProp ?? xpCtx.xp ?? profile?.xp ?? 0;
+  const xpToNextLevel = xpToNextProp ?? xpCtx.xpToNext ?? 290;
 
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
 
   const resolvedName: string =
     (displayName && displayName.trim()) ||
-    (user?.fullName && user.fullName.trim()) ||
-    user?.username ||
-    user?.firstName ||
+    (profile?.displayName && profile.displayName.trim()) ||
+    (profile?.username && profile.username.trim()) ||
     t.rank.competitions.title;
 
   const remoteAvatar: string | null =
-    (avatarUrl && avatarUrl.trim()) || user?.imageUrl || null;
+    (avatarUrl && avatarUrl.trim()) ||
+    (profile?.avatar && profile.avatar.trim()) ||
+    null;
 
   const xpPct = useMemo(() => {
     if (!xpToNextLevel || xpToNextLevel <= 0) return 0;
@@ -108,6 +126,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
               contentFit="cover"
               cachePolicy="memory-disk"
               transition={150}
+              recyclingKey={remoteAvatar ?? 'placeholder'}
             />
             <View style={s.avatarRing} />
           </View>

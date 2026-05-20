@@ -2612,36 +2612,44 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
 
 /**
  * GET /api/reels/rankings/top-players
- * Get top 11 players based on views, profile visits, and likes
- * أفضل 11 لاعب بناءً على المشاهدات وزيارات البروفايل واللايكات
- * @query period - 'weekly' | 'monthly' (default: 'weekly')
+ * Get top 11 players. Primary sort: XP (lifetime). Tiebreaker: weighted
+ * engagement score over the requested period (views + profile visits + likes).
+ *
+ * Why XP-first?
+ *   The Rank screen shows each user's XP next to their card and labels the
+ *   list as the "Top Players" leaderboard. Sorting by an unrelated activity
+ *   score made the displayed metric (XP) feel disconnected from the ranking.
+ *   Now the ordering matches what the UI shows; the engagement score still
+ *   matters when two users have the same XP.
+ *
+ * @query period - 'weekly' | 'monthly' (default: 'weekly') — only affects the
+ *                 tiebreaker score window.
  */
 router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '11', period = 'weekly' } = req.query;
         const take = Math.min(parseInt(limit as string) || 11, 50);
-        
-        // Calculate date based on period
+
+        // Date range powers the tiebreaker score only — ranking is XP-first.
         const startDate = new Date();
         if (period === 'monthly') {
             startDate.setMonth(startDate.getMonth() - 1);
         } else {
-            // weekly (default)
             startDate.setDate(startDate.getDate() - 7);
         }
 
-        // Get users with their stats aggregated for the period
-        // Score = (total views * 1) + (profile views * 2) + (total likes * 3)
-        const usersWithStats = await prisma.user.findMany({
+        // Fetch the top 50 by XP (oversample) so we have headroom for a
+        // tiebreaker pass without paginating the entire users table.
+        const candidates = await prisma.user.findMany({
             where: {
-                reels: {
-                    some: {
-                        createdAt: {
-                            gte: startDate
-                        }
-                    }
-                }
+                isDeleted: false,
+                isBanned: false,
             },
+            orderBy: [
+                { xp: 'desc' },
+                { level: 'desc' },
+            ],
+            take: 50,
             select: {
                 id: true,
                 username: true,
@@ -2656,36 +2664,23 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
                 clubLogo: true,
                 reels: {
                     where: {
-                        createdAt: {
-                            gte: startDate
-                        }
+                        createdAt: { gte: startDate },
                     },
                     select: {
                         views: true,
-                        _count: {
-                            select: {
-                                likes: true,
-                            }
-                        }
-                    }
+                        _count: { select: { likes: true } },
+                    },
                 },
-                _count: {
-                    select: {
-                        followers: true,
-                    }
-                }
-            }
+                _count: { select: { followers: true } },
+            },
         });
 
-        // Calculate score for each user
-        const scoredUsers = usersWithStats.map((user: any) => {
-            const totalViews = user.reels.reduce((sum: any, reel: any) => sum + reel.views, 0);
-            const totalLikes = user.reels.reduce((sum: any, reel: any) => sum + reel._count.likes, 0);
+        const scored = candidates.map((user: any) => {
+            const totalViews = user.reels.reduce((sum: number, reel: any) => sum + (reel.views || 0), 0);
+            const totalLikes = user.reels.reduce((sum: number, reel: any) => sum + (reel._count?.likes || 0), 0);
             const profileViews = user.profileViews || 0;
-            
-            // Weighted score calculation
             const score = (totalViews * 1) + (profileViews * 2) + (totalLikes * 3);
-            
+
             return {
                 id: user.id,
                 username: user.username,
@@ -2698,18 +2693,18 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
                 countryFlag: user.countryFlag || '🇪🇬',
                 clubLogo: user.clubLogo,
                 followersCount: user._count.followers,
-                stats: {
-                    totalViews,
-                    totalLikes,
-                    profileViews,
-                },
+                stats: { totalViews, totalLikes, profileViews },
                 score,
             };
         });
 
-        // Sort by score and take top players
-        const topPlayers = scoredUsers
-            .sort((a: any, b: any) => b.score - a.score)
+        // XP first, engagement score as tiebreaker, then created-id stable order.
+        const topPlayers = scored
+            .sort((a: any, b: any) => {
+                if (b.xp !== a.xp) return b.xp - a.xp;
+                if (b.score !== a.score) return b.score - a.score;
+                return a.id.localeCompare(b.id);
+            })
             .slice(0, take)
             .map((player: any, index: any) => ({
                 ...player,
