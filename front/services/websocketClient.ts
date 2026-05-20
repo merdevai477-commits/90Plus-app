@@ -10,6 +10,7 @@
  */
 
 import { io, Socket } from 'socket.io-client';
+import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { getWsUrl } from '../config/api.config';
 import { logger } from './logger';
 import { WSPayload } from '@/types/websocket';
@@ -161,6 +162,54 @@ class WebSocketClient {
   private subscribedRooms: Set<string> = new Set();
   private currentWsUrl: string | null = null;
 
+  // ── Network awareness ───────────────────────────────────────────────
+  // When the device loses connectivity we don't want to keep firing
+  // socket.io reconnect attempts every second — that floods the console
+  // with "xhr poll error" noise and wastes battery. We watch NetInfo;
+  // while offline reconnects are paused, and we kick a fresh reconnect as
+  // soon as connectivity comes back.
+  private isOnline = true;
+  private netInfoUnsubscribe: (() => void) | null = null;
+
+  constructor() {
+    this.setupNetInfoListener();
+  }
+
+  private setupNetInfoListener(): void {
+    if (this.netInfoUnsubscribe) return;
+    try {
+      // Seed the initial state asynchronously so connect() called before
+      // the first NetInfo event still works (we default to online above).
+      NetInfo.fetch()
+        .then((state) => {
+          this.isOnline = !!(state.isConnected && state.isInternetReachable !== false);
+        })
+        .catch(() => {});
+
+      this.netInfoUnsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
+        const next = !!(state.isConnected && state.isInternetReachable !== false);
+        const wasOffline = !this.isOnline;
+        this.isOnline = next;
+        if (next && wasOffline && !this.isDestroyed && !this.isManualDisconnect) {
+          // We just came back online — reset the backoff and reconnect now.
+          logger.info('[WebSocket] Network restored — reconnecting');
+          this.reconnectAttempts = 0;
+          if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+          }
+          if (this.socket && !this.socket.connected) {
+            this.socket.connect();
+          } else if (!this.socket) {
+            this.connect(this.userId || undefined);
+          }
+        }
+      });
+    } catch (err) {
+      logger.debug('[WebSocket] NetInfo listener setup failed:', err);
+    }
+  }
+
   /**
    * Connect to the WebSocket server
    * Requirement 21.1: Establish WebSocket connection
@@ -235,12 +284,19 @@ class WebSocketClient {
         logger.debug('[WebSocket] Connection error (localhost - backend not running)');
         return;
       }
-      
+
+      // ✅ Silent when device is offline — DNS/xhr-poll errors are expected
+      // and would otherwise flood the console with stack traces every retry.
+      if (!this.isOnline) {
+        logger.debug('[WebSocket] Connection error (device offline) — waiting for network');
+        return;
+      }
+
       // ✅ Check if it's a 502 error (cold start) - reduce noise
-      const is502Error = error.message?.includes('502') || 
+      const is502Error = error.message?.includes('502') ||
                          (error as any).description === 502 ||
                          (error as any).context?.status === 502;
-      
+
       if (is502Error) {
         logger.debug('[WebSocket] Server cold start detected (502) - will retry automatically');
         if (!this.isManualDisconnect) {
@@ -248,19 +304,36 @@ class WebSocketClient {
         }
         return;
       }
-      
+
+      // Detect DNS / unreachable host failures (typical when WiFi drops mid-
+      // request even if NetInfo hasn't fired yet) and downgrade them to debug.
+      const errMsg = String(error?.message || '').toLowerCase();
+      const ctxResp = String((error as any)?.context?._response || '').toLowerCase();
+      const looksLikeNetwork =
+        errMsg.includes('network request failed') ||
+        errMsg.includes('xhr poll error') ||
+        ctxResp.includes('unable to resolve host') ||
+        ctxResp.includes('no address associated');
+      if (looksLikeNetwork) {
+        logger.debug('[WebSocket] Transient network error — retrying silently');
+        if (!this.isManualDisconnect) {
+          this.attemptReconnect();
+        }
+        return;
+      }
+
       // Log detailed error information for debugging (production only)
       const errorDetails: Record<string, unknown> = {
         message: error.message,
         wsUrl: this.currentWsUrl || getWsUrl(),
         error: error.toString(),
       };
-      
+
       // Add optional Socket.IO-specific properties if they exist
       if ('type' in error) errorDetails.type = (error as any).type;
       if ('description' in error) errorDetails.description = (error as any).description;
       if ('context' in error) errorDetails.context = (error as any).context;
-      
+
       logger.error('[WebSocket] Connection error:', errorDetails);
 
       if (!this.isManualDisconnect) {
@@ -321,6 +394,14 @@ class WebSocketClient {
       return;
     }
 
+    // ✅ Don't burn through reconnect budget while the device is offline.
+    // The NetInfo listener will fire a fresh reconnect as soon as the
+    // network comes back.
+    if (!this.isOnline) {
+      logger.debug('[WebSocket] Skipping reconnect - device is offline');
+      return;
+    }
+
     if (this.reconnectAttempts >= this.reconnectionConfig.maxAttempts) {
       logger.debug('[WebSocket] Max reconnection attempts reached - will retry on next app focus');
       return;
@@ -363,6 +444,12 @@ class WebSocketClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+
+    // ✅ Tear down NetInfo listener
+    if (this.netInfoUnsubscribe) {
+      try { this.netInfoUnsubscribe(); } catch { /* noop */ }
+      this.netInfoUnsubscribe = null;
     }
 
     // ✅ Disconnect socket
