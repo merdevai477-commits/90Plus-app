@@ -43,18 +43,18 @@ export interface ProfileCardProps {
   avatarUrl?: string | null;
   /** User level override (falls back to XpContext). */
   level?: number;
-  /** Current XP override (falls back to XpContext). */
-  xp?: number;
-  /** XP required to reach the next level override (falls back to XpContext). */
-  xpToNextLevel?: number;
+  /** XP earned inside the current level (override). */
+  xpInLevel?: number;
+  /** Total XP span needed to clear the current level (override). */
+  xpForNextLevel?: number;
 }
 
 const ProfileCard: React.FC<ProfileCardProps> = ({
   displayName,
   avatarUrl,
   level: levelProp,
-  xp: xpProp,
-  xpToNextLevel: xpToNextProp,
+  xpInLevel: xpInLevelProp,
+  xpForNextLevel: xpSpanProp,
 }) => {
   const router = useRouter();
   const { t } = useTranslation();
@@ -70,10 +70,12 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     }, [refetchProfile]),
   );
 
-  // Use props if provided, otherwise XpContext (live SSE/poll), else profile data
+  // Source of truth for level/XP: live XpContext (SSE/poll), then profile,
+  // then sane defaults. The bar shows progress *within* the current level —
+  // not the absolute lifetime XP — so the label matches the bar.
   const level = levelProp ?? xpCtx.level ?? profile?.level ?? 1;
-  const xp = xpProp ?? xpCtx.xp ?? profile?.xp ?? 0;
-  const xpToNextLevel = xpToNextProp ?? xpCtx.xpToNext ?? 290;
+  const xpInLevel = xpInLevelProp ?? xpCtx.xpInLevel ?? 0;
+  const xpForNextLevel = Math.max(1, xpSpanProp ?? xpCtx.xpForNextLevel ?? 290);
 
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
@@ -90,12 +92,12 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     null;
 
   const xpPct = useMemo(() => {
-    if (!xpToNextLevel || xpToNextLevel <= 0) return 0;
-    const ratio = xp / xpToNextLevel;
+    if (xpForNextLevel <= 0) return 0;
+    const ratio = xpInLevel / xpForNextLevel;
     if (ratio < 0) return 0;
     if (ratio > 1) return 100;
     return ratio * 100;
-  }, [xp, xpToNextLevel]);
+  }, [xpInLevel, xpForNextLevel]);
 
   const handlePress = () => {
     router.push('/(tabs)/profile' as never);
@@ -153,10 +155,10 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 />
               </View>
               <Text style={s.xpLabel}>
-                <Text style={s.xpCur}>{xp}</Text>
+                <Text style={s.xpCur}>{xpInLevel}</Text>
                 <Text style={s.xpMax}>
                   {' '}
-                  / {xpToNextLevel} {t.rank.xpSuffix}
+                  / {xpForNextLevel} {t.rank.xpSuffix}
                 </Text>
               </Text>
             </View>

@@ -55,7 +55,11 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
         xp,
         level,
         title: levelTitle(level),
-        xpToNext,
+        xpToNext,                       // remaining XP to reach the next level
+        currentLevelXp,                 // absolute XP threshold of the current level
+        nextLevelXp,                    // absolute XP threshold of the next level
+        xpInLevel: Math.max(0, xp - currentLevelXp),     // XP earned inside the current level
+        xpForNextLevel: nextLevelXp - currentLevelXp,    // XP span between current and next level
         progressPct,
         streakFreezes: user.streakFreezes,
         isResting,
