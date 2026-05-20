@@ -115,7 +115,6 @@ export class ProfileCompletionService {
         user.avatar.trim() !== '' && 
         !user.avatar.includes('default') && 
         !user.avatar.includes('placeholder');
-      logger.info(`Checking avatar completion for user ${clerkUserId}: avatar="${user.avatar}", completed=${avatarCompleted}`);
       steps.push({
         id: 'avatar',
         label: PROFILE_STEPS.avatar.label,
@@ -133,7 +132,6 @@ export class ProfileCompletionService {
       // Country - Check if EITHER countryFlag OR country exists (more flexible)
       const countryCompleted = (!!user.countryFlag && user.countryFlag.trim() !== '') || 
         (!!user.country && user.country.trim() !== '');
-      logger.info(`Checking country completion for user ${clerkUserId}: countryFlag="${user.countryFlag}", country="${user.country}", completed=${countryCompleted}`);
       steps.push({
         id: 'country',
         label: PROFILE_STEPS.country.label,
@@ -251,15 +249,36 @@ export class ProfileCompletionService {
         return acc;
       }, {} as Record<string, boolean>);
 
-      // Update user's completion percentage in database using internal ID
+      // ✅ Skip the DB update if nothing actually changed. The previous
+      // code wrote on every GET, which under polling pressure (frontend hits
+      // the endpoint on every focus) caused row-level lock contention with
+      // legitimate user.update calls and showed up as 30s timeouts.
       try {
-        await prisma.user.update({
+        // Find user by clerkUserId AGAIN to read current persisted values.
+        // We already have `user.id`; this is a single PK lookup.
+        const persisted = await prisma.user.findUnique({
           where: { id: user.id },
-          data: {
-            profileCompletionPercentage: Math.round(totalPercentage),
-            profileCompletionSteps: completionStepsObj,
+          select: {
+            profileCompletionPercentage: true,
+            profileCompletionSteps: true,
           },
         });
+        const newPct = Math.round(totalPercentage);
+        const oldPct = persisted?.profileCompletionPercentage ?? null;
+        const oldSteps = (persisted?.profileCompletionSteps as Record<string, boolean>) || {};
+        const stepsChanged =
+          Object.keys(completionStepsObj).length !== Object.keys(oldSteps).length ||
+          Object.entries(completionStepsObj).some(([k, v]) => oldSteps[k] !== v);
+
+        if (oldPct !== newPct || stepsChanged) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              profileCompletionPercentage: newPct,
+              profileCompletionSteps: completionStepsObj,
+            },
+          });
+        }
       } catch (persistErr) {
         logger.error(`Profile completion DB persist failed for ${clerkUserId}:`, persistErr);
         // Still return computed status so clients are not stuck on 500

@@ -408,36 +408,35 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
             return;
         }
 
-        // Get total predictions
-        const total = await prisma.prediction.count({
-            where: { userId: user.id }
-        });
+        // ✅ Single round-trip aggregation (was 5 separate count + 1 aggregate)
+        // groupBy returns the count for each isCorrect value (true/false/null)
+        // in one query — turns ~6× DB round trips into 2 (groupBy + aggregate).
+        const [grouped, coinsAgg] = await Promise.all([
+            prisma.prediction.groupBy({
+                by: ['isCorrect'],
+                where: { userId: user.id },
+                _count: { _all: true },
+            }),
+            prisma.prediction.aggregate({
+                where: { userId: user.id, isCorrect: true },
+                _sum: { coinsWon: true },
+            }),
+        ]);
 
-        // Get correct predictions
-        const correct = await prisma.prediction.count({
-            where: { userId: user.id, isCorrect: true }
-        });
+        let correct = 0;
+        let incorrect = 0;
+        let pending = 0;
+        for (const row of grouped) {
+            const c = row._count._all || 0;
+            if (row.isCorrect === true) correct = c;
+            else if (row.isCorrect === false) incorrect = c;
+            else pending = c;
+        }
 
-        // Get incorrect predictions
-        const incorrect = await prisma.prediction.count({
-            where: { userId: user.id, isCorrect: false }
-        });
-
-        // Get pending (not resolved yet)
-        const pending = await prisma.prediction.count({
-            where: { userId: user.id, isCorrect: null }
-        });
-
-        // Get total coins won from predictions
-        const coinsWonResult = await prisma.prediction.aggregate({
-            where: { userId: user.id, isCorrect: true },
-            _sum: { coinsWon: true }
-        });
-        const totalCoinsWon = coinsWonResult._sum.coinsWon || 0;
-
-        // Calculate accuracy
+        const total = correct + incorrect + pending;
         const resolved = correct + incorrect;
         const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
+        const totalCoinsWon = coinsAgg._sum.coinsWon || 0;
 
         res.json({
             success: true,
@@ -448,7 +447,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
                 pending,
                 accuracy,
                 resolved,
-                totalCoinsWon // ✅ Added total coins won
+                totalCoinsWon,
             }
         });
     } catch (error) {
