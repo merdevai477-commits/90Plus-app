@@ -87,12 +87,23 @@ export class PredictionResolverService {
                     ]);
 
                     // ✅ Award XP for correct prediction (daily cap 5 to prevent farming)
+                    // idempotencyKey ties the award to this prediction row so
+                    // even if MatchWatcher + PredictionWatcher race on the
+                    // same match, awardXp returns the cached result on the
+                    // second pass instead of double-crediting.
                     try {
                         await awardXp({
                             userId: prediction.userId,
                             action: CORRECT_PREDICTION_XP_ACTION,
                             dailyCap: 5,
                             timezone: 'UTC',
+                            idempotencyKey: `prediction:${prediction.id}`,
+                            metadata: {
+                                predictionId: prediction.id,
+                                apiMatchId,
+                                homeScore,
+                                awayScore,
+                            },
                         });
                     } catch (xpErr: any) {
                         logger.warn(`⚠️ XP award failed for user ${prediction.userId} (non-fatal):`, xpErr?.message);

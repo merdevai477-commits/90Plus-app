@@ -191,6 +191,7 @@ model User {
   @@index([email])
   @@index([username])
   @@index([level])
+  @@index([xp])
   @@index([coins])
   @@index([createdAt])
   @@index([isDeleted])
