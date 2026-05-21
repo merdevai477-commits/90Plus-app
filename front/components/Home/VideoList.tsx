@@ -96,6 +96,7 @@ function VideoCard({
     onOpen,
     onToggleLike,
 }: VideoCardProps): React.ReactElement {
+    const { t } = useLanguage();
     const scale = useSharedValue(1);
     const animStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
@@ -159,7 +160,7 @@ function VideoCard({
                     {isOffline && (
                         <View style={styles.offlineChip}>
                             <WifiOff size={10} color="rgba(255,255,255,0.85)" strokeWidth={2.2} />
-                            <Text style={styles.offlineChipText}>بدون إنترنت</Text>
+                            <Text style={styles.offlineChipText}>{t.homeExtra.offline}</Text>
                         </View>
                     )}
 

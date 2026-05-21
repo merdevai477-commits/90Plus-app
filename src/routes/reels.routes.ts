@@ -11,6 +11,8 @@ import { filterUGCContent } from '../middleware/filter-content.middleware';
 import { enqueueNotification, enqueueSocialNotification } from '../queues/notification.queue';
 import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { awardXp } from '../services/xp.service';
+import { ErrorCode, sendError } from '../constants/errors';
+import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 
 const router = Router();
 
@@ -21,7 +23,7 @@ const ensureString = (param: string | string[] | undefined): string => {
 };
 
 // Constants
-const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم
+const REEL_UPLOAD_COOLDOWN_DAYS = 1; // Reduced from 3 days to 1 day
 const REELS_PER_PAGE = 5;
 const MAX_COMMENTS_PREVIEW = 3;
 
@@ -290,7 +292,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         res.json(responseData);
     } catch (error: any) {
         logger.error('Get reels feed error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -366,7 +368,7 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Get hashtag reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -390,16 +392,16 @@ router.patch('/:id', requireAuth, writeLimiter, moderateReelCaption, async (req:
             where: { clerkUserId: clerkUserId! },
             select: { id: true },
         });
-        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+        if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
         const reel = await prisma.reel.findUnique({
             where: { id: reelId },
             select: { id: true, userId: true, status: true },
         });
-        if (!reel) { res.status(404).json({ status: 'ERROR', message: 'Reel not found' }); return; }
-        if (reel.userId !== user.id) { res.status(403).json({ status: 'ERROR', message: 'Not authorized' }); return; }
+        if (!reel) { sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found'); return; }
+        if (reel.userId !== user.id) { sendError(req, res, ErrorCode.AUTHORIZATION, 'Not authorized'); return; }
         if (reel.status === 'PROCESSING') {
-            res.status(400).json({ status: 'ERROR', message: 'لا يمكن تعديل الفيديو أثناء المعالجة' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot edit a reel while it is processing.');
             return;
         }
 
@@ -444,10 +446,10 @@ router.patch('/:id', requireAuth, writeLimiter, moderateReelCaption, async (req:
             redisCacheService.del(`reel:${reelId}`),
         ]);
 
-        res.json({ status: 'SUCCESS', message: 'تم تحديث الفيديو بنجاح' });
+        res.json({ status: 'SUCCESS', message: 'Reel updated successfully' });
     } catch (error: any) {
         logger.error('Edit reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -464,24 +466,24 @@ router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Prom
             where: { clerkUserId: clerkUserId! },
             select: { id: true },
         });
-        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+        if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
         const reel = await prisma.reel.findUnique({
             where: { id: reelId },
             select: { id: true, userId: true, status: true, videoStoragePath: true, muxAssetId: true },
         });
 
-        if (!reel) { res.status(404).json({ status: 'ERROR', message: 'Reel not found' }); return; }
-        if (reel.userId !== user.id) { res.status(403).json({ status: 'ERROR', message: 'Not authorized' }); return; }
+        if (!reel) { sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found'); return; }
+        if (reel.userId !== user.id) { sendError(req, res, ErrorCode.AUTHORIZATION, 'Not authorized'); return; }
         if (reel.status !== 'FAILED') {
-            res.status(400).json({ status: 'ERROR', message: 'يمكن إعادة المحاولة فقط للفيديوهات الفاشلة' });
+            sendError(req, res, ErrorCode.VALIDATION, 'You can only retry failed reels.');
             return;
         }
         if (!reel.videoStoragePath) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'انتهت صلاحية الفيديو الأصلي (أكثر من 24 ساعة). يرجى رفع الفيديو من جديد.',
-            });
+            sendError(
+                req, res, ErrorCode.VALIDATION,
+                'The original video has expired (older than 24 hours). Please upload it again.',
+            );
             return;
         }
 
@@ -499,7 +501,7 @@ router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Prom
 
         const videoResponse = await fetch(signedUrl);
         if (!videoResponse.ok) {
-            res.status(502).json({ status: 'ERROR', message: 'فشل تحميل الفيديو الأصلي من التخزين' });
+            sendError(req, res, ErrorCode.EXTERNAL_SERVICE, 'Failed to fetch the original video from storage.');
             return;
         }
         const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
@@ -515,7 +517,7 @@ router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Prom
             body: videoBuffer,
         });
         if (!muxRes.ok) {
-            res.status(502).json({ status: 'ERROR', message: 'فشل رفع الفيديو إلى خادم المعالجة' });
+            sendError(req, res, ErrorCode.EXTERNAL_SERVICE, 'Failed to upload the video to the processing server.');
             return;
         }
 
@@ -524,10 +526,10 @@ router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Prom
             data: { status: 'PROCESSING', muxUploadId: uploadId, muxAssetId: null, muxPlaybackId: null, videoUrl: '' },
         });
 
-        res.json({ status: 'SUCCESS', message: 'جاري إعادة معالجة الفيديو', data: { reelId, muxUploadId: uploadId } });
+        res.json({ status: 'SUCCESS', message: 'Reprocessing the reel.', data: { reelId, muxUploadId: uploadId } });
     } catch (error: any) {
         logger.error('Retry reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -542,7 +544,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -553,7 +555,7 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -647,7 +649,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -711,11 +713,15 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
 
             // Send on first like OR every 10 likes
             if (likeCount === 1 || likeCount % 10 === 0) {
-                const likerName = liker?.displayName || liker?.username || 'شخص';
-                const title = likeCount === 1 ? '❤️ أعجب بمقطعك' : `❤️ ${likeCount} إعجاب على مقطعك`;
-                const message = likeCount === 1
-                    ? `${likerName} أعجب بمقطعك`
-                    : `${likerName} و${likeCount - 1} آخرين أعجبوا بمقطعك`;
+                const likerName = liker?.displayName || liker?.username || '';
+                const ownerLang = await getUserLanguage(reel.userId);
+                const titleKey = likeCount === 1 ? 'reelLikeTitle' : 'reelLikeTitleMany';
+                const bodyKey = likeCount === 1 ? 'reelLikeBody' : 'reelLikeBodyMany';
+                const title = renderPushTemplate(titleKey, ownerLang, { count: likeCount });
+                const message = renderPushTemplate(bodyKey, ownerLang, {
+                    user: likerName,
+                    others: Math.max(likeCount - 1, 0),
+                });
 
                 await enqueueSocialNotification({
                     userId: reel.userId,
@@ -773,7 +779,7 @@ router.delete('/:id/like', requireAuth, writeLimiter, async (req: Request, res: 
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -903,7 +909,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Get comments error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -924,7 +930,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
         const clerkUserId = req.auth?.userId;
 
         if (!content || content.trim().length === 0) {
-            res.status(400).json({ status: 'ERROR', message: 'Comment content is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Comment content is required');
             return;
         }
 
@@ -934,7 +940,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -953,15 +959,17 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
             });
 
             if (userRepliesCount >= COMMENT_LIMITS.MAX_REPLIES_PER_USER_PER_REEL) {
-                res.status(429).json({
-                    status: 'ERROR',
-                    message: 'وصلت للحد الأقصى من الردود (5) على هذا الفيديو',
-                    code: 'REPLY_LIMIT_REACHED',
-                    details: {
+                sendError(
+                    req,
+                    res,
+                    ErrorCode.RATE_LIMIT,
+                    'You have reached the maximum number of replies (5) on this reel',
+                    {
+                        code: 'REPLY_LIMIT_REACHED',
                         maxReplies: COMMENT_LIMITS.MAX_REPLIES_PER_USER_PER_REEL,
                         currentReplies: userRepliesCount,
-                    }
-                });
+                    },
+                );
                 return;
             }
         } else {
@@ -975,15 +983,17 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
             });
 
             if (userCommentsCount >= COMMENT_LIMITS.MAX_COMMENTS_PER_USER_PER_REEL) {
-                res.status(429).json({
-                    status: 'ERROR',
-                    message: 'وصلت للحد الأقصى من التعليقات (5) على هذا الفيديو',
-                    code: 'COMMENT_LIMIT_REACHED',
-                    details: {
+                sendError(
+                    req,
+                    res,
+                    ErrorCode.RATE_LIMIT,
+                    'You have reached the maximum number of comments (5) on this reel',
+                    {
+                        code: 'COMMENT_LIMIT_REACHED',
                         maxComments: COMMENT_LIMITS.MAX_COMMENTS_PER_USER_PER_REEL,
                         currentComments: userCommentsCount,
-                    }
-                });
+                    },
+                );
                 return;
             }
         }
@@ -996,7 +1006,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                 select: { id: true, userId: true, user: { select: { username: true } } }
             });
             if (!parentComment) {
-                res.status(404).json({ status: 'ERROR', message: 'Parent comment not found' });
+                sendError(req, res, ErrorCode.NOT_FOUND, 'Parent comment not found');
                 return;
             }
         }
@@ -1060,23 +1070,28 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                         skipDuplicates: true,
                     });
 
+                    const actorName = user.displayName || user.username;
+
                     // Fan-out notifications in parallel; the queue itself
                     // ensures delivery is async.
                     await Promise.all(
-                        targets.map((mentionedUser) =>
-                            enqueueSocialNotification({
+                        targets.map(async (mentionedUser) => {
+                            const lang = await getUserLanguage(mentionedUser.id);
+                            return enqueueSocialNotification({
                                 userId: mentionedUser.id,
                                 actorId: user.id,
-                                title: 'تم الإشارة إليك في تعليق',
-                                message: `قام ${user.displayName || user.username} بالإشارة إليك في تعليق`,
+                                title: renderPushTemplate('reelMentionTitle', lang),
+                                message: renderPushTemplate('reelMentionBody', lang, {
+                                    user: actorName,
+                                }),
                                 type: 'MENTION',
                                 data: {
                                     reelId: idStr,
                                     commentId: comment.id,
                                     parentCommentId: parentId || null,
                                 },
-                            }),
-                        ),
+                            });
+                        }),
                     );
                 }
             }
@@ -1102,11 +1117,17 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                 try {
                     if (parentComment && parentComment.userId !== user.id) {
                         // Reply notification → parent author
+                        const lang = await getUserLanguage(parentComment.userId);
+                        const actorName = user.displayName || user.username;
+                        const snippet = `${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`;
                         await enqueueSocialNotification({
                             userId: parentComment.userId,
                             actorId: user.id,
-                            title: 'رد جديد',
-                            message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
+                            title: renderPushTemplate('reelReplyTitle', lang),
+                            message: renderPushTemplate('reelReplyBody', lang, {
+                                user: actorName,
+                                content: snippet,
+                            }),
                             type: 'REPLY',
                             data: {
                                 reelId: idStr,
@@ -1142,8 +1163,18 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                         await enqueueSocialNotification({
                             userId: reel.userId,
                             actorId: user.id,
-                            title: 'تعليق جديد',
-                            message: `${user.displayName || user.username}: ${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
+                            title: renderPushTemplate(
+                                'reelCommentTitle',
+                                await getUserLanguage(reel.userId),
+                            ),
+                            message: renderPushTemplate(
+                                'reelCommentBody',
+                                await getUserLanguage(reel.userId),
+                                {
+                                    user: user.displayName || user.username,
+                                    content: `${content.substring(0, 60)}${content.length > 60 ? '...' : ''}`,
+                                },
+                            ),
                             type: 'COMMENT',
                             data: {
                                 reelId: idStr,
@@ -1189,7 +1220,7 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
         logger.error('Add comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1225,7 +1256,7 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
 
         res.json({ status: 'SUCCESS', data: { replies } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1259,7 +1290,7 @@ router.get('/search/users', requireAuth, async (req: Request, res: Response): Pr
 
         res.json({ status: 'SUCCESS', data: { users } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1403,7 +1434,7 @@ router.get('/search', requireAuth, lenientLimiter, async (req: Request, res: Res
         res.json({ status: 'SUCCESS', data: results });
     } catch (error: any) {
         logger.error('Search reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1425,12 +1456,12 @@ router.get('/trending-hashtags', async (req: Request, res: Response): Promise<vo
 
         res.json({ status: 'SUCCESS', data: { hashtags } });
     } catch (error: any) {
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 // ============================================
-// COMMENT LIKES (لايك على التعليقات والردود)
+// COMMENT LIKES (likes on comments and replies)
 // ============================================
 
 /**
@@ -1449,7 +1480,7 @@ router.post('/comments/:commentId/like', requireAuth, writeLimiter, async (req: 
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1460,7 +1491,7 @@ router.post('/comments/:commentId/like', requireAuth, writeLimiter, async (req: 
         });
 
         if (!comment) {
-            res.status(404).json({ status: 'ERROR', message: 'Comment not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Comment not found');
             return;
         }
 
@@ -1484,25 +1515,31 @@ router.post('/comments/:commentId/like', requireAuth, writeLimiter, async (req: 
         // Notify comment owner (if not self) — non-blocking
         if (comment.userId !== user.id) {
             setImmediate(() => {
-                enqueueSocialNotification({
-                    userId: comment.userId,
-                    actorId: user.id,
-                    title: '❤️ إعجاب على تعليقك',
-                    message: `أعجب ${user.displayName || user.username} بتعليقك`,
-                    type: 'COMMENT_LIKE',
-                    data: {
-                        commentId: commentIdStr,
-                        reelId: comment.reelId,
-                        screen: '/(tabs)/reels',
-                    },
-                }).catch((e) => logger.warn('[comment-like] notify failed:', e?.message));
+                (async () => {
+                    const lang = await getUserLanguage(comment.userId);
+                    const actorName = user.displayName || user.username;
+                    return enqueueSocialNotification({
+                        userId: comment.userId,
+                        actorId: user.id,
+                        title: renderPushTemplate('reelCommentLikeTitle', lang),
+                        message: renderPushTemplate('reelCommentLikeBody', lang, {
+                            user: actorName,
+                        }),
+                        type: 'COMMENT_LIKE',
+                        data: {
+                            commentId: commentIdStr,
+                            reelId: comment.reelId,
+                            screen: '/(tabs)/reels',
+                        },
+                    });
+                })().catch((e) => logger.warn('[comment-like] notify failed:', e?.message));
             });
         }
 
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Like comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1522,7 +1559,7 @@ router.delete('/comments/:commentId/like', requireAuth, writeLimiter, async (req
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1535,7 +1572,7 @@ router.delete('/comments/:commentId/like', requireAuth, writeLimiter, async (req
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Unlike comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1555,7 +1592,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1566,12 +1603,12 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
         });
 
         if (!comment) {
-            res.status(404).json({ status: 'ERROR', message: 'Comment not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Comment not found');
             return;
         }
 
         if (comment.userId !== user.id) {
-            res.status(403).json({ status: 'ERROR', message: 'You can only delete your own comments' });
+            sendError(req, res, ErrorCode.AUTHORIZATION, 'You can only delete your own comments');
             return;
         }
 
@@ -1581,7 +1618,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
             data: {
                 isDeleted: true,
                 deletedAt: new Date(),
-                content: '[تم حذف هذا التعليق]'
+                content: '[deleted]'
             }
         });
 
@@ -1601,7 +1638,7 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
         res.json({ status: 'SUCCESS', message: 'Comment deleted successfully' });
     } catch (error: any) {
         logger.error('Delete comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1617,7 +1654,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         const clerkUserId = req.auth?.userId;
 
         if (!reason || reason.trim().length === 0) {
-            res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Report reason is required');
             return;
         }
 
@@ -1627,7 +1664,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1638,13 +1675,13 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         });
 
         if (!comment) {
-            res.status(404).json({ status: 'ERROR', message: 'Comment not found or already deleted' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Comment not found or already deleted');
             return;
         }
 
         // Can't report own comments
         if (comment.userId === user.id) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot report your own comment' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot report your own comment');
             return;
         }
 
@@ -1656,7 +1693,7 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         });
 
         if (isDuplicate) {
-            res.status(400).json({ status: 'ERROR', message: 'تم الإبلاغ عن هذا التعليق مسبقاً. يمكنك الإبلاغ مرة أخرى بعد 24 ساعة' });
+            sendError(req, res, ErrorCode.VALIDATION, 'You have already reported this comment. You can report it again after 24 hours');
             return;
         }
 
@@ -1666,6 +1703,10 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
             'سبام أو إعلانات': 'SPAM',
             'خطاب كراهية': 'HARASSMENT',
             'أخرى': 'OTHER',
+            INAPPROPRIATE: 'INAPPROPRIATE',
+            SPAM: 'SPAM',
+            HARASSMENT: 'HARASSMENT',
+            OTHER: 'OTHER',
         };
 
         const reportType = reportTypeMap[reason] || 'OTHER';
@@ -1706,15 +1747,15 @@ router.post('/comments/:commentId/report', requireAuth, strictLimiter, async (re
         const { AuditService } = await import('../services/audit.service');
         await AuditService.logReportCreated(report.id, user.id, commentIdStr, 'COMMENT' as any);
 
-        res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
+        res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
     } catch (error: any) {
         logger.error('Report comment error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 // ============================================
-// SAVED REELS (الفيديوهات المحفوظة)
+// SAVED REELS (saved videos)
 // ============================================
 
 /**
@@ -1733,7 +1774,7 @@ router.post('/:id/save', requireAuth, writeLimiter, async (req: Request, res: Re
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1744,7 +1785,7 @@ router.post('/:id/save', requireAuth, writeLimiter, async (req: Request, res: Re
         });
 
         if (!reel) {
-            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
             return;
         }
 
@@ -1765,7 +1806,7 @@ router.post('/:id/save', requireAuth, writeLimiter, async (req: Request, res: Re
         res.json({ status: 'SUCCESS', data: { saved: true } });
     } catch (error: any) {
         logger.error('Save reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1785,7 +1826,7 @@ router.delete('/:id/save', requireAuth, writeLimiter, async (req: Request, res: 
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1796,7 +1837,7 @@ router.delete('/:id/save', requireAuth, writeLimiter, async (req: Request, res: 
         res.json({ status: 'SUCCESS', data: { saved: false } });
     } catch (error: any) {
         logger.error('Unsave reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1816,7 +1857,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1871,12 +1912,12 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Get saved reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 // ============================================
-// SHARE TRACKING (تتبع المشاركات)
+// SHARE TRACKING (share counters)
 // ============================================
 
 /**
@@ -1896,7 +1937,7 @@ router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: R
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1907,7 +1948,7 @@ router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: R
         });
 
         if (!reel) {
-            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
             return;
         }
 
@@ -1966,13 +2007,17 @@ router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: R
                 where: { id: user.id },
                 select: { username: true, displayName: true }
             });
-            const sharerName = sharer?.displayName || sharer?.username || 'شخص';
-            
+            const sharerName = sharer?.displayName || sharer?.username || '';
+            const ownerLang = await getUserLanguage(reel.userId);
+
             await enqueueSocialNotification({
                 userId: reel.userId,
                 actorId: user.id,
-                title: '🔗 شاركوا مقطعك!',
-                message: `${sharerName} شارك مقطعك على ${platform || 'وسائل التواصل'}`,
+                title: renderPushTemplate('reelShareTitle', ownerLang),
+                message: renderPushTemplate('reelShareBody', ownerLang, {
+                    user: sharerName,
+                    platform: platform || 'social',
+                }),
                 type: 'SHARE',
                 data: { reelId: idStr, platform, screen: '/(tabs)/reels' }
             });
@@ -1982,12 +2027,12 @@ router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: R
         res.json({ status: 'SUCCESS', data: { sharesCount: updatedReel.sharesCount } });
     } catch (error: any) {
         logger.error('Share reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 // ============================================
-// REPORT REEL (الإبلاغ عن فيديو)
+// REPORT REEL (report content)
 // ============================================
 
 /**
@@ -2002,7 +2047,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         const clerkUserId = req.auth?.userId;
 
         if (!reason || reason.trim().length === 0) {
-            res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Report reason is required');
             return;
         }
 
@@ -2012,7 +2057,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -2023,7 +2068,7 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         });
 
         if (!reel) {
-            res.status(404).json({ status: 'ERROR', message: 'Reel not found or already deleted' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found or already deleted');
             return;
         }
 
@@ -2035,11 +2080,12 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         });
 
         if (isDuplicate) {
-            res.status(400).json({ status: 'ERROR', message: 'تم الإبلاغ عن هذا الفيديو مسبقاً. يمكنك الإبلاغ مرة أخرى بعد 24 ساعة' });
+            sendError(req, res, ErrorCode.VALIDATION, 'You have already reported this reel. You can report it again after 24 hours');
             return;
         }
 
-        // Map Arabic reasons to ReportType enum
+        // Map reasons to ReportType enum (accepts both Arabic legacy
+        // strings and the canonical English enum values).
         const reportTypeMap: Record<string, string> = {
             'محتوى غير لائق': 'INAPPROPRIATE',
             'سبام أو إعلانات': 'SPAM',
@@ -2049,6 +2095,12 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
             'محتوى للبالغين': 'INAPPROPRIATE',
             'معلومات مضللة': 'FAKE_INFO',
             'أخرى': 'OTHER',
+            INAPPROPRIATE: 'INAPPROPRIATE',
+            SPAM: 'SPAM',
+            HARASSMENT: 'HARASSMENT',
+            COPYRIGHT: 'COPYRIGHT',
+            FAKE_INFO: 'FAKE_INFO',
+            OTHER: 'OTHER',
         };
 
         const reportType = reportTypeMap[reason] || type || 'OTHER';
@@ -2101,21 +2153,20 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
         const { AuditService, AuditTargetType } = await import('../services/audit.service');
         await AuditService.logReportCreated(report.id, user.id, idStr, AuditTargetType.REEL);
 
-        res.json({ status: 'SUCCESS', message: 'تم إرسال البلاغ بنجاح' });
+        res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
     } catch (error: any) {
         logger.error('Report reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 // ============================================
-// RANKINGS SYSTEM (نظام الرانكينج)
+// RANKINGS SYSTEM
 // ============================================
 
 /**
  * GET /api/reels/rankings/top-views
  * Get top 10 reels by views in the last 3 days
- * الفيديوهات الأكثر مشاهدة خلال 3 أيام
  */
 router.get('/rankings/top-views', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2186,14 +2237,13 @@ router.get('/rankings/top-views', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }
         });
     } catch (error: any) {
         logger.error('Get top views rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * GET /api/reels/rankings/top-shares
  * Get top 10 reels by shares in the last 3 days
- * الفيديوهات الأكثر مشاركة خلال 3 أيام
  */
 router.get('/rankings/top-shares', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2267,14 +2317,13 @@ router.get('/rankings/top-shares', responseCacheMiddleware({ ttl: 5 * 60 * 1000 
         });
     } catch (error: any) {
         logger.error('Get top shares rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * GET /api/reels/rankings/top-predictions
  * Get top 10 users by correct predictions
- * أفضل المتوقعين (أكثر التوقعات الصحيحة)
  */
 router.get('/rankings/top-predictions', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2358,14 +2407,13 @@ router.get('/rankings/top-predictions', responseCacheMiddleware({ ttl: 5 * 60 * 
         });
     } catch (error: any) {
         logger.error('Get top predictions rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * GET /api/reels/rankings/top-commenters
  * Get top 10 users by comments count in the last 3 days
- * أكثر المستخدمين تعليقاً خلال 3 أيام
  */
 router.get('/rankings/top-commenters', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2433,14 +2481,13 @@ router.get('/rankings/top-commenters', responseCacheMiddleware({ ttl: 5 * 60 * 1
         });
     } catch (error: any) {
         logger.error('Get top commenters rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * GET /api/reels/rankings/all
  * Get all rankings in one request (for efficiency)
- * كل الرانكينج في طلب واحد
  */
 router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2606,7 +2653,7 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
         });
     } catch (error: any) {
         logger.error('Get all rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -2722,14 +2769,13 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
         });
     } catch (error: any) {
         logger.error('Get top players error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * POST /api/reels/rankings/players/:userId/vote
  * Vote for a player (like or dislike)
- * التصويت للاعب
  */
 router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2739,7 +2785,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
         const clerkUserId = req.auth?.userId;
 
         if (!voteType || !['up', 'down'].includes(voteType)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid vote type' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid vote type');
             return;
         }
 
@@ -2749,7 +2795,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
         });
 
         if (!voter) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -2760,13 +2806,13 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
         });
 
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Player not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Player not found');
             return;
         }
 
         // Can't vote for yourself
         if (voter.id === userIdStr) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot vote for yourself' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot vote for yourself');
             return;
         }
 
@@ -2826,7 +2872,7 @@ router.post('/rankings/players/:userId/vote', requireAuth, async (req: Request, 
         });
     } catch (error: any) {
         logger.error('Vote for player error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -2877,21 +2923,20 @@ router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, 
         });
     } catch (error: any) {
         logger.error('Get player votes error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * POST /api/reels/rankings/award-badges
  * Award badges to top ranked users (called by cron job or admin)
- * منح الميداليات للمصنفين
  */
 router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { category, period = '3_days' } = req.body;
         
         if (!category || !['views', 'shares', 'comments', 'predictions'].includes(category)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid category' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid category');
             return;
         }
 
@@ -2959,11 +3004,21 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
 
             // Create notification for top 3
             if (user.rank <= 3) {
-                const medalName = user.rank === 1 ? 'ذهبية 🥇' : user.rank === 2 ? 'فضية 🥈' : 'برونزية 🥉';
+                const lang = await getUserLanguage(user.userId);
+                const medalKey =
+                    user.rank === 1
+                        ? 'medalGoldName'
+                        : user.rank === 2
+                            ? 'medalSilverName'
+                            : 'medalBronzeName';
+                const medalName = renderPushTemplate(medalKey, lang);
                 await enqueueNotification({
                     userId: user.userId,
-                    title: 'مبروك! حصلت على ميدالية',
-                    message: `حصلت على ميدالية ${medalName} في تصنيف ${category}`,
+                    title: renderPushTemplate('medalAwardedTitle', lang),
+                    message: renderPushTemplate('medalAwardedBody', lang, {
+                        medal: medalName,
+                        category,
+                    }),
                     type: 'ACHIEVEMENT',
                     data: { badgeType, category, rank: user.rank },
                 });
@@ -2976,14 +3031,13 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
         });
     } catch (error: any) {
         logger.error('Award badges error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * POST /api/reels/rankings/award-team-of-month
  * Award team of month badges and check for diamond streak
- * منح ميداليات تشكيلة الشهر وفحص الـ Diamond
  */
 router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -3098,14 +3152,18 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
                                 userId: user.userId,
                                 amount: 1000,
                                 type: 'ACHIEVEMENT',
-                                description: 'هدية ميدالية الدايموند - 3 شهور متتالية في تشكيلة الشهر'
+                                description: renderPushTemplate(
+                                    'diamondCoinTransactionDescription',
+                                    'en',
+                                ),
                             }
                         });
 
+                        const diamondLang = await getUserLanguage(user.userId);
                         await enqueueNotification({
                             userId: user.userId,
-                            title: '💎 مبروك! حصلت على ميدالية الدايموند!',
-                            message: 'أنت بطل! ظهرت في تشكيلة الشهر 3 شهور متتالية. حصلت على 1000 كوين هدية!',
+                            title: renderPushTemplate('diamondAwardedTitle', diamondLang),
+                            message: renderPushTemplate('diamondAwardedBody', diamondLang),
                             type: 'ACHIEVEMENT',
                             data: { badgeType: 'diamond', coinsAwarded: 1000 },
                         });
@@ -3135,11 +3193,20 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
 
             // Notification for top 3
             if (rank <= 3) {
-                const medalName = rank === 1 ? 'ذهبية 🥇' : rank === 2 ? 'فضية 🥈' : 'برونزية 🥉';
+                const lang = await getUserLanguage(user.userId);
+                const medalKey =
+                    rank === 1
+                        ? 'medalGoldName'
+                        : rank === 2
+                            ? 'medalSilverName'
+                            : 'medalBronzeName';
+                const medalName = renderPushTemplate(medalKey, lang);
                 await enqueueNotification({
                     userId: user.userId,
-                    title: 'مبروك! أنت في تشكيلة الشهر',
-                    message: `حصلت على ميدالية ${medalName} في تشكيلة الشهر`,
+                    title: renderPushTemplate('teamOfMonthMedalTitle', lang),
+                    message: renderPushTemplate('teamOfMonthMedalBody', lang, {
+                        medal: medalName,
+                    }),
                     type: 'ACHIEVEMENT',
                     data: { badgeType, category: 'team_of_month', rank },
                 });
@@ -3156,20 +3223,19 @@ router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, r
         });
     } catch (error: any) {
         logger.error('Award team of month error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * GET /api/reels/rankings/user-rank
  * Get current user's rank in all categories
- * جلب رتبة المستخدم الحالي في كل الفئات
  */
 router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -3180,7 +3246,7 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -3252,14 +3318,13 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
         });
     } catch (error: any) {
         logger.error('Get user rank error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
 /**
  * GET /api/reels/rankings/user/:userId/badges
  * Get all badges for a user
- * جلب كل ميداليات المستخدم
  */
 router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -3304,7 +3369,7 @@ router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 6
         });
     } catch (error: any) {
         logger.error('Get user badges error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -3470,7 +3535,7 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
         res.json(responseData);
     } catch (error: any) {
         logger.error('Get reels feed error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -3534,7 +3599,7 @@ router.get('/trending', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get trending reels error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -3600,7 +3665,7 @@ router.get('/rankings', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get reels rankings error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -3619,7 +3684,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
         });
 
         if (!reel || reel.isDeleted) {
-            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
             return;
         }
 
@@ -3629,7 +3694,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
             : null;
 
         if (!currentUser || currentUser.id !== reel.userId) {
-            res.status(403).json({ status: 'ERROR', message: 'Access denied' });
+            sendError(req, res, ErrorCode.AUTHORIZATION, 'Access denied');
             return;
         }
 
@@ -3648,7 +3713,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
 
         const storagePath = reel.processedVideoKey || reel.videoStoragePath;
         if (!storagePath) {
-            res.status(404).json({ status: 'ERROR', message: 'Video file not found in storage' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Video file not found in storage');
             return;
         }
 
@@ -3657,7 +3722,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
             signedUrl = await r2MediaStorage.generateSignedUrl(storagePath, 3600);
         } catch (signErr: any) {
             logger.error('[reels/signed-url] AWS SDK error:', signErr?.message);
-            res.status(500).json({ status: 'ERROR', message: 'Failed to generate signed URL' });
+            sendError(req, res, ErrorCode.INTERNAL, 'Failed to generate signed URL');
             return;
         }
 
@@ -3667,7 +3732,7 @@ router.get('/:id/signed-url', requireAuth, async (req: Request, res: Response): 
         });
     } catch (error: any) {
         logger.error('Get signed URL error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -3686,19 +3751,23 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         const MAX_REEL_DELETES = 2;
         if (user.reelDeleteCount >= MAX_REEL_DELETES) {
-            res.status(429).json({
-                status: 'ERROR',
-                code: 'MAX_DELETES_REACHED',
-                message: 'لقد وصلت للحد الأقصى من مسح الفيديوهات (2 مرات)',
-                deletesUsed: user.reelDeleteCount,
-                maxDeletes: MAX_REEL_DELETES,
-            });
+            sendError(
+                req,
+                res,
+                ErrorCode.RATE_LIMIT,
+                'You have reached the maximum number of reel deletions (2)',
+                {
+                    code: 'MAX_DELETES_REACHED',
+                    deletesUsed: user.reelDeleteCount,
+                    maxDeletes: MAX_REEL_DELETES,
+                },
+            );
             return;
         }
 
@@ -3708,12 +3777,12 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
         });
 
         if (!reel) {
-            res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
             return;
         }
 
         if (reel.userId !== user.id) {
-            res.status(403).json({ status: 'ERROR', message: 'Not authorized to delete this reel' });
+            sendError(req, res, ErrorCode.AUTHORIZATION, 'Not authorized to delete this reel');
             return;
         }
 
@@ -3758,7 +3827,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
 
         res.json({
             status: 'SUCCESS',
-            message: 'تم حذف الفيديو بنجاح',
+            message: 'Reel deleted successfully',
             data: {
                 deletesUsed: user.reelDeleteCount + 1,
                 remainingDeletes: MAX_REEL_DELETES - (user.reelDeleteCount + 1),
@@ -3768,7 +3837,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
         });
     } catch (error: any) {
         logger.error('Delete reel error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

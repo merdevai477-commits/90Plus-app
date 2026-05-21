@@ -10,6 +10,7 @@ import prisma from '../lib/prisma';
 import { r2MediaStorage, R2MediaBucket } from './r2-media-storage.service';
 import { logger } from '../utils/logger';
 import { NotificationService } from './notification.service';
+import { renderPushTemplate, getUserLanguage } from './push-templates.service';
 
 // Lazy import to avoid circular dependency
 async function getMuxDeleteAsset(): Promise<(assetId: string) => Promise<void>> {
@@ -187,10 +188,11 @@ export async function runStuckReelCleanup(): Promise<void> {
       }
 
       // Notify user
+      const lang = await getUserLanguage(reel.userId);
       await NotificationService.createNotification({
         userId: reel.userId,
-        title: '❌ فشل رفع الفيديو',
-        message: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+        title: renderPushTemplate('videoFailedTitle', lang),
+        message: renderPushTemplate('videoFailedBody', lang),
         type: 'VIDEO_PROCESSED',
         data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'FAILED' },
       }).catch((err: any) =>

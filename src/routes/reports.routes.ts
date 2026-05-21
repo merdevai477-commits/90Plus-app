@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { strictLimiter } from '../middleware/rateLimit.middleware';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -20,20 +21,14 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
     const { reason, additionalInfo } = req.body;
     const clerkUserId = req.auth?.userId;
 
-    if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-      return;
-    }
+    if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
     const user = await prisma.user.findUnique({
       where: { clerkUserId },
       select: { id: true },
     });
 
-    if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
-      return;
-    }
+    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
     // Get reel owner
     const reel = await prisma.reel.findUnique({
@@ -41,10 +36,7 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
       select: { userId: true },
     });
 
-    if (!reel) {
-      res.status(404).json({ status: 'ERROR', message: 'Reel not found' });
-      return;
-    }
+    if (!reel) { sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found'); return; }
 
     // Map reason to ReportType
     const reasonToType: Record<string, string> = {
@@ -71,7 +63,7 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
       select: { id: true },
     });
     if (existing) {
-      res.status(409).json({ status: 'ERROR', message: 'You have already reported this content recently' });
+      sendError(req, res, ErrorCode.CONFLICT, 'You have already reported this content recently.');
       return;
     }
 
@@ -88,16 +80,10 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
 
     logger.info(`User ${user.id} reported reel ${reelIdStr} for: ${reason}`);
 
-    res.json({
-      status: 'SUCCESS',
-      message: 'Report submitted successfully',
-    });
+    res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {
     logger.error('Report reel error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Internal server error',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 
@@ -109,20 +95,14 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
     const { reason, additionalInfo } = req.body;
     const clerkUserId = req.auth?.userId;
 
-    if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-      return;
-    }
+    if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
     const user = await prisma.user.findUnique({
       where: { clerkUserId },
       select: { id: true },
     });
 
-    if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
-      return;
-    }
+    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
     // Get comment owner
     const comment = await prisma.comment.findUnique({
@@ -130,10 +110,7 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
       select: { userId: true },
     });
 
-    if (!comment) {
-      res.status(404).json({ status: 'ERROR', message: 'Comment not found' });
-      return;
-    }
+    if (!comment) { sendError(req, res, ErrorCode.NOT_FOUND, 'Comment not found'); return; }
 
     const reasonToType: Record<string, string> = {
       'spam': 'SPAM',
@@ -158,7 +135,7 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
       select: { id: true },
     });
     if (existing) {
-      res.status(409).json({ status: 'ERROR', message: 'You have already reported this content recently' });
+      sendError(req, res, ErrorCode.CONFLICT, 'You have already reported this content recently.');
       return;
     }
 
@@ -175,16 +152,10 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
 
     logger.info(`User ${user.id} reported comment ${commentIdStr} for: ${reason}`);
 
-    res.json({
-      status: 'SUCCESS',
-      message: 'Report submitted successfully',
-    });
+    res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {
     logger.error('Report comment error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Internal server error',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 
@@ -195,13 +166,10 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
     const { reason, additionalInfo } = req.body;
     const clerkUserId = req.auth?.userId;
 
-    if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-      return;
-    }
+    if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
     if (!reason || String(reason).trim().length === 0) {
-      res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+      sendError(req, res, ErrorCode.VALIDATION, 'Report reason is required');
       return;
     }
 
@@ -210,13 +178,10 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
       select: { id: true },
     });
 
-    if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
-      return;
-    }
+    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
     if (user.id === targetUserId) {
-      res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+      sendError(req, res, ErrorCode.VALIDATION, 'Cannot report yourself');
       return;
     }
 
@@ -225,10 +190,7 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
       select: { id: true },
     });
 
-    if (!target) {
-      res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
-      return;
-    }
+    if (!target) { sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found'); return; }
 
     // Duplicate detection: allow re-report after 24 hours only
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -241,7 +203,7 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
       select: { id: true },
     });
     if (existing) {
-      res.status(409).json({ status: 'ERROR', message: 'You have already reported this content recently' });
+      sendError(req, res, ErrorCode.CONFLICT, 'You have already reported this content recently.');
       return;
     }
 
@@ -267,16 +229,10 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
 
     logger.info(`User ${user.id} reported user ${targetUserId} for: ${reason}`);
 
-    res.json({
-      status: 'SUCCESS',
-      message: 'Report submitted successfully',
-    });
+    res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {
     logger.error('Report user error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Internal server error',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 
@@ -285,20 +241,14 @@ router.get('/my-reports', requireAuth, async (req: Request, res: Response): Prom
   try {
     const clerkUserId = req.auth?.userId;
 
-    if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-      return;
-    }
+    if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
     const user = await prisma.user.findUnique({
       where: { clerkUserId },
       select: { id: true },
     });
 
-    if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
-      return;
-    }
+    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
     // Get user's reports
     const reports = await prisma.report.findMany({
@@ -328,24 +278,18 @@ router.get('/my-reports', requireAuth, async (req: Request, res: Response): Prom
       reason: report.reason,
       status: report.status,
       createdAt: report.createdAt,
-      contentType: report.reportedReelId 
-        ? 'reel' 
-        : report.reportedCommentId 
-        ? 'comment' 
+      contentType: report.reportedReelId
+        ? 'reel'
+        : report.reportedCommentId
+        ? 'comment'
         : 'user',
       contentId: report.reportedReelId || report.reportedCommentId || report.reportedUserId || '',
     }));
 
-    res.json({
-      status: 'SUCCESS',
-      reports: formattedReports,
-    });
+    res.json({ status: 'SUCCESS', reports: formattedReports });
   } catch (error: any) {
     logger.error('Get my reports error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Internal server error',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 

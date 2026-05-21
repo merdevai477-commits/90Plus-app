@@ -10,6 +10,8 @@ import { WebSocketService } from '../services/websocket.service';
 import { clearResponseCache, responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import { enqueueSocialNotification } from '../queues/notification.queue';
 import { getOrSetWithLock } from '../lib/cache-mutex';
+import { ErrorCode, sendError } from '../constants/errors';
+import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 
 const router = Router();
 
@@ -49,11 +51,7 @@ router.get(
 
         if (!clerkUserId) {
             logger.warn('[/clerk/me] ⚠️ No clerkUserId in request');
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-                code: 'E002',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized', { code: 'E002' });
             return;
         }
 
@@ -80,21 +78,13 @@ router.get(
                 error: dbError.message,
                 code: dbError.code,
             });
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'Database error while loading user. Please try again.',
-                code: 'E009',
-            });
+            sendError(req, res, ErrorCode.INTERNAL, 'Database error while loading user. Please try again.', { code: 'E009' });
             return;
         }
 
         if (!user) {
             logger.error(`[/clerk/me] ❌ Failed to find or create user: ${clerkUserId}`);
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'Failed to load user profile. Please try logging out and back in.',
-                code: 'E009',
-            });
+            sendError(req, res, ErrorCode.INTERNAL, 'Failed to load user profile. Please try logging out and back in.', { code: 'E009' });
             return;
         }
 
@@ -137,11 +127,7 @@ router.get(
         res.json({ status: 'SUCCESS', data: { user: userData } });
     } catch (error: any) {
         logger.error('[/clerk/me] ❌ Unexpected error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error',
-            code: 'E010',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error', { code: 'E010' });
     }
 });
 
@@ -154,10 +140,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -179,11 +162,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
         // Light validation for the extra fields (mirrors /card-profile)
         const validPositions = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'];
         if (position && !validPositions.includes(position)) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Invalid position',
-                code: 'E001',
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid position', { code: 'E001' });
             return;
         }
 
@@ -191,10 +170,12 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
         if (username) {
             const usernameRegex = /^[a-z0-9_]+$/;
             if (!usernameRegex.test(username)) {
-                res.status(400).json({
-                    status: 'ERROR',
-                    message: 'Username must contain only lowercase letters, numbers, and underscore',
-                });
+                sendError(
+                    req,
+                    res,
+                    ErrorCode.VALIDATION,
+                    'Username must contain only lowercase letters, numbers, and underscore',
+                );
                 return;
             }
 
@@ -209,15 +190,20 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
                     
                     if (daysSinceLastChange < 15) {
                         const daysRemaining = 15 - daysSinceLastChange;
-                        res.status(400).json({
-                            status: 'ERROR',
-                            message: `يمكنك تغيير اسم المستخدم بعد ${daysRemaining} يوم`,
-                            code: 'USERNAME_CHANGE_RESTRICTED',
-                            data: {
+                        sendError(
+                            req,
+                            res,
+                            ErrorCode.RATE_LIMIT,
+                            `You can change your username in ${daysRemaining} day(s)`,
+                            {
+                                code: 'USERNAME_CHANGE_RESTRICTED',
                                 daysRemaining,
-                                nextAllowedChange: new Date(existingUser.lastUsernameChange.getTime() + (15 * 24 * 60 * 60 * 1000))
-                            }
-                        });
+                                nextAllowedChange: new Date(
+                                    existingUser.lastUsernameChange.getTime() +
+                                        15 * 24 * 60 * 60 * 1000,
+                                ),
+                            },
+                        );
                         return;
                     }
                 }
@@ -226,10 +212,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
                     where: { username },
                 });
                 if (userWithUsername) {
-                    res.status(400).json({
-                        status: 'ERROR',
-                        message: 'Username already taken',
-                    });
+                    sendError(req, res, ErrorCode.VALIDATION, 'Username already taken');
                     return;
                 }
             }
@@ -320,10 +303,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
         });
     } catch (error: any) {
         logger.error('Update profile error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -336,10 +316,7 @@ router.post('/preferences', requireAuth, async (req: Request, res: Response): Pr
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -405,10 +382,7 @@ router.post('/preferences', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Save preferences error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -421,10 +395,7 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -433,19 +404,13 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
         // Validate fields
         const validPositions = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'];
         if (position && !validPositions.includes(position)) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Invalid position',
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid position');
             return;
         }
 
         const validFeet = ['R', 'L', 'B'];
         if (preferredFoot && !validFeet.includes(preferredFoot)) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Invalid preferred foot (R, L, or B)',
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid preferred foot (R, L, or B)');
             return;
         }
 
@@ -533,10 +498,7 @@ router.put('/card-profile', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Update card profile error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -549,10 +511,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -565,10 +524,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Sync user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -593,7 +549,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
         const searchOffset = Math.max(parseInt(offset as string) || 0, 0);
 
         if (!sanitized || sanitized.length < 2) {
-            res.status(400).json({ status: 'ERROR', error: 'Search query too short' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Search query too short');
             return;
         }
 
@@ -660,10 +616,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
         res.json(responseData);
     } catch (error: any) {
         logger.error('Search users error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -680,11 +633,7 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
 
         if (!username) {
             logger.warn('[/clerk/user/:username] ⚠️ No username provided');
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Username is required',
-                code: 'E001',
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'Username is required', { code: 'E001' });
             return;
         }
 
@@ -726,11 +675,7 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
 
         if (!user) {
             logger.warn(`[/clerk/user/:username] ⚠️ User not found: ${username}`);
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found',
-                code: 'E004',
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'E004' });
             return;
         }
 
@@ -787,11 +732,7 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
         });
     } catch (error: any) {
         logger.error('[/clerk/user/:username] ❌ Error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error',
-            code: 'E010',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error', { code: 'E010' });
     }
 });
 
@@ -805,7 +746,7 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -816,7 +757,7 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -827,13 +768,13 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         });
 
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found');
             return;
         }
 
         // Can't follow yourself
         if (currentUser.id === targetUser.id) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot follow yourself');
             return;
         }
 
@@ -844,7 +785,7 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
         });
 
         if (followingCount >= 5000) {
-            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            sendError(req, res, ErrorCode.VALIDATION, 'FOLLOWING_LIMIT_REACHED');
             return;
         }
 
@@ -858,18 +799,21 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
             });
         } catch (createError: any) {
             if (createError.code === 'P2002') {
-                res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+                sendError(req, res, ErrorCode.VALIDATION, 'Already following this user');
                 return;
             }
             throw createError;
         }
 
         // Create notification asynchronously (off request path)
+        const followerLang = await getUserLanguage(targetUser.id);
         await enqueueSocialNotification({
             userId: targetUser.id,
             actorId: currentUser.id,
-            title: 'متابع جديد',
-            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
+            title: renderPushTemplate('newFollowerTitle', followerLang),
+            message: renderPushTemplate('newFollowerBody', followerLang, {
+                user: currentUser.displayName || currentUser.username,
+            }),
             type: 'FOLLOW',
             data: { followerId: currentUser.id },
         });
@@ -907,14 +851,14 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
     } catch (error: any) {
         logger.error('Follow error:', error);
         if (error?.message === 'FOLLOWING_LIMIT_REACHED') {
-            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            sendError(req, res, ErrorCode.VALIDATION, 'FOLLOWING_LIMIT_REACHED');
             return;
         }
         if (error?.message === 'ALREADY_FOLLOWING') {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Already following this user');
             return;
         }
-        res.status(500).json({ status: 'ERROR', message: error.message || 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -928,7 +872,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -939,7 +883,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -950,7 +894,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
         });
 
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found');
             return;
         }
 
@@ -996,10 +940,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
         });
     } catch (error: any) {
         logger.error('Unfollow error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1017,10 +958,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
 
         if (!username) {
             logger.warn('[GET /user/:username/reels] ⚠️ No username provided');
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Username is required',
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'Username is required');
             return;
         }
 
@@ -1031,10 +969,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
         });
 
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found',
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1109,10 +1044,7 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
         });
     } catch (error: any) {
         logger.error('Get user reels error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1125,7 +1057,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -1143,7 +1075,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1157,10 +1089,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         });
     } catch (error: any) {
         logger.error('Get stats error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1174,7 +1103,7 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
         const clerkUserId = req.auth?.userId;
 
         if (!userId) {
-            res.status(400).json({ status: 'ERROR', message: 'User ID is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'User ID is required');
             return;
         }
 
@@ -1236,10 +1165,7 @@ router.get('/followers/:userId', requireAuth, async (req: Request, res: Response
         });
     } catch (error: any) {
         logger.error('Get followers error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1253,7 +1179,7 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
         const clerkUserId = req.auth?.userId;
 
         if (!userId) {
-            res.status(400).json({ status: 'ERROR', message: 'User ID is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'User ID is required');
             return;
         }
 
@@ -1315,10 +1241,7 @@ router.get('/following/:userId', requireAuth, async (req: Request, res: Response
         });
     } catch (error: any) {
         logger.error('Get following error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1332,7 +1255,7 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -1343,13 +1266,13 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         // Can't follow yourself
         if (currentUser.id === targetUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot follow yourself' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot follow yourself');
             return;
         }
 
@@ -1360,7 +1283,7 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         });
 
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found');
             return;
         }
 
@@ -1371,7 +1294,7 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
         });
 
         if (followingCount >= 5000) {
-            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            sendError(req, res, ErrorCode.VALIDATION, 'FOLLOWING_LIMIT_REACHED');
             return;
         }
 
@@ -1385,17 +1308,20 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             });
         } catch (createError: any) {
             if (createError.code === 'P2002') {
-                res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+                sendError(req, res, ErrorCode.VALIDATION, 'Already following this user');
                 return;
             }
             throw createError;
         }
 
+        const targetLang = await getUserLanguage(targetUserId);
         await enqueueSocialNotification({
             userId: targetUserId,
             actorId: currentUser.id,
-            title: 'متابع جديد',
-            message: `${currentUser.displayName || currentUser.username} بدأ متابعتك`,
+            title: renderPushTemplate('newFollowerTitle', targetLang),
+            message: renderPushTemplate('newFollowerBody', targetLang, {
+                user: currentUser.displayName || currentUser.username,
+            }),
             type: 'FOLLOW',
             data: {
                 followerId: currentUser.id,
@@ -1409,10 +1335,13 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             const followerCount = await prisma.follow.count({ where: { followingId: targetUserId } });
             if (MILESTONES.includes(followerCount)) {
                 const { NotificationService } = await import('../services/notification.service');
+                const lang = await getUserLanguage(targetUserId);
                 await NotificationService.createNotification({
                     userId: targetUserId,
-                    title: '🎉 إنجاز جديد!',
-                    message: `وصلت لـ ${followerCount.toLocaleString()} متابع!`,
+                    title: renderPushTemplate('followerMilestoneTitle', lang),
+                    message: renderPushTemplate('followerMilestoneBody', lang, {
+                        count: followerCount.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US'),
+                    }),
                     type: 'MILESTONE',
                     data: { type: 'MILESTONE', milestone: followerCount, screen: '/(tabs)/profile' },
                 });
@@ -1428,14 +1357,14 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
     } catch (error: any) {
         logger.error('Follow by ID error:', error);
         if (error?.message === 'FOLLOWING_LIMIT_REACHED') {
-            res.status(400).json({ status: 'ERROR', message: 'FOLLOWING_LIMIT_REACHED' });
+            sendError(req, res, ErrorCode.VALIDATION, 'FOLLOWING_LIMIT_REACHED');
             return;
         }
         if (error?.message === 'ALREADY_FOLLOWING') {
-            res.status(400).json({ status: 'ERROR', message: 'Already following this user' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Already following this user');
             return;
         }
-        res.status(500).json({ status: 'ERROR', message: error.message || 'Internal server error' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -1449,7 +1378,7 @@ router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Respo
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -1460,7 +1389,7 @@ router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Respo
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -1478,10 +1407,7 @@ router.delete('/follow/id/:userId', requireAuth, async (req: Request, res: Respo
         });
     } catch (error: any) {
         logger.error('Unfollow by ID error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1495,19 +1421,19 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
         const { socialLinks } = req.body;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         // Validate social links array
         if (!Array.isArray(socialLinks)) {
-            res.status(400).json({ status: 'ERROR', message: 'Social links must be an array' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Social links must be an array');
             return;
         }
 
         // Validate max 5 links
         if (socialLinks.length > 5) {
-            res.status(400).json({ status: 'ERROR', message: 'Maximum 5 social links allowed' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Maximum 5 social links allowed');
             return;
         }
 
@@ -1613,10 +1539,7 @@ router.put('/social-links', requireAuth, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Update social links error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, error.message || 'Internal server error');
     }
 });
 
@@ -1629,11 +1552,7 @@ router.get('/username-change-status', requireAuth, async (req: Request, res: Res
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized',
-                code: 'E002',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized', { code: 'E002' });
             return;
         }
 
@@ -1643,11 +1562,7 @@ router.get('/username-change-status', requireAuth, async (req: Request, res: Res
         });
 
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found',
-                code: 'E004',
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'E004' });
             return;
         }
 
@@ -1685,11 +1600,7 @@ router.get('/username-change-status', requireAuth, async (req: Request, res: Res
 
     } catch (error) {
         logger.error('[/clerk/username-change-status] Error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Internal server error',
-            code: 'E010',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error', { code: 'E010' });
     }
 });
 
@@ -1702,10 +1613,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
         const clerkUserId = req.auth?.userId;
         
         if (!clerkUserId) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Unauthorized'
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
         
@@ -1729,10 +1637,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
         });
         
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found'
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
         
@@ -1742,10 +1647,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
         });
     } catch (error: any) {
         logger.error('Get current user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Bell, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { COLORS } from '../reels/constants';
+import { useTranslation } from '../../src/i18n';
 
 interface Props {
   title: string;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function NotificationEmpty({ title, subtitle, isError, onRetry }: Props) {
+  const { t } = useTranslation();
   return (
     <View style={styles.emptyContainer}>
       {isError ? (
@@ -18,13 +20,13 @@ export function NotificationEmpty({ title, subtitle, isError, onRetry }: Props) 
       ) : (
         <Bell size={48} color="rgba(255,255,255,0.3)" />
       )}
-      <Text style={styles.emptyText}>{title}</Text>
-      <Text style={styles.emptySubtext}>{subtitle}</Text>
-      
+      <Text style={styles.emptyText} numberOfLines={2}>{title}</Text>
+      <Text style={styles.emptySubtext} numberOfLines={3}>{subtitle}</Text>
+
       {isError && onRetry && (
         <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.8}>
           <RefreshCw size={16} color={COLORS.white} />
-          <Text style={styles.retryText}>Try Again</Text>
+          <Text style={styles.retryText}>{t.notifications.tryAgain}</Text>
         </TouchableOpacity>
       )}
     </View>

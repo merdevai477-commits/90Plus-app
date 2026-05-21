@@ -6,6 +6,8 @@ import { Transfer } from '../../services/apiFootball';
 import PlayerAvatar from '../common/PlayerAvatar';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
+import { useTranslation } from '../../src/i18n';
+import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 interface TopListsProps {
   transfers: Transfer[];
@@ -13,6 +15,7 @@ interface TopListsProps {
 }
 
 export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }) => {
+  const { language } = useTranslation();
   const topLists = useMemo(() => {
     // Note: Transfer values are not available in the current data structure
     // Biggest transfers list is disabled until value data is available
@@ -108,7 +111,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
                     {transfer.player.name}
                   </Text>
                   <Text style={styles.itemSubtext} numberOfLines={1}>
-                    {transfer.transfers[0]?.teams.out?.name} → {transfer.transfers[0]?.teams.in?.name}
+                    {getTeamDisplayName(transfer.transfers[0]?.teams.out?.name, language)} → {getTeamDisplayName(transfer.transfers[0]?.teams.in?.name, language)}
                   </Text>
                 </View>
                 <Text style={styles.itemValue}>N/A</Text>
@@ -134,7 +137,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>
-                  {team.name}
+                  {getTeamDisplayName(team.name, language)}
                 </Text>
               </View>
               <Text style={styles.itemValue}>{team.count}</Text>
@@ -159,7 +162,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>
-                  {league.name}
+                  {getLeagueDisplayName(league.name, language)}
                 </Text>
               </View>
               <Text style={styles.itemValue}>{league.count}</Text>
@@ -191,7 +194,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
                   {transfer.player.name}
                 </Text>
                 <Text style={styles.itemSubtext} numberOfLines={1}>
-                  {transfer.transfers[0]?.teams.out?.name} → {transfer.transfers[0]?.teams.in?.name}
+                  {getTeamDisplayName(transfer.transfers[0]?.teams.out?.name, language)} → {getTeamDisplayName(transfer.transfers[0]?.teams.in?.name, language)}
                 </Text>
               </View>
               <Ionicons name="checkmark-circle" size={20} color="#10b981" />

@@ -145,7 +145,7 @@ export default function PrivacySettingsScreen() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to update consent');
+      if (!response.ok) throw new Error('CONSENT_UPDATE_FAILED');
       logger.info(`[PrivacySettings] Consent updated: ${type} = ${value}`);
     } catch (error: any) {
       setConsent(prev => ({ ...prev, [type]: !value }));
@@ -153,24 +153,24 @@ export default function PrivacySettingsScreen() {
       captureException(error, { tags: { screen: 'PrivacySettings' } });
       Alert.alert(
         t.common.error,
-        t.privacySettings.consentUpdateError || 'Failed to update consent'
+        t.privacySettings.consentUpdateError
       );
     }
   };
 
   const handleExportData = async () => {
     Alert.alert(
-      t.privacySettings.exportDataTitle || 'Export Your Data',
-      t.privacySettings.exportDataMessage || 'We will prepare a file with all your data and send you a download link via email. This may take 5-10 minutes.',
+      t.privacySettings.exportDataTitle,
+      t.privacySettings.exportDataMessage,
       [
         { text: t.common.cancel, style: 'cancel' },
         {
-          text: t.privacySettings.exportConfirm || 'Export',
+          text: t.privacySettings.exportConfirm,
           onPress: async () => {
             try {
               setExportLoading(true);
               const token = await getToken();
-              if (!token) throw new Error('Authentication token not found');
+              if (!token) throw new Error('NOT_AUTHENTICATED');
 
               const response = await fetch(getApiEndpoint('gdpr/export-data'), {
                 method: 'POST',
@@ -178,19 +178,21 @@ export default function PrivacySettingsScreen() {
               });
 
               const data = await response.json();
-              if (!response.ok) throw new Error(data.message || 'Failed to request data export');
+              if (!response.ok) throw new Error(data.message || 'EXPORT_REQUEST_FAILED');
 
               logger.info('[PrivacySettings] Data export requested');
               Alert.alert(
                 t.common.success,
-                t.privacySettings.exportSuccess || 'Data export requested. You will receive an email when ready.'
+                t.privacySettings.exportSuccess
               );
             } catch (error: any) {
               logger.error('[PrivacySettings] Export data error:', error);
               captureException(error, { tags: { screen: 'PrivacySettings' } });
               Alert.alert(
                 t.common.error,
-                error.message || t.privacySettings.exportError || 'Failed to export data'
+                // Safe: only forward backend message if it's a string we showed
+                // intentionally; otherwise use the localized fallback.
+                t.privacySettings.exportError
               );
             } finally {
               setExportLoading(false);
@@ -207,28 +209,28 @@ export default function PrivacySettingsScreen() {
 
   const handleCancelDeletion = async () => {
     Alert.alert(
-      t.privacySettings.cancelDeletionTitle || 'Cancel Account Deletion',
-      t.privacySettings.cancelDeletionMessage || 'Are you sure you want to cancel the account deletion?',
+      t.privacySettings.cancelDeletionTitle,
+      t.privacySettings.cancelDeletionMessage,
       [
         { text: t.common.cancel, style: 'cancel' },
         {
-          text: t.privacySettings.cancelDeletionConfirm || 'Yes, Cancel Deletion',
+          text: t.privacySettings.cancelDeletionConfirm,
           onPress: async () => {
             try {
               const token = await getToken();
-              if (!token) throw new Error('Authentication token not found');
+              if (!token) throw new Error('NOT_AUTHENTICATED');
 
               const response = await fetch(getApiEndpoint('gdpr/cancel-deletion'), {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
               });
 
-              if (!response.ok) throw new Error('Failed to cancel deletion');
+              if (!response.ok) throw new Error('CANCEL_DELETION_FAILED');
 
               logger.info('[PrivacySettings] Account deletion cancelled');
               Alert.alert(
                 t.common.success,
-                t.privacySettings.deletionCancelled || 'Account deletion cancelled successfully'
+                t.privacySettings.deletionCancelled
               );
               setDeletionStatus(null);
             } catch (error: any) {
@@ -236,7 +238,7 @@ export default function PrivacySettingsScreen() {
               captureException(error, { tags: { screen: 'PrivacySettings' } });
               Alert.alert(
                 t.common.error,
-                t.privacySettings.cancelDeletionError || 'Failed to cancel deletion'
+                t.privacySettings.cancelDeletionError
               );
             }
           },
@@ -257,7 +259,7 @@ export default function PrivacySettingsScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>{t.common.loading}</Text>
       </View>
     );
   }
@@ -276,8 +278,8 @@ export default function PrivacySettingsScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
-        <Text style={styles.heroEyebrow}>GDPR & PRIVACY</Text>
-        <Text style={styles.heroTitle}>{t.privacySettings.title}</Text>
+        <Text style={styles.heroEyebrow} numberOfLines={1}>{t.privacySettings.heroEyebrow}</Text>
+        <Text style={styles.heroTitle} numberOfLines={1}>{t.privacySettings.title}</Text>
       </View>
 
       {/* Deletion Warning */}
@@ -359,7 +361,7 @@ export default function PrivacySettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.linkTitle}>{t.privacySettings.exportData}</Text>
             <Text style={styles.linkSub}>
-              {t.privacySettings.exportDataDescription || 'Download a copy of all your data'}
+              {t.privacySettings.exportDataDescription || t.privacySettings.exportDataDescriptionShort}
             </Text>
           </View>
         </View>
@@ -384,7 +386,7 @@ export default function PrivacySettingsScreen() {
                   {t.privacySettings.deleteAccount}
                 </Text>
                 <Text style={styles.linkSub}>
-                  {t.privacySettings.deleteAccountDescription || 'Permanently remove your account and data'}
+                  {t.privacySettings.deleteAccountDescription || t.privacySettings.deleteAccountDescriptionShort}
                 </Text>
               </View>
             </View>
@@ -403,7 +405,7 @@ export default function PrivacySettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkTitle}>{t.privacySettings.privacyPolicy}</Text>
-            <Text style={styles.linkSub}>How we protect your data</Text>
+            <Text style={styles.linkSub}>{t.privacySettings.privacyPolicySub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -416,7 +418,7 @@ export default function PrivacySettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkTitle}>{t.privacySettings.terms}</Text>
-            <Text style={styles.linkSub}>Read our usage terms</Text>
+            <Text style={styles.linkSub}>{t.privacySettings.termsSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -529,7 +531,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginEnd: 12,
   },
   linkTitle: { fontSize: 15, fontWeight: '700', color: TEXT_PRIMARY },
   linkSub: { marginTop: 2, fontSize: 12, color: TEXT_MUTED },
@@ -553,8 +555,7 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: BORDER_ARENA,
-    marginLeft: 12,
-    marginRight: 12,
+    marginHorizontal: 12,
   },
 
   warningCard: {

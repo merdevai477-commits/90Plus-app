@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.get('/balance', requireAuth, async (req: Request, res: Response): Promise
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -62,7 +63,7 @@ router.get('/balance', requireAuth, async (req: Request, res: Response): Promise
         });
     } catch (error: any) {
         logger.error('Get coins balance error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -76,12 +77,12 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
         const { amount, description, type } = req.body;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (!amount || amount <= 0) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid amount' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid amount');
             return;
         }
 
@@ -91,7 +92,7 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -125,7 +126,7 @@ router.post('/add', requireAuth, async (req: Request, res: Response): Promise<vo
         });
     } catch (error: any) {
         logger.error('Add coins error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -139,12 +140,12 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
         const { amount, description, type } = req.body;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (!amount || amount <= 0) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid amount' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid amount');
             return;
         }
 
@@ -154,18 +155,13 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         // Check if user has enough coins
         if (user.coins < amount) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'Insufficient coins',
-                current: user.coins,
-                required: amount
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'Insufficient coins', { current: user.coins, required: amount });
             return;
         }
 
@@ -199,7 +195,7 @@ router.post('/subtract', requireAuth, async (req: Request, res: Response): Promi
         });
     } catch (error: any) {
         logger.error('Subtract coins error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -212,7 +208,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -222,7 +218,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -235,7 +231,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Sync coins error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

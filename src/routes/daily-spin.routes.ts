@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { enqueueNotification } from '../queues/notification.queue';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -72,7 +73,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
   try {
     const clerkUserId = req.auth?.userId;
     if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
       return;
     }
 
@@ -82,7 +83,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
     });
 
     if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
       return;
     }
 
@@ -127,7 +128,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
     });
   } catch (error: any) {
     logger.error('Get spin status error:', error);
-    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 
@@ -139,7 +140,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
   try {
     const clerkUserId = req.auth?.userId;
     if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
       return;
     }
 
@@ -149,19 +150,14 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
     });
 
     if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
       return;
     }
 
     // Check if user can spin
     if (!canSpinToday(user.lastDailySpin)) {
       const timeRemaining = getTimeUntilNextSpin(user.lastDailySpin);
-      res.status(429).json({
-        status: 'ERROR',
-        message: `يمكنك اللف مرة أخرى بعد ${timeRemaining.hours} ساعة و ${timeRemaining.minutes} دقيقة`,
-        code: 'SPIN_COOLDOWN',
-        timeRemaining
-      });
+      sendError(req, res, ErrorCode.RATE_LIMIT, `يمكنك اللف مرة أخرى بعد ${timeRemaining.hours} ساعة و ${timeRemaining.minutes} دقيقة`, { code: 'SPIN_COOLDOWN', timeRemaining });
       return;
     }
 
@@ -236,7 +232,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
     });
   } catch (error: any) {
     logger.error('Spin wheel error:', error);
-    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 
@@ -248,7 +244,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
   try {
     const clerkUserId = req.auth?.userId;
     if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
       return;
     }
 
@@ -258,7 +254,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
     });
 
     if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
       return;
     }
 
@@ -288,7 +284,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
     });
   } catch (error: any) {
     logger.error('Get spin history error:', error);
-    res.status(500).json({ status: 'ERROR', message: 'Internal server error' });
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
 

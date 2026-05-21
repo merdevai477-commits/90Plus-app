@@ -7,6 +7,7 @@ import { AuditService, AuditAction, AuditTargetType } from '../services/audit.se
 import { suspendUser, autoDeleteContent } from '../services/moderation.service';
 import { NotificationService } from '../services/notification.service';
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -85,7 +86,7 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get admin reports error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -154,7 +155,7 @@ router.get('/reports/:id', requireAdmin, async (req: Request, res: Response): Pr
         });
 
         if (!report) {
-            res.status(404).json({ status: 'ERROR', message: 'Report not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Report not found');
             return;
         }
 
@@ -164,7 +165,7 @@ router.get('/reports/:id', requireAdmin, async (req: Request, res: Response): Pr
         });
     } catch (error: any) {
         logger.error('Get report details error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -180,7 +181,7 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
         const adminUser = (req as any).adminUser;
 
         if (!action || !['NO_ACTION', 'WARNING', 'CONTENT_REMOVED', 'USER_SUSPENDED', 'USER_BANNED'].includes(action)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid action' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid action');
             return;
         }
 
@@ -194,7 +195,7 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
         });
 
         if (!report) {
-            res.status(404).json({ status: 'ERROR', message: 'Report not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Report not found');
             return;
         }
 
@@ -273,7 +274,7 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
         });
     } catch (error: any) {
         logger.error('Review report error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -320,7 +321,7 @@ router.get('/strikes', requireAdmin, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get strikes error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -345,7 +346,7 @@ router.get('/users/:id/strikes', requireAdmin, async (req: Request, res: Respons
         });
     } catch (error: any) {
         logger.error('Get user strikes error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -361,7 +362,7 @@ router.post('/users/:id/suspend', requireAdmin, async (req: Request, res: Respon
         const adminUser = (req as any).adminUser;
 
         if (!reason) {
-            res.status(400).json({ status: 'ERROR', message: 'Reason is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Reason is required');
             return;
         }
 
@@ -375,7 +376,7 @@ router.post('/users/:id/suspend', requireAdmin, async (req: Request, res: Respon
         });
     } catch (error: any) {
         logger.error('Suspend user error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -421,7 +422,7 @@ router.post('/users/:id/unsuspend', requireAdmin, async (req: Request, res: Resp
         });
     } catch (error: any) {
         logger.error('Unsuspend user error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -456,10 +457,7 @@ router.post('/users/:username/verify', requireAdmin, async (req: Request, res: R
         });
 
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: `User with username "${username}" not found`,
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, `User with username "${username}" not found`);
             return;
         }
 
@@ -517,7 +515,7 @@ router.post('/users/:username/verify', requireAdmin, async (req: Request, res: R
         });
     } catch (error: any) {
         logger.error('Verify user error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -555,7 +553,7 @@ router.get('/audit', requireAdmin, async (req: Request, res: Response): Promise<
         });
     } catch (error: any) {
         logger.error('Get audit logs error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -594,7 +592,7 @@ router.get('/notifications/stats', requireAdmin, async (req: Request, res: Respo
         });
     } catch (error: any) {
         logger.error('Notification stats error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -608,7 +606,7 @@ router.post('/test-notification', requireAdmin, async (req: Request, res: Respon
         const { username, title, body } = req.body;
 
         if (!username) {
-            res.status(400).json({ status: 'ERROR', message: 'username is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'username is required');
             return;
         }
 
@@ -619,15 +617,12 @@ router.post('/test-notification', requireAdmin, async (req: Request, res: Respon
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: `User "${username}" not found` });
+            sendError(req, res, ErrorCode.NOT_FOUND, `User "${username}" not found`);
             return;
         }
 
         if (!user.expoPushToken) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: `User "${username}" has no push token registered. Make sure the app is installed and opened on a physical device.`,
-            });
+            sendError(req, res, ErrorCode.VALIDATION, `User "${username}" has no push token registered. Make sure the app is installed and opened on a physical device.`);
             return;
         }
 
@@ -656,7 +651,7 @@ router.post('/test-notification', requireAdmin, async (req: Request, res: Respon
         });
     } catch (error: any) {
         logger.error('Test notification error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -672,14 +667,14 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
         const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 
         if (!internalKey || !clerkSecretKey || internalKey !== clerkSecretKey) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         const { username, clerkUserId, title, body } = req.body;
 
         if (!username && !clerkUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'username or clerkUserId is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'username or clerkUserId is required');
             return;
         }
 
@@ -689,16 +684,12 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: `User "${username}" not found` });
+            sendError(req, res, ErrorCode.NOT_FOUND, `User "${username}" not found`);
             return;
         }
 
         if (!user.expoPushToken) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: `No push token for "${username}". Open the app on a physical device first.`,
-                data: { username: user.username, hasPushToken: false },
-            });
+            sendError(req, res, ErrorCode.VALIDATION, `No push token for "${username}". Open the app on a physical device first.`, { data: { username: user.username, hasPushToken: false } });
             return;
         }
 
@@ -727,7 +718,7 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
         });
     } catch (error: any) {
         logger.error('Send test push error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -742,7 +733,7 @@ router.get('/uploads/stats', requireAdmin, async (req: Request, res: Response): 
         res.json({ status: 'SUCCESS', data: stats });
     } catch (error: any) {
         logger.error('Upload stats error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

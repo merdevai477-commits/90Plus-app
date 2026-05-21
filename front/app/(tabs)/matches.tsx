@@ -25,6 +25,7 @@ import { useScreenFont } from '../../utils/fontSetup';
 import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
+import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 // Top 5 European leagues' countries — these accordions start expanded by default.
 const TOP5_COUNTRIES: ReadonlySet<string> = new Set(['England', 'Spain', 'Italy', 'France', 'Germany']);
@@ -237,7 +238,9 @@ const MatchRow = memo(function MatchRow({
 }) {
   const existingPrediction = predictedMatches[fixture.id] ?? null;
   const isSubmitting = submittingId === fixture.id;
-  const { translate: t } = useTranslation();
+  const { translate: t, language } = useTranslation();
+  const homeName = getTeamDisplayName(fixture.home, language);
+  const awayName = getTeamDisplayName(fixture.away, language);
 
   // Bell is only actionable for future matches — no point notifying for a
   // match that already started or finished.
@@ -265,11 +268,11 @@ const MatchRow = memo(function MatchRow({
                 />
               ) : (
                 <View style={styles.logoInitials}>
-                  <Text style={styles.logoInitialsTxt}>{(fixture.home || '?').slice(0, 2).toUpperCase()}</Text>
+                  <Text style={styles.logoInitialsTxt}>{(homeName || '?').slice(0, 2).toUpperCase()}</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{fixture.home}</Text>
+            <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
           </View>
           <View style={styles.scoreCol}>
             {fixture.status === 'UPCOMING' ? (
@@ -296,11 +299,11 @@ const MatchRow = memo(function MatchRow({
                 />
               ) : (
                 <View style={styles.logoInitials}>
-                  <Text style={styles.logoInitialsTxt}>{(fixture.away || '?').slice(0, 2).toUpperCase()}</Text>
+                  <Text style={styles.logoInitialsTxt}>{(awayName || '?').slice(0, 2).toUpperCase()}</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{fixture.away}</Text>
+            <Text style={styles.teamTxt} numberOfLines={1}>{awayName}</Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
@@ -334,7 +337,7 @@ const MatchRow = memo(function MatchRow({
           </View>
           <View style={styles.predButtons}>
             <PredictionButton
-              label={fixture.home}
+              label={homeName}
               kind="home"
               isActive={existingPrediction === 'home'}
               onPress={() => onPredict(fixture.id, 'home')}
@@ -348,7 +351,7 @@ const MatchRow = memo(function MatchRow({
               disabled={!!existingPrediction || isSubmitting}
             />
             <PredictionButton
-              label={fixture.away}
+              label={awayName}
               kind="away"
               isActive={existingPrediction === 'away'}
               onPress={() => onPredict(fixture.id, 'away')}
@@ -387,7 +390,9 @@ function LeagueAllMatchesModal({
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
 }) {
+  const { language } = useTranslation();
   if (!group) return null;
+  const localizedLeagueName = getLeagueDisplayName(group.league, language);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       {/* Full-screen iOS-style blur backdrop */}
@@ -422,7 +427,7 @@ function LeagueAllMatchesModal({
               {group.leagueLogo ? (
                 <Image source={{ uri: group.leagueLogo }} style={styles.allMatchesLeagueLogo} contentFit="contain" />
               ) : null}
-              <Text style={styles.allMatchesTitle}>{group.league}</Text>
+              <Text style={styles.allMatchesTitle}>{localizedLeagueName}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.allMatchesClose} activeOpacity={0.7}>
               <X size={20} color="rgba(255,255,255,0.6)" />
@@ -482,7 +487,8 @@ const LeagueCard = memo(function LeagueCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const { translate: t } = useTranslation();
+  const { translate: t, language } = useTranslation();
+  const localizedLeagueName = getLeagueDisplayName(group.league, language);
   const hasMore = group.fixtures.length > PREVIEW_COUNT;
   const previewFixtures = hasMore ? group.fixtures.slice(0, PREVIEW_COUNT) : group.fixtures;
 
@@ -507,7 +513,7 @@ const LeagueCard = memo(function LeagueCard({
                 />
               ) : null}
             </View>
-            <Text style={styles.leagueTitle}>{group.league}</Text>
+            <Text style={styles.leagueTitle}>{localizedLeagueName}</Text>
           </View>
           <View style={styles.leagueRight}>
             <View style={styles.matchCountBadge}>

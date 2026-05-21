@@ -28,6 +28,8 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import path from 'path';
 import { strictLimiter } from '../middleware/rateLimit.middleware';
+import { ErrorCode, sendError as sendApiError, type ErrorCodeValue } from '../constants/errors';
+import { renderPushTemplate, getUserLanguage } from '../services/push-templates.service';
 
 const router = Router();
 
@@ -38,24 +40,37 @@ function sanitizeOriginalName(name: string | undefined, fallback: string): strin
   return base.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120);
 }
 
+/**
+ * Local wrapper that forwards to the canonical `sendError` helper while
+ * preserving the legacy `code` field inside `details` for back-compat.
+ *
+ * The frontend looks at `error` (E001–E010) for localization; the legacy
+ * domain-specific `code` (`COOLDOWN_ACTIVE`, `QUOTA_EXCEEDED`, etc.) is
+ * kept inside `details` so any existing client analytics that read it
+ * keep working.
+ */
 function sendError(
+  req: Request,
   res: Response,
   httpStatus: number,
-  code: string,
+  errorCode: ErrorCodeValue,
+  legacyCode: string,
   message: string,
   details?: Record<string, unknown>,
 ): void {
-  res.status(httpStatus).json({
-    status: 'ERROR',
-    code,
+  sendApiError(
+    req,
+    res,
+    errorCode,
     message,
-    details,
-    timestamp: new Date().toISOString(),
-  });
+    { ...(details || {}), code: legacyCode },
+    httpStatus,
+  );
 }
 
-/** Fix 6: Rich cooldown response */
+/** Fix 6: Rich cooldown response (same fields as before, canonical shape). */
 function sendCooldownError(
+  req: Request,
   res: Response,
   cooldownType: 'avatar' | 'cover' | 'reel',
   lastChangeDate: Date,
@@ -68,22 +83,30 @@ function sendCooldownError(
   const daysRemaining = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
   const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000));
 
-  res.status(429).json({
-    status: 'ERROR',
-    code: 'COOLDOWN_ACTIVE',
-    cooldownType,
-    lastChangeDate: lastChangeDate.toISOString(),
-    nextAllowedDate: nextAllowedDate.toISOString(),
-    daysRemaining,
-    hoursRemaining,
-    message: `يمكنك التغيير بعد ${daysRemaining} يوم و${hoursRemaining % 24} ساعة`,
-  });
+  // Frontend localizes via the E006 code; the message here is a safe
+  // English fallback for clients that don't yet map error codes.
+  sendApiError(
+    req,
+    res,
+    ErrorCode.RATE_LIMIT,
+    `You can change this again in ${daysRemaining}d ${hoursRemaining % 24}h`,
+    {
+      code: 'COOLDOWN_ACTIVE',
+      cooldownType,
+      lastChangeDate: lastChangeDate.toISOString(),
+      nextAllowedDate: nextAllowedDate.toISOString(),
+      daysRemaining,
+      hoursRemaining,
+    },
+    429,
+  );
 }
 
 /** Fix 7: Check storage quota WITHOUT incrementing yet. Returns false and sends 413 if exceeded. */
 async function checkQuota(
   userId: string,
   fileSizeBytes: number,
+  req: Request,
   res: Response,
 ): Promise<boolean> {
   const user = await prisma.user.findUnique({
@@ -99,13 +122,14 @@ async function checkQuota(
   if (used + fileSizeBytes > quota) {
     const usedGB = (used / 1e9).toFixed(2);
     const quotaGB = (quota / 1e9).toFixed(2);
-    res.status(413).json({
-      status: 'ERROR',
-      code: 'QUOTA_EXCEEDED',
-      message: `تجاوزت حد التخزين. مستخدم: ${usedGB} GB من ${quotaGB} GB`,
-      usedGB,
-      quotaGB,
-    });
+    sendApiError(
+      req,
+      res,
+      ErrorCode.FILE_UPLOAD,
+      `Storage quota exceeded. Used ${usedGB} GB of ${quotaGB} GB.`,
+      { code: 'QUOTA_EXCEEDED', usedGB, quotaGB },
+      413,
+    );
     return false;
   }
 
@@ -200,14 +224,14 @@ async function readAndCleanupTempFile(filePath: string): Promise<Buffer> {
 
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;
 const COVER_CHANGE_COOLDOWN_DAYS = 15;
-const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم لتشجيع المحتوى
+const REEL_UPLOAD_COOLDOWN_DAYS = 1; // Reduced from 3 days to 1 day to encourage content
 const REEL_UPLOAD_LOCK_MS = 25 * 60 * 1000;
 
 // ─── Reel upload lock helper ──────────────────────────────────────────────────
 
 type BeginReelResult =
   | { ok: true; userId: string }
-  | { ok: false; status: number; payload: Record<string, unknown> };
+  | { ok: false; status: number; errorCode: ErrorCodeValue; payload: Record<string, unknown> };
 
 async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginReelResult> {
   try {
@@ -222,7 +246,8 @@ async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginRe
         return {
           ok: false,
           status: 404,
-          payload: { status: 'ERROR', code: 'USER_NOT_FOUND', message: 'User not found', timestamp: new Date().toISOString() },
+          errorCode: ErrorCode.NOT_FOUND,
+          payload: { code: 'USER_NOT_FOUND', message: 'User not found' },
         };
       }
 
@@ -232,11 +257,10 @@ async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginRe
         return {
           ok: false,
           status: 429,
+          errorCode: ErrorCode.RATE_LIMIT,
           payload: {
-            status: 'ERROR',
             code: 'REEL_UPLOAD_IN_PROGRESS',
-            message: 'يتم رفع فيديو بالفعل. انتظر حتى يكتمل ثم حاول مجدداً.',
-            timestamp: new Date().toISOString(),
+            message: 'A reel upload is already in progress. Wait until it finishes before trying again.',
           },
         };
       }
@@ -249,8 +273,8 @@ async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginRe
           return {
             ok: false,
             status: 429,
+            errorCode: ErrorCode.RATE_LIMIT,
             payload: {
-              status: 'ERROR',
               code: 'COOLDOWN_ACTIVE',
               cooldownType: 'reel',
               lastChangeDate: user.lastReelUpload.toISOString(),
@@ -262,8 +286,7 @@ async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginRe
                 REEL_UPLOAD_COOLDOWN_DAYS * 24 -
                   (now - new Date(user.lastReelUpload).getTime()) / (1000 * 60 * 60),
               ),
-              message: `يمكنك رفع فيديو جديد بعد ${REEL_UPLOAD_COOLDOWN_DAYS - daysSince} يوم`,
-              timestamp: new Date().toISOString(),
+              message: `You can upload a new reel in ${REEL_UPLOAD_COOLDOWN_DAYS - daysSince} day(s).`,
             },
           };
         }
@@ -281,11 +304,10 @@ async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginRe
     return {
       ok: false,
       status: 500,
+      errorCode: ErrorCode.INTERNAL,
       payload: {
-        status: 'ERROR',
         code: 'LOCK_ERROR',
-        message: 'تعذّر بدء الرفع. حاول مرة أخرى.',
-        timestamp: new Date().toISOString(),
+        message: 'Could not start the upload. Please try again.',
       },
     };
   }
@@ -304,11 +326,11 @@ router.post(
     const startTime = Date.now();
     const clerkUserId = req.auth?.userId;
 
-    if (!clerkUserId) { sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized'); return; }
+    if (!clerkUserId) { sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized'); return; }
 
     const file = req.file;
-    if (!file) { sendError(res, 400, 'NO_FILE', 'No file provided'); return; }
-    if (!file.buffer || file.buffer.length === 0) { sendError(res, 400, 'EMPTY_FILE', 'File is empty'); return; }
+    if (!file) { sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'NO_FILE', 'No file provided'); return; }
+    if (!file.buffer || file.buffer.length === 0) { sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'EMPTY_FILE', 'File is empty'); return; }
 
     try {
       const user = await prisma.user.findUnique({
@@ -316,7 +338,7 @@ router.post(
         select: { id: true, lastAvatarChange: true, avatarStoragePath: true },
       });
 
-      if (!user) { sendError(res, 404, 'USER_NOT_FOUND', 'User not found'); return; }
+      if (!user) { sendError(req, res, 404, ErrorCode.NOT_FOUND, 'USER_NOT_FOUND', 'User not found'); return; }
 
       // Fix 6: Rich cooldown
       if (user.lastAvatarChange) {
@@ -324,16 +346,17 @@ router.post(
           (Date.now() - user.lastAvatarChange.getTime()) / (1000 * 60 * 60 * 24),
         );
         if (daysSince < AVATAR_CHANGE_COOLDOWN_DAYS) {
+          const lang = await getUserLanguage(user.id);
           await prisma.notification.create({
             data: {
               userId: user.id,
               type: 'GENERAL',
-              title: 'تغيير صورة البروفايل',
-              message: `لا يمكنك تغيير صورة البروفايل الآن.`,
+              title: renderPushTemplate('avatarChangeBlockedTitle', lang),
+              message: renderPushTemplate('avatarChangeBlockedBody', lang),
               data: { type: 'AVATAR_COOLDOWN' },
             },
           });
-          sendCooldownError(res, 'avatar', user.lastAvatarChange, AVATAR_CHANGE_COOLDOWN_DAYS);
+          sendCooldownError(req, res, 'avatar', user.lastAvatarChange, AVATAR_CHANGE_COOLDOWN_DAYS);
           await UploadAnalyticsService.record({
             userId: user.id, type: 'AVATAR', status: 'FAILED',
             fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -344,7 +367,7 @@ router.post(
       }
 
       // Fix 7: Check quota BEFORE upload (don't increment yet)
-      const quotaOk = await checkQuota(user.id, file.buffer.length, res);
+      const quotaOk = await checkQuota(user.id, file.buffer.length, req, res);
       if (!quotaOk) return;
 
       // Delete old avatar from R2 (non-blocking)
@@ -358,7 +381,7 @@ router.post(
       const result = await r2MediaStorage.uploadPublic('avatars', user.id, file.buffer, safeName, file.mimetype);
 
       if (!result.success || !result.url || !result.key) {
-        sendError(res, 500, 'STORAGE_UPLOAD_FAILED', result.error || 'Upload failed');
+        sendError(req, res, 500, ErrorCode.EXTERNAL_SERVICE, 'STORAGE_UPLOAD_FAILED', result.error || 'Upload failed');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'AVATAR', status: 'FAILED',
           fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -379,7 +402,7 @@ router.post(
       } catch (dbErr: any) {
         logger.error('[upload/avatar] DB update failed after R2 upload — rolling back:', dbErr?.message);
         await rollbackR2Upload(user.id, result.key!, file.buffer.length);
-        sendError(res, 500, 'DB_UPDATE_FAILED', 'فشل حفظ الصورة في قاعدة البيانات. تم حذف الملف المرفوع.');
+        sendError(req, res, 500, ErrorCode.DATABASE, 'DB_UPDATE_FAILED', 'Could not save the image. The uploaded file was removed.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'AVATAR', status: 'FAILED',
           fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -408,7 +431,7 @@ router.post(
       const respondedAt = Date.now();
       res.json({
         status: 'SUCCESS',
-        message: 'تم رفع صورة البروفايل بنجاح',
+        message: 'Profile picture uploaded successfully.',
         data: { url: result.url, storagePath: result.key },
         xpEvents: [], // populated server-side; client refetches /me to get authoritative XP
       });
@@ -432,10 +455,11 @@ router.post(
 
         try {
           const { enqueueNotification } = await import('../queues/notification.queue');
+          const lang = await getUserLanguage(user.id);
           await enqueueNotification({
             userId: user.id,
-            title: '🖼️ صورة البروفايل',
-            message: 'تم تحديث صورة البروفايل بنجاح!',
+            title: renderPushTemplate('avatarUpdatedTitle', lang),
+            message: renderPushTemplate('avatarUpdatedBody', lang),
             type: 'GENERAL',
             data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' },
           });
@@ -453,7 +477,7 @@ router.post(
       });
     } catch (error: any) {
       logger.error('Upload avatar error:', error);
-      sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Upload failed');
+      sendError(req, res, 500, ErrorCode.INTERNAL, 'UPLOAD_ERROR', error?.message || 'Upload failed');
     }
   },
 );
@@ -471,10 +495,10 @@ router.post(
     const startTime = Date.now();
     const clerkUserId = req.auth?.userId;
 
-    if (!clerkUserId) { sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized'); return; }
+    if (!clerkUserId) { sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized'); return; }
 
     const file = req.file;
-    if (!file) { sendError(res, 400, 'NO_FILE', 'No file provided'); return; }
+    if (!file) { sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'NO_FILE', 'No file provided'); return; }
 
     try {
       const user = await prisma.user.findUnique({
@@ -482,7 +506,7 @@ router.post(
         select: { id: true, lastCoverChange: true, coverStoragePath: true },
       });
 
-      if (!user) { sendError(res, 404, 'USER_NOT_FOUND', 'User not found'); return; }
+      if (!user) { sendError(req, res, 404, ErrorCode.NOT_FOUND, 'USER_NOT_FOUND', 'User not found'); return; }
 
       // Fix 6: Rich cooldown
       if (user.lastCoverChange) {
@@ -490,16 +514,17 @@ router.post(
           (Date.now() - user.lastCoverChange.getTime()) / (1000 * 60 * 60 * 24),
         );
         if (daysSince < COVER_CHANGE_COOLDOWN_DAYS) {
+          const lang = await getUserLanguage(user.id);
           await prisma.notification.create({
             data: {
               userId: user.id,
               type: 'GENERAL',
-              title: 'تغيير صورة الغلاف',
-              message: 'لا يمكنك تغيير صورة الغلاف الآن.',
+              title: renderPushTemplate('coverChangeBlockedTitle', lang),
+              message: renderPushTemplate('coverChangeBlockedBody', lang),
               data: { type: 'COVER_COOLDOWN' },
             },
           });
-          sendCooldownError(res, 'cover', user.lastCoverChange, COVER_CHANGE_COOLDOWN_DAYS);
+          sendCooldownError(req, res, 'cover', user.lastCoverChange, COVER_CHANGE_COOLDOWN_DAYS);
           await UploadAnalyticsService.record({
             userId: user.id, type: 'COVER', status: 'FAILED',
             fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -510,7 +535,7 @@ router.post(
       }
 
       // Fix 7: Check quota BEFORE upload
-      const quotaOk = await checkQuota(user.id, file.buffer.length, res);
+      const quotaOk = await checkQuota(user.id, file.buffer.length, req, res);
       if (!quotaOk) return;
 
       if (user.coverStoragePath) {
@@ -523,7 +548,7 @@ router.post(
       const result = await r2MediaStorage.uploadPublic('covers', user.id, file.buffer, safeName, file.mimetype);
 
       if (!result.success || !result.url || !result.key) {
-        sendError(res, 500, 'STORAGE_UPLOAD_FAILED', result.error || 'Upload failed');
+        sendError(req, res, 500, ErrorCode.EXTERNAL_SERVICE, 'STORAGE_UPLOAD_FAILED', result.error || 'Upload failed');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'COVER', status: 'FAILED',
           fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -544,7 +569,7 @@ router.post(
       } catch (dbErr: any) {
         logger.error('[upload/cover] DB update failed after R2 upload — rolling back:', dbErr?.message);
         await rollbackR2Upload(user.id, result.key!, file.buffer.length);
-        sendError(res, 500, 'DB_UPDATE_FAILED', 'فشل حفظ الصورة في قاعدة البيانات. تم حذف الملف المرفوع.');
+        sendError(req, res, 500, ErrorCode.DATABASE, 'DB_UPDATE_FAILED', 'Could not save the image. The uploaded file was removed.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'COVER', status: 'FAILED',
           fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -566,10 +591,11 @@ router.post(
 
       try {
         const { enqueueNotification } = await import('../queues/notification.queue');
+        const lang = await getUserLanguage(user.id);
         await enqueueNotification({
           userId: user.id,
-          title: '🎨 صورة الغلاف',
-          message: 'تم تحديث صورة الغلاف بنجاح!',
+          title: renderPushTemplate('coverUpdatedTitle', lang),
+          message: renderPushTemplate('coverUpdatedBody', lang),
           type: 'GENERAL',
           data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' }
         });
@@ -577,10 +603,10 @@ router.post(
         logger.error('Enqueue notification failed for cover:', err);
       }
 
-      res.json({ status: 'SUCCESS', message: 'تم رفع صورة الغلاف بنجاح', data: { url: result.url, storagePath: result.key } });
+      res.json({ status: 'SUCCESS', message: 'Cover image uploaded successfully.', data: { url: result.url, storagePath: result.key } });
     } catch (error: any) {
       logger.error('Upload cover error:', error);
-      sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Upload failed');
+      sendError(req, res, 500, ErrorCode.INTERNAL, 'UPLOAD_ERROR', error?.message || 'Upload failed');
     }
   },
 );
@@ -602,22 +628,22 @@ router.post(
 
     try {
       const clerkUserId = req.auth?.userId;
-      if (!clerkUserId) { sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized'); return; }
+      if (!clerkUserId) { sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized'); return; }
 
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
       const videoFile = files['video']?.[0];
 
-      if (!videoFile) { sendError(res, 400, 'NO_FILE', 'No video provided'); return; }
+      if (!videoFile) { sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'NO_FILE', 'No video provided'); return; }
       
       const videoFileSize = videoFile.size || 0;
       if (videoFileSize === 0) {
         if (videoFile.path) fs.promises.unlink(videoFile.path).catch(() => undefined);
-        sendError(res, 400, 'EMPTY_FILE', 'ملف الفيديو فارغ أو معطوب.');
+        sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'EMPTY_FILE', 'The uploaded video file is empty or corrupted.');
         return;
       }
       if (videoFileSize > 50 * 1024 * 1024) {
         if (videoFile.path) fs.promises.unlink(videoFile.path).catch(() => undefined);
-        sendError(res, 413, 'FILE_TOO_LARGE', 'Video file is too large. Maximum size is 50MB.');
+        sendError(req, res, 413, ErrorCode.FILE_UPLOAD, 'FILE_TOO_LARGE', 'Video file is too large. Maximum size is 50MB.');
         return;
       }
 
@@ -625,14 +651,24 @@ router.post(
       (videoFile as any).buffer = videoBuffer;
 
       const begin = await beginReelUploadForClerkUser(clerkUserId);
-      if (!begin.ok) { res.status(begin.status).json(begin.payload); return; }
+      if (!begin.ok) {
+        sendApiError(
+          req,
+          res,
+          begin.errorCode,
+          (begin.payload as { message?: string }).message || 'Could not start the upload',
+          begin.payload,
+          begin.status,
+        );
+        return;
+      }
       reelSlotHeld = true;
       heldUserId = begin.userId;
       const user = { id: begin.userId };
 
       // Fix 7: Quota check BEFORE upload
       const totalSize = videoFile.buffer.length;
-      const quotaOk = await checkQuota(user.id, totalSize, res);
+      const quotaOk = await checkQuota(user.id, totalSize, req, res);
       if (!quotaOk) return;
 
       const fileSizeMB = videoFile.buffer.length / 1e6;
@@ -676,7 +712,7 @@ router.post(
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch((e: any) =>
           logger.warn('[upload/reel] Failed to delete placeholder reel:', e?.message),
         );
-        sendError(res, 502, 'MUX_UNAVAILABLE', 'خدمة معالجة الفيديو غير متاحة حالياً. حاول مرة أخرى.');
+        sendError(req, res, 502, ErrorCode.EXTERNAL_SERVICE, 'MUX_UNAVAILABLE', 'Video processing service is unavailable. Please try again.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
           fileSizeMB: videoFile.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -704,7 +740,7 @@ router.post(
         // Fix 2 + Fix 6: Network error during Mux PUT — clean up everything
         logger.error('[upload/reel] Mux PUT network error — cleaning up:', fetchErr?.message);
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch(() => undefined);
-        sendError(res, 502, 'MUX_UPLOAD_FAILED', 'فشل رفع الفيديو إلى خادم المعالجة. حاول مرة أخرى.');
+        sendError(req, res, 502, ErrorCode.EXTERNAL_SERVICE, 'MUX_UPLOAD_FAILED', 'Failed to upload the video to the processing server. Please try again.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
           fileSizeMB: videoFile.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -718,7 +754,7 @@ router.post(
         // Fix 2 + Fix 6: Mux rejected the upload — clean up everything
         logger.error(`[upload/reel] Mux upload rejected (${muxUploadResponse.status}) — cleaning up: ${errText}`);
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch(() => undefined);
-        sendError(res, 502, 'MUX_UPLOAD_REJECTED', 'رفض خادم المعالجة الفيديو. تأكد من صحة الملف وحاول مرة أخرى.');
+        sendError(req, res, 502, ErrorCode.EXTERNAL_SERVICE, 'MUX_UPLOAD_REJECTED', 'The processing server rejected the video. Make sure the file is valid and try again.');
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
           fileSizeMB: videoFile.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -763,11 +799,12 @@ router.post(
         });
         if (mentionedUser) {
           await prisma.reelMention.create({ data: { reelId: placeholderReel.id, mentionedUserId: mentionedUser.id } });
+          const lang = await getUserLanguage(mentionedUser.id);
           await prisma.notification.create({
             data: {
               userId: mentionedUser.id,
-              title: 'تم الإشارة إليك',
-              message: 'قام شخص بالإشارة إليك في فيديو',
+              title: renderPushTemplate('mentionInVideoTitle', lang),
+              message: renderPushTemplate('mentionInVideoBody', lang),
               type: 'GENERAL',
               data: { reelId: placeholderReel.id },
             },
@@ -805,7 +842,7 @@ router.post(
 
       res.json({
         status: 'SUCCESS',
-        message: 'تم رفع الفيديو بنجاح وجاري المعالجة',
+        message: 'Reel uploaded successfully and is being processed.',
         data: {
           reelId: placeholderReel.id,
           muxUploadId: uploadId,
@@ -818,7 +855,7 @@ router.post(
       logger.error('[upload/reel] Exception:', error?.message);
 
       if (!res.headersSent) {
-        sendError(res, 500, 'UPLOAD_ERROR', error?.message || 'Failed to upload reel');
+        sendError(req, res, 500, ErrorCode.INTERNAL, 'UPLOAD_ERROR', error?.message || 'Failed to upload reel');
       }
 
       await UploadAnalyticsService.record({
@@ -856,7 +893,7 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
       },
     });
 
-    if (!reel) { sendError(res, 404, 'NOT_FOUND', 'Reel not found'); return; }
+    if (!reel) { sendError(req, res, 404, ErrorCode.NOT_FOUND, 'NOT_FOUND', 'Reel not found'); return; }
 
     // Poll-fallback: if the reel has been PROCESSING for >10s, ask Mux directly
     // and self-heal the DB in case the webhook was missed or delayed.
@@ -935,10 +972,11 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
 
             try {
               const { NotificationService } = await import('../services/notification.service');
+              const lang = await getUserLanguage(reel.userId);
               await NotificationService.createNotification({
                 userId: reel.userId,
-                title: '✅ فيديوهك جاهز!',
-                message: 'تم معالجة فيديوهك بنجاح وهو متاح الآن للمشاهدة',
+                title: renderPushTemplate('videoReadyTitle', lang),
+                message: renderPushTemplate('videoReadyBody', lang),
                 type: 'VIDEO_PROCESSED',
                 data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'READY', muxPlaybackId: playbackId },
               });
@@ -970,10 +1008,11 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
           // ✅ Notify uploader that processing failed (webhook-equivalent)
           try {
             const { NotificationService } = await import('../services/notification.service');
+            const lang = await getUserLanguage(reel.userId);
             await NotificationService.createNotification({
               userId: reel.userId,
-              title: '❌ فشل رفع الفيديو',
-              message: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+              title: renderPushTemplate('videoFailedTitle', lang),
+              message: renderPushTemplate('videoFailedBody', lang),
               type: 'VIDEO_PROCESSED',
               data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'FAILED' },
             });
@@ -1010,7 +1049,7 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
       },
     });
   } catch (error: any) {
-    sendError(res, 500, 'ERROR', error?.message);
+    sendError(req, res, 500, ErrorCode.INTERNAL, 'INTERNAL', error?.message || 'Internal server error');
   }
 });
 
@@ -1023,18 +1062,18 @@ router.delete(
   async (req: Request, res: Response): Promise<void> => {
     const startTime = Date.now();
     const clerkUserId = req.auth?.userId;
-    if (!clerkUserId) { sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized'); return; }
+    if (!clerkUserId) { sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized'); return; }
 
     try {
       const user = await prisma.user.findUnique({
         where: { clerkUserId },
         select: { id: true, avatarStoragePath: true, avatar: true },
       });
-      if (!user) { sendError(res, 404, 'USER_NOT_FOUND', 'User not found'); return; }
+      if (!user) { sendError(req, res, 404, ErrorCode.NOT_FOUND, 'USER_NOT_FOUND', 'User not found'); return; }
 
       // Only allow removal if user has a custom avatar stored in R2
       if (!user.avatarStoragePath) {
-        sendError(res, 400, 'NO_AVATAR', 'لا توجد صورة بروفايل مخصصة لإزالتها');
+        sendError(req, res, 400, ErrorCode.NOT_FOUND, 'NO_AVATAR', 'No custom profile picture to remove.');
         return;
       }
 
@@ -1065,10 +1104,10 @@ router.delete(
         fileSizeMB: 0, durationMs: Date.now() - startTime,
       });
 
-      res.json({ status: 'SUCCESS', message: 'تم إزالة صورة البروفايل بنجاح' });
+      res.json({ status: 'SUCCESS', message: 'Profile picture removed.' });
     } catch (error: any) {
       logger.error('Delete avatar error:', error);
-      sendError(res, 500, 'DELETE_ERROR', error?.message || 'Failed to remove avatar');
+      sendError(req, res, 500, ErrorCode.INTERNAL, 'DELETE_ERROR', error?.message || 'Failed to remove avatar');
     }
   },
 );

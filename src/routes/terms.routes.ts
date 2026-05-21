@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { TermsService } from '../services/terms.service';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -12,17 +13,10 @@ const router = Router();
 router.get('/latest', async (req: Request, res: Response): Promise<void> => {
   try {
     const terms = await TermsService.getLatestTerms();
-    
-    res.json({
-      status: 'SUCCESS',
-      data: terms,
-    });
+    res.json({ status: 'SUCCESS', data: terms });
   } catch (error: any) {
     logger.error('Get latest terms error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Failed to get terms',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Failed to get terms');
   }
 });
 
@@ -36,12 +30,12 @@ router.post('/accept', requireAuth, async (req: Request, res: Response): Promise
     const { version } = req.body;
 
     if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
       return;
     }
 
     if (!version) {
-      res.status(400).json({ status: 'ERROR', message: 'Version is required' });
+      sendError(req, res, ErrorCode.VALIDATION, 'Version is required');
       return;
     }
 
@@ -52,27 +46,21 @@ router.post('/accept', requireAuth, async (req: Request, res: Response): Promise
     });
 
     if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
       return;
     }
 
     // Get IP address and user agent
-    const ipAddress = req.ip || req.headers['x-forwarded-for'] as string || undefined;
+    const ipAddress = req.ip || (req.headers['x-forwarded-for'] as string) || undefined;
     const userAgent = req.headers['user-agent'];
 
     // Record acceptance
     await TermsService.recordAcceptance(user.id, version, ipAddress, userAgent);
 
-    res.json({
-      status: 'SUCCESS',
-      message: 'Terms accepted successfully',
-    });
+    res.json({ status: 'SUCCESS', message: 'Terms accepted successfully' });
   } catch (error: any) {
     logger.error('Accept terms error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Failed to accept terms',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Failed to accept terms');
   }
 });
 
@@ -85,7 +73,7 @@ router.get('/user-acceptance', requireAuth, async (req: Request, res: Response):
     const clerkUserId = req.auth?.userId;
 
     if (!clerkUserId) {
-      res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
       return;
     }
 
@@ -96,7 +84,7 @@ router.get('/user-acceptance', requireAuth, async (req: Request, res: Response):
     });
 
     if (!user) {
-      res.status(404).json({ status: 'ERROR', message: 'User not found' });
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
       return;
     }
 
@@ -112,10 +100,7 @@ router.get('/user-acceptance', requireAuth, async (req: Request, res: Response):
     });
   } catch (error: any) {
     logger.error('Get user acceptance error:', error);
-    res.status(500).json({
-      status: 'ERROR',
-      message: error.message || 'Failed to get acceptance history',
-    });
+    sendError(req, res, ErrorCode.INTERNAL, 'Failed to get acceptance history');
   }
 });
 

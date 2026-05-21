@@ -23,6 +23,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bell, Star, CalendarClock, Sparkles, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from '../../src/i18n';
 import { SectionHeader } from './SectionHeader';
 import {
     PURPLE_PRIMARY,
@@ -395,6 +396,7 @@ function PulsingGlow(): React.ReactElement {
 }
 
 function EmptySection({ onAction }: { onAction?: () => void }): React.ReactElement {
+    const { t } = useTranslation();
     const glassProps: any = isLiquidGlassSupported
         ? { effect: 'clear', interactive: false, tint: 'rgba(20,15,30,0.58)' }
         : { intensity: 30, tint: 'dark' };
@@ -477,9 +479,9 @@ function EmptySection({ onAction }: { onAction?: () => void }): React.ReactEleme
                 </View>
 
                 {/* Copy */}
-                <Text style={styles.emptyTitle}>مفيش ماتشات دلوقتي</Text>
+                <Text style={styles.emptyTitle}>{t.homeExtra.emptyMatchesTitle}</Text>
                 <Text style={styles.emptySubtitle}>
-                    لسه مفيش مباريات مجدولة{'\n'}نزّل لتحديث الصفحة
+                    {t.homeExtra.emptyMatchesSub}
                 </Text>
 
                 {/* Glass CTA pill */}
@@ -489,7 +491,7 @@ function EmptySection({ onAction }: { onAction?: () => void }): React.ReactEleme
                         onPress={onAction}
                         style={styles.emptyCtaOuter}
                         accessibilityRole="button"
-                        accessibilityLabel="فتح قائمة المباريات"
+                        accessibilityLabel={t.homeExtra.accessibilityOpenMatches}
                     >
                         <View style={styles.emptyCta}>
                             {isLiquidGlassSupported ? (
@@ -512,7 +514,7 @@ function EmptySection({ onAction }: { onAction?: () => void }): React.ReactEleme
                                 end={{ x: 1, y: 0 }}
                                 style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
                             />
-                            <Text style={styles.emptyCtaText}>استعرض كل المباريات</Text>
+                            <Text style={styles.emptyCtaText}>{t.homeExtra.browseAllMatches}</Text>
                             <ChevronRight
                                 size={14}
                                 color={PURPLE_SOFT}

@@ -23,6 +23,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import { verifyNotificationOwnership } from '../middleware/ownership.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -36,7 +37,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -50,7 +51,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -87,7 +88,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
         });
     } catch (error: any) {
         logger.error('Get notifications error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -101,7 +102,7 @@ router.get('/unread-count', requireAuth, async (req: Request, res: Response): Pr
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -111,7 +112,7 @@ router.get('/unread-count', requireAuth, async (req: Request, res: Response): Pr
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -122,7 +123,7 @@ router.get('/unread-count', requireAuth, async (req: Request, res: Response): Pr
         res.json({ status: 'SUCCESS', data: { count } });
     } catch (error: any) {
         logger.error('Get unread count error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -135,13 +136,13 @@ router.get('/unread-count', requireAuth, async (req: Request, res: Response): Pr
 router.get('/preferences', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+        if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true },
         });
-        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+        if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
         const prefs = await (prisma as any).notificationPreferences.upsert({
             where: { userId: user.id },
@@ -152,7 +153,7 @@ router.get('/preferences', requireAuth, async (req: Request, res: Response): Pro
         res.json({ status: 'SUCCESS', data: { preferences: prefs } });
     } catch (error: any) {
         logger.error('Get notification preferences error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -165,13 +166,13 @@ router.get('/preferences', requireAuth, async (req: Request, res: Response): Pro
 router.put('/preferences', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+        if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true },
         });
-        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+        if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
         const allowedFields = [
             'matchGoals', 'matchStart', 'matchEnd', 'matchHalftime', 'leagueMatches',
@@ -195,7 +196,7 @@ router.put('/preferences', requireAuth, async (req: Request, res: Response): Pro
         res.json({ status: 'SUCCESS', data: { preferences: prefs } });
     } catch (error: any) {
         logger.error('Update notification preferences error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -209,7 +210,7 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -219,7 +220,7 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -231,7 +232,7 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
         res.json({ status: 'SUCCESS', message: 'تم قراءة جميع الإشعارات' });
     } catch (error: any) {
         logger.error('Mark all as read error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -245,7 +246,7 @@ router.delete('/clear-all', requireAuth, async (req: Request, res: Response): Pr
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -255,7 +256,7 @@ router.delete('/clear-all', requireAuth, async (req: Request, res: Response): Pr
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -264,7 +265,7 @@ router.delete('/clear-all', requireAuth, async (req: Request, res: Response): Pr
         res.json({ status: 'SUCCESS', message: 'تم مسح جميع الإشعارات' });
     } catch (error: any) {
         logger.error('Clear all notifications error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -285,7 +286,7 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -293,16 +294,18 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
         const parsedFixtureId = Number.parseInt(String(fixtureId), 10);
 
         if (!Number.isFinite(parsedFixtureId) || !matchTime || !homeTeam || !awayTeam) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'fixtureId, matchTime, homeTeam and awayTeam are required',
-            });
+            sendError(
+                req,
+                res,
+                ErrorCode.VALIDATION,
+                'fixtureId, matchTime, homeTeam and awayTeam are required',
+            );
             return;
         }
 
         const matchDate = new Date(matchTime);
         if (Number.isNaN(matchDate.getTime())) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid matchTime' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid matchTime');
             return;
         }
 
@@ -311,7 +314,7 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
             select: { id: true },
         });
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -364,7 +367,7 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
         });
     } catch (error: any) {
         logger.error('Match subscribe error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -375,14 +378,14 @@ router.delete('/match-subscribe/:fixtureId', requireAuth, async (req: Request, r
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         const fixtureIdParam = Array.isArray(req.params.fixtureId) ? req.params.fixtureId[0] : req.params.fixtureId;
         const parsedFixtureId = Number.parseInt(fixtureIdParam, 10);
         if (!Number.isFinite(parsedFixtureId)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid fixtureId' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid fixtureId');
             return;
         }
 
@@ -391,7 +394,7 @@ router.delete('/match-subscribe/:fixtureId', requireAuth, async (req: Request, r
             select: { id: true },
         });
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -413,7 +416,7 @@ router.delete('/match-subscribe/:fixtureId', requireAuth, async (req: Request, r
         });
     } catch (error: any) {
         logger.error('Match unsubscribe error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -426,7 +429,7 @@ router.get('/match-subscriptions', requireAuth, async (req: Request, res: Respon
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -435,7 +438,7 @@ router.get('/match-subscriptions', requireAuth, async (req: Request, res: Respon
             select: { id: true },
         });
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -453,7 +456,7 @@ router.get('/match-subscriptions', requireAuth, async (req: Request, res: Respon
         });
     } catch (error: any) {
         logger.error('Match subscriptions fetch error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -476,7 +479,7 @@ router.put('/:id/read', requireAuth, verifyNotificationOwnership, async (req: Re
         res.json({ status: 'SUCCESS', message: 'تم قراءة الإشعار' });
     } catch (error: any) {
         logger.error('Mark as read error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -494,7 +497,7 @@ router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Requ
         res.json({ status: 'SUCCESS', message: 'تم حذف الإشعار' });
     } catch (error: any) {
         logger.error('Delete notification error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -506,7 +509,7 @@ router.delete('/:id', requireAuth, verifyNotificationOwnership, async (req: Requ
 router.post('/:id/opened', requireAuth, verifyNotificationOwnership, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+        if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
         const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
@@ -514,7 +517,7 @@ router.post('/:id/opened', requireAuth, verifyNotificationOwnership, async (req:
             where: { clerkUserId },
             select: { id: true },
         });
-        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
+        if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
         await (prisma as any).notificationEvent.create({
             data: {
@@ -527,7 +530,7 @@ router.post('/:id/opened', requireAuth, verifyNotificationOwnership, async (req:
         res.json({ status: 'SUCCESS' });
     } catch (error: any) {
         logger.error('Track notification open error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -540,17 +543,17 @@ router.post('/:id/opened', requireAuth, verifyNotificationOwnership, async (req:
 router.post('/test-push', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        if (!clerkUserId) { res.status(401).json({ status: 'ERROR', message: 'Unauthorized' }); return; }
+        if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true, expoPushToken: true, pushNotificationsConsent: true, isDeveloper: true },
         });
-        if (!user) { res.status(404).json({ status: 'ERROR', message: 'User not found' }); return; }
-        if (!user.isDeveloper) { res.status(403).json({ status: 'ERROR', message: 'Developer access only' }); return; }
+        if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
+        if (!user.isDeveloper) { sendError(req, res, ErrorCode.AUTHORIZATION, 'Developer access only'); return; }
 
         if (!user.expoPushToken) {
-            res.status(400).json({ status: 'ERROR', message: 'No push token registered. Open the app on a real device first.' });
+            sendError(req, res, ErrorCode.VALIDATION, 'No push token registered. Open the app on a real device first.');
             return;
         }
 
@@ -645,7 +648,7 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
         });
     } catch (error: any) {
         logger.error('Test push error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

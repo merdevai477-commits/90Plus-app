@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from '../../src/i18n';
+import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -50,6 +52,8 @@ export const ProfileTasksModal: React.FC<ProfileTasksModalProps> = ({
   canUploadVideo,
   onStepPress,
 }) => {
+  const { t, language } = useTranslation();
+  const tProfile = t.profile;
   // Get color based on percentage
   const getProgressColor = (): [string, string] => {
     if (percentage >= 80) return ['#22c55e', '#16a34a']; // Green
@@ -95,9 +99,11 @@ export const ProfileTasksModal: React.FC<ProfileTasksModalProps> = ({
                 <Ionicons name="checkmark-done" size={24} color={progressColors[0]} />
               </View>
               <View>
-                <Text style={styles.title}>مهام البروفايل</Text>
-                <Text style={styles.subtitle}>
-                  {completedSteps} من {totalSteps} مكتملة
+                <Text style={styles.title} numberOfLines={1}>{tProfile.completionTasksTitle}</Text>
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {tProfile.completionTasksProgress
+                    .replace('{done}', String(completedSteps))
+                    .replace('{total}', String(totalSteps))}
                 </Text>
               </View>
             </View>
@@ -128,8 +134,8 @@ export const ProfileTasksModal: React.FC<ProfileTasksModalProps> = ({
           {!canUploadVideo && (
             <View style={styles.warningContainer}>
               <Ionicons name="warning" size={18} color="#f97316" />
-              <Text style={styles.warningText}>
-                أكمل 3 خطوات على الأقل لرفع الفيديوهات
+              <Text style={styles.warningText} numberOfLines={2}>
+                {tProfile.completionUploadGate}
               </Text>
             </View>
           )}
@@ -170,13 +176,14 @@ export const ProfileTasksModal: React.FC<ProfileTasksModalProps> = ({
                           styles.taskLabel,
                           step.completed && styles.taskLabelCompleted,
                         ]}
+                        numberOfLines={1}
                       >
-                        {step.label}
+                        {getProfileCompletionStepLabel(step.id, language, step.label)}
                       </Text>
                       <View style={styles.taskMeta}>
                         {step.required && !step.completed && (
                           <View style={styles.requiredBadge}>
-                            <Text style={styles.requiredText}>مطلوب</Text>
+                            <Text style={styles.requiredText}>{tProfile.completionRequiredBadge}</Text>
                           </View>
                         )}
                         <Text style={styles.weightText}>+{step.weight}%</Text>
@@ -195,8 +202,8 @@ export const ProfileTasksModal: React.FC<ProfileTasksModalProps> = ({
           {/* Footer Tip */}
           <View style={styles.footer}>
             <Ionicons name="bulb-outline" size={16} color="#eab308" />
-            <Text style={styles.footerText}>
-              أكمل بروفايلك للحصول على تجربة أفضل
+            <Text style={styles.footerText} numberOfLines={2}>
+              {tProfile.completionFooterTip}
             </Text>
           </View>
         </View>

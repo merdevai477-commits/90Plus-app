@@ -230,7 +230,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
     const handleShareWhatsApp = useCallback(async () => {
         const url = `${REEL_BASE_URL}/${reel.id}`;
-        const message = `شاهد هذا الفيديو الرائع على 90Plus! ${url}`;
+        const message = (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url);
         const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
         try {
             const canOpen = await Linking.canOpenURL(whatsappUrl);
@@ -298,7 +298,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             // Android — use native share sheet
             const url = `${REEL_BASE_URL}/${reel.id}`;
             RNShare.share({
-                message: `شاهد هذا الفيديو الرائع على 90Plus! ${url}`,
+                message: (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url),
             }).then(() => onShare());
         }
     }, [reel.id, t, handleShareWhatsApp, handleShareFacebook, handleCopyLink, onShare]);
@@ -310,8 +310,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
         if (Platform.OS === 'ios') {
             const options = isOwnReel
-                ? [t.common.cancel, 'تعديل الوصف ✏️', 'حذف الفيديو 🗑️']
-                : [t.common.cancel, 'الإبلاغ عن الفيديو'];
+                ? [t.common.cancel, t.reels.editCaption, t.reels.deleteReelAction]
+                : [t.common.cancel, t.reels.reportReelAction];
             const cancelIndex = 0;
             const destructiveIndex = isOwnReel ? 2 : 1;
 
@@ -325,11 +325,11 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             setShowEditModal(true);
                         } else if (buttonIndex === 2 && onDeleteReel) {
                             Alert.alert(
-                                'حذف الفيديو',
-                                'هل أنت متأكد؟ لا يمكن التراجع عن هذا الإجراء.',
+                                t.reels.deleteConfirmTitle,
+                                t.reels.deleteConfirmMessage,
                                 [
-                                    { text: 'إلغاء', style: 'cancel' },
-                                    { text: 'حذف', style: 'destructive', onPress: () => onDeleteReel(reel.id) },
+                                    { text: t.reels.deleteConfirmCancel, style: 'cancel' },
+                                    { text: t.reels.deleteConfirmDelete, style: 'destructive', onPress: () => onDeleteReel(reel.id) },
                                 ]
                             );
                         }
@@ -342,31 +342,31 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             // Android
             if (isOwnReel) {
                 Alert.alert(
-                    'خيارات الفيديو',
+                    t.reels.actionsSheetTitle,
                     '',
                     [
                         {
-                            text: 'تعديل الوصف ✏️',
+                            text: t.reels.editCaption,
                             onPress: () => {
                                 setEditCaption(reel.description || '');
                                 setShowEditModal(true);
                             },
                         },
                         {
-                            text: 'حذف الفيديو 🗑️',
+                            text: t.reels.deleteReelAction,
                             style: 'destructive',
                             onPress: () => {
                                 Alert.alert(
-                                    'حذف الفيديو',
-                                    'هل أنت متأكد؟ لا يمكن التراجع عن هذا الإجراء.',
+                                    t.reels.deleteConfirmTitle,
+                                    t.reels.deleteConfirmMessage,
                                     [
-                                        { text: 'إلغاء', style: 'cancel' },
-                                        { text: 'حذف', style: 'destructive', onPress: () => onDeleteReel?.(reel.id) },
+                                        { text: t.reels.deleteConfirmCancel, style: 'cancel' },
+                                        { text: t.reels.deleteConfirmDelete, style: 'destructive', onPress: () => onDeleteReel?.(reel.id) },
                                     ]
                                 );
                             },
                         },
-                        { text: 'إلغاء', style: 'cancel' },
+                        { text: t.reels.deleteConfirmCancel, style: 'cancel' },
                     ]
                 );
             } else {
@@ -479,7 +479,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             </View>
                             {typeof reel.user.followers === 'number' && reel.user.followers > 0 && (
                                 <Text style={styles.userFollowers}>
-                                    {formatCount(reel.user.followers)} {t.profile?.followers || 'متابعين'}
+                                    {formatCount(reel.user.followers)} {t.reels?.followersLabel || t.profile?.followers || 'followers'}
                                 </Text>
                             )}
                         </View>
@@ -565,7 +565,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     <View style={styles.statItem}>
                         <Eye size={14} color={COLORS.accent} />
                         <Text style={styles.statText}>
-                            {formatCount(reel.views)} {t.reels?.views || 'مشاهدات'}
+                            {formatCount(reel.views)} {t.reels?.views || t.reels?.viewsLabel || 'views'}
                         </Text>
                     </View>
                     {reel.location && (
@@ -689,9 +689,9 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                 disabled={isSavingEdit}
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             >
-                                <Text style={editStyles.cancelBtn}>إلغاء</Text>
+                                <Text style={editStyles.cancelBtn}>{t.reels.editModalCancel}</Text>
                             </TouchableOpacity>
-                            <Text style={editStyles.title}>تعديل الوصف</Text>
+                            <Text style={editStyles.title}>{t.reels.editModalTitle}</Text>
                             <TouchableOpacity
                                 onPress={async () => {
                                     if (!onEditReel || isSavingEdit) return;
@@ -713,7 +713,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                 {isSavingEdit ? (
                                     <ActivityIndicator size="small" color={COLORS.primary} />
                                 ) : (
-                                    <Text style={editStyles.saveBtn}>حفظ</Text>
+                                    <Text style={editStyles.saveBtn}>{t.reels.editModalSave}</Text>
                                 )}
                             </TouchableOpacity>
                         </View>
@@ -724,7 +724,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                 style={editStyles.input}
                                 value={editCaption}
                                 onChangeText={setEditCaption}
-                                placeholder="اكتب وصفاً للفيديو... #هاشتاج @مستخدم"
+                                placeholder={t.reels.editModalPlaceholder}
                                 placeholderTextColor="rgba(255,255,255,0.35)"
                                 multiline
                                 maxLength={500}
@@ -739,7 +739,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
                         {/* Hint */}
                         <Text style={editStyles.hint}>
-                            💡 يمكنك إضافة هاشتاجات بـ # وذكر مستخدمين بـ @
+                            {t.reels.editModalHint}
                         </Text>
                     </View>
                 </KeyboardAvoidingView>

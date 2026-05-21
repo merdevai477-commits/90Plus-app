@@ -3,9 +3,10 @@ import { r2MediaStorage } from '../services/r2-media-storage.service';
 import prisma from '../lib/prisma';
 import { validateFileSize, validateMimeType } from '../middleware/file-validation.middleware';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 // Constants for rate limiting
-const REEL_UPLOAD_COOLDOWN_DAYS = 1; // تقليل من 3 أيام لـ 1 يوم
+const REEL_UPLOAD_COOLDOWN_DAYS = 1; // Reduced from 3 days to 1 day
 // Requirements 13.5, 13.6: Allow up to 2 deletions, block the third
 export const MAX_REEL_DELETES = 2;
 
@@ -44,14 +45,14 @@ export function shouldResetUploadCooldown(wasDeleted: boolean): boolean {
 
 export class VideoController {
   /**
-   * GET /api/videos - جلب فيديوهات المستخدم الحالي
+   * GET /api/videos — fetch the current user's videos
    */
   static async getMyVideos(req: Request, res: Response): Promise<void> {
     try {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -61,7 +62,7 @@ export class VideoController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -110,12 +111,12 @@ export class VideoController {
       });
     } catch (error) {
       logger.error('Get videos error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to get videos' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to get videos');
     }
   }
 
   /**
-   * GET /api/videos/user/:username - جلب فيديوهات مستخدم معين
+   * GET /api/videos/user/:username — fetch a specific user's videos
    */
   static async getVideosByUsername(req: Request, res: Response): Promise<void> {
     try {
@@ -127,7 +128,7 @@ export class VideoController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -176,12 +177,12 @@ export class VideoController {
       });
     } catch (error) {
       logger.error('Get videos by username error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to get videos' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to get videos');
     }
   }
 
   /**
-   * POST /api/videos - رفع فيديو جديد
+   * POST /api/videos — upload a new video
    * Requirements: 13.1, 13.2, 13.3 - 3-day cooldown enforcement
    */
   static async uploadVideo(req: Request, res: Response): Promise<void> {
@@ -189,7 +190,7 @@ export class VideoController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -199,7 +200,7 @@ export class VideoController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -207,22 +208,25 @@ export class VideoController {
       if (user.lastReelUpload) {
         const msSinceLastUpload = Date.now() - new Date(user.lastReelUpload).getTime();
         const cooldownMs = REEL_UPLOAD_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
-        
+
         if (msSinceLastUpload < cooldownMs) {
           const remainingMs = cooldownMs - msSinceLastUpload;
           const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000));
           const daysRemaining = Math.floor(hoursRemaining / 24);
           const hoursInDay = hoursRemaining % 24;
-          
-          // Return remaining hours on rejection (Requirement 13.3)
-          res.status(429).json({
-            status: 'ERROR',
-            code: 'UPLOAD_COOLDOWN_ACTIVE',
-            message: `يمكنك رفع فيديو جديد بعد ${hoursRemaining} ساعة`,
-            hoursRemaining,
-            daysRemaining,
-            hoursInDay,
-          });
+
+          // E006 — frontend localizes via the error code; the message
+          // here is a safe English fallback only.
+          sendError(
+            req, res, ErrorCode.RATE_LIMIT,
+            `You can upload a new reel in ${hoursRemaining} hour(s).`,
+            {
+              code: 'UPLOAD_COOLDOWN_ACTIVE',
+              hoursRemaining,
+              daysRemaining,
+              hoursInDay,
+            },
+          );
           return;
         }
       }
@@ -232,29 +236,31 @@ export class VideoController {
       const thumbnailFile = files?.['thumbnail']?.[0];
 
       if (!videoFile) {
-        res.status(400).json({ status: 'ERROR', message: 'No video file uploaded' });
+        sendError(req, res, ErrorCode.FILE_UPLOAD, 'No video file uploaded');
         return;
       }
 
       // Validate file size (50MB hard limit)
       const sizeValidation = validateFileSize(videoFile.buffer);
       if (!sizeValidation.valid) {
-        res.status(413).json({
-          status: 'ERROR',
-          code: sizeValidation.errorCode,
-          message: sizeValidation.error,
-        });
+        sendError(
+          req, res, ErrorCode.FILE_UPLOAD,
+          sizeValidation.error || 'Video file too large.',
+          { code: sizeValidation.errorCode },
+          413,
+        );
         return;
       }
 
       // Validate MIME type using magic bytes
       const mimeValidation = validateMimeType(videoFile.buffer, videoFile.mimetype);
       if (!mimeValidation.valid) {
-        res.status(415).json({
-          status: 'ERROR',
-          code: mimeValidation.errorCode,
-          message: mimeValidation.error,
-        });
+        sendError(
+          req, res, ErrorCode.FILE_UPLOAD,
+          mimeValidation.error || 'Unsupported video type.',
+          { code: mimeValidation.errorCode },
+          415,
+        );
         return;
       }
 
@@ -271,7 +277,7 @@ export class VideoController {
       );
 
       if (!videoResult.success || !videoResult.url || !videoResult.key) {
-        res.status(500).json({ status: 'ERROR', message: videoResult.error || 'Failed to upload video' });
+        sendError(req, res, ErrorCode.EXTERNAL_SERVICE, videoResult.error || 'Failed to upload video');
         return;
       }
 
@@ -338,14 +344,14 @@ export class VideoController {
       });
     } catch (error) {
       logger.error('Upload video error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to upload video' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to upload video');
     }
   }
 
   /**
-   * DELETE /api/videos/:id - حذف فيديو
-   * حد أقصى 2 مرات مسح للفيديو (Requirements 13.5, 13.6)
-   * يتم إعادة تعيين cooldown الرفع عند الحذف (Requirement 13.4)
+   * DELETE /api/videos/:id — delete a video
+   * Maximum 2 deletions per user (Requirements 13.5, 13.6).
+   * Deleting a video resets the upload cooldown (Requirement 13.4).
    */
   static async deleteVideo(req: Request, res: Response): Promise<void> {
     
@@ -355,7 +361,7 @@ export class VideoController {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -365,19 +371,21 @@ export class VideoController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
       // Check if user has reached delete limit (Requirement 13.6)
       if (user.reelDeleteCount >= MAX_REEL_DELETES) {
-        res.status(429).json({
-          status: 'ERROR',
-          message: 'لقد وصلت للحد الأقصى من مسح الفيديوهات (2 مرات)',
-          code: 'MAX_DELETES_REACHED',
-          deletesUsed: user.reelDeleteCount,
-          maxDeletes: MAX_REEL_DELETES
-        });
+        sendError(
+          req, res, ErrorCode.RATE_LIMIT,
+          `You have reached the maximum number of reel deletions (${MAX_REEL_DELETES}).`,
+          {
+            code: 'MAX_DELETES_REACHED',
+            deletesUsed: user.reelDeleteCount,
+            maxDeletes: MAX_REEL_DELETES,
+          },
+        );
         return;
       }
 
@@ -392,12 +400,12 @@ export class VideoController {
       });
 
       if (!reel) {
-        res.status(404).json({ status: 'ERROR', message: 'Video not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'Video not found');
         return;
       }
 
       if (reel.userId !== user.id) {
-        res.status(403).json({ status: 'ERROR', message: 'Not authorized to delete this video' });
+        sendError(req, res, ErrorCode.AUTHORIZATION, 'Not authorized to delete this video');
         return;
       }
 
@@ -462,12 +470,12 @@ export class VideoController {
       });
     } catch (error) {
       logger.error('Delete video error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to delete video' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to delete video');
     }
   }
 
   /**
-   * POST /api/videos/:id/view - تسجيل مشاهدة
+   * POST /api/videos/:id/view — record a view
    */
   static async recordView(req: Request, res: Response): Promise<void> {
     try {
@@ -482,7 +490,7 @@ export class VideoController {
       res.json({ status: 'SUCCESS' });
     } catch (error) {
       logger.error('Record view error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to record view' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to record view');
     }
   }
 
@@ -496,7 +504,7 @@ export class VideoController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -510,7 +518,7 @@ export class VideoController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -542,7 +550,7 @@ export class VideoController {
       });
     } catch (error) {
       logger.error('Get delete status error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to get delete status' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to get delete status');
     }
   }
 }

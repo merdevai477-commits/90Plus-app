@@ -2,6 +2,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from './websocket.service';
 import PushNotificationService from './push-notification.service';
+import { renderPushTemplate, getUserLanguage } from './push-templates.service';
 
 export enum NotificationType {
     MATCH_UPDATE = 'MATCH_UPDATE',
@@ -252,8 +253,9 @@ export class NotificationService {
         if (prefs && !prefs.matchGoals) return null;
 
         const scorer = scoringTeam === 'home' ? homeTeam : awayTeam;
-        const title = '⚽ هدف!';
-        const message = `${scorer} سجل! ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`;
+        const lang = await getUserLanguage(userId);
+        const title = renderPushTemplate('goalTitle', lang);
+        const message = `${scorer} — ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`;
 
         return this.createNotification({
             userId,
@@ -304,8 +306,13 @@ export class NotificationService {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchStart) return null;
 
-        const title = '🏟️ بدأت المباراة!';
-        const message = `${homeTeam} vs ${awayTeam} - المباراة بدأت الآن`;
+        const lang = await getUserLanguage(userId);
+        const title = renderPushTemplate('matchStartTitle', lang);
+        const message = renderPushTemplate('matchStartBody', lang, {
+            home: homeTeam,
+            away: awayTeam,
+            minutes: 0,
+        });
 
         return this.createNotification({
             userId,
@@ -355,8 +362,14 @@ export class NotificationService {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchHalftime) return null;
 
-        const title = '⏸️ نهاية الشوط الأول';
-        const message = `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam} (HT)`;
+        const lang = await getUserLanguage(userId);
+        const title = renderPushTemplate('halftimeTitle', lang);
+        const message = renderPushTemplate('halftimeBody', lang, {
+            home: homeTeam,
+            away: awayTeam,
+            homeScore,
+            awayScore,
+        });
 
         return this.createNotification({
             userId,
@@ -408,12 +421,14 @@ export class NotificationService {
         const prefs = await getUserPreferences(userId);
         if (prefs && !prefs.matchEnd) return null;
 
-        const title = '🏁 انتهت المباراة!';
-        let result = 'تعادل';
-        if (homeScore > awayScore) result = `فوز ${homeTeam}`;
-        else if (awayScore > homeScore) result = `فوز ${awayTeam}`;
-
-        const message = `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam} | ${result}`;
+        const lang = await getUserLanguage(userId);
+        const title = renderPushTemplate('fulltimeTitle', lang);
+        const message = renderPushTemplate('fulltimeBody', lang, {
+            home: homeTeam,
+            away: awayTeam,
+            homeScore,
+            awayScore,
+        });
 
         return this.createNotification({
             userId,
@@ -479,10 +494,13 @@ export class NotificationService {
 
             if (prefs && !prefs.predictionResults) return null;
 
-            const title = isCorrect ? '🎯 توقع صحيح!' : '❌ توقع خاطئ';
+            const lang = await getUserLanguage(userId);
+            const title = isCorrect
+                ? renderPushTemplate('predictionWinTitle', lang)
+                : renderPushTemplate('predictionLossTitle', lang);
             const message = isCorrect
-                ? `تهانينا! توقعك كان صحيحاً 🎉\n${matchInfo}\n+${coinsWon} تذاكر`
-                : `للأسف توقعك كان خاطئاً\n${matchInfo}\nجرب حظك في المباراة الجاية! 🎯`;
+                ? `${renderPushTemplate('predictionWinBody', lang, { coins: coinsWon, match: matchInfo })}`
+                : `${renderPushTemplate('predictionLossBody', lang, { match: matchInfo })}`;
 
             const fixtureId = match?.fixtureId != null ? String(match.fixtureId) : '';
             const matchDate = match?.matchDate

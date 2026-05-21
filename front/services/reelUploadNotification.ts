@@ -17,6 +17,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { logger } from './logger';
+import { useLanguageStore } from '../src/i18n/store';
+import { translations } from '../src/i18n/utils';
 
 const CHANNEL_ID = 'reel-upload';
 const CHANNEL_ID_RESULT = 'reel-upload-result';
@@ -25,6 +27,18 @@ const ACTIVE_REQUEST_ID = 'reel-upload-active-session';
 let lastProgressRounded = -1;
 
 type NotificationsModule = typeof import('expo-notifications');
+
+/**
+ * Read push templates for the current language from the i18n store.
+ * Falls back to English if the language slot is missing or partial so
+ * we never crash a notification just because a key is unavailable.
+ */
+function getPushTemplates() {
+    const lang = useLanguageStore.getState().language;
+    const tab = (translations[lang] ?? translations.en).pushTemplates;
+    const en = translations.en.pushTemplates;
+    return { ...en, ...tab } as typeof en;
+}
 
 /** True when the app is running inside Expo Go (not a development/production build). */
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -52,9 +66,10 @@ async function ensureChannels(): Promise<void> {
     if (Platform.OS !== 'android') return;
     const Notifications = getNotificationsModule();
     if (!Notifications) return;
+    const tpl = getPushTemplates();
     // Silent channel for progress updates (no sound, no vibration)
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-        name: 'رفع الريلز - التقدم',
+        name: tpl.reelUploadChannelProgress,
         importance: Notifications.AndroidImportance.LOW,
         vibrationPattern: [],
         enableVibrate: false,
@@ -63,7 +78,7 @@ async function ensureChannels(): Promise<void> {
     });
     // Loud channel for success/failure only
     await Notifications.setNotificationChannelAsync(CHANNEL_ID_RESULT, {
-        name: 'رفع الريلز - النتيجة',
+        name: tpl.reelUploadChannelResult,
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250],
         enableVibrate: true,
@@ -113,11 +128,12 @@ export const reelUploadNotification = {
         try { await Notifications.cancelScheduledNotificationAsync(ACTIVE_REQUEST_ID); } catch { /* */ }
 
         try {
+            const tpl = getPushTemplates();
             await Notifications.scheduleNotificationAsync({
                 identifier: ACTIVE_REQUEST_ID,
                 content: {
-                    title: '📤 جاري رفع الريلز',
-                    body: 'يتم تحضير الفيديو…',
+                    title: tpl.reelUploadingTitle,
+                    body: tpl.reelUploadingPreparing,
                     sound: null,           // ✅ NO SOUND on start
                     data: { type: 'reel_upload_progress' },
                     ...(Platform.OS === 'android' ? {
@@ -156,11 +172,13 @@ export const reelUploadNotification = {
         if (perm.status !== 'granted') return;
 
         try {
+            const tpl = getPushTemplates();
+            const progressTitle = tpl.reelUploadingProgressTitle.replace('{percent}', String(rounded));
             // Replace existing notification in-place (same identifier = no new pop)
             await Notifications.scheduleNotificationAsync({
                 identifier: ACTIVE_REQUEST_ID,
                 content: {
-                    title: `📤 جاري رفع الريلز — ${rounded}٪`,
+                    title: progressTitle,
                     body: phaseLabel,
                     sound: null,           // ✅ NEVER make sound during progress
                     data: { type: 'reel_upload_progress', progress: rounded },
@@ -180,7 +198,7 @@ export const reelUploadNotification = {
         }
     },
 
-    async success(message = 'تم نشر الريلز في ملفك الشخصي! 🎉'): Promise<void> {
+    async success(message?: string): Promise<void> {
         if (Platform.OS === 'web') return;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
@@ -196,10 +214,11 @@ export const reelUploadNotification = {
         await ensureChannels();
 
         try {
+            const tpl = getPushTemplates();
             await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: '✅ تم رفع الريلز!',
-                    body: message,
+                    title: tpl.reelUploadSuccessTitle,
+                    body: message ?? tpl.reelUploadSuccessBody,
                     sound: 'default',      // ✅ YES sound on success
                     data: { type: 'reel_upload_ok' },
                     ...(Platform.OS === 'android' ? {
@@ -233,9 +252,10 @@ export const reelUploadNotification = {
         await ensureChannels();
 
         try {
+            const tpl = getPushTemplates();
             await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: '❌ فشل رفع الريلز',
+                    title: tpl.reelUploadFailedTitle,
                     body: message,
                     sound: 'default',       // ✅ YES sound on failure
                     data: { type: 'reel_upload_error' },

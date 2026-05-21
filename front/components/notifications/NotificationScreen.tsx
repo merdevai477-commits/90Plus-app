@@ -244,7 +244,7 @@ export default function NotificationScreen() {
       },
       asyncAction: async () => {
         const success = await clearAll();
-        if (!success) throw new Error('Failed to clear notifications on server');
+        if (!success) throw new Error(t.notifications.failedClearServer);
         await cacheService.invalidate(notificationsCacheKey);
         return success;
       },
@@ -286,25 +286,25 @@ export default function NotificationScreen() {
   const emptyText = useMemo(() => {
     if (searchQuery.trim()) {
       return {
-        title: t.notifications?.noSearchResults || 'No results found',
-        subtitle: t.notifications?.tryDifferentSearch || 'Try a different search term',
+        title: t.notifications.noSearchResults,
+        subtitle: t.notifications.tryDifferentSearch,
       };
     }
     if (activeTab === 'unread') {
       return {
-        title: t.notifications?.noUnread || 'No unread notifications',
-        subtitle: t.notifications?.noNotificationsSubtitle || 'Follow, like, and comment notifications will appear here',
+        title: t.notifications.noUnread,
+        subtitle: t.notifications.noNotificationsSubtitle,
       };
     }
     if (activeTab === 'mentions') {
       return {
-        title: t.notifications?.noMentions || 'No mentions yet',
-        subtitle: t.notifications?.noNotificationsSubtitle || 'Follow, like, and comment notifications will appear here',
+        title: t.notifications.noMentions,
+        subtitle: t.notifications.noNotificationsSubtitle,
       };
     }
     return {
-      title: t.notifications?.noNotifications || 'No notifications yet',
-      subtitle: t.notifications?.noNotificationsSubtitle || 'Follow, like, and comment notifications will appear here',
+      title: t.notifications.noNotifications,
+      subtitle: t.notifications.noNotificationsSubtitle,
     };
   }, [activeTab, searchQuery, t.notifications]);
 
@@ -327,7 +327,7 @@ export default function NotificationScreen() {
         <Stack.Screen
           options={{
             headerShown: true,
-            title: t.settings?.notifications || 'الإشعارات',
+            title: t.settings?.notifications || t.notifications.title,
             headerStyle: { backgroundColor: COLORS.deepBlack },
             headerTintColor: COLORS.white,
             headerTitleStyle: { fontWeight: 'bold' },
@@ -336,7 +336,7 @@ export default function NotificationScreen() {
         <LinearGradient colors={[COLORS.deepBlack, '#1a1a1a']} style={styles.background} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.neonGreen} />
-          <Text style={styles.loadingText}>{t.notifications?.loading || 'Loading notifications...'}</Text>
+          <Text style={styles.loadingText}>{t.notifications.loading}</Text>
         </View>
       </View>
     );
@@ -347,7 +347,7 @@ export default function NotificationScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: t.settings?.notifications || 'الإشعارات',
+          title: t.settings?.notifications || t.notifications.title,
           headerStyle: { backgroundColor: COLORS.deepBlack },
           headerTintColor: COLORS.white,
           headerTitleStyle: { fontWeight: 'bold' },
@@ -356,8 +356,8 @@ export default function NotificationScreen() {
               hasNotifications={filteredNotifications.length > 0}
               unreadCount={unreadCount}
               labels={{
-                markAllRead: t.notifications?.markAllRead || 'Mark All Read',
-                clearAll: t.notifications?.clearAll || 'Clear All',
+                markAllRead: t.notifications.markAllRead,
+                clearAll: t.notifications.clearAll,
               }}
               onOpenSearch={() => setIsSearchVisible(true)}
               onMarkAllAsRead={handleMarkAllAsRead}
@@ -372,7 +372,7 @@ export default function NotificationScreen() {
       <NotificationSearch
         visible={isSearchVisible}
         query={searchQuery}
-        placeholder={t.notifications?.searchPlaceholder || 'Search notifications...'}
+        placeholder={t.notifications.searchPlaceholder}
         onQueryChange={setSearchQuery}
         onClose={() => setIsSearchVisible(false)}
       />
@@ -382,9 +382,9 @@ export default function NotificationScreen() {
         onTabChange={setActiveTab as any}
         unreadCount={unreadCount}
         labels={{
-          all: t.notifications?.tabs?.all || 'All',
-          unread: t.notifications?.tabs?.unread || 'Unread',
-          mentions: t.notifications?.tabs?.mentions || 'Mentions',
+          all: t.notifications.tabs.all,
+          unread: t.notifications.tabs.unread,
+          mentions: t.notifications.tabs.mentions,
         }}
       />
 
@@ -406,8 +406,8 @@ export default function NotificationScreen() {
             <View style={styles.luckyWheelContent}>
               <Gift size={24} color={COLORS.neonGreen} />
               <View style={styles.luckyWheelTextContainer}>
-                <Text style={styles.luckyWheelTitle}>{t.notifications?.luckyWheelReady || '🎡 Lucky Wheel Ready!'}</Text>
-                <Text style={styles.luckyWheelSubtitle}>{t.notifications?.tapToWin || 'Tap here to win free coins'}</Text>
+                <Text style={styles.luckyWheelTitle}>{t.notifications.luckyWheelReady}</Text>
+                <Text style={styles.luckyWheelSubtitle}>{t.notifications.tapToWin}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -417,7 +417,7 @@ export default function NotificationScreen() {
       {unreadCount > 0 && (
         <View style={styles.unreadBadgeContainer}>
           <Text style={styles.unreadBadgeText}>
-            {unreadCount} {t.notifications?.newNotification || 'new'}
+            {unreadCount} {t.notifications.newNotification}
           </Text>
         </View>
       )}
@@ -457,7 +457,7 @@ export default function NotificationScreen() {
         }
         ListEmptyComponent={
           error && filteredNotifications.length === 0 ? (
-            <NotificationEmpty title={'Something went wrong'} subtitle={error} isError onRetry={refreshNotifications} />
+            <NotificationEmpty title={t.notifications.somethingWentWrong} subtitle={error} isError onRetry={refreshNotifications} />
           ) : (
             <NotificationEmpty title={emptyText.title} subtitle={emptyText.subtitle} />
           )

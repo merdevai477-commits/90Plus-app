@@ -16,6 +16,8 @@ import { Calendar, MapPin, Trophy } from 'lucide-react-native';
 import { MatchArchive } from '../../services/matchArchiveService';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
+import { useTranslation } from '../../src/i18n';
+import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 interface MatchHistoryCardProps {
   match: MatchArchive;
@@ -52,6 +54,11 @@ const getStatusText = (status: MatchArchive['status']): string => {
 };
 
 const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) => {
+  const { language } = useTranslation();
+  const localizedLeagueName = getLeagueDisplayName(match.league.name, language);
+  const localizedHomeName = getTeamDisplayName(match.homeTeam.name, language);
+  const localizedAwayName = getTeamDisplayName(match.awayTeam.name, language);
+
   const cardContent = (
     <View style={styles.container}>
       {/* Header with league info */}
@@ -59,7 +66,7 @@ const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) =
         <View style={styles.leagueInfo}>
           <LeagueIcon name={match.league.name} size={16} color="#ffffff" />
           <Text style={styles.leagueName} numberOfLines={1}>
-            {match.league.name}
+            {localizedLeagueName}
           </Text>
         </View>
         <View style={styles.statusBadge}>
@@ -73,7 +80,7 @@ const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) =
         <View style={styles.team}>
           <TeamBadge name={match.homeTeam.name} size={40} color="transparent" />
           <Text style={styles.teamName} numberOfLines={2}>
-            {match.homeTeam.name}
+            {localizedHomeName}
           </Text>
         </View>
 
@@ -88,7 +95,7 @@ const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) =
         <View style={styles.team}>
           <TeamBadge name={match.awayTeam.name} size={40} color="transparent" />
           <Text style={styles.teamName} numberOfLines={2}>
-            {match.awayTeam.name}
+            {localizedAwayName}
           </Text>
         </View>
       </View>

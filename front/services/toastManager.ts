@@ -1,8 +1,20 @@
 import { ToastType } from '../components/common/ProfessionalToast';
+import { useLanguageStore } from '../src/i18n/store';
+import { translations } from '../src/i18n/utils';
 
 interface ToastOptions {
   duration?: number;
   position?: 'top' | 'center' | 'bottom';
+}
+
+/**
+ * Read the current translations object directly from the Zustand store.
+ * Used by the toast manager (and other non-React utilities) so toasts
+ * pick up the user's selected language without requiring a hook call.
+ */
+function getCurrentTranslations() {
+  const lang = useLanguageStore.getState().language;
+  return translations[lang] ?? translations.en;
 }
 
 // Global toast manager for use across the app
@@ -38,140 +50,237 @@ class ToastManager {
   }
 
   /**
-   * Show a persistent loading toast with a spinning icon. Unlike the other
-   * variants this one does NOT auto-dismiss — callers must call
-   * `toastManager.hideLoading()` (or show another toast) when the work is
-   * done. Useful for long-running actions like uploads.
+   * Show a persistent loading toast. Caller must dismiss it.
    */
   showLoading(title: string, message: string, options?: ToastOptions) {
     this.showToastCallback?.('loading', title, message, options);
   }
 
-  /** Dismiss the current loading toast (shows a fleeting success-less info). */
+  /** Dismiss the current loading toast. */
   hideLoading() {
-    // Ask the provider to hide via a no-op info toast with duration=0 so it
-    // exits immediately. Implementation: providers handle `loading` specially
-    // (no auto-hide) and any new toast replaces it, so a new info with 1ms
-    // duration + empty strings is the simplest way to dismiss.
     this.showToastCallback?.('info', '', '', { duration: 1 });
   }
 
-  // Convenience methods for common scenarios
+  // ── Convenience methods (use current language from i18n store) ─────────
   showNetworkError() {
-    this.showError('خطأ في الشبكة', 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى');
+    const t = getCurrentTranslations();
+    this.showError(
+      t.toastManager?.networkErrorTitle ?? t.common.error,
+      t.toastManager?.networkErrorMessage ?? t.common.errorOccurred,
+    );
   }
 
   showAuthError() {
-    this.showError('خطأ في المصادقة', 'يرجى تسجيل الدخول مرة أخرى');
+    const t = getCurrentTranslations();
+    this.showError(
+      t.toastManager?.authErrorTitle ?? t.common.error,
+      t.toastManager?.authErrorMessage ?? t.common.errorOccurred,
+    );
   }
 
   showValidationError(field: string) {
-    this.showError('خطأ في البيانات', `يرجى التحقق من ${field} والمحاولة مرة أخرى`);
+    const t = getCurrentTranslations();
+    const template = t.toastManager?.validationErrorMessage ?? 'Please check {field} and try again';
+    this.showError(
+      t.toastManager?.validationErrorTitle ?? t.common.error,
+      template.replace('{field}', field),
+    );
   }
 
   showUploadSuccess(type: 'video' | 'image' | 'avatar' | 'cover') {
-    const typeMap = {
-      video: 'الفيديو',
-      image: 'الصورة', 
-      avatar: 'صورة الملف الشخصي',
-      cover: 'صورة الغلاف'
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    const itemMap = {
+      video: tm?.itemVideo ?? 'video',
+      image: tm?.itemImage ?? 'image',
+      avatar: tm?.itemAvatar ?? 'profile picture',
+      cover: tm?.itemCover ?? 'cover image',
     };
-    this.showSuccess('تم بنجاح', `تم رفع ${typeMap[type]} بنجاح`);
+    const template = tm?.uploadSuccessMessage ?? 'Uploaded {item} successfully';
+    this.showSuccess(
+      tm?.successTitle ?? 'Success',
+      template.replace('{item}', itemMap[type]),
+    );
   }
 
   showUploadError(type: 'video' | 'image' | 'avatar' | 'cover') {
-    const typeMap = {
-      video: 'الفيديو',
-      image: 'الصورة',
-      avatar: 'صورة الملف الشخصي', 
-      cover: 'صورة الغلاف'
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    const itemMap = {
+      video: tm?.itemVideo ?? 'video',
+      image: tm?.itemImage ?? 'image',
+      avatar: tm?.itemAvatar ?? 'profile picture',
+      cover: tm?.itemCover ?? 'cover image',
     };
-    this.showError('فشل الرفع', `فشل في رفع ${typeMap[type]}. حاول مرة أخرى`);
+    const template = tm?.uploadFailedMessage ?? 'Failed to upload {item}. Try again.';
+    this.showError(
+      tm?.uploadFailedTitle ?? 'Upload failed',
+      template.replace('{item}', itemMap[type]),
+    );
   }
 
   showDeleteSuccess(type: 'video' | 'comment' | 'account') {
-    const typeMap = {
-      video: 'الفيديو',
-      comment: 'التعليق',
-      account: 'الحساب'
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    const itemMap = {
+      video: tm?.itemVideo ?? 'video',
+      comment: tm?.itemComment ?? 'comment',
+      account: tm?.itemAccount ?? 'account',
     };
-    this.showSuccess('تم الحذف', `تم حذف ${typeMap[type]} بنجاح`);
+    const template = tm?.deleteSuccessMessage ?? 'Deleted {item} successfully';
+    this.showSuccess(
+      tm?.deleteSuccessTitle ?? 'Deleted',
+      template.replace('{item}', itemMap[type]),
+    );
   }
 
   showBlockSuccess(username: string) {
-    this.showSuccess('تم الحظر', `تم حظر @${username} بنجاح`);
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.blockSuccessTitle ?? 'Blocked',
+      (tm?.blockSuccessMessage ?? 'Blocked @{username}').replace('{username}', username),
+    );
   }
 
   showUnblockSuccess(username: string) {
-    this.showSuccess('تم إلغاء الحظر', `تم إلغاء حظر @${username} بنجاح`);
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.unblockSuccessTitle ?? 'Unblocked',
+      (tm?.unblockSuccessMessage ?? 'Unblocked @{username}').replace('{username}', username),
+    );
   }
 
   showLanguageChangeSuccess(language: string) {
-    this.showSuccess('تم تغيير اللغة', `تم تغيير اللغة إلى ${language} بنجاح`);
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.languageChangedTitle ?? 'Language changed',
+      (tm?.languageChangedMessage ?? 'Language changed to {language}').replace('{language}', language),
+    );
   }
 
   showPredictionSuccess() {
-    this.showSuccess('تم التوقع', 'تم حفظ توقعك بنجاح');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.predictionSavedTitle ?? 'Prediction saved',
+      tm?.predictionSavedMessage ?? 'Your prediction was saved.',
+    );
   }
 
   showPredictionError() {
-    this.showError('فشل التوقع', 'فشل في حفظ التوقع. حاول مرة أخرى');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showError(
+      tm?.predictionFailedTitle ?? 'Prediction failed',
+      tm?.predictionFailedMessage ?? 'Could not save the prediction. Try again.',
+    );
   }
 
   showReportSuccess() {
-    this.showSuccess('تم الإبلاغ', 'تم إرسال البلاغ بنجاح. سيتم مراجعته قريباً');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.reportSentTitle ?? 'Report sent',
+      tm?.reportSentMessage ?? 'Thanks for the report. Our team will review it.',
+    );
   }
 
   showSaveSuccess() {
-    this.showSuccess('تم الحفظ', 'تم حفظ المحتوى في مجموعتك');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.saveSuccessTitle ?? 'Saved',
+      tm?.saveSuccessMessage ?? 'Saved to your collection',
+    );
   }
 
   showShareSuccess() {
-    this.showSuccess('تم المشاركة', 'تم مشاركة المحتوى بنجاح');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.shareSuccessTitle ?? 'Shared',
+      tm?.shareSuccessMessage ?? 'Content shared successfully',
+    );
   }
 
   showFollowSuccess(username: string) {
-    this.showSuccess('تم المتابعة', `أصبحت تتابع @${username}`);
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.followSuccessTitle ?? 'Following',
+      (tm?.followSuccessMessage ?? 'You are now following @{username}').replace('{username}', username),
+    );
   }
 
   showUnfollowSuccess(username: string) {
-    this.showSuccess('تم إلغاء المتابعة', `لم تعد تتابع @${username}`);
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.unfollowSuccessTitle ?? 'Unfollowed',
+      (tm?.unfollowSuccessMessage ?? 'You are no longer following @{username}').replace('{username}', username),
+    );
   }
 
   showLikeSuccess() {
-    this.showSuccess('تم الإعجاب', 'تم إضافة إعجابك');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.likeSuccessTitle ?? 'Liked',
+      tm?.likeSuccessMessage ?? 'Your like was added',
+    );
   }
 
   showCommentSuccess() {
-    this.showSuccess('تم التعليق', 'تم إضافة تعليقك بنجاح');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.commentSuccessTitle ?? 'Comment posted',
+      tm?.commentSuccessMessage ?? 'Your comment was posted',
+    );
   }
 
   showProfileUpdateSuccess() {
-    this.showSuccess('تم التحديث', 'تم تحديث ملفك الشخصي بنجاح');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.profileUpdatedTitle ?? 'Updated',
+      tm?.profileUpdatedMessage ?? 'Your profile has been updated',
+    );
   }
 
   showSettingsUpdateSuccess() {
-    this.showSuccess('تم الحفظ', 'تم حفظ الإعدادات بنجاح');
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showSuccess(
+      tm?.settingsSavedTitle ?? 'Saved',
+      tm?.settingsSavedMessage ?? 'Settings saved successfully',
+    );
   }
 
   // Cooldown specific methods
   showCooldownWarning(type: 'avatar' | 'cover' | 'video' | 'username', timeRemaining: string) {
-    const typeMap = {
-      avatar: 'الصورة الشخصية',
-      cover: 'صورة الغلاف',
-      video: 'الفيديو',
-      username: 'اسم المستخدم'
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    const itemMap = {
+      avatar: tm?.itemAvatar ?? 'profile picture',
+      cover: tm?.itemCover ?? 'cover image',
+      video: tm?.itemVideo ?? 'video',
+      username: tm?.itemUsername ?? 'username',
     };
-    this.showWarning('انتظر قليلاً', `يمكنك تغيير ${typeMap[type]} بعد ${timeRemaining}`);
+    const template = tm?.cooldownMessage ?? 'You can change {item} after {time}';
+    this.showWarning(
+      tm?.cooldownTitle ?? 'Wait a moment',
+      template.replace('{item}', itemMap[type]).replace('{time}', timeRemaining),
+    );
   }
 
   showCooldownError(message: string) {
-    // Extract time information from Arabic message if possible
-    if (message.includes('يوم') || message.includes('ساعة')) {
-      this.showWarning('انتظر قليلاً', message);
-    } else {
-      this.showWarning('انتظر قليلاً', message);
-    }
+    const t = getCurrentTranslations();
+    const tm = t.toastManager;
+    this.showWarning(tm?.cooldownTitle ?? 'Wait a moment', message);
   }
 }
 

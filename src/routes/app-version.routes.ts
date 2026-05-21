@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/admin.middleware';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.get('/version', async (req: Request, res: Response): Promise<void> => {
         });
     } catch (error: any) {
         logger.error('App version check error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -74,7 +75,7 @@ router.get('/version', async (req: Request, res: Response): Promise<void> => {
  * Get app status (maintenance mode, etc.)
  * Public endpoint
  */
-router.get('/status', async (_req: Request, res: Response): Promise<void> => {
+router.get('/status', async (req: Request, res: Response): Promise<void> => {
     try {
         res.json({
             status: 'SUCCESS',
@@ -87,7 +88,7 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
         });
     } catch (error: any) {
         logger.error('App status check error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -128,7 +129,7 @@ router.post('/admin/version', requireAdmin, async (req: Request, res: Response):
         });
     } catch (error: any) {
         logger.error('Update app version config error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -136,7 +137,7 @@ router.post('/admin/version', requireAdmin, async (req: Request, res: Response):
  * GET /api/app/admin/version
  * Get current app version configuration (Admin only)
  */
-router.get('/admin/version', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.get('/admin/version', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         res.json({
             status: 'SUCCESS',
@@ -144,7 +145,7 @@ router.get('/admin/version', requireAdmin, async (_req: Request, res: Response):
         });
     } catch (error: any) {
         logger.error('Get app version config error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -182,10 +183,7 @@ router.get('/check-update', async (req: Request, res: Response): Promise<void> =
         const platform = (req.query.platform as string || 'android').toLowerCase();
         
         if (!currentVersion) {
-            res.status(400).json({
-                status: 'ERROR',
-                message: 'currentVersion is required'
-            });
+            sendError(req, res, ErrorCode.VALIDATION, 'currentVersion is required');
             return;
         }
         
@@ -221,9 +219,6 @@ router.get('/check-update', async (req: Request, res: Response): Promise<void> =
         });
     } catch (error: any) {
         logger.error('Check update error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

@@ -47,12 +47,14 @@ import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 import { AuthService } from '../../src/services/authService';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { useScreenFont } from '../../utils/fontSetup';
+import { useTranslation } from '../../src/i18n';
 
 const API_URL = getApiUrl();
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
     useScreenFont();
+    const { t } = useTranslation();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const [searchVisible, setSearchVisible] = useState(false);
@@ -729,7 +731,7 @@ export default function HomeScreen() {
                 <ScreenSection>
                     {matchesError && !loadingMatches && matches.length === 0 ? (
                         <HomeSectionError
-                            sectionName="المباريات"
+                            sectionName={t.home.importantMatches}
                             detail={matchesError}
                             isOffline={!isOnline}
                             onRetry={() => {
@@ -752,7 +754,7 @@ export default function HomeScreen() {
                 <ScreenSection>
                     {rankingsError && !loadingRankings && videos.length === 0 ? (
                         <HomeSectionError
-                            sectionName="الفيديوهات"
+                            sectionName={t.home.trendingReels}
                             detail={rankingsError}
                             isOffline={!isOnline}
                             onRetry={() => {
@@ -777,7 +779,7 @@ export default function HomeScreen() {
                 <ScreenSection>
                     {rankingsError && !loadingRankings && players.length === 0 ? (
                         <HomeSectionError
-                            sectionName="اللاعبين"
+                            sectionName={t.home.players}
                             detail={rankingsError}
                             isOffline={!isOnline}
                             onRetry={() => {

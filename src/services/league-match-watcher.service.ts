@@ -2,6 +2,7 @@ import prisma from '../lib/prisma';
 import { NotificationService, NotificationType } from './notification.service';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
+import { getUserLanguage, renderPushTemplate } from './push-templates.service';
 
 interface ApiFootballFixture {
     fixture: {
@@ -286,16 +287,25 @@ export class LeagueMatchWatcherService {
             let title: string;
             let message: string;
 
+            const lang = await getUserLanguage(userId);
             if (status === 'NS') {
                 // Match starting soon
                 const matchDate = new Date(fixture.fixture.date);
                 const minutesUntil = Math.round((matchDate.getTime() - Date.now()) / (60 * 1000));
-                title = '⏰ مباراة قريباً!';
-                message = `${homeTeam} vs ${awayTeam} - بعد ${minutesUntil} دقيقة`;
+                title = renderPushTemplate('leagueMatchSoonTitle', lang);
+                message = renderPushTemplate('leagueMatchSoonBody', lang, {
+                    home: homeTeam,
+                    away: awayTeam,
+                    minutes: minutesUntil,
+                });
             } else {
                 // Match just started
-                title = '🚀 بدأت المباراة!';
-                message = `${homeTeam} vs ${awayTeam}\n${leagueName}\nالمباراة بدأت الآن`;
+                title = renderPushTemplate('leagueMatchStartedTitle', lang);
+                message = renderPushTemplate('leagueMatchStartedBody', lang, {
+                    home: homeTeam,
+                    away: awayTeam,
+                    league: leagueName,
+                });
             }
 
             await NotificationService.createNotification({

@@ -93,11 +93,30 @@ const REPORT_TYPE_LABELS = {
   },
 };
 
+const STATUS_LABELS_KEYS: Record<Report['status'], string> = {
+  PENDING: 'statusPending',
+  REVIEWED: 'statusReviewed',
+  RESOLVED: 'statusResolved',
+  REJECTED: 'statusRejected',
+};
+
+const REPORT_TYPE_KEYS: Record<string, string> = {
+  SPAM: 'typeSpam',
+  HARASSMENT: 'typeHarassment',
+  INAPPROPRIATE: 'typeInappropriate',
+  VIOLENCE: 'typeViolence',
+  HATE: 'typeHate',
+  COPYRIGHT: 'typeCopyright',
+  FAKE_INFO: 'typeFakeInfo',
+  OTHER: 'typeOther',
+};
+
 export default function MyReportsScreen() {
   const { getToken } = useAuth();
   const router = useRouter();
   const { language, t } = useLanguage();
   const isRTL = language === 'ar';
+  const tReports = t.myReports;
 
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +130,7 @@ export default function MyReportsScreen() {
 
       const token = await getToken();
       if (!token) {
-        throw new Error(isRTL ? 'يجب تسجيل الدخول' : 'Authentication required');
+        throw new Error(tReports.authRequired);
       }
 
       const response = await fetch(`${getApiUrl()}/reports/my-reports`, {
@@ -123,7 +142,7 @@ export default function MyReportsScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || (isRTL ? 'فشل تحميل البلاغات' : 'Failed to load reports'));
+        throw new Error(data.message || tReports.loadFailed);
       }
 
       setReports(data.reports || []);
@@ -147,23 +166,29 @@ export default function MyReportsScreen() {
 
   const handleReportPress = (report: Report) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
+    const typeKey = REPORT_TYPE_KEYS[report.type] ?? 'typeOther';
+    const statusKey = STATUS_LABELS_KEYS[report.status];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const typeLabel = (tReports as any)[typeKey] || report.type;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const statusLabel = (tReports as any)[statusKey];
+
     Alert.alert(
-      isRTL ? 'تفاصيل البلاغ' : 'Report Details',
-      `${isRTL ? 'النوع' : 'Type'}: ${
-        REPORT_TYPE_LABELS[language][report.type as keyof typeof REPORT_TYPE_LABELS.ar] || report.type
-      }\n${isRTL ? 'الحالة' : 'Status'}: ${
-        STATUS_LABELS[language][report.status]
-      }\n${isRTL ? 'السبب' : 'Reason'}: ${report.reason}`,
-      [{ text: isRTL ? 'حسناً' : 'OK' }]
+      tReports.detailTitle,
+      `${tReports.detailType}: ${typeLabel}\n${tReports.detailStatus}: ${statusLabel}\n${tReports.detailReason}: ${report.reason}`,
+      [{ text: tReports.ok }]
     );
   };
 
   const renderReportItem = ({ item }: { item: Report }) => {
     const statusColor = STATUS_COLORS[item.status];
-    const statusLabel = STATUS_LABELS[language][item.status];
-    const typeLabel =
-      REPORT_TYPE_LABELS[language][item.type as keyof typeof REPORT_TYPE_LABELS.ar] || item.type;
+    const statusKey = STATUS_LABELS_KEYS[item.status];
+    const typeKey = REPORT_TYPE_KEYS[item.type] ?? 'typeOther';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const statusLabel = (tReports as any)[statusKey];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const typeLabel = (tReports as any)[typeKey] || item.type;
 
     return (
       <TouchableOpacity
@@ -194,16 +219,10 @@ export default function MyReportsScreen() {
           <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
           <Text style={styles.reportContentType}>
             {item.contentType === 'reel'
-              ? isRTL
-                ? 'فيديو'
-                : 'Reel'
+              ? tReports.contentReel
               : item.contentType === 'comment'
-              ? isRTL
-                ? 'تعليق'
-                : 'Comment'
-              : isRTL
-              ? 'مستخدم'
-              : 'User'}
+              ? tReports.contentComment
+              : tReports.contentUser}
           </Text>
         </View>
       </TouchableOpacity>
@@ -216,12 +235,10 @@ export default function MyReportsScreen() {
         <Ionicons name="flag-outline" size={64} color={COLORS.textSecondary} />
       </View>
       <Text style={styles.emptyTitle}>
-        {isRTL ? 'لا توجد بلاغات' : 'No Reports'}
+        {tReports.empty}
       </Text>
       <Text style={styles.emptyMessage}>
-        {isRTL
-          ? 'لم تقم بإرسال أي بلاغات بعد'
-          : "You haven't submitted any reports yet"}
+        {tReports.emptySub}
       </Text>
     </View>
   );
@@ -229,7 +246,7 @@ export default function MyReportsScreen() {
   const renderError = () => (
     <View style={styles.errorContainer}>
       <Ionicons name="alert-circle-outline" size={64} color={COLORS.error} />
-      <Text style={styles.errorTitle}>{isRTL ? 'حدث خطأ' : 'Error'}</Text>
+      <Text style={styles.errorTitle}>{tReports.error}</Text>
       <Text style={styles.errorMessage}>{error}</Text>
       <TouchableOpacity style={styles.retryButton} onPress={() => fetchReports()}>
         <LinearGradient
@@ -239,7 +256,7 @@ export default function MyReportsScreen() {
           style={styles.retryButtonGradient}
         >
           <Text style={styles.retryButtonText}>
-            {isRTL ? 'إعادة المحاولة' : 'Retry'}
+            {tReports.retry}
           </Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -264,7 +281,7 @@ export default function MyReportsScreen() {
           />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {isRTL ? 'بلاغاتي' : 'My Reports'}
+          {tReports.title}
         </Text>
         <View style={styles.headerRight} />
       </View>

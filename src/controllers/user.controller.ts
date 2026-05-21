@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { AuditService, AuditAction } from '../services/audit.service';
+import { ErrorCode, sendError } from '../constants/errors';
+import { invalidateUserLanguageCache } from '../services/push-templates.service';
 
 export class UserController {
     /**
@@ -13,10 +15,7 @@ export class UserController {
             const clerkUserId = req.auth?.userId;
 
             if (!clerkUserId) {
-                res.status(401).json({
-                    status: 'ERROR',
-                    message: 'Unauthorized - No user ID',
-                });
+                sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
                 return;
             }
 
@@ -31,10 +30,7 @@ export class UserController {
             });
         } catch (error) {
             logger.error('Get settings error:', error);
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'Failed to retrieve settings',
-            });
+            sendError(req, res, ErrorCode.INTERNAL, 'Failed to retrieve settings');
         }
     }
 
@@ -44,10 +40,7 @@ export class UserController {
             const clerkUserId = req.auth?.userId;
 
             if (!clerkUserId) {
-                res.status(401).json({
-                    status: 'ERROR',
-                    message: 'Unauthorized - No user ID',
-                });
+                sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
                 return;
             }
 
@@ -60,7 +53,7 @@ export class UserController {
             });
 
             if (!user) {
-                res.status(404).json({ status: 'ERROR', message: 'User not found' });
+                sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
                 return;
             }
 
@@ -88,6 +81,17 @@ export class UserController {
                 userUpdateData.pushNotificationsConsent = updatedSettings.notificationsEnabled;
             }
 
+            // Detect language change so we can invalidate the in-process
+            // language cache used by push notifications. Without this, push
+            // copy would lag behind the user's selection by up to 5 minutes
+            // (the cache TTL).
+            const previousLanguage =
+                typeof currentSettings.language === 'string' ? currentSettings.language : null;
+            const nextLanguage =
+                typeof updatedSettings.language === 'string' ? updatedSettings.language : null;
+            const languageChanged =
+                nextLanguage !== null && nextLanguage !== previousLanguage;
+
             await prisma.user.update({
                 where: { clerkUserId },
                 data: userUpdateData,
@@ -101,6 +105,12 @@ export class UserController {
                 });
             }
 
+            if (languageChanged) {
+                // Drop the cached language so the very next push for this
+                // user reads the fresh value from the DB.
+                invalidateUserLanguageCache(user.id);
+            }
+
             res.json({
                 status: 'SUCCESS',
                 data: updatedSettings,
@@ -108,10 +118,7 @@ export class UserController {
             });
         } catch (error) {
             logger.error('Update settings error:', error);
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'Failed to update settings',
-            });
+            sendError(req, res, ErrorCode.INTERNAL, 'Failed to update settings');
         }
     }
 
@@ -131,11 +138,8 @@ export class UserController {
                     req,
                     reason: 'Account deletion attempted without authentication',
                 });
-                
-                res.status(401).json({
-                    status: 'ERROR',
-                    message: 'Unauthorized - No user ID',
-                });
+
+                sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
                 return;
             }
 
@@ -146,10 +150,7 @@ export class UserController {
             });
 
             if (!user) {
-                res.status(404).json({
-                    status: 'ERROR',
-                    message: 'User not found',
-                });
+                sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
                 return;
             }
 
@@ -161,6 +162,9 @@ export class UserController {
                 action: AuditAction.ACCOUNT_DELETION_INITIATED,
                 userId: user.id,
                 req,
+                // Avoid embedding email/username in audit reason — those are
+                // captured separately in `metadata` and shouldn't propagate
+                // into log lines that may end up in shared log aggregators.
                 reason: 'User requested account deletion',
                 metadata: {
                     email: user.email,
@@ -171,7 +175,7 @@ export class UserController {
             // Initiate account deletion (soft delete + schedule permanent deletion)
             await AccountDeletionService.initiateAccountDeletion(user.id, clerkUserId);
 
-            logger.info(`Account deletion initiated for user ${user.id} (${user.username})`);
+            logger.info(`Account deletion initiated for user ${user.id}`);
 
             res.json({
                 status: 'SUCCESS',
@@ -183,10 +187,7 @@ export class UserController {
             });
         } catch (error) {
             logger.error('Delete account error:', error);
-            res.status(500).json({
-                status: 'ERROR',
-                message: 'Failed to delete account',
-            });
+            sendError(req, res, ErrorCode.INTERNAL, 'Failed to delete account');
         }
     }
 }

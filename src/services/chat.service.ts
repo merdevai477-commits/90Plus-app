@@ -82,9 +82,9 @@ export async function listConversations(userId: string, take = 50): Promise<Conv
     }));
 }
 
-export async function createConversation(userId: string, title = 'محادثة جديدة') {
+export async function createConversation(userId: string, title = 'New conversation') {
     return prisma.chatConversation.create({
-        data: { userId, title: title.trim().slice(0, 100) || 'محادثة جديدة' },
+        data: { userId, title: title.trim().slice(0, 100) || 'New conversation' },
     });
 }
 
@@ -350,7 +350,7 @@ export async function migrateLegacyFileStore(): Promise<void> {
                     data: {
                         id: c.id,
                         userId: c.userId,
-                        title: c.title || 'محادثة جديدة',
+                        title: c.title || 'New conversation',
                         pinned: !!c.isPinned,
                         createdAt: new Date(c.createdAt),
                         updatedAt: new Date(c.updatedAt),

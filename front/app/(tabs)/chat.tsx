@@ -61,6 +61,7 @@ import {
 import { Toast } from '../../components/chat/Toast';
 import { Colors, Gradients, BlurIntensity } from '../../constants/theme';
 import { useScreenFont } from '../../utils/fontSetup';
+import { useTranslation } from '../../src/i18n';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -126,6 +127,8 @@ export default function ChatScreen() {
     const insets = useSafeAreaInsets();
     const listRef = useRef<FlatList>(null);
     const inputRef = useRef<TextInput>(null);
+    const { t } = useTranslation();
+    const tChat = t.chat;
 
     // ─── State ──────────────────────────────────────────────────────────────
     const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -156,22 +159,25 @@ export default function ChatScreen() {
         prevOnlineRef.current = isOnline;
 
         if (isOnline) {
-            setConnToast({ message: 'عاد الاتصال ✓', type: 'success' });
+            setConnToast({ message: tChat.backOnline, type: 'success' });
         } else {
-            setConnToast({ message: 'لا يوجد اتصال بالإنترنت', type: 'error' });
+            setConnToast({ message: tChat.offline, type: 'error' });
         }
-    }, [isOnline]);
+    }, [isOnline, tChat.backOnline, tChat.offline]);
 
     const greetingName = useMemo(
-        () => (profile?.displayName?.trim() || 'كابتن'),
-        [profile?.displayName],
+        () => (profile?.displayName?.trim() || tChat.welcomeGreetingFallback),
+        [profile?.displayName, tChat.welcomeGreetingFallback],
     );
 
     // Hook uses a ref builder so we don't need to re-memoize sendMessage when
     // the profile slice arrives from the network.
     const getSystemPromptSuffix = useCallback(
-        () => buildProfileSystemPromptSuffix(profileRef.current, profileRef.current?.displayName?.trim() || 'كابتن'),
-        [profileRef],
+        () => buildProfileSystemPromptSuffix(
+            profileRef.current,
+            profileRef.current?.displayName?.trim() || tChat.welcomeGreetingFallback,
+        ),
+        [profileRef, tChat.welcomeGreetingFallback],
     );
 
     // ─── Chat hook ──────────────────────────────────────────────────────────
@@ -200,7 +206,7 @@ export default function ChatScreen() {
             try {
                 const seen = await AsyncStorage.getItem(storageKey);
                 if (seen || cancelled) return;
-                setNudgeText('لو مليت بياناتك في البروفايل هيبقى كلامنا أكتر تخصيصاً 🎯');
+                setNudgeText(tChat.profileNudge);
                 AsyncStorage.setItem(storageKey, '1').catch(() => {});
                 // Auto-dismiss after ~6s so it never lingers.
                 setTimeout(() => {
@@ -444,7 +450,7 @@ export default function ChatScreen() {
                                 pressed && styles.iconButtonPressed,
                             ]}
                             hitSlop={8}
-                            accessibilityLabel="Back to home"
+                            accessibilityLabel={tChat.a11yBack}
                             accessibilityRole="button"
                         >
                             <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
@@ -469,7 +475,7 @@ export default function ChatScreen() {
                                 pressed && styles.iconButtonPressed,
                             ]}
                             hitSlop={8}
-                            accessibilityLabel="Open conversation history"
+                            accessibilityLabel={tChat.a11yMenu}
                             accessibilityRole="button"
                         >
                             <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
@@ -506,6 +512,7 @@ export default function ChatScreen() {
                         onPickChip={handleSend}
                         insetsTop={insets.top}
                         greetingName={greetingName}
+                        tChat={tChat}
                     />
                 ) : (
                     <FlatList
@@ -611,7 +618,7 @@ export default function ChatScreen() {
                     >
                         <View style={styles.retryBannerInner}>
                             <Text style={styles.retryBannerText} numberOfLines={2}>
-                                {error ?? 'انقطع الاتصال...'}
+                                {error ?? tChat.connectionLost}
                             </Text>
                             {!isRetrying && (
                                 <Pressable
@@ -619,7 +626,7 @@ export default function ChatScreen() {
                                     style={styles.retryBannerBtn}
                                     hitSlop={8}
                                 >
-                                    <Text style={styles.retryBannerBtnText}>إعادة</Text>
+                                    <Text style={styles.retryBannerBtnText}>{tChat.retryButton}</Text>
                                 </Pressable>
                             )}
                             {!isRetrying && (
@@ -635,7 +642,7 @@ export default function ChatScreen() {
                 <View style={[styles.bottomArea, { bottom: bottomPad }]} pointerEvents="box-none">
                     {messagesRemaining === 0 && resetTime ? (
                         <View style={styles.limitBanner}>
-                            <Text style={styles.limitText}>انتهت رسائلك اليومية</Text>
+                            <Text style={styles.limitText}>{tChat.dailyLimitOver}</Text>
                         </View>
                     ) : (
                         <GlassSurface
@@ -663,7 +670,7 @@ export default function ChatScreen() {
                                             <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                                             <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                                         </Svg>
-                                        <Text style={styles.editText}>تعديل الرسالة</Text>
+                                        <Text style={styles.editText}>{tChat.editingMessage}</Text>
                                     </View>
                                     <Pressable onPress={handleCancelEdit} hitSlop={8}>
                                         <Text style={styles.editCancel}>×</Text>
@@ -678,7 +685,7 @@ export default function ChatScreen() {
                                     style={styles.textInput}
                                     value={inputValue}
                                     onChangeText={setInputValue}
-                                    placeholder={editingMessage ? 'عدّل...' : 'اكتب رسالتك...'}
+                                    placeholder={editingMessage ? tChat.inputPlaceholderEdit : tChat.inputPlaceholder}
                                     placeholderTextColor="rgba(255,255,255,0.35)"
                                     multiline
                                     textAlign="right"
@@ -750,12 +757,15 @@ function SendButton({
 // ─── Welcome Screen ───────────────────────────────────────────────────────────
 
 const WelcomeScreen = React.memo(function WelcomeScreen({
-    onPickChip, insetsTop, greetingName,
+    onPickChip, insetsTop, greetingName, tChat,
 }: {
     onPickChip: (text: string) => void;
     insetsTop: number;
     greetingName: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tChat: any;
 }) {
+    const greeting = (tChat.welcomeGreeting as string).replace('{name}', greetingName);
     return (
         <ScrollView
             contentContainerStyle={[
@@ -771,9 +781,9 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
                 entering={FadeIn.duration(400)}
                 style={styles.welcomeHero}
             >
-                <Text style={styles.welcomeTitle}>ازيك يا {greetingName}!</Text>
-                <Text style={styles.welcomeSubtitle}>كيف أقدر أساعدك؟</Text>
-                <Text style={styles.welcomeBrand}>90Plus AI · مدربك الشخصي</Text>
+                <Text style={styles.welcomeTitle}>{greeting}</Text>
+                <Text style={styles.welcomeSubtitle}>{tChat.welcomeSubtitle}</Text>
+                <Text style={styles.welcomeBrand}>{tChat.welcomeBrand}</Text>
             </Animated.View>
 
             <Animated.View
@@ -781,15 +791,35 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
                 style={styles.chipGrid}
             >
                 <View style={styles.chipRow}>
-                    <ChipButton icon="⚽" text="معلومات كرة القدم" onClick={() => onPickChip('معلومات كرة القدم')} />
-                    <ChipButton icon="📊" text="إحصائيات الدوريات" onClick={() => onPickChip('إحصائيات الدوريات')} />
+                    <ChipButton
+                        icon="⚽"
+                        text={tChat.suggestionFootballInfo}
+                        onClick={() => onPickChip(tChat.suggestionFootballInfo)}
+                    />
+                    <ChipButton
+                        icon="📊"
+                        text={tChat.suggestionLeagueStats}
+                        onClick={() => onPickChip(tChat.suggestionLeagueStats)}
+                    />
                 </View>
                 <View style={styles.chipRow}>
-                    <ChipButton icon="💪" text="خطة تمرين" onClick={() => onPickChip('خطة تمرين')} />
-                    <ChipButton icon="🥗" text="نظام غذائي" onClick={() => onPickChip('نظام غذائي')} />
+                    <ChipButton
+                        icon="💪"
+                        text={tChat.suggestionTrainingPlan}
+                        onClick={() => onPickChip(tChat.suggestionTrainingPlan)}
+                    />
+                    <ChipButton
+                        icon="🥗"
+                        text={tChat.suggestionDietPlan}
+                        onClick={() => onPickChip(tChat.suggestionDietPlan)}
+                    />
                 </View>
                 <View style={styles.chipRow}>
-                    <ChipButton icon="🩹" text="نصائح الاستشفاء" onClick={() => onPickChip('نصائح الاستشفاء')} />
+                    <ChipButton
+                        icon="🩹"
+                        text={tChat.suggestionRecoveryTips}
+                        onClick={() => onPickChip(tChat.suggestionRecoveryTips)}
+                    />
                 </View>
             </Animated.View>
         </ScrollView>

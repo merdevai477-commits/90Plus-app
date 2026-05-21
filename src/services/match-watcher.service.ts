@@ -4,6 +4,7 @@ import { WebSocketService } from './websocket.service';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
+import { getUserLanguage, renderPushTemplate } from './push-templates.service';
 
 interface ApiFootballMatch {
     fixture: {
@@ -363,17 +364,23 @@ export class MatchWatcherService {
 
         for (const event of newEvents) {
             const isRed = event.detail === 'Red Card' || event.detail === 'Second Yellow card';
-            const emoji = isRed ? '🟥' : '🟨';
-            const cardLabel = isRed ? 'بطاقة حمراء' : 'بطاقة صفراء';
-            const playerName = event.player?.name || 'لاعب';
+            const playerName = event.player?.name;
             const teamName = event.team?.name || '';
             const elapsed = event.time?.elapsed ?? '';
 
-            const title = `${emoji} ${cardLabel}!`;
-            const message = `${playerName} (${teamName}) - الدقيقة ${elapsed}'`;
-
             for (const favorite of matchFavorites) {
                 try {
+                    const lang = await getUserLanguage(favorite.userId);
+                    const fallbackPlayer = renderPushTemplate('matchCardPlayerFallback', lang);
+                    const title = renderPushTemplate(
+                        isRed ? 'matchRedCardTitle' : 'matchYellowCardTitle',
+                        lang,
+                    );
+                    const message = renderPushTemplate('matchCardBody', lang, {
+                        player: playerName || fallbackPlayer,
+                        team: teamName,
+                        minute: elapsed,
+                    });
                     await NotificationService.createNotification({
                         userId: favorite.userId,
                         pushToken: favorite.user?.expoPushToken ?? null,

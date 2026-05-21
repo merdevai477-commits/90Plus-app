@@ -102,7 +102,7 @@ function ClerkKeyMissingScreen() {
   return (
     <View style={layoutStyles.errorContainer}>
       <Text style={layoutStyles.errorText}>
-        خطأ في الإعداد. يرجى إعادة تثبيت التطبيق.
+        Setup error. Please reinstall the app.
       </Text>
     </View>
   );

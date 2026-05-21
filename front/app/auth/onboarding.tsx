@@ -29,6 +29,7 @@ import Animated, {
 import { globalState } from '../../globalState';
 import { useHomeStore } from '../../src/store/home.store';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useTranslation } from '../../src/i18n';
 
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 3;
@@ -36,6 +37,7 @@ const ITEM_SIZE = (width - 48) / 3;
 type Step = 'club' | 'brand' | 'country' | 'leagues';
 
 export default function OnboardingScreen() {
+    const { t } = useTranslation();
     const [step, setStep] = useState<Step>('club');
     const [selectedClub, setSelectedClub] = useState<string | null>(null);
     const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
@@ -145,10 +147,10 @@ export default function OnboardingScreen() {
         : selectedLeagues.length >= 3;
 
     const titles: Record<Step, string> = {
-        club: 'اختر ناديك المفضل ⚽',
-        brand: 'اختر براندك المفضل 👕',
-        country: 'اختر بلدك 🌍',
-        leagues: 'اختر 3 دوريات على الأقل ⭐',
+        club: t.onboardingFlow.titleClub,
+        brand: t.onboardingFlow.titleBrand,
+        country: t.onboardingFlow.titleCountry,
+        leagues: t.onboardingFlow.titleLeagues,
     };
 
     // Render functions with React.memo pattern
@@ -271,7 +273,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.title}>{titles[step]}</Text>
                 {step === 'leagues' && (
                     <Text style={styles.subtitle}>
-                        تم اختيار {selectedLeagues.length}/3
+                        {t.onboardingFlow.leaguesSelected.replace('{count}', String(selectedLeagues.length))}
                     </Text>
                 )}
             </Animated.View>
@@ -332,7 +334,7 @@ export default function OnboardingScreen() {
                 {step !== 'club' && (
                     <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.7}>
                         <ChevronLeft size={20} color="#fff" />
-                        <Text style={styles.backButtonText}>رجوع</Text>
+                        <Text style={styles.backButtonText}>{t.onboardingFlow.back}</Text>
                     </TouchableOpacity>
                 )}
 
@@ -349,7 +351,7 @@ export default function OnboardingScreen() {
                         end={{ x: 1, y: 0 }}
                     >
                         <Text style={[styles.nextButtonText, !canProceed && styles.disabledText]}>
-                            {step === 'leagues' ? 'ابدأ الآن! 🚀' : 'التالي'}
+                            {step === 'leagues' ? t.onboardingFlow.finish : t.onboardingFlow.next}
                         </Text>
                         <ChevronRight size={20} color={canProceed ? '#000' : '#666'} />
                     </LinearGradient>

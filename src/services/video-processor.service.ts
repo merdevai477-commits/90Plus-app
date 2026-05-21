@@ -29,6 +29,7 @@ import { bullCreateClient } from '../lib/bull-redis';
 import { r2MediaStorage } from './r2-media-storage.service';
 import { NotificationService } from './notification.service';
 import { logger } from '../utils/logger';
+import { renderPushTemplate, getUserLanguage } from './push-templates.service';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
@@ -274,10 +275,11 @@ async function processVideoInline(data: VideoProcessingJobData): Promise<void> {
     }
 
     // ── 8. Notify user ────────────────────────────────────────────────────────
+    const lang = await getUserLanguage(userId);
     await NotificationService.createNotification({
       userId,
-      title: '✅ فيديوهك جاهز!',
-      message: 'تم معالجة فيديوهك بنجاح وهو متاح الآن للمشاهدة',
+      title: renderPushTemplate('videoReadyTitle', lang),
+      message: renderPushTemplate('videoReadyBody', lang),
       type: 'VIDEO_PROCESSED',
       data: { type: 'VIDEO_PROCESSED', reelId, status: 'READY' },
     });
@@ -309,10 +311,11 @@ async function processVideoInline(data: VideoProcessingJobData): Promise<void> {
 async function handleProcessingFailure(reelId: string, userId: string, errorMsg: string): Promise<void> {
   try {
     await db.reel.update({ where: { id: reelId }, data: { status: 'FAILED' } });
+    const lang = await getUserLanguage(userId);
     await NotificationService.createNotification({
       userId,
-      title: '❌ فشل رفع الفيديو',
-      message: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+      title: renderPushTemplate('videoFailedTitle', lang),
+      message: renderPushTemplate('videoFailedBody', lang),
       type: 'VIDEO_PROCESSED',
       data: { type: 'VIDEO_PROCESSED', reelId, status: 'FAILED', error: errorMsg },
     });

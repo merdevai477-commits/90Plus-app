@@ -33,6 +33,7 @@ import * as Haptics from 'expo-haptics';
 import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCache';
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
+import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
 import { compressImage } from '@/utils/imageCompressor';
@@ -315,7 +316,7 @@ export default function ProfileScreen() {
     setReelUploadUi,
     resetReelUploadUi,
   } = useVideos();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   // Optimization: Prevent guest access - redirect to auth
   useEffect(() => {
@@ -915,7 +916,7 @@ export default function ProfileScreen() {
     // UX Fix 2: Cross-platform action sheet
     showImageSourceSheet(
       {
-        title: 'صورة الغلاف',
+        title: t.profile.coverImageTitle,
         hasExistingImage: !!userData.coverImage,
         onGallery: () => _pickCoverFromGallery(),
         onCamera: () => _pickCoverFromCamera(),
@@ -1014,7 +1015,7 @@ export default function ProfileScreen() {
     } catch (err: any) {
       logger.error('Cover upload exception:', err);
       setCoverImage(originalCover || null);
-      toastManager.showError(t.common.error, t.profile.coverUploadFailed || 'فشل رفع صورة الغلاف');
+      toastManager.showError(t.common.error, t.profile.coverUploadFailed || t.profile.coverUploadFailedFallback);
     } finally {
       setIsCoverUploading(false);
     }
@@ -1036,7 +1037,7 @@ export default function ProfileScreen() {
     // UX Fix 2: Cross-platform action sheet with "remove" option
     showImageSourceSheet(
       {
-        title: 'صورة البروفايل',
+        title: t.profile.avatarImageTitle,
         hasExistingImage: !!(userData.avatar || localImage),
         onGallery: () => _pickAvatarFromGallery(),
         onCamera: () => _pickAvatarFromCamera(),
@@ -1062,13 +1063,14 @@ export default function ProfileScreen() {
         setLocalImage(null);
         globalState.setLocalAvatar(undefined);
         await updateCachedUserData({ avatar: null });
-        toastManager.showSuccess('تم', 'تم إزالة صورة البروفايل');
+        toastManager.showSuccess(t.common.done, t.profile.avatarRemoved);
+        // Note: We're keeping the success toast simple — the user already saw the avatar disappear.
       } else {
-        toastManager.showError(t.common.error, json.message || 'فشل إزالة الصورة');
+        toastManager.showError(t.common.error, json.message || t.profile.avatarRemoveFailed);
       }
     } catch (err: any) {
       logger.error('Remove avatar error:', err);
-      toastManager.showError(t.common.error, 'فشل إزالة الصورة. تحقق من اتصالك بالإنترنت.');
+      toastManager.showError(t.common.error, t.profile.avatarRemoveNetworkError);
     } finally {
       setIsAvatarUploading(false);
     }
@@ -1164,7 +1166,7 @@ export default function ProfileScreen() {
     } catch (err: any) {
       logger.error('Avatar upload exception:', err);
       setLocalImage(originalAvatar || null);
-      toastManager.showError(t.common.error, t.profile.avatarUploadFailed || 'فشل رفع صورة البروفايل');
+      toastManager.showError(t.common.error, t.profile.avatarUploadFailed || t.profile.avatarUploadFailedFallback);
     }
   };
 
@@ -1692,7 +1694,7 @@ export default function ProfileScreen() {
                 setSelectedVideoUrl(src);
                 setIsVideoPlayerVisible(true);
               } else {
-                toastManager.showWarning('الفيديو غير جاهز', 'لا يوجد مصدر فيديو صالح للتشغيل');
+                toastManager.showWarning(t.profile.videoNotReadyTitle, t.profile.videoNotReadyMessage);
               }
             }}
             onVideoLongPress={() => setIsDeleteMode(prev => !prev)}
@@ -2258,8 +2260,10 @@ export default function ProfileScreen() {
                           color: step.completed ? '#fff' : 'rgba(255,255,255,0.55)',
                           fontSize: 14,
                           fontWeight: step.completed ? '700' : '500',
-                        }}>
-                          {step.label}
+                        }}
+                        numberOfLines={1}
+                        >
+                          {getProfileCompletionStepLabel(step.id, language, step.label)}
                         </Text>
 
                         {/* Required badge */}

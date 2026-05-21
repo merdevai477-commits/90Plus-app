@@ -6,6 +6,20 @@
 
 import { getApiUrl } from '../config/api.config';
 import { cacheService } from './cacheService';
+import { useLanguageStore } from '../src/i18n/store';
+import { translations } from '../src/i18n/utils';
+import { getLocalizedErrorFromUnknown } from '../utils/i18nHelpers';
+
+/**
+ * Read translations for the active language directly from the store.
+ * Used by service-level success/error messages so they match the
+ * user's selected locale without dragging React hooks into the data
+ * layer.
+ */
+function getCurrentT() {
+  const lang = useLanguageStore.getState().language;
+  return translations[lang] ?? translations.en;
+}
 
 // Cache keys for rankings
 const RANKINGS_CACHE_KEYS = {
@@ -309,15 +323,24 @@ class RankingsService {
       }
 
       const data = await response.json();
-      return { 
-        success: true, 
-        message: data.data?.message || data.message || 'تم إرسال توقعك بنجاح',
-        data: data.data 
+      const t = getCurrentT();
+      return {
+        success: true,
+        // Backend may already return a localized message; only fall back
+        // to our locale-aware default if it didn't.
+        message:
+          data.data?.message ||
+          data.message ||
+          t.toastManager?.predictionSavedMessage ||
+          t.predictions?.successMessage ||
+          '',
+        data: data.data,
       };
     } catch (error: any) {
-      return { 
-        success: false, 
-        message: error.message || 'فشل إرسال التوقع. يرجى المحاولة مرة أخرى.' 
+      const lang = useLanguageStore.getState().language;
+      return {
+        success: false,
+        message: getLocalizedErrorFromUnknown(error, lang),
       };
     }
   }
