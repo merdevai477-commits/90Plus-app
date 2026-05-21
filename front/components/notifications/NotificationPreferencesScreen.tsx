@@ -54,7 +54,7 @@ async function fetchPreferences(token: string): Promise<NotificationPreferences>
     const res = await fetch(`${getApiUrl()}/notifications/preferences`, {
         headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error('Failed to fetch preferences');
+    if (!res.ok) throw new Error('NOTIF_PREFS_FETCH_FAILED');
     const data = await res.json();
     return data.data.preferences;
 }
@@ -65,7 +65,7 @@ async function updatePreferences(token: string, updates: Partial<NotificationPre
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('Failed to update preferences');
+    if (!res.ok) throw new Error('NOTIF_PREFS_UPDATE_FAILED');
     const data = await res.json();
     return data.data.preferences;
 }
@@ -83,8 +83,8 @@ function SwitchRow({ label, subtitle, value, field, onToggle, loading }: SwitchR
     return (
         <View style={styles.row}>
             <View style={styles.rowText}>
-                <Text style={styles.rowLabel}>{label}</Text>
-                <Text style={styles.rowSubtitle}>{subtitle}</Text>
+                <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
+                <Text style={styles.rowSubtitle} numberOfLines={2}>{subtitle}</Text>
             </View>
             {loading ? (
                 <ActivityIndicator size="small" color={COLORS.neonGreen} />
@@ -119,7 +119,7 @@ export default function NotificationPreferencesScreen() {
         queryKey: ['notification-preferences'],
         queryFn: async () => {
             const token = await getToken();
-            if (!token) throw new Error('Not authenticated');
+            if (!token) throw new Error('NOT_AUTHENTICATED');
             return fetchPreferences(token);
         },
         placeholderData: DEFAULT_PREFS,
@@ -128,7 +128,7 @@ export default function NotificationPreferencesScreen() {
     const mutation = useMutation({
         mutationFn: async (updates: Partial<NotificationPreferences>) => {
             const token = await getToken();
-            if (!token) throw new Error('Not authenticated');
+            if (!token) throw new Error('NOT_AUTHENTICATED');
             return updatePreferences(token, updates);
         },
         onMutate: async (updates) => {
@@ -147,10 +147,7 @@ export default function NotificationPreferencesScreen() {
                 queryClient.setQueryData(['notification-preferences'], context.previous);
             }
             logger.error('Failed to update notification preferences:', err);
-            Alert.alert(
-                t.common?.error || 'خطأ',
-                t.notifications?.prefUpdateError || 'فشل تحديث الإعدادات، حاول مرة أخرى'
-            );
+            Alert.alert(t.common.error, t.notifications.prefUpdateError);
         },
         onSettled: () => {
             setLoadingField(null);
@@ -181,7 +178,7 @@ export default function NotificationPreferencesScreen() {
             <Stack.Screen
                 options={{
                     headerShown: true,
-                    title: t.notifications?.preferencesTitle || 'إعدادات الإشعارات',
+                    title: t.notifications.preferencesTitle,
                     headerStyle: { backgroundColor: COLORS.deepBlack },
                     headerTintColor: COLORS.white,
                     headerTitleStyle: { fontWeight: 'bold' },
@@ -193,45 +190,45 @@ export default function NotificationPreferencesScreen() {
 
                 {/* Match Section */}
                 <View style={styles.section}>
-                    <SectionHeader title={t.notifications?.sectionMatch || 'المباريات'} icon="football-outline" />
+                    <SectionHeader title={t.notifications.sectionMatch} icon="football-outline" />
                     <View style={styles.card}>
-                        <SwitchRow label={t.notifications?.prefMatchGoals || 'الأهداف'} subtitle={t.notifications?.prefMatchGoalsSub || 'إشعار فوري عند تسجيل هدف'} value={current.matchGoals} field="matchGoals" onToggle={handleToggle} loading={loadingField === 'matchGoals'} />
+                        <SwitchRow label={t.notifications.prefMatchGoals} subtitle={t.notifications.prefMatchGoalsSub} value={current.matchGoals} field="matchGoals" onToggle={handleToggle} loading={loadingField === 'matchGoals'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefMatchStart || 'بداية المباراة'} subtitle={t.notifications?.prefMatchStartSub || 'عند انطلاق صافرة البداية'} value={current.matchStart} field="matchStart" onToggle={handleToggle} loading={loadingField === 'matchStart'} />
+                        <SwitchRow label={t.notifications.prefMatchStart} subtitle={t.notifications.prefMatchStartSub} value={current.matchStart} field="matchStart" onToggle={handleToggle} loading={loadingField === 'matchStart'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefMatchEnd || 'نهاية المباراة'} subtitle={t.notifications?.prefMatchEndSub || 'النتيجة النهائية'} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} loading={loadingField === 'matchEnd'} />
+                        <SwitchRow label={t.notifications.prefMatchEnd} subtitle={t.notifications.prefMatchEndSub} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} loading={loadingField === 'matchEnd'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefHalftime || 'نهاية الشوط الأول'} subtitle={t.notifications?.prefHalftimeSub || 'نتيجة الشوط الأول'} value={current.matchHalftime} field="matchHalftime" onToggle={handleToggle} loading={loadingField === 'matchHalftime'} />
+                        <SwitchRow label={t.notifications.prefHalftime} subtitle={t.notifications.prefHalftimeSub} value={current.matchHalftime} field="matchHalftime" onToggle={handleToggle} loading={loadingField === 'matchHalftime'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefLeague || 'مباريات الدوريات'} subtitle={t.notifications?.prefLeagueSub || 'مباريات دورياتك المفضلة'} value={current.leagueMatches} field="leagueMatches" onToggle={handleToggle} loading={loadingField === 'leagueMatches'} />
+                        <SwitchRow label={t.notifications.prefLeague} subtitle={t.notifications.prefLeagueSub} value={current.leagueMatches} field="leagueMatches" onToggle={handleToggle} loading={loadingField === 'leagueMatches'} />
                     </View>
                 </View>
 
                 {/* Social Section */}
                 <View style={styles.section}>
-                    <SectionHeader title={t.notifications?.sectionSocial || 'التفاعل الاجتماعي'} icon="people-outline" />
+                    <SectionHeader title={t.notifications.sectionSocial} icon="people-outline" />
                     <View style={styles.card}>
-                        <SwitchRow label={t.notifications?.prefFollow || 'متابعون جدد'} subtitle={t.notifications?.prefFollowSub || 'عندما يتابعك شخص'} value={current.socialFollow} field="socialFollow" onToggle={handleToggle} loading={loadingField === 'socialFollow'} />
+                        <SwitchRow label={t.notifications.prefFollow} subtitle={t.notifications.prefFollowSub} value={current.socialFollow} field="socialFollow" onToggle={handleToggle} loading={loadingField === 'socialFollow'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefLike || 'الإعجابات'} subtitle={t.notifications?.prefLikeSub || 'عندما يعجب أحد بمقطعك'} value={current.socialLike} field="socialLike" onToggle={handleToggle} loading={loadingField === 'socialLike'} />
+                        <SwitchRow label={t.notifications.prefLike} subtitle={t.notifications.prefLikeSub} value={current.socialLike} field="socialLike" onToggle={handleToggle} loading={loadingField === 'socialLike'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefComment || 'التعليقات'} subtitle={t.notifications?.prefCommentSub || 'عندما يعلق أحد على مقطعك'} value={current.socialComment} field="socialComment" onToggle={handleToggle} loading={loadingField === 'socialComment'} />
+                        <SwitchRow label={t.notifications.prefComment} subtitle={t.notifications.prefCommentSub} value={current.socialComment} field="socialComment" onToggle={handleToggle} loading={loadingField === 'socialComment'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefReply || 'الردود'} subtitle={t.notifications?.prefReplySub || 'عندما يرد أحد على تعليقك'} value={current.socialReply} field="socialReply" onToggle={handleToggle} loading={loadingField === 'socialReply'} />
+                        <SwitchRow label={t.notifications.prefReply} subtitle={t.notifications.prefReplySub} value={current.socialReply} field="socialReply" onToggle={handleToggle} loading={loadingField === 'socialReply'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefMention || 'الإشارات'} subtitle={t.notifications?.prefMentionSub || 'عندما يشير إليك أحد'} value={current.socialMention} field="socialMention" onToggle={handleToggle} loading={loadingField === 'socialMention'} />
+                        <SwitchRow label={t.notifications.prefMention} subtitle={t.notifications.prefMentionSub} value={current.socialMention} field="socialMention" onToggle={handleToggle} loading={loadingField === 'socialMention'} />
                     </View>
                 </View>
 
                 {/* General Section */}
                 <View style={styles.section}>
-                    <SectionHeader title={t.notifications?.sectionGeneral || 'عام'} icon="gift-outline" />
+                    <SectionHeader title={t.notifications.sectionGeneral} icon="gift-outline" />
                     <View style={styles.card}>
-                        <SwitchRow label={t.notifications?.prefPrediction || 'نتائج التوقعات'} subtitle={t.notifications?.prefPredictionSub || 'عند معرفة نتيجة توقعك'} value={current.predictionResults} field="predictionResults" onToggle={handleToggle} loading={loadingField === 'predictionResults'} />
+                        <SwitchRow label={t.notifications.prefPrediction} subtitle={t.notifications.prefPredictionSub} value={current.predictionResults} field="predictionResults" onToggle={handleToggle} loading={loadingField === 'predictionResults'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefLuckyWheel || 'عجلة الحظ'} subtitle={t.notifications?.prefLuckyWheelSub || 'تذكير يومي بعجلة الحظ'} value={current.luckyWheel} field="luckyWheel" onToggle={handleToggle} loading={loadingField === 'luckyWheel'} />
+                        <SwitchRow label={t.notifications.prefLuckyWheel} subtitle={t.notifications.prefLuckyWheelSub} value={current.luckyWheel} field="luckyWheel" onToggle={handleToggle} loading={loadingField === 'luckyWheel'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications?.prefGifts || 'الهدايا والمكافآت'} subtitle={t.notifications?.prefGiftsSub || 'عند استلام هدية أو مكافأة'} value={current.gifts} field="gifts" onToggle={handleToggle} loading={loadingField === 'gifts'} />
+                        <SwitchRow label={t.notifications.prefGifts} subtitle={t.notifications.prefGiftsSub} value={current.gifts} field="gifts" onToggle={handleToggle} loading={loadingField === 'gifts'} />
                     </View>
                 </View>
 
@@ -249,7 +246,7 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.white },
     card: { backgroundColor: '#111', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
-    rowText: { flex: 1, marginRight: 12 },
+    rowText: { flex: 1, marginEnd: 12 },
     rowLabel: { fontSize: 15, fontWeight: '600', color: COLORS.white, marginBottom: 2 },
     rowSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
     divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginHorizontal: 16 },

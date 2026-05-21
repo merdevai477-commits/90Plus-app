@@ -203,7 +203,7 @@ export default function UserProfileScreen() {
 
   // ── Data loading (cache-first for instant render) ──────────────────────────
   const loadUserProfile = useCallback(async (skipCache = false) => {
-    if (!username) { setError('اسم المستخدم غير موجود'); setIsLoading(false); return; }
+    if (!username) { setError(t.publicProfile.notFound); setIsLoading(false); return; }
 
     const isOwn =
       globalState.userProfile?.username?.toLowerCase() === username?.toLowerCase();
@@ -224,7 +224,7 @@ export default function UserProfileScreen() {
 
     try {
       const token = await getToken();
-      if (!token) { setError('يرجى تسجيل الدخول'); setIsLoading(false); return; }
+      if (!token) { setError(t.errorCodes.E002); setIsLoading(false); return; }
       const userData = await AuthService.getUserByUsername(token, username);
       if (userData) {
         setUser(userData);
@@ -232,18 +232,18 @@ export default function UserProfileScreen() {
         // Refresh cache (5 min TTL — reasonable for non-self profiles).
         cacheService.set(cacheKey, userData, 5 * 60 * 1000).catch(() => {});
       } else {
-        setError('المستخدم غير موجود');
+        setError(t.publicProfile.notFound);
       }
     } catch {
       // Only surface error if we have nothing on screen at all.
       setUser(prev => {
-        if (!prev) setError('حدث خطأ أثناء تحميل البروفايل');
+        if (!prev) setError(t.errorCodes.unknown);
         return prev;
       });
     } finally {
       setIsLoading(false);
     }
-  }, [username, getToken]);
+  }, [username, getToken, t]);
 
   const loadUserVideos = useCallback(async (skipCache = false) => {
     if (!username) return;
@@ -383,7 +383,7 @@ export default function UserProfileScreen() {
       <View style={[s.container, s.center]}>
         <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" color={ACCENT} />
-        <Text style={s.loadingTxt}>جاري التحميل...</Text>
+        <Text style={s.loadingTxt}>{t.publicProfile.loading}</Text>
       </View>
     );
   }
@@ -393,9 +393,9 @@ export default function UserProfileScreen() {
       <View style={[s.container, s.center]}>
         <StatusBar barStyle="light-content" />
         <Ionicons name="person-outline" size={64} color="#555" />
-        <Text style={s.errorTxt}>{error || 'المستخدم غير موجود'}</Text>
+        <Text style={s.errorTxt}>{error || t.publicProfile.notFound}</Text>
         <TouchableOpacity style={s.backBtnLarge} onPress={() => router.back()}>
-          <Text style={s.backBtnTxt}>العودة</Text>
+          <Text style={s.backBtnTxt}>{t.publicProfile.goBack}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -446,14 +446,14 @@ export default function UserProfileScreen() {
 
             {/* Title */}
             <Text style={s.modalTitle}>
-              {isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم'}
+              {isBlocked ? t.publicProfile.unblock : t.publicProfile.block}
             </Text>
 
             {/* Body */}
             <Text style={s.modalBody}>
               {isBlocked
-                ? `هل تريد إلغاء حظر @${user.username}؟`
-                : `هل تريد حظر @${user.username}؟\nلن يتمكن من رؤية محتواك أو التفاعل معك.`}
+                ? t.publicProfile.unblockConfirm.replace('{username}', user.username)
+                : t.publicProfile.blockConfirm.replace('{username}', user.username)}
             </Text>
 
             {/* Buttons */}
@@ -463,7 +463,7 @@ export default function UserProfileScreen() {
                 onPress={() => setIsBlockModalVisible(false)}
                 activeOpacity={0.75}
               >
-                <Text style={s.modalCancelTxt}>إلغاء</Text>
+                <Text style={s.modalCancelTxt}>{t.publicProfile.cancel}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -472,7 +472,7 @@ export default function UserProfileScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={s.modalConfirmTxt}>
-                  {isBlocked ? 'إلغاء الحظر' : 'حظر'}
+                  {isBlocked ? t.publicProfile.confirmUnblock : t.publicProfile.confirmBlock}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -584,7 +584,7 @@ export default function UserProfileScreen() {
                         end={{ x: 1, y: 1 }}
                       />
                       <Ionicons name="checkmark" size={18} color={ACCENT} />
-                      <Text style={s.followingTxt}>متابَع</Text>
+                      <Text style={s.followingTxt}>{t.publicProfile.following}</Text>
                     </G>
                   );
                 })()
@@ -602,7 +602,7 @@ export default function UserProfileScreen() {
                     color="#fff"
                   />
                   <Text style={s.followTxt}>
-                    {user.isFollowingMe ? 'رد المتابعة' : 'متابعة'}
+                    {user.isFollowingMe ? t.publicProfile.followBack : t.publicProfile.follow}
                   </Text>
                 </LinearGradient>
               )}
@@ -637,7 +637,7 @@ export default function UserProfileScreen() {
 
         {/* Videos section */}
         <View style={s.sectionHeader}>
-          <Text style={s.sectionTitle}>الفيديوهات</Text>
+          <Text style={s.sectionTitle}>{t.publicProfile.videosTitle}</Text>
           {userVideos.length > 0 && (
             <View style={s.countBadge}>
               <Text style={s.countTxt}>{userVideos.length}</Text>
@@ -652,7 +652,7 @@ export default function UserProfileScreen() {
         ) : userVideos.length === 0 ? (
           <View style={s.emptyVideos}>
             <Ionicons name="videocam-outline" size={48} color="#444" />
-            <Text style={s.emptyTxt}>لا يوجد فيديوهات بعد</Text>
+            <Text style={s.emptyTxt}>{t.publicProfile.noVideosYet}</Text>
           </View>
         ) : (
           <VideoGrid

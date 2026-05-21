@@ -15,6 +15,8 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { Zap } from 'lucide-react-native';
 import { useHaptic } from '../../hooks/useHaptic';
+import { useTranslation } from '../../src/i18n';
+import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { LiveTimer } from '../common/LiveTimer';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
@@ -66,6 +68,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
   onPredictionSubmit,
 }) => {
   const { trigger } = useHaptic();
+  const { t, language } = useTranslation();
   const scaleAnim = useSharedValue(1);
   const modalScaleAnim = useSharedValue(0);
 
@@ -74,6 +77,14 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
     match.homeTeam?.name || 'Team 1',
     match.awayTeam?.name || 'Team 2'
   ), [match.homeTeam?.name, match.awayTeam?.name]);
+
+  const localizedHomeName = getTeamDisplayName(match.homeTeam?.name, language);
+  const localizedAwayName = getTeamDisplayName(match.awayTeam?.name, language);
+  const localizedLeagueName = getLeagueDisplayName(match.league?.name, language);
+  const homeFallback = t.matches.prediction.homeLabelFallback ?? 'Home';
+  const awayFallback = t.matches.prediction.awayLabelFallback ?? 'Away';
+  const winLabel = t.predictions.homeWin ?? 'Win';
+  const drawLabel = t.predictions.draw ?? 'Draw';
 
   const [showPredictionModal, setShowPredictionModal] = useState(false);
   const [selectedPrediction, setSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
@@ -131,7 +142,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
     if (!selectedPrediction || !onPredictionSubmit) return;
 
     if (match.status !== 'upcoming') {
-      Alert.alert('Cannot Predict', 'You can only predict upcoming matches');
+      Alert.alert(t.predictions.alertTitle, t.predictions.cannotPredictLive);
       return;
     }
 
@@ -146,7 +157,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
       setShowPredictionModal(false);
       setSelectedPrediction(null);
     } catch (error) {
-      Alert.alert('Error', 'Failed to submit prediction');
+      Alert.alert(t.predictions.errorTitle, t.predictions.errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -158,9 +169,9 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
 
   const getPredictionLabel = (type: string) => {
     switch (type) {
-      case 'home': return `${match.homeTeam?.name || 'Home'} Win`;
-      case 'away': return `${match.awayTeam?.name || 'Away'} Win`;
-      case 'draw': return 'Draw';
+      case 'home': return `${localizedHomeName || homeFallback} ${winLabel}`;
+      case 'away': return `${localizedAwayName || awayFallback} ${winLabel}`;
+      case 'draw': return drawLabel;
       default: return '';
     }
   };
@@ -197,7 +208,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                 {isLive && (
                   <View style={styles.liveBadge}>
                     <Ionicons name="videocam" size={12} color="#fff" style={{ marginRight: 4 }} />
-                    <Text style={styles.liveText}>Live</Text>
+                    <Text style={styles.liveText}>{t.matches.status.live}</Text>
                   </View>
                 )}
               </View>
@@ -235,7 +246,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     />
                   </View>
                   <Text style={styles.teamName} numberOfLines={2}>
-                    {match.homeTeam?.name || 'TBD'}
+                    {localizedHomeName || 'TBD'}
                   </Text>
                 </View>
 
@@ -269,7 +280,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                       onPress={openPredictionModal}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.predictButtonText}>Predict</Text>
+                      <Text style={styles.predictButtonText}>{t.predictions.predict}</Text>
                       <Text style={styles.predictPoints}>5</Text>
                       <Zap size={14} color="#FFD700" fill="#FFD700" />
                     </TouchableOpacity>
@@ -296,7 +307,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     />
                   </View>
                   <Text style={styles.teamName} numberOfLines={2}>
-                    {match.awayTeam?.name || 'TBD'}
+                    {localizedAwayName || 'TBD'}
                   </Text>
                 </View>
               </View>
@@ -311,7 +322,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     color="#ffffff" 
                   />
                   <Text style={styles.leagueNameBottom} numberOfLines={1}>
-                    {match.league?.name || 'League'}
+                    {localizedLeagueName || 'League'}
                   </Text>
                 </View>
               </View>
@@ -337,7 +348,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
             >
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Make Your Prediction</Text>
+                  <Text style={styles.modalTitle}>{t.matches.prediction.title}</Text>
                   <TouchableOpacity
                     style={styles.modalClose}
                     onPress={() => setShowPredictionModal(false)}
@@ -358,7 +369,9 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     {match.homeTeam?.logo && (
                       <Image source={{ uri: match.homeTeam.logo }} style={styles.optionLogo} />
                     )}
-                    <Text style={styles.optionText}>Home Win</Text>
+                    <Text style={styles.optionText} numberOfLines={2}>
+                      {`${localizedHomeName || homeFallback} ${winLabel}`}
+                    </Text>
                     {selectedPrediction === 'home' && (
                       <Ionicons name="checkmark-circle" size={20} color="#22c55e" style={styles.checkIcon} />
                     )}
@@ -375,7 +388,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     <View style={styles.drawIcon}>
                       <Text style={styles.drawText}>X</Text>
                     </View>
-                    <Text style={styles.optionText}>Draw</Text>
+                    <Text style={styles.optionText}>{drawLabel}</Text>
                     {selectedPrediction === 'draw' && (
                       <Ionicons name="checkmark-circle" size={20} color="#fbbf24" style={styles.checkIcon} />
                     )}
@@ -392,7 +405,9 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                     {match.awayTeam?.logo && (
                       <Image source={{ uri: match.awayTeam.logo }} style={styles.optionLogo} />
                     )}
-                    <Text style={styles.optionText}>Away Win</Text>
+                    <Text style={styles.optionText} numberOfLines={2}>
+                      {`${localizedAwayName || awayFallback} ${winLabel}`}
+                    </Text>
                     {selectedPrediction === 'away' && (
                       <Ionicons name="checkmark-circle" size={20} color="#ef4444" style={styles.checkIcon} />
                     )}
@@ -408,7 +423,7 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                   disabled={!selectedPrediction || isSubmitting}
                 >
                   <Text style={styles.submitButtonText}>
-                    {isSubmitting ? 'Submitting...' : 'Submit Prediction'}
+                    {isSubmitting ? t.predictions.submitting : t.predictions.submitPrediction}
                   </Text>
                 </TouchableOpacity>
               </View>

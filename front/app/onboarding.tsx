@@ -28,6 +28,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { globalState } from '../globalState';
 import { useHomeStore } from '../src/store/home.store';
+import { useTranslation } from '../src/i18n';
 import { clubLogoService } from '../services/clubLogoService';
 import { brandLogoService } from '../services/brandLogoService';
 import { useSettings } from '../contexts/SettingsContext';
@@ -38,6 +39,7 @@ const ITEM_SIZE = (width - 48) / 3;
 type Step = 'club' | 'brand' | 'country' | 'leagues';
 
 export default function OnboardingScreen() {
+    const { t } = useTranslation();
     const [step, setStep] = useState<Step>('club');
     const [selectedClub, setSelectedClub] = useState<string | null>(null);
     const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
@@ -69,11 +71,11 @@ export default function OnboardingScreen() {
                     if (!token) {
                         console.error('No auth token available');
                         Alert.alert(
-                            'خطأ في المصادقة',
-                            'يرجى تسجيل الدخول مرة أخرى',
+                            t.onboardingFlow.authError,
+                            t.onboardingFlow.pleaseLoginAgain,
                             [
-                                { 
-                                    text: 'حسناً', 
+                                {
+                                    text: t.onboardingFlow.okay,
                                     onPress: () => router.replace('/auth')
                                 }
                             ]
@@ -108,15 +110,15 @@ export default function OnboardingScreen() {
                 } catch (error) {
                     console.error('Save preferences error:', error);
                     Alert.alert(
-                        'خطأ',
-                        'حدث خطأ أثناء حفظ التفضيلات. هل تريد المحاولة مرة أخرى؟',
+                        t.common.error,
+                        t.onboardingFlow.saveError,
                         [
-                            { 
-                                text: 'إعادة المحاولة', 
+                            {
+                                text: t.onboardingFlow.retry,
                                 onPress: () => handleNext()
                             },
-                            { 
-                                text: 'تخطي', 
+                            {
+                                text: t.onboardingFlow.skip,
                                 onPress: () => {
                                     try {
                                         router.replace('/(tabs)/Home');
@@ -133,11 +135,11 @@ export default function OnboardingScreen() {
         } catch (error) {
             console.error('Unexpected error in handleNext:', error);
             Alert.alert(
-                'خطأ غير متوقع',
-                'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.',
+                t.onboardingFlow.unexpectedError,
+                t.onboardingFlow.unexpectedErrorMessage,
                 [
-                    { 
-                        text: 'حسناً',
+                    {
+                        text: t.onboardingFlow.okay,
                         onPress: () => {
                             // Safe fallback - go to home anyway
                             try {
@@ -253,10 +255,10 @@ export default function OnboardingScreen() {
         : selectedLeagues.length >= 3;
 
     const titles: Record<Step, string> = {
-        club: 'اختر ناديك المفضل ⚽',
-        brand: 'اختر براندك المفضل 👕',
-        country: 'اختر بلدك 🌍',
-        leagues: 'اختر 3 دوريات على الأقل ⭐',
+        club: t.onboardingFlow.titleClub,
+        brand: t.onboardingFlow.titleBrand,
+        country: t.onboardingFlow.titleCountry,
+        leagues: t.onboardingFlow.titleLeagues,
     };
 
     const renderClubItem = useCallback(({ item }: { item: typeof CLUBS[0] }) => {
@@ -326,7 +328,7 @@ export default function OnboardingScreen() {
 
             <Animated.View entering={FadeIn.duration(200)} style={styles.header}>
                 <Text style={styles.title}>{titles[step]}</Text>
-                {step === 'leagues' && <Text style={styles.subtitle}>تم اختيار {selectedLeagues.length}/3</Text>}
+                {step === 'leagues' && <Text style={styles.subtitle}>{t.onboardingFlow.leaguesSelected.replace('{count}', String(selectedLeagues.length))}</Text>}
             </Animated.View>
 
             <View style={styles.content}>
@@ -339,12 +341,12 @@ export default function OnboardingScreen() {
             <View style={styles.bottomButtons}>
                 {step !== 'club' && (
                     <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.7}>
-                        <ChevronLeft size={20} color="#fff" /><Text style={styles.backButtonText}>رجوع</Text>
+                        <ChevronLeft size={20} color="#fff" /><Text style={styles.backButtonText}>{t.onboardingFlow.back}</Text>
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity style={[styles.nextButton, !canProceed && styles.disabledButton]} onPress={handleNext} disabled={!canProceed} activeOpacity={0.8}>
                     <LinearGradient colors={canProceed ? ['#FFD700', '#FFA500'] : ['#333', '#222']} style={styles.nextButtonGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                        <Text style={[styles.nextButtonText, !canProceed && styles.disabledText]}>{step === 'leagues' ? 'ابدأ الآن! 🚀' : 'التالي'}</Text>
+                        <Text style={[styles.nextButtonText, !canProceed && styles.disabledText]}>{step === 'leagues' ? t.onboardingFlow.finish : t.onboardingFlow.next}</Text>
                         <ChevronRight size={20} color={canProceed ? '#000' : '#666'} />
                     </LinearGradient>
                 </TouchableOpacity>

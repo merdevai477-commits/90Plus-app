@@ -1,7 +1,8 @@
 /**
  * Prediction Watcher Service
- * نظام مراقبة التوقعات وتحديثها تلقائياً
- * 
+ *
+ * Watches predictions automatically and resolves them when matches end.
+ *
  * This service watches ALL matches that have predictions (not just favorites)
  * and resolves them when matches end.
  */
@@ -11,6 +12,7 @@ import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { enqueueNotification } from '../queues/notification.queue';
+import { getUserLanguage, renderPushTemplate } from './push-templates.service';
 
 
 export class PredictionWatcherService {
@@ -103,11 +105,12 @@ export class PredictionWatcherService {
                 
                 for (const userId of newIds) {
                     logger.info(`🏆 User ${userId} entered Top 10 Leaderboard! Sending notification...`);
+                    const lang = await getUserLanguage(userId);
                     await enqueueNotification({
                         userId,
                         type: 'LEADERBOARD_TOP10',
-                        title: '🏆 بطل التوقعات!',
-                        message: 'تهانينا! لقد دخلت قائمة أفضل 10 متوقعين 🔥',
+                        title: renderPushTemplate('leaderboardTop10Title', lang),
+                        message: renderPushTemplate('leaderboardTop10Body', lang),
                         data: { type: 'LEADERBOARD_TOP10', screen: '/(tabs)/rank' }
                     }).catch(() => {});
                 }
@@ -183,11 +186,12 @@ export class PredictionWatcherService {
 
             const newIds = newTop10.filter((id) => !oldTop10.includes(id));
             for (const userId of newIds) {
+                const lang = await getUserLanguage(userId);
                 await enqueueNotification({
                     userId,
                     type: 'LEADERBOARD_TOP10',
-                    title: '🏆 بطل التوقعات!',
-                    message: 'تهانينا! لقد دخلت قائمة أفضل 10 متوقعين 🔥',
+                    title: renderPushTemplate('leaderboardTop10Title', lang),
+                    message: renderPushTemplate('leaderboardTop10Body', lang),
                     data: { type: 'LEADERBOARD_TOP10', screen: '/(tabs)/rank' }
                 }).catch(() => {});
             }

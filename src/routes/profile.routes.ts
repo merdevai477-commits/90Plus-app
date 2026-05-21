@@ -6,6 +6,7 @@ import { ProfileController } from '../controllers/profile.controller';
 import { moderateBio } from '../middleware/content-moderation.middleware';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import { writeLimiter, strictLimiter } from '../middleware/rateLimit.middleware';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -22,10 +23,10 @@ router.get('/me', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 1000 }), 
 router.patch('/me', requireAuth, writeLimiter, moderateBio, ProfileController.updateMyProfile);
 
 // Constants - Strict Cooldown Rules
-const AVATAR_CHANGE_COOLDOWN_DAYS = 7;   // صورة البروفايل: مرة كل 7 أيام (Requirement 10)
-const COVER_CHANGE_COOLDOWN_DAYS = 15;   // صورة الغلاف: مرة كل 15 يوم
-const USERNAME_CHANGE_COOLDOWN_DAYS = 15; // اليوزر نيم: مرة كل 15 يوم
-const REEL_UPLOAD_COOLDOWN_DAYS = 1;      // الريلز: مرة كل يوم
+const AVATAR_CHANGE_COOLDOWN_DAYS = 7;   // Avatar: once every 7 days (Requirement 10)
+const COVER_CHANGE_COOLDOWN_DAYS = 15;   // Cover image: once every 15 days
+const USERNAME_CHANGE_COOLDOWN_DAYS = 15; // Username: once every 15 days
+const REEL_UPLOAD_COOLDOWN_DAYS = 1;      // Reel upload: once per day
 
 /**
  * PUT /api/profile/avatar
@@ -36,14 +37,14 @@ router.put('/avatar', requireAuth, writeLimiter, async (req: Request, res: Respo
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         const { avatarUrl, storagePath } = req.body;
 
         if (!avatarUrl) {
-            res.status(400).json({ status: 'ERROR', message: 'Avatar URL is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Avatar URL is required');
             return;
         }
 
@@ -83,27 +84,31 @@ router.put('/avatar', requireAuth, writeLimiter, async (req: Request, res: Respo
         });
 
         if (result.error === 'NOT_FOUND') {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         if (result.error === 'COOLDOWN') {
-            res.status(429).json({
-                status: 'ERROR',
-                code: 'COOLDOWN_ACTIVE',
-                message: `يمكنك تغيير صورة البروفايل بعد ${result.daysRemaining} يوم`,
-                daysRemaining: result.daysRemaining
-            });
+            sendError(
+                req,
+                res,
+                ErrorCode.RATE_LIMIT,
+                `You can change your profile picture in ${result.daysRemaining} day(s)`,
+                {
+                    code: 'COOLDOWN_ACTIVE',
+                    daysRemaining: result.daysRemaining,
+                },
+            );
             return;
         }
 
         res.json({
-            status: 'SUCCESS',
-            message: 'تم تحديث صورة البروفايل بنجاح'
+            data: { updated: true },
+            message: 'Profile picture updated successfully'
         });
     } catch (error: any) {
         logger.error('Update avatar error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to update avatar' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update avatar');
     }
 });
 
@@ -116,14 +121,14 @@ router.put('/cover', requireAuth, writeLimiter, async (req: Request, res: Respon
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         const { coverUrl, storagePath } = req.body;
 
         if (!coverUrl) {
-            res.status(400).json({ status: 'ERROR', message: 'Cover URL is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cover URL is required');
             return;
         }
 
@@ -163,27 +168,31 @@ router.put('/cover', requireAuth, writeLimiter, async (req: Request, res: Respon
         });
 
         if (result.error === 'NOT_FOUND') {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         if (result.error === 'COOLDOWN') {
-            res.status(429).json({
-                status: 'ERROR',
-                code: 'COOLDOWN_ACTIVE',
-                message: `يمكنك تغيير صورة الغلاف بعد ${result.daysRemaining} يوم`,
-                daysRemaining: result.daysRemaining
-            });
+            sendError(
+                req,
+                res,
+                ErrorCode.RATE_LIMIT,
+                `You can change your cover image in ${result.daysRemaining} day(s)`,
+                {
+                    code: 'COOLDOWN_ACTIVE',
+                    daysRemaining: result.daysRemaining,
+                },
+            );
             return;
         }
 
         res.json({
-            status: 'SUCCESS',
-            message: 'تم تحديث صورة الغلاف بنجاح'
+            data: { updated: true },
+            message: 'Cover image updated successfully'
         });
     } catch (error: any) {
         logger.error('Update cover error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to update cover' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update cover');
     }
 });
 
@@ -196,7 +205,7 @@ router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Re
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -206,7 +215,7 @@ router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Re
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -217,29 +226,33 @@ router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Re
             );
             if (daysSinceLastChange < USERNAME_CHANGE_COOLDOWN_DAYS) {
                 const daysRemaining = USERNAME_CHANGE_COOLDOWN_DAYS - daysSinceLastChange;
-                
+
                 // Create notification on rejection
                 await prisma.notification.create({
                     data: {
                         userId: user.id,
                         type: 'GENERAL',
-                        title: 'تغيير اسم المستخدم',
-                        message: `لا يمكنك تغيير اسم المستخدم الآن. يرجى الانتظار ${daysRemaining} يوم.`,
-                        data: { 
+                        title: 'Username change',
+                        message: `You cannot change your username right now. Please wait ${daysRemaining} more day(s).`,
+                        data: {
                             type: 'USERNAME_COOLDOWN',
                             daysRemaining,
                             cooldownDays: USERNAME_CHANGE_COOLDOWN_DAYS
                         }
                     }
                 });
-                
+
                 // Return remaining days on rejection (Requirement 12.2)
-                res.status(429).json({
-                    status: 'ERROR',
-                    code: 'COOLDOWN_ACTIVE',
-                    message: `يمكنك تغيير اسم المستخدم بعد ${daysRemaining} يوم`,
-                    daysRemaining
-                });
+                sendError(
+                    req,
+                    res,
+                    ErrorCode.RATE_LIMIT,
+                    `You can change your username in ${daysRemaining} day(s)`,
+                    {
+                        code: 'COOLDOWN_ACTIVE',
+                        daysRemaining,
+                    },
+                );
                 return;
             }
         }
@@ -247,17 +260,19 @@ router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Re
         const { username } = req.body;
 
         if (!username) {
-            res.status(400).json({ status: 'ERROR', message: 'Username is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Username is required');
             return;
         }
 
         // Validate username format
         const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
         if (!usernameRegex.test(username)) {
-            res.status(400).json({ 
-                status: 'ERROR', 
-                message: 'Username must be 3-20 characters and contain only letters, numbers, and underscores' 
-            });
+            sendError(
+                req,
+                res,
+                ErrorCode.VALIDATION,
+                'Username must be 3-20 characters and contain only letters, numbers, and underscores',
+            );
             return;
         }
 
@@ -268,7 +283,7 @@ router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Re
         });
 
         if (existingUser && existingUser.id !== user.id) {
-            res.status(409).json({ status: 'ERROR', message: 'Username is already taken' });
+            sendError(req, res, ErrorCode.CONFLICT, 'Username is already taken');
             return;
         }
 
@@ -282,13 +297,12 @@ router.put('/username', requireAuth, strictLimiter, async (req: Request, res: Re
         });
 
         res.json({
-            status: 'SUCCESS',
-            message: 'تم تحديث اسم المستخدم بنجاح',
-            data: { username }
+            data: { username },
+            message: 'Username updated successfully'
         });
     } catch (error: any) {
         logger.error('Update username error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to update username' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update username');
     }
 });
 
@@ -313,7 +327,7 @@ router.post('/:username/view', requireAuth, async (req: Request, res: Response):
         });
 
         if (viewer?.username === username) {
-            res.json({ status: 'SUCCESS', message: 'Self view not counted' });
+            res.json({ data: { counted: false }, message: 'Self view not counted' });
             return;
         }
 
@@ -321,7 +335,7 @@ router.post('/:username/view', requireAuth, async (req: Request, res: Response):
         const dedupKey = `${clerkUserId}:${username}`;
         const lastView = profileViewDedup.get(dedupKey);
         if (lastView && Date.now() - lastView < PROFILE_VIEW_DEDUP_TTL) {
-            res.json({ status: 'SUCCESS', message: 'View already counted recently' });
+            res.json({ data: { counted: false }, message: 'View already counted recently' });
             return;
         }
         profileViewDedup.set(dedupKey, Date.now());
@@ -339,10 +353,10 @@ router.post('/:username/view', requireAuth, async (req: Request, res: Response):
             data: { profileViews: { increment: 1 } }
         });
 
-        res.json({ status: 'SUCCESS' });
+        res.json({ data: { counted: true } });
     } catch (error: any) {
         logger.error('Update profile error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to update profile' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update profile');
     }
 });
 
@@ -373,14 +387,14 @@ router.get('/analytics', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 10
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         // Check cache first
         const cached = analyticsCache.get(clerkUserId);
         if (cached && Date.now() - cached.timestamp < ANALYTICS_CACHE_TTL) {
-            res.json({ status: 'SUCCESS', data: cached.data });
+            res.json({ data: cached.data });
             return;
         }
 
@@ -402,7 +416,7 @@ router.get('/analytics', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 10
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -449,10 +463,10 @@ router.get('/analytics', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 10
         evictAnalyticsCacheIfNeeded();
         analyticsCache.set(clerkUserId, { data: analyticsData, timestamp: Date.now() });
 
-        res.json({ status: 'SUCCESS', data: analyticsData });
+        res.json({ data: analyticsData });
     } catch (error: any) {
         logger.error('Get analytics error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load analytics');
     }
 });
 
@@ -466,7 +480,7 @@ router.get('/cooldowns', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -482,24 +496,24 @@ router.get('/cooldowns', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         const calculateRemaining = (lastChange: Date | null, cooldownDays: number) => {
             if (!lastChange) return { canChange: true, daysRemaining: 0, hoursRemaining: 0 };
-            
+
             const msSinceChange = Date.now() - new Date(lastChange).getTime();
             const cooldownMs = cooldownDays * 24 * 60 * 60 * 1000;
-            
+
             if (msSinceChange >= cooldownMs) {
                 return { canChange: true, daysRemaining: 0, hoursRemaining: 0 };
             }
-            
+
             const remainingMs = cooldownMs - msSinceChange;
             const daysRemaining = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
             const hoursRemaining = Math.ceil((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-            
+
             return { canChange: false, daysRemaining, hoursRemaining };
         };
 
@@ -510,7 +524,6 @@ router.get('/cooldowns', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }
         const canDelete = deletesUsed < MAX_REEL_DELETES;
 
         res.json({
-            status: 'SUCCESS',
             data: {
                 avatar: calculateRemaining(user.lastAvatarChange, AVATAR_CHANGE_COOLDOWN_DAYS),
                 cover: calculateRemaining(user.lastCoverChange, COVER_CHANGE_COOLDOWN_DAYS),
@@ -527,7 +540,7 @@ router.get('/cooldowns', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }
         });
     } catch (error: any) {
         logger.error('Get cooldowns error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load cooldowns');
     }
 });
 

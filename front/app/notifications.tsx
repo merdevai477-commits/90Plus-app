@@ -91,17 +91,17 @@ function mapTypeToKind(type: SocialNotification['type']): Kind {
     }
 }
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: ReturnType<typeof useTranslation>['t']): string {
     const date = new Date(iso);
     if (isNaN(date.getTime())) return '—';
     const diffMs = Date.now() - date.getTime();
     const mins = Math.floor(diffMs / 60_000);
-    if (mins < 1) return 'Just now';
+    if (mins < 1) return t.notifications.now;
     if (mins < 60) return `${mins}m`;
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h`;
     const days = Math.floor(hrs / 24);
-    if (days === 1) return 'Yesterday';
+    if (days === 1) return t.profile.yesterday;
     if (days < 7) return `${days}d`;
     return date.toLocaleDateString();
 }
@@ -121,6 +121,9 @@ type HeaderProps = {
     hasUnread: boolean;
     title: string;
     markAllLabel: string;
+    eyebrowLabel: string;
+    summaryLabel: string;
+    backLabel: string;
 };
 
 const NotificationsHeader = React.memo(function NotificationsHeader({
@@ -132,6 +135,9 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
     hasUnread,
     title,
     markAllLabel,
+    eyebrowLabel,
+    summaryLabel,
+    backLabel,
 }: HeaderProps) {
     return (
         <HeaderGlass
@@ -145,18 +151,18 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
                     hitSlop={12}
                     style={headerStyles.backBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="Go back"
+                    accessibilityLabel={backLabel}
                 >
                     <ChevronLeft color={TEXT_PRIMARY} size={22} strokeWidth={2.2} />
                 </TouchableOpacity>
 
                 <View style={headerStyles.titleBlock}>
-                    <Text style={headerStyles.eyebrow}>INBOX</Text>
+                    <Text style={headerStyles.eyebrow}>{eyebrowLabel}</Text>
                     <Text style={headerStyles.title} numberOfLines={1}>
                         {title}
                     </Text>
                     <Text style={headerStyles.sub} numberOfLines={1}>
-                        {unreadCount} unread · {total} total
+                        {summaryLabel}
                     </Text>
                 </View>
 
@@ -543,7 +549,7 @@ export default function NotificationsScreen() {
             const timer = setTimeout(() => {
                 if (isLoading) {
                     toastManager.showLoading(
-                        t.notifications?.loading || 'Loading notifications...',
+                        t.notifications.loading,
                         '',
                         { position: 'top' },
                     );
@@ -561,12 +567,12 @@ export default function NotificationsScreen() {
     useEffect(() => {
         if (error && notifications.length === 0) {
             toastManager.showError(
-                'Failed to load',
+                t.notifications.failedToLoad,
                 error,
                 { duration: 3500, position: 'top' },
             );
         }
-    }, [error, notifications.length]);
+    }, [error, notifications.length, t.notifications]);
 
     const unreadCount = useMemo(
         () => notifications.filter((n) => !n.isRead).length,
@@ -592,18 +598,18 @@ export default function NotificationsScreen() {
                 setUnreadCount(0);
                 clearMatchNotifications();
                 toastManager.showSuccess(
-                    t.notifications?.markAllRead || 'Mark All Read',
+                    t.notifications.markAllRead,
                     '',
                     { duration: 1500, position: 'top' },
                 );
             }
         } catch (err) {
             logger.error('Failed to mark all read:', err);
-            toastManager.showError('Error', 'Could not mark as read', {
+            toastManager.showError(t.common.error, t.notifications.couldNotMarkRead, {
                 duration: 2500,
             });
         }
-    }, [getToken, setBackendNotifications, setUnreadCount, clearMatchNotifications, t.notifications]);
+    }, [getToken, setBackendNotifications, setUnreadCount, clearMatchNotifications, t]);
 
     const handleLuckyWheelPress = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -696,8 +702,13 @@ export default function NotificationsScreen() {
                 onBack={handleBack}
                 onMarkAll={markAllRead}
                 hasUnread={unreadCount > 0}
-                title={t.settings?.notifications || t.notifications?.title || 'Notifications'}
-                markAllLabel={t.notifications?.markAllRead || 'Mark All Read'}
+                title={t.settings?.notifications || t.notifications.title}
+                markAllLabel={t.notifications.markAllRead}
+                eyebrowLabel={t.notifications.inboxEyebrow}
+                summaryLabel={t.notifications.inboxSummary
+                    .replace('{unread}', String(unreadCount))
+                    .replace('{total}', String(notifications.length))}
+                backLabel={t.notifications.a11yBack}
             />
 
             <ScrollView
@@ -723,10 +734,10 @@ export default function NotificationsScreen() {
                     canSpin={canSpin}
                     timeRemaining={spinTimeRemaining}
                     onPress={handleLuckyWheelPress}
-                    readyTitle={t.notifications?.luckyWheelReady || '🎡 Lucky Wheel Ready!'}
-                    readySub={t.notifications?.tapToWin || 'Tap here to win free coins'}
-                    lockedTitle={t.home?.wheelLocked || t.luckyWheel?.locked || 'Wheel Locked'}
-                    lockedSub={t.notifications?.wheelAvailableIn || 'Lucky wheel available in'}
+                    readyTitle={t.notifications.luckyWheelReady}
+                    readySub={t.notifications.tapToWin}
+                    lockedTitle={t.home?.wheelLocked || t.luckyWheel?.locked || t.common.unavailable}
+                    lockedSub={t.notifications.wheelAvailableIn}
                 />
 
                 {/* Notifications list */}
@@ -734,14 +745,14 @@ export default function NotificationsScreen() {
                     <NotificationSkeleton />
                 ) : error && notifications.length === 0 ? (
                     <View style={styles.errorWrap}>
-                        <Text style={styles.errorTitle}>Could not load notifications</Text>
+                        <Text style={styles.errorTitle}>{t.notifications.loadFailed}</Text>
                         <Text style={styles.errorSub}>{error}</Text>
                         <TouchableOpacity
                             activeOpacity={0.85}
                             style={styles.retryBtn}
                             onPress={refreshNotifications}
                         >
-                            <Text style={styles.retryTxt}>Try again</Text>
+                            <Text style={styles.retryTxt}>{t.notifications.tryAgain}</Text>
                         </TouchableOpacity>
                     </View>
                 ) : notifications.length === 0 ? (
@@ -750,11 +761,10 @@ export default function NotificationsScreen() {
                             <MessageSquare size={22} color="rgba(167,139,250,0.55)" strokeWidth={2} />
                         </View>
                         <Text style={styles.emptyTitle}>
-                            {t.notifications?.noNotifications || 'No notifications yet'}
+                            {t.notifications.noNotifications}
                         </Text>
                         <Text style={styles.emptySub}>
-                            {t.notifications?.noNotificationsSubtitle ||
-                                'Match updates, likes, and follows will show up here.'}
+                            {t.notifications.emptyDefaultSubtitle}
                         </Text>
                     </View>
                 ) : (
@@ -781,7 +791,7 @@ export default function NotificationsScreen() {
                                         </Text>
                                     </View>
                                     <View style={styles.cardRight}>
-                                        <Text style={styles.time}>{formatRelativeTime(row.createdAt)}</Text>
+                                        <Text style={styles.time}>{formatRelativeTime(row.createdAt, t)}</Text>
                                         {!row.isRead ? <View style={styles.dot} /> : null}
                                     </View>
                                 </TouchableOpacity>
@@ -798,7 +808,7 @@ export default function NotificationsScreen() {
                                 {isLoadingMore ? (
                                     <ActivityIndicator color={PURPLE_SOFT} />
                                 ) : (
-                                    <Text style={styles.loadMoreTxt}>Load more</Text>
+                                    <Text style={styles.loadMoreTxt}>{t.notifications.loadMore}</Text>
                                 )}
                             </TouchableOpacity>
                         )}

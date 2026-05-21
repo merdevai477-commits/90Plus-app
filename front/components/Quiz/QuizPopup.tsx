@@ -13,12 +13,8 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Brain, ArrowRight, X, Zap } from 'lucide-react-native';
 import { router } from 'expo-router';
-import {
-  BG_SURFACE,
-  TEXT_PRIMARY,
-  TEXT_MUTED,
-  PURPLE_PRIMARY,
-} from '../../constants/tokens';
+import { BG_SURFACE, TEXT_PRIMARY, TEXT_MUTED, PURPLE_PRIMARY } from '../../constants/tokens';
+import { useTranslation } from '../../src/i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +24,7 @@ interface QuizPopupProps {
 }
 
 export function QuizPopup({ initialDelay = 3000 }: QuizPopupProps) {
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const hasShown = useRef(false);
   const scaleAnim = useRef(new Animated.Value(0.88)).current;
@@ -109,7 +106,7 @@ export function QuizPopup({ initialDelay = 3000 }: QuizPopupProps) {
             { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
           ]}
         >
-          <TouchableOpacity style={styles.closeBtn} onPress={dismiss} hitSlop={12}>
+          <TouchableOpacity style={styles.closeBtn} onPress={dismiss} hitSlop={12} accessibilityLabel={t.quiz.popupClose}>
             <X size={18} color={TEXT_MUTED} strokeWidth={2.2} />
           </TouchableOpacity>
 
@@ -131,15 +128,15 @@ export function QuizPopup({ initialDelay = 3000 }: QuizPopupProps) {
             </LinearGradient>
           </View>
 
-          <Text style={styles.title}>Daily Quiz</Text>
+          <Text style={styles.title}>{t.quiz.popupTitle}</Text>
           <Text style={styles.subtitle}>
-            A new question is waiting for you. Answer correctly and earn coins.
+            {t.quiz.popupSubtitle}
           </Text>
 
           <View style={styles.rewardRow}>
             <View style={styles.rewardPill}>
               <Zap size={13} color="#a78bfa" strokeWidth={2.2} />
-              <Text style={styles.rewardTxt}>+10 coins per correct answer</Text>
+              <Text style={styles.rewardTxt} numberOfLines={1}>{t.quiz.popupReward}</Text>
             </View>
           </View>
 
@@ -154,13 +151,13 @@ export function QuizPopup({ initialDelay = 3000 }: QuizPopupProps) {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Text style={styles.ctaTxt}>Start Quiz</Text>
+              <Text style={styles.ctaTxt}>{t.quiz.popupStart}</Text>
               <ArrowRight size={18} color="#fff" strokeWidth={2.4} />
             </LinearGradient>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={dismiss} hitSlop={10} style={styles.dismissWrap}>
-            <Text style={styles.dismissTxt}>Maybe later</Text>
+            <Text style={styles.dismissTxt}>{t.quiz.popupDismiss}</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>

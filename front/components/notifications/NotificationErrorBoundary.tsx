@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { AlertCircle, RefreshCw } from 'lucide-react-native';
 import * as Sentry from '@sentry/react-native';
 import { COLORS } from '../reels/constants';
+import { useLanguageStore } from '../../src/i18n/store';
+import { translations } from '../../src/i18n/utils';
 
 interface Props {
   children: React.ReactNode;
@@ -11,6 +13,15 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+/**
+ * Read translations directly from the Zustand store. Class components
+ * can't use hooks, so we resolve the active language at render time.
+ */
+function getNotificationsT() {
+  const lang = useLanguageStore.getState().language;
+  return (translations[lang] ?? translations.en).notifications;
 }
 
 export class NotificationErrorBoundary extends React.Component<Props, State> {
@@ -41,16 +52,17 @@ export class NotificationErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const tn = getNotificationsT();
       return (
         <View style={styles.container}>
           <AlertCircle size={64} color={COLORS.error} />
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.message}>
-            {this.state.error?.message || 'An unexpected error occurred'}
+          <Text style={styles.title} numberOfLines={2}>{tn.somethingWentWrong}</Text>
+          <Text style={styles.message} numberOfLines={3}>
+            {this.state.error?.message || tn.unexpectedError}
           </Text>
           <TouchableOpacity style={styles.button} onPress={this.handleReset}>
             <RefreshCw size={20} color={COLORS.white} />
-            <Text style={styles.buttonText}>Try Again</Text>
+            <Text style={styles.buttonText}>{tn.tryAgain}</Text>
           </TouchableOpacity>
         </View>
       );

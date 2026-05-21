@@ -1,6 +1,6 @@
 /**
  * Search Cache Service
- * نظام البحث الذكي مع التخزين المؤقت
+ * Smart search system with caching
  * 
  * Features:
  * - Caches search results in PostgreSQL for instant retrieval

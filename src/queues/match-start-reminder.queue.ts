@@ -75,10 +75,16 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                 return;
             }
 
-            await PushNotificationService.sendNotification({
-                to: user.expoPushToken,
-                title: '⚽ انطلقت المباراة!',
-                body: `${homeTeam} 🆚 ${awayTeam} — بدأت الآن. افتح التطبيق وتابع المباراة مباشرة.`,
+            await PushNotificationService.sendLocalizedNotification({
+                pushToken: user.expoPushToken,
+                userId,
+                titleKey: 'matchStartTitle',
+                bodyKey: 'matchStartBody',
+                vars: {
+                    home: homeTeam,
+                    away: awayTeam,
+                    minutes: 0,
+                },
                 data: {
                     type: 'MATCH_START',
                     fixtureId: String(fixtureId),

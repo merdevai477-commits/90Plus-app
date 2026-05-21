@@ -13,6 +13,11 @@ import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import PushNotificationService from './push-notification.service';
+import {
+    renderPushTemplate,
+    readLanguageFromSettings,
+    type PushTemplateKey,
+} from './push-templates.service';
 
 const BATCH_SIZE = 100;
 
@@ -23,7 +28,7 @@ const BATCH_SIZE = 100;
  *  - Participated in at least one quiz in the last 7 days (active quiz users)
  *  - Are not banned/deleted
  */
-async function getEligibleQuizUsers(): Promise<Array<{ id: string; expoPushToken: string }>> {
+async function getEligibleQuizUsers(): Promise<Array<{ id: string; expoPushToken: string; settings: unknown }>> {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -48,10 +53,12 @@ async function getEligibleQuizUsers(): Promise<Array<{ id: string; expoPushToken
             isDeleted: false,
             isBanned: false,
         },
-        select: { id: true, expoPushToken: true },
+        select: { id: true, expoPushToken: true, settings: true },
     });
 
-    return users.filter(u => u.expoPushToken).map(u => ({ id: u.id, expoPushToken: u.expoPushToken! }));
+    return users
+        .filter(u => u.expoPushToken)
+        .map(u => ({ id: u.id, expoPushToken: u.expoPushToken!, settings: u.settings }));
 }
 
 /**
@@ -68,24 +75,29 @@ async function runDailyQuizNotifier(): Promise<void> {
 
         logger.info(`[DailyQuiz] Sending quiz renewal notification to ${users.length} users`);
 
-        // Random message variants for variety
-        const messages = [
-            { title: '🧠 اختبار جديد جاهز!', body: 'اختبار اليوم في انتظارك. اثبت معرفتك بالكرة واكسب XP!' },
-            { title: '⚽ وقت الكويز!', body: 'أسئلة جديدة كل يوم — جرب حظك وشوف مستواك!' },
-            { title: '🏆 تحدي اليوم!', body: 'اختبار جديد نزل دلوقتي. جاوب صح واكسب عملات وXP!' },
+        // Pick a variant key per call. Each user receives the same
+        // variant in this run to keep "Today's challenge" cohesion;
+        // the body is rendered per-user in the user's language.
+        const variants: Array<{ title: PushTemplateKey; body: PushTemplateKey }> = [
+            { title: 'dailyQuizReadyTitle', body: 'dailyQuizReadyBody' },
+            { title: 'dailyQuizTimeTitle', body: 'dailyQuizTimeBody' },
+            { title: 'dailyQuizChallengeTitle', body: 'dailyQuizChallengeBody' },
         ];
-        const msg = messages[Math.floor(Math.random() * messages.length)];
+        const variant = variants[Math.floor(Math.random() * variants.length)];
 
         let sent = 0;
         for (let i = 0; i < users.length; i += BATCH_SIZE) {
             const batch = users.slice(i, i + BATCH_SIZE);
-            const payloads = batch.map(u => ({
-                to: u.expoPushToken,
-                title: msg.title,
-                body: msg.body,
-                data: { type: 'QUIZ_RENEWAL', screen: '/(tabs)/quiz' },
-                channelId: 'general',
-            }));
+            const payloads = batch.map(u => {
+                const lang = readLanguageFromSettings(u.settings);
+                return {
+                    to: u.expoPushToken,
+                    title: renderPushTemplate(variant.title, lang),
+                    body: renderPushTemplate(variant.body, lang),
+                    data: { type: 'QUIZ_RENEWAL', screen: '/(tabs)/quiz' },
+                    channelId: 'general',
+                };
+            });
 
             const result = await PushNotificationService.sendBulkNotifications(payloads);
             sent += result.success;

@@ -116,9 +116,9 @@ export function AppSplashScreen() {
         </Animated.View>
       </View>
 
-      {/* Tagline */}
+      {/* Tagline — shown during boot before i18n is initialized */}
       <Animated.Text style={styles.tagline}>
-        90 Plus · عالمك الكروي
+        90 Plus · Your football world
       </Animated.Text>
     </LinearGradient>
   );

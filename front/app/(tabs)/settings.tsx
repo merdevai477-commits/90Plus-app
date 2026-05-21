@@ -1,54 +1,42 @@
 /**
  * Settings Screen - 90Plus
- * 
- * New purple-gradient design with glass cards.
- * Uses tokens from constants/tokens.ts for design consistency.
+ *
+ * Fully localized: every user-facing string comes from front/locales/*.ts
+ * via the i18n hook. RTL is handled by Arabic translations themselves and
+ * `start`/`end` style props elsewhere.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Switch,
   StatusBar,
-  Animated,
   Platform,
   Linking,
   ActivityIndicator,
   Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import {
   Bell,
   Shield,
   ChevronRight,
   Globe,
-  Volume2,
-  Smartphone,
-  RefreshCw,
   Trash2,
-  HelpCircle,
   Star,
   Share2,
   FileText,
   LogOut,
   UserX,
   Ban,
-  Settings,
-  Palette,
-  Database,
-  Info,
-  User,
   Mail,
   Bug,
   Lightbulb,
 } from 'lucide-react-native';
 import { useSettings } from '../../contexts/SettingsContext';
-import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideos } from '../../contexts/VideosContext';
 import { useRouter } from 'expo-router';
 import { globalState } from '../../globalState';
@@ -71,7 +59,6 @@ import {
   BORDER_ARENA,
   RADIUS_LG,
   PURPLE_PRIMARY,
-  BLUE_GLOW_SM,
   GOLD_SOFT,
 } from '../../constants/tokens';
 
@@ -90,34 +77,14 @@ export default function SettingsScreen() {
     toggleGoalNotifications,
     togglePredictionReminders,
     clearCache,
-    deleteAccount,
   } = useSettings();
 
   const router = useRouter();
   const { signOut } = useAuth();
 
-  const {
-    language: i18nLanguage,
-    setLanguage: setI18nLanguage,
-    t: i18nT,
-    isRTL: i18nIsRTL,
-  } = useTranslation();
-
-  const { language: contextLanguage, setLanguage: setAppLanguage, t, isRTL } = useLanguage();
-
-  if (!t) {
-    return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#000" />
-        <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-        <Text style={styles.loadingText}>
-          {i18nIsRTL ? 'جاري تحميل الإعدادات...' : 'Loading Settings...'}
-        </Text>
-      </View>
-    );
-  }
-
-  const currentLanguage = i18nLanguage;
+  const { t, language, setLanguage } = useTranslation();
+  const tSettings = t.settingsScreen;
+  const tCommon = t.common;
 
   const [cacheSize, setCacheSize] = useState('12.5 MB');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -154,8 +121,8 @@ export default function SettingsScreen() {
     try {
       await toggleNotifications(!settings.notificationsEnabled);
       toastManager.showSettingsUpdateSuccess();
-    } catch (error) {
-      toastManager.showError('خطأ', 'فشل في تحديث إعدادات الإشعارات');
+    } catch {
+      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedNotifications);
     }
   };
 
@@ -163,8 +130,8 @@ export default function SettingsScreen() {
     try {
       await toggleMatchNotifications(!settings.matchNotifications);
       toastManager.showSettingsUpdateSuccess();
-    } catch (error) {
-      toastManager.showError('خطأ', 'فشل في تحديث إعدادات إشعارات المباريات');
+    } catch {
+      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedMatch);
     }
   };
 
@@ -172,8 +139,8 @@ export default function SettingsScreen() {
     try {
       await toggleGoalNotifications(!settings.goalNotifications);
       toastManager.showSettingsUpdateSuccess();
-    } catch (error) {
-      toastManager.showError('خطأ', 'فشل في تحديث إعدادات إشعارات الأهداف');
+    } catch {
+      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedGoals);
     }
   };
 
@@ -181,8 +148,8 @@ export default function SettingsScreen() {
     try {
       await togglePredictionReminders(!settings.predictionReminders);
       toastManager.showSettingsUpdateSuccess();
-    } catch (error) {
-      toastManager.showError('خطأ', 'فشل في تحديث إعدادات تذكير التوقعات');
+    } catch {
+      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedPredictions);
     }
   };
 
@@ -190,16 +157,16 @@ export default function SettingsScreen() {
     try {
       await clearCache();
       setCacheSize('0 MB');
-      toastManager.showSuccess('تم المسح', 'تم مسح الذاكرة المؤقتة بنجاح');
-    } catch (error) {
-      toastManager.showError('خطأ', 'فشل مسح الذاكرة المؤقتة');
+      toastManager.showSuccess(tSettings.cacheCleared, tSettings.cacheClearedDetail);
+    } catch {
+      toastManager.showError(tCommon.error, tSettings.cacheClearFailed);
     }
   };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      toastManager.showInfo('جاري تسجيل الخروج', 'جاري تنظيف البيانات وتسجيل الخروج...');
+      toastManager.showInfo(tSettings.loggingOutTitle, tSettings.loggingOutDetail);
       await clearVideos();
       await globalState.logout();
       const { CoinsService } = await import('../../services/coins.service');
@@ -218,9 +185,9 @@ export default function SettingsScreen() {
       await AsyncStorage.removeItem('@user_profile');
       await signOut();
       router.replace('/auth');
-      toastManager.showSuccess('تم تسجيل الخروج', 'تم تسجيل الخروج بنجاح. نراك قريباً!');
-    } catch (e: any) {
-      toastManager.showError('خطأ في تسجيل الخروج', 'فشل تسجيل الخروج. حاول مرة أخرى.');
+      toastManager.showSuccess(tSettings.logoutSuccess, tSettings.logoutSuccessDetail);
+    } catch {
+      toastManager.showError(tSettings.logoutFailed, tSettings.logoutFailedDetail);
     } finally {
       setIsLoggingOut(false);
     }
@@ -233,7 +200,7 @@ export default function SettingsScreen() {
   const handleConfirmDeletion = async () => {
     setIsDeletingAccount(true);
     try {
-      toastManager.showInfo('جاري حذف الحساب', 'جاري حذف حسابك وجميع بياناتك...');
+      toastManager.showInfo(tSettings.deletingAccount, tSettings.deletingAccountDetail);
       await AccountDeletionService.deleteAccount();
       await clearVideos();
       await signOut();
@@ -253,9 +220,9 @@ export default function SettingsScreen() {
       await AsyncStorage.removeItem('@username_setup_complete');
       await AsyncStorage.removeItem('@user_profile');
       router.replace('/auth');
-      toastManager.showSuccess('تم حذف الحساب', 'تم حذف حسابك بنجاح. شكراً لاستخدامك التطبيق.');
-    } catch (error) {
-      toastManager.showError('فشل حذف الحساب', 'حدث خطأ أثناء حذف الحساب. يرجى المحاولة مرة أخرى.');
+      toastManager.showSuccess(tSettings.deleteAccountSuccess, tSettings.deleteAccountSuccessDetail);
+    } catch {
+      toastManager.showError(tSettings.deleteAccountFailed, tSettings.deleteAccountFailedDetail);
     } finally {
       setIsDeletingAccount(false);
       setDeletionModalVisible(false);
@@ -269,7 +236,7 @@ export default function SettingsScreen() {
     });
     if (storeUrl) {
       Linking.openURL(storeUrl).catch(() => {
-        toastManager.showInfo('شكراً لدعمك!', 'يمكنك تقييم التطبيق من متجر التطبيقات');
+        toastManager.showInfo(tSettings.rateThanks, tSettings.rateThanksDetail);
       });
     }
   };
@@ -277,12 +244,10 @@ export default function SettingsScreen() {
   const handleShareApp = async () => {
     try {
       await Share.share({
-        message: isRTL
-          ? '🏆 جرّب تطبيق 90Plus - أفضل تطبيق لكرة القدم! تنبؤات، اختبارات، وأهداف مباشرة! https://apps.apple.com/app/90plus/id6744076498'
-          : '🏆 Try 90Plus - The ultimate football app! Predictions, quizzes, and live highlights! https://apps.apple.com/app/90plus/id6744076498',
+        message: tSettings.shareMessage,
         title: '90Plus Football App',
       });
-    } catch (error) {
+    } catch {
       // User cancelled share
     }
   };
@@ -318,13 +283,12 @@ export default function SettingsScreen() {
   const handleLanguageChange = async (lang: Language) => {
     setIsChangingLanguage(true);
     try {
-      toastManager.showInfo('جاري تغيير اللغة', 'جاري تطبيق اللغة الجديدة...');
-      await setI18nLanguage(lang);
-      await setAppLanguage(lang);
+      toastManager.showInfo(tSettings.languageChanging, tSettings.languageChangingDetail);
+      await setLanguage(lang);
       toastManager.showLanguageChangeSuccess(getLanguageName(lang));
       setLanguageModalVisible(false);
-    } catch (error) {
-      toastManager.showError('خطأ', 'فشل تغيير اللغة. حاول مرة أخرى.');
+    } catch {
+      toastManager.showError(tCommon.error, tSettings.languageChangeFailed);
     } finally {
       setIsChangingLanguage(false);
     }
@@ -345,9 +309,7 @@ export default function SettingsScreen() {
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
         <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-        <Text style={styles.loadingText}>
-          {isRTL ? 'جاري تحميل الإعدادات...' : 'Loading Settings...'}
-        </Text>
+        <Text style={styles.loadingText}>{tSettings.loading}</Text>
       </View>
     );
   }
@@ -355,7 +317,7 @@ export default function SettingsScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <MainShell title={isRTL ? 'الإعدادات' : 'Settings'} subtitle={isRTL ? 'تحكم في تجربتك وتفضيلاتك' : 'Control your preferences and app behavior'}>
+    <MainShell title={tSettings.title} subtitle={tSettings.subtitle}>
       {/* Hero banner */}
       <View style={styles.hero}>
         <LinearGradient
@@ -364,12 +326,12 @@ export default function SettingsScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
-        <Text style={styles.heroEyebrow}>{isRTL ? 'مركز التحكم' : 'CONTROL CENTER'}</Text>
-        <Text style={styles.heroTitle}>{isRTL ? 'التنبيهات وسلوك التطبيق' : 'Alerts & app behavior'}</Text>
+        <Text style={styles.heroEyebrow}>{tSettings.heroEyebrow}</Text>
+        <Text style={styles.heroTitle}>{tSettings.heroTitle}</Text>
       </View>
 
       {/* ── Notifications ─────────────────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>{isRTL ? 'الإشعارات' : 'Notifications'}</Text>
+      <Text style={styles.sectionLabel}>{tSettings.sectionNotifications}</Text>
 
       <TouchableOpacity
         activeOpacity={0.88}
@@ -381,8 +343,8 @@ export default function SettingsScreen() {
             <Bell size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'صندوق الإشعارات' : 'Notification inbox'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'عرض التنبيهات والسجل' : 'View alerts and history'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.notificationInbox}</Text>
+            <Text style={styles.linkSub}>{tSettings.notificationInboxSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -390,49 +352,50 @@ export default function SettingsScreen() {
 
       <View style={styles.switchCard}>
         <RowToggle
-          label={isRTL ? 'إشعارات المباريات' : 'Match reminders'}
-          sub={isRTL ? 'تنبيهات بداية المباريات والأهداف' : 'Kickoffs and score bursts'}
+          label={tSettings.matchReminders}
+          sub={tSettings.matchRemindersSub}
           value={settings.matchNotifications}
           onValueChange={handleToggleMatchNotifications}
         />
         <View style={styles.divider} />
         <RowToggle
-          label={isRTL ? 'إشعارات الأهداف' : 'Goal alerts'}
-          sub={isRTL ? 'تنبيه فوري عند تسجيل هدف' : 'Instant goal notifications'}
+          label={tSettings.goalAlerts}
+          sub={tSettings.goalAlertsSub}
           value={settings.goalNotifications}
           onValueChange={handleToggleGoalNotifications}
         />
         <View style={styles.divider} />
         <RowToggle
-          label={isRTL ? 'تذكير التوقعات' : 'Prediction reminders'}
-          sub={isRTL ? 'تذكيرك بالتوقع قبل المباراة' : 'Remind before match starts'}
+          label={tSettings.predictionReminders}
+          sub={tSettings.predictionRemindersSub}
           value={settings.predictionReminders}
           onValueChange={handleTogglePredictionReminders}
         />
         <View style={styles.divider} />
         <RowToggle
-          label={isRTL ? 'كل الإشعارات' : 'All notifications'}
-          sub={isRTL ? 'تفعيل أو تعطيل الكل' : 'Master toggle for all alerts'}
+          label={tSettings.allNotifications}
+          sub={tSettings.allNotificationsSub}
           value={settings.notificationsEnabled}
           onValueChange={handleToggleNotifications}
         />
       </View>
 
       {/* ── Preferences ───────────────────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>{isRTL ? 'التفضيلات' : 'Preferences'}</Text>
+      <Text style={styles.sectionLabel}>{tSettings.sectionPreferences}</Text>
 
       <TouchableOpacity
         activeOpacity={0.88}
         style={styles.linkRow}
         onPress={() => setLanguageModalVisible(true)}
+        disabled={isChangingLanguage}
       >
         <View style={styles.linkLeft}>
           <View style={[styles.linkIcon, { backgroundColor: 'rgba(59,130,246,0.12)' }]}>
             <Globe size={18} color="#93c5fd" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'اللغة' : 'Language'}</Text>
-            <Text style={styles.linkSub}>{getLanguageName(currentLanguage)}</Text>
+            <Text style={styles.linkTitle}>{tSettings.language}</Text>
+            <Text style={styles.linkSub}>{getLanguageName(language)}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -440,8 +403,8 @@ export default function SettingsScreen() {
 
       <View style={styles.switchCard}>
         <RowToggle
-          label={isRTL ? 'المؤثرات الصوتية' : 'Sound effects'}
-          sub={isRTL ? 'تشغيل الأصوات في التطبيق' : 'In-app audio feedback'}
+          label={tSettings.soundEffects}
+          sub={tSettings.soundEffectsSub}
           value={soundEffects}
           onValueChange={(v) => {
             setSoundEffects(v);
@@ -450,8 +413,8 @@ export default function SettingsScreen() {
         />
         <View style={styles.divider} />
         <RowToggle
-          label={isRTL ? 'الاهتزاز التفاعلي' : 'Haptic feedback'}
-          sub={isRTL ? 'تفعيل الاهتزاز عند التفاعل' : 'Vibration on interactions'}
+          label={tSettings.hapticFeedback}
+          sub={tSettings.hapticFeedbackSub}
           value={hapticFeedback}
           onValueChange={(v) => {
             setHapticFeedback(v);
@@ -460,8 +423,8 @@ export default function SettingsScreen() {
         />
         <View style={styles.divider} />
         <RowToggle
-          label={isRTL ? 'التحديث التلقائي' : 'Auto refresh'}
-          sub={isRTL ? 'تحديث البيانات تلقائياً' : 'Refresh data automatically'}
+          label={tSettings.autoRefresh}
+          sub={tSettings.autoRefreshSub}
           value={autoRefresh}
           onValueChange={(v) => {
             setAutoRefresh(v);
@@ -471,20 +434,18 @@ export default function SettingsScreen() {
       </View>
 
       {/* ── Data & Storage ────────────────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>{isRTL ? 'البيانات والتخزين' : 'Data & storage'}</Text>
+      <Text style={styles.sectionLabel}>{tSettings.sectionData}</Text>
 
-      <TouchableOpacity
-        activeOpacity={0.88}
-        style={styles.linkRow}
-        onPress={handleClearCache}
-      >
+      <TouchableOpacity activeOpacity={0.88} style={styles.linkRow} onPress={handleClearCache}>
         <View style={styles.linkLeft}>
           <View style={[styles.linkIcon, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
             <Trash2 size={18} color="#fca5a5" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'مسح الذاكرة المؤقتة' : 'Clear cache'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? `الحجم الحالي: ${cacheSize}` : `Current size: ${cacheSize}`}</Text>
+            <Text style={styles.linkTitle}>{tSettings.clearCache}</Text>
+            <Text style={styles.linkSub}>
+              {tSettings.currentSize.replace('{size}', cacheSize)}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -499,8 +460,8 @@ export default function SettingsScreen() {
             <Shield size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'إدارة الأذونات' : 'Manage permissions'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'التحكم في أذونات التطبيق' : 'Control app permissions'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.managePermissions}</Text>
+            <Text style={styles.linkSub}>{tSettings.managePermissionsSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -516,15 +477,15 @@ export default function SettingsScreen() {
             <Ban size={18} color="#fcd34d" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'المستخدمون المحظورون' : 'Blocked users'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'إدارة المستخدمين المحظورين' : 'Manage blocked users'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.blockedUsers}</Text>
+            <Text style={styles.linkSub}>{tSettings.blockedUsersSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       {/* ── Support & Legal ───────────────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>{isRTL ? 'الدعم والقانوني' : 'Support & legal'}</Text>
+      <Text style={styles.sectionLabel}>{tSettings.sectionSupport}</Text>
 
       <TouchableOpacity activeOpacity={0.88} style={styles.linkRow} onPress={handleContactUs}>
         <View style={styles.linkLeft}>
@@ -532,7 +493,7 @@ export default function SettingsScreen() {
             <Mail size={18} color="#93c5fd" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'تواصل معنا' : 'Contact us'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.contactUs}</Text>
             <Text style={styles.linkSub}>merdevai477@gmail.com</Text>
           </View>
         </View>
@@ -545,8 +506,8 @@ export default function SettingsScreen() {
             <Bug size={18} color="#fca5a5" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'الإبلاغ عن مشكلة' : 'Report a bug'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'أخبرنا عن أي مشاكل تقنية' : 'Tell us about technical issues'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.reportBug}</Text>
+            <Text style={styles.linkSub}>{tSettings.reportBugSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -558,8 +519,8 @@ export default function SettingsScreen() {
             <Lightbulb size={18} color="#fcd34d" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'اقتراح ميزة' : 'Feature request'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'شاركنا أفكارك' : 'Share your ideas'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.featureRequest}</Text>
+            <Text style={styles.linkSub}>{tSettings.featureRequestSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -571,8 +532,8 @@ export default function SettingsScreen() {
             <FileText size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'سياسة الخصوصية' : 'Privacy policy'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'اطلع على كيفية حماية بياناتك' : 'How we protect your data'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.privacyPolicy}</Text>
+            <Text style={styles.linkSub}>{tSettings.privacyPolicySub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -584,25 +545,27 @@ export default function SettingsScreen() {
             <FileText size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'الشروط والأحكام' : 'Terms & conditions'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'اقرأ شروط الاستخدام' : 'Read our usage terms'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.termsConditions}</Text>
+            <Text style={styles.linkSub}>{tSettings.termsConditionsSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       {/* ── About ─────────────────────────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>{isRTL ? 'حول التطبيق' : 'About'}</Text>
+      <Text style={styles.sectionLabel}>{tSettings.sectionAbout}</Text>
 
       <View style={styles.switchCard}>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{isRTL ? 'الإصدار' : 'Version'}</Text>
+          <Text style={styles.infoLabel}>{tSettings.version}</Text>
           <Text style={styles.infoValue}>{APP_VERSION} ({BUILD_NUMBER})</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{isRTL ? 'البيئة' : 'Environment'}</Text>
-          <Text style={styles.infoValue}>{__DEV__ ? 'Development' : 'Production'}</Text>
+          <Text style={styles.infoLabel}>{tSettings.environment}</Text>
+          <Text style={styles.infoValue}>
+            {__DEV__ ? tSettings.envDevelopment : tSettings.envProduction}
+          </Text>
         </View>
       </View>
 
@@ -612,8 +575,8 @@ export default function SettingsScreen() {
             <Star size={18} color="#fcd34d" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'تقييم التطبيق' : 'Rate app'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'ساعدنا بتقييمك' : 'Help us improve'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.rateApp}</Text>
+            <Text style={styles.linkSub}>{tSettings.rateAppSub}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -624,14 +587,14 @@ export default function SettingsScreen() {
             <Share2 size={18} color="#93c5fd" strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{isRTL ? 'مشاركة التطبيق' : 'Share app'}</Text>
-            <Text style={styles.linkSub}>{isRTL ? 'شارك مع أصدقائك' : 'Invite your friends'}</Text>
+            <Text style={styles.linkTitle}>{tSettings.shareApp}</Text>
+            <Text style={styles.linkSub}>{tSettings.shareAppSub}</Text>
           </View>
         </View>
       </TouchableOpacity>
 
       {/* ── Account ───────────────────────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>{isRTL ? 'الحساب' : 'Account'}</Text>
+      <Text style={styles.sectionLabel}>{tSettings.sectionAccount}</Text>
 
       <TouchableOpacity
         activeOpacity={0.88}
@@ -649,9 +612,9 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.linkTitle, { color: '#fca5a5' }]}>
-              {isLoggingOut ? (isRTL ? 'جاري تسجيل الخروج...' : 'Logging out...') : (isRTL ? 'تسجيل الخروج' : 'Log out')}
+              {isLoggingOut ? tSettings.loggingOut : tSettings.logout}
             </Text>
-            <Text style={styles.linkSub}>{isRTL ? 'الخروج من حسابك الحالي' : 'Sign out of your account'}</Text>
+            <Text style={styles.linkSub}>{tSettings.logoutSub}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -672,19 +635,17 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.linkTitle, { color: '#ef4444' }]}>
-              {isDeletingAccount ? (isRTL ? 'جاري حذف الحساب...' : 'Deleting...') : (isRTL ? 'حذف الحساب' : 'Delete account')}
+              {isDeletingAccount ? tSettings.deleting : tSettings.deleteAccount}
             </Text>
-            <Text style={styles.linkSub}>{isRTL ? 'حذف حسابك وجميع بياناتك نهائياً' : 'Permanently delete your account'}</Text>
+            <Text style={styles.linkSub}>{tSettings.deleteAccountSub}</Text>
           </View>
         </View>
       </TouchableOpacity>
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          {isRTL ? 'صُنع بـ ❤️ لعشاق كرة القدم' : 'Made with ❤️ for football fans'}
-        </Text>
-        <Text style={styles.footerCopyright}>© 2024 90Plus. All rights reserved.</Text>
+        <Text style={styles.footerText}>{tSettings.madeWith}</Text>
+        <Text style={styles.footerCopyright}>{tSettings.copyright}</Text>
       </View>
 
       {/* Modals */}
@@ -718,7 +679,7 @@ function RowToggle({
 }) {
   return (
     <View style={styles.toggleRow}>
-      <View style={{ flex: 1, paddingRight: 12 }}>
+      <View style={{ flex: 1, paddingHorizontal: 0 }}>
         <Text style={styles.toggleTitle}>{label}</Text>
         <Text style={styles.toggleSub}>{sub}</Text>
       </View>
@@ -802,7 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginEnd: 12,
   },
   linkTitle: { fontSize: 15, fontWeight: '700', color: TEXT_PRIMARY },
   linkSub: { marginTop: 2, fontSize: 12, color: TEXT_MUTED },
@@ -820,14 +781,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 12,
+    gap: 12,
   },
   toggleTitle: { fontSize: 15, fontWeight: '700', color: TEXT_PRIMARY },
   toggleSub: { marginTop: 2, fontSize: 12, color: TEXT_MUTED },
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: BORDER_ARENA,
-    marginLeft: 12,
-    marginRight: 12,
+    marginHorizontal: 12,
   },
 
   infoRow: {

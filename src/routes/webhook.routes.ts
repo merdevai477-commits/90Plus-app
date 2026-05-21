@@ -13,6 +13,7 @@ import { clerkClient } from '@clerk/express';
 import { generateUsername } from '../utils/username.utils';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -248,10 +249,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         event = verifyWebhook(req);
 
         if (!event) {
-            res.status(401).json({
-                status: 'ERROR',
-                message: 'Invalid webhook signature',
-            });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Invalid webhook signature');
             return;
         }
     }
@@ -285,11 +283,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         });
     } catch (error: any) {
         logger.error(`❌ Webhook error for ${eventType}:`, error);
-
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Webhook processing failed',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Webhook processing failed');
     }
 });
 

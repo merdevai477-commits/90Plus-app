@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent, Venue } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
+import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { APP_BG } from '../../constants/ui';
@@ -54,7 +55,7 @@ interface MatchDetailsParams {
 const MatchDetailsScreen = () => {
   useScreenFont();
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
   const shimmerX = useShimmer();
 
@@ -198,7 +199,7 @@ const MatchDetailsScreen = () => {
 
   const loadMatchDetails = async () => {
     if (!fixtureId) {
-      setError('معرف المباراة غير صحيح');
+      setError(t.matchDetails.invalidMatchId);
       setLoading(false);
       return;
     }
@@ -244,12 +245,12 @@ const MatchDetailsScreen = () => {
       } else if (fixtureData.status === 'rejected') {
         // If fixture fetch failed entirely, show error but don't block the screen
         // The params still provide basic display info (team names, scores)
-        setError(fixtureData.reason?.message || 'فشل تحميل تفاصيل المباراة');
+        setError(fixtureData.reason?.message || t.matchDetails.loadDetailsFailed);
       }
 
       setLoading(false);
     } catch (err: any) {
-      setError(err?.message || 'فشل تحميل تفاصيل المباراة');
+      setError(err?.message || t.matchDetails.loadDetailsFailed);
       setLoading(false);
     }
   };
@@ -263,7 +264,7 @@ const MatchDetailsScreen = () => {
       const data = await ApiFootballService.getFixtureLineups(fixtureId);
       setLineups(data);
     } catch (err: any) {
-      setLineupsError(err?.message || 'فشل تحميل التشكيلات');
+      setLineupsError(err?.message || t.matchDetails.loadLineupsFailed);
     } finally {
       setLineupsLoading(false);
     }
@@ -277,7 +278,7 @@ const MatchDetailsScreen = () => {
       const data = await ApiFootballService.getFixtureStatistics(fixtureId);
       setStatistics(data);
     } catch (err: any) {
-      setStatsError(err?.message || 'فشل تحميل الإحصائيات');
+      setStatsError(err?.message || t.matchDetails.loadStatsFailed);
     } finally {
       setStatsLoading(false);
     }
@@ -311,7 +312,7 @@ const MatchDetailsScreen = () => {
       );
       setStandings(data);
     } catch (err: any) {
-      setStandingsError(err?.message || 'فشل تحميل الترتيب');
+      setStandingsError(err?.message || t.matchDetails.loadStandingsFailed);
     } finally {
       setStandingsLoading(false);
     }
@@ -468,7 +469,7 @@ const MatchDetailsScreen = () => {
                   )}
                 </View>
 
-                <TeamBadge name={event.team.name} logo={event.team.logo} size={30} color="transparent" />
+                <TeamBadge name={getTeamDisplayName(event.team.name, language)} logo={event.team.logo} size={30} color="transparent" />
               </View>
             );
           })}
@@ -528,7 +529,7 @@ const MatchDetailsScreen = () => {
                 <View style={styles.teamHeader}>
                   <TeamBadge name={lineup.team.name} logo={lineup.team.logo} size={60} color="transparent" />
                   <View style={styles.teamInfo}>
-                    <Text style={styles.teamName}>{lineup.team.name}</Text>
+                    <Text style={styles.teamName} numberOfLines={2}>{getTeamDisplayName(lineup.team.name, language)}</Text>
                     <Text style={styles.formationText}>
                       {t.matchDetails.formation}: {formation}
                     </Text>
@@ -691,7 +692,7 @@ const MatchDetailsScreen = () => {
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
             <TeamBadge name={params.homeTeam} logo={params.homeLogo} size={50} color="transparent" />
-            <Text style={styles.formTeamName}>{params.homeTeam}</Text>
+            <Text style={styles.formTeamName}>{getTeamDisplayName(params.homeTeam, language)}</Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>
           {homeLastFixtures.length > 0 ? (
@@ -731,7 +732,7 @@ const MatchDetailsScreen = () => {
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
             <TeamBadge name={params.awayTeam} logo={params.awayLogo} size={50} color="transparent" />
-            <Text style={styles.formTeamName}>{params.awayTeam}</Text>
+            <Text style={styles.formTeamName}>{getTeamDisplayName(params.awayTeam, language)}</Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>
           {awayLastFixtures.length > 0 ? (
@@ -883,7 +884,7 @@ const MatchDetailsScreen = () => {
                 <Text style={[styles.standingsText, { width: 30 }]}>{team.rank}</Text>
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Image source={{ uri: team.team.logo }} style={{ width: 20, height: 20 }} />
-                  <Text style={[styles.standingsText, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>{team.team.name}</Text>
+                  <Text style={[styles.standingsText, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>{getTeamDisplayName(team.team.name, language)}</Text>
                 </View>
                 <Text style={[styles.standingsText, { width: 30 }]}>{team.all.played}</Text>
                 <Text style={[styles.standingsText, { width: 30 }]}>{team.goalsDiff}</Text>
@@ -965,8 +966,8 @@ const MatchDetailsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Modern Header (Score Card) */}
         <MatchHeader
-          homeTeam={fixture?.teams?.home?.name || params.homeTeam}
-          awayTeam={fixture?.teams?.away?.name || params.awayTeam}
+          homeTeam={getTeamDisplayName(fixture?.teams?.home?.name || params.homeTeam, language)}
+          awayTeam={getTeamDisplayName(fixture?.teams?.away?.name || params.awayTeam, language)}
           homeLogo={fixture?.teams?.home?.logo || params.homeLogo}
           awayLogo={fixture?.teams?.away?.logo || params.awayLogo}
           homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : params.homeScore}

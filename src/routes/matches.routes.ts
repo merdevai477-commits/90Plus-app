@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
 import { enqueueNotification } from '../queues/notification.queue';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -19,12 +20,12 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
         const { homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, matchDate, leagueName } = req.body;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (isNaN(apiMatchId)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid match ID' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid match ID');
             return;
         }
 
@@ -35,7 +36,7 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -50,7 +51,7 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
         });
 
         if (existing) {
-            res.status(400).json({ status: 'ERROR', message: 'Match already in favorites' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Match already in favorites');
             return;
         }
 
@@ -92,7 +93,7 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
         });
     } catch (error: any) {
         logger.error('Add favorite match error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to add favorite' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to add favorite');
     }
 });
 
@@ -108,12 +109,12 @@ router.delete('/favorite/:matchId', requireAuth, async (req: Request, res: Respo
         const apiMatchId = parseInt(matchIdParam);
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (isNaN(apiMatchId)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid match ID' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid match ID');
             return;
         }
 
@@ -124,7 +125,7 @@ router.delete('/favorite/:matchId', requireAuth, async (req: Request, res: Respo
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -142,7 +143,7 @@ router.delete('/favorite/:matchId', requireAuth, async (req: Request, res: Respo
         });
     } catch (error: any) {
         logger.error('Remove favorite match error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to remove favorite' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to remove favorite');
     }
 });
 
@@ -155,7 +156,7 @@ router.get('/favorites', requireAuth, async (req: Request, res: Response): Promi
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -166,7 +167,7 @@ router.get('/favorites', requireAuth, async (req: Request, res: Response): Promi
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -193,7 +194,7 @@ router.get('/favorites', requireAuth, async (req: Request, res: Response): Promi
         });
     } catch (error: any) {
         logger.error('Get favorite matches error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to get favorites' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to get favorites');
     }
 });
 
@@ -209,7 +210,7 @@ router.get('/favorite/:matchId/check', requireAuth, async (req: Request, res: Re
         const apiMatchId = parseInt(matchIdParam);
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -239,7 +240,7 @@ router.get('/favorite/:matchId/check', requireAuth, async (req: Request, res: Re
         });
     } catch (error: any) {
         logger.error('Check favorite error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to check favorite' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to check favorite');
     }
 });
 
@@ -253,19 +254,19 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
         const { token } = req.body;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (!token) {
-            res.status(400).json({ status: 'ERROR', message: 'Push token is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Push token is required');
             return;
         }
 
         // Validate Expo push token format before saving
         const { Expo } = await import('expo-server-sdk');
         if (!Expo.isExpoPushToken(token)) {
-            res.status(400).json({ status: 'ERROR', message: 'Invalid Expo push token format' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid Expo push token format');
             return;
         }
 
@@ -281,7 +282,7 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
         });
     } catch (error: any) {
         logger.error('Register push token error:', error);
-        res.status(500).json({ status: 'ERROR', message: 'Failed to register push token' });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to register push token');
     }
 });
 
@@ -298,7 +299,7 @@ router.get('/live', async (req: Request, res: Response): Promise<void> => {
         await FootballController.getLiveFixtures(req, res);
     } catch (error: any) {
         logger.error('Get live matches error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -317,7 +318,7 @@ router.get('/today', async (req: Request, res: Response): Promise<void> => {
         await FootballController.getFixtures(req, res);
     } catch (error: any) {
         logger.error('Get today matches error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -340,7 +341,7 @@ router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
         await FootballController.getFixtures(req, res);
     } catch (error: any) {
         logger.error('Get upcoming matches error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -359,9 +360,9 @@ router.post('/archive', async (_req: Request, res: Response): Promise<void> => {
 // GET /api/matches/archive/:matchId
 // Get a specific archived match (returns 404 if not in backend cache)
 // ============================================
-router.get('/archive/:matchId', async (_req: Request, res: Response): Promise<void> => {
+router.get('/archive/:matchId', async (req: Request, res: Response): Promise<void> => {
     // Backend archive not yet implemented — client falls back to local storage
-    res.status(404).json({ status: 'ERROR', message: 'Archive not found in backend cache' });
+    sendError(req, res, ErrorCode.NOT_FOUND, 'Archive not found in backend cache');
 });
 
 export default router;

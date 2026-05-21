@@ -74,7 +74,7 @@ export default function SplashScreen() {
 
         {/* Loading Section */}
         <View style={styles.loadingSection}>
-          <Text style={styles.loadingText}>جاري الدخول الى 90Plus...</Text>
+          <Text style={styles.loadingText}>Loading 90Plus...</Text>
           <View style={styles.loadingBarContainer}>
             <Animated.View style={styles.loadingBar} />
           </View>

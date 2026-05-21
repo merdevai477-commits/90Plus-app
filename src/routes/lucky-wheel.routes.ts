@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { enqueueNotification } from '../queues/notification.queue';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -67,7 +68,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -77,7 +78,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -96,7 +97,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
         });
     } catch (error: any) {
         logger.error('Lucky wheel status error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -108,7 +109,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -118,19 +119,14 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         // التحقق من مرور 24 ساعة
         if (!canSpinToday(user.lastDailySpin)) {
             const timeRemaining = getTimeRemaining(user.lastDailySpin!);
-            res.status(429).json({
-                status: 'ERROR',
-                message: 'يمكنك لف العجلة مرة واحدة كل 24 ساعة',
-                code: 'SPIN_COOLDOWN',
-                timeRemaining
-            });
+            sendError(req, res, ErrorCode.RATE_LIMIT, 'يمكنك لف العجلة مرة واحدة كل 24 ساعة', { code: 'SPIN_COOLDOWN', timeRemaining });
             return;
         }
 
@@ -188,7 +184,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
         });
     } catch (error: any) {
         logger.error('Lucky wheel spin error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -201,7 +197,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
     try {
         const clerkUserId = req.auth?.userId;
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -211,7 +207,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (!user) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -248,7 +244,7 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
         });
     } catch (error: any) {
         logger.error('Lucky wheel history error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -261,7 +257,7 @@ router.post('/send-daily-notification', async (req: Request, res: Response): Pro
         // التحقق من API key للأمان
         const apiKey = req.headers['x-api-key'];
         if (apiKey !== process.env.CRON_API_KEY) {
-            res.status(401).json({ status: 'ERROR', message: 'Invalid API key' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Invalid API key');
             return;
         }
 
@@ -309,7 +305,7 @@ router.post('/send-daily-notification', async (req: Request, res: Response): Pro
         });
     } catch (error: any) {
         logger.error('Send daily notification error:', error);
-        res.status(500).json({ status: 'ERROR', message: error.message });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

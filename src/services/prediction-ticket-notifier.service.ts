@@ -16,6 +16,10 @@ import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import PushNotificationService from './push-notification.service';
+import {
+    renderPushTemplate,
+    readLanguageFromSettings,
+} from './push-templates.service';
 
 const DAILY_PREDICTION_LIMIT = 10;
 const BATCH_SIZE = 100;
@@ -24,7 +28,7 @@ const BATCH_SIZE = 100;
  * Find users who should be notified about ticket renewal.
  * Criteria: have push token, consent, not banned, and used at least 1 prediction yesterday.
  */
-async function getEligibleUsers(): Promise<Array<{ id: string; expoPushToken: string }>> {
+async function getEligibleUsers(): Promise<Array<{ id: string; expoPushToken: string; settings: unknown }>> {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
@@ -54,7 +58,7 @@ async function getEligibleUsers(): Promise<Array<{ id: string; expoPushToken: st
             isDeleted: false,
             isBanned: false,
         },
-        select: { id: true, expoPushToken: true },
+        select: { id: true, expoPushToken: true, settings: true },
     });
 
     // Filter out users who opted out of prediction notifications
@@ -69,7 +73,7 @@ async function getEligibleUsers(): Promise<Array<{ id: string; expoPushToken: st
 
     return users
         .filter(u => !optedOutIds.has(u.id) && u.expoPushToken)
-        .map(u => ({ id: u.id, expoPushToken: u.expoPushToken! }));
+        .map(u => ({ id: u.id, expoPushToken: u.expoPushToken!, settings: u.settings }));
 }
 
 /**
@@ -89,13 +93,18 @@ async function runPredictionTicketNotifier(): Promise<void> {
         let sent = 0;
         for (let i = 0; i < users.length; i += BATCH_SIZE) {
             const batch = users.slice(i, i + BATCH_SIZE);
-            const payloads = batch.map(u => ({
-                to: u.expoPushToken,
-                title: '🎟️ تذاكرك اتجددت!',
-                body: `عندك ${DAILY_PREDICTION_LIMIT} تذاكر توقع جديدة. توقع نتيجة المباريات واكسب عملات! ⚽`,
-                data: { type: 'PREDICTION_TICKET_RENEWAL', screen: '/(tabs)/matches' },
-                channelId: 'general',
-            }));
+            const payloads = batch.map(u => {
+                const lang = readLanguageFromSettings(u.settings);
+                return {
+                    to: u.expoPushToken,
+                    title: renderPushTemplate('predictionTicketRenewalTitle', lang),
+                    body: renderPushTemplate('predictionTicketRenewalBody', lang, {
+                        count: DAILY_PREDICTION_LIMIT,
+                    }),
+                    data: { type: 'PREDICTION_TICKET_RENEWAL', screen: '/(tabs)/matches' },
+                    channelId: 'general',
+                };
+            });
 
             const result = await PushNotificationService.sendBulkNotifications(payloads);
             sent += result.success;

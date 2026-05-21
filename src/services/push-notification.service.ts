@@ -2,6 +2,12 @@ import { Expo, ExpoPushMessage, ExpoPushSuccessTicket } from 'expo-server-sdk';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
+import {
+    renderPushTemplate,
+    getUserLanguage,
+    type SupportedLanguage,
+    type PushTemplateKey,
+} from './push-templates.service';
 
 // Create a new Expo SDK client
 const expo = new Expo();
@@ -376,7 +382,15 @@ export class PushNotificationService {
     }
 
     /**
-     * Send match goal notification
+     * Send match goal notification.
+     *
+     * Accepts an optional `userId` (or pre-resolved `language`) so the
+     * title and body are rendered in the user's preferred locale. When
+     * neither is provided we fall back to English to stay safe.
+     *
+     * Note: team names come from the data provider as-is. The frontend
+     * applies its own Arabic mapping when displaying push payload data;
+     * we forward the original strings here so deep links keep working.
      */
     static async sendGoalNotification(
         pushToken: string,
@@ -384,14 +398,29 @@ export class PushNotificationService {
         awayTeam: string,
         homeScore: number,
         awayScore: number,
-        scoringTeam: 'home' | 'away'
+        scoringTeam: 'home' | 'away',
+        opts?: { userId?: string; language?: SupportedLanguage },
     ): Promise<boolean> {
         const scorer = scoringTeam === 'home' ? homeTeam : awayTeam;
-        
+        const language = await this.resolveLanguage(opts);
+
+        const title = renderPushTemplate('goalTitle', language);
+        // Goal body is composed of two parts the templates already
+        // model: the scorer line, plus the latest score line. We put
+        // the scorer ahead and append the running scoreboard for both
+        // languages so user copy stays close to what they expect.
+        const scorerLine = renderPushTemplate('goalBody', language, {
+            player: scorer,
+            team: scorer,
+            minute: '',
+        }).replace(/\s*\(\s*'?\s*\)/, '').trim();
+        const scoreLine = `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`;
+        const body = scorerLine ? `${scorerLine}\n${scoreLine}` : scoreLine;
+
         return this.sendNotification({
             to: pushToken,
-            title: '⚽ هدف!',
-            body: `${scorer} سجل! ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`,
+            title,
+            body,
             data: {
                 type: 'MATCH_GOAL',
                 homeTeam,
@@ -402,18 +431,71 @@ export class PushNotificationService {
         });
     }
 
+    /** Resolve a language from optional userId / language hints. */
+    private static async resolveLanguage(opts?: { userId?: string; language?: SupportedLanguage }): Promise<SupportedLanguage> {
+        if (opts?.language === 'ar' || opts?.language === 'en') return opts.language;
+        if (opts?.userId) {
+            try {
+                return await getUserLanguage(opts.userId);
+            } catch {
+                return 'en';
+            }
+        }
+        return 'en';
+    }
+
+    /**
+     * Generic localized push helper — pick a title key and a body key
+     * from `pushTemplates` and let the service interpolate variables
+     * in the user's language. Use this for any new push types so we
+     * don't keep multiplying domain-specific helpers.
+     */
+    static async sendLocalizedNotification(params: {
+        pushToken: string;
+        userId?: string;
+        language?: SupportedLanguage;
+        titleKey: PushTemplateKey;
+        bodyKey: PushTemplateKey;
+        vars?: Record<string, string | number>;
+        data?: Record<string, unknown>;
+        channelId?: string;
+        threadId?: string;
+        badge?: number;
+    }): Promise<boolean> {
+        const language = await this.resolveLanguage({ userId: params.userId, language: params.language });
+        const title = renderPushTemplate(params.titleKey, language, params.vars);
+        const body = renderPushTemplate(params.bodyKey, language, params.vars);
+        return this.sendNotification({
+            to: params.pushToken,
+            title,
+            body,
+            data: params.data,
+            channelId: params.channelId,
+            threadId: params.threadId,
+            badge: params.badge,
+        });
+    }
+
     /**
      * Send match start notification
      */
     static async sendMatchStartNotification(
         pushToken: string,
         homeTeam: string,
-        awayTeam: string
+        awayTeam: string,
+        opts?: { userId?: string; language?: SupportedLanguage; minutesUntilKickoff?: number },
     ): Promise<boolean> {
+        const language = await this.resolveLanguage(opts);
+        const title = renderPushTemplate('matchStartTitle', language);
+        const body = renderPushTemplate('matchStartBody', language, {
+            home: homeTeam,
+            away: awayTeam,
+            minutes: opts?.minutesUntilKickoff ?? 0,
+        });
         return this.sendNotification({
             to: pushToken,
-            title: '🏟️ بدأت المباراة!',
-            body: `${homeTeam} vs ${awayTeam} - المباراة بدأت الآن`,
+            title,
+            body,
             data: {
                 type: 'MATCH_START',
                 homeTeam,
@@ -430,16 +512,21 @@ export class PushNotificationService {
         homeTeam: string,
         awayTeam: string,
         homeScore: number,
-        awayScore: number
+        awayScore: number,
+        opts?: { userId?: string; language?: SupportedLanguage },
     ): Promise<boolean> {
-        let result = 'تعادل';
-        if (homeScore > awayScore) result = `فوز ${homeTeam}`;
-        else if (awayScore > homeScore) result = `فوز ${awayTeam}`;
-
+        const language = await this.resolveLanguage(opts);
+        const title = renderPushTemplate('fulltimeTitle', language);
+        const body = renderPushTemplate('fulltimeBody', language, {
+            home: homeTeam,
+            away: awayTeam,
+            homeScore,
+            awayScore,
+        });
         return this.sendNotification({
             to: pushToken,
-            title: '🏁 انتهت المباراة!',
-            body: `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam} | ${result}`,
+            title,
+            body,
             data: {
                 type: 'MATCH_END',
                 homeTeam,
@@ -458,12 +545,21 @@ export class PushNotificationService {
         homeTeam: string,
         awayTeam: string,
         homeScore: number,
-        awayScore: number
+        awayScore: number,
+        opts?: { userId?: string; language?: SupportedLanguage },
     ): Promise<boolean> {
+        const language = await this.resolveLanguage(opts);
+        const title = renderPushTemplate('halftimeTitle', language);
+        const body = renderPushTemplate('halftimeBody', language, {
+            home: homeTeam,
+            away: awayTeam,
+            homeScore,
+            awayScore,
+        });
         return this.sendNotification({
             to: pushToken,
-            title: '⏸️ نهاية الشوط الأول',
-            body: `${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`,
+            title,
+            body,
             data: {
                 type: 'MATCH_HALFTIME',
                 homeTeam,

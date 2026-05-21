@@ -445,7 +445,7 @@ const ReelsFeed: React.FC = () => {
       if (!networkState.isConnected || !networkState.isInternetReachable) {
         setIsOffline(true);
         setNetworkError(true);
-        setLoadError('لا يوجد اتصال بالإنترنت');
+        setLoadError(t.reels.offline);
 
         // Display cached data immediately if available (offline mode)
         if (cachedData?.reels && cachedData.reels.length > 0) {
@@ -471,7 +471,7 @@ const ReelsFeed: React.FC = () => {
 
       const token = await getToken();
       if (!token) {
-        setLoadError('فشل التحقق من الهوية');
+        setLoadError(t.reels.authFailed);
         return;
       }
 
@@ -568,10 +568,14 @@ const ReelsFeed: React.FC = () => {
           loadReelsFromBackend(cursor, skipCache, attemptNumber + 1);
         }, delay);
 
-        setLoadError(`جاري إعادة المحاولة (${attemptNumber + 1}/${MAX_RETRIES})...`);
+        setLoadError(
+          t.reels.retryingAttempt
+            .replace('{current}', String(attemptNumber + 1))
+            .replace('{max}', String(MAX_RETRIES))
+        );
       } else {
         // Max retries reached
-        setLoadError('فشل تحميل الريلز. اضغط لإعادة المحاولة.');
+        setLoadError(t.reels.feedLoadFailed);
         setNetworkError(true);
         setRetryCount(attemptNumber);
       }
@@ -711,7 +715,7 @@ const ReelsFeed: React.FC = () => {
     } else if (reels.length > 0) {
       // Reel not found in current feed - it may be deleted or not loaded yet
       // Show toast and stay on reels screen
-      toastManager.showError('المقطع غير موجود', 'المقطع مش موجود أو اتحذف');
+      toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
     }
   }, [params.reelId, params.commentId, params.autoOpenComments, reels]);
 
@@ -1013,11 +1017,14 @@ const ReelsFeed: React.FC = () => {
     try {
       // Generate deep link: 90plus://reel/:reelId
       const deepLink = `90plus://reel/${reel.id}`;
-      const message = `شاهد هذا الفيديو الرائع من ${reel.user.name}!\n${reel.description || ''}\n\n${deepLink}`;
+      const message = t.reels.shareReelMessage
+        .replace('{name}', reel.user.name)
+        .replace('{description}', reel.description || '')
+        .replace('{link}', deepLink);
       const result = await Share.share({
         message,
         url: deepLink, // Use deep link instead of direct video URL
-        title: 'مشاركة فيديو'
+        title: t.reels.shareReelTitle
       });
 
       if (result.action === Share.sharedAction) {
@@ -1066,13 +1073,13 @@ const ReelsFeed: React.FC = () => {
         // Remove from local state immediately
         setReels(prev => prev.filter(r => r.id !== reelId));
         setBackendReels(prev => prev.filter(r => r.id !== reelId));
-        toastManager.showSuccess('تم الحذف', result.message || 'تم حذف الفيديو بنجاح');
+        toastManager.showSuccess(t.reels.deleteSuccess, result.message || t.reels.deleteSuccessDetail);
       } else {
-        Alert.alert('خطأ', result.message || 'فشل حذف الفيديو. حاول مرة أخرى.');
+        Alert.alert(t.common.error, result.message || t.reels.deleteFailed);
       }
     } catch (error) {
       logger.error('Error deleting reel:', error);
-      Alert.alert('خطأ', 'فشل حذف الفيديو. حاول مرة أخرى.');
+      Alert.alert(t.common.error, t.reels.deleteFailed);
     }
   }, [getToken]);
 
@@ -1089,13 +1096,13 @@ const ReelsFeed: React.FC = () => {
           r.id === reelId ? { ...r, description: caption, hashtags } : r;
         setReels(prev => prev.map(updateReel));
         setBackendReels(prev => prev.map(updateReel));
-        toastManager.showSuccess('تم التعديل', 'تم تحديث وصف الفيديو بنجاح ✅');
+        toastManager.showSuccess(t.reels.editSuccess, t.reels.editSuccessDetail);
       } else {
-        Alert.alert('خطأ', result.message || 'فشل تعديل الوصف. حاول مرة أخرى.');
+        Alert.alert(t.common.error, result.message || t.reels.editFailed);
       }
     } catch (error) {
       logger.error('Error editing reel:', error);
-      Alert.alert('خطأ', 'فشل تعديل الوصف. حاول مرة أخرى.');
+      Alert.alert(t.common.error, t.reels.editFailed);
     }
   }, [getToken]);
 
@@ -1339,8 +1346,8 @@ const ReelsFeed: React.FC = () => {
           <View style={styles.noReelsIconContainer}>
             <Eye size={64} color="rgba(255,255,255,0.3)" />
           </View>
-          <Text style={styles.noReelsTitle}>{t.reels.noVideosTitle || 'لا توجد فيديوهات بعد'}</Text>
-          <Text style={styles.noReelsSubtitle}>{t.reels.noVideosSubtitle || 'تابع أشخاص جدد لمشاهدة فيديوهاتهم هنا'}</Text>
+          <Text style={styles.noReelsTitle}>{t.reels.noVideosTitle}</Text>
+          <Text style={styles.noReelsSubtitle}>{t.reels.noVideosSubtitle}</Text>
           <TouchableOpacity
             style={styles.noReelsButton}
             onPress={() => {
@@ -1349,7 +1356,7 @@ const ReelsFeed: React.FC = () => {
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.noReelsButtonText}>{t.reels.noVideosCallToAction || 'اكتشف أشخاص'}</Text>
+            <Text style={styles.noReelsButtonText}>{t.reels.noVideosCallToAction}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1380,17 +1387,17 @@ const ReelsFeed: React.FC = () => {
           onEndReachedThreshold={0.5}
           // Accessibility (Low Priority #13)
           accessible={true}
-          accessibilityLabel="قائمة الفيديوهات"
-          accessibilityHint="اسحب لأعلى لعرض الفيديو التالي، اسحب لأسفل لتحديث"
+          accessibilityLabel={t.reels.a11yVideoList}
+          accessibilityHint={t.reels.a11yVideoHint}
           ListFooterComponent={
             isLoadingMore ? (
               <View style={styles.loadingMoreContainer}>
                 <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.loadingMoreText}>{t.reels.loadingMore || 'جاري تحميل المزيد...'}</Text>
+                <Text style={styles.loadingMoreText}>{t.reels.loadingMore}</Text>
               </View>
             ) : !hasMore && reels.length > 0 ? (
               <View style={styles.endOfListContainer}>
-                <Text style={styles.endOfListText}>{t.reels.endOfFeed || 'لقد شاهدت كل الفيديوهات 🎉'}</Text>
+                <Text style={styles.endOfListText}>{t.reels.endOfFeed}</Text>
               </View>
             ) : null
           }

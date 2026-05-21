@@ -1,0 +1,506 @@
+/**
+ * Push notification template service.
+ *
+ * Source of truth for localized push notification copy on the backend.
+ * Mirrors the keys exposed by the frontend at
+ * `front/locales/*.ts → pushTemplates.*`. When a user has set a
+ * preferred language (`User.settings.language`), the dispatcher reads
+ * that value and resolves the title/body through this module.
+ *
+ * Adding a new template:
+ *   1. Add the entry under both `en` and `ar` blocks below.
+ *   2. Add the matching key to `front/locales/en.ts` and `ar.ts`
+ *      under `pushTemplates` so the in-app inbox stays in sync.
+ *   3. Use `renderPushTemplate(key, language, vars)` from the
+ *      caller — never pass a hard-coded string from a controller.
+ *
+ * Variables use `{name}` placeholders for both `{name}` and `{{name}}`
+ * to stay tolerant of either syntax inside the locale files.
+ *
+ * Languages: 'ar' | 'en'. Anything else falls back to 'en'.
+ */
+
+import prisma from '../lib/prisma';
+import { logger } from '../utils/logger';
+
+export type SupportedLanguage = 'ar' | 'en';
+
+const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
+
+export type PushTemplateKey =
+    | 'matchStartTitle'
+    | 'matchStartBody'
+    | 'goalTitle'
+    | 'goalBody'
+    | 'halftimeTitle'
+    | 'halftimeBody'
+    | 'fulltimeTitle'
+    | 'fulltimeBody'
+    | 'predictionWinTitle'
+    | 'predictionWinBody'
+    | 'predictionLossTitle'
+    | 'predictionLossBody'
+    | 'predictionReminderTitle'
+    | 'predictionReminderBody'
+    | 'quizReminderTitle'
+    | 'quizReminderBody'
+    | 'newFollowerTitle'
+    | 'newFollowerBody'
+    | 'likeTitle'
+    | 'likeBody'
+    | 'commentTitle'
+    | 'commentBody'
+    | 'mentionTitle'
+    | 'mentionBody'
+    | 'rewardTitle'
+    | 'rewardBody'
+    | 'luckyWheelTitle'
+    | 'luckyWheelBody'
+    | 'rankUpTitle'
+    | 'rankUpBody'
+    | 'moderationStrikeTitle'
+    | 'moderationStrikeBody'
+    | 'moderationRemovedTitle'
+    | 'moderationRemovedBody'
+    // Renewal / cooldown / video lifecycle (backend-only for now)
+    | 'predictionTicketRenewalTitle'
+    | 'predictionTicketRenewalBody'
+    | 'dailyQuizReadyTitle'
+    | 'dailyQuizReadyBody'
+    | 'dailyQuizTimeTitle'
+    | 'dailyQuizTimeBody'
+    | 'dailyQuizChallengeTitle'
+    | 'dailyQuizChallengeBody'
+    | 'cooldownAvatarTitle'
+    | 'cooldownAvatarBody'
+    | 'cooldownCoverTitle'
+    | 'cooldownCoverBody'
+    | 'cooldownReelTitle'
+    | 'cooldownReelBody'
+    | 'cooldownUsernameTitle'
+    | 'cooldownUsernameBody'
+    | 'videoReadyTitle'
+    | 'videoReadyBody'
+    | 'videoFailedTitle'
+    | 'videoFailedBody'
+    // Upload outcome (in-app notifications dispatched right after a
+    // successful or rate-limited upload).
+    | 'avatarUpdatedTitle'
+    | 'avatarUpdatedBody'
+    | 'coverUpdatedTitle'
+    | 'coverUpdatedBody'
+    | 'avatarChangeBlockedTitle'
+    | 'avatarChangeBlockedBody'
+    | 'coverChangeBlockedTitle'
+    | 'coverChangeBlockedBody'
+    | 'mentionInVideoTitle'
+    | 'mentionInVideoBody'
+    // Reel social interactions (likes / comments / replies / shares /
+    // mentions in comments / comment-likes). Used by reels.routes.ts.
+    | 'reelLikeTitle'
+    | 'reelLikeTitleMany'
+    | 'reelLikeBody'
+    | 'reelLikeBodyMany'
+    | 'reelCommentTitle'
+    | 'reelCommentBody'
+    | 'reelReplyTitle'
+    | 'reelReplyBody'
+    | 'reelMentionTitle'
+    | 'reelMentionBody'
+    | 'reelCommentLikeTitle'
+    | 'reelCommentLikeBody'
+    | 'reelShareTitle'
+    | 'reelShareBody'
+    // Ranking achievements (top-3 medal + team-of-month diamond streak)
+    | 'medalGoldName'
+    | 'medalSilverName'
+    | 'medalBronzeName'
+    | 'medalAwardedTitle'
+    | 'medalAwardedBody'
+    | 'diamondAwardedTitle'
+    | 'diamondAwardedBody'
+    | 'diamondCoinTransactionDescription'
+    | 'teamOfMonthMedalTitle'
+    | 'teamOfMonthMedalBody'
+    // Moderation actions targeted at the user
+    | 'moderationReelDeletedTitle'
+    | 'moderationReelDeletedBody'
+    | 'moderationCommentDeletedTitle'
+    | 'moderationCommentDeletedBody'
+    | 'accountSuspendedTitle'
+    | 'accountSuspendedBody'
+    | 'accountSuspendedReason'
+    // Leaderboard achievements
+    | 'leaderboardTop10Title'
+    | 'leaderboardTop10Body'
+    // Live match events
+    | 'matchYellowCardTitle'
+    | 'matchRedCardTitle'
+    | 'matchCardBody'
+    | 'matchCardPlayerFallback'
+    | 'leagueMatchSoonTitle'
+    | 'leagueMatchSoonBody'
+    | 'leagueMatchStartedTitle'
+    | 'leagueMatchStartedBody'
+    // Follower milestone
+    | 'followerMilestoneTitle'
+    | 'followerMilestoneBody';
+
+type TemplateMap = Record<PushTemplateKey, string>;
+
+const en: TemplateMap = {
+    matchStartTitle: '⚽ Match starting',
+    matchStartBody: '{home} vs {away} kicks off in {minutes} minutes',
+    goalTitle: '⚽ Goal!',
+    goalBody: "{player} scores for {team} ({minute}')",
+    halftimeTitle: 'Half time',
+    halftimeBody: '{home} {homeScore} - {awayScore} {away}',
+    fulltimeTitle: 'Full time',
+    fulltimeBody: '{home} {homeScore} - {awayScore} {away}',
+    predictionWinTitle: '🎉 Correct prediction!',
+    predictionWinBody: 'You earned {coins} coins on {match}',
+    predictionLossTitle: '😔 Wrong prediction',
+    predictionLossBody: 'Your prediction on {match} did not land',
+    predictionReminderTitle: "⏰ Don't miss your prediction",
+    predictionReminderBody: '{match} kicks off soon — lock in your call',
+    quizReminderTitle: '🎯 Daily quiz is ready',
+    quizReminderBody: 'Test your football IQ and earn coins',
+    newFollowerTitle: 'New follower',
+    newFollowerBody: '{user} started following you',
+    likeTitle: 'Someone liked your reel',
+    likeBody: '{user} liked your video',
+    commentTitle: 'New comment',
+    commentBody: '{user} commented on your reel',
+    mentionTitle: 'You were mentioned',
+    mentionBody: '{user} mentioned you in a comment',
+    rewardTitle: '🎁 Reward unlocked',
+    rewardBody: 'You earned {amount} coins',
+    luckyWheelTitle: '🎡 Lucky wheel ready',
+    luckyWheelBody: 'Tap to spin and win free coins',
+    rankUpTitle: '📈 Rank up!',
+    rankUpBody: 'You climbed to #{rank} on the leaderboard',
+    moderationStrikeTitle: '⚠️ Strike on your account',
+    moderationStrikeBody: 'A moderator action was applied. Tap for details.',
+    moderationRemovedTitle: 'Content removed',
+    moderationRemovedBody: 'Your reel was removed for policy violation',
+    // Backend-only renewals + cooldowns
+    predictionTicketRenewalTitle: '🎟️ Tickets renewed!',
+    predictionTicketRenewalBody:
+        'You have {count} fresh prediction tickets. Predict match results and earn coins ⚽',
+    dailyQuizReadyTitle: '🧠 New quiz is live!',
+    dailyQuizReadyBody: "Today's quiz is waiting — show off your football knowledge and earn XP!",
+    dailyQuizTimeTitle: '⚽ Quiz time!',
+    dailyQuizTimeBody: 'Fresh questions every day — try your luck and check your level!',
+    dailyQuizChallengeTitle: "🏆 Today's challenge!",
+    dailyQuizChallengeBody: 'A new quiz just dropped. Answer correctly and earn coins and XP!',
+    cooldownAvatarTitle: '📸 Update your photo!',
+    cooldownAvatarBody: "The cooldown is over — you can change your profile picture now!",
+    cooldownCoverTitle: '🖼️ Refresh your cover!',
+    cooldownCoverBody: 'You can change your cover image now. Pick a fresh shot!',
+    cooldownReelTitle: '🎬 Drop a new reel!',
+    cooldownReelBody: 'You can upload a new reel now. Share your skill with the crowd!',
+    cooldownUsernameTitle: '✏️ Change your username!',
+    cooldownUsernameBody: 'You can update your username now.',
+    videoReadyTitle: '✅ Your reel is ready!',
+    videoReadyBody: 'Your video has been processed and is live for everyone to watch.',
+    videoFailedTitle: '❌ Reel upload failed',
+    videoFailedBody: 'Something went wrong while processing your reel. Try again from your profile.',
+    avatarUpdatedTitle: '🖼️ Profile picture',
+    avatarUpdatedBody: 'Your profile picture has been updated.',
+    coverUpdatedTitle: '🎨 Cover image',
+    coverUpdatedBody: 'Your cover image has been updated.',
+    avatarChangeBlockedTitle: 'Profile picture change',
+    avatarChangeBlockedBody: 'You cannot change your profile picture right now.',
+    coverChangeBlockedTitle: 'Cover image change',
+    coverChangeBlockedBody: 'You cannot change your cover image right now.',
+    mentionInVideoTitle: 'You were mentioned',
+    mentionInVideoBody: 'Someone mentioned you in a video.',
+    // Reel social interactions
+    reelLikeTitle: '❤️ Someone liked your reel',
+    reelLikeTitleMany: '❤️ {count} likes on your reel',
+    reelLikeBody: '{user} liked your reel',
+    reelLikeBodyMany: '{user} and {others} others liked your reel',
+    reelCommentTitle: 'New comment',
+    reelCommentBody: '{user}: {content}',
+    reelReplyTitle: 'New reply',
+    reelReplyBody: '{user}: {content}',
+    reelMentionTitle: 'You were mentioned in a comment',
+    reelMentionBody: '{user} mentioned you in a comment',
+    reelCommentLikeTitle: '❤️ Someone liked your comment',
+    reelCommentLikeBody: '{user} liked your comment',
+    reelShareTitle: '🔗 Your reel was shared',
+    reelShareBody: '{user} shared your reel on {platform}',
+    // Ranking achievements
+    medalGoldName: 'Gold 🥇',
+    medalSilverName: 'Silver 🥈',
+    medalBronzeName: 'Bronze 🥉',
+    medalAwardedTitle: 'Congratulations! You earned a medal',
+    medalAwardedBody: 'You won a {medal} medal in the {category} ranking',
+    diamondAwardedTitle: '💎 Congratulations! You earned the Diamond medal!',
+    diamondAwardedBody: "You're a champion! You appeared in the team of the month 3 months in a row. You earned 1000 coins as a gift!",
+    diamondCoinTransactionDescription: 'Diamond medal gift — 3 consecutive months in the team of the month',
+    teamOfMonthMedalTitle: 'Congratulations! You made the team of the month',
+    teamOfMonthMedalBody: 'You won a {medal} medal in the team of the month',
+    // Moderation actions targeted at the user
+    moderationReelDeletedTitle: 'Notice: your reel was removed',
+    moderationReelDeletedBody:
+        'Your reel was removed because it received multiple reports ({reason}). Warning: continued violations will permanently ban your account!',
+    moderationCommentDeletedTitle: 'Notice: your comment was removed',
+    moderationCommentDeletedBody:
+        'Your comment was removed because it received multiple reports ({reason}). Please follow community guidelines to avoid a permanent ban.',
+    accountSuspendedTitle: 'Your account has been suspended',
+    accountSuspendedBody: 'Your account is suspended until {until}. Reason: {reason}',
+    accountSuspendedReason: 'Reached {count} strikes',
+    // Leaderboard achievement (top-10 predictor)
+    leaderboardTop10Title: '🏆 Prediction champion!',
+    leaderboardTop10Body: 'Congrats! You made it into the top 10 predictors 🔥',
+    // Live match events (cards / kickoff / reminders)
+    matchYellowCardTitle: '🟨 Yellow card!',
+    matchRedCardTitle: '🟥 Red card!',
+    matchCardBody: "{player} ({team}) - {minute}'",
+    matchCardPlayerFallback: 'A player',
+    leagueMatchSoonTitle: '⏰ Match starting soon!',
+    leagueMatchSoonBody: '{home} vs {away} - in {minutes} minutes',
+    leagueMatchStartedTitle: '🚀 Kick off!',
+    leagueMatchStartedBody: '{home} vs {away}\n{league}\nThe match has started',
+    // Follower milestone (every {count} followers)
+    followerMilestoneTitle: '🎉 New milestone!',
+    followerMilestoneBody: 'You reached {count} followers!',
+};
+
+
+const ar: TemplateMap = {
+    matchStartTitle: '⚽ المباراة على وشك البدء',
+    matchStartBody: '{home} ضد {away} - تبدأ خلال {minutes} دقيقة',
+    goalTitle: '⚽ هدف!',
+    goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
+    halftimeTitle: 'استراحة بين الشوطين',
+    halftimeBody: '{home} {homeScore} - {awayScore} {away}',
+    fulltimeTitle: 'انتهت المباراة',
+    fulltimeBody: '{home} {homeScore} - {awayScore} {away}',
+    predictionWinTitle: '🎉 توقع صحيح!',
+    predictionWinBody: 'كسبت {coins} كوينز في {match}',
+    predictionLossTitle: '😔 توقع خاطئ',
+    predictionLossBody: 'توقعك في {match} ما اشتغلش',
+    predictionReminderTitle: '⏰ فيه ماتش جاي',
+    predictionReminderBody: '{match} هتبدأ قريب — حدّد توقعك',
+    quizReminderTitle: '🎯 الكويز اليومي جاهز',
+    quizReminderBody: 'اختبر معلوماتك الكروية واكسب عملات',
+    newFollowerTitle: 'متابع جديد',
+    newFollowerBody: '{user} بدأ متابعتك',
+    likeTitle: 'إعجاب جديد',
+    likeBody: '{user} أعجب بفيديوك',
+    commentTitle: 'تعليق جديد',
+    commentBody: '{user} علّق على ريلك',
+    mentionTitle: 'تم ذكرك',
+    mentionBody: '{user} ذكرك في تعليق',
+    rewardTitle: '🎁 جائزة جديدة',
+    rewardBody: 'حصلت على {amount} عملة',
+    luckyWheelTitle: '🎡 عجلة الحظ جاهزة',
+    luckyWheelBody: 'اضغط للف واربح عملات مجانية',
+    rankUpTitle: '📈 ارتقيت في الترتيب!',
+    rankUpBody: 'وصلت للمركز #{rank} على لوحة الصدارة',
+    moderationStrikeTitle: '⚠️ تحذير على حسابك',
+    moderationStrikeBody: 'تم تطبيق إجراء إشرافي. اضغط لمعرفة التفاصيل.',
+    moderationRemovedTitle: 'تم حذف المحتوى',
+    moderationRemovedBody: 'تم حذف ريلك بسبب مخالفة السياسات',
+    // قوالب الواجهة الخلفية فقط
+    predictionTicketRenewalTitle: '🎟️ تذاكرك اتجددت!',
+    predictionTicketRenewalBody:
+        'عندك {count} تذاكر توقع جديدة. توقع نتيجة المباريات واكسب عملات! ⚽',
+    dailyQuizReadyTitle: '🧠 اختبار جديد جاهز!',
+    dailyQuizReadyBody: 'اختبار اليوم في انتظارك. اثبت معرفتك بالكرة واكسب XP!',
+    dailyQuizTimeTitle: '⚽ وقت الكويز!',
+    dailyQuizTimeBody: 'أسئلة جديدة كل يوم — جرب حظك وشوف مستواك!',
+    dailyQuizChallengeTitle: '🏆 تحدي اليوم!',
+    dailyQuizChallengeBody: 'اختبار جديد نزل دلوقتي. جاوب صح واكسب عملات وXP!',
+    cooldownAvatarTitle: '📸 غيّر صورتك!',
+    cooldownAvatarBody: 'الكولداون خلص — تقدر تغير صورة بروفايلك دلوقتي!',
+    cooldownCoverTitle: '🖼️ غيّر الغلاف!',
+    cooldownCoverBody: 'تقدر تغير صورة الغلاف دلوقتي. اختار صورة جديدة!',
+    cooldownReelTitle: '🎬 ارفع فيديو جديد!',
+    cooldownReelBody: 'تقدر ترفع فيديو جديد دلوقتي. شارك موهبتك مع الجمهور!',
+    cooldownUsernameTitle: '✏️ غيّر اسمك!',
+    cooldownUsernameBody: 'تقدر تغير اسم المستخدم دلوقتي.',
+    videoReadyTitle: '✅ فيديوهك جاهز!',
+    videoReadyBody: 'تم معالجة فيديوهك بنجاح وهو متاح الآن للمشاهدة.',
+    videoFailedTitle: '❌ فشل رفع الفيديو',
+    videoFailedBody: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+    avatarUpdatedTitle: '🖼️ صورة البروفايل',
+    avatarUpdatedBody: 'تم تحديث صورة البروفايل بنجاح.',
+    coverUpdatedTitle: '🎨 صورة الغلاف',
+    coverUpdatedBody: 'تم تحديث صورة الغلاف بنجاح.',
+    avatarChangeBlockedTitle: 'تغيير صورة البروفايل',
+    avatarChangeBlockedBody: 'لا يمكنك تغيير صورة البروفايل الآن.',
+    coverChangeBlockedTitle: 'تغيير صورة الغلاف',
+    coverChangeBlockedBody: 'لا يمكنك تغيير صورة الغلاف الآن.',
+    mentionInVideoTitle: 'تم الإشارة إليك',
+    mentionInVideoBody: 'قام شخص بالإشارة إليك في فيديو.',
+    // تفاعلات الريلز
+    reelLikeTitle: '❤️ أعجب بمقطعك',
+    reelLikeTitleMany: '❤️ {count} إعجاب على مقطعك',
+    reelLikeBody: '{user} أعجب بمقطعك',
+    reelLikeBodyMany: '{user} و{others} آخرين أعجبوا بمقطعك',
+    reelCommentTitle: 'تعليق جديد',
+    reelCommentBody: '{user}: {content}',
+    reelReplyTitle: 'رد جديد',
+    reelReplyBody: '{user}: {content}',
+    reelMentionTitle: 'تم الإشارة إليك في تعليق',
+    reelMentionBody: 'قام {user} بالإشارة إليك في تعليق',
+    reelCommentLikeTitle: '❤️ إعجاب على تعليقك',
+    reelCommentLikeBody: 'أعجب {user} بتعليقك',
+    reelShareTitle: '🔗 شاركوا مقطعك!',
+    reelShareBody: '{user} شارك مقطعك على {platform}',
+    // إنجازات الترتيب
+    medalGoldName: 'ذهبية 🥇',
+    medalSilverName: 'فضية 🥈',
+    medalBronzeName: 'برونزية 🥉',
+    medalAwardedTitle: 'مبروك! حصلت على ميدالية',
+    medalAwardedBody: 'حصلت على ميدالية {medal} في تصنيف {category}',
+    diamondAwardedTitle: '💎 مبروك! حصلت على ميدالية الدايموند!',
+    diamondAwardedBody: 'أنت بطل! ظهرت في تشكيلة الشهر 3 شهور متتالية. حصلت على 1000 كوين هدية!',
+    diamondCoinTransactionDescription: 'هدية ميدالية الدايموند - 3 شهور متتالية في تشكيلة الشهر',
+    teamOfMonthMedalTitle: 'مبروك! أنت في تشكيلة الشهر',
+    teamOfMonthMedalBody: 'حصلت على ميدالية {medal} في تشكيلة الشهر',
+    // إجراءات الإشراف على المستخدم
+    moderationReelDeletedTitle: 'تنبيه: تم حذف فيديوك',
+    moderationReelDeletedBody:
+        'تم حذف مقطعك لتلقيه بلاغات متعددة ({reason}). تحذير: استمرار المخالفات سيؤدي إلى حظر حسابك نهائياً!',
+    moderationCommentDeletedTitle: 'تنبيه: تم حذف تعليقك',
+    moderationCommentDeletedBody:
+        'تم حذف تعليقك لتلقيه بلاغات متعددة ({reason}). تحذير: يرجى الالتزام بالقواعد لكي لا يتم حظر حسابك بصفة دائمة.',
+    accountSuspendedTitle: 'تم تعليق حسابك',
+    accountSuspendedBody: 'تم تعليق حسابك حتى {until}. السبب: {reason}',
+    accountSuspendedReason: 'وصلت إلى {count} تحذيرات',
+    // إنجاز لوحة الصدارة
+    leaderboardTop10Title: '🏆 بطل التوقعات!',
+    leaderboardTop10Body: 'تهانينا! لقد دخلت قائمة أفضل 10 متوقعين 🔥',
+    // أحداث المباراة (بطاقات / تذكير / بدء)
+    matchYellowCardTitle: '🟨 بطاقة صفراء!',
+    matchRedCardTitle: '🟥 بطاقة حمراء!',
+    matchCardBody: '{player} ({team}) - الدقيقة {minute}',
+    matchCardPlayerFallback: 'لاعب',
+    leagueMatchSoonTitle: '⏰ مباراة قريباً!',
+    leagueMatchSoonBody: '{home} vs {away} - بعد {minutes} دقيقة',
+    leagueMatchStartedTitle: '🚀 بدأت المباراة!',
+    leagueMatchStartedBody: '{home} vs {away}\n{league}\nالمباراة بدأت الآن',
+    // إنجاز عدد المتابعين
+    followerMilestoneTitle: '🎉 إنجاز جديد!',
+    followerMilestoneBody: 'وصلت لـ {count} متابع!',
+};
+
+const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };
+
+/**
+ * Render a single push template key for the given language. Variable
+ * interpolation supports both `{name}` and `{{name}}` to stay tolerant
+ * of the syntax used by translators.
+ */
+export function renderPushTemplate(
+    key: PushTemplateKey,
+    language: SupportedLanguage | string | null | undefined,
+    vars: Record<string, string | number> = {},
+): string {
+    const lang = (language === 'ar' ? 'ar' : 'en') as SupportedLanguage;
+    const fallback = TEMPLATES[DEFAULT_LANGUAGE][key];
+    const template = TEMPLATES[lang]?.[key] ?? fallback ?? '';
+
+    return Object.entries(vars).reduce((acc, [k, v]) => {
+        const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return acc
+            .replace(new RegExp(`\\{${escaped}\\}`, 'g'), String(v))
+            .replace(new RegExp(`\\{\\{${escaped}\\}\\}`, 'g'), String(v));
+    }, template);
+}
+
+/**
+ * In-process cache of `userId → language`. Push notifications often
+ * hit the same user repeatedly within seconds (goal flurry, match
+ * end), and looking the language up in Postgres every time would be
+ * wasteful. The cache is bounded and short-lived to stay correct
+ * after a user changes their language.
+ */
+const LANGUAGE_CACHE = new Map<string, { lang: SupportedLanguage; expiresAt: number }>();
+const LANGUAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+
+function readCachedLanguage(userId: string): SupportedLanguage | null {
+    const entry = LANGUAGE_CACHE.get(userId);
+    if (!entry) return null;
+    if (entry.expiresAt < Date.now()) {
+        LANGUAGE_CACHE.delete(userId);
+        return null;
+    }
+    return entry.lang;
+}
+
+function writeCachedLanguage(userId: string, lang: SupportedLanguage): void {
+    // Hard cap to avoid unbounded growth in long-lived processes.
+    if (LANGUAGE_CACHE.size > 5_000) LANGUAGE_CACHE.clear();
+    LANGUAGE_CACHE.set(userId, { lang, expiresAt: Date.now() + LANGUAGE_CACHE_TTL_MS });
+}
+
+/** Public: invalidate after the language sync endpoint accepts a change. */
+export function invalidateUserLanguageCache(userId: string): void {
+    LANGUAGE_CACHE.delete(userId);
+}
+
+/**
+ * Resolve the user's preferred language from `User.settings.language`.
+ * Always returns a supported value, defaulting to English.
+ */
+export async function getUserLanguage(userId: string): Promise<SupportedLanguage> {
+    if (!userId) return DEFAULT_LANGUAGE;
+    const cached = readCachedLanguage(userId);
+    if (cached) return cached;
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { settings: true },
+        });
+        const settings = (user?.settings as Record<string, unknown> | null) ?? null;
+        const raw = settings && typeof settings.language === 'string' ? settings.language : '';
+        const lang: SupportedLanguage = raw === 'ar' || raw === 'en' ? raw : DEFAULT_LANGUAGE;
+        writeCachedLanguage(userId, lang);
+        return lang;
+    } catch (err) {
+        logger.warn('[push-templates] getUserLanguage failed, falling back:', err);
+        return DEFAULT_LANGUAGE;
+    }
+}
+
+/**
+ * Convenience: resolve language and render a template body in one call.
+ * Used by controllers/services that already have a `userId` and need a
+ * localized push payload.
+ */
+export async function renderPushForUser(
+    userId: string,
+    titleKey: PushTemplateKey,
+    bodyKey: PushTemplateKey,
+    vars: Record<string, string | number> = {},
+): Promise<{ title: string; body: string; language: SupportedLanguage }> {
+    const language = await getUserLanguage(userId);
+    return {
+        language,
+        title: renderPushTemplate(titleKey, language, vars),
+        body: renderPushTemplate(bodyKey, language, vars),
+    };
+}
+
+
+/**
+ * Read a user's language preference from a Prisma `User.settings` JSON
+ * blob without making an extra DB query. Falls back to English when
+ * the value is missing or unsupported, never throws.
+ *
+ * Use this in bulk notifiers that already select `settings` alongside
+ * the push token, to avoid N+1 round-trips.
+ */
+export function readLanguageFromSettings(
+    settings: unknown,
+): SupportedLanguage {
+    if (!settings || typeof settings !== 'object') return DEFAULT_LANGUAGE;
+    const raw = (settings as Record<string, unknown>).language;
+    return raw === 'ar' || raw === 'en' ? raw : DEFAULT_LANGUAGE;
+}

@@ -17,9 +17,10 @@ import {
     TEXT_MUTED,
     SCREEN_PADDING_H,
 } from '../../constants/tokens';
+import { useTranslation } from '../../src/i18n';
 
 interface HomeSectionErrorProps {
-    /** Arabic/English label of the failing section — e.g. "المباريات". */
+    /** Localized label of the failing section (already translated). */
     sectionName: string;
     /** Technical detail hidden in __DEV__ only. */
     detail?: string;
@@ -34,12 +35,13 @@ export function HomeSectionError({
     onRetry,
     isOffline = false,
 }: HomeSectionErrorProps) {
+    const { t } = useTranslation();
     const title = isOffline
-        ? `لا يوجد اتصال — ${sectionName}`
-        : `تعذّر تحميل ${sectionName}`;
+        ? t.homeExtra.sectionLoadOffline.replace('{section}', sectionName)
+        : t.homeExtra.sectionLoadFailed.replace('{section}', sectionName);
     const subtitle = isOffline
-        ? 'هنعرض آخر بيانات محفوظة'
-        : 'اضغط لإعادة المحاولة';
+        ? t.homeExtra.sectionLoadOfflineSub
+        : t.homeExtra.sectionLoadFailedSub;
 
     return (
         <View style={styles.wrap}>
@@ -68,10 +70,10 @@ export function HomeSectionError({
                         hitSlop={10}
                         style={styles.retryBtn}
                         accessibilityRole="button"
-                        accessibilityLabel={`إعادة تحميل ${sectionName}`}
+                        accessibilityLabel={t.homeExtra.accessibilityRetry.replace('{section}', sectionName)}
                     >
                         <RefreshCw size={13} color={PURPLE_PRIMARY} strokeWidth={2.5} />
-                        <Text style={styles.retryTxt}>إعادة</Text>
+                        <Text style={styles.retryTxt}>{t.homeExtra.retry}</Text>
                     </TouchableOpacity>
                 )}
             </View>

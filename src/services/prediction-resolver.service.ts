@@ -1,6 +1,6 @@
 /**
  * Prediction Resolver Service
- * نظام تحديث نتائج التوقعات
+ * Updates prediction outcomes when matches finish
  * 
  * This service is responsible for:
  * 1. Resolving predictions after matches end
@@ -81,7 +81,10 @@ export class PredictionResolverService {
                                 userId: prediction.userId,
                                 amount: CORRECT_PREDICTION_REWARD,
                                 type: 'PREDICTION' as any,
-                                description: `مكافأة توقع صحيح - مباراة ${apiMatchId}`,
+                                // Server-side audit trail. Not rendered to
+                                // users directly; the wallet UI maps the
+                                // `type` enum to a localized label instead.
+                                description: `Correct prediction reward — match ${apiMatchId}`,
                             },
                         }),
                     ]);

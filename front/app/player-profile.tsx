@@ -24,6 +24,7 @@ import PlayerAvatar from '../components/common/PlayerAvatar';
 import TeamBadge from '../components/common/TeamBadge';
 import { getAPIConfig } from '../config/api.config';
 import { useTranslation } from '../src/i18n';
+import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -176,7 +177,7 @@ export default function PlayerProfileScreen() {
     const router = useRouter();
     const params = useLocalSearchParams() as unknown as PlayerParams;
     const insets = useSafeAreaInsets();
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
 
     const [player, setPlayer] = useState<PlayerData | null>(null);
     const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -661,10 +662,10 @@ export default function PlayerProfileScreen() {
                                     size={48}
                                 />
                                 <View style={styles.teamCardInfo}>
-                                    <Text style={styles.teamCardName}>{stats.team.name}</Text>
+                                    <Text style={styles.teamCardName} numberOfLines={2}>{getTeamDisplayName(stats.team.name, language)}</Text>
                                     {stats.league && stats.league.name && stats.league.season != null && (
-                                        <Text style={styles.teamCardLeague}>
-                                            {stats.league.name} • {stats.league.season}/{stats.league.season + 1}
+                                        <Text style={styles.teamCardLeague} numberOfLines={1}>
+                                            {getLeagueDisplayName(stats.league.name, language)} • {stats.league.season}/{stats.league.season + 1}
                                         </Text>
                                     )}
                                 </View>
@@ -870,7 +871,7 @@ export default function PlayerProfileScreen() {
                                             size={40}
                                         />
                                         <Text style={styles.careerTeamName} numberOfLines={2}>
-                                            {team.name}
+                                            {getTeamDisplayName(team.name, language)}
                                         </Text>
                                     </View>
                                 ))}

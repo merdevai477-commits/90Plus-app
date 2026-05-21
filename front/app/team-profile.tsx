@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiFootballService, { Injury, Trophy, Coach } from '../services/apiFootball';
 import { useTranslation } from '../src/i18n';
+import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 import { useHaptic } from '../hooks/useHaptic';
 
 const { width, height } = Dimensions.get('window');
@@ -63,7 +64,7 @@ const getTeamColors = (teamName: string): string[] => {
 export default function TeamProfileScreen() {
     const router = useRouter();
     const params = useLocalSearchParams() as unknown as TeamParams;
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const { trigger } = useHaptic();
 
     const [team, setTeam] = useState<any | null>(null);
@@ -374,14 +375,14 @@ export default function TeamProfileScreen() {
             <View style={styles.matchTeams}>
                 <View style={styles.matchTeam}>
                     <Image source={{ uri: match.teams?.home?.logo }} style={styles.matchTeamLogo} />
-                    <Text style={styles.matchTeamName}>{match.teams?.home?.name}</Text>
+                    <Text style={styles.matchTeamName} numberOfLines={2}>{getTeamDisplayName(match.teams?.home?.name, language)}</Text>
                 </View>
                 <Text style={styles.matchScore}>
                     {match.goals?.home ?? '-'} - {match.goals?.away ?? '-'}
                 </Text>
                 <View style={styles.matchTeam}>
                     <Image source={{ uri: match.teams?.away?.logo }} style={styles.matchTeamLogo} />
-                    <Text style={styles.matchTeamName}>{match.teams?.away?.name}</Text>
+                    <Text style={styles.matchTeamName} numberOfLines={2}>{getTeamDisplayName(match.teams?.away?.name, language)}</Text>
                 </View>
             </View>
         </TouchableOpacity>
@@ -397,7 +398,7 @@ export default function TeamProfileScreen() {
                     <View key={index} style={styles.trophyCard}>
                         <Image source={{ uri: trophy.league.logo }} style={styles.trophyLogo} />
                         <View style={styles.trophyInfo}>
-                            <Text style={styles.trophyName}>{trophy.league.name}</Text>
+                            <Text style={styles.trophyName} numberOfLines={2}>{getLeagueDisplayName(trophy.league.name, language)}</Text>
                             <Text style={styles.trophySeason}>{trophy.season}</Text>
                             <Text style={styles.trophyPlace}>{trophy.place}</Text>
                         </View>
@@ -426,7 +427,7 @@ export default function TeamProfileScreen() {
                             {coach.team && (
                                 <View style={styles.coachTeam}>
                                     <Image source={{ uri: coach.team.logo }} style={styles.coachTeamLogo} />
-                                    <Text style={styles.coachTeamName}>{coach.team.name}</Text>
+                                    <Text style={styles.coachTeamName} numberOfLines={1}>{getTeamDisplayName(coach.team.name, language)}</Text>
                                 </View>
                             )}
                         </View>
@@ -478,7 +479,7 @@ export default function TeamProfileScreen() {
 
                 <Animated.View style={[styles.heroContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
                     <Image source={{ uri: teamInfo.logo }} style={styles.heroLogo} />
-                    <Text style={styles.heroName}>{teamInfo.name}</Text>
+                    <Text style={styles.heroName} numberOfLines={2}>{getTeamDisplayName(teamInfo.name, language)}</Text>
                     <View style={styles.heroDetails}>
                         <Text style={styles.heroDetailText}>{teamInfo.country}</Text>
                         <Text style={styles.separator}>•</Text>

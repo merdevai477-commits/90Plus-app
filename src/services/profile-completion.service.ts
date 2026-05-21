@@ -24,16 +24,19 @@ export interface ProfileCompletionStatus {
   missingRequiredSteps: string[]; // List of missing required steps
 }
 
-// Define profile completion steps
+// Define profile completion steps. Labels are English fallbacks only —
+// the frontend resolves the localized display string from `id` via
+// `getProfileCompletionStepLabel(stepId, language)`. The label is kept
+// for legacy clients and admin tooling that surface the raw payload.
 const PROFILE_STEPS = {
-  avatar: { label: 'صورة البروفايل', required: true, weight: 20 },
-  country: { label: 'البلد', required: true, weight: 15 },
-  club: { label: 'النادي المفضل', required: true, weight: 15 },
-  bio: { label: 'النبذة التعريفية', required: false, weight: 10 },
-  position: { label: 'المركز', required: false, weight: 10 },
-  cardData: { label: 'بيانات الكارت', required: false, weight: 20 }, // Combined: age, height, weight, foot
-  brand: { label: 'البراند المفضل', required: false, weight: 5 },
-  socialLinks: { label: 'روابط السوشيال ميديا', required: false, weight: 5 },
+  avatar: { label: 'Profile picture', required: true, weight: 20 },
+  country: { label: 'Country', required: true, weight: 15 },
+  club: { label: 'Favorite club', required: true, weight: 15 },
+  bio: { label: 'Bio', required: false, weight: 10 },
+  position: { label: 'Playing position', required: false, weight: 10 },
+  cardData: { label: 'Player card stats', required: false, weight: 20 }, // Combined: age, height, weight, foot
+  brand: { label: 'Favorite brand', required: false, weight: 5 },
+  socialLinks: { label: 'Social links', required: false, weight: 5 },
 };
 
 function buildFallbackCompletionStatus(): ProfileCompletionStatus {

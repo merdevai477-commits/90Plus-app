@@ -1,10 +1,18 @@
 /**
  * Profile Completion Service
- * Handles profile completion status and tracking
+ * Handles profile completion status and tracking.
+ *
+ * The service is language-neutral: step `id` is the source of truth.
+ * UI consumers should resolve display labels through
+ * `getProfileCompletionStepLabel(stepId, language, serverLabel?)` so the
+ * label always reflects the user's selected locale, regardless of what
+ * the backend returns.
  */
 
 import { getApiUrl } from '../config/api.config';
 import { logger } from '../utils/logger';
+import { useLanguageStore } from '../src/i18n/store';
+import { getProfileCompletionStepLabel } from '../utils/i18nHelpers';
 
 const API_URL = getApiUrl();
 
@@ -83,25 +91,34 @@ export class ProfileCompletionService {
   }
 
   /**
-   * Get default incomplete profile (used when user is not yet created)
+   * Get default incomplete profile (used when user is not yet created).
+   *
+   * Step labels are resolved through the i18n store at call time so
+   * defaults match the user's selected language. Falls back to the
+   * step id when a translation is missing, never crashes.
    */
   private static getDefaultIncompleteProfile(): ProfileCompletionStatus {
+    const lang = useLanguageStore.getState().language;
+    const label = (id: string) => getProfileCompletionStepLabel(id, lang);
+
+    const steps: ProfileCompletionStep[] = [
+      { id: 'avatar', label: label('avatar'), completed: false, required: true, weight: 20 },
+      { id: 'country', label: label('country'), completed: false, required: true, weight: 15 },
+      { id: 'club', label: label('club'), completed: false, required: true, weight: 15 },
+      { id: 'bio', label: label('bio'), completed: false, required: false, weight: 10 },
+      { id: 'position', label: label('position'), completed: false, required: false, weight: 10 },
+      { id: 'cardData', label: label('cardData'), completed: false, required: false, weight: 20 },
+      { id: 'brand', label: label('brand'), completed: false, required: false, weight: 5 },
+      { id: 'socialLinks', label: label('socialLinks'), completed: false, required: false, weight: 5 },
+    ];
+
     return {
       percentage: 0,
       completedSteps: 0,
       totalSteps: 8,
-      steps: [
-        { id: 'avatar', label: 'صورة البروفايل', completed: false, required: true, weight: 20 },
-        { id: 'country', label: 'البلد', completed: false, required: true, weight: 15 },
-        { id: 'club', label: 'النادي المفضل', completed: false, required: true, weight: 15 },
-        { id: 'bio', label: 'النبذة التعريفية', completed: false, required: false, weight: 10 },
-        { id: 'position', label: 'المركز', completed: false, required: false, weight: 10 },
-        { id: 'cardData', label: 'بيانات الكارت', completed: false, required: false, weight: 20 },
-        { id: 'brand', label: 'البراند المفضل', completed: false, required: false, weight: 5 },
-        { id: 'socialLinks', label: 'روابط السوشيال ميديا', completed: false, required: false, weight: 5 },
-      ],
+      steps,
       canUploadVideo: false,
-      missingRequiredSteps: ['صورة البروفايل', 'البلد', 'النادي المفضل'],
+      missingRequiredSteps: [label('avatar'), label('country'), label('club')],
     };
   }
 

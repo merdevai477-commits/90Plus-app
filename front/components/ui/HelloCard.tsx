@@ -6,7 +6,7 @@ type HelloCardProps = {
   subtitle?: string;
 };
 
-export default function HelloCard({ title = 'مرحباً 👋', subtitle = 'هذا مكون مثال (TypeScript)' }: HelloCardProps) {
+export default function HelloCard({ title = 'Hello 👋', subtitle = 'This is a sample component (TypeScript)' }: HelloCardProps) {
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{title}</Text>

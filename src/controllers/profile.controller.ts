@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { r2MediaStorage } from '../services/r2-media-storage.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 export class ProfileController {
   static async getMyProfile(req: Request, res: Response): Promise<void> {
@@ -9,7 +10,7 @@ export class ProfileController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -53,7 +54,7 @@ export class ProfileController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -68,7 +69,7 @@ export class ProfileController {
       });
     } catch (error) {
       logger.error('Get profile error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to get profile' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to get profile');
     }
   }
 
@@ -77,7 +78,7 @@ export class ProfileController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -85,15 +86,15 @@ export class ProfileController {
 
       // Input validation
       if (displayName !== undefined && (typeof displayName !== 'string' || displayName.length > 50)) {
-        res.status(400).json({ status: 'ERROR', message: 'Display name must be 50 characters or less' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Display name must be 50 characters or less');
         return;
       }
       if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) {
-        res.status(400).json({ status: 'ERROR', message: 'Bio must be 500 characters or less' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Bio must be 500 characters or less');
         return;
       }
       if (favoriteTeam !== undefined && (typeof favoriteTeam !== 'string' || favoriteTeam.length > 100)) {
-        res.status(400).json({ status: 'ERROR', message: 'Favorite team must be 100 characters or less' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Favorite team must be 100 characters or less');
         return;
       }
 
@@ -133,7 +134,7 @@ export class ProfileController {
       });
     } catch (error) {
       logger.error('Update profile error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to update profile' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to update profile');
     }
   }
 
@@ -142,12 +143,12 @@ export class ProfileController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
       if (!req.file) {
-        res.status(400).json({ status: 'ERROR', message: 'No file uploaded' });
+        sendError(req, res, ErrorCode.FILE_UPLOAD, 'No file uploaded');
         return;
       }
 
@@ -157,7 +158,7 @@ export class ProfileController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -174,7 +175,7 @@ export class ProfileController {
       );
 
       if (!result.success || !result.url || !result.key) {
-        res.status(500).json({ status: 'ERROR', message: result.error || 'Upload failed' });
+        sendError(req, res, ErrorCode.EXTERNAL_SERVICE, result.error || 'Upload failed');
         return;
       }
 
@@ -193,7 +194,7 @@ export class ProfileController {
       });
     } catch (error) {
       logger.error('Upload avatar error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to upload avatar' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to upload avatar');
     }
   }
 
@@ -202,12 +203,12 @@ export class ProfileController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
       if (!req.file) {
-        res.status(400).json({ status: 'ERROR', message: 'No file uploaded' });
+        sendError(req, res, ErrorCode.FILE_UPLOAD, 'No file uploaded');
         return;
       }
 
@@ -217,7 +218,7 @@ export class ProfileController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -236,7 +237,7 @@ export class ProfileController {
       );
 
       if (!result.success || !result.url || !result.key) {
-        res.status(500).json({ status: 'ERROR', message: result.error || 'Upload failed' });
+        sendError(req, res, ErrorCode.EXTERNAL_SERVICE, result.error || 'Upload failed');
         return;
       }
 
@@ -258,7 +259,7 @@ export class ProfileController {
       });
     } catch (error) {
       logger.error('Upload cover error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to upload cover' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to upload cover');
     }
   }
 
@@ -267,7 +268,7 @@ export class ProfileController {
       const clerkUserId = req.auth?.userId;
 
       if (!clerkUserId) {
-        res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+        sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
         return;
       }
 
@@ -275,27 +276,27 @@ export class ProfileController {
 
       // Input validation
       if (age !== undefined && (typeof age !== 'number' || age < 5 || age > 100)) {
-        res.status(400).json({ status: 'ERROR', message: 'Age must be between 5 and 100' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Age must be between 5 and 100');
         return;
       }
       if (height !== undefined && (typeof height !== 'number' || height < 50 || height > 250)) {
-        res.status(400).json({ status: 'ERROR', message: 'Height must be between 50 and 250 cm' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Height must be between 50 and 250 cm');
         return;
       }
       if (weight !== undefined && (typeof weight !== 'number' || weight < 20 || weight > 200)) {
-        res.status(400).json({ status: 'ERROR', message: 'Weight must be between 20 and 200 kg' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Weight must be between 20 and 200 kg');
         return;
       }
       if (foot !== undefined && !['R', 'L', 'B'].includes(foot)) {
-        res.status(400).json({ status: 'ERROR', message: 'Foot must be R, L, or B' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Foot must be R, L, or B');
         return;
       }
       if (position !== undefined && (typeof position !== 'string' || position.length > 30)) {
-        res.status(400).json({ status: 'ERROR', message: 'Position must be 30 characters or less' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Position must be 30 characters or less');
         return;
       }
       if (country !== undefined && (typeof country !== 'string' || country.length > 50)) {
-        res.status(400).json({ status: 'ERROR', message: 'Country must be 50 characters or less' });
+        sendError(req, res, ErrorCode.VALIDATION, 'Country must be 50 characters or less');
         return;
       }
 
@@ -323,12 +324,12 @@ export class ProfileController {
       });
     } catch (error) {
       logger.error('Update stats error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to update stats' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to update stats');
     }
   }
 
   /**
-   * GET /api/profile/:username - عرض بروفايل مستخدم آخر
+   * GET /api/profile/:username — view another user's profile
    */
   static async getProfileByUsername(req: Request, res: Response): Promise<void> {
     try {
@@ -375,7 +376,7 @@ export class ProfileController {
       });
 
       if (!user) {
-        res.status(404).json({ status: 'ERROR', message: 'User not found' });
+        sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
         return;
       }
 
@@ -424,7 +425,7 @@ export class ProfileController {
       });
     } catch (error) {
       logger.error('Get profile by username error:', error);
-      res.status(500).json({ status: 'ERROR', message: 'Failed to get profile' });
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to get profile');
     }
   }
 }

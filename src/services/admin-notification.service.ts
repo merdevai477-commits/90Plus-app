@@ -43,7 +43,7 @@ export class AdminNotificationService {
                 return;
             }
 
-            const title = `تنبيه إدارة: ${this.getPriorityLabel(params.priority)}`;
+            const title = `Moderation alert: ${this.getPriorityLabel(params.priority)}`;
             const notificationData = {
                 type: 'MODERATION_ALERT',
                 priority: params.priority,
@@ -79,7 +79,7 @@ export class AdminNotificationService {
         if (priority === 'HIGH' || priority === 'CRITICAL') {
             await this.alertAdmins({
                 priority,
-                message: `بلاغ عالي الأولوية: ${reportType} - Report ID: ${reportId}`,
+                message: `High priority report: ${reportType} - Report ID: ${reportId}`,
                 reportId,
                 metadata: {
                     reportType,
@@ -95,7 +95,7 @@ export class AdminNotificationService {
         if (reportCount >= 3) {
             await this.alertAdmins({
                 priority: 'HIGH',
-                message: `${contentType === 'reel' ? 'فيديو' : 'تعليق'} وصل إلى ${reportCount} بلاغات - ID: ${contentId}`,
+                message: `${contentType === 'reel' ? 'Reel' : 'Comment'} reached ${reportCount} reports - ID: ${contentId}`,
                 metadata: {
                     contentId,
                     contentType,
@@ -112,7 +112,7 @@ export class AdminNotificationService {
         if (strikeCount >= 8) {
             await this.alertAdmins({
                 priority: 'HIGH',
-                message: `مستخدم وصل إلى ${strikeCount} تحذيرات - User ID: ${userId}`,
+                message: `User reached ${strikeCount} strikes - User ID: ${userId}`,
                 metadata: {
                     userId,
                     strikeCount,
@@ -134,7 +134,7 @@ export class AdminNotificationService {
         try {
             await this.alertAdmins({
                 priority: 'MEDIUM',
-                message: `بلاغ جديد عن مستخدم: ${params.reportedUsername}\nالسبب: ${params.reason}`,
+                message: `New user report: ${params.reportedUsername}\nReason: ${params.reason}`,
                 reportId: params.reportId,
                 metadata: {
                     reporterUsername: params.reporterUsername,
@@ -152,14 +152,14 @@ export class AdminNotificationService {
     }
 
     /**
-     * Get priority label in Arabic
+     * Get priority label (English; admin-only audience)
      */
     private static getPriorityLabel(priority: ReportPriority): string {
         const labels: Record<ReportPriority, string> = {
-            LOW: 'أولوية منخفضة',
-            MEDIUM: 'أولوية متوسطة',
-            HIGH: 'أولوية عالية',
-            CRITICAL: 'أولوية حرجة',
+            LOW: 'Low priority',
+            MEDIUM: 'Medium priority',
+            HIGH: 'High priority',
+            CRITICAL: 'Critical priority',
         };
 
         return labels[priority] || priority;

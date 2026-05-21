@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import { bullCreateClient } from '../lib/bull-redis';
 import { logger } from '../utils/logger';
 import PushNotificationService from './push-notification.service';
+import { renderPushTemplate, readLanguageFromSettings } from './push-templates.service';
 
 const BATCH_SIZE = 100;
 
@@ -86,17 +87,20 @@ function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
                 expoPushToken: { not: null },
                 pushNotificationsConsent: true,
             },
-            select: { id: true, expoPushToken: true },
+            select: { id: true, expoPushToken: true, settings: true },
         });
 
         const payloads = users
             .filter(u => u.expoPushToken)
-            .map(u => ({
-                to: u.expoPushToken!,
-                title: '🎡 عجلة الحظ جاهزة!',
-                body: 'حظك النهارده ينتظرك، العب دلوقتي!',
-                data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
-            }));
+            .map(u => {
+                const lang = readLanguageFromSettings(u.settings);
+                return {
+                    to: u.expoPushToken!,
+                    title: renderPushTemplate('luckyWheelTitle', lang),
+                    body: renderPushTemplate('luckyWheelBody', lang),
+                    data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
+                };
+            });
 
         if (payloads.length > 0) {
             const result = await PushNotificationService.sendBulkNotifications(payloads);
@@ -240,14 +244,17 @@ async function runHourlyLuckyWheelNotifier(): Promise<void> {
             } else {
                 const users = await prisma.user.findMany({
                     where: { id: { in: batch }, expoPushToken: { not: null } },
-                    select: { id: true, expoPushToken: true },
+                    select: { id: true, expoPushToken: true, settings: true },
                 });
-                const payloads = users.filter(u => u.expoPushToken).map(u => ({
-                    to: u.expoPushToken!,
-                    title: '🎡 عجلة الحظ جاهزة!',
-                    body: 'حظك النهارده ينتظرك، العب دلوقتي قبل ما يضيع اليوم!',
-                    data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
-                }));
+                const payloads = users.filter(u => u.expoPushToken).map(u => {
+                    const lang = readLanguageFromSettings(u.settings);
+                    return {
+                        to: u.expoPushToken!,
+                        title: renderPushTemplate('luckyWheelTitle', lang),
+                        body: renderPushTemplate('luckyWheelBody', lang),
+                        data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
+                    };
+                });
                 if (payloads.length > 0) await PushNotificationService.sendBulkNotifications(payloads);
             }
         }

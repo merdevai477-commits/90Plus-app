@@ -4,6 +4,7 @@ import { StrikeService, StrikeType } from './strike.service';
 import { NotificationService } from './notification.service';
 import { ReportPriority } from '@prisma/client';
 import { r2MediaStorage } from './r2-media-storage.service';
+import { getUserLanguage, renderPushTemplate } from './push-templates.service';
 
 const CONTENT_AUTO_DELETE_THRESHOLD = 5;
 const USER_SUSPENSION_THRESHOLD = 10;
@@ -121,10 +122,11 @@ export async function autoDeleteContent(
 
             // Notify content owner
             const { enqueueNotification } = await import('../queues/notification.queue');
+            const ownerLang = await getUserLanguage(reel.userId);
             await enqueueNotification({
                 userId: reel.userId,
-                title: 'تنبيه: تم حذف فيديوك',
-                message: `تم حذف مقطعك لتلقيه بلاغات متعددة (${reason}). تحذير: استمرار المخالفات سيؤدي إلى حظر حسابك نهائياً!`,
+                title: renderPushTemplate('moderationReelDeletedTitle', ownerLang),
+                message: renderPushTemplate('moderationReelDeletedBody', ownerLang, { reason }),
                 type: 'SYSTEM',
                 data: {
                     reelId: contentId,
@@ -158,10 +160,11 @@ export async function autoDeleteContent(
 
             // Notify comment owner
             const { enqueueNotification } = await import('../queues/notification.queue');
+            const ownerLang = await getUserLanguage(comment.userId);
             await enqueueNotification({
                 userId: comment.userId,
-                title: 'تنبيه: تم حذف تعليقك',
-                message: `تم حذف تعليقك لتلقيه بلاغات متعددة (${reason}). تحذير: يرجى الالتزام بالقواعد لكي لا يتم حظر حسابك بصفة دائمة.`,
+                title: renderPushTemplate('moderationCommentDeletedTitle', ownerLang),
+                message: renderPushTemplate('moderationCommentDeletedBody', ownerLang, { reason }),
                 type: 'SYSTEM',
                 data: {
                     commentId: contentId,
@@ -195,10 +198,14 @@ export async function suspendUser(userId: string, reason: string, durationDays: 
         });
 
         // Notify user
+        const userLang = await getUserLanguage(userId);
         await NotificationService.createNotification({
             userId,
-            title: 'تم تعليق حسابك',
-            message: `تم تعليق حسابك حتى ${suspendedUntil.toLocaleDateString('ar-EG')}. السبب: ${reason}`,
+            title: renderPushTemplate('accountSuspendedTitle', userLang),
+            message: renderPushTemplate('accountSuspendedBody', userLang, {
+                until: suspendedUntil.toLocaleDateString(userLang === 'ar' ? 'ar-EG' : 'en-US'),
+                reason,
+            }),
             type: 'GENERAL',
             data: {
                 reason,
@@ -277,7 +284,11 @@ export async function processReport(reportId: string) {
 
         // Suspend user if threshold reached
         if (thresholds.userThresholdReached) {
-            await suspendUser(targetUserId, `وصلت إلى ${thresholds.userStrikeCount} تحذيرات`);
+            const targetLang = await getUserLanguage(targetUserId);
+            const reasonText = renderPushTemplate('accountSuspendedReason', targetLang, {
+                count: thresholds.userStrikeCount,
+            });
+            await suspendUser(targetUserId, reasonText);
         }
 
         // Alert admins if user is approaching suspension threshold

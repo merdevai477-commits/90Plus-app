@@ -39,20 +39,20 @@ export const NotificationItem = React.memo<NotificationItemProps>(({
   const actorName = (data as any)?.actorDisplayName || (data as any)?.actorUsername || (data as any)?.followerUsername || (data as any)?.username;
 
   const formatTime = (dateString: string) => {
-    if (!dateString) return t.notifications?.now || 'الآن';
+    if (!dateString) return t.notifications.now;
     const date = new Date(dateString);
     // Guard against Invalid Date (e.g. undefined/null createdAt from match notifications)
-    if (isNaN(date.getTime())) return t.notifications?.now || 'الآن';
+    if (isNaN(date.getTime())) return t.notifications.now;
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return t.notifications?.now || 'Now';
-    if (diffMins < 60) return (t.notifications?.minutesAgo || '{n} minutes ago').replace('{n}', String(diffMins));
-    if (diffHours < 24) return (t.notifications?.hoursAgo || '{n} hours ago').replace('{n}', String(diffHours));
-    if (diffDays < 7) return (t.notifications?.daysAgo || '{n} days ago').replace('{n}', String(diffDays));
+    if (diffMins < 1) return t.notifications.now;
+    if (diffMins < 60) return t.notifications.minutesAgo.replace('{n}', String(diffMins));
+    if (diffHours < 24) return t.notifications.hoursAgo.replace('{n}', String(diffHours));
+    if (diffDays < 7) return t.notifications.daysAgo.replace('{n}', String(diffDays));
     return date.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US');
   };
 

@@ -6,6 +6,7 @@ import { accountDeletionRateLimiter } from '../middleware/auth-rate-limit.middle
 import { validate } from '../middleware/validation.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
 
@@ -35,12 +36,12 @@ router.post('/report/:userId', requireAuth, strictLimiter, async (req: Request, 
         const { reason, additionalInfo } = req.body as { reason?: string; additionalInfo?: string };
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (!reason || reason.trim().length === 0) {
-            res.status(400).json({ status: 'ERROR', message: 'Report reason is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Report reason is required');
             return;
         }
 
@@ -50,12 +51,12 @@ router.post('/report/:userId', requireAuth, strictLimiter, async (req: Request, 
         });
 
         if (!reporter) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         if (reporter.id === targetUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot report yourself');
             return;
         }
 
@@ -65,7 +66,7 @@ router.post('/report/:userId', requireAuth, strictLimiter, async (req: Request, 
         });
 
         if (!target) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found');
             return;
         }
 
@@ -83,10 +84,8 @@ router.post('/report/:userId', requireAuth, strictLimiter, async (req: Request, 
         });
 
         if (existing) {
-            res.status(409).json({
-                status: 'ERROR',
-                message: 'تم الإبلاغ عن هذا المستخدم مسبقاً. يمكنك الإبلاغ مرة أخرى بعد 24 ساعة',
-            });
+            // E005 — frontend will localize. Keep a safe English fallback message.
+            sendError(req, res, ErrorCode.CONFLICT, 'You already reported this user. You can report again after 24 hours.');
             return;
         }
 
@@ -131,10 +130,7 @@ router.post('/report/:userId', requireAuth, strictLimiter, async (req: Request, 
         res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
     } catch (error: any) {
         logger.error('Report user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -150,7 +146,7 @@ router.post('/block/:userId', requireAuth, async (req: Request, res: Response): 
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -161,13 +157,13 @@ router.post('/block/:userId', requireAuth, async (req: Request, res: Response): 
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         // Can't block yourself
         if (currentUser.id === targetUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot block yourself' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot block yourself');
             return;
         }
 
@@ -178,7 +174,7 @@ router.post('/block/:userId', requireAuth, async (req: Request, res: Response): 
         });
 
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found');
             return;
         }
 
@@ -192,10 +188,12 @@ router.post('/block/:userId', requireAuth, async (req: Request, res: Response): 
         } catch (dbError: any) {
             // If table doesn't exist yet, return a friendly message
             if (dbError.code === '42P01') {
-                res.status(503).json({ 
-                    status: 'ERROR', 
-                    message: 'Block feature not available yet. Please run database migration.' 
-                });
+                sendError(
+                    req, res, ErrorCode.DATABASE,
+                    'Block feature is not available yet. Please run database migration.',
+                    { code: 'BLOCK_TABLE_MISSING' },
+                    503,
+                );
                 return;
             }
             throw dbError;
@@ -219,10 +217,7 @@ router.post('/block/:userId', requireAuth, async (req: Request, res: Response): 
         });
     } catch (error: any) {
         logger.error('Block user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -237,7 +232,7 @@ router.delete('/block/:userId', requireAuth, async (req: Request, res: Response)
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -248,7 +243,7 @@ router.delete('/block/:userId', requireAuth, async (req: Request, res: Response)
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -260,10 +255,12 @@ router.delete('/block/:userId', requireAuth, async (req: Request, res: Response)
             `;
         } catch (dbError: any) {
             if (dbError.code === '42P01') {
-                res.status(503).json({ 
-                    status: 'ERROR', 
-                    message: 'Block feature not available yet. Please run database migration.' 
-                });
+                sendError(
+                    req, res, ErrorCode.DATABASE,
+                    'Block feature is not available yet. Please run database migration.',
+                    { code: 'BLOCK_TABLE_MISSING' },
+                    503,
+                );
                 return;
             }
             throw dbError;
@@ -275,10 +272,7 @@ router.delete('/block/:userId', requireAuth, async (req: Request, res: Response)
         });
     } catch (error: any) {
         logger.error('Unblock user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -291,7 +285,7 @@ router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -302,7 +296,7 @@ router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -327,10 +321,12 @@ router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise
             });
         } catch (dbError: any) {
             if (dbError.code === '42P01') {
-                res.status(503).json({ 
-                    status: 'ERROR', 
-                    message: 'Block feature not available yet. Please run database migration.',
-                    data: []
+                // Block table missing — return empty list with a hint so the UI
+                // doesn't render an error state when the migration is pending.
+                res.json({
+                    status: 'SUCCESS',
+                    data: [],
+                    message: 'Block feature is not available yet.',
                 });
                 return;
             }
@@ -338,10 +334,7 @@ router.get('/blocked', requireAuth, async (req: Request, res: Response): Promise
         }
     } catch (error: any) {
         logger.error('Get blocked users error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -356,7 +349,7 @@ router.get('/block/:userId/status', requireAuth, async (req: Request, res: Respo
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
@@ -367,7 +360,7 @@ router.get('/block/:userId/status', requireAuth, async (req: Request, res: Respo
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
@@ -397,10 +390,7 @@ router.get('/block/:userId/status', requireAuth, async (req: Request, res: Respo
         }
     } catch (error: any) {
         logger.error('Check block status error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -429,12 +419,12 @@ router.post('/report/:userId', requireAuth, validate({
         const clerkUserId = req.auth?.userId;
 
         if (!clerkUserId) {
-            res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (!reason) {
-            res.status(400).json({ status: 'ERROR', message: 'Reason is required' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Reason is required');
             return;
         }
 
@@ -445,13 +435,13 @@ router.post('/report/:userId', requireAuth, validate({
         });
 
         if (!currentUser) {
-            res.status(404).json({ status: 'ERROR', message: 'User not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
 
         // Can't report yourself
         if (currentUser.id === targetUserId) {
-            res.status(400).json({ status: 'ERROR', message: 'Cannot report yourself' });
+            sendError(req, res, ErrorCode.VALIDATION, 'Cannot report yourself');
             return;
         }
 
@@ -462,7 +452,7 @@ router.post('/report/:userId', requireAuth, validate({
         });
 
         if (!targetUser) {
-            res.status(404).json({ status: 'ERROR', message: 'Target user not found' });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Target user not found');
             return;
         }
 
@@ -511,10 +501,7 @@ router.post('/report/:userId', requireAuth, validate({
         });
     } catch (error: any) {
         logger.error('Report user error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message || 'Internal server error',
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
@@ -556,10 +543,7 @@ router.get('/:username', async (req: Request, res: Response): Promise<void> => {
         });
         
         if (!user) {
-            res.status(404).json({
-                status: 'ERROR',
-                message: 'User not found'
-            });
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
         }
         
@@ -576,9 +560,6 @@ router.get('/:username', async (req: Request, res: Response): Promise<void> => {
         });
     } catch (error: any) {
         logger.error('Get user by username error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            message: error.message
-        });
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

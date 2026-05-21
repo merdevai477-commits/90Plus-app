@@ -15,15 +15,46 @@ import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import PushNotificationService from './push-notification.service';
+import {
+    renderPushTemplate,
+    readLanguageFromSettings,
+    type PushTemplateKey,
+} from './push-templates.service';
 
 const BATCH_SIZE = 50;
 
-// Cooldown durations (must match profile.routes.ts)
+/**
+ * Cooldown durations + the matching i18n template keys. Templates are
+ * resolved per-user at send time so each user sees the copy in their
+ * own language.
+ *
+ * Must keep day counts in sync with `profile.routes.ts`.
+ */
 const COOLDOWNS = {
-    avatar: { days: 7, field: 'lastAvatarChange' as const, title: '📸 غيّر صورتك!', body: 'الكولداون خلص — تقدر تغير صورة بروفايلك دلوقتي!' },
-    cover: { days: 15, field: 'lastCoverChange' as const, title: '🖼️ غيّر الغلاف!', body: 'تقدر تغير صورة الغلاف دلوقتي. اختار صورة جديدة!' },
-    reel: { days: 1, field: 'lastReelUpload' as const, title: '🎬 ارفع فيديو جديد!', body: 'تقدر ترفع فيديو جديد دلوقتي. شارك موهبتك مع الجمهور!' },
-    username: { days: 15, field: 'lastUsernameChange' as const, title: '✏️ غيّر اسمك!', body: 'تقدر تغير اسم المستخدم دلوقتي.' },
+    avatar: {
+        days: 7,
+        field: 'lastAvatarChange' as const,
+        titleKey: 'cooldownAvatarTitle' as PushTemplateKey,
+        bodyKey: 'cooldownAvatarBody' as PushTemplateKey,
+    },
+    cover: {
+        days: 15,
+        field: 'lastCoverChange' as const,
+        titleKey: 'cooldownCoverTitle' as PushTemplateKey,
+        bodyKey: 'cooldownCoverBody' as PushTemplateKey,
+    },
+    reel: {
+        days: 1,
+        field: 'lastReelUpload' as const,
+        titleKey: 'cooldownReelTitle' as PushTemplateKey,
+        bodyKey: 'cooldownReelBody' as PushTemplateKey,
+    },
+    username: {
+        days: 15,
+        field: 'lastUsernameChange' as const,
+        titleKey: 'cooldownUsernameTitle' as PushTemplateKey,
+        bodyKey: 'cooldownUsernameBody' as PushTemplateKey,
+    },
 };
 
 type CooldownType = keyof typeof COOLDOWNS;
@@ -31,7 +62,7 @@ type CooldownType = keyof typeof COOLDOWNS;
 /**
  * Find users whose cooldown expired within the last hour (± 5 min buffer).
  */
-async function getUsersWithExpiredCooldown(type: CooldownType): Promise<Array<{ id: string; expoPushToken: string }>> {
+async function getUsersWithExpiredCooldown(type: CooldownType): Promise<Array<{ id: string; expoPushToken: string; settings: unknown }>> {
     const config = COOLDOWNS[type];
     const cooldownMs = config.days * 24 * 60 * 60 * 1000;
     
@@ -53,10 +84,12 @@ async function getUsersWithExpiredCooldown(type: CooldownType): Promise<Array<{ 
 
     const users = await prisma.user.findMany({
         where: whereClause,
-        select: { id: true, expoPushToken: true },
+        select: { id: true, expoPushToken: true, settings: true },
     });
 
-    return users.filter(u => u.expoPushToken).map(u => ({ id: u.id, expoPushToken: u.expoPushToken! }));
+    return users
+        .filter(u => u.expoPushToken)
+        .map(u => ({ id: u.id, expoPushToken: u.expoPushToken!, settings: u.settings }));
 }
 
 /**
@@ -92,13 +125,16 @@ async function notifyCooldownExpiry(type: CooldownType): Promise<number> {
     let sent = 0;
     for (let i = 0; i < eligibleUsers.length; i += BATCH_SIZE) {
         const batch = eligibleUsers.slice(i, i + BATCH_SIZE);
-        const payloads = batch.map(u => ({
-            to: u.expoPushToken,
-            title: config.title,
-            body: config.body,
-            data: { type: 'COOLDOWN_EXPIRED', cooldownType: type, screen: '/(tabs)/profile' },
-            channelId: 'general',
-        }));
+        const payloads = batch.map(u => {
+            const lang = readLanguageFromSettings(u.settings);
+            return {
+                to: u.expoPushToken,
+                title: renderPushTemplate(config.titleKey, lang),
+                body: renderPushTemplate(config.bodyKey, lang),
+                data: { type: 'COOLDOWN_EXPIRED', cooldownType: type, screen: '/(tabs)/profile' },
+                channelId: 'general',
+            };
+        });
 
         const result = await PushNotificationService.sendBulkNotifications(payloads);
         sent += result.success;
