@@ -14,6 +14,7 @@ import { toastManager } from '../../services/toastManager';
 import { usePhotoPermission } from '../../hooks/usePhotoPermission';
 import { logger } from '../../utils/logger';
 import { useReelDraft } from '../../hooks/useReelDraft';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface ReelUploadModalProps {
     visible: boolean;
@@ -38,6 +39,7 @@ export default function ReelUploadModal({
     uploadLocked = false,
 }: ReelUploadModalProps) {
     const { isSignedIn } = useAuth();
+    const { t } = useLanguage();
     const [videoAsset, setVideoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [caption, setCaption] = useState('');
     const [isUploading, setIsUploading] = useState(false);
@@ -52,25 +54,23 @@ export default function ReelUploadModal({
         width: `${uploadProgress.value}%`,
     }));
 
-    // استعادة المسودة عند فتح المودال
+    // Restore draft when modal opens
     useEffect(() => {
         if (visible && hasDraft && draft && !videoAsset) {
             Alert.alert(
-                '📝 مسودة محفوظة',
-                'وجدنا مسودة محفوظة من قبل. هل تريد استعادتها؟',
+                t.reels.uploadDraftTitle,
+                t.reels.uploadDraftMessage,
                 [
                     {
-                        text: 'تجاهل',
+                        text: t.reels.uploadDraftDiscard,
                         style: 'destructive',
                         onPress: () => clearDraft(),
                     },
                     {
-                        text: 'استعادة',
+                        text: t.reels.uploadDraftRestore,
                         onPress: () => {
                             setCaption(draft.caption);
-                            // ملاحظة: لا يمكن استعادة الفيديو نفسه (URI قد يكون منتهياً)
-                            // لكن نستعيد الـ caption والـ hashtags
-                            toastManager.showInfo('تم استعادة المسودة', 'يرجى اختيار الفيديو مجدداً');
+                            toastManager.showInfo(t.reels.uploadDraftRestoredTitle, t.reels.uploadDraftRestoredDetail);
                         },
                     },
                 ]
@@ -108,8 +108,8 @@ export default function ReelUploadModal({
         if (!canUploadVideo) {
             onClose();
             toastManager.showWarning(
-                'أكمل بروفايلك أولاً',
-                `يجب إكمال 3 خطوات على الأقل لرفع الفيديوهات:\n\n• ${missingRequiredSteps.join('\n• ')}`
+                t.reels.uploadProfileIncomplete,
+                (t.reels.uploadProfileIncompleteDetail as string).replace('{steps}', missingRequiredSteps.join('\n• '))
             );
         }
     }, [visible, isSignedIn, canUploadVideo, missingRequiredSteps, onClose]);
@@ -125,8 +125,8 @@ export default function ReelUploadModal({
     const pickVideo = async () => {
         if (uploadLocked) {
             toastManager.showWarning(
-                'جاري رفع فيديو',
-                'انتظر حتى يكتمل الرفع الحالي أو يظهر خطأ، ثم يمكنك رفع فيديو جديد.'
+                t.reels.uploadLockedToast,
+                t.reels.uploadLockedToastDetail
             );
             return;
         }
@@ -136,8 +136,8 @@ export default function ReelUploadModal({
         // Informative hint for iOS "Limited" access (user can still pick, but may not see all items).
         if (permissionState.library === 'limited') {
             toastManager.showInfo(
-                'وصول محدود للمعرض',
-                'يمكنك اختيار فيديو، لكن قد لا تظهر كل العناصر. يمكنك توسيع الوصول من الإعدادات.'
+                t.reels.uploadLimitedAccess,
+                t.reels.uploadLimitedAccessDetail
             );
         }
 
@@ -165,8 +165,8 @@ export default function ReelUploadModal({
             const MAX_FILE_SIZE_MB = 50;
             if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
                 toastManager.showWarning(
-                    'حجم الفيديو كبير جداً',
-                    `الحد الأقصى لحجم الفيديو ${MAX_FILE_SIZE_MB} ميجابايت. حاول اختيار فيديو أصغر.`
+                    t.reels.uploadFileTooLarge,
+                    (t.reels.uploadFileTooLargeDetail as string).replace('{max}', String(MAX_FILE_SIZE_MB))
                 );
                 return;
             }
@@ -177,8 +177,8 @@ export default function ReelUploadModal({
                 // In Expo Go, we can't extract duration - allow upload anyway
                 // Show warning but don't block
                 toastManager.showWarning(
-                    'تنبيه',
-                    'لا يمكن التحقق من مدة الفيديو في Expo Go. تأكد أن الفيديو بين 5-60 ثانية.'
+                    t.reels.uploadDurationWarning,
+                    t.reels.uploadDurationWarningDetail
                 );
                 setVideoAsset(asset);
                 return;
@@ -186,16 +186,16 @@ export default function ReelUploadModal({
 
             if (duration < 5) {
                 toastManager.showWarning(
-                    'فيديو قصير جداً',
-                    'يجب أن تكون مدة الفيديو 5 ثوانٍ على الأقل.'
+                    t.reels.uploadTooShort,
+                    t.reels.uploadTooShortDetail
                 );
                 return;
             }
 
             if (duration > 60) {
                 toastManager.showWarning(
-                    'فيديو طويل جداً',
-                    'يجب أن لا تتجاوز مدة الفيديو 60 ثانية.'
+                    t.reels.uploadTooLong,
+                    t.reels.uploadTooLongDetail
                 );
                 return;
             }
@@ -213,7 +213,22 @@ export default function ReelUploadModal({
     const handleUpload = async () => {
         if (!videoAsset) return;
         if (uploadLocked) {
-            toastManager.showWarning('جاري رفع فيديو', 'انتظر حتى يكتمل الرفع الحالي.');
+            toastManager.showWarning(t.reels.uploadLockedToast, t.reels.uploadLockedPublishToast);
+            return;
+        }
+
+        // Client-side hashtag validation (backend is source of truth)
+        const hashtagMatches = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
+        if (hashtagMatches.length > 10) {
+            toastManager.showWarning(t.reels.uploadHashtagTooMany, t.reels.uploadHashtagTooManyDetail);
+            return;
+        }
+        const invalidHashtag = hashtagMatches.find((tag: string) => {
+            const clean = tag.replace('#', '');
+            return clean.length < 2 || clean.length > 30;
+        });
+        if (invalidHashtag) {
+            toastManager.showWarning(t.reels.uploadHashtagLength, t.reels.uploadHashtagLengthDetail);
             return;
         }
 
@@ -250,7 +265,7 @@ export default function ReelUploadModal({
             // ✅ FIX: Do NOT call onUpload on error — this was creating ghost videos
             // that appear as perpetually uploading. Just show error and reset state.
             logger.error('[ReelUploadModal] Upload preparation failed:', error);
-            toastManager.showError('فشل الرفع', 'حدث خطأ أثناء تحضير الفيديو. حاول مرة أخرى.');
+            toastManager.showError(t.reels.uploadFailed, t.reels.uploadFailedDetail);
             setIsUploading(false);
             setUploadStage('idle');
             uploadProgress.value = 0;
@@ -261,10 +276,10 @@ export default function ReelUploadModal({
 
     const getUploadStatusText = () => {
         switch (uploadStage) {
-            case 'preparing': return 'جاري التحضير...';
-            case 'uploading': return 'جاري الرفع...';
-            case 'done': return 'تم! ✓';
-            default: return 'نشر الآن';
+            case 'preparing': return t.reels.uploadPreparing;
+            case 'uploading': return t.reels.uploadUploading;
+            case 'done': return t.reels.uploadDone;
+            default: return t.reels.uploadPublishNow;
         }
     };
 
@@ -280,7 +295,7 @@ export default function ReelUploadModal({
 
                 <View style={styles.content}>
                     <View style={styles.header}>
-                        <Text style={styles.title}>رفع ريلز جديد 🎥</Text>
+                        <Text style={styles.title}>{t.reels.uploadTitle}</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                             <Ionicons name="close" size={24} color="#FFF" />
                         </TouchableOpacity>
@@ -290,7 +305,7 @@ export default function ReelUploadModal({
                         <View style={styles.lockedBanner}>
                             <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
                             <Text style={styles.lockedBannerText}>
-                                يتم رفع فيديو حالياً — لن يُقبل فيديو جديد حتى يكتمل الرفع أو يفشل.
+                                {t.reels.uploadLockedBanner}
                             </Text>
                         </View>
                     )}
@@ -310,14 +325,14 @@ export default function ReelUploadModal({
                                     contentFit="cover"
                                 />
                                 <View style={styles.changeOverlay}>
-                                    <Text style={styles.changeText}>تغيير الفيديو</Text>
+                                    <Text style={styles.changeText}>{t.reels.uploadChangeVideo}</Text>
                                 </View>
                             </View>
                         ) : (
                             <View style={styles.placeholderContainer}>
                                 <Ionicons name="cloud-upload-outline" size={48} color={ProfileTheme.colors.neonGreen} />
-                                <Text style={styles.uploadText}>اختر فيديو من الاستوديو</Text>
-                                <Text style={styles.uploadSubText}>(5-60 ثانية)</Text>
+                                <Text style={styles.uploadText}>{t.reels.uploadPickVideo}</Text>
+                                <Text style={styles.uploadSubText}>{t.reels.uploadDurationHint}</Text>
                             </View>
                         )}
                     </TouchableOpacity>
@@ -325,7 +340,7 @@ export default function ReelUploadModal({
                     {/* Meta Fields */}
                     <TextInput
                         style={[styles.input, uploadLocked && styles.inputDisabled]}
-                        placeholder="اكتب وصفاً للفيديو... #هاشتاج"
+                        placeholder={t.reels.uploadCaptionPlaceholder}
                         placeholderTextColor="#aaa"
                         value={caption}
                         onChangeText={setCaption}
@@ -359,15 +374,15 @@ export default function ReelUploadModal({
                                     <Text style={styles.submitText}>{getUploadStatusText()}</Text>
                                 </View>
                             ) : !isOnline ? (
-                                <Text style={styles.submitText}>📵 لا يوجد اتصال</Text>
+                                <Text style={styles.submitText}>{t.reels.uploadNoConnection}</Text>
                             ) : (
-                                <Text style={styles.submitText}>نشر الآن</Text>
+                                <Text style={styles.submitText}>{t.reels.uploadPublishNow}</Text>
                             )}
                         </LinearGradient>
                     </TouchableOpacity>
                     {!isOnline && (
                         <Text style={{ color: '#f87171', textAlign: 'center', marginTop: 8, fontSize: 12 }}>
-                            ⚠️ المسودة محفوظة. ستتمكن من الرفع عند عودة الاتصال.
+                            {t.reels.uploadOfflineHint}
                         </Text>
                     )}
                 </View>

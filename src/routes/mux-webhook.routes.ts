@@ -17,6 +17,7 @@ import { NotificationService } from '../services/notification.service';
 import { enqueueNotification } from '../queues/notification.queue';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 
 
 const router = Router();
@@ -206,10 +207,11 @@ async function handleAssetReady(event: any): Promise<void> {
   logger.info(`[MuxWebhook] Reel ${reel.id} is READY — playbackId: ${playbackId}`);
 
   // 1. Notify the uploader that their video is ready
+  const uploaderLang = await getUserLanguage(reel.userId);
   await NotificationService.createNotification({
     userId: reel.userId,
-    title: '✅ فيديوهك جاهز!',
-    message: 'تم معالجة فيديوهك بنجاح وهو متاح الآن للمشاهدة',
+    title: renderPushTemplate('videoReadyTitle', uploaderLang),
+    message: renderPushTemplate('videoReadyBody', uploaderLang),
     type: 'VIDEO_PROCESSED',
     data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'READY', muxPlaybackId: playbackId },
   });
@@ -243,15 +245,16 @@ async function handleAssetReady(event: any): Promise<void> {
       for (let i = 0; i < followers.length; i += BATCH_SIZE) {
         const batch = followers.slice(i, i + BATCH_SIZE);
         await Promise.allSettled(
-          batch.map(f =>
-            enqueueNotification({
+          batch.map(async (f) => {
+            const followerLang = await getUserLanguage(f.followerId);
+            return enqueueNotification({
               userId: f.followerId,
-              title: '🎬 فيديو جديد!',
-              message: `${uploaderName} نشر فيديو جديد — شوفه دلوقتي!`,
+              title: renderPushTemplate('newVideoFromFollowTitle', followerLang),
+              message: renderPushTemplate('newVideoFromFollowBody', followerLang, { user: uploaderName }),
               type: 'FOLLOW_ACTIVITY',
               data: { type: 'FOLLOW_ACTIVITY', reelId: reel.id, uploaderUsername: uploader.username, screen: '/(tabs)/reels' },
-            })
-          )
+            });
+          })
         );
       }
     } catch (err: any) {
@@ -291,10 +294,11 @@ async function handleAssetErrored(event: any): Promise<void> {
 
   logger.error(`[MuxWebhook] Reel ${reel.id} FAILED — errors:`, errors);
 
+  const erroredLang = await getUserLanguage(reel.userId);
   await NotificationService.createNotification({
     userId: reel.userId,
-    title: '❌ فشل رفع الفيديو',
-    message: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+    title: renderPushTemplate('videoFailedTitle', erroredLang),
+    message: renderPushTemplate('videoFailedBody', erroredLang),
     type: 'VIDEO_PROCESSED',
     data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'FAILED' },
   });

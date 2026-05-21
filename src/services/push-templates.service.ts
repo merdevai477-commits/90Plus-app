@@ -144,7 +144,10 @@ export type PushTemplateKey =
     | 'leagueMatchStartedBody'
     // Follower milestone
     | 'followerMilestoneTitle'
-    | 'followerMilestoneBody';
+    | 'followerMilestoneBody'
+    // Mux webhook: new video from followed user
+    | 'newVideoFromFollowTitle'
+    | 'newVideoFromFollowBody';
 
 type TemplateMap = Record<PushTemplateKey, string>;
 
@@ -266,6 +269,9 @@ const en: TemplateMap = {
     // Follower milestone (every {count} followers)
     followerMilestoneTitle: '🎉 New milestone!',
     followerMilestoneBody: 'You reached {count} followers!',
+    // Mux webhook: new video from followed user
+    newVideoFromFollowTitle: '🎬 New video!',
+    newVideoFromFollowBody: '{user} posted a new video — check it out!',
 };
 
 
@@ -387,6 +393,9 @@ const ar: TemplateMap = {
     // إنجاز عدد المتابعين
     followerMilestoneTitle: '🎉 إنجاز جديد!',
     followerMilestoneBody: 'وصلت لـ {count} متابع!',
+    // Mux webhook: فيديو جديد من متابَع
+    newVideoFromFollowTitle: '🎬 فيديو جديد!',
+    newVideoFromFollowBody: '{user} نشر فيديو جديد — شوفه دلوقتي!',
 };
 
 const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };
