@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.28.0",
-    "appVersionSource": "remote",
+    "appVersionSource": "local",
     "requireCommit": false
   },
   "build": {
@@ -35,7 +35,6 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "channel": "production",
       "node": "22.15.0",
       "env": {
