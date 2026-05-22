@@ -1,0 +1,5 @@
+# Xcode / React Native shell scripts must use LF on EAS and macOS builders.
+ios/** text eol=lf
+*.sh text eol=lf
+.xcode.env text eol=lf
+.xcode.env.* text eol=lf

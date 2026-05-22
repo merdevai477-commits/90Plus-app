@@ -11,7 +11,7 @@
       "channel": "development",
       "node": "22.15.0",
       "ios": {
-        "image": "macos-sequoia-15.3-xcode-16.2"
+        "image": "macos-sequoia-15.6-xcode-26.2"
       },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
@@ -24,32 +24,36 @@
       "distribution": "internal",
       "channel": "preview",
       "node": "22.15.0",
+      "prebuildCommand": "prebuild --no-install --clean",
       "ios": {
-        "image": "macos-sequoia-15.3-xcode-16.2"
+        "image": "macos-sequoia-15.6-xcode-26.2"
       },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
-        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api"
+        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api",
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
       }
     },
     "production": {
       "channel": "production",
       "node": "22.15.0",
+      "prebuildCommand": "prebuild --no-install --clean",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "SENTRY_ALLOW_FAILURE": "true",
         "npm_config_ignore_scripts": "false",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
-        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api"
+        "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api",
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
       },
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
       },
       "ios": {
-        "image": "macos-sequoia-15.3-xcode-16.2",
+        "image": "macos-sequoia-15.6-xcode-26.2",
         "simulator": false,
         "buildConfiguration": "Release"
       }
@@ -60,7 +64,7 @@
       "ios": {
         "appleId": "mhmdsh1892@gmail.com",
         "ascAppId": "6758296989",
-        "appleTeamId": "BNVH5YFQXZ",
+        "appleTeamId": "337M3TRC5C",
         "sku": "90plus-ios-app"
       }
     }
