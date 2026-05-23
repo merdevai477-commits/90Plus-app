@@ -1,6 +1,8 @@
 export type QuizLanguage = 'ar' | 'en';
 export type QuizDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 export type QuizOptionKey = 'A' | 'B' | 'C' | 'D';
+export type QuizQuestionType = 'normal' | 'image' | 'guess_player' | 'logo' | 'stadium';
+export type QuizImageType = 'player' | 'team' | 'league' | 'flag' | 'venue' | null;
 export type QuizImageLayout = 'square' | 'wide';
 
 export interface QuizOptionDto {
@@ -11,12 +13,13 @@ export interface QuizOptionDto {
 export interface StoredQuizQuestion {
   id: string;
   question: string;
+  type: QuizQuestionType;
   options: QuizOptionDto[];
   correctKey: QuizOptionKey;
   difficulty: QuizDifficulty;
   imageUrl?: string | null;
   imageLayout?: QuizImageLayout;
-  imageType?: string | null;
+  imageType?: QuizImageType;
   hint?: string | null;
 }
 
@@ -24,9 +27,13 @@ export interface QuestionProgress {
   status: 'pending' | 'answered' | 'skipped';
   selectedKey?: QuizOptionKey;
   isCorrect?: boolean;
+  correctKey?: QuizOptionKey;
   hintUsed?: boolean;
+  skipped?: boolean;
   timeTaken?: number;
   xpAwarded?: number;
+  answeredAt?: Date | string;
+  skippedAt?: Date | string;
 }
 
 export interface SessionProgress {
@@ -36,6 +43,7 @@ export interface SessionProgress {
 export interface PublicQuizQuestion {
   id: string;
   question: string;
+  type: QuizQuestionType;
   options: QuizOptionDto[];
   difficulty: QuizDifficulty;
   imageUrl?: string | null;
@@ -45,4 +53,5 @@ export interface PublicQuizQuestion {
   selectedKey?: QuizOptionKey;
   isCorrect?: boolean;
   hintUsed?: boolean;
+  hint?: string | null;
 }

@@ -48,6 +48,7 @@ import { AuthService } from '../../src/services/authService';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { useScreenFont } from '../../utils/fontSetup';
 import { useTranslation } from '../../src/i18n';
+import { QuizApiService } from '../../services/quizApi.service';
 
 const API_URL = getApiUrl();
 
@@ -248,6 +249,17 @@ export default function HomeScreen() {
         }
     }, [getToken, isSignedIn]);
 
+    const preloadQuizData = useCallback(async () => {
+        try {
+            const token = await getToken();
+            if (!token || !isSignedIn) return;
+            QuizApiService.fetchDaily(token, 'ar').catch(() => {});
+            QuizApiService.fetchDaily(token, 'en').catch(() => {});
+        } catch {
+            // silent
+        }
+    }, [getToken, isSignedIn]);
+
     // ── Fetch subscribed fixture IDs (pinned matches) ─────────────────────────
     const fetchSubscribedIds = useCallback(async () => {
         try {
@@ -340,6 +352,7 @@ export default function HomeScreen() {
     const fetchHomeDataRef = useRef(fetchHomeData);
     const fetchRankingsDataRef = useRef(fetchRankingsData);
     const preloadProfileDataRef = useRef(preloadProfileData);
+    const preloadQuizDataRef = useRef(preloadQuizData);
     const fetchSubscribedIdsRef = useRef(fetchSubscribedIds);
     const getTokenRef = useRef(getToken);
     const setUserModeRef = useRef(setUserMode);
@@ -365,6 +378,7 @@ export default function HomeScreen() {
         fetchHomeData,
         fetchRankingsData,
         preloadProfileData,
+        preloadQuizData,
         fetchSubscribedIds,
         getToken,
         setUserMode,
@@ -433,6 +447,7 @@ export default function HomeScreen() {
                     await Promise.all(criticalPromises);
                     Promise.all(secondaryPromises).catch(() => {});
                     preloadProfileDataRef.current().catch(() => {});
+                    preloadQuizDataRef.current().catch(() => {});
                 } catch (error) {
                     logger.error('Error loading home screen data:', error);
                 } finally {

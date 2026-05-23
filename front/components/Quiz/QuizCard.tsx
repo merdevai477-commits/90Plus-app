@@ -35,6 +35,8 @@ const CORRECT_BG = 'rgba(34, 197, 94, 0.18)';
 const CORRECT_BORDER = 'rgba(34, 197, 94, 0.75)';
 const WRONG_BG = 'rgba(239, 68, 68, 0.18)';
 const WRONG_BORDER = 'rgba(239, 68, 68, 0.75)';
+const PURPLE_BG = 'rgba(168, 85, 247, 0.18)';
+const PURPLE_BORDER = 'rgba(168, 85, 247, 0.75)';
 
 interface OptionRowProps {
   opt: QuizOption;
@@ -43,6 +45,7 @@ interface OptionRowProps {
   answerRevealed: boolean;
   isCorrectOption: boolean;
   isWrongSelection: boolean;
+  userGotItWrong: boolean;
   disabled: boolean;
 }
 
@@ -53,17 +56,20 @@ function OptionRow({
   answerRevealed,
   isCorrectOption,
   isWrongSelection,
+  userGotItWrong,
   disabled,
 }: OptionRowProps) {
   const showCorrect = answerRevealed && isCorrectOption;
   const showWrong = answerRevealed && isWrongSelection;
+  const showPurple = showCorrect && userGotItWrong;
 
   return (
     <TouchableOpacity
       style={[
         optStyles.row,
         isSelected && !answerRevealed && optStyles.rowSelected,
-        showCorrect && optStyles.rowCorrect,
+        showCorrect && !showPurple && optStyles.rowCorrect,
+        showPurple && optStyles.rowPurple,
         showWrong && optStyles.rowWrong,
         disabled && !answerRevealed && { opacity: 0.65 },
       ]}
@@ -78,7 +84,8 @@ function OptionRow({
         style={[
           optStyles.letterCircle,
           isSelected && !answerRevealed && optStyles.letterCircleSelected,
-          showCorrect && optStyles.letterCircleCorrect,
+          showCorrect && !showPurple && optStyles.letterCircleCorrect,
+          showPurple && optStyles.letterCirclePurple,
           showWrong && optStyles.letterCircleWrong,
         ]}
       >
@@ -113,7 +120,7 @@ function OptionRow({
           <CircleCheck size={13} color="#FFF" strokeWidth={3} />
         </View>
       ) : showCorrect ? (
-        <CircleCheck size={20} color="#22C55E" strokeWidth={2.5} />
+        <CircleCheck size={20} color={showPurple ? '#A855F7' : '#22C55E'} strokeWidth={2.5} />
       ) : showWrong ? (
         <Text style={optStyles.wrongMark}>✕</Text>
       ) : (
@@ -144,6 +151,10 @@ const optStyles = StyleSheet.create({
     borderColor: CORRECT_BORDER,
     backgroundColor: CORRECT_BG,
   },
+  rowPurple: {
+    borderColor: PURPLE_BORDER,
+    backgroundColor: PURPLE_BG,
+  },
   rowWrong: {
     borderColor: WRONG_BORDER,
     backgroundColor: WRONG_BG,
@@ -165,6 +176,10 @@ const optStyles = StyleSheet.create({
   letterCircleCorrect: {
     backgroundColor: '#22C55E',
     borderColor: '#4ADE80',
+  },
+  letterCirclePurple: {
+    backgroundColor: '#9333EA',
+    borderColor: '#A855F7',
   },
   letterCircleWrong: {
     backgroundColor: '#EF4444',
@@ -273,6 +288,7 @@ export function QuizCard({
               selectedKey === opt.key &&
               isCorrect === false
             }
+            userGotItWrong={isCorrect === false}
             disabled={disableOptions}
           />
         ))}

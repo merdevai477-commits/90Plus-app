@@ -1,0 +1,2102 @@
+{
+  "info": {
+    "name": "90Plus API",
+    "description": "Complete API collection for 90Plus football social media platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "90plus-api-collection",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{clerk_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://90plus-app-production-1808.up.railway.app/api",
+      "type": "string"
+    },
+    {
+      "key": "clerk_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "test_username",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated by 'Sync User with Backend' test script. Set manually if running requests out of order."
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Check API health status, database connection, and system metrics"
+          },
+          "response": []
+        },
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}",
+              "host": [
+                "{{base_url}}"
+              ]
+            },
+            "description": "Get API information and available endpoints"
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            },
+            "description": "Get API performance metrics"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Daily Spin",
+      "item": [
+        {
+          "name": "Get Spin Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/daily-spin/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-spin",
+                "status"
+              ]
+            },
+            "description": "Check if user can spin today and get spin history"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip assertions if no auth token is configured",
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has SUCCESS status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains spin data\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property(\"canSpin\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"currentCoins\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"prizes\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spin Wheel",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/daily-spin/spin",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-spin",
+                "spin"
+              ]
+            },
+            "description": "Spin the daily wheel and get prize"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip assertions if no auth token is configured",
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.test(\"Status code is 200 or 429\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 429]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Response has SUCCESS status\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "    });",
+                  "    ",
+                  "    pm.test(\"Response contains prize data\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.data).to.have.property(\"prize\");",
+                  "        pm.expect(jsonData.data).to.have.property(\"newBalance\");",
+                  "    });",
+                  "} else if (pm.response.code === 429) {",
+                  "    pm.test(\"Cooldown error returned\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.code).to.eql(\"SPIN_COOLDOWN\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Spin History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/daily-spin/history?limit=30",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "daily-spin",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get user's spin history"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Sync User with Backend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clerk/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clerk",
+                "me"
+              ]
+            },
+            "description": "Sync authenticated user with backend database. Returns full user profile including xp, coverImage, and consecutiveLoginDays."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has SUCCESS status', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.status).to.eql('SUCCESS');",
+                  "});",
+                  "",
+                  "pm.test('Response contains user object', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.data).to.have.property('user');",
+                  "    pm.expect(j.data.user).to.have.property('id');",
+                  "    pm.expect(j.data.user).to.have.property('username');",
+                  "});",
+                  "",
+                  "pm.test('User has xp field (non-negative integer)', function () {",
+                  "    var user = pm.response.json().data.user;",
+                  "    pm.expect(user).to.have.property('xp');",
+                  "    pm.expect(user.xp).to.be.a('number');",
+                  "    pm.expect(user.xp).to.be.at.least(0);",
+                  "});",
+                  "",
+                  "pm.test('User has coverImage field (string or null)', function () {",
+                  "    var user = pm.response.json().data.user;",
+                  "    pm.expect(user).to.have.property('coverImage');",
+                  "    var v = user.coverImage;",
+                  "    pm.expect(v === null || typeof v === 'string').to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('User has consecutiveLoginDays field (non-negative integer)', function () {",
+                  "    var user = pm.response.json().data.user;",
+                  "    pm.expect(user).to.have.property('consecutiveLoginDays');",
+                  "    pm.expect(user.consecutiveLoginDays).to.be.a('number');",
+                  "    pm.expect(user.consecutiveLoginDays).to.be.at.least(0);",
+                  "});",
+                  "",
+                  "// Save username for downstream requests",
+                  "var username = pm.response.json().data.user.username;",
+                  "if (username) pm.collectionVariables.set('test_username', username);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Profile by Username",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clerk/user/{{test_username}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clerk",
+                "user",
+                "{{test_username}}"
+              ]
+            },
+            "description": "Get public profile by username. Now returns xp, coverImage, and consecutiveLoginDays (added in diff to clerk-user.routes.ts)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.test('Status code is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has SUCCESS status', function () {",
+                  "        pm.expect(pm.response.json().status).to.eql('SUCCESS');",
+                  "    });",
+                  "",
+                  "    pm.test('Profile has core identity fields', function () {",
+                  "        var d = pm.response.json().data;",
+                  "        pm.expect(d).to.have.property('id');",
+                  "        pm.expect(d).to.have.property('username');",
+                  "        pm.expect(d).to.have.property('displayName');",
+                  "    });",
+                  "",
+                  "    pm.test('Profile has xp field (non-negative integer) — new field', function () {",
+                  "        var d = pm.response.json().data;",
+                  "        pm.expect(d).to.have.property('xp');",
+                  "        pm.expect(d.xp).to.be.a('number');",
+                  "        pm.expect(d.xp).to.be.at.least(0);",
+                  "    });",
+                  "",
+                  "    pm.test('Profile has coverImage field (string or null) — new field', function () {",
+                  "        var d = pm.response.json().data;",
+                  "        pm.expect(d).to.have.property('coverImage');",
+                  "        var v = d.coverImage;",
+                  "        pm.expect(v === null || typeof v === 'string').to.be.true;",
+                  "    });",
+                  "",
+                  "    pm.test('Profile has consecutiveLoginDays field (non-negative integer) — new field', function () {",
+                  "        var d = pm.response.json().data;",
+                  "        pm.expect(d).to.have.property('consecutiveLoginDays');",
+                  "        pm.expect(d.consecutiveLoginDays).to.be.a('number');",
+                  "        pm.expect(d.consecutiveLoginDays).to.be.at.least(0);",
+                  "    });",
+                  "",
+                  "    pm.test('Profile has follower/following counts', function () {",
+                  "        var d = pm.response.json().data;",
+                  "        pm.expect(d).to.have.property('_count');",
+                  "        pm.expect(d._count).to.have.property('followers');",
+                  "        pm.expect(d._count).to.have.property('following');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clerk/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clerk",
+                "stats"
+              ]
+            },
+            "description": "Get user statistics (followers, following, reels)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reels",
+      "item": [
+        {
+          "name": "Get Reels Feed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reels/feed?limit=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                "feed"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get paginated reels feed"
+          },
+          "response": []
+        },
+        {
+          "name": "View Reel",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reels/:id/view",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                ":id",
+                "view"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Increment view count for a reel"
+          },
+          "response": []
+        },
+        {
+          "name": "Like Reel",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reels/:id/like",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                ":id",
+                "like"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Like a reel"
+          },
+          "response": []
+        },
+        {
+          "name": "Unlike Reel",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reels/:id/like",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                ":id",
+                "like"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Unlike a reel"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Reel Comments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reels/:id/comments?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                ":id",
+                "comments"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Get comments for a reel"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Great video!\",\n  \"parentId\": null,\n  \"mentions\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/reels/:id/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                ":id",
+                "comments"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Add a comment to a reel"
+          },
+          "response": []
+        },
+        {
+          "name": "Retry Failed Reel",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reels/:id/retry",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reels",
+                ":id",
+                "retry"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Retry Mux processing for a failed reel"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Upload",
+      "item": [
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload/avatar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "upload",
+                "avatar"
+              ]
+            },
+            "description": "Upload user avatar image"
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Cover",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload/cover",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "upload",
+                "cover"
+              ]
+            },
+            "description": "Upload user cover image"
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Reel",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "video",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "thumbnail",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true
+                },
+                {
+                  "key": "caption",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "hashtags",
+                  "value": "[]",
+                  "type": "text"
+                },
+                {
+                  "key": "mentions",
+                  "value": "[]",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload/reel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "upload",
+                "reel"
+              ]
+            },
+            "description": "Upload a video reel"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Get user notifications with pagination"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/unread-count",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "Get count of unread notifications"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/:id/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                ":id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Mark a notification as read"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/read-all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "read-all"
+              ]
+            },
+            "description": "Mark all notifications as read"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Delete a notification"
+          },
+          "response": []
+        },
+        {
+          "name": "Clear All Notifications",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/clear-all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "clear-all"
+              ]
+            },
+            "description": "Delete all notifications"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notification Preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/preferences",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "preferences"
+              ]
+            },
+            "description": "Get notification preferences"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Notification Preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matchGoals\": true,\n  \"matchStart\": true,\n  \"socialLike\": true,\n  \"socialComment\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notifications/preferences",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "preferences"
+              ]
+            },
+            "description": "Update notification preferences"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Matches",
+      "item": [
+        {
+          "name": "Get Live Fixtures",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/football/fixtures/live",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "football",
+                "fixtures",
+                "live"
+              ]
+            },
+            "description": "Get live football fixtures"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Fixtures by Date",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/football/fixtures?date=2024-01-01",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "football",
+                "fixtures"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2024-01-01"
+                }
+              ]
+            },
+            "description": "Get fixtures for a specific date"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Predictions",
+      "item": [
+        {
+          "name": "Get Remaining Predictions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/remaining",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions",
+                "remaining"
+              ]
+            },
+            "description": "Get remaining daily predictions for user"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Predictions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/user",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions",
+                "user"
+              ]
+            },
+            "description": "Get user's predictions"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Prediction (Win/Draw/Lose)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"apiMatchId\": 123456,\n  \"predictionType\": \"home\",\n  \"homeTeam\": \"Team A\",\n  \"awayTeam\": \"Team B\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predictions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions"
+              ]
+            },
+            "description": "Create a match prediction (home/draw/away)"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Score Prediction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matchId\": 123456,\n  \"homeScore\": 2,\n  \"awayScore\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predictions/submit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions",
+                "submit"
+              ]
+            },
+            "description": "Submit a score prediction for the rank page"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Prediction Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions",
+                "stats"
+              ]
+            },
+            "description": "Get prediction statistics (correct, incorrect, accuracy)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Predictions Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions/leaderboard?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions",
+                "leaderboard"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get top predictors leaderboard"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Coins",
+      "item": [
+        {
+          "name": "Get Coin Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/coins/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "coins",
+                "balance"
+              ]
+            },
+            "description": "Get user's coin balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Coins",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5,\n  \"reason\": \"quiz_correct\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/coins/add",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "coins",
+                "add"
+              ]
+            },
+            "description": "Add coins to user's balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Subtract Coins",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10,\n  \"reason\": \"hint_used\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/coins/subtract",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "coins",
+                "subtract"
+              ]
+            },
+            "description": "Subtract coins from user's balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Coins",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/coins/sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "coins",
+                "sync"
+              ]
+            },
+            "description": "Sync coins from backend (manual sync)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "me"
+              ]
+            },
+            "description": "Get current user's full profile (cached 2min per user)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has SUCCESS status', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.status).to.eql('SUCCESS');",
+                  "});",
+                  "pm.test('Response contains user data', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.data).to.have.property('id');",
+                  "    pm.expect(j.data).to.have.property('username');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile Completion",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/completion",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "completion"
+              ]
+            },
+            "description": "Get profile completion status"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has completion data', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j).to.have.property('completionPercentage');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/analytics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "analytics"
+              ]
+            },
+            "description": "Get current user's analytics — views, followers, likes, reels (cached 2min)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has SUCCESS status', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.status).to.eql('SUCCESS');",
+                  "});",
+                  "pm.test('Analytics data has required fields', function () {",
+                  "    var d = pm.response.json().data;",
+                  "    pm.expect(d).to.have.property('profileViews');",
+                  "    pm.expect(d).to.have.property('followersCount');",
+                  "    pm.expect(d).to.have.property('reelsCount');",
+                  "    pm.expect(d).to.have.property('totalLikes');",
+                  "    pm.expect(d).to.have.property('totalViews');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile Cooldowns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/cooldowns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "cooldowns"
+              ]
+            },
+            "description": "Get remaining cooldowns for avatar (7d), cover (15d), username (15d), reel upload (1d), and delete limits (cached 1min)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has SUCCESS status', function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.status).to.eql('SUCCESS');",
+                  "});",
+                  "pm.test('Cooldowns data has all sections', function () {",
+                  "    var d = pm.response.json().data;",
+                  "    pm.expect(d).to.have.property('avatar');",
+                  "    pm.expect(d).to.have.property('cover');",
+                  "    pm.expect(d).to.have.property('username');",
+                  "    pm.expect(d).to.have.property('reelUpload');",
+                  "    pm.expect(d).to.have.property('reelDelete');",
+                  "});",
+                  "pm.test('Each cooldown has canChange field', function () {",
+                  "    var d = pm.response.json().data;",
+                  "    pm.expect(d.avatar).to.have.property('canChange');",
+                  "    pm.expect(d.cover).to.have.property('canChange');",
+                  "    pm.expect(d.username).to.have.property('canChange');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profile (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"John Doe\",\n  \"bio\": \"Football fan\",\n  \"favoriteTeam\": \"Manchester United\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "me"
+              ]
+            },
+            "description": "Update current user profile fields. Rate-limited: writeLimiter (500 req/15min prod)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401]);",
+                  "});",
+                  "pm.test('Rate-limit headers present', function () {",
+                  "    pm.expect(pm.response.headers.get('RateLimit-Limit') ||",
+                  "              pm.response.headers.get('X-RateLimit-Limit')).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Avatar",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatarUrl\": \"https://example.com/avatar.jpg\",\n  \"storagePath\": \"avatars/user123/avatar.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/avatar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "avatar"
+              ]
+            },
+            "description": "Update profile avatar. 7-day cooldown enforced. Rate-limited: writeLimiter (500 req/15min prod)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200, 400, 401, or 429 (cooldown)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 429]);",
+                  "});",
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('Cooldown response has daysRemaining', function () {",
+                  "        var j = pm.response.json();",
+                  "        var isRateLimit = j.code === 'COOLDOWN_ACTIVE' || j.status === 'ERROR';",
+                  "        pm.expect(isRateLimit).to.be.true;",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Success response has SUCCESS status', function () {",
+                  "        pm.expect(pm.response.json().status).to.eql('SUCCESS');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Cover Image",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coverUrl\": \"https://example.com/cover.jpg\",\n  \"storagePath\": \"covers/user123/cover.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/cover",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "cover"
+              ]
+            },
+            "description": "Update cover image. 15-day cooldown enforced. Rate-limited: writeLimiter (500 req/15min prod)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200, 400, 401, or 429 (cooldown)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 429]);",
+                  "});",
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('Cooldown response has COOLDOWN_ACTIVE code', function () {",
+                  "        var j = pm.response.json();",
+                  "        pm.expect(j.code).to.eql('COOLDOWN_ACTIVE');",
+                  "        pm.expect(j).to.have.property('daysRemaining');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Username",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newusername\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/username",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "username"
+              ]
+            },
+            "description": "Update username. 15-day cooldown enforced. Rate-limited: strictLimiter (50 req/15min prod — most sensitive)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200, 400, 401, 409, or 429', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401, 409, 429]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Success response has username', function () {",
+                  "        var j = pm.response.json();",
+                  "        pm.expect(j.status).to.eql('SUCCESS');",
+                  "        pm.expect(j.data).to.have.property('username');",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 409) {",
+                  "    pm.test('Conflict response for taken username', function () {",
+                  "        var j = pm.response.json();",
+                  "        pm.expect(j.status).to.eql('ERROR');",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('Cooldown or rate-limit response', function () {",
+                  "        var j = pm.response.json();",
+                  "        pm.expect(j.status).to.eql('ERROR');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Increment Profile View",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/:username/view",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                ":username",
+                "view"
+              ],
+              "variable": [
+                {
+                  "key": "username",
+                  "value": "testuser",
+                  "description": "Target profile username"
+                }
+              ]
+            },
+            "description": "Increment profile view count. Deduplicated per viewer per 5 minutes. Self-views are ignored."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Response has SUCCESS status', function () {",
+                  "        pm.expect(pm.response.json().status).to.eql('SUCCESS');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile by Username",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/profile/:username",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                ":username"
+              ],
+              "variable": [
+                {
+                  "key": "username",
+                  "value": "testuser",
+                  "description": "Target profile username"
+                }
+              ]
+            },
+            "description": "Get public profile by username. Must be last route to avoid matching /analytics, /cooldowns, etc."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () { pm.expect(true).to.be.true; });",
+                  "    return;",
+                  "}",
+                  "pm.test('Status code is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Profile has username field', function () {",
+                  "        var j = pm.response.json();",
+                  "        pm.expect(j.data || j).to.have.property('username');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quiz",
+      "item": [
+        {
+          "name": "Get Quiz Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/quiz/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "quiz",
+                "categories"
+              ]
+            },
+            "description": "Get all quiz categories"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Quiz Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/quiz/daily-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "quiz",
+                "daily-status"
+              ]
+            },
+            "description": "Get daily quiz status and availability"
+          },
+          "response": []
+        },
+        {
+          "name": "Start Quiz",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/quiz/:categoryId/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "quiz",
+                ":categoryId",
+                "start"
+              ],
+              "variable": [
+                {
+                  "key": "categoryId",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Start a quiz for a category"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Quiz",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"q1\",\n      \"answer\": \"A\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/quiz/:categoryId/submit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "quiz",
+                ":categoryId",
+                "submit"
+              ],
+              "variable": [
+                {
+                  "key": "categoryId",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Submit quiz answers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Quiz Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/quiz/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "quiz",
+                "stats"
+              ]
+            },
+            "description": "Get user's quiz statistics"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "XP & Levels",
+      "item": [
+        {
+          "name": "Get My XP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/xp/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "xp",
+                "me"
+              ]
+            },
+            "description": "Get current user's XP, level, title, progress percentage, and login streak"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip assertions if no auth token is configured",
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has SUCCESS status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains XP data\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property(\"xp\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"level\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"title\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"xpToNext\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"progressPct\");",
+                  "    pm.expect(jsonData.data).to.have.property(\"streak\");",
+                  "});",
+                  "",
+                  "pm.test(\"XP is non-negative\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.xp).to.be.at.least(0);",
+                  "});",
+                  "",
+                  "pm.test(\"Level is at least 1\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.level).to.be.at.least(1);",
+                  "});",
+                  "",
+                  "pm.test(\"Progress percentage is 0-100\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.progressPct).to.be.at.least(0);",
+                  "    pm.expect(jsonData.data.progressPct).to.be.at.most(100);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User XP (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/xp/users/:userId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "xp",
+                "users",
+                ":userId"
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "",
+                  "description": "Internal user ID"
+                }
+              ]
+            },
+            "description": "Get public XP/level data for any user by their internal ID. Cached for 5 minutes."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 or 404\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Response has SUCCESS status\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "    });",
+                  "",
+                  "    pm.test(\"Response contains public XP data\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.data).to.have.property(\"xp\");",
+                  "        pm.expect(jsonData.data).to.have.property(\"level\");",
+                  "        pm.expect(jsonData.data).to.have.property(\"title\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My XP History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/xp/me/history?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "xp",
+                "me",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Max 50"
+                }
+              ]
+            },
+            "description": "Get XP transaction history for the current user (action, amount, timestamp, metadata)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip assertions if no auth token is configured",
+                  "if (!pm.variables.get('clerk_token')) {",
+                  "    pm.test('⚠️ Skipped - No clerk_token configured', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has SUCCESS status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains transactions array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property(\"transactions\");",
+                  "    pm.expect(jsonData.data.transactions).to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"Transactions have required fields\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data.transactions.length > 0) {",
+                  "        var tx = jsonData.data.transactions[0];",
+                  "        pm.expect(tx).to.have.property(\"action\");",
+                  "        pm.expect(tx).to.have.property(\"amount\");",
+                  "        pm.expect(tx).to.have.property(\"createdAt\");",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Level Curve",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/xp/curve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "xp",
+                "curve"
+              ]
+            },
+            "description": "Get the full level curve (levels 1-50 with XP thresholds and titles). Cached for 1 hour."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has SUCCESS status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains 50 levels\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property(\"levels\");",
+                  "    pm.expect(jsonData.data.levels).to.be.an(\"array\");",
+                  "    pm.expect(jsonData.data.levels).to.have.lengthOf(50);",
+                  "});",
+                  "",
+                  "pm.test(\"Level 1 requires 0 XP\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.levels[0].level).to.eql(1);",
+                  "    pm.expect(jsonData.data.levels[0].xpRequired).to.eql(0);",
+                  "});",
+                  "",
+                  "pm.test(\"XP requirements are monotonically increasing\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var levels = jsonData.data.levels;",
+                  "    for (var i = 1; i < levels.length; i++) {",
+                  "        pm.expect(levels[i].xpRequired).to.be.above(levels[i-1].xpRequired);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test(\"Each level has a title\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    jsonData.data.levels.forEach(function(level) {",
+                  "        pm.expect(level).to.have.property(\"title\");",
+                  "        pm.expect(level.title).to.be.a(\"string\").and.not.empty;",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

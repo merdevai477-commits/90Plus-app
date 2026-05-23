@@ -9,6 +9,8 @@ import type {
   QuizLanguage,
   QuizOptionKey,
   StoredQuizQuestion,
+  QuizQuestionType,
+  QuizImageType,
 } from '../types/quiz.types';
 import { enrichQuizImages } from './quiz-image-enricher.service';
 
@@ -60,6 +62,27 @@ function normalizeDifficulty(raw: string): QuizDifficulty {
   return 'EASY';
 }
 
+function normalizeType(raw: string): QuizQuestionType {
+  const s = String(raw || '').toLowerCase();
+  if (['normal', 'image', 'guess_player', 'logo', 'stadium'].includes(s)) {
+    return s as QuizQuestionType;
+  }
+  return 'normal';
+}
+
+function normalizeImageType(raw: string | null | undefined): QuizImageType {
+  if (!raw) return null;
+  const s = String(raw).toLowerCase();
+  if (['player', 'team', 'league', 'flag', 'venue'].includes(s)) {
+    return s as QuizImageType;
+  }
+  return null;
+}
+
+function hashQuestion(q: string): string {
+  return q.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+}
+
 function parseQuestionsFromAi(
   raw: unknown,
   language: QuizLanguage,
@@ -72,10 +95,16 @@ function parseQuestionsFromAi(
       : [];
 
   const out: StoredQuizQuestion[] = [];
+  const seenHashes = new Set<string>();
+
   for (let i = 0; i < arr.length; i++) {
     const item = arr[i] as Record<string, unknown>;
     const question = String(item.question ?? '').trim();
     if (!question) continue;
+
+    const hash = hashQuestion(question);
+    if (seenHashes.has(hash)) continue; // duplicate removal
+    seenHashes.add(hash);
 
     const optionsRaw = item.options;
     const options: StoredQuizQuestion['options'] = [];
@@ -92,26 +121,35 @@ function parseQuestionsFromAi(
         }
       }
     }
-    while (options.length < 4) {
-      options.push({ key: OPTION_KEYS[options.length], text: `Option ${options.length + 1}` });
+    
+    // Only accept exactly 4 options. If not 4, this question is invalid.
+    if (options.length !== 4) continue;
+
+    let correctKey = String(item.correctKey ?? item.correct ?? '').toUpperCase() as QuizOptionKey;
+    if (!OPTION_KEYS.includes(correctKey)) correctKey = 'A';
+    
+    // Ensure correctKey actually exists in options
+    if (!options.some(o => o.key === correctKey)) {
+      correctKey = options[0].key;
     }
 
-    let correctKey = String(item.correctKey ?? item.correct ?? 'A').toUpperCase() as QuizOptionKey;
-    if (!OPTION_KEYS.includes(correctKey)) correctKey = 'A';
-
     const difficulty = normalizeDifficulty(String(item.difficulty ?? 'EASY'));
+    const type = normalizeType(String(item.type ?? 'normal'));
+    const imageType = normalizeImageType(item.imageType as string | null);
+    
     const imageLayout =
       item.imageLayout === 'wide' ? 'wide' : ('square' as const);
 
     out.push({
-      id: `daily-${packDate}-${language}-${i + 1}`,
+      id: `daily-${packDate}-${language}-${out.length + 1}`,
       question,
-      options: options.slice(0, 4),
+      type,
+      options: options,
       correctKey,
       difficulty,
       imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
       imageLayout,
-      imageType: typeof item.imageType === 'string' ? item.imageType : null,
+      imageType,
       hint: typeof item.hint === 'string' ? item.hint : null,
     });
   }
@@ -142,31 +180,29 @@ function rebalanceDifficulties(questions: StoredQuizQuestion[]): StoredQuizQuest
   }));
 }
 
-async function callOpenRouter(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
+async function attemptOpenRouterCall(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
   const client = buildClient();
-  if (!client) {
-    throw new Error('OpenRouter API key not configured');
-  }
+  if (!client) throw new Error('OpenRouter API key not configured');
 
-  const model =
-    process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
+  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
 
   const system = `You are a world football trivia writer for the 90Plus app.
-Return ONLY valid JSON (no markdown): {"questions":[...]} with exactly 20 multiple-choice questions.
-Distribution: 10 EASY, 5 MEDIUM, 5 HARD.
-Topics: global football — leagues, World Cup, UEFA, players, clubs, stadiums, records, history.
+Return ONLY valid JSON (no markdown): {"questions":[...]} with exactly 20 multiple-choice questions (MCQ).
+Distribution MUST BE EXACTLY: 10 EASY, 5 MEDIUM, 5 HARD.
+Do NOT generate duplicate questions.
 Each question object:
 - question (string, ${langLabel})
-- options: array of 4 objects {key:"A"|"B"|"C"|"D", text:string}
-- correctKey: "A"|"B"|"C"|"D"
+- type (string, strictly one of: "normal", "image", "guess_player", "logo", "stadium")
+- options: array of EXACTLY 4 objects {key:"A"|"B"|"C"|"D", text:string}
+- correctKey: "A"|"B"|"C"|"D" (must match one of the options)
 - difficulty: "EASY"|"MEDIUM"|"HARD"
-- imageType: optional "player"|"team"|"league"|"flag"|"venue" when a photo helps
-- imageLayout: "square" or "wide" (wide for stadiums)
+- imageType: optional "player"|"team"|"league"|"flag"|"venue" (crucial if type is not "normal")
+- imageLayout: "square" or "wide"
 - hint: short hint string in ${langLabel} (do not reveal the answer)
-All four options must be plausible; exactly one correct.`;
+Never generate text-input or essay questions. Exactly 20 questions.`;
 
-  const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Make questions diverse and engaging.`;
+  const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Ensure no duplicates, exactly 4 options per question, and correctKey exists.`;
 
   const completion = await client.chat.completions.create({
     model,
@@ -187,15 +223,38 @@ All four options must be plausible; exactly one correct.`;
     parsed = match ? JSON.parse(match[0]) : { questions: [] };
   }
 
-  let questions = parseQuestionsFromAi(parsed, language, packDate);
-  if (questions.length < 20) {
-    throw new Error(`AI returned ${questions.length} questions, expected 20`);
+  return parseQuestionsFromAi(parsed, language, packDate);
+}
+
+async function callOpenRouter(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
+  let attempts = 0;
+  const MAX_ATTEMPTS = 3; // 1 initial + 2 retries
+  let lastError: Error | null = null;
+
+  while (attempts < MAX_ATTEMPTS) {
+    try {
+      attempts++;
+      logger.info(`[QuizGen] Calling AI for ${packDate} (${language}) - Attempt ${attempts}`);
+      let questions = await attemptOpenRouterCall(language, packDate);
+      
+      if (questions.length < 20) {
+        throw new Error(`AI returned ${questions.length} valid unique questions, expected exactly 20.`);
+      }
+
+      questions = questions.slice(0, 20);
+      
+      if (!validateDistribution(questions)) {
+        questions = rebalanceDifficulties(questions);
+      }
+      
+      return enrichQuizImages(questions, packDate);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      logger.warn(`[QuizGen] Attempt ${attempts} failed: ${lastError.message}`);
+    }
   }
-  questions = questions.slice(0, 20);
-  if (!validateDistribution(questions)) {
-    questions = rebalanceDifficulties(questions);
-  }
-  return enrichQuizImages(questions, packDate);
+
+  throw new Error(`Failed to generate valid pack after ${MAX_ATTEMPTS} attempts. Last error: ${lastError?.message}`);
 }
 
 export async function generateDailyQuizPack(

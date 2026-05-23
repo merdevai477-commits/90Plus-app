@@ -85,6 +85,7 @@ const BottomNav = () => {
   const isMatchDetails = pathname?.includes('match-details');
   const isMatches = pathname?.includes('matches');
   const isChat = pathname?.includes('chat');
+  const isQuiz = pathname?.includes('quiz');
   const isProfileStack =
     pathname?.includes('/notifications') ||
     pathname?.includes('/settings');
@@ -97,7 +98,8 @@ const BottomNav = () => {
 
   // Chat has its own floating header + input bar; the bottom nav would
   // overlap the composer and break the keyboard-aware layout.
-  if (isChat) return null;
+  // Hide on Quiz screen as well to avoid overlapping footer actions.
+  if (isChat || isQuiz) return null;
 
   const activeTab: TabName = (() => {
     if (isMatchDetails || isMatches) return 'Leagues';

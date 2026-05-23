@@ -44,6 +44,9 @@ import { QuizHeader } from './QuizHeader';
 import { QuizProgressCard } from './QuizProgressCard';
 import { QuizCard } from './QuizCard';
 import { QuizFooterActions } from './QuizFooterActions';
+import { QuizLanguagePopup } from './QuizLanguagePopup';
+import { QuizScorePopup } from './QuizScorePopup';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type AnswerPhase = 'idle' | 'submitting' | 'revealed';
 
@@ -74,7 +77,30 @@ export default function QuizHubScreen() {
   const [seconds, setSeconds] = useState(QUIZ_TIME_LIMIT_SEC);
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState<string | null>(null);
+  
+  // Score popup states
+  const [scorePopupVisible, setScorePopupVisible] = useState(false);
+  const [finalScore, setFinalScore] = useState(0);
+  const [finalXp, setFinalXp] = useState(0);
+
   const questionStartedAt = useRef(Date.now());
+
+  // Load language from AsyncStorage -> App State -> en
+  useEffect(() => {
+    const loadQuizLanguage = async () => {
+      try {
+        const storedLang = await AsyncStorage.getItem('quiz_language');
+        if (storedLang === 'ar' || storedLang === 'en') {
+          setQuizLang(storedLang);
+        } else {
+          setQuizLang(appLanguage === 'en' ? 'en' : 'ar');
+        }
+      } catch {
+        setQuizLang(appLanguage === 'en' ? 'en' : 'ar');
+      }
+    };
+    loadQuizLanguage();
+  }, [appLanguage]);
 
   const loadDaily = useCallback(async (lang: QuizApiLanguage) => {
     setLoadingQuestions(true);
@@ -98,9 +124,9 @@ export default function QuizHubScreen() {
     }
   }, [getToken, refreshCoins, refreshXp, t.quiz.matchesPreviewFailed]);
 
-  useEffect(() => {
-    setQuizLang(appLanguage === 'en' ? 'en' : 'ar');
-  }, [appLanguage]);
+  const handleLanguageSelect = (lang: 'ar' | 'en') => {
+    setQuizLang(lang);
+  };
 
   useEffect(() => {
     loadDaily(quizLang);
@@ -142,12 +168,18 @@ export default function QuizHubScreen() {
   const goNextQuestion = useCallback(() => {
     if (!canGoNext) return;
     if (currentIndex + 1 >= questions.length) {
-      toastManager.showSuccess(t.quiz.quizCompleted, t.quiz.quizCompleted);
-      loadDaily(quizLang);
+      // Show Score Popup instead of generic toast
+      const correctAnswers = questions.filter(q => q.isCorrect).length;
+      // We don't have total XP easily available here without fetching session again, 
+      // but we can estimate or just show total XP earned for this session if we track it.
+      // For now, we will just show correct answers.
+      setFinalScore(correctAnswers);
+      setFinalXp(correctAnswers * 2); // basic estimation, could be fetched from session if needed
+      setScorePopupVisible(true);
       return;
     }
     setCurrentIndex((i) => i + 1);
-  }, [canGoNext, currentIndex, questions.length, loadDaily, quizLang, t.quiz]);
+  }, [canGoNext, currentIndex, questions]);
 
   const handleSelectOption = useCallback(
     async (key: OptionKey) => {
@@ -235,8 +267,10 @@ export default function QuizHubScreen() {
       }
       await refreshCoins();
       if (currentIndex + 1 >= questions.length) {
-        toastManager.showSuccess(t.quiz.quizCompleted, t.quiz.quizCompleted);
-        loadDaily(quizLang);
+        const correctAnswers = questions.filter(q => q.isCorrect).length;
+        setFinalScore(correctAnswers);
+        setFinalXp(correctAnswers * 2);
+        setScorePopupVisible(true);
       } else {
         setCurrentIndex((i) => i + 1);
       }
@@ -389,8 +423,21 @@ export default function QuizHubScreen() {
             answerPhase === 'revealed'
           }
           nextDisabled={!canGoNext}
+          answerRevealed={answerPhase === 'revealed'}
+          isCorrect={isCorrect}
         />
       </ScrollView>
+      <QuizLanguagePopup onSelectLanguage={handleLanguageSelect} />
+      <QuizScorePopup
+        visible={scorePopupVisible}
+        score={finalScore}
+        total={totalQuestions}
+        xpEarned={finalXp}
+        onClose={() => {
+          setScorePopupVisible(false);
+          loadDaily(quizLang);
+        }}
+      />
     </View>
   );
 }

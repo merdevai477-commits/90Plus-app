@@ -29,6 +29,8 @@ interface QuizFooterActionsProps {
   onNext: () => void;
   skipDisabled?: boolean;
   nextDisabled?: boolean;
+  answerRevealed?: boolean;
+  isCorrect?: boolean | null;
 }
 
 export function QuizFooterActions({
@@ -36,6 +38,8 @@ export function QuizFooterActions({
   onNext,
   skipDisabled = false,
   nextDisabled = false,
+  answerRevealed = false,
+  isCorrect = null,
 }: QuizFooterActionsProps) {
   const { t } = useTranslation();
 
@@ -55,22 +59,29 @@ export function QuizFooterActions({
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.nextWrap, nextDisabled && styles.nextWrapDisabled]}
-        activeOpacity={nextDisabled ? 1 : 0.9}
+        style={[
+          styles.nextWrap, 
+          (!answerRevealed || nextDisabled) && styles.nextWrapDisabled,
+          answerRevealed && isCorrect === true && { shadowColor: '#22C55E' },
+          answerRevealed && isCorrect === false && { shadowColor: '#EF4444' }
+        ]}
+        activeOpacity={(!answerRevealed || nextDisabled) ? 1 : 0.9}
         onPress={onNext}
         disabled={nextDisabled}
       >
         <LinearGradient
           colors={
-            nextDisabled
+            (!answerRevealed || nextDisabled)
               ? ['#3F3F50', '#2A2A38', '#1F1F2E']
-              : [NEON_PURPLE, ACCENT, '#7C3AED']
+              : isCorrect
+                ? ['#4ADE80', '#22C55E', '#16A34A']
+                : ['#F87171', '#EF4444', '#DC2626']
           }
           style={styles.nextBtn}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
         >
-          <Text style={[styles.nextTxt, nextDisabled && styles.nextTxtDisabled]}>
+          <Text style={[styles.nextTxt, (!answerRevealed || nextDisabled) && styles.nextTxtDisabled]}>
             {t.quiz.nextQuestion}
           </Text>
           <ArrowRight
