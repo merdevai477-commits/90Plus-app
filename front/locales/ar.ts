@@ -666,6 +666,8 @@ export const ar = {
     hintAlreadyUsedMessage: 'استخدمت تلميحاً على هذا السؤال بالفعل.',
     notEnoughCoins: 'كوينز غير كافية',
     notEnoughCoinsMessage: 'تحتاج 10 كوينز لهذا الإجراء.',
+    timesUpCoinsDeducted: 'انتهى الوقت! تم خصم 10 كوينز.',
+    timesUpNoCoinsDeducted: 'انتهى الوقت! لم يتم خصم كوينز.',
     loadingFromMatches: 'جاري تحميل صور الكويز من المباريات…',
     matchesPreviewFailed: 'تعذر تحميل صور المباريات. عرض تجريبي محلي.',
     questionsLeft: 'أسئلة متبقية',

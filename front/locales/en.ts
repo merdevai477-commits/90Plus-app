@@ -607,6 +607,8 @@ export const en = {
     hintAlreadyUsedMessage: 'You already used a hint on this question.',
     notEnoughCoins: 'Not enough coins',
     notEnoughCoinsMessage: 'You need 10 coins for this action.',
+    timesUpCoinsDeducted: "Time's up! 10 coins deducted.",
+    timesUpNoCoinsDeducted: "Time's up! No coins deducted.",
     loadingFromMatches: 'Loading quiz images from matches…',
     matchesPreviewFailed: 'Could not load match images. Using offline preview.',
     questionsLeft: 'questions left',

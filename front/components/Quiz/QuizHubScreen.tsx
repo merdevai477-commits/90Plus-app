@@ -24,8 +24,8 @@ import { toastManager } from '../../services/toastManager';
 import {
   QuizApiService,
   type QuizApiLanguage,
-  type QuizApiQuestion,
   type QuizApiOptionKey,
+  type QuizDailyPayload,
 } from '../../services/quizApi.service';
 import { SCREEN_PADDING_H } from '../../constants/tokens';
 import {
@@ -51,10 +51,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type AnswerPhase = 'idle' | 'submitting' | 'revealed';
 
+const AUTO_NEXT_MS = 5000;
+
 function mapDifficulty(d: string): 'Easy' | 'Medium' | 'Hard' {
   if (d === 'EASY') return 'Easy';
   if (d === 'HARD') return 'Hard';
   return 'Medium';
+}
+
+function patchDailyStats(
+  oldStats: QuizDailyPayload['stats'] | undefined,
+  nextStats: Partial<QuizDailyPayload['stats']> | undefined,
+): QuizDailyPayload['stats'] {
+  return {
+    correct: nextStats?.correct ?? oldStats?.correct ?? 0,
+    answered: nextStats?.answered ?? oldStats?.answered ?? 0,
+    skipped: nextStats?.skipped ?? oldStats?.skipped ?? 0,
+    timedOut: nextStats?.timedOut ?? oldStats?.timedOut ?? 0,
+    closed: nextStats?.closed ?? oldStats?.closed ?? 0,
+    xpEarned: nextStats?.xpEarned ?? oldStats?.xpEarned ?? 0,
+    completed: nextStats?.completed ?? oldStats?.completed ?? false,
+  };
 }
 
 export default function QuizHubScreen() {
@@ -63,12 +80,12 @@ export default function QuizHubScreen() {
   const appLanguage = useLanguageStore((s) => s.language);
   const { getToken } = useAuth();
   const { refreshCoins, coins, loading: coinsLoading } = useCoins();
-  const { handleXpEvents, refresh: refreshXp } = useXp();
+  const { handleXpEvents } = useXp();
 
   const [quizLang, setQuizLang] = useState<QuizApiLanguage>(
     appLanguage === 'en' ? 'en' : 'ar',
   );
-  
+
   const queryClient = useQueryClient();
 
   const { data: dailyData, isLoading: loadingQuestions, error } = useQuery({
@@ -88,11 +105,14 @@ export default function QuizHubScreen() {
     retry: (failureCount, err) => {
       if (err.message === 'RATE_LIMIT') return false;
       return failureCount < 2;
-    }
+    },
   });
 
   const questions = dailyData?.questions ?? [];
-  const safeCurrentIndex = dailyData?.currentIndex >= questions.length ? 0 : (dailyData?.currentIndex ?? 0);
+  const safeCurrentIndex =
+    dailyData?.currentIndex !== undefined && dailyData.currentIndex >= questions.length
+      ? 0
+      : (dailyData?.currentIndex ?? 0);
   const currentIndex = safeCurrentIndex;
   const [selected, setSelected] = useState<OptionKey | null>(null);
   const [answerPhase, setAnswerPhase] = useState<AnswerPhase>('idle');
@@ -101,16 +121,23 @@ export default function QuizHubScreen() {
   const [seconds, setSeconds] = useState(QUIZ_TIME_LIMIT_SEC);
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState<string | null>(null);
-  
-  // Score popup states
+
   const [scorePopupVisible, setScorePopupVisible] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   const [finalXp, setFinalXp] = useState(0);
 
   const nextIndexRef = useRef<number | null>(null);
   const questionStartedAt = useRef(Date.now());
+  const timeoutCalledRef = useRef<string | null>(null);
+  const autoNextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load language from AsyncStorage -> App State -> en
+  const clearAutoNextTimer = useCallback(() => {
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     const loadQuizLanguage = async () => {
       try {
@@ -127,6 +154,8 @@ export default function QuizHubScreen() {
     loadQuizLanguage();
   }, [appLanguage]);
 
+  useEffect(() => () => clearAutoNextTimer(), [clearAutoNextTimer]);
+
   const handleLanguageSelect = (lang: 'ar' | 'en') => {
     setQuizLang(lang);
   };
@@ -138,6 +167,8 @@ export default function QuizHubScreen() {
 
   useEffect(() => {
     if (!currentQuestion) return;
+    clearAutoNextTimer();
+    timeoutCalledRef.current = null;
     setSelected(null);
     setAnswerPhase('idle');
     setIsCorrect(null);
@@ -150,46 +181,187 @@ export default function QuizHubScreen() {
     if (currentQuestion.status === 'answered') {
       setSelected((currentQuestion.selectedKey as OptionKey) ?? null);
       setIsCorrect(currentQuestion.isCorrect ?? false);
+      setCorrectKey((currentQuestion.correctKey as OptionKey) ?? null);
+      setAnswerPhase('revealed');
+    } else if (currentQuestion.status === 'timed_out') {
+      setIsCorrect(false);
+      setCorrectKey((currentQuestion.correctKey as OptionKey) ?? null);
       setAnswerPhase('revealed');
     } else if (currentQuestion.status === 'skipped') {
       setAnswerPhase('revealed');
     }
-  }, [currentIndex, currentQuestion?.id, currentQuestion?.status]);
+  }, [currentIndex, currentQuestion?.id, currentQuestion?.status, clearAutoNextTimer]);
 
   useEffect(() => {
-    if (!currentQuestion || answerPhase === 'revealed') return;
+    if (!currentQuestion || answerPhase !== 'idle') return;
     const interval = setInterval(() => {
-      setSeconds((prev) => (prev <= 1 ? QUIZ_TIME_LIMIT_SEC : prev - 1));
+      setSeconds((prev) => (prev <= 0 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(interval);
   }, [currentIndex, currentQuestion?.id, answerPhase]);
 
-  const goNextQuestion = useCallback(() => {
-    if (!canGoNext) return;
-    
-    const dailyData: any = queryClient.getQueryData(['dailyQuiz', quizLang]);
-    const isCompleted = dailyData?.stats?.completed || currentIndex + 1 >= questions.length;
-    
-    if (isCompleted) {
-      const correctAnswers = dailyData?.stats?.correct ?? questions.filter(q => q.isCorrect).length;
+  const showCompletionPopup = useCallback(
+    (stats?: QuizDailyPayload['stats']) => {
+      const cached = queryClient.getQueryData<QuizDailyPayload>(['dailyQuiz', quizLang]);
+      const correctAnswers =
+        stats?.correct ??
+        cached?.stats?.correct ??
+        questions.filter((q) => q.isCorrect).length;
+      const xpEarned =
+        stats?.xpEarned ??
+        cached?.stats?.xpEarned ??
+        correctAnswers * 2;
       setFinalScore(correctAnswers);
-      setFinalXp(dailyData?.stats?.xpEarned ?? (correctAnswers * 2));
+      setFinalXp(xpEarned);
       setScorePopupVisible(true);
+    },
+    [queryClient, quizLang, questions],
+  );
+
+  const goNextQuestion = useCallback(() => {
+    clearAutoNextTimer();
+    if (!canGoNext) return;
+
+    const cached = queryClient.getQueryData<QuizDailyPayload>(['dailyQuiz', quizLang]);
+    const isCompleted =
+      cached?.stats?.completed || currentIndex + 1 >= questions.length;
+
+    if (isCompleted) {
+      showCompletionPopup(cached?.stats);
       return;
     }
-    
-    queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+
+    queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
       if (!oldData) return oldData;
       return {
         ...oldData,
-        currentIndex: nextIndexRef.current ?? (oldData.currentIndex + 1),
+        currentIndex: nextIndexRef.current ?? oldData.currentIndex + 1,
       };
     });
-  }, [canGoNext, currentIndex, questions, queryClient, quizLang]);
+  }, [
+    canGoNext,
+    clearAutoNextTimer,
+    currentIndex,
+    questions.length,
+    queryClient,
+    quizLang,
+    showCompletionPopup,
+  ]);
+
+  const startAutoNext = useCallback(() => {
+    clearAutoNextTimer();
+    autoNextTimerRef.current = setTimeout(() => {
+      goNextQuestion();
+    }, AUTO_NEXT_MS);
+  }, [clearAutoNextTimer, goNextQuestion]);
+
+  const handleTimeout = useCallback(async () => {
+    if (!currentQuestion || answerPhase !== 'idle') return;
+    if (timeoutCalledRef.current === currentQuestion.id) return;
+    timeoutCalledRef.current = currentQuestion.id;
+    setAnswerPhase('submitting');
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        setAnswerPhase('idle');
+        timeoutCalledRef.current = null;
+        return;
+      }
+
+      const res = await QuizApiService.submitTimeout(token, {
+        questionId: currentQuestion.id,
+        language: quizLang,
+      });
+
+      if (res?.status !== 'SUCCESS' || !res.data) {
+        setAnswerPhase('idle');
+        timeoutCalledRef.current = null;
+        return;
+      }
+
+      const d = res.data;
+      nextIndexRef.current = d.currentIndex;
+      setIsCorrect(false);
+      if (d.correctKey) {
+        setCorrectKey(d.correctKey as OptionKey);
+      }
+      setAnswerPhase('revealed');
+
+      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+        if (!oldData) return oldData;
+        const newQuestions = [...oldData.questions];
+        newQuestions[currentIndex] = {
+          ...newQuestions[currentIndex],
+          status: 'timed_out',
+          isCorrect: false,
+          ...(d.correctKey ? { correctKey: d.correctKey } : {}),
+          penaltyApplied: d.penaltyApplied,
+        };
+        return {
+          ...oldData,
+          coins: d.coins,
+          questions: newQuestions,
+          stats: patchDailyStats(oldData.stats, {
+            correct: d.stats.correct,
+            answered: d.stats.answered,
+            skipped: d.stats.skipped,
+            timedOut: d.stats.timedOut,
+            closed: d.stats.closed,
+            xpEarned: (d.stats as { xp?: number }).xp ?? oldData.stats.xpEarned,
+            completed: d.completed,
+          }),
+        };
+      });
+
+      if (d.penaltyApplied) {
+        await refreshCoins();
+        toastManager.showInfo(t.quiz.timesUpCoinsDeducted, t.quiz.timesUpCoinsDeducted);
+      } else {
+        toastManager.showInfo(t.quiz.timesUpNoCoinsDeducted, t.quiz.timesUpNoCoinsDeducted);
+      }
+
+      if (d.completed) {
+        showCompletionPopup(
+          patchDailyStats(undefined, {
+            correct: d.stats.correct,
+            answered: d.stats.answered,
+            skipped: d.stats.skipped,
+            timedOut: d.stats.timedOut,
+            closed: d.stats.closed,
+            xpEarned: d.stats.xpEarned ?? d.stats.xp,
+            completed: true,
+          }),
+        );
+      } else {
+        startAutoNext();
+      }
+    } catch {
+      setAnswerPhase('idle');
+      timeoutCalledRef.current = null;
+    }
+  }, [
+    currentQuestion,
+    answerPhase,
+    getToken,
+    quizLang,
+    queryClient,
+    currentIndex,
+    refreshCoins,
+    t.quiz,
+    showCompletionPopup,
+    startAutoNext,
+  ]);
+
+  useEffect(() => {
+    if (!currentQuestion || answerPhase !== 'idle' || seconds > 0) return;
+    void handleTimeout();
+  }, [seconds, currentQuestion?.id, answerPhase, handleTimeout]);
 
   const handleSelectOption = useCallback(
     async (key: OptionKey) => {
       if (!currentQuestion || answerPhase !== 'idle') return;
+      clearAutoNextTimer();
       setSelected(key);
       setAnswerPhase('submitting');
       try {
@@ -209,7 +381,19 @@ export default function QuizHubScreen() {
           setSelected(null);
           return;
         }
-        const d = res.data as any;
+        const d = res.data as {
+          isCorrect: boolean;
+          correctKey: QuizApiOptionKey;
+          currentIndex: number;
+          stats?: QuizDailyPayload['stats'];
+          completed?: boolean;
+          xpEvents?: Array<{
+            action: string;
+            amount: number;
+            leveledUp: boolean;
+            newLevel: number;
+          }>;
+        };
         nextIndexRef.current = d.currentIndex;
 
         setIsCorrect(d.isCorrect);
@@ -217,7 +401,7 @@ export default function QuizHubScreen() {
         setAnswerPhase('revealed');
         if (d.xpEvents?.length) {
           handleXpEvents(
-            d.xpEvents.map((e: any) => ({
+            d.xpEvents.map((e) => ({
               action: e.action,
               amount: e.amount,
               leveledUp: e.leveledUp,
@@ -226,7 +410,7 @@ export default function QuizHubScreen() {
           );
         }
 
-        queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+        queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
           if (!oldData) return oldData;
           const newQuestions = [...oldData.questions];
           newQuestions[currentIndex] = {
@@ -234,21 +418,27 @@ export default function QuizHubScreen() {
             status: 'answered',
             isCorrect: d.isCorrect,
             selectedKey: key,
+            correctKey: d.correctKey,
           };
-          return { 
-            ...oldData, 
+          return {
+            ...oldData,
             questions: newQuestions,
-            stats: d.stats ?? oldData.stats
+            stats: patchDailyStats(oldData.stats, d.stats),
           };
         });
 
-        // Backend updates XP/Coins directly, UI handles XpEvents, refresh coins manually
         await refreshCoins();
-        
+
         if (d.isCorrect) {
           toastManager.showSuccess(t.quiz.excellent, `+${d.xpEvents?.[0]?.amount ?? 2} XP`);
         } else {
           toastManager.showInfo(t.quiz.wrong, t.quiz.wrong);
+        }
+
+        if (d.completed) {
+          showCompletionPopup(d.stats);
+        } else {
+          startAutoNext();
         }
       } catch {
         setAnswerPhase('idle');
@@ -258,6 +448,7 @@ export default function QuizHubScreen() {
     [
       currentQuestion,
       answerPhase,
+      clearAutoNextTimer,
       getToken,
       quizLang,
       handleXpEvents,
@@ -265,11 +456,14 @@ export default function QuizHubScreen() {
       currentIndex,
       refreshCoins,
       t.quiz,
+      showCompletionPopup,
+      startAutoNext,
     ],
   );
 
   const handleSkip = useCallback(async () => {
     if (!currentQuestion || answerPhase === 'revealed') return;
+    clearAutoNextTimer();
     try {
       const token = await getToken();
       if (!token) return;
@@ -282,31 +476,31 @@ export default function QuizHubScreen() {
         return;
       }
       await refreshCoins();
-      
-      const d = res.data as any;
+
+      const d = res.data as {
+        currentIndex: number;
+        completed?: boolean;
+        stats?: QuizDailyPayload['stats'];
+      };
       nextIndexRef.current = d.currentIndex;
-      
-      queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+
+      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
         if (!oldData) return oldData;
         const newQuestions = [...oldData.questions];
         newQuestions[currentIndex] = {
           ...newQuestions[currentIndex],
           status: 'skipped',
         };
-        return { 
-          ...oldData, 
+        return {
+          ...oldData,
           questions: newQuestions,
-          stats: d.stats ?? oldData.stats,
-          currentIndex: d.currentIndex ?? (oldData.currentIndex + 1)
+          stats: patchDailyStats(oldData.stats, d.stats),
+          currentIndex: d.currentIndex ?? oldData.currentIndex + 1,
         };
       });
 
-      const isCompleted = d.completed || currentIndex + 1 >= questions.length;
-      if (isCompleted) {
-        const correctAnswers = d.stats?.correct ?? questions.filter(q => q.isCorrect).length;
-        setFinalScore(correctAnswers);
-        setFinalXp(d.stats?.xpEarned ?? (correctAnswers * 2));
-        setScorePopupVisible(true);
+      if (d.completed || currentIndex + 1 >= questions.length) {
+        showCompletionPopup(d.stats);
       }
     } catch {
       toastManager.showWarning(t.quiz.notEnoughCoins, t.quiz.notEnoughCoinsMessage);
@@ -314,13 +508,15 @@ export default function QuizHubScreen() {
   }, [
     currentQuestion,
     answerPhase,
+    clearAutoNextTimer,
     getToken,
     quizLang,
     refreshCoins,
     queryClient,
     currentIndex,
-    questions,
+    questions.length,
     t.quiz,
+    showCompletionPopup,
   ]);
 
   const handleHint = useCallback(async () => {
@@ -336,13 +532,13 @@ export default function QuizHubScreen() {
         toastManager.showWarning(t.quiz.notEnoughCoins, t.quiz.notEnoughCoinsMessage);
         return;
       }
-      const d = res.data as any;
+      const d = res.data as { hint?: string; currentIndex: number };
       nextIndexRef.current = d.currentIndex;
-      
+
       setHintUsed(true);
       setHintText(d.hint || t.quiz.hintAppliedMessage);
-      
-      queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+
+      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
         if (!oldData) return oldData;
         const newQuestions = [...oldData.questions];
         newQuestions[currentIndex] = {
@@ -350,10 +546,10 @@ export default function QuizHubScreen() {
           hintUsed: true,
           hint: d.hint || t.quiz.hintAppliedMessage,
         };
-        return { 
-          ...oldData, 
+        return {
+          ...oldData,
           questions: newQuestions,
-          currentIndex: d.currentIndex ?? oldData.currentIndex 
+          currentIndex: d.currentIndex ?? oldData.currentIndex,
         };
       });
 
@@ -408,7 +604,7 @@ export default function QuizHubScreen() {
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <Text style={styles.noQuestionsText}>
-          {t.common.errorTitle ?? 'Too many requests. Please wait a moment and try again.'}
+          {t.common.error ?? 'Too many requests. Please wait a moment and try again.'}
         </Text>
       </View>
     );
@@ -423,6 +619,8 @@ export default function QuizHubScreen() {
       </View>
     );
   }
+
+  const resolvedImageUrl = currentQuestion.imageUrl?.trim() || null;
 
   return (
     <View style={styles.root}>
@@ -465,7 +663,7 @@ export default function QuizHubScreen() {
 
         <QuizCard
           question={currentQuestion.question}
-          imageUrl={currentQuestion.imageUrl}
+          imageUrl={resolvedImageUrl}
           imageLayout={currentQuestion.imageLayout ?? 'square'}
           options={currentQuestion.options.map((o) => ({
             key: o.key as OptionKey,
@@ -501,10 +699,7 @@ export default function QuizHubScreen() {
         score={finalScore}
         total={totalQuestions}
         xpEarned={finalXp}
-        onClose={() => {
-          setScorePopupVisible(false);
-          loadDaily(quizLang);
-        }}
+        onClose={() => setScorePopupVisible(false)}
       />
     </View>
   );
@@ -524,6 +719,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 12,
     fontWeight: '600',
+  },
+  noQuestionsText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    marginTop: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
   scroll: {
     flex: 1,

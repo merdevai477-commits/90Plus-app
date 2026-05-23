@@ -11,6 +11,7 @@ import {
   submitQuizAnswer,
   skipQuizQuestion,
   useQuizHint,
+  timeoutQuizQuestion,
 } from '../services/quiz-daily.service';
 import type { QuizOptionKey } from '../types/quiz.types';
 
@@ -162,6 +163,47 @@ router.post('/hint', requireAuth, async (req: Request, res: Response): Promise<v
     }
     logger.error('[Quiz] POST /hint error', err);
     sendError(req, res, ErrorCode.INTERNAL, 'Failed to use hint');
+  }
+});
+
+/**
+ * POST /api/quiz/timeout
+ * Body: { questionId, language? }
+ */
+router.post('/timeout', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+      return;
+    }
+
+    const { questionId, language } = req.body ?? {};
+    if (!questionId) {
+      sendError(req, res, ErrorCode.VALIDATION, 'questionId required');
+      return;
+    }
+
+    const data = await timeoutQuizQuestion(
+      clerkUserId,
+      String(questionId),
+      getTimezone(req),
+      language,
+    );
+
+    res.json({ status: 'SUCCESS', data });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message === 'USER_NOT_FOUND') {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+      return;
+    }
+    if (message === 'QUESTION_NOT_FOUND') {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'Question not found');
+      return;
+    }
+    logger.error('[Quiz] POST /timeout error', err);
+    sendError(req, res, ErrorCode.INTERNAL, 'Failed to process quiz timeout');
   }
 });
 

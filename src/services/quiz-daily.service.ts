@@ -8,12 +8,15 @@ import { logger } from '../utils/logger';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { redisCacheService } from './redis-cache.service';
 import { generateDailyQuizPack, todayPackDate, packExpiresAt, packDateYmd } from './quiz-generator.service';
-import { awardXp } from './xp.service';
 import type {
   PublicQuizQuestion,
   QuestionProgress,
+  QuizImageLayout,
   QuizLanguage,
   QuizOptionKey,
+  QuizQuestionStatus,
+  QuizSessionStats,
+  QuizTimeoutResult,
   SessionProgress,
   StoredQuizQuestion,
 } from '../types/quiz.types';
@@ -37,24 +40,56 @@ function parseProgress(raw: unknown): SessionProgress {
   return { byQuestionId: p.byQuestionId ?? {} };
 }
 
+function isTerminalStatus(status?: QuizQuestionStatus): boolean {
+  return status === 'answered' || status === 'skipped' || status === 'timed_out';
+}
+
+function sanitizePublicImage(q: StoredQuizQuestion): {
+  imageUrl: string | null;
+  imageLayout: QuizImageLayout;
+} {
+  if (q.type === 'normal') {
+    return { imageUrl: null, imageLayout: 'square' };
+  }
+  const url = q.imageUrl?.trim();
+  return {
+    imageUrl: url || null,
+    imageLayout: q.imageLayout ?? 'square',
+  };
+}
+
+function resolvePublicCorrectKey(
+  p: QuestionProgress | undefined,
+): QuizOptionKey | undefined {
+  if (!p) return undefined;
+  if (p.status === 'answered' || p.status === 'timed_out') {
+    return p.correctKey;
+  }
+  return undefined;
+}
+
 function toPublicQuestions(
   stored: StoredQuizQuestion[],
   progress: SessionProgress,
 ): PublicQuizQuestion[] {
   return stored.map((q, index) => {
     const p = progress.byQuestionId[q.id];
+    const status = p?.status ?? 'pending';
+    const { imageUrl, imageLayout } = sanitizePublicImage(q);
     return {
       id: q.id,
       question: q.question,
       type: q.type,
       options: q.options,
       difficulty: q.difficulty,
-      imageUrl: q.imageUrl ?? null,
-      imageLayout: q.imageLayout ?? 'square',
+      imageUrl,
+      imageLayout,
       index: index + 1,
-      status: p?.status ?? 'pending',
+      status,
       selectedKey: p?.selectedKey,
       isCorrect: p?.isCorrect,
+      correctKey: resolvePublicCorrectKey(p),
+      penaltyApplied: status === 'timed_out' ? p?.penaltyApplied : undefined,
       hintUsed: p?.hintUsed,
       hint: p?.hintUsed ? (q.hint ?? null) : null,
     };
@@ -233,10 +268,11 @@ function findQuestion(pack: StoredQuizQuestion[], questionId: string) {
   return pack.find((q) => q.id === questionId);
 }
 
-function countStats(progress: SessionProgress, pack: StoredQuizQuestion[]) {
+function countStats(progress: SessionProgress, pack: StoredQuizQuestion[]): QuizSessionStats {
   let correct = 0;
   let answered = 0;
   let skipped = 0;
+  let timedOut = 0;
   let xp = 0;
   for (const q of pack) {
     const p = progress.byQuestionId[q.id];
@@ -245,16 +281,27 @@ function countStats(progress: SessionProgress, pack: StoredQuizQuestion[]) {
       answered++;
       if (p.isCorrect) correct++;
       xp += p.xpAwarded ?? 0;
-    } else if (p.status === 'skipped') skipped++;
+    } else if (p.status === 'skipped') {
+      skipped++;
+    } else if (p.status === 'timed_out') {
+      timedOut++;
+    }
   }
-  return { correct, answered, skipped, xp };
+  return {
+    correct,
+    answered,
+    skipped,
+    timedOut,
+    closed: answered + skipped + timedOut,
+    xp,
+  };
 }
 
 function computeCurrentIndex(progress: SessionProgress, pack: StoredQuizQuestion[]) {
   let firstPendingIndex = 0;
   for (let i = 0; i < pack.length; i++) {
     const st = progress.byQuestionId[pack[i].id]?.status;
-    if (st !== 'answered' && st !== 'skipped') {
+    if (!isTerminalStatus(st)) {
       firstPendingIndex = i;
       break;
     }
@@ -263,37 +310,8 @@ function computeCurrentIndex(progress: SessionProgress, pack: StoredQuizQuestion
   return firstPendingIndex;
 }
 
-async function deductCoins(
-  userId: string,
-  amount: number,
-  description: string,
-): Promise<{ ok: boolean; coins: number }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { coins: true },
-  });
-  if (!user || user.coins < amount) {
-    return { ok: false, coins: user?.coins ?? 0 };
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const u = await tx.user.update({
-      where: { id: userId },
-      data: { coins: { decrement: amount } },
-      select: { coins: true },
-    });
-    await tx.coinTransaction.create({
-      data: {
-        userId,
-        amount: -amount,
-        type: 'SPEND',
-        description,
-      },
-    });
-    return u;
-  });
-
-  return { ok: true, coins: updated.coins };
+function isQuizComplete(progress: SessionProgress, pack: StoredQuizQuestion[]): boolean {
+  return pack.every((q) => isTerminalStatus(progress.byQuestionId[q.id]?.status));
 }
 
 export async function getDailyQuizForUser(
@@ -319,6 +337,7 @@ export async function getDailyQuizForUser(
 
   const questions = toPublicQuestions(pack, progress);
   const pendingIndex = questions.findIndex((q) => q.status === 'pending');
+  const stats = countStats(progress, pack);
 
   return {
     language,
@@ -333,10 +352,12 @@ export async function getDailyQuizForUser(
     xp: user.xp,
     level: user.level,
     stats: {
-      correct: session.correctCount,
-      answered: session.answeredCount,
-      skipped: session.skippedCount,
-      xpEarned: session.xpEarned,
+      correct: stats.correct,
+      answered: stats.answered,
+      skipped: stats.skipped,
+      timedOut: stats.timedOut,
+      closed: stats.closed,
+      xpEarned: stats.xp,
       completed: Boolean(session.completedAt),
     },
     timezone,
@@ -383,18 +404,24 @@ export async function submitQuizAnswer(
     const existing = progress.byQuestionId[questionId];
 
     // Idempotency check
-    if (existing?.status === 'answered' || existing?.status === 'skipped') {
-      return { 
-        alreadyDone: true, 
-        isCorrect: existing.isCorrect, 
-        correctKey: question.correctKey, 
-        xpAwarded: existing.xpAwarded ?? 0, 
-        coins: user.coins, 
-        xp: user.xp, 
+    if (
+      existing?.status === 'answered' ||
+      existing?.status === 'skipped' ||
+      existing?.status === 'timed_out'
+    ) {
+      const stats = countStats(progress, pack);
+      return {
+        alreadyDone: true,
+        isCorrect: existing.isCorrect,
+        correctKey: question.correctKey,
+        xpAwarded: existing.xpAwarded ?? 0,
+        coins: user.coins,
+        xp: user.xp,
         level: user.level,
-        completed: false,
+        stats,
+        completed: isQuizComplete(progress, pack),
         currentIndex: computeCurrentIndex(progress, pack),
-        progress: progress.byQuestionId
+        progress: progress.byQuestionId,
       };
     }
 
@@ -428,10 +455,7 @@ export async function submitQuizAnswer(
     };
 
     const stats = countStats(progress, pack);
-    const allDone = pack.every((q) => {
-      const st = progress.byQuestionId[q.id]?.status;
-      return st === 'answered' || st === 'skipped';
-    });
+    const allDone = isQuizComplete(progress, pack);
 
     await tx.userDailyQuizSession.update({
       where: { id: activeSession.id },
@@ -442,7 +466,7 @@ export async function submitQuizAnswer(
         skippedCount: stats.skipped,
         xpEarned: stats.xp,
         completedAt: allDone ? new Date() : null,
-      }
+      },
     });
 
     return {
@@ -455,7 +479,7 @@ export async function submitQuizAnswer(
       stats,
       completed: allDone,
       currentIndex: computeCurrentIndex(progress, pack),
-      progress: progress.byQuestionId
+      progress: progress.byQuestionId,
     };
   });
 }
@@ -498,7 +522,7 @@ export async function skipQuizQuestion(
         progress: progress.byQuestionId
       };
     }
-    if (existing?.status === 'answered') {
+    if (existing?.status === 'answered' || existing?.status === 'timed_out') {
       throw new Error('QUESTION_ALREADY_ANSWERED');
     }
 
@@ -524,10 +548,7 @@ export async function skipQuizQuestion(
     };
 
     const stats = countStats(progress, pack);
-    const allDone = pack.every((q) => {
-      const st = progress.byQuestionId[q.id]?.status;
-      return st === 'answered' || st === 'skipped';
-    });
+    const allDone = isQuizComplete(progress, pack);
 
     await tx.userDailyQuizSession.update({
       where: { id: activeSession.id },
@@ -538,7 +559,7 @@ export async function skipQuizQuestion(
         skippedCount: stats.skipped,
         xpEarned: stats.xp,
         completedAt: allDone ? new Date() : null,
-      }
+      },
     });
 
     return {
@@ -547,7 +568,7 @@ export async function skipQuizQuestion(
       stats,
       completed: allDone,
       currentIndex: computeCurrentIndex(progress, pack),
-      progress: progress.byQuestionId
+      progress: progress.byQuestionId,
     };
   });
 }
@@ -590,7 +611,11 @@ export async function useQuizHint(
         progress: progress.byQuestionId
       };
     }
-    if (existing.status === 'answered' || existing.status === 'skipped') {
+    if (
+      existing.status === 'answered' ||
+      existing.status === 'skipped' ||
+      existing.status === 'timed_out'
+    ) {
       throw new Error('QUESTION_CLOSED');
     }
 
@@ -625,7 +650,123 @@ export async function useQuizHint(
       coins: newCoins,
       hintUsed: true,
       currentIndex: computeCurrentIndex(progress, pack),
-      progress: progress.byQuestionId
+      progress: progress.byQuestionId,
     };
+  });
+}
+
+export async function timeoutQuizQuestion(
+  clerkUserId: string,
+  questionId: string,
+  timezone: string,
+  languageInput?: string,
+): Promise<QuizTimeoutResult> {
+  const language = normalizeLang(languageInput);
+  const packDate = todayPackDate();
+  const pack = await getOrCreateDailyPack(language, packDate);
+  const question = findQuestion(pack, questionId);
+  if (!question) throw new Error('QUESTION_NOT_FOUND');
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { clerkUserId },
+      select: { id: true, coins: true },
+    });
+    if (!user) throw new Error('USER_NOT_FOUND');
+
+    const session = await tx.userDailyQuizSession.findUnique({
+      where: { userId_packDate_language: { userId: user.id, packDate, language } },
+    });
+
+    const activeSession =
+      session ??
+      (await tx.userDailyQuizSession.create({
+        data: {
+          userId: user.id,
+          packDate,
+          language,
+          progress: emptyProgress() as unknown as Prisma.InputJsonValue,
+        },
+      }));
+
+    const progress = parseProgress(activeSession.progress);
+    const existing = progress.byQuestionId[questionId];
+
+    if (isTerminalStatus(existing?.status)) {
+      const stats = countStats(progress, pack);
+      const result: QuizTimeoutResult = {
+        penaltyApplied: existing?.penaltyApplied ?? false,
+        alreadyDone: true,
+        coins: user.coins,
+        stats,
+        completed: isQuizComplete(progress, pack),
+        currentIndex: computeCurrentIndex(progress, pack),
+        progress: progress.byQuestionId,
+      };
+      if (existing?.status === 'answered' || existing?.status === 'timed_out') {
+        result.correctKey = existing?.correctKey ?? question.correctKey;
+      }
+      return result;
+    }
+
+    const canDeduct = user.coins >= QUIZ_COIN_COST;
+    const penaltyApplied = canDeduct;
+    let newCoins = user.coins;
+
+    if (canDeduct) {
+      newCoins = user.coins - QUIZ_COIN_COST;
+      await tx.user.update({
+        where: { id: user.id },
+        data: { coins: newCoins },
+      });
+      await tx.coinTransaction.create({
+        data: {
+          userId: user.id,
+          amount: -QUIZ_COIN_COST,
+          type: 'SPEND',
+          description: `quiz_timeout:${questionId}`,
+        },
+      });
+    }
+
+    progress.byQuestionId[questionId] = {
+      status: 'timed_out',
+      isCorrect: false,
+      correctKey: question.correctKey,
+      xpAwarded: 0,
+      penaltyApplied,
+      timedOutAt: new Date().toISOString(),
+    };
+
+    const stats = countStats(progress, pack);
+    const allDone = isQuizComplete(progress, pack);
+
+    await tx.userDailyQuizSession.update({
+      where: { id: activeSession.id },
+      data: {
+        progress: progress as unknown as Prisma.InputJsonValue,
+        correctCount: stats.correct,
+        answeredCount: stats.answered,
+        skippedCount: stats.skipped,
+        xpEarned: stats.xp,
+        completedAt: allDone ? new Date() : null,
+      },
+    });
+
+    const result: QuizTimeoutResult = {
+      correctKey: question.correctKey,
+      penaltyApplied,
+      coins: newCoins,
+      stats,
+      completed: allDone,
+      currentIndex: computeCurrentIndex(progress, pack),
+      progress: progress.byQuestionId,
+    };
+
+    if (!penaltyApplied) {
+      result.errorCode = 'INSUFFICIENT_COINS_FOR_TIMEOUT_PENALTY';
+    }
+
+    return result;
   });
 }

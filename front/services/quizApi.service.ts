@@ -9,6 +9,7 @@ import type { QuizImageLayout } from '../components/Quiz/quiz.constants';
 export type QuizApiLanguage = 'ar' | 'en';
 export type QuizApiDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 export type QuizApiOptionKey = 'A' | 'B' | 'C' | 'D';
+export type QuizApiQuestionStatus = 'pending' | 'answered' | 'skipped' | 'timed_out';
 
 export interface QuizApiOption {
   key: QuizApiOptionKey;
@@ -23,10 +24,23 @@ export interface QuizApiQuestion {
   imageUrl?: string | null;
   imageLayout?: QuizImageLayout;
   index: number;
-  status: 'pending' | 'answered' | 'skipped';
+  status: QuizApiQuestionStatus;
   selectedKey?: QuizApiOptionKey;
   isCorrect?: boolean;
+  correctKey?: QuizApiOptionKey;
+  penaltyApplied?: boolean;
   hintUsed?: boolean;
+  hint?: string | null;
+}
+
+export interface QuizDailyStats {
+  correct: number;
+  answered: number;
+  skipped: number;
+  timedOut: number;
+  closed: number;
+  xpEarned: number;
+  completed: boolean;
 }
 
 export interface QuizDailyPayload {
@@ -41,13 +55,18 @@ export interface QuizDailyPayload {
   coins: number;
   xp: number;
   level: number;
-  stats: {
-    correct: number;
-    answered: number;
-    skipped: number;
-    xpEarned: number;
-    completed: boolean;
-  };
+  stats: QuizDailyStats;
+}
+
+export interface QuizTimeoutResponse {
+  correctKey?: QuizApiOptionKey;
+  penaltyApplied: boolean;
+  errorCode?: 'INSUFFICIENT_COINS_FOR_TIMEOUT_PENALTY';
+  alreadyDone?: boolean;
+  coins: number;
+  stats: Omit<QuizDailyStats, 'completed'> & { xp?: number };
+  completed: boolean;
+  currentIndex: number;
 }
 
 export interface XpEventPayload {
@@ -140,5 +159,19 @@ export const QuizApiService = {
       body: JSON.stringify(body),
     });
     return safeJsonParse(res, { status: 'ERROR', data: null });
+  },
+
+  async submitTimeout(
+    token: string,
+    body: { questionId: string; language: QuizApiLanguage },
+  ) {
+    const res = await authFetch('/quiz/timeout', token, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return safeJsonParse<{ status: string; data: QuizTimeoutResponse | null }>(
+      res,
+      { status: 'ERROR', data: null },
+    );
   },
 };

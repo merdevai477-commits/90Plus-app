@@ -4,6 +4,7 @@ export type QuizOptionKey = 'A' | 'B' | 'C' | 'D';
 export type QuizQuestionType = 'normal' | 'image' | 'guess_player' | 'logo' | 'stadium';
 export type QuizImageType = 'player' | 'team' | 'league' | 'flag' | 'venue' | null;
 export type QuizImageLayout = 'square' | 'wide';
+export type QuizQuestionStatus = 'pending' | 'answered' | 'skipped' | 'timed_out';
 
 export interface QuizOptionDto {
   key: QuizOptionKey;
@@ -31,20 +32,43 @@ export interface StoredQuizQuestion {
 }
 
 export interface QuestionProgress {
-  status: 'pending' | 'answered' | 'skipped';
+  status: QuizQuestionStatus;
   selectedKey?: QuizOptionKey;
   isCorrect?: boolean;
   correctKey?: QuizOptionKey;
   hintUsed?: boolean;
   skipped?: boolean;
+  penaltyApplied?: boolean;
   timeTaken?: number;
   xpAwarded?: number;
   answeredAt?: Date | string;
   skippedAt?: Date | string;
+  timedOutAt?: Date | string;
 }
 
 export interface SessionProgress {
   byQuestionId: Record<string, QuestionProgress>;
+}
+
+export interface QuizSessionStats {
+  correct: number;
+  answered: number;
+  skipped: number;
+  timedOut: number;
+  closed: number;
+  xp: number;
+}
+
+export interface QuizTimeoutResult {
+  correctKey?: QuizOptionKey;
+  penaltyApplied: boolean;
+  errorCode?: 'INSUFFICIENT_COINS_FOR_TIMEOUT_PENALTY';
+  alreadyDone?: boolean;
+  coins: number;
+  stats: QuizSessionStats;
+  completed: boolean;
+  currentIndex: number;
+  progress: SessionProgress['byQuestionId'];
 }
 
 export interface PublicQuizQuestion {
@@ -56,9 +80,11 @@ export interface PublicQuizQuestion {
   imageUrl?: string | null;
   imageLayout?: QuizImageLayout;
   index: number;
-  status: 'pending' | 'answered' | 'skipped';
+  status: QuizQuestionStatus;
   selectedKey?: QuizOptionKey;
   isCorrect?: boolean;
+  correctKey?: QuizOptionKey;
+  penaltyApplied?: boolean;
   hintUsed?: boolean;
   hint?: string | null;
 }
