@@ -11,7 +11,7 @@ import {
   I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CircleCheck, Lightbulb, Zap } from 'lucide-react-native';
+import { CircleCheck, Lightbulb, User, Zap } from 'lucide-react-native';
 
 import { useTranslation } from '../../src/i18n';
 import {
@@ -28,6 +28,7 @@ import {
   type OptionKey,
   type QuizImageLayout,
   type QuizOption,
+  QUIZ_MEDIA_SQUARE,
 } from './quiz.constants';
 import { QuizQuestionMedia } from './QuizQuestionMedia';
 
@@ -211,7 +212,9 @@ const optStyles = StyleSheet.create({
 
 interface QuizCardProps {
   question: string;
+  questionType?: string;
   imageUrl?: string | null;
+  revealImageUrl?: string | null;
   imageLayout?: QuizImageLayout;
   options: QuizOption[];
   selectedKey: OptionKey | null;
@@ -227,7 +230,9 @@ interface QuizCardProps {
 
 export function QuizCard({
   question,
+  questionType = 'normal',
   imageUrl,
+  revealImageUrl = null,
   imageLayout = 'square',
   options,
   selectedKey,
@@ -242,21 +247,35 @@ export function QuizCard({
 }: QuizCardProps) {
   const { t } = useTranslation();
   const textAlign = I18nManager.isRTL ? 'right' : 'left';
-  const hasImageUrl = Boolean(imageUrl?.trim());
+  const isGuessPlayer = questionType === 'guess_player';
+  const effectiveImageUrl = answerRevealed
+    ? (revealImageUrl?.trim() || imageUrl?.trim() || null)
+    : isGuessPlayer
+      ? null
+      : imageUrl?.trim() || null;
+  const hasImageUrl = Boolean(effectiveImageUrl);
   const [showMedia, setShowMedia] = useState(hasImageUrl);
+  const showMysterySlot = isGuessPlayer && !answerRevealed;
 
   useEffect(() => {
-    setShowMedia(hasImageUrl);
-  }, [hasImageUrl, imageUrl]);
+    setShowMedia(hasImageUrl || showMysterySlot);
+  }, [hasImageUrl, imageUrl, revealImageUrl, answerRevealed, showMysterySlot]);
 
   return (
     <View style={styles.card}>
       <View style={styles.questionBlock}>
         <Text style={[styles.questionTitle, { textAlign }]}>{question}</Text>
-        {showMedia && hasImageUrl ? (
+        {showMysterySlot ? (
+          <View style={styles.mediaWrap}>
+            <View style={styles.mysterySlot}>
+              <User size={56} color={ACCENT_SOFT} strokeWidth={1.5} />
+              <Text style={styles.mysteryLabel}>{t.quiz.guessPlayerHidden}</Text>
+            </View>
+          </View>
+        ) : showMedia && hasImageUrl ? (
           <View style={styles.mediaWrap}>
             <QuizQuestionMedia
-              imageUrl={imageUrl}
+              imageUrl={effectiveImageUrl}
               layout={imageLayout}
               onLoadFailed={() => setShowMedia(false)}
             />
@@ -343,6 +362,23 @@ const styles = StyleSheet.create({
   mediaWrap: {
     marginTop: 14,
     width: '100%',
+  },
+  mysterySlot: {
+    width: QUIZ_MEDIA_SQUARE,
+    height: QUIZ_MEDIA_SQUARE,
+    alignSelf: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: QUIZ_CARD_BORDER,
+    backgroundColor: '#120E24',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  mysteryLabel: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontWeight: '700',
   },
   hintBanner: {
     flexDirection: 'row',

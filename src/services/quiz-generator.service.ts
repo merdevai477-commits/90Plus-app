@@ -17,11 +17,12 @@ import {
   isImageDependentQuestionText,
   isRetiredLegendPlayerName,
 } from './quiz-image-legends';
+import { QUIZ_DIFFICULTY_COUNTS, QUIZ_PACK_SIZE } from '../constants/quiz.constants';
 
 const DIFFICULTY_COUNTS: Record<QuizDifficulty, number> = {
-  EASY: 10,
-  MEDIUM: 5,
-  HARD: 5,
+  EASY: QUIZ_DIFFICULTY_COUNTS.EASY,
+  MEDIUM: QUIZ_DIFFICULTY_COUNTS.MEDIUM,
+  HARD: QUIZ_DIFFICULTY_COUNTS.HARD,
 };
 
 const OPTION_KEYS: QuizOptionKey[] = ['A', 'B', 'C', 'D'];
@@ -85,6 +86,24 @@ function normalizeImageType(raw: string | null | undefined): QuizImageType {
 
 function hashQuestion(q: string): string {
   return q.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+}
+
+function parseAiJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (!match) return { questions: [] };
+    let jsonText = match[0];
+    jsonText = jsonText.replace(/,\s*([}\]])/g, '$1');
+    try {
+      return JSON.parse(jsonText);
+    } catch {
+      logger.warn('[QuizGen] Failed to parse AI JSON after cleanup');
+      return { questions: [] };
+    }
+  }
 }
 
 function parseQuestionsFromAi(
@@ -210,7 +229,7 @@ function rebalanceDifficulties(questions: StoredQuizQuestion[]): StoredQuizQuest
     ...Array(DIFFICULTY_COUNTS.MEDIUM).fill('MEDIUM' as QuizDifficulty),
     ...Array(DIFFICULTY_COUNTS.HARD).fill('HARD' as QuizDifficulty),
   ];
-  return sorted.slice(0, 20).map((q, i) => ({
+  return sorted.slice(0, QUIZ_PACK_SIZE).map((q, i) => ({
     ...q,
     id: q.id.replace(/-\d+$/, `-${i + 1}`),
     difficulty: targets[i] ?? 'EASY',
@@ -265,8 +284,8 @@ async function attemptOpenRouterCall(language: QuizLanguage, packDate: string): 
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
 
   const system = `You are a world football trivia writer for the 90Plus app.
-Return ONLY valid JSON (no markdown): {"questions":[...]} with exactly 20 multiple-choice questions (MCQ).
-Distribution MUST BE EXACTLY: 10 EASY, 5 MEDIUM, 5 HARD.
+Return ONLY valid JSON (no markdown): {"questions":[...]} with exactly ${QUIZ_PACK_SIZE} multiple-choice questions (MCQ).
+Distribution MUST BE EXACTLY: ${QUIZ_DIFFICULTY_COUNTS.EASY} EASY, ${QUIZ_DIFFICULTY_COUNTS.MEDIUM} MEDIUM, ${QUIZ_DIFFICULTY_COUNTS.HARD} HARD.
 Do NOT generate duplicate questions.
 Each question object:
 - question (string, ${langLabel})
@@ -277,7 +296,7 @@ Each question object:
 - imageBinding: required IF type is not "normal". Object with:
   - kind: "player" | "team" | "league" | "venue"
   - entityName: specific name to search for (e.g. "Lionel Messi", "Real Madrid")
-  - teamName: string. REQUIRED ONLY if kind is "player" (the player's current club in 2024-2026, e.g. "Liverpool", "Real Madrid").
+  - teamName: string. REQUIRED ONLY if kind is "player" (player's CURRENT club in 2024-2026, e.g. Mbappe -> "Real Madrid", Salah -> "Liverpool"). Do NOT use former clubs.
 - imageLayout: "square" or "wide"
 - hint: short hint string in ${langLabel} (do not reveal the answer)
 
@@ -288,7 +307,10 @@ CRITICAL — guess_player / player images:
 - Retired legends MAY appear ONLY in type "normal" (text-only, no imageBinding).
 - Prefer "logo" and "stadium" and "normal" for history/legends trivia.
 
-Never generate text-input or essay questions. Exactly 20 questions.`;
+- Include at least 3 type "guess_player" questions (player photo hidden until user answers — use active stars only).
+- Use type "logo" for club badges, "stadium" for venues, "normal" for history/legends text trivia.
+
+Never generate text-input or essay questions. Exactly ${QUIZ_PACK_SIZE} questions.`;
 
   const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Ensure no duplicates, exactly 4 options per question, and correctKey exists.`;
 
@@ -303,13 +325,7 @@ Never generate text-input or essay questions. Exactly 20 questions.`;
   });
 
   const content = completion.choices[0]?.message?.content ?? '{}';
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    const match = content.match(/\{[\s\S]*\}/);
-    parsed = match ? JSON.parse(match[0]) : { questions: [] };
-  }
+  const parsed = parseAiJsonContent(content);
 
   return parseQuestionsFromAi(parsed, language, packDate);
 }
@@ -351,13 +367,7 @@ Language: ${langLabel}. No duplicates.`;
   });
 
   const content = completion.choices[0]?.message?.content ?? '{}';
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    const match = content.match(/\{[\s\S]*\}/);
-    parsed = match ? JSON.parse(match[0]) : { questions: [] };
-  }
+  const parsed = parseAiJsonContent(content);
 
   return parseQuestionsFromAi(parsed, language, packDate);
 }
@@ -372,12 +382,12 @@ async function buildPackWithReplacements(
   let fillRound = 0;
   const MAX_FILL_ROUNDS = 4;
 
-  while (questions.length < 20 && fillRound < MAX_FILL_ROUNDS) {
+  while (questions.length < QUIZ_PACK_SIZE && fillRound < MAX_FILL_ROUNDS) {
     fillRound++;
-    const needed = 20 - questions.length;
+    const needed = QUIZ_PACK_SIZE - questions.length;
     const buffer = needed + 3;
     logger.info(
-      `[QuizGen] Pack has ${questions.length}/20 — generating ${buffer} replacement question(s) (round ${fillRound})`,
+      `[QuizGen] Pack has ${questions.length}/${QUIZ_PACK_SIZE} — generating ${buffer} replacement question(s) (round ${fillRound})`,
     );
 
     const replacements = await generateReplacementQuestions(
@@ -390,13 +400,13 @@ async function buildPackWithReplacements(
     questions = mergeUniqueQuestions(questions, validReplacements);
   }
 
-  if (questions.length < 20) {
+  if (questions.length < QUIZ_PACK_SIZE) {
     throw new Error(
-      `Only ${questions.length} valid unique questions after image resolution and ${fillRound} replacement round(s), expected exactly 20.`,
+      `Only ${questions.length} valid unique questions after image resolution and ${fillRound} replacement round(s), expected exactly ${QUIZ_PACK_SIZE}.`,
     );
   }
 
-  questions = questions.slice(0, 20);
+  questions = questions.slice(0, QUIZ_PACK_SIZE);
   if (!validateDistribution(questions)) {
     questions = rebalanceDifficulties(questions);
   }

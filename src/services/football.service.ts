@@ -599,15 +599,79 @@ class FootballService {
     });
   }
 
+  /** API-Football requires `league` or `team` (plus `season`) when using `search` on /players. */
+  private static readonly PLAYER_SEARCH_LEAGUE_IDS = [
+    39, 140, 135, 78, 61, 2, 3, 88, 94, 203, 253, 307, // top leagues + Saudi
+  ];
+
+  private currentSeason(): number {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    return now.getUTCMonth() >= 6 ? year : year - 1;
+  }
+
   /**
-   * Search players by name
+   * Search players by name (API requires league or team + season with search).
    */
   async searchPlayers(name: string, league?: number, team?: number): Promise<any[]> {
     if (!this.isValidSearch(name)) return [];
-    const params: any = { search: name };
-    if (league) params.league = league;
-    if (team) params.team = team;
-    return this.fetchFromApi<any[]>('/players', params);
+    const season = this.currentSeason();
+
+    if (team) {
+      try {
+        const byTeam = await this.fetchFromApi<any[]>('/players', {
+          search: name,
+          team,
+          season,
+        });
+        if (byTeam?.length) return byTeam;
+      } catch (err) {
+        logger.warn(
+          `[Football] searchPlayers by team ${team} failed for "${name}" — trying league scan`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    if (league) {
+      return this.fetchFromApi<any[]>('/players', {
+        search: name,
+        league,
+        season,
+      });
+    }
+
+    const merged: any[] = [];
+    const seenPlayerIds = new Set<number>();
+
+    for (const leagueId of FootballService.PLAYER_SEARCH_LEAGUE_IDS) {
+      try {
+        const batch = await this.fetchFromApi<any[]>('/players', {
+          search: name,
+          league: leagueId,
+          season,
+        });
+        for (const item of batch ?? []) {
+          const pid = item?.player?.id;
+          if (typeof pid === 'number') {
+            if (seenPlayerIds.has(pid)) continue;
+            seenPlayerIds.add(pid);
+          }
+          merged.push(item);
+        }
+        if (merged.length >= 8) break;
+      } catch (err) {
+        if (err instanceof FootballApiError) {
+          logger.debug(
+            `[Football] Player search in league ${leagueId} for "${name}": ${err.message}`,
+          );
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    return merged;
   }
 
   // ============================================

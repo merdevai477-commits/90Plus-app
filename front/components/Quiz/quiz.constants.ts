@@ -56,7 +56,7 @@ export interface QuizQuestionData {
   options: QuizOption[];
 }
 
-export const QUIZ_SESSION_TOTAL = 20;
+export const QUIZ_SESSION_TOTAL = 15;
 export const QUIZ_TIME_LIMIT_SEC = 20;
 export const QUIZ_COIN_COST = 10;
 

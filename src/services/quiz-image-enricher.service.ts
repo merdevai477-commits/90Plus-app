@@ -91,17 +91,17 @@ function handleUnresolvedImageQuestion(
     logger.warn(
       `[QuizImage] Player image unavailable for "${binding.entityName}", likely retired/legend or not in API-Football.`,
     );
-    if (isRetiredLegendPlayerName(binding.entityName) || maxScore < 0.85) {
-      if (!imageDependent) {
-        logger.info(
-          `[QuizImage] Degraded ${q.id} guess_player to normal text (no photo): "${binding.entityName}"`,
-        );
-        return degradeToNormalTextQuestion(q);
-      }
+    if (imageDependent) {
       logger.info(
         `[QuizImage] Discarded ${q.id} guess_player — image required but unavailable for "${binding.entityName}"`,
       );
       return null;
+    }
+    if (isRetiredLegendPlayerName(binding.entityName) || maxScore < 0.85) {
+      logger.info(
+        `[QuizImage] Degraded ${q.id} guess_player to normal text (no photo): "${binding.entityName}"`,
+      );
+      return degradeToNormalTextQuestion(q);
     }
   }
 
@@ -210,6 +210,22 @@ export async function enrichQuizImages(
              } catch (e) {
                logger.warn(`[QuizImages] Player search failed for "${pAlias}"`, e);
              }
+          }
+
+          if (results.length === 0 && teamId) {
+            try {
+              const squadRows = await footballService.getTeamSquad(teamId);
+              const squadPlayers = squadRows?.[0]?.players ?? [];
+              for (const p of squadPlayers) {
+                if (p?.id && p?.name) {
+                  results.push({
+                    player: { id: p.id, name: p.name, photo: p.photo ?? null },
+                  });
+                }
+              }
+            } catch (e) {
+              logger.warn(`[QuizImages] Squad fallback failed for team ${teamId}`, e);
+            }
           }
           break;
         case 'team':

@@ -20,8 +20,9 @@ import type {
   SessionProgress,
   StoredQuizQuestion,
 } from '../types/quiz.types';
+import { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
 
-export const QUIZ_PACK_SIZE = 20;
+export { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
 export const QUIZ_COIN_COST = 10;
 export const QUIZ_TIME_LIMIT_SEC = 20;
 const PACK_CACHE_TTL = 25 * 60 * 60 * 1000;
@@ -68,6 +69,17 @@ function resolvePublicCorrectKey(
   return undefined;
 }
 
+function resolvePublicImageUrl(
+  q: StoredQuizQuestion,
+  status: string,
+  sanitizedUrl: string | null,
+): string | null {
+  if (q.type === 'guess_player' && status === 'pending') {
+    return null;
+  }
+  return sanitizedUrl;
+}
+
 function toPublicQuestions(
   stored: StoredQuizQuestion[],
   progress: SessionProgress,
@@ -75,7 +87,8 @@ function toPublicQuestions(
   return stored.map((q, index) => {
     const p = progress.byQuestionId[q.id];
     const status = p?.status ?? 'pending';
-    const { imageUrl, imageLayout } = sanitizePublicImage(q);
+    const { imageUrl: rawUrl, imageLayout } = sanitizePublicImage(q);
+    const imageUrl = resolvePublicImageUrl(q, status, rawUrl);
     return {
       id: q.id,
       question: q.question,
@@ -414,6 +427,10 @@ export async function submitQuizAnswer(
         alreadyDone: true,
         isCorrect: existing.isCorrect,
         correctKey: question.correctKey,
+        imageUrl:
+          question.type === 'guess_player' && question.imageUrl
+            ? question.imageUrl
+            : undefined,
         xpAwarded: existing.xpAwarded ?? 0,
         coins: user.coins,
         xp: user.xp,
@@ -472,6 +489,10 @@ export async function submitQuizAnswer(
     return {
       isCorrect,
       correctKey: question.correctKey,
+      imageUrl:
+        question.type === 'guess_player' && question.imageUrl
+          ? question.imageUrl
+          : undefined,
       xpAwarded,
       coins: user.coins,
       xp: newXp,
@@ -705,6 +726,9 @@ export async function timeoutQuizQuestion(
       };
       if (existing?.status === 'answered' || existing?.status === 'timed_out') {
         result.correctKey = existing?.correctKey ?? question.correctKey;
+        if (question.type === 'guess_player' && question.imageUrl) {
+          result.imageUrl = question.imageUrl;
+        }
       }
       return result;
     }
@@ -755,6 +779,10 @@ export async function timeoutQuizQuestion(
 
     const result: QuizTimeoutResult = {
       correctKey: question.correctKey,
+      imageUrl:
+        question.type === 'guess_player' && question.imageUrl
+          ? question.imageUrl
+          : undefined,
       penaltyApplied,
       coins: newCoins,
       stats,

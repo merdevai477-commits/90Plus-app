@@ -16,9 +16,17 @@ export interface QuizApiOption {
   text: string;
 }
 
+export type QuizApiQuestionType =
+  | 'normal'
+  | 'image'
+  | 'guess_player'
+  | 'logo'
+  | 'stadium';
+
 export interface QuizApiQuestion {
   id: string;
   question: string;
+  type?: QuizApiQuestionType;
   options: QuizApiOption[];
   difficulty: QuizApiDifficulty;
   imageUrl?: string | null;
@@ -60,6 +68,7 @@ export interface QuizDailyPayload {
 
 export interface QuizTimeoutResponse {
   correctKey?: QuizApiOptionKey;
+  imageUrl?: string | null;
   penaltyApplied: boolean;
   errorCode?: 'INSUFFICIENT_COINS_FOR_TIMEOUT_PENALTY';
   alreadyDone?: boolean;

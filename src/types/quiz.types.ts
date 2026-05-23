@@ -61,6 +61,7 @@ export interface QuizSessionStats {
 
 export interface QuizTimeoutResult {
   correctKey?: QuizOptionKey;
+  imageUrl?: string | null;
   penaltyApplied: boolean;
   errorCode?: 'INSUFFICIENT_COINS_FOR_TIMEOUT_PENALTY';
   alreadyDone?: boolean;

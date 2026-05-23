@@ -8,6 +8,7 @@ interface CoinsContextType {
   coins: number;
   addCoins: (amount: number) => Promise<void>;
   subtractCoins: (amount: number) => Promise<boolean>;
+  applyCoinsBalance: (balance: number) => void;
   resetCoins: () => Promise<void>;
   refreshCoins: () => Promise<void>;
   loading: boolean;
@@ -88,29 +89,30 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
 
   const subtractCoins = async (amount: number): Promise<boolean> => {
     if (coins < amount) {
-      return false; // مش كفاية كوينات
+      return false;
     }
 
+    const newCoins = coins - amount;
+    setCoins(newCoins);
+
     try {
-      // Update token before operation
       const token = await getToken();
       if (token) {
         CoinsService.setToken(token);
       }
-      const newCoins = coins - amount;
-      // ✅ PERFORMANCE: Update UI immediately (optimistic)
-      setCoins(newCoins);
-      // Update backend in background (non-blocking)
       CoinsService.updateBalance(newCoins).catch(() => {
-        // On error, reload to sync
         loadCoins();
       });
       return true;
-    } catch (error) {
+    } catch {
       loadCoins();
       return false;
     }
   };
+
+  const applyCoinsBalance = useCallback((balance: number) => {
+    setCoins(balance);
+  }, []);
 
   const resetCoins = async () => {
     try {
@@ -122,7 +124,7 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <CoinsContext.Provider value={{ coins, addCoins, subtractCoins, resetCoins, refreshCoins: loadCoins, loading }}>
+    <CoinsContext.Provider value={{ coins, addCoins, subtractCoins, applyCoinsBalance, resetCoins, refreshCoins: loadCoins, loading }}>
       {children}
     </CoinsContext.Provider>
   );

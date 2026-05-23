@@ -644,6 +644,7 @@ export const ar = {
     noQuestionsAvailable: 'لا توجد أسئلة متاحة',
     imageQuiz: 'اختبار الصور',
     footballQuiz: 'كويز كرة القدم',
+    guessPlayerHidden: 'خمّن اللاعب — الصورة تظهر بعد إجابتك',
     questionImage: 'صورة السؤال',
     questionImagePlaceholder: 'مكان صورة السؤال',
     imageUnavailable: 'الصورة غير متاحة',
