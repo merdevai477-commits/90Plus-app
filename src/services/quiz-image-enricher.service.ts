@@ -6,6 +6,27 @@ function normalizeName(name: string): string {
   return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 }
 
+function getAliases(name: string): string[] {
+  const aliases = new Set<string>();
+  aliases.add(name);
+  
+  let cleaned = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  
+  const stopWords = ['fc', 'cf', 'sc', 'afc', 'national football team', 'national team', 'football club'];
+  let shortName = cleaned;
+  for (const word of stopWords) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    shortName = shortName.replace(regex, '');
+  }
+  shortName = shortName.trim().replace(/\s+/g, ' ');
+  
+  if (shortName && shortName !== cleaned && shortName.length > 0) {
+    aliases.add(shortName);
+  }
+  
+  return Array.from(aliases);
+}
+
 function editDistance(s1: string, s2: string): number {
   s1 = s1.toLowerCase();
   s2 = s2.toLowerCase();
@@ -79,7 +100,9 @@ export async function enrichQuizImages(
     }
 
     const binding = q.imageBinding;
-    const targetName = normalizeName(binding.entityName);
+    const aliases = getAliases(binding.entityName);
+    const targetNames = aliases.map(normalizeName);
+    
     let bestMatchUrl: string | null = null;
     let bestMatchId: number | undefined;
     let maxScore = 0;
@@ -88,30 +111,52 @@ export async function enrichQuizImages(
     try {
       switch (binding.kind) {
         case 'player':
+          let teamId: number | undefined;
           if (binding.teamName) {
-            const teamRes = await footballService.searchTeams(binding.teamName);
-            if (teamRes && teamRes.length > 0 && teamRes[0].team) {
-              const teamId = teamRes[0].team.id;
-              results = await footballService.searchPlayers(binding.entityName, undefined, teamId);
-            } else {
-              logger.warn(`[QuizImages] Could not resolve team "${binding.teamName}" for player "${binding.entityName}"`);
+            const teamAliases = getAliases(binding.teamName);
+            for (const tAlias of teamAliases) {
+              const teamRes = await footballService.searchTeams(tAlias);
+              if (teamRes && teamRes.length > 0 && teamRes[0].team) {
+                teamId = teamRes[0].team.id;
+                break;
+              }
             }
-          } else {
-             logger.warn(`[QuizImages] Missing teamName for player "${binding.entityName}"`);
+          }
+          
+          if (!teamId) {
+             logger.warn(`[QuizImages] Could not resolve team "${binding.teamName}" for player "${binding.entityName}". Attempting global search.`);
+          }
+          
+          for (const pAlias of aliases) {
+             try {
+               const pRes = await footballService.searchPlayers(pAlias, undefined, teamId);
+               if (pRes && pRes.length > 0) results = results.concat(pRes);
+             } catch (e) {
+               logger.warn(`[QuizImages] Player search failed for "${pAlias}"`, e);
+             }
           }
           break;
         case 'team':
-          results = await footballService.searchTeams(binding.entityName);
+          for (const alias of aliases) {
+            const tRes = await footballService.searchTeams(alias);
+            if (tRes && tRes.length > 0) results = results.concat(tRes);
+          }
           break;
         case 'league':
-          results = await footballService.searchLeagues(binding.entityName);
+          for (const alias of aliases) {
+            const lRes = await footballService.searchLeagues(alias);
+            if (lRes && lRes.length > 0) results = results.concat(lRes);
+          }
           break;
         case 'venue':
-          results = await footballService.searchVenues(binding.entityName);
+          for (const alias of aliases) {
+            const vRes = await footballService.searchVenues(alias);
+            if (vRes && vRes.length > 0) results = results.concat(vRes);
+          }
           break;
       }
     } catch (e) {
-      logger.warn(`[QuizImages] API search failed for ${binding.kind} "${binding.entityName}"`, e);
+      logger.warn(`[QuizImages] API search wrapper failed for ${binding.kind} "${binding.entityName}"`, e);
     }
 
     for (const item of results) {
@@ -140,19 +185,23 @@ export async function enrichQuizImages(
       if (!name || !url) continue;
 
       const normalizedItemName = normalizeName(name);
-      if (normalizedItemName === targetName) {
-        bestMatchUrl = url;
-        bestMatchId = id;
-        maxScore = 1.0;
-        break; // Exact match found
-      }
+      
+      for (const tName of targetNames) {
+        if (normalizedItemName === tName) {
+          bestMatchUrl = url;
+          bestMatchId = id;
+          maxScore = 1.0;
+          break; // Exact match found
+        }
 
-      const score = getSimilarity(targetName, normalizedItemName);
-      if (score > maxScore) {
-        maxScore = score;
-        bestMatchUrl = url;
-        bestMatchId = id;
+        const score = getSimilarity(tName, normalizedItemName);
+        if (score > maxScore) {
+          maxScore = score;
+          bestMatchUrl = url;
+          bestMatchId = id;
+        }
       }
+      if (maxScore === 1.0) break;
     }
 
     if (maxScore >= 0.85 && bestMatchUrl) {
