@@ -1,441 +1,403 @@
 /**
- * QuizCard — Question card: category chip, question box, answer options, hint.
- *
- * Surface: fully transparent — the screen background shows through.
- * Solid border + subtle rgba tint give definition without hiding the background.
- * No BlurView / LiquidGlass — works identically on iOS and Android.
+ * QuizCard — Question, options, hint; green/red answer feedback.
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Image,
   I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withSequence,
-  Easing,
-} from 'react-native-reanimated';
-import { CircleCheck, BrainCircuit, Swords } from 'lucide-react-native';
+import { CircleCheck, Lightbulb, Zap } from 'lucide-react-native';
 
 import { useTranslation } from '../../src/i18n';
-import { TEXT_MUTED, TEXT_SECONDARY, GOLD_PRIMARY } from '../../constants/tokens';
 import {
   ACCENT,
   ACCENT_SOFT,
-  CARD_BORDER,
+  QUIZ_CARD_BG,
+  QUIZ_CARD_BORDER,
+  QUIZ_OPTION_BG,
+  QUIZ_OPTION_BORDER,
+  QUIZ_RADIUS_LG,
+  QUIZ_RADIUS_MD,
+  QUIZ_RADIUS_SM,
+  QUIZ_COIN_COST,
   type OptionKey,
+  type QuizImageLayout,
   type QuizOption,
 } from './quiz.constants';
+import { QuizQuestionMedia } from './QuizQuestionMedia';
 
-// ─── Transparent GlassCard primitive ─────────────────────────────────────────
-
-function GlassCard({
-  children,
-  style,
-  borderColor = CARD_BORDER,
-}: {
-  children: React.ReactNode;
-  style?: object;
-  borderColor?: string;
-}) {
-  return (
-    <View style={[gcStyles.card, { borderColor }, style]}>
-      {/* Top sheen line */}
-      <View style={gcStyles.topHighlight} />
-      {children}
-    </View>
-  );
-}
-
-const gcStyles = StyleSheet.create({
-  card: {
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: 'hidden',
-    // Transparent — screen background shows through
-    backgroundColor: 'rgba(10,6,18,0.0)',
-  },
-  topHighlight: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    zIndex: 1,
-  },
-});
-
-// ─── OptionRow ────────────────────────────────────────────────────────────────
+const CORRECT_BG = 'rgba(34, 197, 94, 0.18)';
+const CORRECT_BORDER = 'rgba(34, 197, 94, 0.75)';
+const WRONG_BG = 'rgba(239, 68, 68, 0.18)';
+const WRONG_BORDER = 'rgba(239, 68, 68, 0.75)';
 
 interface OptionRowProps {
   opt: QuizOption;
   isSelected: boolean;
   onPress: () => void;
+  answerRevealed: boolean;
+  isCorrectOption: boolean;
+  isWrongSelection: boolean;
+  disabled: boolean;
 }
 
-function OptionRow({ opt, isSelected, onPress }: OptionRowProps) {
-  const scale  = useSharedValue(1);
-  const glowOp = useSharedValue(isSelected ? 1 : 0);
-
-  useEffect(() => {
-    glowOp.value = withTiming(isSelected ? 1 : 0, { duration: 250 });
-  }, [isSelected, glowOp]);
-
-  const handlePress = useCallback(() => {
-    scale.value = withSequence(
-      withTiming(0.965, { duration: 70, easing: Easing.out(Easing.quad) }),
-      withSpring(1, { damping: 10, stiffness: 220 }),
-    );
-    onPress();
-  }, [scale, onPress]);
-
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: glowOp.value }));
+function OptionRow({
+  opt,
+  isSelected,
+  onPress,
+  answerRevealed,
+  isCorrectOption,
+  isWrongSelection,
+  disabled,
+}: OptionRowProps) {
+  const showCorrect = answerRevealed && isCorrectOption;
+  const showWrong = answerRevealed && isWrongSelection;
 
   return (
-    <Animated.View style={[optStyles.wrapper, animStyle]}>
-      <Animated.View style={[StyleSheet.absoluteFill, optStyles.glowBorder, glowStyle]} />
-      <TouchableOpacity
-        style={[optStyles.row, isSelected && optStyles.rowActive]}
-        activeOpacity={1}
-        onPress={handlePress}
-        accessibilityRole="radio"
-        accessibilityState={{ selected: isSelected }}
-        accessibilityLabel={`${opt.key}: ${opt.text}`}
+    <TouchableOpacity
+      style={[
+        optStyles.row,
+        isSelected && !answerRevealed && optStyles.rowSelected,
+        showCorrect && optStyles.rowCorrect,
+        showWrong && optStyles.rowWrong,
+        disabled && !answerRevealed && { opacity: 0.65 },
+      ]}
+      activeOpacity={0.85}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: isSelected, disabled }}
+      accessibilityLabel={`${opt.key}: ${opt.text}`}
+    >
+      <View
+        style={[
+          optStyles.letterCircle,
+          isSelected && !answerRevealed && optStyles.letterCircleSelected,
+          showCorrect && optStyles.letterCircleCorrect,
+          showWrong && optStyles.letterCircleWrong,
+        ]}
       >
-        <LinearGradient
-          colors={
-            isSelected
-              ? [ACCENT, '#7B2EFF']
-              : ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.04)']
-          }
-          style={optStyles.letterBadge}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <Text
+          style={[
+            optStyles.letter,
+            isSelected && !answerRevealed && optStyles.letterSelected,
+            (showCorrect || showWrong) && optStyles.letterOnResult,
+          ]}
         >
-          <Text style={optStyles.letter}>{opt.key}</Text>
-        </LinearGradient>
-
-        <Text style={[optStyles.text, isSelected && optStyles.textActive]}>
-          {opt.text}
+          {opt.key}
         </Text>
+      </View>
 
-        {isSelected ? (
-          <CircleCheck size={22} color={ACCENT_SOFT} strokeWidth={2.2} />
-        ) : (
-          <View style={optStyles.radioEmpty} />
-        )}
-      </TouchableOpacity>
-    </Animated.View>
+      <Text
+        style={[
+          optStyles.answerText,
+          isSelected && !answerRevealed && optStyles.answerTextSelected,
+          showCorrect && optStyles.answerTextCorrect,
+          showWrong && optStyles.answerTextWrong,
+        ]}
+      >
+        {opt.text}
+      </Text>
+
+      {isSelected && !answerRevealed ? (
+        <View style={optStyles.radioFilled}>
+          <LinearGradient
+            colors={[ACCENT_SOFT, '#7C3AED']}
+            style={StyleSheet.absoluteFill}
+          />
+          <CircleCheck size={13} color="#FFF" strokeWidth={3} />
+        </View>
+      ) : showCorrect ? (
+        <CircleCheck size={20} color="#22C55E" strokeWidth={2.5} />
+      ) : showWrong ? (
+        <Text style={optStyles.wrongMark}>✕</Text>
+      ) : (
+        <View style={optStyles.radioEmpty} />
+      )}
+    </TouchableOpacity>
   );
 }
 
 const optStyles = StyleSheet.create({
-  wrapper: { borderRadius: 18, position: 'relative' },
-  glowBorder: {
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#B026FF',
-    shadowColor: '#C026FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    elevation: 8,
-  },
   row: {
-    minHeight: 60,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    // Transparent with very subtle tint
-    backgroundColor: 'rgba(10,6,18,0.0)',
+    minHeight: 52,
+    borderRadius: QUIZ_RADIUS_MD,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: QUIZ_OPTION_BG,
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.20)',
+    borderColor: QUIZ_OPTION_BORDER,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  rowActive: {
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderColor: 'transparent',
+  rowSelected: {
+    borderColor: 'rgba(168, 85, 247, 0.75)',
+    backgroundColor: 'rgba(124, 58, 237, 0.14)',
   },
-  letterBadge: {
-    width: 38, height: 38,
-    borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
+  rowCorrect: {
+    borderColor: CORRECT_BORDER,
+    backgroundColor: CORRECT_BG,
   },
-  letter: { color: '#fff', fontSize: 15, fontWeight: '900' },
-  text: {
-    color: TEXT_SECONDARY,
-    fontSize: 14, fontWeight: '600',
-    flex: 1, lineHeight: 20,
+  rowWrong: {
+    borderColor: WRONG_BORDER,
+    backgroundColor: WRONG_BG,
   },
-  textActive: { color: '#fff', fontWeight: '700' },
+  letterCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  letterCircleSelected: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT_SOFT,
+  },
+  letterCircleCorrect: {
+    backgroundColor: '#22C55E',
+    borderColor: '#4ADE80',
+  },
+  letterCircleWrong: {
+    backgroundColor: '#EF4444',
+    borderColor: '#F87171',
+  },
+  letter: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  letterSelected: { color: '#FFFFFF' },
+  letterOnResult: { color: '#FFFFFF' },
+  answerText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  answerTextSelected: { fontWeight: '700' },
+  answerTextCorrect: { fontWeight: '700' },
+  answerTextWrong: { fontWeight: '700' },
   radioEmpty: {
-    width: 22, height: 22,
+    width: 22,
+    height: 22,
     borderRadius: 11,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  radioFilled: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wrongMark: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '800',
   },
 });
 
-// ─── QuizCard ─────────────────────────────────────────────────────────────────
-
 interface QuizCardProps {
   question: string;
-  imageUri?: string;
-  category: string;
-  difficulty: string;
+  imageUrl?: string | null;
+  imageLayout?: QuizImageLayout;
   options: QuizOption[];
   selectedKey: OptionKey | null;
   onSelectOption: (key: OptionKey) => void;
   onUseHint: () => void;
+  hintUsed?: boolean;
+  hintText?: string | null;
+  answerRevealed?: boolean;
+  isCorrect?: boolean | null;
+  correctKey?: OptionKey | null;
+  disableOptions?: boolean;
 }
 
 export function QuizCard({
   question,
-  imageUri,
-  category,
-  difficulty,
+  imageUrl,
+  imageLayout = 'square',
   options,
   selectedKey,
   onSelectOption,
   onUseHint,
+  hintUsed = false,
+  hintText = null,
+  answerRevealed = false,
+  isCorrect = null,
+  correctKey = null,
+  disableOptions = false,
 }: QuizCardProps) {
   const { t } = useTranslation();
   const textAlign = I18nManager.isRTL ? 'right' : 'left';
 
   return (
-    <View style={styles.quizCard}>
-      {/* Thin purple top accent */}
-      <View style={styles.cardTopLine} />
-
-      <View style={styles.inner}>
-        {/* ── Category + difficulty ── */}
-        <View style={[styles.head, I18nManager.isRTL && styles.headRTL]}>
-          <View style={styles.categoryChip}>
-            <Swords size={13} color={ACCENT_SOFT} strokeWidth={2} />
-            <Text style={styles.categoryTxt}>{category}</Text>
-          </View>
-          <LinearGradient
-            colors={['rgba(234,179,8,0.22)', 'rgba(202,138,4,0.12)']}
-            style={styles.levelPill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.levelTxt}>{difficulty}</Text>
-          </LinearGradient>
+    <View style={styles.card}>
+      <View style={styles.questionBlock}>
+        <Text style={[styles.questionTitle, { textAlign }]}>{question}</Text>
+        <View style={styles.mediaWrap}>
+          <QuizQuestionMedia imageUrl={imageUrl} layout={imageLayout} />
         </View>
+      </View>
 
-        {/* ── Question box ── */}
-        <View style={styles.questionBox}>
-          {imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              style={[
-                styles.questionImage,
-                I18nManager.isRTL ? { left: 0 } : { right: 0 },
-              ]}
-              resizeMode="cover"
-              accessibilityLabel={t.quiz.imageUnavailable}
-            />
-          ) : null}
-
-          {/* Cinematic image fades */}
-          <LinearGradient
-            colors={['rgba(10,6,18,0.05)', 'rgba(10,6,18,0.5)', 'rgba(10,6,18,0.95)', 'rgba(10,6,18,1.0)']}
-            style={StyleSheet.absoluteFill}
-            start={{ x: I18nManager.isRTL ? 0 : 1, y: 0 }}
-            end={{ x: I18nManager.isRTL ? 1 : 0, y: 1 }}
-          />
-          <LinearGradient
-            colors={['rgba(10,6,18,0.95)', 'rgba(10,6,18,0.5)', 'transparent']}
-            style={StyleSheet.absoluteFill}
-            start={{ x: I18nManager.isRTL ? 1 : 0, y: 0 }}
-            end={{ x: I18nManager.isRTL ? 0 : 1, y: 0 }}
-          />
-          {/* Purple ambient tint */}
-          <LinearGradient
-            colors={['rgba(124,58,237,0.10)', 'transparent']}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          />
-
-          <View
-            style={[
-              styles.questionTextWrap,
-              I18nManager.isRTL
-                ? { paddingRight: 18, paddingLeft: '42%' }
-                : { paddingLeft: 18, paddingRight: '42%' },
-            ]}
-          >
-            <Text style={[styles.questionTitle, { textAlign }]}>{question}</Text>
-          </View>
+      {hintText ? (
+        <View style={styles.hintBanner}>
+          <Lightbulb size={16} color="#FACC15" />
+          <Text style={[styles.hintBannerText, { textAlign }]}>{hintText}</Text>
         </View>
+      ) : null}
 
-        {/* ── Answer options ── */}
-        <View style={styles.optionsContainer}>
-          {options.map((opt) => (
-            <OptionRow
-              key={opt.key}
-              opt={opt}
-              isSelected={selectedKey === opt.key}
-              onPress={() => onSelectOption(opt.key)}
-            />
-          ))}
+      <View style={styles.optionsList}>
+        {options.map((opt) => (
+          <OptionRow
+            key={opt.key}
+            opt={opt}
+            isSelected={selectedKey === opt.key}
+            onPress={() => onSelectOption(opt.key)}
+            answerRevealed={answerRevealed}
+            isCorrectOption={answerRevealed && correctKey === opt.key}
+            isWrongSelection={
+              answerRevealed &&
+              selectedKey === opt.key &&
+              isCorrect === false
+            }
+            disabled={disableOptions}
+          />
+        ))}
+      </View>
+
+      <View style={[styles.hintRow, I18nManager.isRTL && styles.hintRowRTL]}>
+        <Lightbulb size={20} color="#FACC15" strokeWidth={2} />
+        <View style={styles.hintTexts}>
+          <Text style={[styles.hintTitle, { textAlign }]}>{t.quiz.needHint}</Text>
+          <Text style={[styles.hintSub, { textAlign }]}>{t.quiz.hintAvailable}</Text>
         </View>
-
-        {/* ── Hint card ── */}
-        <GlassCard
-          style={[styles.hintCard, I18nManager.isRTL && styles.hintCardRTL]}
-          borderColor="rgba(234,179,8,0.20)"
+        <TouchableOpacity
+          style={[styles.hintBtn, hintUsed && styles.hintBtnDisabled]}
+          activeOpacity={0.85}
+          onPress={onUseHint}
+          disabled={hintUsed || answerRevealed}
         >
-          <View style={styles.hintIconWrap}>
-            <BrainCircuit size={20} color={GOLD_PRIMARY} strokeWidth={2} />
-          </View>
-          <View style={styles.hintBody}>
-            <Text style={[styles.hintTitle, { textAlign }]}>{t.quiz.hintCost}</Text>
-            <Text style={[styles.hintSub, { textAlign }]}>
-              {t.quiz.hintAvailable} · {t.quiz.coins} 10
-            </Text>
-          </View>
-          <TouchableOpacity activeOpacity={0.8} style={styles.hintBtnWrap} onPress={onUseHint}>
-            <LinearGradient
-              colors={[ACCENT, '#7B2EFF']}
-              style={styles.hintBtn}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Text style={styles.hintBtnText}>{t.quiz.useHint}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </GlassCard>
+          <Text style={styles.hintBtnLabel}>
+            {hintUsed ? t.quiz.hintUsed : t.quiz.useHint}
+          </Text>
+          {!hintUsed ? (
+            <>
+              <Zap size={11} color={ACCENT_SOFT} fill={ACCENT_SOFT} />
+              <Text style={styles.hintBtnCost}>{QUIZ_COIN_COST}</Text>
+            </>
+          ) : null}
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  quizCard: {
-    borderRadius: 26,
+  card: {
+    borderRadius: QUIZ_RADIUS_LG,
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.22)',
-    overflow: 'hidden',
-    marginBottom: 14,
-    // Transparent — screen background shows through
-    backgroundColor: 'rgba(10,6,18,0.0)',
+    borderColor: QUIZ_CARD_BORDER,
+    backgroundColor: QUIZ_CARD_BG,
+    padding: 14,
     shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
     elevation: 8,
   },
-  cardTopLine: {
-    height: 1,
-    backgroundColor: 'rgba(176,38,255,0.35)',
-  },
-  inner: { padding: 16 },
-
-  // Head
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  questionBlock: {
     marginBottom: 14,
-  },
-  headRTL: { flexDirection: 'row-reverse' },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 10,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(124,58,237,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.28)',
-  },
-  categoryTxt: {
-    color: ACCENT_SOFT,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  levelPill: {
-    borderRadius: 10,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(234,179,8,0.30)',
-  },
-  levelTxt: { color: '#fde68a', fontSize: 12, fontWeight: '700' },
-
-  // Question box
-  questionBox: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    minHeight: 170,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.18)',
-    backgroundColor: 'rgba(10,6,18,0.0)',
-  },
-  questionImage: {
-    position: 'absolute',
-    top: 0, bottom: 0,
-    width: '65%',
-    opacity: 0.80,
-  },
-  questionTextWrap: {
-    padding: 18,
-    justifyContent: 'flex-end',
-    minHeight: 170,
   },
   questionTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '900',
-    lineHeight: 28,
-    letterSpacing: -0.4,
-    textShadowColor: 'rgba(0,0,0,0.9)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 25,
+    letterSpacing: -0.2,
   },
-
-  // Options
-  optionsContainer: { gap: 9, marginBottom: 14 },
-
-  // Hint
-  hintCard: {
-    padding: 13,
+  mediaWrap: {
+    marginTop: 14,
+    width: '100%',
+  },
+  hintBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: QUIZ_RADIUS_SM,
+    backgroundColor: 'rgba(250, 204, 21, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(250, 204, 21, 0.35)',
+  },
+  hintBannerText: {
+    flex: 1,
+    color: '#FDE68A',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  optionsList: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  hintRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
-  hintCardRTL: { flexDirection: 'row-reverse' },
-  hintIconWrap: {
-    width: 40, height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(245,197,24,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,197,24,0.25)',
-    alignItems: 'center', justifyContent: 'center',
+  hintRowRTL: { flexDirection: 'row-reverse' },
+  hintTexts: { flex: 1 },
+  hintTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  hintBody: { flex: 1 },
-  hintTitle: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  hintSub: { color: TEXT_MUTED, fontSize: 11, marginTop: 2 },
-  hintBtnWrap: { borderRadius: 13, overflow: 'hidden' },
+  hintSub: {
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '500',
+  },
   hintBtn: {
-    paddingHorizontal: 16, paddingVertical: 10,
-    alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: QUIZ_RADIUS_SM,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.5)',
+    backgroundColor: '#1A1630',
   },
-  hintBtnText: { color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  hintBtnLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  hintBtnCost: {
+    color: ACCENT_SOFT,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  hintBtnDisabled: {
+    opacity: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
 });

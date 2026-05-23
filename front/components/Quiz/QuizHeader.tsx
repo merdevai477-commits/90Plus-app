@@ -1,5 +1,5 @@
 /**
- * QuizHeader — Fixed top bar with back button, 90PLUS logo, and coin chip.
+ * QuizHeader — Fixed liquid-glass bar aligned like Rank (back | 90 PLUS | coins).
  */
 
 import React from 'react';
@@ -11,14 +11,16 @@ import {
   I18nManager,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { ChevronLeft, Zap } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
-import { TEXT_PRIMARY } from '../../constants/tokens';
-import { ACCENT, ACCENT_SOFT, BLUR_INTENSITY } from './quiz.constants';
+import { glassProps } from '../../constants/ui';
+
+const ACCENT = '#A855F7';
+const SIDE_SLOT_W = 88;
 
 interface QuizHeaderProps {
   topInset: number;
@@ -26,127 +28,147 @@ interface QuizHeaderProps {
 
 export function QuizHeader({ topInset }: QuizHeaderProps) {
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+  const glassHeaderProps = isLiquidGlassSupported
+    ? (glassProps.header as { effect: 'clear'; tint?: string })
+    : { intensity: 15, tint: 'dark' as const };
+
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
-  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
   const display = loading ? '—' : String(coins);
 
   return (
     <GlassContainer
-      intensity={25}
-      tint="dark"
-      effect="regular"
-      style={[styles.container, { paddingTop: topInset + 12, flexDirection: rowDirection }]}
+      {...glassHeaderProps}
+      style={[styles.shell, { paddingTop: topInset + 10 }]}
     >
-      {/* Back → rank */}
-      <TouchableOpacity
-        onPress={() => router.push('/rank' as never)}
-        style={styles.backBtn}
-        activeOpacity={0.75}
-        accessibilityLabel={t.common.cancel}
-      >
-        <ChevronLeft size={20} color={TEXT_PRIMARY} strokeWidth={2.5} />
-      </TouchableOpacity>
+      <View style={[styles.row, I18nManager.isRTL && styles.rowRTL]}>
+        <View style={[styles.sideSlot, I18nManager.isRTL && styles.sideSlotRTL]}>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/rank')}
+            style={styles.glassChip}
+            activeOpacity={0.75}
+            accessibilityLabel={t.common.cancel}
+          >
+            <ChevronLeft
+              size={20}
+              color="#FFFFFF"
+              strokeWidth={2.5}
+              style={I18nManager.isRTL ? styles.chevronRTL : undefined}
+            />
+          </TouchableOpacity>
+        </View>
 
-      {/* 90 PLUS logo */}
-      <View style={styles.logoWrap}>
-        <View style={styles.logoGlow} pointerEvents="none" />
-        <View style={styles.logoPill}>
-          <Text style={styles.logo90}>90</Text>
-          <View style={styles.plusBadge}>
-            <Text style={styles.plusTxt}>PLUS</Text>
+        <View style={styles.centerSlot}>
+          <View style={styles.logoPillSmall}>
+            <Text style={styles.logo90Small}>90</Text>
+            <View style={styles.plusChipSmall}>
+              <Text style={styles.logoPlusSmall}>PLUS</Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* Coin chip */}
-      <View
-        style={styles.coinChip}
-        accessibilityRole="text"
-        accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
-      >
-        <Zap size={14} color={ACCENT_SOFT} fill={ACCENT_SOFT} />
-        <Text style={styles.coinTxt}>{display}</Text>
+        <View style={[styles.sideSlot, styles.sideSlotEnd, I18nManager.isRTL && styles.sideSlotEndRTL]}>
+          <View
+            style={styles.glassChip}
+            accessibilityRole="text"
+            accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
+          >
+            <Zap size={13} color={ACCENT} fill={ACCENT} />
+            <Text style={styles.coinTxt}>{display}</Text>
+          </View>
+        </View>
       </View>
     </GlassContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  shell: {
     position: 'absolute',
-    top: 0, start: 0, end: 0,
+    top: 0,
+    start: 0,
+    end: 0,
     zIndex: 100,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(176,38,255,0.12)',
-    backgroundColor: 'rgba(5,1,13,0.0)',
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'transparent',
   },
-  backBtn: {
-    width: 38, height: 38,
-    borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#17172A',
-    borderWidth: 1, borderColor: '#2B2B45',
-  },
-  logoWrap: {
-    alignItems: 'center', justifyContent: 'center',
-    position: 'relative',
-  },
-  logoGlow: {
-    position: 'absolute',
-    width: 90, height: 36,
-    borderRadius: 18,
-    backgroundColor: ACCENT,
-    opacity: 0.18,
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 20,
-    elevation: 0,
-  },
-  logoPill: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#17172A',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: '#2B2B45',
-    gap: 7,
+    paddingHorizontal: 16,
+    minHeight: 44,
   },
-  logo90: {
+  rowRTL: {
+    flexDirection: 'row-reverse',
+  },
+  sideSlot: {
+    width: SIDE_SLOT_W,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  sideSlotRTL: {
+    alignItems: 'flex-end',
+  },
+  sideSlotEnd: {
+    alignItems: 'flex-end',
+  },
+  sideSlotEndRTL: {
+    alignItems: 'flex-start',
+  },
+  centerSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glassChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 40,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    gap: 5,
+  },
+  logoPillSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    gap: 5,
+  },
+  logo90Small: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.3,
   },
-  plusBadge: {
-    backgroundColor: ACCENT_SOFT,
-    borderRadius: 6,
-    paddingHorizontal: 7,
+  plusChipSmall: {
+    backgroundColor: ACCENT,
+    borderRadius: 5,
+    paddingHorizontal: 5,
     paddingVertical: 2,
   },
-  plusTxt: {
+  logoPlusSmall: {
     color: '#fff',
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
   },
-  coinChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#17172A',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#2B2B45',
-    gap: 6,
+  coinTxt: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
   },
-  coinTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  chevronRTL: {
+    transform: [{ scaleX: -1 }],
+  },
 });

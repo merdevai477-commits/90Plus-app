@@ -123,9 +123,10 @@ model User {
   // Relations
   sessions         Session[]
   refreshTokens    RefreshToken[]
-  quizAttempts     QuizAttempt[]
-  quizAnswers      UserQuizAnswer[]
-  quizState        UserQuizState?
+  quizAttempts        QuizAttempt[]
+  quizAnswers         UserQuizAnswer[]
+  quizState           UserQuizState?
+  dailyQuizSessions   UserDailyQuizSession[]
   notifications    Notification[]
   reels            Reel[]
   comments         Comment[]
@@ -495,6 +496,45 @@ model DailyQuiz {
   @@index([categoryId])
   @@index([expiresAt])
   @@map("daily_quizzes")
+}
+
+/// AI-generated daily question packs (20 per language, renewed every 24h)
+model DailyQuizPack {
+  id        String   @id @default(uuid())
+  packDate  DateTime @db.Date
+  language  String   @db.VarChar(5)
+  questions Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([packDate, language])
+  @@index([packDate])
+  @@index([expiresAt])
+  @@map("daily_quiz_packs")
+}
+
+/// Per-user progress for a daily pack (answers, skips, hints, XP)
+model UserDailyQuizSession {
+  id            String    @id @default(uuid())
+  userId        String
+  packDate      DateTime  @db.Date
+  language      String    @db.VarChar(5)
+  progress      Json      @default("{}")
+  correctCount  Int       @default(0)
+  answeredCount Int       @default(0)
+  skippedCount  Int       @default(0)
+  xpEarned      Int       @default(0)
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, packDate, language])
+  @@index([userId])
+  @@index([packDate])
+  @@map("user_daily_quiz_sessions")
 }
 
 // ============================================

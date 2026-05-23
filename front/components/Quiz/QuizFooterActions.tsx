@@ -1,8 +1,8 @@
 /**
- * QuizFooterActions — Skip button + animated Next Question button.
+ * QuizFooterActions — Skip (10 coins) + Next Question.
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -11,72 +11,74 @@ import {
   I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { SkipForward, ArrowRight } from 'lucide-react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
+import { SkipForward, ArrowRight, Zap } from 'lucide-react-native';
 
 import { useTranslation } from '../../src/i18n';
-import { TEXT_PRIMARY } from '../../constants/tokens';
-import { ACCENT, NEON_PURPLE, BLUR_INTENSITY } from './quiz.constants';
+import {
+  ACCENT,
+  ACCENT_SOFT,
+  NEON_PURPLE,
+  QUIZ_CARD_BORDER,
+  QUIZ_CHIP_BG,
+  QUIZ_COIN_COST,
+  QUIZ_RADIUS_MD,
+} from './quiz.constants';
 
 interface QuizFooterActionsProps {
   onSkip: () => void;
   onNext: () => void;
+  skipDisabled?: boolean;
+  nextDisabled?: boolean;
 }
 
-export function QuizFooterActions({ onSkip, onNext }: QuizFooterActionsProps) {
+export function QuizFooterActions({
+  onSkip,
+  onNext,
+  skipDisabled = false,
+  nextDisabled = false,
+}: QuizFooterActionsProps) {
   const { t } = useTranslation();
-
-  const nextArrow = useSharedValue(0);
-  useEffect(() => {
-    nextArrow.value = withRepeat(
-      withSequence(
-        withTiming(6, { duration: 600, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 600, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      false,
-    );
-  }, [nextArrow]);
-
-  const arrowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: nextArrow.value }],
-  }));
 
   return (
     <View style={[styles.row, I18nManager.isRTL && styles.rowRTL]}>
-      {/* Skip */}
-      <TouchableOpacity style={styles.skipBtn} activeOpacity={0.85} onPress={onSkip}>
-        <BlurView intensity={BLUR_INTENSITY} tint="dark" style={StyleSheet.absoluteFill} />
-        <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.skipTopLine} />
-        <SkipForward size={18} color={TEXT_PRIMARY} strokeWidth={2} />
+      <TouchableOpacity
+        style={[styles.skipBtn, skipDisabled && styles.skipBtnDisabled]}
+        activeOpacity={0.85}
+        onPress={onSkip}
+        disabled={skipDisabled}
+        accessibilityLabel={t.quiz.skip}
+      >
+        <SkipForward size={17} color="#FFFFFF" strokeWidth={2} />
         <Text style={styles.skipTxt}>{t.quiz.skip}</Text>
+        <Zap size={11} color={ACCENT_SOFT} fill={ACCENT_SOFT} />
+        <Text style={styles.skipCost}>{QUIZ_COIN_COST}</Text>
       </TouchableOpacity>
 
-      {/* Next Question */}
-      <TouchableOpacity style={styles.nextBtnWrap} activeOpacity={0.9} onPress={onNext}>
+      <TouchableOpacity
+        style={[styles.nextWrap, nextDisabled && styles.nextWrapDisabled]}
+        activeOpacity={nextDisabled ? 1 : 0.9}
+        onPress={onNext}
+        disabled={nextDisabled}
+      >
         <LinearGradient
-          colors={[ACCENT, NEON_PURPLE, '#7B2EFF']}
+          colors={
+            nextDisabled
+              ? ['#3F3F50', '#2A2A38', '#1F1F2E']
+              : [NEON_PURPLE, ACCENT, '#7C3AED']
+          }
           style={styles.nextBtn}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
         >
-          <View style={styles.nextBtnTopLine} />
-          <Text style={styles.nextTxt}>{t.quiz.nextQuestion}</Text>
-          <Animated.View style={[arrowStyle, I18nManager.isRTL && styles.arrowRTL]}>
-            <ArrowRight size={18} color="#fff" strokeWidth={2.5} />
-          </Animated.View>
+          <Text style={[styles.nextTxt, nextDisabled && styles.nextTxtDisabled]}>
+            {t.quiz.nextQuestion}
+          </Text>
+          <ArrowRight
+            size={18}
+            color="#fff"
+            strokeWidth={2.5}
+            style={I18nManager.isRTL ? styles.arrowRTL : undefined}
+          />
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -86,48 +88,67 @@ export function QuizFooterActions({ onSkip, onNext }: QuizFooterActionsProps) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    marginTop: 18,
     marginBottom: 8,
   },
   rowRTL: { flexDirection: 'row-reverse' },
-
-  // Skip
   skipBtn: {
-    width: 110, height: 56,
-    borderRadius: 20,
+    height: 50,
+    minWidth: 118,
+    borderRadius: QUIZ_RADIUS_MD,
     borderWidth: 1,
-    borderColor: '#2A2A45',
-    alignItems: 'center', justifyContent: 'center',
-    flexDirection: 'row', gap: 7,
+    borderColor: QUIZ_CARD_BORDER,
+    backgroundColor: QUIZ_CHIP_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 12,
+  },
+  skipBtnDisabled: {
+    opacity: 0.45,
+  },
+  skipTxt: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  skipCost: {
+    color: ACCENT_SOFT,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  nextWrap: {
+    flex: 1,
+    borderRadius: QUIZ_RADIUS_MD,
     overflow: 'hidden',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+    elevation: 10,
   },
-  skipTopLine: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+  nextWrapDisabled: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  skipTxt: { color: TEXT_PRIMARY, fontSize: 13, fontWeight: '700' },
-
-  // Next
-  nextBtnWrap: {
-    flex: 1, borderRadius: 20, overflow: 'hidden',
-    shadowColor: '#B026FF',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.55,
-    shadowRadius: 20,
-    elevation: 12,
+  nextTxtDisabled: {
+    color: 'rgba(255,255,255,0.35)',
   },
   nextBtn: {
-    height: 56, paddingHorizontal: 20,
+    height: 50,
     flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
-    gap: 10, position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
   },
-  nextBtnTopLine: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.28)',
+  nextTxt: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
-  nextTxt: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
   arrowRTL: { transform: [{ scaleX: -1 }] },
 });

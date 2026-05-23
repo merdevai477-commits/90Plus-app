@@ -236,6 +236,7 @@ import reportsRoutes from './routes/reports.routes';
 import gdprRoutes from './routes/gdpr.routes';
 import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
+import quizRoutes from './routes/quiz.routes';
 import path from 'path';
 
 // Import services
@@ -304,6 +305,8 @@ app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
 app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
+app.use(`${API_PREFIX}/quiz`, lenientShellLimiter);
+app.use(`${API_PREFIX}/quiz`, quizRoutes);
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
@@ -751,6 +754,18 @@ async function startServer() {
                         // ✅ Start daily quiz renewal notifier (daily at 9 AM Egypt)
                         const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
                         startDailyQuizNotifier();
+
+                        const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
+                        ensureDailyPacksForToday().catch((err) =>
+                            logger.error('Quiz pack warmup failed:', err),
+                        );
+                        cron.schedule('0 0 * * *', () => {
+                            logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
+                            ensureDailyPacksForToday().catch((err) =>
+                                logger.error('Daily quiz pack cron error:', err),
+                            );
+                        });
+                        logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
                     }
                     
                     // ✅ Start football background service for API optimization
