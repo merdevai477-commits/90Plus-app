@@ -29,18 +29,18 @@ export interface MyProfileBasics {
   xp: number;
 }
 
+interface ProfileMeUser {
+  id: string;
+  username: string;
+  displayName?: string | null;
+  avatar?: string | null;
+  level?: number | null;
+  xp?: number | null;
+}
+
 interface ProfileMeResponse {
   status: 'SUCCESS' | 'ERROR';
-  data?: {
-    user: {
-      id: string;
-      username: string;
-      displayName?: string | null;
-      avatar?: string | null;
-      level?: number | null;
-      xp?: number | null;
-    };
-  };
+  data?: ProfileMeUser;
   message?: string;
 }
 
@@ -51,14 +51,19 @@ export function useMyProfileBasics(): {
   isLoading: boolean;
   refetch: () => void;
 } {
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user: clerkUser } = useUser();
 
   const query = useQuery<MyProfileBasics | null, Error>({
     queryKey: ['profile', 'me', 'basics', clerkUser?.id],
-    enabled: !!isSignedIn && !!clerkUser?.id,
+    enabled: isLoaded && !!isSignedIn && !!clerkUser?.id,
     staleTime: FIVE_MINUTES_MS,
     gcTime: FIVE_MINUTES_MS * 2,
+    retry: (failureCount, error) => {
+      const status = (error as Error & { status?: number })?.status;
+      if (status === 401 || status === 403) return false;
+      return failureCount < 1;
+    },
     queryFn: async () => {
       try {
         const token = await getToken().catch(() => null);
@@ -67,12 +72,17 @@ export function useMyProfileBasics(): {
         const res = await fetch(`${getApiUrl()}/profile/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.status === 401 || res.status === 403) {
+          const err = new Error('Unauthorized') as Error & { status?: number };
+          err.status = res.status;
+          throw err;
+        }
         if (!res.ok) return null;
 
         const json = (await res.json()) as ProfileMeResponse;
-        if (json.status !== 'SUCCESS' || !json.data?.user) return null;
+        if (json.status !== 'SUCCESS' || !json.data?.username) return null;
 
-        const u = json.data.user;
+        const u = json.data;
         return {
           avatar: (u.avatar?.trim() || null) ?? null,
           displayName:
