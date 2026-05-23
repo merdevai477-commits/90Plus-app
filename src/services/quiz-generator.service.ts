@@ -88,22 +88,102 @@ function hashQuestion(q: string): string {
   return q.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
 }
 
-function parseAiJsonContent(content: string): unknown {
-  const trimmed = content.trim();
+const QUIZ_COMPLETION_OPTS = {
+  max_tokens: 12_000,
+  response_format: { type: 'json_object' as const },
+};
+
+function stripMarkdownFences(text: string): string {
+  return text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+}
+
+function repairJsonText(jsonText: string): string {
+  return jsonText
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1');
+}
+
+function tryParseJson(text: string): unknown | null {
   try {
-    return JSON.parse(trimmed);
+    return JSON.parse(repairJsonText(text));
   } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) return { questions: [] };
-    let jsonText = match[0];
-    jsonText = jsonText.replace(/,\s*([}\]])/g, '$1');
-    try {
-      return JSON.parse(jsonText);
-    } catch {
-      logger.warn('[QuizGen] Failed to parse AI JSON after cleanup');
-      return { questions: [] };
+    return null;
+  }
+}
+
+function salvageQuestionsJson(jsonText: string): { questions: unknown[] } | null {
+  const keyIdx = jsonText.indexOf('"questions"');
+  if (keyIdx < 0) return null;
+  const arrStart = jsonText.indexOf('[', keyIdx);
+  if (arrStart < 0) return null;
+
+  const questions: unknown[] = [];
+  let i = arrStart + 1;
+
+  while (i < jsonText.length) {
+    while (i < jsonText.length && /[\s,]/.test(jsonText[i])) i += 1;
+    if (jsonText[i] === ']') break;
+    if (jsonText[i] !== '{') break;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    const start = i;
+
+    for (; i < jsonText.length; i += 1) {
+      const c = jsonText[i];
+      if (inString) {
+        if (escape) escape = false;
+        else if (c === '\\') escape = true;
+        else if (c === '"') inString = false;
+        continue;
+      }
+      if (c === '"') {
+        inString = true;
+        continue;
+      }
+      if (c === '{') depth += 1;
+      if (c === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          const objStr = jsonText.slice(start, i + 1);
+          const obj = tryParseJson(objStr);
+          if (obj && typeof obj === 'object') questions.push(obj);
+          i += 1;
+          break;
+        }
+      }
     }
   }
+
+  if (questions.length === 0) return null;
+  logger.info(`[QuizGen] Salvaged ${questions.length} question object(s) from broken JSON`);
+  return { questions };
+}
+
+function parseAiJsonContent(content: string): unknown {
+  const stripped = stripMarkdownFences(content.trim());
+  const direct = tryParseJson(stripped);
+  if (direct) return direct;
+
+  const match = stripped.match(/\{[\s\S]*\}/);
+  if (match) {
+    const fromObject = tryParseJson(match[0]);
+    if (fromObject) return fromObject;
+
+    const salvaged = salvageQuestionsJson(match[0]);
+    if (salvaged) return salvaged;
+  }
+
+  logger.warn('[QuizGen] Failed to parse AI JSON after cleanup', {
+    length: content.length,
+    preview: content.slice(0, 280).replace(/\s+/g, ' '),
+  });
+  return { questions: [] };
 }
 
 function parseQuestionsFromAi(
@@ -321,13 +401,18 @@ Never generate text-input or essay questions. Exactly ${QUIZ_PACK_SIZE} question
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    response_format: { type: 'json_object' },
+    ...QUIZ_COMPLETION_OPTS,
   });
 
   const content = completion.choices[0]?.message?.content ?? '{}';
   const parsed = parseAiJsonContent(content);
-
-  return parseQuestionsFromAi(parsed, language, packDate);
+  const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate);
+  if (parsedQuestions.length === 0) {
+    logger.warn(
+      `[QuizGen] Initial AI call returned 0 parseable questions (${content.length} chars)`,
+    );
+  }
+  return parsedQuestions;
 }
 
 async function generateReplacementQuestions(
@@ -363,7 +448,7 @@ Language: ${langLabel}. No duplicates.`;
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    response_format: { type: 'json_object' },
+    ...QUIZ_COMPLETION_OPTS,
   });
 
   const content = completion.choices[0]?.message?.content ?? '{}';
@@ -402,7 +487,7 @@ Language: ${langLabel}. Mix EASY/MEDIUM/HARD. No duplicates.`;
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    response_format: { type: 'json_object' },
+    ...QUIZ_COMPLETION_OPTS,
   });
 
   const content = completion.choices[0]?.message?.content ?? '{}';
@@ -416,11 +501,41 @@ Language: ${langLabel}. Mix EASY/MEDIUM/HARD. No duplicates.`;
   }));
 }
 
+async function generateInitialQuestionsInBatches(
+  language: QuizLanguage,
+  packDate: string,
+): Promise<StoredQuizQuestion[]> {
+  let merged: StoredQuizQuestion[] = [];
+  const batchSize = 5;
+  const batches = Math.ceil(QUIZ_PACK_SIZE / batchSize);
+
+  for (let batch = 0; batch < batches; batch += 1) {
+    const needed = Math.min(batchSize, QUIZ_PACK_SIZE - merged.length);
+    if (needed <= 0) break;
+    const batchQuestions = await generateReplacementQuestions(
+      needed,
+      language,
+      packDate,
+      merged,
+    );
+    merged = mergeUniqueQuestions(merged, batchQuestions);
+    logger.info(
+      `[QuizGen] Batch ${batch + 1}/${batches}: ${merged.length}/${QUIZ_PACK_SIZE} questions collected`,
+    );
+  }
+
+  return merged;
+}
+
 async function buildPackWithReplacements(
   language: QuizLanguage,
   packDate: string,
 ): Promise<StoredQuizQuestion[]> {
   let questions = await attemptOpenRouterCall(language, packDate);
+  if (questions.length === 0) {
+    logger.warn('[QuizGen] Full-pack AI parse failed — falling back to batched generation');
+    questions = await generateInitialQuestionsInBatches(language, packDate);
+  }
   questions = await enrichAndFilterValid(questions, packDate);
 
   let fillRound = 0;
@@ -445,17 +560,17 @@ async function buildPackWithReplacements(
   }
 
   if (questions.length < QUIZ_PACK_SIZE) {
-  const stillNeeded = QUIZ_PACK_SIZE - questions.length;
-  logger.info(
-    `[QuizGen] Image rounds exhausted at ${questions.length}/${QUIZ_PACK_SIZE} — generating ${stillNeeded} normal text fallback question(s)`,
-  );
-  const normalFallback = await generateNormalOnlyReplacements(
-    stillNeeded + 2,
-    language,
-    packDate,
-    questions,
-  );
-  questions = mergeUniqueQuestions(questions, normalFallback);
+    const stillNeeded = QUIZ_PACK_SIZE - questions.length;
+    logger.info(
+      `[QuizGen] Image rounds exhausted at ${questions.length}/${QUIZ_PACK_SIZE} — generating ${stillNeeded} normal text fallback question(s)`,
+    );
+    const normalFallback = await generateNormalOnlyReplacements(
+      stillNeeded + 2,
+      language,
+      packDate,
+      questions,
+    );
+    questions = mergeUniqueQuestions(questions, normalFallback);
   }
 
   if (questions.length < QUIZ_PACK_SIZE) {
