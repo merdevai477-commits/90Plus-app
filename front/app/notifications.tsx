@@ -74,6 +74,7 @@ function mapTypeToKind(type: SocialNotification['type']): Kind {
     switch (type) {
         case 'MATCH_UPDATE':
         case 'MATCH_FAVORITE':
+        case 'PREDICTION_RESULT':
             return 'match';
         case 'FOLLOW':
             return 'social';
@@ -663,7 +664,9 @@ export default function NotificationsScreen() {
                         }
                         break;
                     case 'MATCH_UPDATE':
-                    case 'MATCH_FAVORITE':
+                    case 'MATCH_FAVORITE': {
+                        const subType = data.type as string | undefined;
+                        const isFinished = subType === 'MATCH_END' || subType === 'PREDICTION_RESULT';
                         if (data.matchId || data.fixtureId) {
                             router.push({
                                 pathname: '/(tabs)/match-details',
@@ -673,17 +676,41 @@ export default function NotificationsScreen() {
                                     awayTeam: data.awayTeam || '',
                                     homeLogo: data.homeTeamLogo || '',
                                     awayLogo: data.awayTeamLogo || '',
-                                    homeScore: data.homeScore || '',
-                                    awayScore: data.awayScore || '',
+                                    homeScore: data.homeScore != null ? String(data.homeScore) : '',
+                                    awayScore: data.awayScore != null ? String(data.awayScore) : '',
                                     league: data.leagueName || '',
                                     leagueLogo: '',
                                     date: data.matchDate || new Date().toISOString().split('T')[0],
                                     time: '',
-                                    status: 'live',
+                                    status: isFinished ? 'finished' : 'live',
                                 },
                             });
                         } else {
                             router.push('/(tabs)/matches');
+                        }
+                        break;
+                    }
+                    case 'PREDICTION_RESULT':
+                        if (data.matchId || data.fixtureId) {
+                            router.push({
+                                pathname: '/(tabs)/match-details',
+                                params: {
+                                    fixtureId: String(data.matchId || data.fixtureId),
+                                    homeTeam: data.homeTeam || '',
+                                    awayTeam: data.awayTeam || '',
+                                    homeLogo: data.homeTeamLogo || '',
+                                    awayLogo: data.awayTeamLogo || '',
+                                    homeScore: data.homeScore != null ? String(data.homeScore) : '',
+                                    awayScore: data.awayScore != null ? String(data.awayScore) : '',
+                                    league: data.leagueName || '',
+                                    leagueLogo: '',
+                                    date: data.matchDate || new Date().toISOString().split('T')[0],
+                                    time: '',
+                                    status: 'finished',
+                                },
+                            });
+                        } else {
+                            router.push({ pathname: '/(tabs)/matches', params: { filter: 'Predictions' } });
                         }
                         break;
                     default:

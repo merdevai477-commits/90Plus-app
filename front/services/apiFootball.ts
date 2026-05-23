@@ -1299,7 +1299,7 @@ export const ApiFootballService = {
    * ✅ Uses offline storage first (no token needed)
    * ✅ Cached based on match status
    */
-  async getFixtureById(fixtureId: number): Promise<Fixture | null> {
+  async getFixtureById(fixtureId: number, options?: { skipCache?: boolean }): Promise<Fixture | null> {
     // ✅ 1. Check offline storage first (permanent, no token needed)
     const { offlineDataService } = await import('./offlineDataService');
     const offlineMatch = await offlineDataService.getFinishedMatch(fixtureId);
@@ -1315,11 +1315,13 @@ export const ApiFootballService = {
       } as Fixture;
     }
 
-    // ✅ 2. Try cache first
-    const cached = await footballCacheService.getMatch(fixtureId);
-    if (cached) {
-      console.log(`📦 Match cache hit for ID ${fixtureId}`);
-      return cached as Fixture;
+    // ✅ 2. Try cache first (skip during live polling for fresh scores)
+    if (!options?.skipCache) {
+      const cached = await footballCacheService.getMatch(fixtureId);
+      if (cached) {
+        console.log(`📦 Match cache hit for ID ${fixtureId}`);
+        return cached as Fixture;
+      }
     }
     
     try {

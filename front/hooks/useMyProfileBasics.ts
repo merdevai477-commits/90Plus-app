@@ -1,47 +1,23 @@
 /**
  * useMyProfileBasics
  *
- * Lightweight hook that fetches the current user's basics from
- * `/api/profile/me` — avatar (R2 url stored on the User row), display name,
- * level and xp. Falls back to the Clerk imageUrl when the backend hasn't
- * synced yet. Keeps the avatar in sync with the Profile screen so other
- * surfaces (rank profile card, headers, etc.) display the same image the
- * user just uploaded.
- *
- * The Profile screen itself keeps using `useProfileCache` for the heavy data
- * (videos, follow stats, FIFA card, etc.); this hook is a tight fan-out for
- * surfaces that only need the basics.
+ * Lightweight hook for avatar, display name, level and xp.
+ * Uses `/api/clerk/me` (same as profile cache) — avoids `/api/profile/me`
+ * which shared a response-cache key collision with `/api/xp/me` on the server.
  */
 
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { getApiUrl } from '../config/api.config';
+import { AuthService } from '../src/services/authService';
 
 export interface MyProfileBasics {
-  /** R2 avatar url (preferred), falling back to Clerk imageUrl. */
   avatar: string | null;
-  /** Resolved display name (display name → username → first name). */
   displayName: string;
   username: string;
   level: number;
   xp: number;
-}
-
-interface ProfileMeUser {
-  id: string;
-  username: string;
-  displayName?: string | null;
-  avatar?: string | null;
-  level?: number | null;
-  xp?: number | null;
-}
-
-interface ProfileMeResponse {
-  status: 'SUCCESS' | 'ERROR';
-  data?: ProfileMeUser;
-  message?: string;
 }
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -65,43 +41,26 @@ export function useMyProfileBasics(): {
       return failureCount < 1;
     },
     queryFn: async () => {
-      try {
-        const token = await getToken().catch(() => null);
-        if (!token) return null;
+      const token = await getToken().catch(() => null);
+      if (!token) return null;
 
-        const res = await fetch(`${getApiUrl()}/profile/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.status === 401 || res.status === 403) {
-          const err = new Error('Unauthorized') as Error & { status?: number };
-          err.status = res.status;
-          throw err;
-        }
-        if (!res.ok) return null;
+      const user = await AuthService.syncUserWithBackend(token);
+      if (!user?.username) return null;
 
-        const json = (await res.json()) as ProfileMeResponse;
-        if (json.status !== 'SUCCESS' || !json.data?.username) return null;
-
-        const u = json.data;
-        return {
-          avatar: (u.avatar?.trim() || null) ?? null,
-          displayName:
-            (u.displayName && u.displayName.trim()) ||
-            u.username ||
-            clerkUser?.firstName ||
-            '',
-          username: u.username,
-          level: u.level ?? 1,
-          xp: u.xp ?? 0,
-        };
-      } catch {
-        return null;
-      }
+      return {
+        avatar: (user.avatar?.trim() || null) ?? null,
+        displayName:
+          (user.displayName && user.displayName.trim()) ||
+          user.username ||
+          clerkUser?.firstName ||
+          '',
+        username: user.username,
+        level: user.level ?? 1,
+        xp: user.xp ?? 0,
+      };
     },
   });
 
-  // Merge fetched data with the Clerk fallback so consumers always get an
-  // avatar — even before the backend responds — without showing a placeholder.
   const merged = useMemo<MyProfileBasics | null>(() => {
     if (!isSignedIn) return null;
     const remote = query.data;

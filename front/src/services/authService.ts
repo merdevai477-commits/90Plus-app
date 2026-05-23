@@ -1912,8 +1912,17 @@ export class ProfileService {
                 },
             });
 
+            if (response.status === 401 || response.status === 403) {
+                return null;
+            }
+
             const data = await safeJsonParse<any>(response, null);
-            if (data && data.status === 'SUCCESS') {
+            if (!data) return null;
+            if (data.status === 'SUCCESS' && data.data) {
+                return data.data;
+            }
+            // Backend returns { data: analytics } without a status wrapper.
+            if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
                 return data.data;
             }
             return null;
@@ -1936,8 +1945,16 @@ export class ProfileService {
                 },
             });
 
+            if (response.status === 401 || response.status === 403) {
+                return null;
+            }
+
             const data = await safeJsonParse<any>(response, null);
-            if (data && data.status === 'SUCCESS') {
+            if (!data) return null;
+            if (data.status === 'SUCCESS' && data.data) {
+                return data.data;
+            }
+            if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
                 return data.data;
             }
             return null;
@@ -1997,7 +2014,7 @@ export class ProfileService {
 
 export interface SocialNotification {
     id: string;
-    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'SHARE' | 'COMMENT_LIKE' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'GENERAL' | 'MODERATION_ALERT';
+    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'SHARE' | 'COMMENT_LIKE' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'PREDICTION_RESULT' | 'GENERAL' | 'MODERATION_ALERT';
     title: string;
     message: string;
     isRead: boolean;

@@ -192,26 +192,37 @@ export const validateVideoDuration = async (
             return;
         }
 
-        // Create temporary file to extract duration
-        // get-video-duration requires a file path, not a buffer
-        const tempDir = os.tmpdir();
-        const safeOriginal = path
-            .basename(videoFile.originalname || 'video')
-            .replace(/[^a-zA-Z0-9._-]+/g, '_')
-            .slice(0, 80);
-        const tempFilePath = path.join(tempDir, `temp_video_${Date.now()}_${safeOriginal}`);
-        
+        const durationSourcePath = videoFile.path;
+        let tempFilePath: string | null = null;
+
         try {
-            // Write buffer to temporary file
-            await fs.promises.writeFile(tempFilePath, videoFile.buffer);
-            
-            // Extract video duration with a timeout to prevent ffprobe from hanging indefinitely
-            // A known issue with some corrupted/specific MP4 files can cause get-video-duration to hang
-            const durationPromise = getVideoDurationInSeconds(tempFilePath);
-            const timeoutPromise = new Promise<number>((_, reject) => 
+            let probePath: string;
+            if (durationSourcePath) {
+                probePath = durationSourcePath;
+            } else if (videoFile.buffer?.length) {
+                const tempDir = os.tmpdir();
+                const safeOriginal = path
+                    .basename(videoFile.originalname || 'video')
+                    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+                    .slice(0, 80);
+                tempFilePath = path.join(tempDir, `temp_video_${Date.now()}_${safeOriginal}`);
+                await fs.promises.writeFile(tempFilePath, videoFile.buffer);
+                probePath = tempFilePath;
+            } else {
+                res.status(400).json({
+                    error: 'E007',
+                    message: 'No video file provided',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                });
+                return;
+            }
+
+            const durationPromise = getVideoDurationInSeconds(probePath);
+            const timeoutPromise = new Promise<number>((_, reject) =>
                 setTimeout(() => reject(new Error('ffprobe timeout')), 5000)
             );
-            
+
             let duration: number;
             try {
                 duration = await Promise.race([durationPromise, timeoutPromise]);
@@ -220,12 +231,13 @@ export const validateVideoDuration = async (
                     userId: req.auth?.userId,
                     fileName: videoFile.originalname
                 });
-                // Fallback duration to allow upload to proceed if ffprobe hangs
                 duration = 30;
             }
 
-            // Clean up temporary file
-            await fs.promises.unlink(tempFilePath).catch(() => undefined);
+            if (tempFilePath) {
+                await fs.promises.unlink(tempFilePath).catch(() => undefined);
+                tempFilePath = null;
+            }
             
             // Validate duration
             if (duration < 5) {
@@ -279,8 +291,9 @@ export const validateVideoDuration = async (
             
             next();
         } catch (fileError: any) {
-            // Clean up temporary file if it exists
-            await fs.promises.unlink(tempFilePath).catch(() => undefined);
+            if (tempFilePath) {
+                await fs.promises.unlink(tempFilePath).catch(() => undefined);
+            }
             throw fileError;
         }
     } catch (error: any) {

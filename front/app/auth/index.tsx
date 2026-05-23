@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Alert,
   Linking,
   Modal,
-  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -17,7 +16,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { CircleUserRound, Mail, Lock, Apple, ShieldCheck, X } from 'lucide-react-native';
-import { AuthScreenShell, AuthTextField, AUTH_ACCENT } from '@/src/components/auth';
+import {
+  AuthScreenShell,
+  AuthTextField,
+  AUTH_ACCENT,
+  OtpInput,
+  MIN_PASSWORD_LENGTH,
+  normalizeAuthEmail,
+} from '@/src/components/auth';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
 import {
   TEXT_PRIMARY,
@@ -70,18 +76,21 @@ export default function RegisterScreen() {
 
   // Verification modal state
   const [showVerification, setShowVerification] = useState(false);
-  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [otp, setOtp] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const submit = async () => {
     if (!terms) {
       Alert.alert('Notice', 'Please accept the Terms & Conditions.');
       return;
     }
-    if (!name.trim() || !email.trim() || password.length < 6) {
-      Alert.alert('Notice', 'Fill all fields (password at least 6 characters).');
+    const normalizedEmail = normalizeAuthEmail(email);
+    if (!name.trim() || !normalizedEmail.includes('@') || password.length < MIN_PASSWORD_LENGTH) {
+      Alert.alert(
+        'Notice',
+        `Fill all fields (password at least ${MIN_PASSWORD_LENGTH} characters).`,
+      );
       return;
     }
     if (!isLoaded) return;
@@ -89,7 +98,7 @@ export default function RegisterScreen() {
     setIsSubmitting(true);
     try {
       const result = await signUp.create({
-        emailAddress: email.trim(),
+        emailAddress: normalizedEmail,
         password,
         firstName: name.trim().split(' ')[0],
         lastName: name.trim().split(' ').slice(1).join(' ') || undefined,
@@ -101,7 +110,7 @@ export default function RegisterScreen() {
       } else {
         // Email verification needed — show glass modal
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        setOtp(Array(OTP_LENGTH).fill(''));
+        setOtp('');
         setShowVerification(true);
         startResendCooldown();
       }
@@ -126,42 +135,8 @@ export default function RegisterScreen() {
     }, 1000);
   };
 
-  const handleOtpChange = (value: string, index: number) => {
-    if (value.length > 1) {
-      // Handle paste
-      const chars = value.replace(/[^0-9]/g, '').split('').slice(0, OTP_LENGTH);
-      const newOtp = [...otp];
-      chars.forEach((char, i) => {
-        if (index + i < OTP_LENGTH) {
-          newOtp[index + i] = char;
-        }
-      });
-      setOtp(newOtp);
-      const nextIndex = Math.min(index + chars.length, OTP_LENGTH - 1);
-      inputRefs.current[nextIndex]?.focus();
-      return;
-    }
-
-    const newOtp = [...otp];
-    newOtp[index] = value.replace(/[^0-9]/g, '');
-    setOtp(newOtp);
-
-    if (value && index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyPress = (key: string, index: number) => {
-    if (key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-      const newOtp = [...otp];
-      newOtp[index - 1] = '';
-      setOtp(newOtp);
-    }
-  };
-
   const handleVerify = async () => {
-    const code = otp.join('');
+    const code = otp;
     if (code.length !== OTP_LENGTH) {
       Alert.alert('Notice', 'Please enter the full verification code.');
       return;
@@ -360,43 +335,21 @@ export default function RegisterScreen() {
                 <Text style={styles.modalEmail}>{email}</Text>
               </Text>
 
-              {/* OTP inputs */}
-              <View style={styles.otpRow}>
-                {otp.map((digit, i) => (
-                  <TextInput
-                    key={i}
-                    ref={(ref) => { inputRefs.current[i] = ref; }}
-                    style={[styles.otpInput, digit ? styles.otpInputFilled : null]}
-                    value={digit}
-                    onChangeText={(v) => handleOtpChange(v, i)}
-                    onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, i)}
-                    keyboardType="number-pad"
-                    // ✅ All cells use maxLength=1 so the box never has to
-                    // scroll text horizontally (which used to make the cells
-                    // visibly jitter as the user typed). Paste is still
-                    // handled by handleOtpChange — on iOS the full pasted
-                    // value lands in the focused cell as a single change
-                    // regardless of maxLength=1, so we can detect it via
-                    // `value.length > 1` and distribute it.
-                    maxLength={1}
-                    textContentType="oneTimeCode"
-                    autoComplete="sms-otp"
-                    returnKeyType={i === OTP_LENGTH - 1 ? 'done' : 'next'}
-                    selectTextOnFocus
-                    autoFocus={i === 0}
-                    allowFontScaling={false}
-                  />
-                ))}
-              </View>
+              <OtpInput
+                value={otp}
+                onChange={setOtp}
+                autoFocus
+                containerStyle={styles.otpRow}
+              />
 
               {/* Verify button */}
               <TouchableOpacity
                 activeOpacity={0.92}
                 onPress={handleVerify}
-                disabled={isVerifying || otp.join('').length !== OTP_LENGTH}
+                disabled={isVerifying || otp.length !== OTP_LENGTH}
                 style={[
                   styles.verifyWrap,
-                  otp.join('').length !== OTP_LENGTH && { opacity: 0.5 },
+                  otp.length !== OTP_LENGTH && { opacity: 0.5 },
                 ]}
               >
                 <LinearGradient
@@ -580,35 +533,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // OTP
   otpRow: {
-    flexDirection: 'row',
-    gap: 8,
     marginBottom: 24,
-  },
-  otpInput: {
-    width: 46,
-    height: 54,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    color: TEXT_PRIMARY,
-    fontSize: 22,
-    // ✅ Explicit lineHeight + padding:0 + includeFontPadding:false +
-    // textAlignVertical:'center' kill the per-keystroke vertical jump
-    // Android's TextInput baseline does when the cell switches between
-    // empty and filled font metrics.
-    lineHeight: 26,
-    fontWeight: '800',
-    textAlign: 'center',
-    padding: 0,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  otpInputFilled: {
-    borderColor: 'rgba(124,58,237,0.5)',
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    justifyContent: 'center',
   },
 
   // Verify button

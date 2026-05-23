@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
-import { fetchMatchesByDate, fetchLiveMatches } from '../components/Matches/leagueApiUtils';
+import { fetchMatchesByDate, fetchLiveMatches, getLocalTodayKey } from '../components/Matches/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { Image } from 'expo-image';
@@ -64,7 +64,7 @@ const evictOldestIfNeeded = (map: Map<string, any>) => {
 
 // TTL configuration based on match date
 const getCacheTTL = (dateString: string): number => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayKey();
   const isPast = dateString < today;
   const isToday = dateString === today;
 

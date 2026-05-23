@@ -876,6 +876,12 @@ router.post(
 
 router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized');
+      return;
+    }
+
     const reelId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     let reel = await prisma.reel.findUnique({
       where: { id: reelId },
@@ -894,6 +900,15 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
     });
 
     if (!reel) { sendError(req, res, 404, ErrorCode.NOT_FOUND, 'NOT_FOUND', 'Reel not found'); return; }
+
+    const owner = await prisma.user.findUnique({
+      where: { clerkUserId },
+      select: { id: true },
+    });
+    if (!owner || owner.id !== reel.userId) {
+      sendError(req, res, 403, ErrorCode.AUTHORIZATION, 'FORBIDDEN', 'Access denied');
+      return;
+    }
 
     // Poll-fallback: if the reel has been PROCESSING for >10s, ask Mux directly
     // and self-heal the DB in case the webhook was missed or delayed.

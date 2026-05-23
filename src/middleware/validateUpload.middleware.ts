@@ -15,6 +15,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
 import { logger } from '../utils/logger';
 
 interface MagicRule {
@@ -85,6 +86,25 @@ function mimeMatches(declared: string, buf: Buffer): boolean {
   return false;
 }
 
+/** Disk-storage multer files have `path` only; memory-storage has `buffer`. */
+async function readFileBytes(file: Express.Multer.File): Promise<Buffer | null> {
+  if (file.buffer && file.buffer.length > 0) {
+    return file.buffer;
+  }
+  if (file.path) {
+    try {
+      return await fs.promises.readFile(file.path);
+    } catch (err: any) {
+      logger.warn('[MagicBytes] Failed to read upload file from disk', {
+        path: file.path,
+        message: err?.message,
+      });
+      return null;
+    }
+  }
+  return null;
+}
+
 // ─── Single-file middleware ───────────────────────────────────────────────────
 
 export const validateUploadMagicBytes = (
@@ -120,11 +140,11 @@ export const validateUploadMagicBytes = (
 
 // ─── Multi-field middleware ───────────────────────────────────────────────────
 
-export const validateUploadFieldsMagicBytes = (
+export const validateUploadFieldsMagicBytes = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
   if (!files) { next(); return; }
 
@@ -135,7 +155,8 @@ export const validateUploadFieldsMagicBytes = (
   ];
 
   for (const file of toCheck) {
-    if (!file.buffer || file.buffer.length < 12) {
+    const bytes = await readFileBytes(file);
+    if (!bytes || bytes.length < 12) {
       res.status(400).json({
         status: 'ERROR',
         code: 'INVALID_FILE',
@@ -144,12 +165,12 @@ export const validateUploadFieldsMagicBytes = (
       return;
     }
 
-    if (!mimeMatches(file.mimetype, file.buffer)) {
+    if (!mimeMatches(file.mimetype, bytes)) {
       logger.warn('[MagicBytes] Mismatch in fields', {
         field: file.fieldname,
         declared: file.mimetype,
         userId: req.auth?.userId,
-        firstBytes: file.buffer.slice(0, 12).toString('hex'),
+        firstBytes: bytes.slice(0, 12).toString('hex'),
       });
       res.status(400).json({
         status: 'ERROR',

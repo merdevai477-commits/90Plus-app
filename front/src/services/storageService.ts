@@ -245,27 +245,32 @@ export class StorageService {
                             logger.info('Upload reel response:', JSON.stringify(data));
                             
                             if (data.status === 'SUCCESS') {
-                                const videoUrl = data.data?.videoUrl || data.data?.url || data.url;
-                                const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
                                 const reelId = data.data?.reelId || data.reelId;
-                                
-                                if (!videoUrl) {
-                                    logger.error('No video URL in response:', data);
-                                    resolve({ success: false, error: 'No video URL returned from server' });
+                                const videoUrl = data.data?.videoUrl || data.data?.url || data.url || '';
+                                const storagePath = data.data?.storagePath || data.data?.path || data.storagePath;
+                                const processingStatus = data.data?.status;
+
+                                // Mux flow: backend returns reelId + PROCESSING; HLS URL arrives via webhook/poll.
+                                if (reelId || videoUrl) {
+                                    logger.info('Reel uploaded successfully:', {
+                                        reelId,
+                                        processingStatus,
+                                        hasVideoUrl: !!videoUrl,
+                                    });
+
+                                    if (onProgress) onProgress(100);
+
+                                    resolve({
+                                        success: true,
+                                        url: videoUrl || undefined,
+                                        storagePath,
+                                        reelId,
+                                    });
                                     return;
                                 }
-                                
-                                logger.info('Reel uploaded successfully:', { videoUrl, reelId });
-                                
-                                // ✅ Show "Upload complete!"
-                                if (onProgress) onProgress(100);
-                                
-                                resolve({
-                                    success: true,
-                                    url: videoUrl,
-                                    storagePath: storagePath,
-                                    reelId: reelId,
-                                });
+
+                                logger.error('No reelId in upload response:', data);
+                                resolve({ success: false, error: 'No reel ID returned from server' });
                             } else {
                                 resolve({ success: false, error: data.message || 'Upload failed' });
                             }
@@ -279,6 +284,10 @@ export class StorageService {
                             errorData = JSON.parse(xhr.responseText);
                         } catch {
                             errorData = { message: xhr.responseText || `Upload failed: ${xhr.status}` };
+                        }
+                        if (xhr.status === 429 && (errorData.code === 'COOLDOWN_ACTIVE' || errorData.errorCode === 'COOLDOWN_ACTIVE')) {
+                            resolve({ success: false, error: errorData.message || 'يرجى الانتظار قبل رفع فيديو جديد.' });
+                            return;
                         }
                         // Arabic messages for common HTTP errors
                         let userMessage = errorData.message;

@@ -30,8 +30,13 @@ class ResponseCache {
      * serves ALL users (correct for public/shared endpoints like football
      * match listings that are identical regardless of auth).
      */
+    private getCachePath(req: Request): string {
+        const joined = `${req.baseUrl || ''}${req.path || ''}`.split('?')[0] || '/';
+        return joined.startsWith('/') ? joined : `/${joined}`;
+    }
+
     private getCacheKey(req: Request, sharedCache = false): string {
-        const path = req.path;
+        const path = this.getCachePath(req);
         const query = JSON.stringify(req.query);
         if (sharedCache) return `${path}:${query}:shared`;
         const userId = (req as any).auth?.userId || 'anonymous';

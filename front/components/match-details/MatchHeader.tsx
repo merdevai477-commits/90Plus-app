@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
   useAnimatedStyle,
 } from 'react-native-reanimated';
+import { formatLiveMinuteDisplay } from '../../components/Matches/leagueApiUtils';
 import {
   PURPLE_PRIMARY,
   PURPLE_SOFT,
@@ -101,7 +102,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const minuteLabel = (() => {
     if (isHalftime) return 'HT';
     if (!isLive) return '';
-    if (typeof elapsed === 'number' && elapsed > 0) return `${elapsed}'`;
+    const formatted = formatLiveMinuteDisplay(short, elapsed);
+    if (formatted) return formatted;
     if (short === '1H') return "1'";
     if (short === '2H') return "46'";
     return short || 'LIVE';

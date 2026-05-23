@@ -22,7 +22,6 @@ import {
   FontSize,
   Spacing,
   Gradients,
-  Layout,
 } from '../../constants/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -136,11 +135,8 @@ export function ScrollToBottomButton({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    bottom: Layout.scrollButtonBottom,
     alignSelf: 'center',
-    zIndex: 30,
-    pointerEvents: 'box-none',    // ✅ هنا بدل prop مهجور
+    pointerEvents: 'box-none',
   },
 
   // ✅ shadow wrapper — منفصل عن LinearGradient

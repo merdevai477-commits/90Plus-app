@@ -81,6 +81,85 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
+function colMinWidth(text: string, isHeader: boolean): number {
+  const len = text.length;
+  const base = isHeader ? 96 : 88;
+  return Math.min(Math.max(base, len * 8 + 24), 180);
+}
+
+function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  const colCount = headers.length;
+  const colWidths = useMemo(() => {
+    const widths = headers.map((h, i) => {
+      let max = colMinWidth(h, true);
+      for (const row of rows) {
+        const cell = row[i] ?? '';
+        max = Math.max(max, colMinWidth(cell, false));
+      }
+      return max;
+    });
+    return widths;
+  }, [headers, rows]);
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator
+      style={s.tableScroll}
+      contentContainerStyle={s.tableScrollContent}
+    >
+      <View style={s.table}>
+        <LinearGradient
+          colors={['rgba(124,58,237,0.55)', 'rgba(76,29,149,0.45)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={s.tableHead}
+        >
+          {headers.map((h, hi) => (
+            <View
+              key={hi}
+              style={[
+                s.tableCell,
+                { width: colWidths[hi] },
+                hi === 0 && s.tableCellFirst,
+                hi === colCount - 1 && s.tableCellLast,
+              ]}
+            >
+              <Text style={s.tableHeadText} numberOfLines={3}>{h}</Text>
+            </View>
+          ))}
+        </LinearGradient>
+        {rows.map((row, ri) => (
+          <View
+            key={ri}
+            style={[
+              s.tableRow,
+              ri % 2 === 1 && s.tableRowAlt,
+              ri === rows.length - 1 && s.tableRowLast,
+            ]}
+          >
+            {headers.map((_, ci) => (
+              <View
+                key={ci}
+                style={[
+                  s.tableCell,
+                  { width: colWidths[ci] },
+                  ci === 0 && s.tableCellFirst,
+                  ci === colCount - 1 && s.tableCellLast,
+                ]}
+              >
+                <Text style={s.tableCellText} numberOfLines={6}>
+                  {row[ci] ?? '—'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
 function renderMarkdown(text: string): React.ReactNode[] {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
@@ -92,26 +171,7 @@ function renderMarkdown(text: string): React.ReactNode[] {
     const tbl = extractTable(lines, i);
     if (tbl) {
       out.push(
-        <ScrollView key={`tbl-${i}`} horizontal showsHorizontalScrollIndicator={false} style={s.tableScroll}>
-          <View style={s.table}>
-            <View style={s.tableHead}>
-              {tbl.headers.map((h, hi) => (
-                <View key={hi} style={s.tableCell}>
-                  <Text style={s.tableHeadText}>{h}</Text>
-                </View>
-              ))}
-            </View>
-            {tbl.rows.map((row, ri) => (
-              <View key={ri} style={[s.tableRow, ri % 2 === 1 && s.tableRowAlt]}>
-                {row.map((cell, ci) => (
-                  <View key={ci} style={s.tableCell}>
-                    <Text style={s.tableCellText}>{cell}</Text>
-                  </View>
-                ))}
-              </View>
-            ))}
-          </View>
-        </ScrollView>,
+        <MarkdownTable key={`tbl-${i}`} headers={tbl.headers} rows={tbl.rows} />,
       );
       i = tbl.end;
       continue;
@@ -568,26 +628,66 @@ const s = StyleSheet.create({
   },
 
   // ── Markdown: table ──
-  tableScroll: { marginVertical: 6 },
-  table: {
-    borderRadius: 10, overflow: 'hidden',
-    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)',
-    minWidth: '100%',
+  tableScroll: {
+    marginVertical: 8,
+    maxWidth: '100%',
   },
-  tableHead: { flexDirection: 'row-reverse', backgroundColor: 'rgba(255,255,255,0.08)' },
-  tableRow:  { flexDirection: 'row-reverse' },
-  tableRowAlt: { backgroundColor: 'rgba(255,255,255,0.025)' },
+  tableScrollContent: {
+    flexGrow: 1,
+  },
+  table: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  tableHead: {
+    flexDirection: 'row-reverse',
+  },
+  tableRow: {
+    flexDirection: 'row-reverse',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  tableRowAlt: {
+    backgroundColor: 'rgba(124,58,237,0.08)',
+  },
+  tableRowLast: {
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
   tableCell: {
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.07)',
-    minWidth: 80,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
   },
+  tableCellFirst: {
+    borderLeftWidth: 0,
+  },
+  tableCellLast: {},
   tableHeadText: {
-    fontSize: 13, fontWeight: '700',
-    color: 'rgba(255,255,255,0.9)', textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'right',
+    letterSpacing: 0.2,
   },
   tableCellText: {
-    fontSize: 12, color: 'rgba(255,255,255,0.75)', textAlign: 'center',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.88)',
+    textAlign: 'right',
+    lineHeight: 18,
   },
 });

@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent, Venue } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
-import { getTeamDisplayName } from '../../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { APP_BG } from '../../constants/ui';
@@ -163,7 +163,7 @@ const MatchDetailsScreen = () => {
       try {
         const [eventsData, fixtureData] = await Promise.allSettled([
           ApiFootballService.getFixtureEvents(fixtureId),
-          ApiFootballService.getFixtureById(fixtureId),
+          ApiFootballService.getFixtureById(fixtureId, { skipCache: true }),
         ]);
 
         if (eventsData.status === 'fulfilled') setEvents(eventsData.value);
@@ -709,8 +709,8 @@ const MatchDetailsScreen = () => {
                   <View key={index} style={styles.fixtureCard}>
                     <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
                     <View style={styles.fixtureInfo}>
-                      <Text style={styles.fixtureOpponent}>{opponent.name}</Text>
-                      <Text style={styles.fixtureLeague}>{fixture.league.name}</Text>
+                      <Text style={styles.fixtureOpponent}>{getTeamDisplayName(opponent.name, language)}</Text>
+                      <Text style={styles.fixtureLeague}>{getLeagueDisplayName(fixture.league.name, language)}</Text>
                     </View>
                     <View style={[styles.fixtureResult, result === 'win' && styles.fixtureWin,
                     result === 'lose' && styles.fixtureLose,
@@ -749,8 +749,8 @@ const MatchDetailsScreen = () => {
                   <View key={index} style={styles.fixtureCard}>
                     <Image source={{ uri: opponent.logo }} style={styles.fixtureTeamLogo} />
                     <View style={styles.fixtureInfo}>
-                      <Text style={styles.fixtureOpponent}>{opponent.name}</Text>
-                      <Text style={styles.fixtureLeague}>{fixture.league.name}</Text>
+                      <Text style={styles.fixtureOpponent}>{getTeamDisplayName(opponent.name, language)}</Text>
+                      <Text style={styles.fixtureLeague}>{getLeagueDisplayName(fixture.league.name, language)}</Text>
                     </View>
                     <View style={[styles.fixtureResult, result === 'win' && styles.fixtureWin,
                     result === 'lose' && styles.fixtureLose,

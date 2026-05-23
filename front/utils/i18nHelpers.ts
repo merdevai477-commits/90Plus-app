@@ -40,8 +40,17 @@ export function getTeamDisplayName(
   if (!name) return fallback;
 
   if (language === 'ar') {
-    const ar = teamArabicNames[name] ?? teamArabicNames[name.toLowerCase()];
-    if (ar && ar.trim().length > 0) return ar;
+    const candidates = [
+      name,
+      name.toLowerCase(),
+      name.replace(/\s+FC$/i, '').trim(),
+      name.replace(/\s+CF$/i, '').trim(),
+      name.replace(/\s+SC$/i, '').trim(),
+    ];
+    for (const key of candidates) {
+      const ar = teamArabicNames[key];
+      if (ar && ar.trim().length > 0) return ar;
+    }
   }
   return name;
 }

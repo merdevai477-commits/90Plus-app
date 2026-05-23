@@ -483,6 +483,7 @@ export default function ProfileScreen() {
     likes: 0,
     saved: false,
     shares: 0,
+    views: 0,
   });
 
   // UX Fix 1+2: Image preview + cross-platform action sheet state
@@ -1699,17 +1700,23 @@ export default function ProfileScreen() {
           <VideoGrid
             videos={myVideos}
             onVideoPress={(video, _index) => {
-              const src = (video as any).videoUrl;
-              // Only open the player if we actually have a video URL — never
-              // pass a thumbnail (image) as the video source.
+              const src =
+                (video as { videoUrl?: string }).videoUrl ||
+                (video as { uri?: string }).uri ||
+                '';
               if (src && typeof src === 'string' && src.length > 0) {
                 setSelectedVideoUrl(src);
                 setSelectedReelId(video.id);
+                const viewsRaw = (video as { views?: string | number }).views;
                 setSelectedReelSocial({
                   liked: likedReelIdsSet.has(video.id),
-                  likes: Number((video as any).likes) || 0,
-                  saved: !!(video as any).saved,
-                  shares: Number((video as any).shares) || 0,
+                  likes: Number((video as { likes?: number }).likes) || 0,
+                  saved: !!(video as { saved?: boolean }).saved,
+                  shares: Number((video as { shares?: number }).shares) || 0,
+                  views:
+                    typeof viewsRaw === 'number'
+                      ? viewsRaw
+                      : parseInt(String(viewsRaw ?? '0').replace(/,/g, ''), 10) || 0,
                 });
                 setIsVideoPlayerVisible(true);
               } else {
@@ -2118,6 +2125,7 @@ export default function ProfileScreen() {
         initialLikes={selectedReelSocial.likes}
         initialSaved={selectedReelSocial.saved}
         initialShares={selectedReelSocial.shares}
+        initialViews={selectedReelSocial.views}
         comments={reelComments[selectedReelId || ''] || []}
         onAddComment={(comment: Comment) => {
           if (selectedReelId) addComment(selectedReelId, comment);

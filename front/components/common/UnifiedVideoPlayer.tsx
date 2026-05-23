@@ -329,15 +329,19 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       );
     }
 
-    // Try to refresh signed URL if this looks like a 403 / expired URL case.
+    // Refresh playback URL from API (R2 signed URL or Mux HLS) when load fails.
+    const isMux = activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8');
     const isSignedUrl = activeVideoUrl.includes('X-Amz-Signature');
-    if (
-      isSignedUrl &&
-      signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES
-    ) {
+    const canRefreshFromApi =
+      !!reel.id &&
+      reel.id !== 'undefined' &&
+      (isSignedUrl || isMux) &&
+      signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES;
+
+    if (canRefreshFromApi) {
       signedUrlRefreshAttempts.current += 1;
       logger.info(
-        `[UnifiedVideoPlayer] Attempting signed URL refresh (attempt ${signedUrlRefreshAttempts.current}) for reel ${reel.id}`,
+        `[UnifiedVideoPlayer] Refreshing playback URL (attempt ${signedUrlRefreshAttempts.current}) for reel ${reel.id}`,
       );
 
       (async () => {
@@ -350,8 +354,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
           if (!res.ok) return;
           const data = await res.json();
           const newUrl: string | undefined = data?.data?.signedUrl;
-          if (newUrl) {
-            logger.info(`[UnifiedVideoPlayer] Signed URL refreshed for reel ${reel.id}`);
+          if (newUrl && !isInvalidVideoUrl(newUrl)) {
+            logger.info(`[UnifiedVideoPlayer] Playback URL refreshed for reel ${reel.id}`);
             setActiveVideoUrl(newUrl);
             setErrorDetails('');
             try {
@@ -362,14 +366,13 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
             }
           }
         } catch (refreshErr) {
-          logger.warn('[UnifiedVideoPlayer] Signed URL refresh failed:', refreshErr);
+          logger.warn('[UnifiedVideoPlayer] Playback URL refresh failed:', refreshErr);
         }
       })();
       return;
     }
 
     // Mux-specific diagnostic: HEAD the URL to surface 403/404 in the UI.
-    const isMux = activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8');
     if (isMux) {
       (async () => {
         try {

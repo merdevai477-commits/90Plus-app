@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -11,7 +10,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Mail, Lock, ShieldCheck } from 'lucide-react-native';
-import { AuthScreenShell, AuthTextField, AUTH_ACCENT } from '@/src/components/auth';
+import {
+  AuthScreenShell,
+  AuthTextField,
+  AUTH_ACCENT,
+  OtpInput,
+  MIN_PASSWORD_LENGTH,
+  normalizeAuthEmail,
+} from '@/src/components/auth';
 import { TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED } from '@/constants/tokens';
 import { useSignIn } from '@clerk/clerk-expo';
 
@@ -19,29 +25,16 @@ const OTP_LENGTH = 6;
 
 type Step = 'email' | 'reset';
 
-/**
- * Forgot-password flow (Clerk reset_password_email_code strategy):
- *  1. User enters email → we trigger Clerk to send a 6-digit code
- *  2. User enters the code + new password on the same screen
- *  3. We call attemptFirstFactor with both → on success, set the active
- *     session and route to /(tabs)/Home
- *
- * Previous version showed an Alert and dropped the user back to /auth/login,
- * which made it impossible to actually finish a password reset because Clerk
- * needs the code AND a new password in the same call.
- */
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const { signIn, setActive, isLoaded } = useSignIn();
 
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-
-  const otpRefs = useRef<(TextInput | null)[]>([]);
 
   const startResendCooldown = (): void => {
     setResendCooldown(60);
@@ -56,18 +49,9 @@ export default function ForgotPasswordScreen() {
     }, 1000);
   };
 
-  // Auto-focus the first OTP cell once we move to the reset step.
-  useEffect(() => {
-    if (step === 'reset') {
-      const t = setTimeout(() => otpRefs.current[0]?.focus(), 250);
-      return () => clearTimeout(t);
-    }
-    return undefined;
-  }, [step]);
-
-  // ───────────── Step 1: send code ─────────────
   const sendCode = async (): Promise<void> => {
-    if (!email.includes('@')) {
+    const normalizedEmail = normalizeAuthEmail(email);
+    if (!normalizedEmail.includes('@')) {
       Alert.alert('Notice', 'Enter a valid email address.');
       return;
     }
@@ -77,8 +61,10 @@ export default function ForgotPasswordScreen() {
     try {
       await signIn.create({
         strategy: 'reset_password_email_code',
-        identifier: email.trim(),
+        identifier: normalizedEmail,
       });
+      setEmail(normalizedEmail);
+      setOtp('');
       setStep('reset');
       startResendCooldown();
     } catch (err: unknown) {
@@ -105,49 +91,13 @@ export default function ForgotPasswordScreen() {
     }
   };
 
-  // ───────────── OTP input helpers ─────────────
-  const handleOtpChange = (value: string, index: number): void => {
-    // Paste handling: a multi-char value lands in the first cell, distribute it.
-    if (value.length > 1) {
-      const chars = value.replace(/\D/g, '').split('').slice(0, OTP_LENGTH);
-      const next = [...otp];
-      chars.forEach((c, i) => {
-        if (index + i < OTP_LENGTH) next[index + i] = c;
-      });
-      setOtp(next);
-      const focusIndex = Math.min(index + chars.length, OTP_LENGTH - 1);
-      otpRefs.current[focusIndex]?.focus();
-      return;
-    }
-
-    const cleaned = value.replace(/\D/g, '');
-    const next = [...otp];
-    next[index] = cleaned;
-    setOtp(next);
-
-    if (cleaned && index < OTP_LENGTH - 1) {
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyPress = (key: string, index: number): void => {
-    if (key === 'Backspace' && !otp[index] && index > 0) {
-      const next = [...otp];
-      next[index - 1] = '';
-      setOtp(next);
-      otpRefs.current[index - 1]?.focus();
-    }
-  };
-
-  // ───────────── Step 2: submit code + new password ─────────────
   const submitReset = async (): Promise<void> => {
-    const code = otp.join('');
-    if (code.length !== OTP_LENGTH) {
+    if (otp.length !== OTP_LENGTH) {
       Alert.alert('Notice', 'Enter the full verification code.');
       return;
     }
-    if (newPassword.length < 8) {
-      Alert.alert('Notice', 'New password must be at least 8 characters.');
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      Alert.alert('Notice', `New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
     if (!isLoaded || !signIn) return;
@@ -156,7 +106,7 @@ export default function ForgotPasswordScreen() {
     try {
       const result = await signIn.attemptFirstFactor({
         strategy: 'reset_password_email_code',
-        code,
+        code: otp,
         password: newPassword,
       });
 
@@ -164,10 +114,9 @@ export default function ForgotPasswordScreen() {
         await setActive({ session: result.createdSessionId });
         router.replace('/(tabs)/Home');
       } else {
-        // Edge case: Clerk requires another factor (rare for email-code reset).
         Alert.alert(
           'More steps required',
-          'Your email is reset, but we need another step to sign you in. Please log in with your new password.',
+          'Your password is reset. Please log in with your new password.',
           [{ text: 'OK', onPress: () => router.replace('/auth/login') }],
         );
       }
@@ -225,32 +174,12 @@ export default function ForgotPasswordScreen() {
         </>
       ) : (
         <>
-          {/* OTP cells */}
-          <View style={styles.otpRow}>
-            {otp.map((digit, i) => (
-              <TextInput
-                key={i}
-                ref={(ref) => {
-                  otpRefs.current[i] = ref;
-                }}
-                style={[styles.otpInput, digit ? styles.otpInputFilled : null]}
-                value={digit}
-                onChangeText={(v) => handleOtpChange(v, i)}
-                onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, i)}
-                keyboardType="number-pad"
-                // ✅ All cells use maxLength=1. Paste is handled in
-                // handleOtpChange by inspecting `value.length > 1` (the first
-                // press of a paste arrives as the full string regardless of
-                // maxLength on iOS).
-                maxLength={1}
-                textContentType="oneTimeCode"
-                autoComplete="sms-otp"
-                returnKeyType="done"
-                selectTextOnFocus
-                allowFontScaling={false}
-              />
-            ))}
-          </View>
+          <OtpInput
+            value={otp}
+            onChange={setOtp}
+            autoFocus
+            containerStyle={styles.otpRow}
+          />
 
           <AuthTextField
             icon={Lock}
@@ -324,33 +253,9 @@ const styles = StyleSheet.create({
   backTxt: { fontSize: 14, fontWeight: '700', color: AUTH_ACCENT },
   resend: { marginTop: 14, alignItems: 'center' },
   resendTxt: { fontSize: 13, fontWeight: '700', color: AUTH_ACCENT },
-
-  // OTP — same layout as the signup verification modal so users see a
-  // consistent shape across both flows.
   otpRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginTop: 24,
     marginBottom: 4,
-  },
-  otpInput: {
-    width: 46,
-    height: 54,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    color: TEXT_PRIMARY,
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: '800',
-    textAlign: 'center',
-    padding: 0,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  otpInputFilled: {
-    borderColor: 'rgba(124,58,237,0.5)',
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    justifyContent: 'center',
   },
 });

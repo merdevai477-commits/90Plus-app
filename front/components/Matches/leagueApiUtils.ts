@@ -25,6 +25,43 @@ export const mapFixtureStatus = (statusShort: string): 'live' | 'upcoming' | 'fi
   return 'upcoming';
 };
 
+/** Local calendar date key (YYYY-MM-DD) — avoids UTC drift near midnight. */
+export const formatLocalDateKey = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+export const getLocalTodayKey = (): string => formatLocalDateKey(new Date());
+
+/**
+ * Live minute label shared by list cards and match-details header.
+ */
+export const formatLiveMinuteDisplay = (
+  statusShort: string,
+  elapsed: number | null | undefined,
+): string | undefined => {
+  const status = statusShort;
+  if (status === 'FT' || status === 'AET') return undefined;
+  if (status === 'PEN' || status === 'P') return undefined;
+  if (status === 'HT') return 'HT';
+  if (status === 'BT') return 'BT';
+
+  if (status === 'ET' && elapsed != null) {
+    if (elapsed > 90) return `90+${elapsed - 90}' (ET)`;
+    return `${elapsed}' (ET)`;
+  }
+
+  if ((status === '1H' || status === '2H') && elapsed != null) {
+    if (status === '1H' && elapsed > 45) return `45+${elapsed - 45}'`;
+    if (status === '2H' && elapsed > 90) return `90+${elapsed - 90}'`;
+    return `${elapsed}'`;
+  }
+
+  return undefined;
+};
+
 /**
  * Formats match minute for display
  * Uses unified status engine with correct 90+X format
@@ -33,34 +70,7 @@ export const formatMatchMinute = (fixture: Fixture): string | undefined => {
   const status = fixture.fixture.status.short;
   const elapsed = fixture.fixture.status.elapsed;
 
-  // Import the unified status utility
-  // Using inline logic to avoid circular dependencies
-  // Never show > 90 minutes directly
-  if (status === 'FT' || status === 'AET') return undefined; // Parent shows "FT"
-  if (status === 'PEN' || status === 'P') return undefined; // Parent shows "PEN"
-  if (status === 'HT') return 'HT';
-  if (status === 'BT') return 'BT';
-  
-  if (status === 'ET' && elapsed !== null && elapsed !== undefined) {
-    if (elapsed > 90) {
-      return `90+${elapsed - 90}' (ET)`;
-    }
-    return `${elapsed}' (ET)`;
-  }
-  
-  if ((status === '1H' || status === '2H') && elapsed !== null && elapsed !== undefined) {
-    // First half: show 45+X after 45 minutes
-    if (status === '1H' && elapsed > 45) {
-      return `45+${elapsed - 45}'`;
-    }
-    // Second half: show 90+X after 90 minutes
-    if (status === '2H' && elapsed > 90) {
-      return `90+${elapsed - 90}'`;
-    }
-    return `${elapsed}'`;
-  }
-  
-  return undefined;
+  return formatLiveMinuteDisplay(status, elapsed);
 };
 
 /**
@@ -111,7 +121,7 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
       : fixture.fixture.periods.first || undefined,
     time: formatMatchTime(fixture.fixture.date),
     league,
-    fixtureDate: fixture.fixture.date.split('T')[0], // Extract date part for filtering
+    fixtureDate: fixture.fixture.date, // Full ISO kickoff — used for bell reminders + timezone-safe display
   };
 };
 
@@ -138,7 +148,7 @@ let inFlightLiveMatches: Promise<Match[]> | null = null;
  * ✅ INTEGRATED: Direct backend API integration
  */
 export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
-  const dateString = date.toISOString().split('T')[0];
+  const dateString = formatLocalDateKey(date);
 
   // Collapse concurrent calls for the same date.
   const existing = inFlightMatchesByDate.get(dateString);
@@ -152,7 +162,7 @@ export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
 };
 
 const fetchMatchesByDateImpl = async (date: Date, dateString: string): Promise<Match[]> => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayKey();
   const isPastDate = dateString < today;
   
   // For past dates, check local cache first (instant response)

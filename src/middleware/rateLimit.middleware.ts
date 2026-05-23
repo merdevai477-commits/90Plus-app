@@ -133,6 +133,7 @@ export const generalLimiter = rateLimit({
         if (p.startsWith('/clerk/user/')) return true;
         if (p.startsWith('/coins/balance')) return true;
         if (p.startsWith('/profile/completion')) return true;
+        if (p.startsWith('/profile/me')) return true;
         if (p.startsWith('/profile/analytics')) return true;
         if (p.startsWith('/profile/cooldowns')) return true;
         return false;

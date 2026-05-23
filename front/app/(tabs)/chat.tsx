@@ -9,7 +9,8 @@
  *  - LiquidGlass UI ONLY on header, BETA badge, online/offline indicator,
  *    and the input bar — message bubbles keep their existing look.
  *  - Consistent with the Rank screen title style (90 + purple PLUS chip).
- *  - Keyboard-aware FlatList with smart auto-scroll + scroll-to-bottom button.
+ *  - Flex-column layout: messages flex:1 + composer in normal flow (not absolute).
+ *  - iOS KeyboardAvoidingView; Android windowSoftInputMode resize (app.json).
  *  - BottomNav hides itself when pathname includes /chat — no tabBarStyle
  *    hacks needed (we use a custom nav, not expo-router's default tab bar).
  */
@@ -26,6 +27,7 @@ import {
     Platform,
     Keyboard,
     KeyboardEvent,
+    KeyboardAvoidingView,
     NativeScrollEvent,
     NativeSyntheticEvent,
 } from 'react-native';
@@ -68,6 +70,7 @@ import { useTranslation } from '../../src/i18n';
 const ACCENT = '#A855F7';
 const SCROLL_NEAR_BOTTOM_THRESHOLD = 120; // px
 const NUDGE_FLAG_PREFIX = '@chat_fifa_nudge_shown_v1_';
+const HEADER_BODY_OFFSET = 64; // matches header padding + row height
 
 // ─── Animated components ──────────────────────────────────────────────────────
 
@@ -278,20 +281,18 @@ export default function ChatScreen() {
 
     // ─── Derived flags ──────────────────────────────────────────────────────
     const hasMessages = messages.length > 1;
-    // Keyboard handling — single source of truth, no KeyboardAvoidingView.
-    //   Android: app.json sets softwareKeyboardLayoutMode = "pan", so the OS
-    //            pans the whole window up to keep the focused input visible.
-    //            We do NOT add keyboardHeight on top of that or we get a
-    //            double-lift / stretched screen.
-    //   iOS:     no native pan — we lift the absolute-positioned bottomArea
-    //            ourselves by setting `bottom = keyboardHeight + smallGap`.
-    const isKbOpen = keyboardHeight > 0;
     const baseInset = Math.max(insets.bottom, 12);
-    const bottomPad = isKbOpen
-        ? Platform.OS === 'ios'
-            ? keyboardHeight + 4    // iOS: lift manually above the keyboard
-            : 4                     // Android: OS pan already lifted us
-        : baseInset;
+
+    // Welcome → FlatList: re-pin scroll and keep composer visible if KB is open.
+    useEffect(() => {
+        if (!hasMessages) return;
+        requestAnimationFrame(() => {
+            listRef.current?.scrollToEnd({ animated: false });
+            if (keyboardHeight > 0) {
+                inputRef.current?.focus();
+            }
+        });
+    }, [hasMessages, keyboardHeight]);
 
     // ─── Handlers ───────────────────────────────────────────────────────────
     const handleSend = useCallback((textOverride?: string) => {
@@ -313,6 +314,8 @@ export default function ChatScreen() {
         setUnreadCount(0);
         requestAnimationFrame(() => {
             listRef.current?.scrollToEnd({ animated: true });
+            // Keep keyboard open so the user can type the next message immediately.
+            inputRef.current?.focus();
         });
     }, [editingMessage, inputValue, editMessage, sendMessage, setInputValue]);
 
@@ -498,216 +501,202 @@ export default function ChatScreen() {
 
             {/* ── Content ── */}
             {/*
-             * Keyboard handling lives in the bottomArea below — we lift the
-             * input bar manually by `bottom = keyboardHeight + 4` on iOS,
-             * and rely on Android's "pan" mode (set in app.json) to handle
-             * the system slide. We deliberately do NOT use
-             * KeyboardAvoidingView: combining KAV with android pan mode
-             * stretched the screen, and on iOS it double-lifted the input
-             * above the keyboard.
+             * Flex column layout (WhatsApp / Telegram pattern):
+             *   messages area flex:1  +  composer dock in normal flow (not absolute).
+             *   iOS  → KeyboardAvoidingView padding lifts the whole column.
+             *   Android → app.json resize shrinks the window; no manual keyboard lift.
              */}
-            <View style={styles.contentWrap}>
-                {!hasMessages ? (
-                    <WelcomeScreen
-                        onPickChip={handleSend}
-                        insetsTop={insets.top}
-                        greetingName={greetingName}
-                        tChat={tChat}
-                    />
-                ) : (
-                    <FlatList
-                        ref={listRef}
-                        style={[styles.messagesList, { marginTop: insets.top + 64 }]}
-                        contentContainerStyle={[
-                            styles.messagesContent,
-                            // Reserve space for the input bar (~52px) + the
-                            // current bottomPad (which already includes
-                            // safe-area + keyboard lift on iOS) + 24 px
-                            // breathing room. Don't add insets.bottom again
-                            // here — bottomPad already factors it in.
-                            { paddingBottom: 52 + bottomPad + 24 },
-                        ]}
-                        keyboardShouldPersistTaps="handled"
-                        keyboardDismissMode="interactive"
-                        automaticallyAdjustKeyboardInsets={false}
-                        data={displayMessages}
-                        keyExtractor={keyExtractor}
-                        renderItem={renderMessage}
-                        onScroll={handleScroll}
-                        scrollEventThrottle={16}
-                        onContentSizeChange={() => {
-                            // Auto-scroll while the user is at the bottom OR
-                            // while the assistant is actively streaming (so
-                            // every flushed chunk keeps the latest text in
-                            // view). Never force-scroll mid-history-read.
-                            if (isNearBottomRef.current || streamingMessageId) {
-                                requestAnimationFrame(() => {
-                                    listRef.current?.scrollToEnd({ animated: false });
-                                });
-                            }
-                        }}
-                        onLayout={() => {
-                            // First render after data arrives — pin to bottom.
-                            requestAnimationFrame(() => {
-                                listRef.current?.scrollToEnd({ animated: false });
-                            });
-                        }}
-                        removeClippedSubviews={Platform.OS === 'android'}
-                        maxToRenderPerBatch={10}
-                        updateCellsBatchingPeriod={50}
-                        windowSize={10}
-                        ListFooterComponent={
-                            isThinking ? (
-                                <ThinkingIndicator
-                                    isThinking={isThinking}
-                                    lastMessage={messages[messages.length - 1]?.text ?? ''}
-                                />
-                            ) : null
-                        }
-                    />
-                )}
-
-                {/* ── Scroll to bottom button ── */}
-                {showScrollButton && hasMessages && (
-                    <Animated.View
-                        entering={FadeIn.duration(200).springify()}
-                        exiting={FadeOut.duration(150)}
-                        style={[styles.scrollBtnWrap, { bottom: bottomPad + 90 }]}
-                        pointerEvents="box-none"
-                    >
-                        <ScrollToBottomButton
-                            onPress={handleScrollToBottom}
-                            newMessagesCount={unreadCount}
+            <KeyboardAvoidingView
+                style={[styles.kav, { marginTop: insets.top + HEADER_BODY_OFFSET }]}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+                <View style={styles.body}>
+                    {!hasMessages ? (
+                        <WelcomeScreen
+                            onPickChip={handleSend}
+                            greetingName={greetingName}
+                            tChat={tChat}
                         />
-                    </Animated.View>
-                )}
-
-                {/* ── Nudge toast (one-time) ── */}
-                {nudgeText && (
-                    <Animated.View
-                        entering={FadeIn.duration(220)}
-                        exiting={FadeOut.duration(180)}
-                        style={[styles.nudgeWrap, { bottom: bottomPad + 160 }]}
-                        pointerEvents="box-none"
-                    >
-                        <GlassSurface
-                            style={styles.nudgeCard}
-                            tint="rgba(124,58,237,0.22)"
-                            effect="regular"
-                            interactive
-                        >
-                            <Text style={styles.nudgeText}>{nudgeText}</Text>
-                            <Pressable
-                                onPress={() => setNudgeText(null)}
-                                hitSlop={8}
-                                style={styles.nudgeDismiss}
-                            >
-                                <Text style={styles.nudgeDismissText}>×</Text>
-                            </Pressable>
-                        </GlassSurface>
-                    </Animated.View>
-                )}
-
-                {/* ── Retry / disconnect banner ── */}
-                {(isRetrying || (error && !isLoading)) && (
-                    <Animated.View
-                        entering={FadeIn.duration(200)}
-                        exiting={FadeOut.duration(150)}
-                        style={[styles.retryBanner, { bottom: bottomPad + 100 }]}
-                        pointerEvents="box-none"
-                    >
-                        <View style={styles.retryBannerInner}>
-                            <Text style={styles.retryBannerText} numberOfLines={2}>
-                                {error ?? tChat.connectionLost}
-                            </Text>
-                            {!isRetrying && (
-                                <Pressable
-                                    onPress={() => { dismissError(); retryLastMessage(); }}
-                                    style={styles.retryBannerBtn}
-                                    hitSlop={8}
-                                >
-                                    <Text style={styles.retryBannerBtnText}>{tChat.retryButton}</Text>
-                                </Pressable>
-                            )}
-                            {!isRetrying && (
-                                <Pressable onPress={dismissError} hitSlop={8} style={styles.retryBannerDismiss}>
-                                    <Text style={styles.retryBannerDismissText}>×</Text>
-                                </Pressable>
-                            )}
-                        </View>
-                    </Animated.View>
-                )}
-
-                {/* ── Input Bar ── */}
-                <View style={[styles.bottomArea, { bottom: bottomPad }]} pointerEvents="box-none">
-                    {messagesRemaining === 0 && resetTime ? (
-                        <View style={styles.limitBanner}>
-                            <Text style={styles.limitText}>{tChat.dailyLimitOver}</Text>
-                        </View>
                     ) : (
-                        <GlassSurface
-                            style={styles.inputWrapper}
-                            tint="rgba(16,10,28,0.55)"
-                            effect="regular"
-                            interactive
-                        >
-                            <LinearGradient
-                                colors={['rgba(124,58,237,0.08)', 'rgba(76,29,149,0.04)']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={StyleSheet.absoluteFill}
-                                pointerEvents="none"
+                        <View style={styles.messagesPane}>
+                            <FlatList
+                                ref={listRef}
+                                style={styles.messagesList}
+                                contentContainerStyle={styles.messagesContent}
+                                keyboardShouldPersistTaps="handled"
+                                keyboardDismissMode="interactive"
+                                automaticallyAdjustKeyboardInsets={false}
+                                data={displayMessages}
+                                keyExtractor={keyExtractor}
+                                renderItem={renderMessage}
+                                onScroll={handleScroll}
+                                scrollEventThrottle={16}
+                                onContentSizeChange={() => {
+                                    if (isNearBottomRef.current || streamingMessageId) {
+                                        requestAnimationFrame(() => {
+                                            listRef.current?.scrollToEnd({ animated: false });
+                                        });
+                                    }
+                                }}
+                                onLayout={() => {
+                                    requestAnimationFrame(() => {
+                                        listRef.current?.scrollToEnd({ animated: false });
+                                    });
+                                }}
+                                removeClippedSubviews={Platform.OS === 'android'}
+                                maxToRenderPerBatch={10}
+                                updateCellsBatchingPeriod={50}
+                                windowSize={10}
+                                ListFooterComponent={
+                                    isThinking ? (
+                                        <ThinkingIndicator
+                                            isThinking={isThinking}
+                                            lastMessage={messages[messages.length - 1]?.text ?? ''}
+                                        />
+                                    ) : null
+                                }
                             />
 
-                            {/* Edit banner */}
-                            {editingMessage && (
+                            {showScrollButton && (
                                 <Animated.View
-                                    entering={FadeIn.duration(180)}
-                                    style={styles.editHeader}
+                                    entering={FadeIn.duration(200).springify()}
+                                    exiting={FadeOut.duration(150)}
+                                    style={styles.scrollFab}
+                                    pointerEvents="box-none"
                                 >
-                                    <View style={styles.editLabel}>
-                                        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={Colors.purpleSoft} strokeWidth={2}>
-                                            <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                            <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                        </Svg>
-                                        <Text style={styles.editText}>{tChat.editingMessage}</Text>
-                                    </View>
-                                    <Pressable onPress={handleCancelEdit} hitSlop={8}>
-                                        <Text style={styles.editCancel}>×</Text>
-                                    </Pressable>
+                                    <ScrollToBottomButton
+                                        onPress={handleScrollToBottom}
+                                        newMessagesCount={unreadCount}
+                                    />
                                 </Animated.View>
                             )}
 
-                            {/* Input row */}
-                            <View style={styles.inputRow}>
-                                <TextInput
-                                    ref={inputRef}
-                                    style={styles.textInput}
-                                    value={inputValue}
-                                    onChangeText={setInputValue}
-                                    placeholder={editingMessage ? tChat.inputPlaceholderEdit : tChat.inputPlaceholder}
-                                    placeholderTextColor="rgba(255,255,255,0.35)"
-                                    multiline
-                                    textAlign="right"
-                                    onSubmitEditing={() => handleSend()}
-                                    submitBehavior="submit"
-                                    underlineColorAndroid="transparent"
-                                    selectionColor={Colors.purpleSoft}
-                                />
-                                <SendButton
-                                    active={Boolean(inputValue.trim())}
-                                    loading={isLoading}
-                                    onPress={() => handleSend()}
-                                />
-                            </View>
-                        </GlassSurface>
+                            {nudgeText && (
+                                <Animated.View
+                                    entering={FadeIn.duration(220)}
+                                    exiting={FadeOut.duration(180)}
+                                    style={styles.nudgeFab}
+                                    pointerEvents="box-none"
+                                >
+                                    <GlassSurface
+                                        style={styles.nudgeCard}
+                                        tint="rgba(124,58,237,0.22)"
+                                        effect="regular"
+                                        interactive
+                                    >
+                                        <Text style={styles.nudgeText}>{nudgeText}</Text>
+                                        <Pressable
+                                            onPress={() => setNudgeText(null)}
+                                            hitSlop={8}
+                                            style={styles.nudgeDismiss}
+                                        >
+                                            <Text style={styles.nudgeDismissText}>×</Text>
+                                        </Pressable>
+                                    </GlassSurface>
+                                </Animated.View>
+                            )}
+
+                            {(isRetrying || (error && !isLoading)) && (
+                                <Animated.View
+                                    entering={FadeIn.duration(200)}
+                                    exiting={FadeOut.duration(150)}
+                                    style={styles.retryFab}
+                                    pointerEvents="box-none"
+                                >
+                                    <View style={styles.retryBannerInner}>
+                                        <Text style={styles.retryBannerText} numberOfLines={2}>
+                                            {error ?? tChat.connectionLost}
+                                        </Text>
+                                        {!isRetrying && (
+                                            <Pressable
+                                                onPress={() => { dismissError(); retryLastMessage(); }}
+                                                style={styles.retryBannerBtn}
+                                                hitSlop={8}
+                                            >
+                                                <Text style={styles.retryBannerBtnText}>{tChat.retryButton}</Text>
+                                            </Pressable>
+                                        )}
+                                        {!isRetrying && (
+                                            <Pressable onPress={dismissError} hitSlop={8} style={styles.retryBannerDismiss}>
+                                                <Text style={styles.retryBannerDismissText}>×</Text>
+                                            </Pressable>
+                                        )}
+                                    </View>
+                                </Animated.View>
+                            )}
+                        </View>
                     )}
 
-                    <View style={styles.footerInfo}>
-                        <Text style={styles.footerText}>powered by mr.dev ai</Text>
+                    {/* ── Composer (normal flow — always above keyboard) ── */}
+                    <View style={[styles.composerDock, { paddingBottom: baseInset }]}>
+                        {messagesRemaining === 0 && resetTime ? (
+                            <View style={styles.limitBanner}>
+                                <Text style={styles.limitText}>{tChat.dailyLimitOver}</Text>
+                            </View>
+                        ) : (
+                            <GlassSurface
+                                style={styles.inputWrapper}
+                                tint="rgba(16,10,28,0.92)"
+                                effect="regular"
+                                interactive
+                            >
+                                <LinearGradient
+                                    colors={['rgba(124,58,237,0.08)', 'rgba(76,29,149,0.04)']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={StyleSheet.absoluteFill}
+                                    pointerEvents="none"
+                                />
+
+                                {editingMessage && (
+                                    <Animated.View
+                                        entering={FadeIn.duration(180)}
+                                        style={styles.editHeader}
+                                    >
+                                        <View style={styles.editLabel}>
+                                            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={Colors.purpleSoft} strokeWidth={2}>
+                                                <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </Svg>
+                                            <Text style={styles.editText}>{tChat.editingMessage}</Text>
+                                        </View>
+                                        <Pressable onPress={handleCancelEdit} hitSlop={8}>
+                                            <Text style={styles.editCancel}>×</Text>
+                                        </Pressable>
+                                    </Animated.View>
+                                )}
+
+                                <View style={styles.inputRow}>
+                                    <TextInput
+                                        ref={inputRef}
+                                        style={styles.textInput}
+                                        value={inputValue}
+                                        onChangeText={setInputValue}
+                                        placeholder={editingMessage ? tChat.inputPlaceholderEdit : tChat.inputPlaceholder}
+                                        placeholderTextColor="rgba(255,255,255,0.35)"
+                                        multiline
+                                        textAlign="right"
+                                        onSubmitEditing={() => handleSend()}
+                                        submitBehavior="submit"
+                                        underlineColorAndroid="transparent"
+                                        selectionColor={Colors.purpleSoft}
+                                        blurOnSubmit={false}
+                                    />
+                                    <SendButton
+                                        active={Boolean(inputValue.trim())}
+                                        loading={isLoading}
+                                        onPress={() => handleSend()}
+                                    />
+                                </View>
+                            </GlassSurface>
+                        )}
+
+                        <View style={styles.footerInfo}>
+                            <Text style={styles.footerText}>powered by mr.dev ai</Text>
+                        </View>
                     </View>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </View>
     );
 }
@@ -757,10 +746,9 @@ function SendButton({
 // ─── Welcome Screen ───────────────────────────────────────────────────────────
 
 const WelcomeScreen = React.memo(function WelcomeScreen({
-    onPickChip, insetsTop, greetingName, tChat,
+    onPickChip, greetingName, tChat,
 }: {
     onPickChip: (text: string) => void;
-    insetsTop: number;
     greetingName: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tChat: any;
@@ -768,10 +756,8 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
     const greeting = (tChat.welcomeGreeting as string).replace('{name}', greetingName);
     return (
         <ScrollView
-            contentContainerStyle={[
-                styles.welcomeContent,
-                { paddingTop: insetsTop + 64 + 32 },
-            ]}
+            style={styles.welcomeScroll}
+            contentContainerStyle={styles.welcomeContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
         >
@@ -833,8 +819,15 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: Colors.bgBase,
     },
-    contentWrap: {
+    kav: {
         flex: 1,
+    },
+    body: {
+        flex: 1,
+    },
+    messagesPane: {
+        flex: 1,
+        position: 'relative',
     },
 
     // ── Header — same structure as RankHeader ──
@@ -902,11 +895,16 @@ const styles = StyleSheet.create({
     },
 
     // ── Welcome ──
+    welcomeScroll: {
+        flex: 1,
+    },
     welcomeContent: {
         flexGrow: 1,
         paddingHorizontal: 20,
+        paddingTop: 32,
+        paddingBottom: 24,
         alignItems: 'center',
-        paddingBottom: 140,
+        justifyContent: 'center',
     },
     welcomeHero: {
         alignItems: 'center',
@@ -947,20 +945,24 @@ const styles = StyleSheet.create({
     messagesContent: {
         paddingHorizontal: 12,
         paddingTop: 16,
+        paddingBottom: 24,
         gap: 4,
     },
 
-    // ── Scroll button ──
-    scrollBtnWrap: {
+    // ── Floating overlays (inside messages pane, above composer) ──
+    scrollFab: {
         position: 'absolute',
-        left: 0, right: 0,
+        bottom: 16,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
         zIndex: 30,
     },
-
-    // ── Nudge ──
-    nudgeWrap: {
+    nudgeFab: {
         position: 'absolute',
-        left: 16, right: 16,
+        bottom: 76,
+        left: 16,
+        right: 16,
         zIndex: 35,
     },
     nudgeCard: {
@@ -993,12 +995,13 @@ const styles = StyleSheet.create({
         lineHeight: 20,
     },
 
-    // ── Bottom / Input ──
-    bottomArea: {
-        position: 'absolute',
-        left: 0, right: 0,
+    // ── Composer dock ──
+    composerDock: {
         paddingHorizontal: 12,
-        zIndex: 40,
+        paddingTop: 8,
+        backgroundColor: Colors.bgBase,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.06)',
     },
     inputWrapper: {
         borderRadius: 26,
@@ -1088,9 +1091,11 @@ const styles = StyleSheet.create({
     limitText: { color: 'rgba(255,255,255,0.55)', fontSize: 12 },
 
     // ── Retry / disconnect banner ──
-    retryBanner: {
+    retryFab: {
         position: 'absolute',
-        left: 12, right: 12,
+        bottom: 76,
+        left: 12,
+        right: 12,
         zIndex: 38,
     },
     retryBannerInner: {

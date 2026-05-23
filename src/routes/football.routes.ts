@@ -127,7 +127,7 @@ router.get('/cached/fixture/:id/lineups', SHARED_CACHE_5MIN, FootballController.
 router.get('/cached/fixture/:id/statistics', SHARED_CACHE_5MIN, FootballController.getCachedStatistics);
 
 // GET /api/football/cached/fixture/:id/events - Get events (permanent for finished, short for empty/live)
-router.get('/cached/fixture/:id/events', SHARED_CACHE_5MIN, FootballController.getCachedEvents);
+router.get('/cached/fixture/:id/events', SHARED_CACHE_8S, FootballController.getCachedEvents);
 
 // GET /api/football/cached/search - Unified search with caching
 router.get('/cached/search', SHARED_CACHE_5MIN, FootballController.getCachedSearch);
@@ -151,7 +151,7 @@ router.get('/cache/stats', FootballController.getCacheStats);
 // GET /api/football/fixtures/:id
 // Get a single fixture by ID
 // ============================================
-router.get('/fixtures/:id', SHARED_CACHE_5MIN, FootballController.getFixtureById);
+router.get('/fixtures/:id', SHARED_CACHE_8S, FootballController.getFixtureById);
 
 // ============================================
 // GET /api/football/fixtures/:id/lineups

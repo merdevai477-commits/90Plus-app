@@ -242,9 +242,9 @@ const MatchRow = memo(function MatchRow({
   const homeName = getTeamDisplayName(fixture.home, language);
   const awayName = getTeamDisplayName(fixture.away, language);
 
-  // Bell is only actionable for future matches — no point notifying for a
-  // match that already started or finished.
-  const canSubscribe = fixture.status === 'UPCOMING';
+  // Bell works for upcoming (kickoff reminder) and live (goal/event alerts via FavoriteMatch).
+  // Disabled only for finished matches.
+  const canSubscribe = fixture.status !== 'FT';
 
   return (
     <View style={styles.rowWrapCol}>
@@ -974,7 +974,7 @@ export default function MatchesHubScreenV2() {
         );
         return;
       }
-      if (fixture.status !== 'UPCOMING') return;
+      if (fixture.status === 'FT') return;
 
       setSubscribingFixtureId(fixture.id);
 

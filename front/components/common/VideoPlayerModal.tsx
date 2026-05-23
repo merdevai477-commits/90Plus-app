@@ -12,7 +12,7 @@
  * the `onVideoRef` callback for mute/play/pause control.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   Animated as RNAnimated,
@@ -53,6 +53,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useReelReport } from '../../hooks/useReportSystem';
 import { useReelSocialActions } from '../../hooks/useReelSocialActions';
 import { ReportSystem } from './ReportSystem';
+import { ReelsService } from '../../src/services/authService';
 
 interface VideoPlayerModalProps {
   visible: boolean;
@@ -68,6 +69,7 @@ interface VideoPlayerModalProps {
   initialSaved?: boolean;
   initialLikes?: number;
   initialShares?: number;
+  initialViews?: number | string;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -92,6 +94,7 @@ export default function VideoPlayerModal({
   initialSaved = false,
   initialLikes = 0,
   initialShares = 0,
+  initialViews = 0,
 }: VideoPlayerModalProps) {
   const { t } = useLanguage();
   const { getToken } = useAuth();
@@ -134,7 +137,14 @@ export default function VideoPlayerModal({
   // ── Local UI state ──
   const [isMuted, setIsMuted] = useState(false); // Audio ON by default
   const [isPaused, setIsPaused] = useState(false);
-  const [views] = useState(0);
+  const viewsDisplay = useMemo(() => {
+    if (typeof initialViews === 'number') return initialViews;
+    if (typeof initialViews === 'string') {
+      const parsed = parseInt(initialViews.replace(/,/g, ''), 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }, [initialViews]);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
   const [isCommentsVisible, setIsCommentsVisible] = useState(false);
@@ -145,6 +155,26 @@ export default function VideoPlayerModal({
   const lastTapRef = useRef(0);
   const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Record view when the modal opens (profile grid / user profile playback).
+  const recordedViewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!visible) {
+      recordedViewRef.current = null;
+      return;
+    }
+    if (!reelIdForApi) return;
+    if (recordedViewRef.current === reelIdForApi) return;
+    recordedViewRef.current = reelIdForApi;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (token) await ReelsService.recordView(token, reelIdForApi);
+      } catch {
+        /* non-blocking */
+      }
+    })();
+  }, [visible, reelIdForApi, getToken]);
 
   // Glow animation when modal opens
   useEffect(() => {
@@ -335,7 +365,7 @@ export default function VideoPlayerModal({
           style={styles.videoWrapper}
         >
           <UnifiedVideoPlayer
-            reel={{ id: reelId, videoUrl, muted: isMuted }}
+            reel={{ id: reelIdForApi ?? reelId ?? 'profile-modal', videoUrl, muted: isMuted }}
             isActive={visible && !isPaused}
             onVideoRef={handlePlayerRef}
             showProgressBar
@@ -395,7 +425,7 @@ export default function VideoPlayerModal({
               <View style={styles.userDetails}>
                 <Text style={styles.userName}>@{username}</Text>
                 <Text style={styles.userFollowers}>
-                  {formatCount(views)} {t.reels?.views || 'views'}
+                  {formatCount(viewsDisplay)} {t.reels?.views || 'views'}
                 </Text>
               </View>
             </View>
