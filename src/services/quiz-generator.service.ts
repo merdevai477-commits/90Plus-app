@@ -375,7 +375,7 @@ Each question object:
 - difficulty: "EASY"|"MEDIUM"|"HARD"
 - imageBinding: required IF type is not "normal". Object with:
   - kind: "player" | "team" | "league" | "venue"
-  - entityName: specific name to search for (e.g. "Lionel Messi", "Real Madrid")
+  - entityName: specific name to search for (e.g. "Lionel Messi", "Real Madrid", "Barcelona" not "FC Barcelona", "Vinicius Junior" not "Vinicius Jr.")
   - teamName: string. REQUIRED ONLY if kind is "player" (player's CURRENT club in 2024-2026, e.g. Mbappe -> "Real Madrid", Salah -> "Liverpool"). Do NOT use former clubs.
 - imageLayout: "square" or "wide"
 - hint: short hint string in ${langLabel} (do not reveal the answer)
@@ -538,13 +538,24 @@ async function buildPackWithReplacements(
   }
   questions = await enrichAndFilterValid(questions, packDate);
 
+  if (questions.length < Math.ceil(QUIZ_PACK_SIZE * 0.6)) {
+    logger.warn(
+      `[QuizGen] Low post-enrich yield (${questions.length}/${QUIZ_PACK_SIZE}) — supplementing with batched generation`,
+    );
+    const batched = await generateInitialQuestionsInBatches(language, packDate);
+    const batchedValid = await enrichAndFilterValid(batched, packDate);
+    questions = mergeUniqueQuestions(questions, batchedValid);
+  }
+
   let fillRound = 0;
   const MAX_FILL_ROUNDS = 6;
+  let stagnantRounds = 0;
 
   while (questions.length < QUIZ_PACK_SIZE && fillRound < MAX_FILL_ROUNDS) {
     fillRound++;
+    const beforeCount = questions.length;
     const needed = QUIZ_PACK_SIZE - questions.length;
-    const buffer = needed + 3;
+    const buffer = Math.min(needed + 2, 6);
     logger.info(
       `[QuizGen] Pack has ${questions.length}/${QUIZ_PACK_SIZE} — generating ${buffer} replacement question(s) (round ${fillRound})`,
     );
@@ -557,20 +568,36 @@ async function buildPackWithReplacements(
     );
     const validReplacements = await enrichAndFilterValid(replacements, packDate);
     questions = mergeUniqueQuestions(questions, validReplacements);
+
+    if (questions.length === beforeCount) {
+      stagnantRounds += 1;
+      if (stagnantRounds >= 2) {
+        logger.warn('[QuizGen] Replacement rounds stalled — switching to normal text fallback early');
+        break;
+      }
+    } else {
+      stagnantRounds = 0;
+    }
   }
 
   if (questions.length < QUIZ_PACK_SIZE) {
-    const stillNeeded = QUIZ_PACK_SIZE - questions.length;
-    logger.info(
-      `[QuizGen] Image rounds exhausted at ${questions.length}/${QUIZ_PACK_SIZE} — generating ${stillNeeded} normal text fallback question(s)`,
-    );
-    const normalFallback = await generateNormalOnlyReplacements(
-      stillNeeded + 2,
-      language,
-      packDate,
-      questions,
-    );
-    questions = mergeUniqueQuestions(questions, normalFallback);
+    let stillNeeded = QUIZ_PACK_SIZE - questions.length;
+    while (stillNeeded > 0) {
+      const chunk = Math.min(stillNeeded + 1, 5);
+      logger.info(
+        `[QuizGen] Image rounds exhausted at ${questions.length}/${QUIZ_PACK_SIZE} — generating ${chunk} normal text fallback question(s)`,
+      );
+      const normalFallback = await generateNormalOnlyReplacements(
+        chunk,
+        language,
+        packDate,
+        questions,
+      );
+      const before = questions.length;
+      questions = mergeUniqueQuestions(questions, normalFallback);
+      if (questions.length === before) break;
+      stillNeeded = QUIZ_PACK_SIZE - questions.length;
+    }
   }
 
   if (questions.length < QUIZ_PACK_SIZE) {

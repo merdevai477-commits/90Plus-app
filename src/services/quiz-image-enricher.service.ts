@@ -26,9 +26,39 @@ function getAliases(name: string): string[] {
   
   if (shortName && shortName !== cleaned && shortName.length > 0) {
     aliases.add(shortName);
+    aliases.add(shortName.replace(/\b\w/g, (c) => c.toUpperCase()));
+  }
+
+  const withoutPrefix = name
+    .replace(/^\s*(?:FC|CF|SC|AFC)\.?\s+/i, '')
+    .trim();
+  if (withoutPrefix && withoutPrefix !== name) {
+    aliases.add(withoutPrefix);
   }
   
   return Array.from(aliases);
+}
+
+function getPlayerSearchAliases(name: string): string[] {
+  const aliases = new Set(getAliases(name));
+  const noSuffix = name
+    .replace(/\s+jr\.?\s*$/i, '')
+    .replace(/\s+sr\.?\s*$/i, '')
+    .replace(/\s+ii\s*$/i, '')
+    .replace(/\s+iii\s*$/i, '')
+    .trim();
+  if (noSuffix && noSuffix !== name) aliases.add(noSuffix);
+
+  const noDots = name.replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+  if (noDots && noDots !== name) aliases.add(noDots);
+
+  const firstToken = name.split(/\s+/)[0]?.replace(/\./g, '');
+  if (firstToken && firstToken.length >= 4) aliases.add(firstToken);
+
+  const lastToken = name.split(/\s+/).pop()?.replace(/\./g, '');
+  if (lastToken && lastToken.length >= 4) aliases.add(lastToken);
+
+  return Array.from(aliases).filter((a) => a.trim().length >= 2);
 }
 
 function editDistance(s1: string, s2: string): number {
@@ -294,10 +324,13 @@ export async function enrichQuizImages(
       continue;
     }
 
-    const aliases = getAliases(binding.entityName);
+    const aliases =
+      binding.kind === 'player'
+        ? getPlayerSearchAliases(binding.entityName)
+        : getAliases(binding.entityName);
     const lastToken = binding.entityName.split(/\s+/).pop();
     if (binding.kind === 'player' && lastToken && lastToken.length >= 4) {
-      aliases.push(lastToken);
+      aliases.push(lastToken.replace(/\./g, ''));
     }
     const matchNames =
       binding.kind === 'venue' ? getVenueSearchAliases(binding.entityName) : aliases;
