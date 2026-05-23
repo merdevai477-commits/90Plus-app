@@ -1,6 +1,10 @@
 import { footballService } from './football.service';
 import { logger } from '../utils/logger';
 import type { StoredQuizQuestion } from '../types/quiz.types';
+import {
+  isImageDependentQuestionText,
+  isRetiredLegendPlayerName,
+} from './quiz-image-legends';
 
 function normalizeName(name: string): string {
   return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
@@ -65,19 +69,70 @@ function getSimilarity(s1: string, s2: string): number {
   return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength.toString());
 }
 
+function degradeToNormalTextQuestion(q: StoredQuizQuestion): StoredQuizQuestion {
+  return {
+    ...q,
+    type: 'normal',
+    imageBinding: null,
+    imageUrl: null,
+    imageLayout: 'square',
+  };
+}
+
+function handleUnresolvedImageQuestion(
+  q: StoredQuizQuestion,
+  binding: NonNullable<StoredQuizQuestion['imageBinding']>,
+  maxScore: number,
+): StoredQuizQuestion | null {
+  const imageDependent = isImageDependentQuestionText(q.question);
+  const isGuessPlayer = q.type === 'guess_player' && binding.kind === 'player';
+
+  if (isGuessPlayer) {
+    logger.warn(
+      `[QuizImage] Player image unavailable for "${binding.entityName}", likely retired/legend or not in API-Football.`,
+    );
+    if (isRetiredLegendPlayerName(binding.entityName) || maxScore < 0.85) {
+      if (!imageDependent) {
+        logger.info(
+          `[QuizImage] Degraded ${q.id} guess_player to normal text (no photo): "${binding.entityName}"`,
+        );
+        return degradeToNormalTextQuestion(q);
+      }
+      logger.info(
+        `[QuizImage] Discarded ${q.id} guess_player — image required but unavailable for "${binding.entityName}"`,
+      );
+      return null;
+    }
+  }
+
+  logger.warn(
+    `[QuizImage] Rejected ${q.id} (${q.type}): ${binding.kind} "${binding.entityName}". Best match score: ${maxScore.toFixed(2)}`,
+  );
+
+  if (q.type === 'image' && !imageDependent) {
+    logger.info(`[QuizImage] Degraded ${q.id} to normal (image failed but answerable text)`);
+    return degradeToNormalTextQuestion(q);
+  }
+
+  logger.info(`[QuizImage] Discarded ${q.id} because it relies on image and resolution failed`);
+  return null;
+}
+
 export async function enrichQuizImages(
   questions: StoredQuizQuestion[],
   dateStr: string,
 ): Promise<(StoredQuizQuestion | null)[]> {
   if (!footballService.isConfigured()) {
-    // If not configured, we degrade all image questions to normal if safe, else discard.
     return questions.map(q => {
       if (q.type === 'normal') return q;
-      if (q.type === 'image' && !/who is this|what is this|identify this|name this|which player is shown|which team is shown/i.test(q.question)) {
-        q.type = 'normal';
-        q.imageBinding = null;
-        q.imageUrl = null;
-        return q;
+      if (q.type === 'image' && !isImageDependentQuestionText(q.question)) {
+        return degradeToNormalTextQuestion(q);
+      }
+      if (q.type === 'guess_player' && q.imageBinding?.kind === 'player') {
+        if (!isImageDependentQuestionText(q.question)) {
+          return degradeToNormalTextQuestion(q);
+        }
+        return null;
       }
       return null;
     });
@@ -100,6 +155,27 @@ export async function enrichQuizImages(
     }
 
     const binding = q.imageBinding;
+
+    if (
+      q.type === 'guess_player' &&
+      binding.kind === 'player' &&
+      isRetiredLegendPlayerName(binding.entityName)
+    ) {
+      if (!isImageDependentQuestionText(q.question)) {
+        logger.info(
+          `[QuizImage] Skipped image lookup for legend "${binding.entityName}" — using normal text question`,
+        );
+        out.push(degradeToNormalTextQuestion(q));
+        continue;
+      }
+      logger.warn(
+        `[QuizImage] Player image unavailable for "${binding.entityName}", likely retired/legend or not in API-Football.`,
+      );
+      logger.info(`[QuizImage] Discarded ${q.id} — image-required legend guess_player`);
+      out.push(null);
+      continue;
+    }
+
     const aliases = getAliases(binding.entityName);
     const targetNames = aliases.map(normalizeName);
     
@@ -191,7 +267,7 @@ export async function enrichQuizImages(
           bestMatchUrl = url;
           bestMatchId = id;
           maxScore = 1.0;
-          break; // Exact match found
+          break;
         }
 
         const score = getSimilarity(tName, normalizedItemName);
@@ -205,26 +281,20 @@ export async function enrichQuizImages(
     }
 
     if (maxScore >= 0.85 && bestMatchUrl) {
+      if (q.type === 'guess_player' && binding.kind === 'player') {
+        if (!bestMatchUrl.trim()) {
+          out.push(handleUnresolvedImageQuestion(q, binding, maxScore));
+          continue;
+        }
+      }
       q.imageUrl = bestMatchUrl;
       q.imageBinding.imageUrl = bestMatchUrl;
       q.imageBinding.apiId = bestMatchId;
       logger.info(`[QuizImage] Resolved ${q.id} (${q.type}): ${binding.kind} "${binding.entityName}" -> ${bestMatchUrl} (score: ${maxScore.toFixed(2)})`);
       out.push(q);
     } else {
-      logger.warn(`[QuizImage] Rejected ${q.id} (${q.type}): ${binding.kind} "${binding.entityName}". Best match score: ${maxScore.toFixed(2)}`);
-      
-      const isImageDependent = /who is this|what is this|identify this|name this|which player is shown|which team is shown/i.test(q.question);
-      
-      if (q.type === 'image' && !isImageDependent) {
-        logger.info(`[QuizImage] Degraded ${q.id} to normal (Image failed but answerable text)`);
-        q.type = 'normal';
-        q.imageBinding = null;
-        q.imageUrl = null;
-        out.push(q);
-      } else {
-        logger.info(`[QuizImage] Discarded ${q.id} because it relies on image and resolution failed`);
-        out.push(null);
-      }
+      const resolved = handleUnresolvedImageQuestion(q, binding, maxScore);
+      out.push(resolved);
     }
   }
 

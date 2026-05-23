@@ -13,6 +13,10 @@ import type {
   QuizImageType,
 } from '../types/quiz.types';
 import { enrichQuizImages } from './quiz-image-enricher.service';
+import {
+  isImageDependentQuestionText,
+  isRetiredLegendPlayerName,
+} from './quiz-image-legends';
 
 const DIFFICULTY_COUNTS: Record<QuizDifficulty, number> = {
   EASY: 10,
@@ -134,7 +138,7 @@ function parseQuestionsFromAi(
     }
 
     const difficulty = normalizeDifficulty(String(item.difficulty ?? 'EASY'));
-    const type = normalizeType(String(item.type ?? 'normal'));
+    let type = normalizeType(String(item.type ?? 'normal'));
     
     let imageBinding: StoredQuizQuestion['imageBinding'] = null;
     let imageUrl: string | null = null;
@@ -155,8 +159,18 @@ function parseQuestionsFromAi(
         entityName: binding.entityName.trim(),
         teamName: typeof binding.teamName === 'string' ? binding.teamName.trim() : undefined
       };
-      // Explicitly nullify imageUrl to enforce backend resolution
       imageUrl = null;
+
+      if (
+        type === 'guess_player' &&
+        imageBinding.kind === 'player' &&
+        isRetiredLegendPlayerName(imageBinding.entityName) &&
+        !isImageDependentQuestionText(question)
+      ) {
+        type = 'normal';
+        imageBinding = null;
+        imageUrl = null;
+      }
     }
     
     const imageLayout =
@@ -203,6 +217,46 @@ function rebalanceDifficulties(questions: StoredQuizQuestion[]): StoredQuizQuest
   }));
 }
 
+function renumberQuestionIds(
+  questions: StoredQuizQuestion[],
+  language: QuizLanguage,
+  packDate: string,
+): StoredQuizQuestion[] {
+  return questions.map((q, i) => ({
+    ...q,
+    id: `daily-${packDate}-${language}-${i + 1}`,
+  }));
+}
+
+function mergeUniqueQuestions(
+  base: StoredQuizQuestion[],
+  additions: StoredQuizQuestion[],
+): StoredQuizQuestion[] {
+  const seen = new Set(base.map((q) => hashQuestion(q.question)));
+  const merged = [...base];
+  for (const q of additions) {
+    const h = hashQuestion(q.question);
+    if (seen.has(h)) continue;
+    seen.add(h);
+    merged.push(q);
+  }
+  return merged;
+}
+
+async function enrichAndFilterValid(
+  questions: StoredQuizQuestion[],
+  packDate: string,
+): Promise<StoredQuizQuestion[]> {
+  const enriched = await enrichQuizImages(questions, packDate);
+  return enriched.filter((q): q is StoredQuizQuestion => {
+    if (q === null) return false;
+    if (q.type === 'guess_player' && !q.imageUrl?.trim()) {
+      return false;
+    }
+    return true;
+  });
+}
+
 async function attemptOpenRouterCall(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
   const client = buildClient();
   if (!client) throw new Error('OpenRouter API key not configured');
@@ -223,9 +277,17 @@ Each question object:
 - imageBinding: required IF type is not "normal". Object with:
   - kind: "player" | "team" | "league" | "venue"
   - entityName: specific name to search for (e.g. "Lionel Messi", "Real Madrid")
-  - teamName: string. REQUIRED ONLY if kind is "player" (the player's current or main team, e.g. "Inter Miami").
+  - teamName: string. REQUIRED ONLY if kind is "player" (the player's current club in 2024-2026, e.g. "Liverpool", "Real Madrid").
 - imageLayout: "square" or "wide"
 - hint: short hint string in ${langLabel} (do not reveal the answer)
+
+CRITICAL — guess_player / player images:
+- For type "guess_player" with kind "player", ONLY use currently active or very recently active players whose photos exist in football APIs (2024-2026 squads).
+- Good examples: Mohamed Salah, Erling Haaland, Kylian Mbappe, Vinicius Jr, Jude Bellingham, Harry Kane, Robert Lewandowski, Lamine Yamal.
+- NEVER use retired legends or historical players for guess_player / image-based player questions: Paolo Maldini, Zinedine Zidane, Ronaldo Nazario, Ronaldinho, Diego Maradona, Pele, David Beckham, Andrea Pirlo, Xavi, Iniesta, Buffon, Totti, etc.
+- Retired legends MAY appear ONLY in type "normal" (text-only, no imageBinding).
+- Prefer "logo" and "stadium" and "normal" for history/legends trivia.
+
 Never generate text-input or essay questions. Exactly 20 questions.`;
 
   const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Ensure no duplicates, exactly 4 options per question, and correctKey exists.`;
@@ -252,6 +314,95 @@ Never generate text-input or essay questions. Exactly 20 questions.`;
   return parseQuestionsFromAi(parsed, language, packDate);
 }
 
+async function generateReplacementQuestions(
+  count: number,
+  language: QuizLanguage,
+  packDate: string,
+  existing: StoredQuizQuestion[],
+): Promise<StoredQuizQuestion[]> {
+  const client = buildClient();
+  if (!client) throw new Error('OpenRouter API key not configured');
+
+  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
+  const langLabel = language === 'ar' ? 'Arabic' : 'English';
+  const avoidSample = existing
+    .slice(0, 12)
+    .map((q) => q.question.slice(0, 100))
+    .join(' | ');
+
+  const system = `You are a football trivia writer for 90Plus.
+Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW multiple-choice questions.
+Each question: question, type (normal|image|guess_player|logo|stadium), options (4x A-D), correctKey, difficulty (EASY|MEDIUM|HARD), imageBinding when not normal, imageLayout, hint.
+For guess_player: ONLY active 2024-2026 players with real club photos (Salah, Haaland, Mbappe, Vinicius, Bellingham, Kane, etc.).
+NEVER use retired legends for guess_player: Maldini, Zidane, Ronaldinho, Maradona, Pele, Beckham, Pirlo, Xavi, Buffon.
+Use type "normal" for legend/history trivia without images.
+Language: ${langLabel}. No duplicates.`;
+
+  const user = `Generate ${count} replacement questions for pack ${packDate}. Do NOT repeat or paraphrase: ${avoidSample}`;
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.9,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    response_format: { type: 'json_object' },
+  });
+
+  const content = completion.choices[0]?.message?.content ?? '{}';
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    const match = content.match(/\{[\s\S]*\}/);
+    parsed = match ? JSON.parse(match[0]) : { questions: [] };
+  }
+
+  return parseQuestionsFromAi(parsed, language, packDate);
+}
+
+async function buildPackWithReplacements(
+  language: QuizLanguage,
+  packDate: string,
+): Promise<StoredQuizQuestion[]> {
+  let questions = await attemptOpenRouterCall(language, packDate);
+  questions = await enrichAndFilterValid(questions, packDate);
+
+  let fillRound = 0;
+  const MAX_FILL_ROUNDS = 4;
+
+  while (questions.length < 20 && fillRound < MAX_FILL_ROUNDS) {
+    fillRound++;
+    const needed = 20 - questions.length;
+    const buffer = needed + 3;
+    logger.info(
+      `[QuizGen] Pack has ${questions.length}/20 — generating ${buffer} replacement question(s) (round ${fillRound})`,
+    );
+
+    const replacements = await generateReplacementQuestions(
+      buffer,
+      language,
+      packDate,
+      questions,
+    );
+    const validReplacements = await enrichAndFilterValid(replacements, packDate);
+    questions = mergeUniqueQuestions(questions, validReplacements);
+  }
+
+  if (questions.length < 20) {
+    throw new Error(
+      `Only ${questions.length} valid unique questions after image resolution and ${fillRound} replacement round(s), expected exactly 20.`,
+    );
+  }
+
+  questions = questions.slice(0, 20);
+  if (!validateDistribution(questions)) {
+    questions = rebalanceDifficulties(questions);
+  }
+  return renumberQuestionIds(questions, language, packDate);
+}
+
 async function callOpenRouter(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
   let attempts = 0;
   const MAX_ATTEMPTS = 3; // 1 initial + 2 retries
@@ -261,25 +412,7 @@ async function callOpenRouter(language: QuizLanguage, packDate: string): Promise
     try {
       attempts++;
       logger.info(`[QuizGen] Calling AI for ${packDate} (${language}) - Attempt ${attempts}`);
-      let questions = await attemptOpenRouterCall(language, packDate);
-      
-      // Attempt image resolution. If resolution fails, enrichQuizImages will return null for that question or safely degrade it.
-      const enriched = await enrichQuizImages(questions, packDate);
-      
-      // Filter out discarded questions
-      questions = enriched.filter((q): q is StoredQuizQuestion => q !== null);
-      
-      if (questions.length < 20) {
-        throw new Error(`AI returned ${questions.length} valid unique questions after image resolution, expected exactly 20.`);
-      }
-
-      questions = questions.slice(0, 20);
-      
-      if (!validateDistribution(questions)) {
-        questions = rebalanceDifficulties(questions);
-      }
-      
-      return questions;
+      return await buildPackWithReplacements(language, packDate);
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       logger.warn(`[QuizGen] Attempt ${attempts} failed: ${lastError.message}`);
