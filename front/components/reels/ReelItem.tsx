@@ -46,7 +46,8 @@ interface ReelItemProps {
     onLike: () => void;
     onToggleMute: () => void;
     onComment: () => void;
-    onShare: () => void;
+    /** Records share in backend after platform-specific share (no second native sheet) */
+    onRecordShare: (platform: string) => void;
     onSave: () => void;
     onUserPress: () => void;
     onReport: () => void;
@@ -86,7 +87,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     onToggleMute,
     onComment,
     onReport,
-    onShare,
+    onRecordShare,
     onSave,
     onUserPress,
     onFollow,
@@ -174,6 +175,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
         // Single tap - wait to see if it's double
         singleTapTimer.current = setTimeout(() => {
+            handleLongPressEnd();
             setIsPaused(prev => !prev);
             singleTapTimer.current = null;
         }, 300);
@@ -211,12 +213,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         setTimeout(() => setShowHeartAnimation(false), 1500);
     };
 
-    // Long press for share menu
+    // Long press for share menu (avoid firing while single-tap pause is pending)
     const handleLongPressStart = () => {
+        if (singleTapTimer.current) return;
         longPressTimer.current = setTimeout(() => {
+            if (singleTapTimer.current) return;
             haptics.heavyImpact();
             showShareMenu();
-        }, 500);
+        }, 650);
     };
 
     const handleLongPressEnd = () => {
@@ -236,14 +240,20 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             const canOpen = await Linking.canOpenURL(whatsappUrl);
             if (canOpen) {
                 await Linking.openURL(whatsappUrl);
+                onRecordShare('whatsapp');
             } else {
-                await RNShare.share({ message });
+                const result = await RNShare.share({ message });
+                if (result.action === RNShare.sharedAction) onRecordShare('whatsapp');
             }
-            onShare(); // track share in backend
-        } catch (e) {
-            await RNShare.share({ message });
+        } catch {
+            try {
+                const result = await RNShare.share({ message });
+                if (result.action === RNShare.sharedAction) onRecordShare('whatsapp');
+            } catch {
+                /* user cancelled */
+            }
         }
-    }, [reel.id, onShare]);
+    }, [reel.id, onRecordShare, t.reels.shareReelMessageWhatsApp]);
 
     const handleShareFacebook = useCallback(async () => {
         const url = `${REEL_BASE_URL}/${reel.id}`;
@@ -252,29 +262,34 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             const canOpen = await Linking.canOpenURL(fbUrl);
             if (canOpen) {
                 await Linking.openURL(fbUrl);
+                onRecordShare('facebook');
             } else {
-                await RNShare.share({ message: url });
+                const result = await RNShare.share({ message: url });
+                if (result.action === RNShare.sharedAction) onRecordShare('facebook');
             }
-            onShare();
-        } catch (e) {
-            await RNShare.share({ message: url });
+        } catch {
+            try {
+                const result = await RNShare.share({ message: url });
+                if (result.action === RNShare.sharedAction) onRecordShare('facebook');
+            } catch {
+                /* user cancelled */
+            }
         }
-    }, [reel.id, onShare]);
+    }, [reel.id, onRecordShare]);
 
     const handleCopyLink = useCallback(async () => {
         const url = `${REEL_BASE_URL}/${reel.id}`;
         try {
-            // Use Clipboard from @react-native-clipboard/clipboard if available, fallback to RN Clipboard
             if ((Clipboard as any).setString) {
                 (Clipboard as any).setString(url);
             } else {
                 await (Clipboard as any).setStringAsync(url);
             }
+            onRecordShare('copy_link');
         } catch {
-            // Clipboard not available — fall through to native share
+            /* clipboard unavailable — no share recorded */
         }
-        onShare();
-    }, [reel.id, onShare]);
+    }, [reel.id, onRecordShare]);
 
     const showShareMenu = useCallback(() => {
         if (Platform.OS === 'ios') {
@@ -299,9 +314,11 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             const url = `${REEL_BASE_URL}/${reel.id}`;
             RNShare.share({
                 message: (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url),
-            }).then(() => onShare());
+            }).then((result) => {
+                if (result.action === RNShare.sharedAction) onRecordShare('android_share');
+            });
         }
-    }, [reel.id, t, handleShareWhatsApp, handleShareFacebook, handleCopyLink, onShare]);
+    }, [reel.id, t, handleShareWhatsApp, handleShareFacebook, handleCopyLink, onRecordShare]);
 
     const handleMoreOptions = useCallback(() => {
         haptics.lightImpact();
@@ -508,7 +525,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             }}
                         >
                             <LinearGradient
-                                colors={reel.user.isFollowing ? GRADIENTS.cardGradient : GRADIENTS.greenGlow}
+                                colors={reel.user.isFollowing ? GRADIENTS.cardGradient : GRADIENTS.brandGlow}
                                 style={styles.followButtonGradient}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
@@ -847,7 +864,7 @@ const styles = StyleSheet.create({
     followButton: {
         borderRadius: 18,
         overflow: 'hidden',
-        ...EFFECTS.greenGlow,
+        ...EFFECTS.brandGlow,
     },
     followingButton: {
         borderRadius: 18,
@@ -960,9 +977,9 @@ const styles = StyleSheet.create({
         ...EFFECTS.softShadow,
     },
     buttonActive: {
-        backgroundColor: 'rgba(50, 205, 50, 0.15)',
+        backgroundColor: 'rgba(168, 85, 247, 0.18)',
         borderColor: COLORS.primary,
-        ...EFFECTS.greenGlow,
+        ...EFFECTS.brandGlow,
     },
     actionCount: {
         color: COLORS.textPrimary,

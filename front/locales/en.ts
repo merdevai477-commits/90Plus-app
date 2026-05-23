@@ -1646,6 +1646,10 @@ export const en = {
     buffering: 'Buffering...',
     tapToReplay: 'Tap to replay',
     replayVideo: 'Replay video',
+    videoUnavailable: 'Video unavailable or link expired',
+    videoConnectionError: 'Could not reach the video server',
+    invalidVideoSource: 'Invalid video source',
+    videoLoadTimeout: 'Video load timed out. Check your connection.',
     loadingVideos: 'Loading videos...',
     // Connectivity / auth
     offline: 'No internet connection',

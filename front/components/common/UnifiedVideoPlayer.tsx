@@ -83,11 +83,11 @@ export interface UnifiedVideoPlayerProps {
 // ─── Styling tokens ───────────────────────────────────────────────────────────
 
 const COLORS = {
-  primary: '#FFD700',
+  primary: '#22c55e',
   background: '#000000',
   error: '#FF5252',
   progressBg: 'rgba(255, 255, 255, 0.3)',
-  progressFill: '#32cd32',
+  progressFill: '#22c55e',
 } as const;
 
 /**
@@ -131,6 +131,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   muted: overrideMuted,
   style,
 }) => {
+  const { t } = useLanguage();
+
   // -------- URL management (signed URL refresh support) --------
   const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
   const signedUrlRefreshAttempts = useRef(0);
@@ -374,15 +376,17 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
           const head = await fetch(activeVideoUrl, { method: 'HEAD' });
           logger.info(`[UnifiedVideoPlayer] 🔍 Mux HEAD status: ${head.status} ${head.statusText}`);
           if (head.status === 403 || head.status === 404) {
-            setErrorDetails(`Mux: ${head.status} - الفيديو غير متاح أو انتهت صلاحيته`);
+            setErrorDetails(
+              `Mux: ${head.status} - ${t.reels?.videoUnavailable || 'Video unavailable or link expired'}`,
+            );
           }
         } catch (headErr) {
           logger.warn('[UnifiedVideoPlayer] 🔍 HEAD request failed (network issue):', headErr);
-          setErrorDetails('مشكلة في الاتصال بخادم الفيديو');
+          setErrorDetails(t.reels?.videoConnectionError || 'Could not reach the video server');
         }
       })();
     }
-  }, [hasError, playerError, activeVideoUrl, reel.id, player, isActive]);
+  }, [hasError, playerError, activeVideoUrl, reel.id, player, isActive, t]);
 
   // -------- Manual retry / manual replay --------
   const handleRetry = useCallback(() => {
@@ -409,16 +413,15 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   }, [onManualReplay, player]);
 
   // -------- Render ---------
-  const { t } = useLanguage();
   const showErrorUi = (hasError || loadTimedOut || invalidSource) && !isLoading;
 
   if (showErrorUi) {
     const invalidReason = invalidSource
-      ? 'مصدر الفيديو غير صالح'
+      ? (t.reels?.invalidVideoSource || 'Invalid video source')
       : errorDetails
         ? errorDetails
         : loadTimedOut
-          ? 'انتهت مهلة تحميل الفيديو. تحقق من اتصالك.'
+          ? (t.reels?.videoLoadTimeout || 'Video load timed out. Check your connection.')
           : '';
     return (
       <View style={[styles.errorContainer, style]}>
@@ -446,8 +449,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         allowsPictureInPicture={false}
       />
 
-      {/* Loading / buffering indicator */}
-      {(isLoading || !isPlaying) && !hasError && isActive && (
+      {/* Loading / buffering indicator — hide when user paused or replay cap reached */}
+      {isLoading && !hasError && isActive && !isPausedByLimit && (
         <View style={styles.loadingContainer} pointerEvents="none">
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>

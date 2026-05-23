@@ -1997,7 +1997,7 @@ export class ProfileService {
 
 export interface SocialNotification {
     id: string;
-    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'GENERAL' | 'MODERATION_ALERT';
+    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'SHARE' | 'COMMENT_LIKE' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'GENERAL' | 'MODERATION_ALERT';
     title: string;
     message: string;
     isRead: boolean;

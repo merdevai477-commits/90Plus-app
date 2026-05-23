@@ -13,7 +13,6 @@ import {
   ViewToken,
   Platform,
   Vibration,
-  Share,
   StatusBar,
 } from 'react-native';
 import * as Network from 'expo-network';
@@ -56,6 +55,7 @@ import { ErrorDisplay } from '../../components/common/ErrorDisplay';
 import { toastManager } from '../../services/toastManager';
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useReelReport } from '../../hooks/useReportSystem';
+import { useReelEvents } from '../../hooks/useWebSocket';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -811,7 +811,35 @@ const ReelsFeed: React.FC = () => {
     return reels;
   }, [selectedHashtag, reels]);
 
+  const activeReelId = filteredReels[currentIndex]?.id;
 
+  const handleWsLike = useCallback((payload: { reelId: string; likesCount: number }) => {
+    setReels((prev) =>
+      prev.map((r) =>
+        r.id === payload.reelId ? { ...r, likes: payload.likesCount } : r,
+      ),
+    );
+    setBackendReels((prev) =>
+      prev.map((r) =>
+        r.id === payload.reelId ? { ...r, likes: payload.likesCount } : r,
+      ),
+    );
+  }, []);
+
+  const handleWsComment = useCallback((payload: { reelId: string }) => {
+    setReels((prev) =>
+      prev.map((r) =>
+        r.id === payload.reelId ? { ...r, comments: (r.comments ?? 0) + 1 } : r,
+      ),
+    );
+    setBackendReels((prev) =>
+      prev.map((r) =>
+        r.id === payload.reelId ? { ...r, comments: (r.comments ?? 0) + 1 } : r,
+      ),
+    );
+  }, []);
+
+  useReelEvents(activeReelId, { onLike: handleWsLike, onComment: handleWsComment });
 
   // Video Ref Management — prune stale entries to prevent memory leak
   const handleVideoRef = useCallback((ref: any, id: string) => {
@@ -843,32 +871,25 @@ const ReelsFeed: React.FC = () => {
     };
   }, []);
 
-  // Like processing state to prevent multiple clicks (Critical Priority #5)
-  const [likingReels, setLikingReels] = useState<Set<string>>(new Set());
   const likeTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingLikeRef = useRef<Map<string, boolean>>(new Map());
 
-  // Handle Like with Backend sync - Ultra Fast with Rollback + Debounce
-  // Requirement: Critical Priority #5 - Add debounce (300ms) to prevent multiple clicks
-  const handleLike = useCallback(async (reelId: string) => {
-    // Prevent multiple rapid clicks on the same reel (debounce 300ms)
-    if (likingReels.has(reelId)) {
-      return; // Already processing this reel
-    }
-
+  // Optimistic like + debounced API sync (allows rapid taps; one request with final state)
+  const handleLike = useCallback((reelId: string) => {
     haptic.trigger('medium');
 
-    // Mark as processing
-    setLikingReels(prev => new Set(prev).add(reelId));
-
-    // Get current state BEFORE update for rollback
     const currentReel = reels.find(r => r.id === reelId);
-    const wasLiked = currentReel?.liked ?? false;
-    const prevLikes = currentReel?.likes ?? 0;
+    if (!currentReel) return;
 
-    // Optimistic UI update - INSTANT (0ms)
+    const wasLiked = currentReel.liked ?? false;
+    const prevLikes = currentReel.likes ?? 0;
+    const nextLiked = !wasLiked;
+    const nextLikes = nextLiked ? prevLikes + 1 : Math.max(0, prevLikes - 1);
+
+    pendingLikeRef.current.set(reelId, nextLiked);
     toggleReelLike(reelId);
 
-    const updateReelState = (liked: boolean, likes: number) => {
+    const applyLikeState = (liked: boolean, likes: number) => {
       setReels(prev => prev.map(reel =>
         reel.id === reelId ? { ...reel, liked, likes } : reel
       ));
@@ -876,50 +897,35 @@ const ReelsFeed: React.FC = () => {
         reel.id === reelId ? { ...reel, liked, likes } : reel
       ));
     };
+    applyLikeState(nextLiked, nextLikes);
 
-    // Apply optimistic update immediately
-    updateReelState(!wasLiked, wasLiked ? prevLikes - 1 : prevLikes + 1);
-
-    // Clear previous timeout for this reel if any
     const existingTimeout = likeTimeoutRef.current.get(reelId);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-    }
+    if (existingTimeout) clearTimeout(existingTimeout);
 
-    // Set debounce timeout (300ms)
-    const timeout = setTimeout(() => {
+    likeTimeoutRef.current.set(reelId, setTimeout(async () => {
       likeTimeoutRef.current.delete(reelId);
-      setLikingReels(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(reelId);
-        return newSet;
-      });
-    }, 300);
-    likeTimeoutRef.current.set(reelId, timeout);
+      const targetLiked = pendingLikeRef.current.get(reelId);
+      pendingLikeRef.current.delete(reelId);
+      if (targetLiked === undefined) return;
 
-    // Sync with backend (fire and forget with rollback on error)
-    try {
-      const token = await getToken();
-      if (token) {
-        if (wasLiked) {
-          await ReelsService.unlikeReel(token, reelId);
-        } else {
-          await ReelsService.likeReel(token, reelId);
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const result = targetLiked
+          ? await ReelsService.likeReel(token, reelId)
+          : await ReelsService.unlikeReel(token, reelId);
+        if (!result.success) {
+          throw new Error('Like sync failed');
         }
+        if (result.likesCount !== undefined) {
+          applyLikeState(targetLiked, result.likesCount);
+        }
+      } catch (error) {
+        logger.error('Error syncing like, rolling back:', error);
+        applyLikeState(!targetLiked, targetLiked ? Math.max(0, nextLikes - 1) : nextLikes + 1);
       }
-    } catch (error) {
-      // ROLLBACK on failure — restore the previous state for THIS reel only,
-      // using a functional setState so we don't clobber concurrent updates
-      // from other reels or fast follow-up taps.
-      logger.error('Error syncing like, rolling back:', error);
-      setReels(prev => prev.map(r =>
-        r.id === reelId ? { ...r, liked: wasLiked, likes: prevLikes } : r,
-      ));
-      setBackendReels(prev => prev.map(r =>
-        r.id === reelId ? { ...r, liked: wasLiked, likes: prevLikes } : r,
-      ));
-    }
-  }, [toggleReelLike, haptic, getToken, reels, likingReels]);
+    }, 300));
+  }, [toggleReelLike, haptic, getToken, reels]);
 
 
   // Handle Mute Toggle
@@ -1010,43 +1016,24 @@ const ReelsFeed: React.FC = () => {
     setSelectedHashtag(null);
   }, [haptic]);
 
-  // Handle Share - with Backend tracking and deep links
-  const handleShareReel = useCallback(async (reel: ReelData) => {
-    haptic.trigger('light');
-
+  // Record share count only (ReelItem already opened WhatsApp/FB/copy — no second sheet)
+  const recordReelShare = useCallback(async (reelId: string, activityType = 'unknown') => {
     try {
-      // Generate deep link: 90plus://reel/:reelId
-      const deepLink = `90plus://reel/${reel.id}`;
-      const message = t.reels.shareReelMessage
-        .replace('{name}', reel.user.name)
-        .replace('{description}', reel.description || '')
-        .replace('{link}', deepLink);
-      const result = await Share.share({
-        message,
-        url: deepLink, // Use deep link instead of direct video URL
-        title: t.reels.shareReelTitle
-      });
-
-      if (result.action === Share.sharedAction) {
-        // Record share in backend
-        const token = await getToken();
-        if (token) {
-          const shareResult = await ReelsService.recordShare(token, reel.id, result.activityType || 'unknown');
-          if (shareResult.success && shareResult.sharesCount !== undefined) {
-            // Update shares count in UI
-            setReels(prev => prev.map(r =>
-              r.id === reel.id ? { ...r, shares: shareResult.sharesCount! } : r
-            ));
-            setBackendReels(prev => prev.map(r =>
-              r.id === reel.id ? { ...r, shares: shareResult.sharesCount! } : r
-            ));
-          }
-        }
+      const token = await getToken();
+      if (!token) return;
+      const shareResult = await ReelsService.recordShare(token, reelId, activityType);
+      if (shareResult.success && shareResult.sharesCount !== undefined) {
+        setReels(prev => prev.map(r =>
+          r.id === reelId ? { ...r, shares: shareResult.sharesCount! } : r
+        ));
+        setBackendReels(prev => prev.map(r =>
+          r.id === reelId ? { ...r, shares: shareResult.sharesCount! } : r
+        ));
       }
     } catch (error) {
-      logger.error('Error sharing:', error);
+      logger.error('Error recording share:', error);
     }
-  }, [haptic, getToken]);
+  }, [getToken]);
 
   // Open Comments
   const openComments = useCallback((reelId: string) => {
@@ -1278,7 +1265,7 @@ const ReelsFeed: React.FC = () => {
       onToggleMute={() => handleToggleMute(item.id)}
       onComment={() => openComments(item.id)}
       onReport={() => openReport(item.id)}
-      onShare={() => handleShareReel(item)}
+      onRecordShare={(platform) => { void recordReelShare(item.id, platform); }}
       onSave={() => handleSave(item.id)}
       onUserPress={() => handleUserPress(item.user.username)}
       onFollow={() => handleFollow(item.user.username, item.user.id)}
@@ -1290,7 +1277,7 @@ const ReelsFeed: React.FC = () => {
       onDeleteReel={handleDeleteReel}
       onEditReel={handleEditReel}
     />
-  ), [currentIndex, handleLike, handleToggleMute, openComments, openReport, handleShareReel, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, currentUserId, handleDeleteReel, handleEditReel]);
+  ), [currentIndex, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, currentUserId, handleDeleteReel, handleEditReel]);
 
   const getItemLayout = useCallback((_: any, index: number) => ({
     length: SCREEN_HEIGHT,

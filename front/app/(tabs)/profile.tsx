@@ -312,6 +312,7 @@ export default function ProfileScreen() {
     reelComments,
     addComment,
     toggleCommentLike,
+    likedReelIds,
     reelUploadUi,
     setReelUploadUi,
     resetReelUploadUi,
@@ -476,6 +477,13 @@ export default function ProfileScreen() {
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
+  const [selectedReelId, setSelectedReelId] = useState<string | null>(null);
+  const [selectedReelSocial, setSelectedReelSocial] = useState({
+    liked: false,
+    likes: 0,
+    saved: false,
+    shares: 0,
+  });
 
   // UX Fix 1+2: Image preview + cross-platform action sheet state
   const [previewUri, setPreviewUri] = useState<string | null>(null);
@@ -679,6 +687,8 @@ export default function ProfileScreen() {
           thumbnail: video.thumbnail || video.uri,
           videoUrl,
           views: video.views || '0',
+          likes: typeof video.likes === 'number' ? video.likes : Number(video.likes) || 0,
+          shares: typeof video.shares === 'number' ? video.shares : Number(video.shares) || 0,
           duration: video.duration || '',
           isUploading: video.isUploading || false,
           isProcessing,
@@ -690,6 +700,8 @@ export default function ProfileScreen() {
       // Show: uploading, processing, failed, or ready (has videoUrl)
       .filter((v: any) => v.isUploading || v.isProcessing || v.isFailed || v.videoUrl.length > 0);
   }, [cachedVideos, uploadedVideos]);
+
+  const likedReelIdsSet = React.useMemo(() => new Set(likedReelIds), [likedReelIds]);
   
   const analytics = cachedAnalytics;
   const cooldowns = cachedCooldowns;
@@ -1692,6 +1704,13 @@ export default function ProfileScreen() {
               // pass a thumbnail (image) as the video source.
               if (src && typeof src === 'string' && src.length > 0) {
                 setSelectedVideoUrl(src);
+                setSelectedReelId(video.id);
+                setSelectedReelSocial({
+                  liked: likedReelIdsSet.has(video.id),
+                  likes: Number((video as any).likes) || 0,
+                  saved: !!(video as any).saved,
+                  shares: Number((video as any).shares) || 0,
+                });
                 setIsVideoPlayerVisible(true);
               } else {
                 toastManager.showWarning(t.profile.videoNotReadyTitle, t.profile.videoNotReadyMessage);
@@ -2088,16 +2107,23 @@ export default function ProfileScreen() {
       <VideoPlayerModal
         visible={isVideoPlayerVisible}
         videoUrl={selectedVideoUrl}
-        onClose={() => setIsVideoPlayerVisible(false)}
+        onClose={() => {
+          setIsVideoPlayerVisible(false);
+          setSelectedReelId(null);
+        }}
         userImage={localImage}
         username={userData?.username || 'user'}
-        reelId={selectedVideoUrl}
-        comments={reelComments[selectedVideoUrl || ''] || []}
-        onAddComment={(comment: Comment) => { 
-          if (selectedVideoUrl) addComment(selectedVideoUrl, comment); 
+        reelId={selectedReelId}
+        initialLiked={selectedReelSocial.liked}
+        initialLikes={selectedReelSocial.likes}
+        initialSaved={selectedReelSocial.saved}
+        initialShares={selectedReelSocial.shares}
+        comments={reelComments[selectedReelId || ''] || []}
+        onAddComment={(comment: Comment) => {
+          if (selectedReelId) addComment(selectedReelId, comment);
         }}
-        onToggleLike={(commentId: string) => { 
-          if (selectedVideoUrl) toggleCommentLike(selectedVideoUrl, commentId); 
+        onToggleLike={(commentId: string) => {
+          if (selectedReelId) toggleCommentLike(selectedReelId, commentId);
         }}
       />
 

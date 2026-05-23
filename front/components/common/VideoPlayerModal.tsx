@@ -49,6 +49,10 @@ import CommentsModal from './CommentsModal';
 import type { Comment } from '../../contexts/VideosContext';
 import { toastManager } from '../../services/toastManager';
 import { UnifiedVideoPlayer } from './UnifiedVideoPlayer';
+import { useAuth } from '@clerk/clerk-expo';
+import { useReelReport } from '../../hooks/useReportSystem';
+import { useReelSocialActions } from '../../hooks/useReelSocialActions';
+import { ReportSystem } from './ReportSystem';
 
 interface VideoPlayerModalProps {
   visible: boolean;
@@ -60,6 +64,10 @@ interface VideoPlayerModalProps {
   comments?: Comment[];
   onAddComment?: (comment: Comment) => void;
   onToggleLike?: (commentId: string) => void;
+  initialLiked?: boolean;
+  initialSaved?: boolean;
+  initialLikes?: number;
+  initialShares?: number;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -80,8 +88,42 @@ export default function VideoPlayerModal({
   comments = [],
   onAddComment,
   onToggleLike,
+  initialLiked = false,
+  initialSaved = false,
+  initialLikes = 0,
+  initialShares = 0,
 }: VideoPlayerModalProps) {
   const { t } = useLanguage();
+  const { getToken } = useAuth();
+  const {
+    reportReel,
+    isVisible: reportVisible,
+    reportConfig,
+    closeReport,
+    handleSuccess: onReportSuccess,
+  } = useReelReport();
+
+  const reelIdForApi =
+    reelId && !/^https?:\/\//i.test(reelId) ? reelId : null;
+
+  const {
+    isLiked,
+    likes,
+    isSaved,
+    shares,
+    handleLike,
+    handleSave,
+    recordShare,
+  } = useReelSocialActions({
+    reelId: reelIdForApi,
+    enabled: !!reelIdForApi,
+    initial: {
+      liked: initialLiked,
+      likes: initialLikes,
+      saved: initialSaved,
+      shares: initialShares,
+    },
+  });
 
   // ── Player handle (published from UnifiedVideoPlayer via onVideoRef) ──
   const playerRef = useRef<any>(null);
@@ -92,10 +134,6 @@ export default function VideoPlayerModal({
   // ── Local UI state ──
   const [isMuted, setIsMuted] = useState(false); // Audio ON by default
   const [isPaused, setIsPaused] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [likes, setLikes] = useState(0);
-  const [shares, setShares] = useState(0);
   const [views] = useState(0);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
@@ -178,7 +216,7 @@ export default function VideoPlayerModal({
   const handleDoubleTap = (event: any) => {
     mediumImpact();
     setTapPosition({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
-    if (!isLiked) handleLike();
+    if (!isLiked) onLikePress();
     setShowHeartAnimation(true);
 
     RNAnimated.sequence([
@@ -189,11 +227,9 @@ export default function VideoPlayerModal({
     setTimeout(() => setShowHeartAnimation(false), 1500);
   };
 
-  // ── Action handlers ──
-  const handleLike = () => {
+  const onLikePress = () => {
     mediumImpact();
-    setIsLiked((prev) => !prev);
-    setLikes((prev) => (isLiked ? prev - 1 : prev + 1));
+    handleLike();
   };
 
   const handleMute = () => {
@@ -209,14 +245,17 @@ export default function VideoPlayerModal({
     });
   };
 
-  const handleSave = () => {
+  const onSavePress = () => {
     lightImpact();
-    setIsSaved((prev) => !prev);
+    void handleSave();
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     lightImpact();
-    setShares((prev) => prev + 1);
+    const deepLink = reelIdForApi ? `90plus://reel/${reelIdForApi}` : '';
+    const message = deepLink
+      ? `Check out this video from @${username}! ${deepLink}`
+      : `Check out this video from @${username}!`;
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -229,14 +268,20 @@ export default function VideoPlayerModal({
           ],
           cancelButtonIndex: 3,
         },
-        (buttonIndex) => {
-          if (buttonIndex < 3) {
-            RNShare.share({ message: `Check out this video from @${username}!` });
+        async (buttonIndex) => {
+          if (buttonIndex === 0 || buttonIndex === 1 || buttonIndex === 2) {
+            const result = await RNShare.share({ message });
+            if (result.action === RNShare.sharedAction) {
+              void recordShare(
+                buttonIndex === 0 ? 'whatsapp' : buttonIndex === 1 ? 'facebook' : 'copy_link',
+              );
+            }
           }
         },
       );
     } else {
-      RNShare.share({ message: `Check out this video from @${username}!` });
+      const result = await RNShare.share({ message });
+      if (result.action === RNShare.sharedAction) void recordShare('android_share');
     }
   };
 
@@ -247,6 +292,7 @@ export default function VideoPlayerModal({
 
   const handleReport = () => {
     lightImpact();
+    if (reelIdForApi) reportReel(reelIdForApi);
   };
 
   const handleLongPressStart = () => {
@@ -268,7 +314,7 @@ export default function VideoPlayerModal({
     outputRange: [0.3, 0.8],
   });
 
-  if (!visible || !videoUrl || !reelId) return null;
+  if (!visible || !videoUrl) return null;
 
   return (
     <Modal
@@ -359,7 +405,7 @@ export default function VideoPlayerModal({
         {/* Action Buttons */}
         <View style={styles.actionsColumn}>
           {/* Like */}
-          <TouchableOpacity style={styles.actionButton} onPress={handleLike} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.actionButton} onPress={onLikePress} activeOpacity={0.7}>
             <View style={[styles.buttonGlass, isLiked && styles.buttonActive]}>
               <Heart
                 size={30}
@@ -390,7 +436,7 @@ export default function VideoPlayerModal({
           </TouchableOpacity>
 
           {/* Save */}
-          <TouchableOpacity style={styles.actionButton} onPress={handleSave} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.actionButton} onPress={onSavePress} activeOpacity={0.7}>
             <View style={[styles.buttonGlass, isSaved && styles.buttonActive]}>
               <Bookmark
                 size={28}
@@ -424,10 +470,19 @@ export default function VideoPlayerModal({
       <CommentsModal
         visible={isCommentsVisible}
         onClose={() => setIsCommentsVisible(false)}
-        reelId={reelId}
+        reelId={reelIdForApi ?? reelId ?? undefined}
         comments={comments || []}
         onAddComment={onAddComment}
         onToggleLike={onToggleLike}
+      />
+
+      <ReportSystem
+        visible={reportVisible}
+        onClose={closeReport}
+        contentType={reportConfig?.contentType ?? 'reel'}
+        contentId={reportConfig?.contentId ?? ''}
+        getToken={getToken}
+        onSuccess={onReportSuccess}
       />
     </Modal>
   );
@@ -535,7 +590,7 @@ const styles = StyleSheet.create({
     ...EFFECTS.softShadow,
   },
   buttonActive: {
-    backgroundColor: 'rgba(50, 205, 50, 0.15)',
+    backgroundColor: 'rgba(168, 85, 247, 0.15)',
     borderColor: COLORS.primary,
     ...EFFECTS.greenGlow,
   },

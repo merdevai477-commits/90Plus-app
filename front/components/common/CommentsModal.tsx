@@ -37,8 +37,10 @@ const MAX_REPLIES_PER_USER = 5;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+import { COLORS as REEL_COLORS } from '../reels/constants';
+
 const COLORS = {
-    primary: '#32cd32',
+    primary: REEL_COLORS.primary,
     secondary: '#ff00ff',
     accent: '#00ffff',
     background: '#0a0a0a',
@@ -49,6 +51,31 @@ const COLORS = {
     info: '#2196f3',
     glassBorder: 'rgba(255, 255, 255, 0.1)',
 };
+
+function mapBackendComment(c: {
+    id: string;
+    content?: string;
+    text?: string;
+    createdAt: string;
+    user: { id: string; displayName?: string; username: string; avatar?: string; isVerified?: boolean };
+    likesCount?: number;
+    likes?: number;
+    liked?: boolean;
+}) {
+    return {
+        id: c.id,
+        user: {
+            id: c.user.id,
+            name: c.user.displayName || c.user.username,
+            avatar: c.user.avatar,
+            verified: c.user.isVerified,
+        },
+        text: c.content || c.text || '',
+        timestamp: formatTimestamp(c.createdAt),
+        likes: c.likesCount ?? c.likes ?? 0,
+        liked: c.liked ?? false,
+    };
+}
 
 // Reply interface extending Comment
 interface Reply {
@@ -291,23 +318,21 @@ export default function CommentsModal({
                 loadedReelIdRef.current = reelId;
 
                 const backendComments = await ReelsService.getComments(token, reelId, 50);
-                const transformedComments: Comment[] = backendComments.map((c: any) => ({
-                    id: c.id,
-                    user: {
-                        id: c.user.id,
-                        name: c.user.displayName || c.user.username,
-                        avatar: c.user.avatar,
-                        verified: c.user.isVerified
-                    },
-                    text: c.content || c.text || '',
-                    timestamp: formatTimestamp(c.createdAt),
-                    likes: (c as any).likes || 0,
-                    liked: (c as any).liked || false
+                const transformedComments = backendComments.map((c: any) => ({
+                    ...mapBackendComment(c),
+                    replies: (c.replies || []).map((r: any) => mapBackendComment(r)),
+                    repliesCount: c.repliesCount ?? c.replies?.length ?? 0,
+                    showReplies: false,
+                    loadingReplies: false,
                 }));
 
                 // ✅ Update ref first, then trigger minimal re-render
-                loadedCommentsRef.current = transformedComments;
-                setLoadedCommentsVersion(v => v + 1);
+                loadedCommentsRef.current = transformedComments as Comment[];
+                commentsWithRepliesRef.current = transformedComments;
+                prevCommentIdsRef.current = transformedComments.map((c) => c.id).join(',');
+                isInitializedRef.current = true;
+                setCommentsWithReplies(transformedComments);
+                setLoadedCommentsVersion((v) => v + 1);
             } catch (error) {
                 console.error('Error loading comments:', error);
                 if ((error as any)?.status !== 429) {
@@ -383,8 +408,14 @@ export default function CommentsModal({
                     ...c.user,
                     name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
                 },
-                replies: existing?.replies || [],
-                repliesCount: existing?.repliesCount ?? (c as any).repliesCount ?? 0,
+                replies:
+                    existing?.replies?.length
+                        ? existing.replies
+                        : ((c as any).replies || []).map((r: any) => mapBackendComment(r)),
+                repliesCount:
+                    existing?.repliesCount ??
+                    (c as any).repliesCount ??
+                    ((c as any).replies?.length ?? 0),
                 showReplies: existing?.showReplies ?? false,
                 loadingReplies: existing?.loadingReplies ?? false
             };
@@ -734,19 +765,7 @@ export default function CommentsModal({
             setCommentsWithReplies(prev => prev.map(c =>
                 c.id === commentId ? {
                     ...c,
-                    replies: replies.map((r: any) => ({
-                        id: r.id,
-                        user: {
-                            id: r.user.id,
-                            name: r.user.displayName || r.user.username,
-                            avatar: r.user.avatar,
-                            verified: r.user.isVerified
-                        },
-                        text: r.content,
-                        timestamp: formatTimestamp(r.createdAt),
-                        likes: 0,
-                        liked: false
-                    })),
+                    replies: replies.map((r: any) => mapBackendComment(r)),
                     showReplies: true,
                     loadingReplies: false
                 } : c
@@ -777,7 +796,7 @@ export default function CommentsModal({
     }, [commentsWithReplies, haptic, loadReplies]);
 
     const currentUser = globalState.userProfile;
-    const currentUserAvatar = currentUser?.avatar || 'https://ui-avatars.com/api/?name=User&background=32cd32&color=fff';
+    const currentUserAvatar = currentUser?.avatar || 'https://ui-avatars.com/api/?name=User&background=22c55e&color=fff';
     const currentUserName = currentUser?.displayName || currentUser?.username || 'أنت';
 
     const displayedComments = useMemo(() => {
@@ -1397,7 +1416,7 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     commentItemHighlighted: {
-        backgroundColor: 'rgba(50, 205, 50, 0.2)',
+        backgroundColor: 'rgba(168, 85, 247, 0.2)',
         borderWidth: 2,
         borderColor: COLORS.primary,
         borderRadius: 12,
@@ -1543,11 +1562,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: 'rgba(50, 205, 50, 0.1)',
+        backgroundColor: 'rgba(168, 85, 247, 0.1)',
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderTopWidth: 1,
-        borderTopColor: 'rgba(50, 205, 50, 0.2)',
+        borderTopColor: 'rgba(168, 85, 247, 0.2)',
     },
     replyingToText: {
         color: '#888',

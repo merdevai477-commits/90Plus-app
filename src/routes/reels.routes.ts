@@ -816,6 +816,23 @@ router.delete('/:id/like', requireAuth, writeLimiter, async (req: Request, res: 
     }
 });
 
+/** Strip Prisma like relation and expose likesCount + liked for the viewer */
+function formatCommentEngagement<T extends { likes?: { id: string }[]; _count?: { replies?: number; likes?: number } }>(
+    c: T,
+): Omit<T, 'likes' | '_count'> & { likesCount: number; liked: boolean } {
+    const likesCount = c._count?.likes ?? 0;
+    const liked = Array.isArray(c.likes) && c.likes.length > 0;
+    const { likes: _likesRel, _count, ...rest } = c;
+    return { ...rest, likesCount, liked };
+}
+
+const commentLikeEngagementSelect = (viewerUserId?: string) => ({
+    _count: { select: { likes: true } },
+    ...(viewerUserId
+        ? { likes: { where: { userId: viewerUserId }, select: { id: true }, take: 1 } }
+        : {}),
+});
+
 /**
  * GET /api/reels/:id/comments
  * Get comments for a reel (with replies)
@@ -881,11 +898,13 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
                                     avatar: true,
                                     isVerified: true,
                                 }
-                            }
+                            },
+                            ...commentLikeEngagementSelect(currentUser?.id),
                         }
                     },
+                    ...commentLikeEngagementSelect(currentUser?.id),
                     _count: {
-                        select: { replies: true }
+                        select: { replies: true, likes: true }
                     }
                 }
             }),
@@ -898,9 +917,9 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
 
         // Format response
         const formattedComments = pageData.map((c: any) => ({
-            ...c,
-            repliesCount: c._count.replies,
-            _count: undefined,
+            ...formatCommentEngagement(c),
+            repliesCount: c._count?.replies ?? 0,
+            replies: (c.replies || []).map((r: any) => formatCommentEngagement(r)),
         }));
 
         res.json({
@@ -1234,6 +1253,11 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
         const commentIdStr = ensureString(commentId);
         const { limit = '20' } = req.query;
 
+        const clerkUserId = req.auth?.userId;
+        const currentUser = clerkUserId
+            ? await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
+            : null;
+
         const replies = await prisma.comment.findMany({
             where: { parentId: commentIdStr },
             take: Math.min(parseInt(limit as string), 50),
@@ -1250,11 +1274,15 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
                         avatar: true,
                         isVerified: true,
                     }
-                }
+                },
+                ...commentLikeEngagementSelect(currentUser?.id),
             }
         });
 
-        res.json({ status: 'SUCCESS', data: { replies } });
+        res.json({
+            status: 'SUCCESS',
+            data: { replies: replies.map((r) => formatCommentEngagement(r)) },
+        });
     } catch (error: any) {
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }

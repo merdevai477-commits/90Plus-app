@@ -122,6 +122,12 @@ export function usePushNotifications(): PushNotificationState {
                     queryClientRef.current.invalidateQueries({ queryKey: ['matches', 'live'] });
                     break;
                 case 'NOTIFICATION_COUNT':
+                case 'LIKE':
+                case 'COMMENT':
+                case 'REPLY':
+                case 'MENTION':
+                case 'SHARE':
+                case 'COMMENT_LIKE':
                     queryClientRef.current.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
                     break;
                 default:
@@ -171,9 +177,29 @@ export function usePushNotifications(): PushNotificationState {
                 } else {
                     r.push('/notifications');
                 }
-            } else if (type === 'LIKE' || type === 'COMMENT' || type === 'REPLY' || type === 'MENTION') {
-                if (data.commentId && data.reelId) {
-                    r.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId, commentId: data.commentId, autoOpenComments: 'true' } });
+            } else if (
+                type === 'LIKE' ||
+                type === 'COMMENT' ||
+                type === 'REPLY' ||
+                type === 'MENTION' ||
+                type === 'SHARE' ||
+                type === 'COMMENT_LIKE'
+            ) {
+                const opensComments =
+                    data.commentId &&
+                    (type === 'COMMENT' ||
+                        type === 'REPLY' ||
+                        type === 'MENTION' ||
+                        type === 'COMMENT_LIKE');
+                if (data.reelId && opensComments) {
+                    r.push({
+                        pathname: '/(tabs)/reels',
+                        params: {
+                            reelId: data.reelId,
+                            commentId: data.commentId,
+                            autoOpenComments: 'true',
+                        },
+                    });
                 } else if (data.reelId) {
                     r.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId } });
                 } else {

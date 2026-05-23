@@ -3,7 +3,7 @@ import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AlertCircle, AtSign, CheckCircle, Heart, Info, MessageCircle, Reply, Star, Trash2, UserPlus } from 'lucide-react-native';
+import { AlertCircle, AtSign, CheckCircle, Heart, Info, MessageCircle, Reply, Share2, Star, Trash2, UserPlus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { COLORS } from '../reels/constants';
 import { useTranslation } from '../../src/i18n';
@@ -68,6 +68,10 @@ export const NotificationItem = React.memo<NotificationItemProps>(({
         return <Reply color="#9B59B6" size={24} />;
       case 'MENTION':
         return <AtSign color="#FFD700" size={24} />;
+      case 'SHARE':
+        return <Share2 color={COLORS.primary} size={24} />;
+      case 'COMMENT_LIKE':
+        return <Heart color="#FF4757" size={24} fill="#FF4757" />;
       case 'MATCH_UPDATE':
       case 'MATCH_FAVORITE':
         return <Star color="#FFD700" size={24} fill="#FFD700" />;

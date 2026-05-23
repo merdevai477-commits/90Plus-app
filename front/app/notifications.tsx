@@ -640,10 +640,25 @@ export default function NotificationsScreen() {
                         break;
                     }
                     case 'LIKE':
+                    case 'SHARE':
+                        if (data.reelId) {
+                            router.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId } });
+                        }
+                        break;
                     case 'COMMENT':
                     case 'REPLY':
                     case 'MENTION':
-                        if (data.reelId) {
+                    case 'COMMENT_LIKE':
+                        if (data.reelId && data.commentId) {
+                            router.push({
+                                pathname: '/(tabs)/reels',
+                                params: {
+                                    reelId: data.reelId,
+                                    commentId: data.commentId,
+                                    autoOpenComments: 'true',
+                                },
+                            });
+                        } else if (data.reelId) {
                             router.push({ pathname: '/(tabs)/reels', params: { reelId: data.reelId } });
                         }
                         break;

@@ -1,12 +1,17 @@
-// Modern Sports App Color Palette 🎨
-// Updated with gold trophy colors
+import { Colors } from '../../src/designSystem/designSystem';
+
+const BRAND_GREEN = Colors.primary[600]; // #22c55e — app-wide accent
+
+// Reels / video UI — aligned with designSystem primary600
 export const COLORS = {
-    // Primary Colors (matching app screenshot)
-    neonGreen: '#32CD32',         // Primary neon green
-    electricGreen: '#39FF14',     // Brighter green for accents
-    darkGreen: '#228B22',         // Darker green for gradients
-    neonBlue: '#00D9FF',          // Neon Blue
-    neonRed: '#FF3B30',           // Neon Red
+    brandPurple: BRAND_GREEN,
+    brandPurpleLight: Colors.primary[400],
+    brandPurpleDark: Colors.primary[700],
+    neonGreen: BRAND_GREEN,
+    electricGreen: Colors.primary[400],
+    darkGreen: Colors.primary[700],
+    neonBlue: '#00D9FF',
+    neonRed: '#FF3B30',
 
     // Base Colors
     deepBlack: '#000000',         // Pure black background
@@ -14,12 +19,12 @@ export const COLORS = {
     mediumGray: '#2A2A2A',        // Card backgrounds
 
     // Semantic Colors
-    primary: '#32CD32',            // Neon green
-    secondary: '#39FF14',          // Electric green
+    primary: BRAND_GREEN,
+    secondary: Colors.primary[400],
     accent: '#00D9FF',             // Electric blue (stats)
     error: '#FF3B30',              // Red for errors
     warning: '#FF9500',            // Orange warnings
-    success: '#34C759',            // Success green
+    success: BRAND_GREEN,
     info: '#2196F3',               // Info blue
 
     // UI Colors
@@ -50,10 +55,12 @@ export const COLORS = {
 
 // Premium Gradients
 export const GRADIENTS = {
-    greenGlow: ['#32CD32', '#39FF14'] as const,
+    brandGlow: [BRAND_GREEN, Colors.primary[400]] as const,
+    /** @deprecated use brandGlow */
+    greenGlow: [BRAND_GREEN, Colors.primary[400]] as const,
     darkFade: ['rgba(0, 0, 0, 0.9)', 'transparent'] as const,
     bottomFade: ['transparent', 'rgba(0, 0, 0, 0.95)'] as const,
-    cardGradient: ['rgba(50, 205, 50, 0.2)', 'rgba(57, 255, 20, 0.1)'] as const,
+    cardGradient: ['rgba(34, 197, 94, 0.22)', 'rgba(34, 197, 94, 0.1)'] as const,
 };
 
 // Animation Timings
@@ -66,10 +73,18 @@ export const ANIMATION = {
 
 // Shadows & Effects
 export const EFFECTS = {
-    greenGlow: {
-        shadowColor: '#32CD32',
+    brandGlow: {
+        shadowColor: BRAND_GREEN,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.6,
+        shadowOpacity: 0.55,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    /** @deprecated use brandGlow */
+    greenGlow: {
+        shadowColor: BRAND_GREEN,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.55,
         shadowRadius: 12,
         elevation: 8,
     },
