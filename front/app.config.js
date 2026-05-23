@@ -1,30 +1,10 @@
-const DEV_CLIENT_PACKAGES = [
-  'expo-dev-client',
-  'expo-dev-launcher',
-  'expo-dev-menu',
-  'expo-dev-menu-interface',
-];
-
 module.exports = ({ config }) => {
-  const profile = process.env.EAS_BUILD_PROFILE;
-  const isDevClientBuild = profile === 'development';
   const projectId = config.extra?.eas?.projectId;
 
-  const autolinking = isDevClientBuild
-    ? config.autolinking
-    : {
-        ...(config.autolinking ?? {}),
-        exclude: [
-          ...new Set([
-            ...(config.autolinking?.exclude ?? []),
-            ...DEV_CLIENT_PACKAGES,
-          ]),
-        ],
-      };
+  // Dev-client autolinking exclusions: see react-native.config.js (EAS_BUILD_PROFILE-aware).
 
   return {
     ...config,
-    autolinking,
     ...(projectId
       ? {
           updates: {

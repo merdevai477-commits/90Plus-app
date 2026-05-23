@@ -10,7 +10,7 @@ import {
   StyleSheet,
   I18nManager,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { BlurView, type BlurTint } from 'expo-blur';
 import { ChevronLeft, Zap } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -21,64 +21,71 @@ import { glassProps } from '../../constants/ui';
 
 const ACCENT = '#A855F7';
 const SIDE_SLOT_W = 88;
+const blurTint: BlurTint = 'dark';
 
 interface QuizHeaderProps {
   topInset: number;
 }
 
 export function QuizHeader({ topInset }: QuizHeaderProps) {
-  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-  const glassHeaderProps = isLiquidGlassSupported
-    ? (glassProps.header as { effect: 'clear'; tint?: string })
-    : { intensity: 15, tint: 'dark' as const };
-
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
   const display = loading ? '—' : String(coins);
 
-  return (
-    <GlassContainer
-      {...glassHeaderProps}
-      style={[styles.shell, { paddingTop: topInset + 10 }]}
-    >
-      <View style={[styles.row, I18nManager.isRTL && styles.rowRTL]}>
-        <View style={[styles.sideSlot, I18nManager.isRTL && styles.sideSlotRTL]}>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/rank')}
-            style={styles.glassChip}
-            activeOpacity={0.75}
-            accessibilityLabel={t.common.cancel}
-          >
-            <ChevronLeft
-              size={20}
-              color="#FFFFFF"
-              strokeWidth={2.5}
-              style={I18nManager.isRTL ? styles.chevronRTL : undefined}
-            />
-          </TouchableOpacity>
-        </View>
+  const shellStyle = [styles.shell, { paddingTop: topInset + 10 }];
 
-        <View style={styles.centerSlot}>
-          <View style={styles.logoPillSmall}>
-            <Text style={styles.logo90Small}>90</Text>
-            <View style={styles.plusChipSmall}>
-              <Text style={styles.logoPlusSmall}>PLUS</Text>
-            </View>
-          </View>
-        </View>
+  const content = (
+    <View style={[styles.row, I18nManager.isRTL && styles.rowRTL]}>
+      <View style={[styles.sideSlot, I18nManager.isRTL && styles.sideSlotRTL]}>
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/rank')}
+          style={styles.glassChip}
+          activeOpacity={0.75}
+          accessibilityLabel={t.common.cancel}
+        >
+          <ChevronLeft
+            size={20}
+            color="#FFFFFF"
+            strokeWidth={2.5}
+            style={I18nManager.isRTL ? styles.chevronRTL : undefined}
+          />
+        </TouchableOpacity>
+      </View>
 
-        <View style={[styles.sideSlot, styles.sideSlotEnd, I18nManager.isRTL && styles.sideSlotEndRTL]}>
-          <View
-            style={styles.glassChip}
-            accessibilityRole="text"
-            accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
-          >
-            <Zap size={13} color={ACCENT} fill={ACCENT} />
-            <Text style={styles.coinTxt}>{display}</Text>
+      <View style={styles.centerSlot}>
+        <View style={styles.logoPillSmall}>
+          <Text style={styles.logo90Small}>90</Text>
+          <View style={styles.plusChipSmall}>
+            <Text style={styles.logoPlusSmall}>PLUS</Text>
           </View>
         </View>
       </View>
-    </GlassContainer>
+
+      <View style={[styles.sideSlot, styles.sideSlotEnd, I18nManager.isRTL && styles.sideSlotEndRTL]}>
+        <View
+          style={styles.glassChip}
+          accessibilityRole="text"
+          accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
+        >
+          <Zap size={13} color={ACCENT} fill={ACCENT} />
+          <Text style={styles.coinTxt}>{display}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (isLiquidGlassSupported) {
+    return (
+      <LiquidGlassView {...glassProps.header} style={shellStyle}>
+        {content}
+      </LiquidGlassView>
+    );
+  }
+
+  return (
+    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
+      {content}
+    </BlurView>
   );
 }
 
@@ -131,7 +138,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.10)',
     gap: 5,
   },
   logoPillSmall: {
@@ -142,7 +149,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.10)',
     gap: 5,
   },
   logo90Small: {
