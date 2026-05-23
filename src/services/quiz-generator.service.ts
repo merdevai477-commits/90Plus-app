@@ -372,6 +372,50 @@ Language: ${langLabel}. No duplicates.`;
   return parseQuestionsFromAi(parsed, language, packDate);
 }
 
+async function generateNormalOnlyReplacements(
+  count: number,
+  language: QuizLanguage,
+  packDate: string,
+  existing: StoredQuizQuestion[],
+): Promise<StoredQuizQuestion[]> {
+  const client = buildClient();
+  if (!client) throw new Error('OpenRouter API key not configured');
+
+  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
+  const langLabel = language === 'ar' ? 'Arabic' : 'English';
+  const avoidSample = existing
+    .slice(0, 15)
+    .map((q) => q.question.slice(0, 80))
+    .join(' | ');
+
+  const system = `You are a football trivia writer for 90Plus.
+Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW text-only multiple-choice questions.
+Every question MUST use type "normal" with NO imageBinding.
+Language: ${langLabel}. Mix EASY/MEDIUM/HARD. No duplicates.`;
+
+  const user = `Generate ${count} normal football trivia questions for ${packDate}. Avoid: ${avoidSample}`;
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.85,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    response_format: { type: 'json_object' },
+  });
+
+  const content = completion.choices[0]?.message?.content ?? '{}';
+  const parsed = parseAiJsonContent(content);
+  const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate);
+  return parsedQuestions.map((q) => ({
+    ...q,
+    type: 'normal' as const,
+    imageBinding: null,
+    imageUrl: null,
+  }));
+}
+
 async function buildPackWithReplacements(
   language: QuizLanguage,
   packDate: string,
@@ -380,7 +424,7 @@ async function buildPackWithReplacements(
   questions = await enrichAndFilterValid(questions, packDate);
 
   let fillRound = 0;
-  const MAX_FILL_ROUNDS = 4;
+  const MAX_FILL_ROUNDS = 6;
 
   while (questions.length < QUIZ_PACK_SIZE && fillRound < MAX_FILL_ROUNDS) {
     fillRound++;
@@ -398,6 +442,20 @@ async function buildPackWithReplacements(
     );
     const validReplacements = await enrichAndFilterValid(replacements, packDate);
     questions = mergeUniqueQuestions(questions, validReplacements);
+  }
+
+  if (questions.length < QUIZ_PACK_SIZE) {
+  const stillNeeded = QUIZ_PACK_SIZE - questions.length;
+  logger.info(
+    `[QuizGen] Image rounds exhausted at ${questions.length}/${QUIZ_PACK_SIZE} — generating ${stillNeeded} normal text fallback question(s)`,
+  );
+  const normalFallback = await generateNormalOnlyReplacements(
+    stillNeeded + 2,
+    language,
+    packDate,
+    questions,
+  );
+  questions = mergeUniqueQuestions(questions, normalFallback);
   }
 
   if (questions.length < QUIZ_PACK_SIZE) {
