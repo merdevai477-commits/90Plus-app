@@ -69,3 +69,41 @@ export function isImageDependentQuestionText(question: string): boolean {
     question,
   );
 }
+
+const GUESS_PLAYER_CLUE_MARKERS =
+  /plays?\s+for|currently|striker|midfielder|defender|goalkeeper|forward|winger|captain|goals?|scored|club|national|league|team|born|nickname|number\s+\d+|top\s+scorer|world\s+cup|champions\s+league|يلعب|يلعب\s+ل|حاليا|نادي|هداف|وسط|مدافع|حارس|منتخب|هدف|أهداف|يسجل|يلقب|قائد|رقم\s+\d+|الدوري|بريمير|إسباني|اسباني|مصري|برازيل|فرنس|إنجليز/i;
+
+/** guess_player must include a factual clue — not only "who is this player?" */
+export function hasGuessPlayerClue(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+
+  const barePatterns = [
+    /^who is this (player|football player)\??$/i,
+    /^guess the player\.?$/i,
+    /^who(?:'s| is) (?:shown|in the photo|this)\??$/i,
+    /^من هو هذا اللاعب(?:\s+المعروف)?\??$/,
+    /^خمن(?: اللاعب)?\.?$/,
+    /^من اللاعب(?: في الصورة)?\??$/,
+    /^تعرف هذا اللاعب\??$/,
+    /^من في الصورة\??$/,
+  ];
+  if (barePatterns.some((p) => p.test(q))) return false;
+
+  if (GUESS_PLAYER_CLUE_MARKERS.test(q)) return true;
+
+  const stripped = q
+    .replace(/who is this (player|football player)\??/gi, '')
+    .replace(/guess the player/gi, '')
+    .replace(/من هو هذا اللاعب(?: المعروف)?\??/g, '')
+    .replace(/خمن اللاعب/g, '')
+    .replace(/من اللاعب/g, '')
+    .replace(/[؟?.!]/g, '')
+    .trim();
+
+  return stripped.length >= 18;
+}
+
+export function isGenericGuessPlayerQuestion(question: string): boolean {
+  return !hasGuessPlayerClue(question);
+}

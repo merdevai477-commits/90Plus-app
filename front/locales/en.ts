@@ -585,7 +585,7 @@ export const en = {
     noQuestionsAvailable: 'No questions available',
     imageQuiz: 'Image Quiz',
     footballQuiz: 'Football Quiz',
-    guessPlayerHidden: 'Guess the player — photo reveals after your answer',
+    guessPlayerHidden: 'Photo hidden — use the clue in the question above',
     questionImage: 'Question image',
     questionImagePlaceholder: 'Question image placeholder',
     imageUnavailable: 'Image unavailable',

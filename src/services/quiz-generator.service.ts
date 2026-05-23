@@ -16,6 +16,7 @@ import { enrichQuizImages } from './quiz-image-enricher.service';
 import {
   isImageDependentQuestionText,
   isRetiredLegendPlayerName,
+  hasGuessPlayerClue,
 } from './quiz-image-legends';
 import { QUIZ_DIFFICULTY_COUNTS, QUIZ_PACK_SIZE } from '../constants/quiz.constants';
 
@@ -26,6 +27,20 @@ const DIFFICULTY_COUNTS: Record<QuizDifficulty, number> = {
 };
 
 const OPTION_KEYS: QuizOptionKey[] = ['A', 'B', 'C', 'D'];
+
+const GUESS_PLAYER_PROMPT_RULES = `
+CRITICAL — guess_player (photo hidden until answer):
+- The "question" field MUST include a clear factual clue so users can guess WITHOUT seeing the photo.
+- NEVER use only generic text like "Who is this player?" or "من هو هذا اللاعب؟" — ALWAYS add club, nationality, position, nickname, stats, or achievement BEFORE the final "who is he?" part.
+- Arabic examples:
+  - "يلعب في ليفربول ويلقب بملك مصر — من هو؟"
+  - "مهاجم نرويجي يسجل أهدافاً كثيرة مع مانشستر سيتي — من هو؟"
+- English examples:
+  - "This Egyptian winger plays for Liverpool — who is he?"
+  - "Norwegian striker at Manchester City — guess the player."
+- Options must be 4 plausible players in the same era/position.
+- ONLY active 2024-2026 players with API photos (Salah, Haaland, Mbappe, Vinicius Junior, Bellingham, Kane, etc.).
+- NEVER retired legends for guess_player.`;
 
 function buildClient(): OpenAI | null {
   const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
@@ -271,6 +286,11 @@ function parseQuestionsFromAi(
         imageUrl = null;
       }
     }
+
+    if (type === 'guess_player' && !hasGuessPlayerClue(question)) {
+      logger.info(`[QuizGen] Rejected clueless guess_player: "${question.slice(0, 100)}"`);
+      continue;
+    }
     
     const imageLayout =
       item.imageLayout === 'wide' ? 'wide' : ('square' as const);
@@ -382,12 +402,12 @@ Each question object:
 
 CRITICAL — guess_player / player images:
 - For type "guess_player" with kind "player", ONLY use currently active or very recently active players whose photos exist in football APIs (2024-2026 squads).
-- Good examples: Mohamed Salah, Erling Haaland, Kylian Mbappe, Vinicius Jr, Jude Bellingham, Harry Kane, Robert Lewandowski, Lamine Yamal.
+${GUESS_PLAYER_PROMPT_RULES}
 - NEVER use retired legends or historical players for guess_player / image-based player questions: Paolo Maldini, Zinedine Zidane, Ronaldo Nazario, Ronaldinho, Diego Maradona, Pele, David Beckham, Andrea Pirlo, Xavi, Iniesta, Buffon, Totti, etc.
 - Retired legends MAY appear ONLY in type "normal" (text-only, no imageBinding).
 - Prefer "logo" and "stadium" and "normal" for history/legends trivia.
 
-- Include at least 3 type "guess_player" questions (player photo hidden until user answers — use active stars only).
+- Include at least 3 type "guess_player" questions (each with a written clue in the question text).
 - Use type "logo" for club badges, "stadium" for venues, "normal" for history/legends text trivia.
 
 Never generate text-input or essay questions. Exactly ${QUIZ_PACK_SIZE} questions.`;
@@ -434,8 +454,8 @@ async function generateReplacementQuestions(
   const system = `You are a football trivia writer for 90Plus.
 Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW multiple-choice questions.
 Each question: question, type (normal|image|guess_player|logo|stadium), options (4x A-D), correctKey, difficulty (EASY|MEDIUM|HARD), imageBinding when not normal, imageLayout, hint.
-For guess_player: ONLY active 2024-2026 players with real club photos (Salah, Haaland, Mbappe, Vinicius, Bellingham, Kane, etc.).
-NEVER use retired legends for guess_player: Maldini, Zidane, Ronaldinho, Maradona, Pele, Beckham, Pirlo, Xavi, Buffon.
+${GUESS_PLAYER_PROMPT_RULES}
+For guess_player: ONLY active 2024-2026 players with real club photos (Salah, Haaland, Mbappe, Vinicius Junior, Bellingham, Kane, etc.).
 Use type "normal" for legend/history trivia without images.
 Language: ${langLabel}. No duplicates.`;
 

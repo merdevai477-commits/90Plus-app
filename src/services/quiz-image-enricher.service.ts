@@ -4,6 +4,7 @@ import type { StoredQuizQuestion } from '../types/quiz.types';
 import {
   isImageDependentQuestionText,
   isRetiredLegendPlayerName,
+  hasGuessPlayerClue,
 } from './quiz-image-legends';
 
 function normalizeName(name: string): string {
@@ -293,6 +294,12 @@ export async function enrichQuizImages(
       q.imageBinding = null;
       q.imageUrl = null;
       out.push(q);
+      continue;
+    }
+
+    if (q.type === 'guess_player' && !hasGuessPlayerClue(q.question)) {
+      logger.info(`[QuizImage] Discarded ${q.id} — guess_player without factual clue`);
+      out.push(null);
       continue;
     }
 
