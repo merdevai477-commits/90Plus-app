@@ -101,7 +101,6 @@ export default function HomeScreen() {
         }
     }, [params.openLuckyWheel, router]);
 
-    const { isSignedIn, getToken } = useAuth();
 
     const fetchSpinWheelStatus = useCallback(async () => {
         try {

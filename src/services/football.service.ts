@@ -847,6 +847,14 @@ class FootballService {
     if (!this.isValidSearch(name)) return [];
     return this.fetchFromApi<any[]>('/leagues', { search: name });
   }
+
+  /**
+   * Search venues by name
+   */
+  async searchVenues(name: string): Promise<any[]> {
+    if (!this.isValidSearch(name)) return [];
+    return this.fetchFromApi<any[]>('/venues', { search: name });
+  }
 }
 
 export const footballService = new FootballService();

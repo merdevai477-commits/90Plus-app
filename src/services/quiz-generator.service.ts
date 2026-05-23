@@ -135,7 +135,28 @@ function parseQuestionsFromAi(
 
     const difficulty = normalizeDifficulty(String(item.difficulty ?? 'EASY'));
     const type = normalizeType(String(item.type ?? 'normal'));
-    const imageType = normalizeImageType(item.imageType as string | null);
+    
+    let imageBinding: StoredQuizQuestion['imageBinding'] = null;
+    let imageUrl: string | null = null;
+    
+    if (type !== 'normal') {
+      const binding = item.imageBinding as Record<string, unknown> | null;
+      if (!binding || typeof binding.kind !== 'string' || typeof binding.entityName !== 'string') {
+        continue; // Reject image-based question if imageBinding is missing or invalid
+      }
+      
+      const kind = binding.kind.toLowerCase();
+      if (!['player', 'team', 'league', 'venue'].includes(kind)) {
+        continue; // Reject invalid kind
+      }
+      
+      imageBinding = {
+        kind: kind as 'player' | 'team' | 'venue' | 'league',
+        entityName: binding.entityName.trim()
+      };
+      // Explicitly nullify imageUrl to enforce backend resolution
+      imageUrl = null;
+    }
     
     const imageLayout =
       item.imageLayout === 'wide' ? 'wide' : ('square' as const);
@@ -147,9 +168,10 @@ function parseQuestionsFromAi(
       options: options,
       correctKey,
       difficulty,
-      imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
+      imageUrl,
       imageLayout,
-      imageType,
+      imageType: null, // deprecated
+      imageBinding,
       hint: typeof item.hint === 'string' ? item.hint : null,
     });
   }
@@ -197,7 +219,9 @@ Each question object:
 - options: array of EXACTLY 4 objects {key:"A"|"B"|"C"|"D", text:string}
 - correctKey: "A"|"B"|"C"|"D" (must match one of the options)
 - difficulty: "EASY"|"MEDIUM"|"HARD"
-- imageType: optional "player"|"team"|"league"|"flag"|"venue" (crucial if type is not "normal")
+- imageBinding: required IF type is not "normal". Object with:
+  - kind: "player" | "team" | "league" | "venue"
+  - entityName: specific name to search for (e.g. "Lionel Messi", "Real Madrid")
 - imageLayout: "square" or "wide"
 - hint: short hint string in ${langLabel} (do not reveal the answer)
 Never generate text-input or essay questions. Exactly 20 questions.`;
@@ -237,8 +261,14 @@ async function callOpenRouter(language: QuizLanguage, packDate: string): Promise
       logger.info(`[QuizGen] Calling AI for ${packDate} (${language}) - Attempt ${attempts}`);
       let questions = await attemptOpenRouterCall(language, packDate);
       
+      // Attempt image resolution. If resolution fails, enrichQuizImages will return null for that question or safely degrade it.
+      const enriched = await enrichQuizImages(questions, packDate);
+      
+      // Filter out discarded questions
+      questions = enriched.filter((q): q is StoredQuizQuestion => q !== null);
+      
       if (questions.length < 20) {
-        throw new Error(`AI returned ${questions.length} valid unique questions, expected exactly 20.`);
+        throw new Error(`AI returned ${questions.length} valid unique questions after image resolution, expected exactly 20.`);
       }
 
       questions = questions.slice(0, 20);
@@ -247,7 +277,7 @@ async function callOpenRouter(language: QuizLanguage, packDate: string): Promise
         questions = rebalanceDifficulties(questions);
       }
       
-      return enrichQuizImages(questions, packDate);
+      return questions;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       logger.warn(`[QuizGen] Attempt ${attempts} failed: ${lastError.message}`);

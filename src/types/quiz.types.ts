@@ -21,6 +21,12 @@ export interface StoredQuizQuestion {
   imageLayout?: QuizImageLayout;
   imageType?: QuizImageType;
   hint?: string | null;
+  imageBinding?: {
+    kind: 'player' | 'team' | 'venue' | 'league';
+    entityName: string;
+    apiId?: number;
+    imageUrl?: string;
+  } | null;
 }
 
 export interface QuestionProgress {
