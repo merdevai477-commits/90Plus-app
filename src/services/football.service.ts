@@ -602,10 +602,11 @@ class FootballService {
   /**
    * Search players by name
    */
-  async searchPlayers(name: string, league?: number): Promise<any[]> {
+  async searchPlayers(name: string, league?: number, team?: number): Promise<any[]> {
     if (!this.isValidSearch(name)) return [];
     const params: any = { search: name };
     if (league) params.league = league;
+    if (team) params.team = team;
     return this.fetchFromApi<any[]>('/players', params);
   }
 

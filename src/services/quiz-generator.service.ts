@@ -152,7 +152,8 @@ function parseQuestionsFromAi(
       
       imageBinding = {
         kind: kind as 'player' | 'team' | 'venue' | 'league',
-        entityName: binding.entityName.trim()
+        entityName: binding.entityName.trim(),
+        teamName: typeof binding.teamName === 'string' ? binding.teamName.trim() : undefined
       };
       // Explicitly nullify imageUrl to enforce backend resolution
       imageUrl = null;
@@ -222,6 +223,7 @@ Each question object:
 - imageBinding: required IF type is not "normal". Object with:
   - kind: "player" | "team" | "league" | "venue"
   - entityName: specific name to search for (e.g. "Lionel Messi", "Real Madrid")
+  - teamName: string. REQUIRED ONLY if kind is "player" (the player's current or main team, e.g. "Inter Miami").
 - imageLayout: "square" or "wide"
 - hint: short hint string in ${langLabel} (do not reveal the answer)
 Never generate text-input or essay questions. Exactly 20 questions.`;

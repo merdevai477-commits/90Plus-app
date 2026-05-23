@@ -88,7 +88,17 @@ export async function enrichQuizImages(
     try {
       switch (binding.kind) {
         case 'player':
-          results = await footballService.searchPlayers(binding.entityName);
+          if (binding.teamName) {
+            const teamRes = await footballService.searchTeams(binding.teamName);
+            if (teamRes && teamRes.length > 0 && teamRes[0].team) {
+              const teamId = teamRes[0].team.id;
+              results = await footballService.searchPlayers(binding.entityName, undefined, teamId);
+            } else {
+              logger.warn(`[QuizImages] Could not resolve team "${binding.teamName}" for player "${binding.entityName}"`);
+            }
+          } else {
+             logger.warn(`[QuizImages] Missing teamName for player "${binding.entityName}"`);
+          }
           break;
         case 'team':
           results = await footballService.searchTeams(binding.entityName);

@@ -24,6 +24,7 @@ export interface StoredQuizQuestion {
   imageBinding?: {
     kind: 'player' | 'team' | 'venue' | 'league';
     entityName: string;
+    teamName?: string;
     apiId?: number;
     imageUrl?: string;
   } | null;
