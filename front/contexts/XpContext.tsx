@@ -141,7 +141,11 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       if (!token) return;
 
       const res = await fetch(`${getApiUrl()}/xp/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache'
+        },
       });
 
       if (!res.ok) return;

@@ -250,6 +250,19 @@ function countStats(progress: SessionProgress, pack: StoredQuizQuestion[]) {
   return { correct, answered, skipped, xp };
 }
 
+function computeCurrentIndex(progress: SessionProgress, pack: StoredQuizQuestion[]) {
+  let firstPendingIndex = 0;
+  for (let i = 0; i < pack.length; i++) {
+    const st = progress.byQuestionId[pack[i].id]?.status;
+    if (st !== 'answered' && st !== 'skipped') {
+      firstPendingIndex = i;
+      break;
+    }
+    if (i === pack.length - 1) firstPendingIndex = pack.length;
+  }
+  return firstPendingIndex;
+}
+
 async function deductCoins(
   userId: string,
   amount: number,
@@ -379,7 +392,9 @@ export async function submitQuizAnswer(
         coins: user.coins, 
         xp: user.xp, 
         level: user.level,
-        completed: false // not full stats recomputed here for speed
+        completed: false,
+        currentIndex: computeCurrentIndex(progress, pack),
+        progress: progress.byQuestionId
       };
     }
 
@@ -439,6 +454,8 @@ export async function submitQuizAnswer(
       level: user.level,
       stats,
       completed: allDone,
+      currentIndex: computeCurrentIndex(progress, pack),
+      progress: progress.byQuestionId
     };
   });
 }
@@ -473,7 +490,13 @@ export async function skipQuizQuestion(
     const existing = progress.byQuestionId[questionId];
     
     if (existing?.status === 'skipped') {
-      return { alreadyDone: true, coins: user.coins, skipped: true };
+      return { 
+        alreadyDone: true, 
+        coins: user.coins, 
+        skipped: true,
+        currentIndex: computeCurrentIndex(progress, pack),
+        progress: progress.byQuestionId
+      };
     }
     if (existing?.status === 'answered') {
       throw new Error('QUESTION_ALREADY_ANSWERED');
@@ -523,6 +546,8 @@ export async function skipQuizQuestion(
       skipped: true,
       stats,
       completed: allDone,
+      currentIndex: computeCurrentIndex(progress, pack),
+      progress: progress.byQuestionId
     };
   });
 }
@@ -557,7 +582,13 @@ export async function useQuizHint(
     const existing = progress.byQuestionId[questionId] ?? { status: 'pending' as const };
 
     if (existing.hintUsed) {
-      return { hint: question.hint ?? '', coins: user.coins, alreadyUsed: true };
+      return { 
+        hint: question.hint ?? '', 
+        coins: user.coins, 
+        alreadyUsed: true,
+        currentIndex: computeCurrentIndex(progress, pack),
+        progress: progress.byQuestionId
+      };
     }
     if (existing.status === 'answered' || existing.status === 'skipped') {
       throw new Error('QUESTION_CLOSED');
@@ -593,6 +624,8 @@ export async function useQuizHint(
       hint: question.hint ?? '',
       coins: newCoins,
       hintUsed: true,
+      currentIndex: computeCurrentIndex(progress, pack),
+      progress: progress.byQuestionId
     };
   });
 }

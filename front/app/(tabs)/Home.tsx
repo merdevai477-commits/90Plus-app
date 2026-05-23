@@ -18,6 +18,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useQueryClient } from '@tanstack/react-query';
 
 import {
     HomeHeader,
@@ -84,6 +85,9 @@ export default function HomeScreen() {
 
     // ── Persisted video likes ─────────────────────────────────────────────────
     const { user } = useUser();
+    const { isSignedIn, getToken } = useAuth();
+    const queryClient = useQueryClient();
+    const quizPreloadDone = useRef(false);
     const { likedIds, toggleLike } = useHomeLikes(user?.id);
 
     // Open lucky wheel from push notification deep link
@@ -252,13 +256,24 @@ export default function HomeScreen() {
     const preloadQuizData = useCallback(async () => {
         try {
             const token = await getToken();
-            if (!token || !isSignedIn) return;
-            QuizApiService.fetchDaily(token, 'ar').catch(() => {});
-            QuizApiService.fetchDaily(token, 'en').catch(() => {});
+            if (!token || !isSignedIn || quizPreloadDone.current) return;
+            quizPreloadDone.current = true;
+            
+            queryClient.prefetchQuery({
+                queryKey: ['dailyQuiz', 'ar'],
+                queryFn: () => QuizApiService.fetchDaily(token, 'ar'),
+                staleTime: 5 * 60 * 1000,
+            }).catch(() => {});
+
+            queryClient.prefetchQuery({
+                queryKey: ['dailyQuiz', 'en'],
+                queryFn: () => QuizApiService.fetchDaily(token, 'en'),
+                staleTime: 5 * 60 * 1000,
+            }).catch(() => {});
         } catch {
             // silent
         }
-    }, [getToken, isSignedIn]);
+    }, [getToken, isSignedIn, queryClient]);
 
     // ── Fetch subscribed fixture IDs (pinned matches) ─────────────────────────
     const fetchSubscribedIds = useCallback(async () => {

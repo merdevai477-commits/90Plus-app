@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useTranslation } from '../../src/i18n';
 import { useLanguageStore } from '../../src/i18n/store';
@@ -67,9 +68,32 @@ export default function QuizHubScreen() {
   const [quizLang, setQuizLang] = useState<QuizApiLanguage>(
     appLanguage === 'en' ? 'en' : 'ar',
   );
-  const [questions, setQuestions] = useState<QuizApiQuestion[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  
+  const queryClient = useQueryClient();
+
+  const { data: dailyData, isLoading: loadingQuestions, error } = useQuery({
+    queryKey: ['dailyQuiz', quizLang],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error('no token');
+      const data = await QuizApiService.fetchDaily(token, quizLang);
+      if (!data?.questions?.length) throw new Error('empty pack');
+      return data;
+    },
+    enabled: !!quizLang,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, err) => {
+      if (err.message === 'RATE_LIMIT') return false;
+      return failureCount < 2;
+    }
+  });
+
+  const questions = dailyData?.questions ?? [];
+  const safeCurrentIndex = dailyData?.currentIndex >= questions.length ? 0 : (dailyData?.currentIndex ?? 0);
+  const currentIndex = safeCurrentIndex;
   const [selected, setSelected] = useState<OptionKey | null>(null);
   const [answerPhase, setAnswerPhase] = useState<AnswerPhase>('idle');
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -83,6 +107,7 @@ export default function QuizHubScreen() {
   const [finalScore, setFinalScore] = useState(0);
   const [finalXp, setFinalXp] = useState(0);
 
+  const nextIndexRef = useRef<number | null>(null);
   const questionStartedAt = useRef(Date.now());
 
   // Load language from AsyncStorage -> App State -> en
@@ -102,35 +127,9 @@ export default function QuizHubScreen() {
     loadQuizLanguage();
   }, [appLanguage]);
 
-  const loadDaily = useCallback(async (lang: QuizApiLanguage) => {
-    setLoadingQuestions(true);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error('no token');
-      const data = await QuizApiService.fetchDaily(token, lang);
-      if (!data?.questions?.length) throw new Error('empty pack');
-      setQuestions(data.questions);
-      setCurrentIndex(data.currentIndex >= data.questions.length ? 0 : data.currentIndex);
-      await refreshCoins();
-      await refreshXp();
-    } catch {
-      toastManager.showWarning(
-        t.quiz.matchesPreviewFailed,
-        t.quiz.matchesPreviewFailed,
-      );
-      setQuestions([]);
-    } finally {
-      setLoadingQuestions(false);
-    }
-  }, [getToken, refreshCoins, refreshXp, t.quiz.matchesPreviewFailed]);
-
   const handleLanguageSelect = (lang: 'ar' | 'en') => {
     setQuizLang(lang);
   };
-
-  useEffect(() => {
-    loadDaily(quizLang);
-  }, [quizLang, loadDaily]);
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length || QUIZ_SESSION_TOTAL;
@@ -167,19 +166,26 @@ export default function QuizHubScreen() {
 
   const goNextQuestion = useCallback(() => {
     if (!canGoNext) return;
-    if (currentIndex + 1 >= questions.length) {
-      // Show Score Popup instead of generic toast
-      const correctAnswers = questions.filter(q => q.isCorrect).length;
-      // We don't have total XP easily available here without fetching session again, 
-      // but we can estimate or just show total XP earned for this session if we track it.
-      // For now, we will just show correct answers.
+    
+    const dailyData: any = queryClient.getQueryData(['dailyQuiz', quizLang]);
+    const isCompleted = dailyData?.stats?.completed || currentIndex + 1 >= questions.length;
+    
+    if (isCompleted) {
+      const correctAnswers = dailyData?.stats?.correct ?? questions.filter(q => q.isCorrect).length;
       setFinalScore(correctAnswers);
-      setFinalXp(correctAnswers * 2); // basic estimation, could be fetched from session if needed
+      setFinalXp(dailyData?.stats?.xpEarned ?? (correctAnswers * 2));
       setScorePopupVisible(true);
       return;
     }
-    setCurrentIndex((i) => i + 1);
-  }, [canGoNext, currentIndex, questions]);
+    
+    queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        currentIndex: nextIndexRef.current ?? (oldData.currentIndex + 1),
+      };
+    });
+  }, [canGoNext, currentIndex, questions, queryClient, quizLang]);
 
   const handleSelectOption = useCallback(
     async (key: OptionKey) => {
@@ -203,33 +209,42 @@ export default function QuizHubScreen() {
           setSelected(null);
           return;
         }
-        const d = res.data as {
-          isCorrect: boolean;
-          correctKey: QuizApiOptionKey;
-          xpEvents?: Array<{
-            action: string;
-            amount: number;
-            leveledUp: boolean;
-            newLevel: number;
-          }>;
-          coins?: number;
-        };
+        const d = res.data as any;
+        nextIndexRef.current = d.currentIndex;
+
         setIsCorrect(d.isCorrect);
         setCorrectKey(d.correctKey as OptionKey);
         setAnswerPhase('revealed');
         if (d.xpEvents?.length) {
           handleXpEvents(
-            d.xpEvents.map((e) => ({
+            d.xpEvents.map((e: any) => ({
               action: e.action,
               amount: e.amount,
               leveledUp: e.leveledUp,
               newLevel: e.newLevel,
             })),
           );
-        } else {
-          await refreshXp();
         }
+
+        queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+          if (!oldData) return oldData;
+          const newQuestions = [...oldData.questions];
+          newQuestions[currentIndex] = {
+            ...newQuestions[currentIndex],
+            status: 'answered',
+            isCorrect: d.isCorrect,
+            selectedKey: key,
+          };
+          return { 
+            ...oldData, 
+            questions: newQuestions,
+            stats: d.stats ?? oldData.stats
+          };
+        });
+
+        // Backend updates XP/Coins directly, UI handles XpEvents, refresh coins manually
         await refreshCoins();
+        
         if (d.isCorrect) {
           toastManager.showSuccess(t.quiz.excellent, `+${d.xpEvents?.[0]?.amount ?? 2} XP`);
         } else {
@@ -246,7 +261,8 @@ export default function QuizHubScreen() {
       getToken,
       quizLang,
       handleXpEvents,
-      refreshXp,
+      queryClient,
+      currentIndex,
       refreshCoins,
       t.quiz,
     ],
@@ -266,13 +282,31 @@ export default function QuizHubScreen() {
         return;
       }
       await refreshCoins();
-      if (currentIndex + 1 >= questions.length) {
-        const correctAnswers = questions.filter(q => q.isCorrect).length;
+      
+      const d = res.data as any;
+      nextIndexRef.current = d.currentIndex;
+      
+      queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+        if (!oldData) return oldData;
+        const newQuestions = [...oldData.questions];
+        newQuestions[currentIndex] = {
+          ...newQuestions[currentIndex],
+          status: 'skipped',
+        };
+        return { 
+          ...oldData, 
+          questions: newQuestions,
+          stats: d.stats ?? oldData.stats,
+          currentIndex: d.currentIndex ?? (oldData.currentIndex + 1)
+        };
+      });
+
+      const isCompleted = d.completed || currentIndex + 1 >= questions.length;
+      if (isCompleted) {
+        const correctAnswers = d.stats?.correct ?? questions.filter(q => q.isCorrect).length;
         setFinalScore(correctAnswers);
-        setFinalXp(correctAnswers * 2);
+        setFinalXp(d.stats?.xpEarned ?? (correctAnswers * 2));
         setScorePopupVisible(true);
-      } else {
-        setCurrentIndex((i) => i + 1);
       }
     } catch {
       toastManager.showWarning(t.quiz.notEnoughCoins, t.quiz.notEnoughCoinsMessage);
@@ -283,7 +317,9 @@ export default function QuizHubScreen() {
     getToken,
     quizLang,
     refreshCoins,
-    goNextQuestion,
+    queryClient,
+    currentIndex,
+    questions,
     t.quiz,
   ]);
 
@@ -300,9 +336,27 @@ export default function QuizHubScreen() {
         toastManager.showWarning(t.quiz.notEnoughCoins, t.quiz.notEnoughCoinsMessage);
         return;
       }
-      const d = res.data as { hint?: string; coins?: number };
+      const d = res.data as any;
+      nextIndexRef.current = d.currentIndex;
+      
       setHintUsed(true);
       setHintText(d.hint || t.quiz.hintAppliedMessage);
+      
+      queryClient.setQueryData(['dailyQuiz', quizLang], (oldData: any) => {
+        if (!oldData) return oldData;
+        const newQuestions = [...oldData.questions];
+        newQuestions[currentIndex] = {
+          ...newQuestions[currentIndex],
+          hintUsed: true,
+          hint: d.hint || t.quiz.hintAppliedMessage,
+        };
+        return { 
+          ...oldData, 
+          questions: newQuestions,
+          currentIndex: d.currentIndex ?? oldData.currentIndex 
+        };
+      });
+
       await refreshCoins();
       toastManager.showSuccess(t.quiz.useHint, t.quiz.hintAppliedMessage);
     } catch {
@@ -314,6 +368,8 @@ export default function QuizHubScreen() {
     answerPhase,
     getToken,
     quizLang,
+    queryClient,
+    currentIndex,
     refreshCoins,
     t.quiz,
   ]);
@@ -335,13 +391,25 @@ export default function QuizHubScreen() {
 
   const HEADER_H = insets.top + 10 + 44 + 12;
 
-  if (loadingQuestions) {
+  if (loadingQuestions && !dailyData) {
     return (
       <View style={[styles.root, styles.centered]}>
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <ActivityIndicator size="large" color={ACCENT_SOFT} />
         <Text style={styles.loadingText}>{t.quiz.loadingQuestions}</Text>
+      </View>
+    );
+  }
+
+  if (error?.message === 'RATE_LIMIT') {
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <QuizBackground />
+        <QuizHeader topInset={insets.top} />
+        <Text style={styles.noQuestionsText}>
+          {t.common.errorTitle ?? 'Too many requests. Please wait a moment and try again.'}
+        </Text>
       </View>
     );
   }

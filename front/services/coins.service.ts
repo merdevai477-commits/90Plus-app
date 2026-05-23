@@ -62,6 +62,8 @@ export const CoinsService = {
                         headers: {
                             'Authorization': `Bearer ${currentToken}`,
                             'Content-Type': 'application/json',
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache',
                         },
                     });
 

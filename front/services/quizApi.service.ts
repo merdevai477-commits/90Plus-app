@@ -70,15 +70,21 @@ async function authFetch(
   token: string,
   init?: RequestInit,
 ): Promise<Response> {
-  return fetch(`${getApiUrl()}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       'x-user-timezone': getTimezone(),
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
       ...(init?.headers ?? {}),
     },
   });
+  if (res.status === 429) {
+    throw new Error('RATE_LIMIT');
+  }
+  return res;
 }
 
 export const QuizApiService = {

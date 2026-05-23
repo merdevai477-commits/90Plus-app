@@ -6,10 +6,10 @@
 --
 -- Created concurrently so it doesn't block writes on the live table.
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_xp_idx"
+CREATE INDEX IF NOT EXISTS "users_xp_idx"
   ON "users" ("xp" DESC);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_xp_level_idx"
+CREATE INDEX IF NOT EXISTS "users_xp_level_idx"
   ON "users" ("xp" DESC, "level" DESC);
 
 ANALYZE "users";
