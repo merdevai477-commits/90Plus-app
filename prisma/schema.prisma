@@ -683,6 +683,10 @@ model Reel {
   muxPlaybackId        String?    // Mux playback ID (set by webhook)
   isDeleted            Boolean    @default(false)
   deletedAt            DateTime?
+  // Set when the reel transitions to READY (via webhook or self-heal).
+  // Feed orders by publishedAt DESC NULLS LAST, then createdAt DESC.
+  // Legacy reels without publishedAt fall back to createdAt ordering.
+  publishedAt          DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -698,6 +702,7 @@ model Reel {
   reelViews ReelView[]
   strikes   Strike[]
 
+  @@index([publishedAt])
   @@index([userId])
   @@index([views])
   @@index([createdAt])
@@ -912,15 +917,33 @@ model Notification {
 
 enum NotificationType {
   MATCH_UPDATE
+  MATCH_GOAL
+  MATCH_START
+  MATCH_END
+  MATCH_HALFTIME
   MATCH_FAVORITE
+  MATCH_YELLOW_CARD
+  MATCH_RED_CARD
+  PREDICTION_RESULT
   QUIZ_REWARD
   LEVEL_UP
   ACHIEVEMENT
   FOLLOW
+  FOLLOW_ACTIVITY
   LIKE
   COMMENT
+  COMMENT_LIKE
   REPLY
   MENTION
+  GIFT
+  SHARE
+  VIDEO_PROCESSED
+  REPORT_RESOLVED
+  MILESTONE
+  COIN_MILESTONE
+  LUCKY_WHEEL
+  LEADERBOARD_TOP10
+  RE_ENGAGEMENT
   GENERAL
   MODERATION_ALERT
 }

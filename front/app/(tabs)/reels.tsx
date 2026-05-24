@@ -316,6 +316,9 @@ const ReelsFeed: React.FC = () => {
   // Abort controller to cancel in-flight retries when component re-focuses
   const retryAbortRef = useRef<AbortController | null>(null);
   const viewedReelsRef = useRef<Set<string>>(new Set());
+  // In-flight dedupe: prevents a flicker between two adjacent reels from
+  // firing two concurrent /view calls for the same reel.
+  const pendingViewsRef = useRef<Set<string>>(new Set());
   const VIEWED_REELS_STORAGE_KEY = '@viewed_reels';
   const MAX_VIEWED_REELS_STORED = 500; // Cap to prevent unbounded AsyncStorage growth
 
@@ -753,42 +756,84 @@ const ReelsFeed: React.FC = () => {
     loadViewedReels();
   }, []);
 
-  // Record view when reel becomes active
+  // Record view when reel becomes active.
+  //
+  // Contract:
+  //  - Do nothing if the reel is already locally marked as viewed.
+  //  - Dedupe concurrent in-flight calls with `pendingViewsRef`.
+  //  - Only mark as viewed (in-memory + AsyncStorage) AFTER a successful
+  //    server response — failures (network/5xx) are retried on the next
+  //    playback because we never marked the reel locally.
+  //  - When the server reports `counted: true`, bump the displayed view
+  //    count optimistically so the UI reflects the increment without a
+  //    full feed refetch. For `owner` / `duplicate` / `not_found` we do
+  //    not bump the UI; we still mark as viewed locally so we don't keep
+  //    re-pinging the API for non-counting reels.
   const recordReelView = useCallback(async (reelId: string) => {
-    // Check if already viewed in memory
     if (viewedReelsRef.current.has(reelId)) return;
+    if (pendingViewsRef.current.has(reelId)) return;
+    pendingViewsRef.current.add(reelId);
 
-    // Mark as viewed immediately to prevent duplicate API calls
-    viewedReelsRef.current.add(reelId);
-
-    // Cap the set to prevent unbounded growth
-    if (viewedReelsRef.current.size > MAX_VIEWED_REELS_STORED) {
-      const entries = Array.from(viewedReelsRef.current);
-      // Remove oldest 20% of entries
-      const toRemove = Math.ceil(MAX_VIEWED_REELS_STORED * 0.2);
-      for (let i = 0; i < toRemove; i++) {
-        viewedReelsRef.current.delete(entries[i]);
-      }
-    }
-
-    // Save to AsyncStorage (capped)
-    try {
-      const viewedArray = Array.from(viewedReelsRef.current);
-      await AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray));
-    } catch (error) {
-      logger.error('Error saving viewed reels:', error);
-    }
-
-    // Call API to record view
     try {
       const token = await getToken();
-      if (token) {
-        await ReelsService.recordView(token, reelId);
+      if (!token) {
+        logger.warn('[ReelView] No auth token — will retry on next playback');
+        return;
+      }
+
+      const result = await ReelsService.recordView(token, reelId);
+
+      // ok=false means network/5xx — leave reelId unmarked so the next
+      // playback retries automatically.
+      if (!result.ok) {
+        logger.warn('[ReelView] Record failed; will retry on next playback', { reelId });
+        return;
+      }
+
+      // Mark as viewed locally (success or accepted skip) so we don't
+      // keep hitting the API for the same reel.
+      viewedReelsRef.current.add(reelId);
+
+      // Cap the set to prevent unbounded growth.
+      if (viewedReelsRef.current.size > MAX_VIEWED_REELS_STORED) {
+        const entries = Array.from(viewedReelsRef.current);
+        const toRemove = Math.ceil(MAX_VIEWED_REELS_STORED * 0.2);
+        for (let i = 0; i < toRemove; i++) {
+          viewedReelsRef.current.delete(entries[i]);
+        }
+      }
+
+      // Persist the (possibly trimmed) viewed set.
+      try {
+        const viewedArray = Array.from(viewedReelsRef.current);
+        await AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray));
+      } catch (storageErr) {
+        logger.error('Error saving viewed reels:', storageErr);
+      }
+
+      // Optimistic UI bump — only when the server actually counted.
+      if (result.counted) {
+        setReels((prev) =>
+          prev.map((r) =>
+            r.id === reelId
+              ? {
+                  ...r,
+                  views:
+                    typeof result.views === 'number'
+                      ? result.views
+                      : (r.views ?? 0) + 1,
+                }
+              : r,
+          ),
+        );
       }
     } catch (error) {
-      // If API call fails, we've already marked as viewed locally
-      // This is fine - the backend will handle duplicate prevention
-      logger.warn('Error recording view:', error);
+      logger.warn('[ReelView] Unexpected error; will retry on next playback', {
+        reelId,
+        error,
+      });
+    } finally {
+      pendingViewsRef.current.delete(reelId);
     }
   }, [getToken]);
 

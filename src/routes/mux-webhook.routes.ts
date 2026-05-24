@@ -141,6 +141,9 @@ async function handleAssetReady(event: any): Promise<void> {
   // Use Mux auto-thumbnail only if no custom thumbnail was uploaded
   const thumbnailUrl = reel.thumbnail || muxService.getThumbnailUrl(playbackId);
 
+  // `publishedAt` is set to the READY transition timestamp so the feed surfaces
+  // freshly-processed reels at the top (the reel may have been `createdAt`
+  // days ago if processing was delayed or the reel was healed from FAILED).
   await prisma.reel.update({
     where: { id: reel.id },
     data: {
@@ -149,6 +152,7 @@ async function handleAssetReady(event: any): Promise<void> {
       videoUrl,
       thumbnail: thumbnailUrl,
       status: 'READY',
+      publishedAt: new Date(),
     },
   });
 

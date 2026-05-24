@@ -35,6 +35,15 @@ const MAX_COMMENTS_DISPLAY = 10;
 const MAX_COMMENTS_PER_USER = 5;
 const MAX_REPLIES_PER_USER = 5;
 
+// Comment / reply IDs from the backend are UUID v4. Any non-UUID id (e.g.
+// `Date.now().toString()` left over from older client code) must NEVER be
+// sent to backend endpoints — it produces 404s on `/reels/comments/<id>/*`.
+// `isCommentId` short-circuits those handlers so the UI can warn the user
+// politely instead of firing a doomed request.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isCommentId = (id: string | undefined | null): id is string =>
+    typeof id === 'string' && UUID_RE.test(id);
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 import { COLORS as REEL_COLORS } from '../reels/constants';
@@ -527,6 +536,13 @@ export default function CommentsModal({
     }, []);
 
     const handleToggleLike = useCallback(async (commentId: string) => {
+        // Defence in depth: every backend comment id is a UUID. A non-UUID
+        // means the comment hasn't been persisted yet (or stale temp id) —
+        // hitting the API would return 404.
+        if (!isCommentId(commentId)) {
+            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ التعليق');
+            return;
+        }
         haptic.trigger('light');
 
         // Find the comment to get current state
@@ -567,6 +583,10 @@ export default function CommentsModal({
 
     // Handle like on reply
     const handleToggleReplyLike = useCallback(async (replyId: string, parentCommentId: string) => {
+        if (!isCommentId(replyId) || !isCommentId(parentCommentId)) {
+            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ الرد');
+            return;
+        }
         haptic.trigger('light');
 
         // Find the reply to get current state
@@ -632,6 +652,10 @@ export default function CommentsModal({
 
     // Handle delete comment (own comments only)
     const handleDeleteComment = useCallback(async (commentId: string) => {
+        if (!isCommentId(commentId)) {
+            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ التعليق');
+            return;
+        }
         haptic.trigger('medium');
 
         try {
@@ -694,6 +718,12 @@ export default function CommentsModal({
 
     // Handle report comment
     const handleReportComment = useCallback(async (commentId: string, authorId?: string, authorName?: string) => {
+        // The report flow ultimately hits `/api/reports/comment/<commentId>`,
+        // which requires a real UUID. Short-circuit politely otherwise.
+        if (!isCommentId(commentId)) {
+            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ التعليق');
+            return;
+        }
         haptic.trigger('medium');
 
         const isOwnComment = currentUserId && authorId && String(currentUserId) === String(authorId);
@@ -753,6 +783,10 @@ export default function CommentsModal({
 
     // Load replies for a comment - Requirements 14.4
     const loadReplies = useCallback(async (commentId: string) => {
+        if (!isCommentId(commentId)) {
+            // Without a backend UUID, GET /reels/comments/<id>/replies returns 404.
+            return;
+        }
         const token = await getToken();
         if (!token) return;
 
@@ -835,10 +869,13 @@ export default function CommentsModal({
                 if (replyingTo) {
                     // Adding a reply - Requirements 14.2, 14.3
                     const result = await ReelsService.addReply(token, reelId, replyingTo.commentId, newComment.trim(), mentions);
-                    if (result.success && result.reply) {
-                        // Optimistic update - add reply to UI immediately (Requirement 14.3)
+
+                    // We must only render the reply once we have the backend
+                    // UUID — otherwise subsequent like/report/delete calls would
+                    // hit `/reels/comments/<temp-id>/*` and 404.
+                    if (result.success && isCommentId(result.reply?.id)) {
                         const newReply: Reply = {
-                            id: result.reply.id || Date.now().toString(),
+                            id: result.reply.id,
                             user: {
                                 id: sessionUserId || currentUser?.id || 'current_user',
                                 name: currentUserName,
@@ -863,6 +900,8 @@ export default function CommentsModal({
                         triggerShake();
                         setCommentLimitReached(true);
                         setTimeout(() => setCommentLimitReached(false), 3000);
+                    } else {
+                        toastManager.showError('خطأ', result.error || 'فشل إرسال الرد');
                     }
                 } else {
                     // Adding a comment
@@ -875,10 +914,22 @@ export default function CommentsModal({
                             setIsSubmitting(false);
                             return;
                         }
+                        toastManager.showError('خطأ', result.error || 'فشل إرسال التعليق');
+                        setIsSubmitting(false);
+                        return;
                     }
-                    // Add comment locally
+
+                    // Only surface the comment when we have a real backend UUID.
+                    // Without it, every downstream action (like / report / delete /
+                    // expand replies) would 404 against `/reels/comments/<id>/*`.
+                    if (!isCommentId(result.comment?.id)) {
+                        toastManager.showError('خطأ', 'فشل إرسال التعليق');
+                        setIsSubmitting(false);
+                        return;
+                    }
+
                     const comment: Comment = {
-                        id: result.comment?.id || Date.now().toString(),
+                        id: result.comment.id,
                         user: {
                             id: sessionUserId || currentUser?.id || 'current_user',
                             name: currentUserName,

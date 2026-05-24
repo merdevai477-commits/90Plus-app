@@ -1171,9 +1171,25 @@ export class ReelsService {
     }
 
     /**
-     * Increment view count
+     * Record a reel view.
+     *
+     * Returns the structured result so callers know whether the view was
+     * actually counted (`counted: true`) or skipped server-side (owner,
+     * duplicate, not_found, error). When counted, `views` contains the new
+     * server-side count and callers can confidently bump the UI optimistically.
+     *
+     * Network/server failure returns `{ ok: false }` so the caller can retry
+     * the next playback.
      */
-    static async recordView(token: string, reelId: string): Promise<boolean> {
+    static async recordView(
+        token: string,
+        reelId: string,
+    ): Promise<{
+        ok: boolean;
+        counted: boolean;
+        views?: number;
+        reason?: 'owner' | 'duplicate' | 'not_found' | 'error';
+    }> {
         try {
             const response = await fetch(`${API_URL}/reels/${reelId}/view`, {
                 method: 'POST',
@@ -1183,11 +1199,21 @@ export class ReelsService {
                 },
             });
 
+            if (!response.ok) {
+                return { ok: false, counted: false };
+            }
+
             const data = await response.json();
-            return data.status === 'SUCCESS';
+            const payload = data?.data ?? {};
+            return {
+                ok: data?.status === 'SUCCESS',
+                counted: Boolean(payload?.counted),
+                views: typeof payload?.views === 'number' ? payload.views : undefined,
+                reason: payload?.reason,
+            };
         } catch (error) {
             console.error('Error recording view:', error);
-            return false;
+            return { ok: false, counted: false };
         }
     }
 

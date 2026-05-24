@@ -174,6 +174,9 @@ export async function healReelFromMux(
       };
     }
 
+    // `publishedAt` is stamped at the moment of the READY transition so the
+    // feed sorts healed reels by their actual go-live time, not their
+    // original `createdAt` (which could be days old for stuck reels).
     const updated = await prisma.reel.update({
       where: { id: reel.id },
       data: {
@@ -182,6 +185,7 @@ export async function healReelFromMux(
         videoUrl: newVideoUrl,
         thumbnail: newThumb,
         status: 'READY',
+        publishedAt: new Date(),
       },
       select: REEL_HEAL_STATUS_SELECT,
     });

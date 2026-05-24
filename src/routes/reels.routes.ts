@@ -153,7 +153,13 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             }, // Exclude deleted reels + blocked users
             take: take + 1, // Get one extra to check if there's more
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
-            orderBy: { createdAt: 'desc' },
+            // Order by publishedAt (set when the reel transitions to READY)
+            // so healed/newly-processed reels surface above older posts.
+            // Legacy reels with publishedAt = NULL fall through to createdAt.
+            orderBy: [
+                { publishedAt: { sort: 'desc', nulls: 'last' } },
+                { createdAt: 'desc' },
+            ],
             select: {
                 id: true,
                 videoUrl: true,
@@ -544,17 +550,18 @@ router.post('/:id/retry', requireAuth, async (req: Request, res: Response): Prom
  * Increment view count (only once per user per video, no owner self-views)
  */
 router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { id } = req.params;
-        const idStr = Array.isArray(id) ? id[0] : id;
-        const clerkUserId = req.auth?.userId;
+    const { id } = req.params;
+    const idStr = Array.isArray(id) ? id[0] : id;
+    const clerkUserId = req.auth?.userId;
 
+    try {
         if (!clerkUserId) {
             sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
-        // Get current user
+        logger.info('[ReelView] Recording view:', { reelId: idStr, clerkUserId });
+
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
             select: { id: true }
@@ -565,25 +572,24 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Check if reel exists and get owner
         const reel = await prisma.reel.findUnique({
             where: { id: idStr },
-            select: { id: true, userId: true }
+            select: { id: true, userId: true, views: true }
         });
 
         if (!reel) {
-            // Reel doesn't exist (might be mock data) - just return success
-            res.json({ status: 'SUCCESS', message: 'View not recorded (reel not in database)' });
+            // Reel doesn't exist (might be mock data, or stale client state).
+            logger.info('[ReelView] Skipped (reel not found):', { reelId: idStr, userId: user.id });
+            res.json({ status: 'SUCCESS', data: { counted: false, reason: 'not_found' } });
             return;
         }
 
-        // Don't count owner's own views
         if (reel.userId === user.id) {
-            res.json({ status: 'SUCCESS', message: 'View not counted (owner viewing own video)' });
+            logger.info('[ReelView] Skipped (owner self-view):', { reelId: idStr, userId: user.id });
+            res.json({ status: 'SUCCESS', data: { counted: false, reason: 'owner', views: reel.views } });
             return;
         }
 
-        // Check if user has already viewed this reel
         const existingView = await prisma.reelView.findUnique({
             where: {
                 reelId_userId: {
@@ -594,12 +600,11 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
         });
 
         if (existingView) {
-            // Already viewed - return success without incrementing
-            res.json({ status: 'SUCCESS', message: 'View already recorded' });
+            logger.info('[ReelView] Skipped (already viewed):', { reelId: idStr, userId: user.id });
+            res.json({ status: 'SUCCESS', data: { counted: false, reason: 'duplicate', views: reel.views } });
             return;
         }
 
-        // Create view record and increment count in a transaction
         const [, updatedReel] = await prisma.$transaction([
             prisma.reelView.create({
                 data: {
@@ -614,6 +619,12 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
             })
         ]);
 
+        logger.info('[ReelView] Counted:', {
+            reelId: idStr,
+            userId: user.id,
+            newCount: updatedReel.views,
+        });
+
         // ✅ XP Awards for reel owner on view milestones (non-blocking)
         const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
         if (updatedReel.views === 100) {
@@ -624,18 +635,18 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
           awardXp({ userId: updatedReel.userId, action: 'REEL_VIEWS_1000', idempotencyKey: `reel:${idStr}:views1000`, timezone: tz, metadata: { reelId: idStr } }).catch((e) => logger.warn('XP views1000 failed:', e));
         }
 
-        res.json({ status: 'SUCCESS' });
+        res.json({ status: 'SUCCESS', data: { counted: true, views: updatedReel.views } });
     } catch (error: any) {
-        // Handle unique constraint violation (race condition)
+        // P2002 = unique constraint (reelId+userId) race — treat as duplicate.
         if (error.code === 'P2002') {
-            // View was already created by another request - just return success
-            res.json({ status: 'SUCCESS', message: 'View already recorded' });
+            logger.info('[ReelView] Skipped (race -> duplicate):', { reelId: idStr });
+            res.json({ status: 'SUCCESS', data: { counted: false, reason: 'duplicate' } });
             return;
         }
-        
-        // Don't fail on view recording errors
-        logger.warn('View recording error:', error.message);
-        res.json({ status: 'SUCCESS', message: 'View recording skipped' });
+
+        // Do not fail the client; record and continue so retries are idempotent.
+        logger.warn('[ReelView] Error recording view:', { reelId: idStr, error: error?.message });
+        res.json({ status: 'SUCCESS', data: { counted: false, reason: 'error' } });
     }
 });
 

@@ -47,6 +47,7 @@
     "test:mux": "ts-node --project tsconfig.scripts.json scripts/test-mux-upload.ts",
     "test:mux:direct": "ts-node --project tsconfig.scripts.json scripts/test-mux-direct.ts",
     "fix:stuck-reels": "ts-node --project tsconfig.scripts.json scripts/fix-stuck-reels.ts",
+    "check:connectivity": "ts-node --project tsconfig.scripts.json scripts/check-connectivity.ts",
     "backfill:xp": "ts-node src/scripts/backfill-xp.ts"
   },
   "keywords": [
