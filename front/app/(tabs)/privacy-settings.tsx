@@ -37,6 +37,7 @@ import {
 import { useTranslation } from '../../src/i18n';
 import { logger } from '../../services/logger';
 import { getApiEndpoint } from '../../config/api.config';
+import { LEGAL_URLS } from '../../config/legal.config';
 import { captureException } from '../../services/sentry.service';
 import { router } from 'expo-router';
 import { MainShell } from '../../components/shell/MainShell';
@@ -248,11 +249,11 @@ export default function PrivacySettingsScreen() {
   };
 
   const openPrivacyPolicy = () => {
-    Linking.openURL('https://90plus-app-production.up.railway.app/privacy');
+    Linking.openURL(LEGAL_URLS.privacy);
   };
 
   const openTerms = () => {
-    Linking.openURL('https://90plus-app-production.up.railway.app/terms');
+    Linking.openURL(LEGAL_URLS.terms);
   };
 
   if (loading) {

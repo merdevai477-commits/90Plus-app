@@ -1,31 +1,33 @@
 import { getApiUrl } from '../utils/getApiUrl';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = getApiUrl();
 
 export class AccountDeletionService {
   /**
-   * Delete user account
+   * Delete user account (requires Clerk session token).
    */
-  static async deleteAccount(): Promise<void> {
+  static async deleteAccount(authToken: string): Promise<void> {
+    if (!authToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${API_URL}/users/me`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    let data: { status?: string; message?: string } = {};
     try {
-      const token = await AsyncStorage.getItem('@session_token');
+      data = await response.json();
+    } catch {
+      // Non-JSON error body
+    }
 
-      const response = await fetch(`${API_URL}/users/me`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.status !== 'SUCCESS') {
-        throw new Error(data.message || 'Failed to delete account');
-      }
-    } catch (error) {
-      console.error('Delete account error:', error);
-      throw error;
+    if (!response.ok || data.status !== 'SUCCESS') {
+      throw new Error(data.message || 'Failed to delete account');
     }
   }
 }

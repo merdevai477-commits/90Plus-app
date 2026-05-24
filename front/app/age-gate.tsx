@@ -24,6 +24,7 @@ import {
   Platform,
   ScrollView,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -34,6 +35,7 @@ import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
 import { verifyAgeWithBackend } from '../hooks/useAgeVerification';
+import { LEGAL_URLS } from '../config/legal.config';
 
 export default function AgeGateScreen() {
   const { getToken } = useAuth();
@@ -212,13 +214,13 @@ export default function AgeGateScreen() {
 
           {/* Privacy Links */}
           <View style={styles.linksContainer}>
-            <TouchableOpacity onPress={() => {/* TODO: Open privacy policy */}}>
+            <TouchableOpacity onPress={() => Linking.openURL(LEGAL_URLS.privacy)}>
               <Text style={styles.linkText}>
                 {t('ageGate.privacyPolicy') || 'Privacy Policy'}
               </Text>
             </TouchableOpacity>
             <Text style={styles.linkSeparator}>•</Text>
-            <TouchableOpacity onPress={() => {/* TODO: Open terms */}}>
+            <TouchableOpacity onPress={() => Linking.openURL(LEGAL_URLS.terms)}>
               <Text style={styles.linkText}>
                 {t('ageGate.terms') || 'Terms of Service'}
               </Text>

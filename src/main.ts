@@ -375,6 +375,22 @@ app.get('/support.html', (req, res) => {
     });
 });
 
+app.get('/delete-account.html', (req, res) => {
+    const filePath = path.join(publicPath, 'delete-account.html');
+    logger.info(`📄 Serving delete account page from: ${filePath}`);
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send delete-account.html:', err);
+            res.status(404).json({
+                status: 'ERROR',
+                message: 'Delete account page not found',
+                path: filePath,
+                exists: require('fs').existsSync(filePath)
+            });
+        }
+    });
+});
+
 // Legacy routes for backward compatibility
 app.get('/privacy', (req, res) => {
     res.redirect('/privacy-policy.html');
@@ -386,6 +402,10 @@ app.get('/terms', (req, res) => {
 
 app.get('/support', (req, res) => {
     res.redirect('/support.html');
+});
+
+app.get('/delete-account', (req, res) => {
+    res.redirect('/delete-account.html');
 });
 
 

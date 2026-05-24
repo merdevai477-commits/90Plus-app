@@ -46,6 +46,7 @@ import LanguagePickerModal from '../../components/common/LanguagePickerModal';
 import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
 import ImprovedAccountDeletionModal from '../../components/common/ImprovedAccountDeletionModal';
 import { AccountDeletionService } from '../../services/accountDeletionService';
+import { LEGAL_URLS } from '../../config/legal.config';
 import { toastManager } from '../../services/toastManager';
 import { useScreenFont } from '../../utils/fontSetup';
 import { MainShell } from '../../components/shell/MainShell';
@@ -80,7 +81,7 @@ export default function SettingsScreen() {
   } = useSettings();
 
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, getToken } = useAuth();
 
   const { t, language, setLanguage } = useTranslation();
   const tSettings = t.settingsScreen;
@@ -201,7 +202,9 @@ export default function SettingsScreen() {
     setIsDeletingAccount(true);
     try {
       toastManager.showInfo(tSettings.deletingAccount, tSettings.deletingAccountDetail);
-      await AccountDeletionService.deleteAccount();
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+      await AccountDeletionService.deleteAccount(token);
       await clearVideos();
       await signOut();
       await globalState.logout();
@@ -253,15 +256,15 @@ export default function SettingsScreen() {
   };
 
   const handleContactUs = () => {
-    Linking.openURL('https://90plus-app-production.up.railway.app/support');
+    Linking.openURL(LEGAL_URLS.support);
   };
 
   const handlePrivacyPolicy = () => {
-    Linking.openURL('https://90plus-app-production.up.railway.app/privacy');
+    Linking.openURL(LEGAL_URLS.privacy);
   };
 
   const handleTerms = () => {
-    Linking.openURL('https://90plus-app-production.up.railway.app/terms');
+    Linking.openURL(LEGAL_URLS.terms);
   };
 
   const handleManagePermissions = () => {

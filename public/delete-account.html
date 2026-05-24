@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account - 90Plus</title>
+    <meta name="description" content="Request account deletion for your 90Plus account. Delete your data in-app or by email.">
+    <meta name="robots" content="index, follow">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.7;
+            color: #2c3e50;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            margin: 20px 0;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 3px solid #4A148C;
+        }
+        .logo {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, #4A148C, #7B1FA2);
+            border-radius: 18px;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 22px;
+            font-weight: bold;
+        }
+        h1 { color: #1a1a1a; font-size: 32px; margin-bottom: 8px; }
+        h2 { color: #4A148C; font-size: 22px; margin-top: 28px; margin-bottom: 12px; }
+        p { margin-bottom: 16px; }
+        ol, ul { margin-bottom: 16px; padding-left: 24px; }
+        li { margin-bottom: 8px; }
+        .steps {
+            background: #f8f4fc;
+            border-left: 4px solid #7B1FA2;
+            padding: 20px 24px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #4A148C, #7B1FA2);
+            color: white !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-weight: 600;
+            margin: 8px 8px 8px 0;
+        }
+        .btn-secondary {
+            background: #eef2ff;
+            color: #4A148C !important;
+        }
+        .note {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            padding: 16px;
+            border-radius: 10px;
+            font-size: 15px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 14px;
+            color: #666;
+        }
+        .footer a { color: #4A148C; }
+        .lang-toggle { text-align: right; margin-bottom: 8px; }
+        .lang-toggle button {
+            background: none;
+            border: 1px solid #ccc;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-left: 6px;
+        }
+        [dir="rtl"] { text-align: right; }
+        [dir="rtl"] ol, [dir="rtl"] ul { padding-right: 24px; padding-left: 0; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="lang-toggle">
+            <button type="button" onclick="setLang('en')">English</button>
+            <button type="button" onclick="setLang('ar')">العربية</button>
+        </div>
+
+        <div id="content-en">
+            <div class="header">
+                <div class="logo">90+</div>
+                <h1>Delete Your Account</h1>
+                <p>90Plus — Football Social App</p>
+            </div>
+
+            <p>You can delete your 90Plus account and associated personal data at any time. Choose one of the options below.</p>
+
+            <h2>Option 1 — Delete in the app (recommended)</h2>
+            <div class="steps">
+                <ol>
+                    <li>Open the <strong>90Plus</strong> app and sign in</li>
+                    <li>Go to your <strong>Profile</strong> tab</li>
+                    <li>Tap the <strong>Settings</strong> icon (gear)</li>
+                    <li>Scroll down and tap <strong>Delete Account</strong></li>
+                    <li>Confirm deletion in the dialog</li>
+                </ol>
+            </div>
+            <a class="btn" href="ninetyplus://settings">Open app settings</a>
+
+            <h2>Option 2 — Email request</h2>
+            <p>If you cannot access the app, send an email from the address linked to your account:</p>
+            <a class="btn btn-secondary" href="mailto:merdevai477@gmail.com?subject=90Plus%20Account%20Deletion%20Request&body=Please%20delete%20my%2090Plus%20account.%0A%0ARegistered%20email%3A%20%0AUsername%20(if%20known)%3A%20%0AReason%20(optional)%3A%20">Email deletion request</a>
+
+            <h2>What happens after deletion</h2>
+            <ul>
+                <li>Your account is deactivated immediately and you are signed out</li>
+                <li>Personal data is scheduled for permanent removal within <strong>30 days</strong></li>
+                <li>Some anonymized or legally required records may be retained as described in our Privacy Policy</li>
+            </ul>
+
+            <div class="note">
+                <strong>Note:</strong> Deletion is permanent. You will lose access to predictions, reels, coins, and social connections tied to this account.
+            </div>
+
+            <div class="footer">
+                <p>
+                    <a href="/privacy">Privacy Policy</a> ·
+                    <a href="/terms">Terms of Service</a> ·
+                    <a href="/support">Support</a>
+                </p>
+                <p>© 2026 90Plus. All rights reserved.</p>
+            </div>
+        </div>
+
+        <div id="content-ar" class="hidden" dir="rtl">
+            <div class="header">
+                <div class="logo">90+</div>
+                <h1>حذف حسابك</h1>
+                <p>90Plus — تطبيق كرة القدم الاجتماعي</p>
+            </div>
+
+            <p>يمكنك حذف حساب 90Plus وبياناتك الشخصية في أي وقت. اختر إحدى الطرق التالية.</p>
+
+            <h2>الطريقة 1 — الحذف من التطبيق (موصى بها)</h2>
+            <div class="steps">
+                <ol>
+                    <li>افتح تطبيق <strong>90Plus</strong> وسجّل الدخول</li>
+                    <li>اذهب إلى تبويب <strong>الملف الشخصي</strong></li>
+                    <li>اضغط على أيقونة <strong>الإعدادات</strong></li>
+                    <li>مرّر لأسفل واضغط <strong>حذف الحساب</strong></li>
+                    <li>أكّد الحذف في النافذة المنبثقة</li>
+                </ol>
+            </div>
+            <a class="btn" href="ninetyplus://settings">فتح إعدادات التطبيق</a>
+
+            <h2>الطريقة 2 — طلب عبر البريد الإلكتروني</h2>
+            <p>إذا لم تتمكن من الوصول للتطبيق، أرسل بريداً من العنوان المرتبط بحسابك:</p>
+            <a class="btn btn-secondary" href="mailto:merdevai477@gmail.com?subject=90Plus%20Account%20Deletion%20Request&body=Please%20delete%20my%2090Plus%20account.%0A%0ARegistered%20email%3A%20%0AUsername%20(if%20known)%3A%20%0AReason%20(optional)%3A%20">طلب الحذف بالبريد</a>
+
+            <h2>ماذا يحدث بعد الحذف</h2>
+            <ul>
+                <li>يُعطَّل حسابك فوراً ويتم تسجيل خروجك</li>
+                <li>تُجدول البيانات الشخصية للحذف النهائي خلال <strong>30 يوماً</strong></li>
+                <li>قد تُحفظ بعض السجلات المجهولة أو المطلوبة قانونياً كما في سياسة الخصوصية</li>
+            </ul>
+
+            <div class="note">
+                <strong>تنبيه:</strong> الحذف نهائي. ستفقد الوصول للتوقعات والريلز والعملات والاتصالات الاجتماعية المرتبطة بالحساب.
+            </div>
+
+            <div class="footer">
+                <p>
+                    <a href="/privacy">سياسة الخصوصية</a> ·
+                    <a href="/terms">الشروط والأحكام</a> ·
+                    <a href="/support">الدعم</a>
+                </p>
+                <p>© 2026 90Plus. جميع الحقوق محفوظة.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setLang(lang) {
+            document.getElementById('content-en').classList.toggle('hidden', lang !== 'en');
+            document.getElementById('content-ar').classList.toggle('hidden', lang !== 'ar');
+            document.documentElement.lang = lang;
+        }
+        if (navigator.language && navigator.language.startsWith('ar')) setLang('ar');
+    </script>
+</body>
+</html>

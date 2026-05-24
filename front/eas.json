@@ -44,13 +44,14 @@
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "SENTRY_ALLOW_FAILURE": "true",
         "npm_config_ignore_scripts": "false",
+        "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
         "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api",
         "EXPO_USE_PRECOMPILED_MODULES": "0"
       },
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
       },
       "ios": {
         "image": "macos-sequoia-15.6-xcode-26.2",

@@ -25,6 +25,7 @@ import {
   normalizeAuthEmail,
 } from '@/src/components/auth';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
+import { LEGAL_URLS } from '@/config/legal.config';
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
@@ -214,14 +215,14 @@ export default function RegisterScreen() {
           By signing up, I agree to the{' '}
           <Text
             style={styles.termsLink}
-            onPress={() => Linking.openURL('https://90plus-app-production-1808.up.railway.app/terms')}
+            onPress={() => Linking.openURL(LEGAL_URLS.terms)}
           >
             Terms
           </Text>
           {' & '}
           <Text
             style={styles.termsLink}
-            onPress={() => Linking.openURL('https://90plus-app-production-1808.up.railway.app/privacy')}
+            onPress={() => Linking.openURL(LEGAL_URLS.privacy)}
           >
             Privacy Policy
           </Text>

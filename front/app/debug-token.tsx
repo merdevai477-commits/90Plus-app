@@ -71,6 +71,17 @@ function ClerkTokenExtractor() {
 }
 
 export default function DebugTokenScreen() {
+  if (!__DEV__) {
+    return (
+      <SafeAreaView style={s.container}>
+        <Stack.Screen options={{ title: 'Not Available' }} />
+        <View style={s.scrollContent}>
+          <Text style={s.label}>This screen is only available in development builds.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={s.container}>
       <Stack.Screen
