@@ -897,6 +897,14 @@ export const ar = {
     xpSuffix: 'نقطة',
     levelPrefix: 'المستوى',
     globalRank: 'الترتيب العالمي',
+    xpThisPeriod: 'نقاط الفترة',
+    lifetimeXp: 'إجمالي النقاط',
+    yourRank: 'ترتيبك',
+    rankNotRanked: 'لم تُصنَّف بعد',
+    periodWeekly: 'هذا الأسبوع',
+    periodMonthly: 'هذا الشهر',
+    shareAppMessage:
+      'جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!',
     leaderboardTitle: 'قائمة الـ 11 الأوائل',
 
     // Accessibility

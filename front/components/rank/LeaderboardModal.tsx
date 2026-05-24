@@ -127,7 +127,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                     <Text style={s.modalName} numberOfLines={1}>
                       {entry.displayName}
                     </Text>
-                    <Text style={s.modalXpLabel}>{t.rank.globalRank}</Text>
+                    <Text style={s.modalXpLabel}>{t.rank.xpThisPeriod}</Text>
                   </View>
                   <Text style={s.modalXpVal}>
                     {entry.xp} {t.rank.xpSuffix}

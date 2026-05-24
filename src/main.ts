@@ -651,6 +651,25 @@ async function startServer() {
                 logger.info('   - Token Revocation System: Active');
                 logger.info('   - Abuse Detection Engine: Active');
                 logger.info('   - Tamper-Proof Audit: Active');
+
+                import('./services/reel-mux-heal.service')
+                    .then(({ healStuckReels }) =>
+                        healStuckReels({
+                            dryRun: false,
+                            statuses: ['FAILED'],
+                            maxAgeDays: 7,
+                            notify: true,
+                            invalidateCaches: true,
+                        }),
+                    )
+                    .then((summary) => {
+                        if (summary.healedReady > 0) {
+                            logger.info('[ReelHeal] Startup heal recovered reels:', summary);
+                        }
+                    })
+                    .catch((err) =>
+                        logger.warn('[ReelHeal] Startup heal failed (non-fatal):', err?.message ?? err),
+                    );
             } catch (postConnectErr) {
                 logger.error('❌ Failed to initialize database-dependent services after connect:', postConnectErr);
                 process.exit(1);
@@ -855,6 +874,13 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ Stuck Reel Cleanup Cron Job scheduled (every hour)');
+
+                    // ✅ Daily ranking badges (views, shares, comments, predictions)
+                    cron.schedule('0 4 * * *', async () => {
+                        const { runRankingBadgesJob } = await import('./services/ranking-badges-cron.service');
+                        await runRankingBadgesJob();
+                    });
+                    logger.info('✅ Ranking Badges Cron Job scheduled (daily at 4 AM UTC)');
                     
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();

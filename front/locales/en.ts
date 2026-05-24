@@ -921,6 +921,14 @@ export const en = {
     xpSuffix: 'XP',
     levelPrefix: 'Lv.',
     globalRank: 'Global Rank',
+    xpThisPeriod: 'Period XP',
+    lifetimeXp: 'Total XP',
+    yourRank: 'Your rank',
+    rankNotRanked: 'Not ranked yet',
+    periodWeekly: 'This week',
+    periodMonthly: 'This month',
+    shareAppMessage:
+      'Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!',
     leaderboardTitle: 'Top 11 Leaderboard',
 
     // Accessibility

@@ -41,7 +41,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     // No secret configured — log warning but process event (dev/staging fallback)
     logger.warn('[MuxWebhook] MUX_WEBHOOK_SECRET not set — skipping verification (INSECURE)');
   } else if (!signature) {
-    logger.warn('[MuxWebhook] Missing mux-signature header — rejecting');
+    logger.error('[MuxWebhook] Signature verification FAILED — missing mux-signature header');
     res.status(401).json({ error: 'Missing signature' });
     return;
   } else {
@@ -49,6 +49,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       muxService.verifyWebhook(rawBody, signature);
       logger.info('[MuxWebhook] Signature verified ✅');
     } catch (err: any) {
+      logger.error('[MuxWebhook] Signature verification FAILED');
       logger.error('[MuxWebhook] Signature verification failed:', err.message);
       logger.error('[MuxWebhook] Secret length:', secret.length, '| Signature:', signature?.substring(0, 30));
       res.status(401).json({ error: 'Invalid webhook signature' });
@@ -66,6 +67,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ error: 'Invalid JSON body' });
     return;
   }
+
+  logger.info('[MuxWebhook] Received event:', {
+    type: event.type,
+    assetId: event.data?.id,
+    uploadId: event.data?.upload_id,
+    status: event.data?.status,
+    timestamp: new Date().toISOString(),
+  });
 
   const eventType: string = event.type;
   logger.info(`[MuxWebhook] Processing event: ${eventType}`);
@@ -292,7 +301,10 @@ async function handleAssetErrored(event: any): Promise<void> {
     data: { status: 'FAILED' },
   });
 
-  logger.error(`[MuxWebhook] Reel ${reel.id} FAILED — errors:`, errors);
+  logger.error(
+    `[MuxWebhook] Reel ${reel.id} FAILED — errors:`,
+    errors != null ? JSON.stringify(errors) : 'none',
+  );
 
   const erroredLang = await getUserLanguage(reel.userId);
   await NotificationService.createNotification({

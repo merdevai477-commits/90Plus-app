@@ -218,23 +218,27 @@ export class StorageService {
             // Use XMLHttpRequest for progress tracking (single retry on transport failure)
             const sendOnce = (): Promise<UploadResult & { reelId?: string }> => new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
-                xhr.timeout = uploadTimeout;
-                
-                // ✅ IMPROVED: Better progress tracking
+                xhr.timeout = Math.max(120_000, uploadTimeout);
+
                 const progressHandler = (event: ProgressEvent) => {
-                    if (event.lengthComputable && event.total > 0 && onProgress) {
-                        // 20% for preparation, 70% for upload, 10% for processing
-                        const uploadProgress = 20 + (event.loaded / event.total) * 70;
-                        const progressValue = Math.min(Math.round(uploadProgress), 90);
-                        onProgress(progressValue);
-                        
-                        // ✅ Log for tracking
-                        logger.info(`Upload progress: ${progressValue}% (${event.loaded}/${event.total} bytes)`);
+                    if (event.lengthComputable && event.total > 0) {
+                        const pct = Math.round((event.loaded / event.total) * 100);
+                        logger.info(`[StorageService] Upload progress: ${pct}%`);
+                        if (onProgress) {
+                            const uploadProgress = 20 + (event.loaded / event.total) * 70;
+                            const progressValue = Math.min(Math.round(uploadProgress), 90);
+                            onProgress(progressValue);
+                        }
                     }
                 };
-                
+
                 const loadHandler = () => {
                     cleanup();
+                    logger.info(
+                        '[ReelUpload] Response status:',
+                        xhr.status,
+                        xhr.responseText?.slice(0, 500),
+                    );
                     if (xhr.status >= 200 && xhr.status < 300) {
                         try {
                             // ✅ Show "Processing..."
@@ -305,7 +309,7 @@ export class StorageService {
                 
                 const errorHandler = () => {
                     cleanup();
-                    logger.error('Upload reel network error');
+                    logger.error('[StorageService] XHR network error — upload failed before reaching server');
                     resolve({ success: false, error: 'فشل الاتصال بالشبكة. تحقق من اتصالك وحاول مرة أخرى.' });
                 };
                 
@@ -328,13 +332,14 @@ export class StorageService {
                 xhr.addEventListener('abort', abortHandler);
                 xhr.ontimeout = () => {
                     cleanup();
-                    logger.error('Upload reel timeout (XHR):', uploadTimeout);
+                    logger.error('[StorageService] XHR timeout');
                     resolve({ success: false, error: 'انتهت مهلة الرفع. الفيديو كبير جداً أو الاتصال بطيء. حاول مرة أخرى.' });
                 };
 
                 xhr.open('POST', `${API_URL}/upload/reel`);
                 xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-                
+
+                logger.info('[ReelUpload] Starting POST to /api/upload/reel...');
                 xhr.send(formData);
             });
 

@@ -22,6 +22,8 @@ export interface TopPlayer {
   isVerified: boolean;
   level: number;
   xp: number;
+  /** Total lifetime XP (period XP is in `xp` for leaderboard sorting). */
+  lifetimeXp?: number;
   position: string;
   /** Emoji flag from the backend (e.g. "🇪🇬"). */
   countryFlag: string;

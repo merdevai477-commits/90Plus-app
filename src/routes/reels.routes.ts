@@ -11,6 +11,12 @@ import { filterUGCContent } from '../middleware/filter-content.middleware';
 import { enqueueNotification, enqueueSocialNotification } from '../queues/notification.queue';
 import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { awardXp } from '../services/xp.service';
+import {
+    getTopPlayers,
+    getUserCategoryRanks,
+    getCategoryRankingList,
+    type BadgeCategory,
+} from '../services/rankings.service';
 import { ErrorCode, sendError } from '../constants/errors';
 import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 
@@ -1134,6 +1140,17 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
         setImmediate(() => {
             (async () => {
                 try {
+                    // XP for the commenter (≥ 5 chars)
+                    if (content.trim().length >= 5) {
+                        awardXp({
+                            userId: user.id,
+                            action: 'REEL_COMMENT',
+                            dailyCap: 10,
+                            timezone: tz,
+                            idempotencyKey: `comment:${comment.id}`,
+                        }).catch((e) => logger.warn('XP comment failed:', e));
+                    }
+
                     if (parentComment && parentComment.userId !== user.id) {
                         // Reply notification → parent author
                         const lang = await getUserLanguage(parentComment.userId);
@@ -1831,6 +1848,16 @@ router.post('/:id/save', requireAuth, writeLimiter, async (req: Request, res: Re
             data: { userId: user.id, reelId: idStr }
         });
 
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+        awardXp({
+            userId: user.id,
+            action: 'REEL_SHARE',
+            dailyCap: 20,
+            timezone: tz,
+            idempotencyKey: `reel.save.${idStr}`,
+            metadata: { reelId: idStr },
+        }).catch((e) => logger.warn('XP save failed:', e));
+
         res.json({ status: 'SUCCESS', data: { saved: true } });
     } catch (error: any) {
         logger.error('Save reel error:', error);
@@ -2025,10 +2052,21 @@ router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: R
             select: { sharesCount: true }
         });
 
+        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+
+        // XP for the sharer (distinct reel per user)
+        awardXp({
+            userId: user.id,
+            action: 'REEL_SHARE',
+            dailyCap: 20,
+            timezone: tz,
+            idempotencyKey: `reel.share.${idStr}`,
+            metadata: { reelId: idStr },
+        }).catch((e) => logger.warn('XP share failed:', e));
+
         // Notify reel owner (if not self)
         if (reel.userId !== user.id && shouldNotifyOwner) {
             // ✅ XP Award to reel owner for receiving a share (non-blocking)
-            const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
             awardXp({ userId: reel.userId, action: 'REEL_RECEIVED_SHARE', dailyCap: 20, timezone: tz, metadata: { reelId: idStr, sharerId: user.id } }).catch((e) => logger.warn('XP received_share failed:', e));
 
             const sharer = await prisma.user.findUnique({
@@ -2704,95 +2742,16 @@ router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000
     try {
         const { limit = '11', period = 'weekly' } = req.query;
         const take = Math.min(parseInt(limit as string) || 11, 50);
+        const periodKey = period === 'monthly' ? 'monthly' : 'weekly';
 
-        // Date range powers the tiebreaker score only — ranking is XP-first.
-        const startDate = new Date();
-        if (period === 'monthly') {
-            startDate.setMonth(startDate.getMonth() - 1);
-        } else {
-            startDate.setDate(startDate.getDate() - 7);
-        }
-
-        // Fetch the top 50 by XP (oversample) so we have headroom for a
-        // tiebreaker pass without paginating the entire users table.
-        const candidates = await prisma.user.findMany({
-            where: {
-                isDeleted: false,
-                isBanned: false,
-            },
-            orderBy: [
-                { xp: 'desc' },
-                { level: 'desc' },
-            ],
-            take: 50,
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                isVerified: true,
-                level: true,
-                xp: true,
-                profileViews: true,
-                position: true,
-                countryFlag: true,
-                clubLogo: true,
-                reels: {
-                    where: {
-                        createdAt: { gte: startDate },
-                    },
-                    select: {
-                        views: true,
-                        _count: { select: { likes: true } },
-                    },
-                },
-                _count: { select: { followers: true } },
-            },
-        });
-
-        const scored = candidates.map((user: any) => {
-            const totalViews = user.reels.reduce((sum: number, reel: any) => sum + (reel.views || 0), 0);
-            const totalLikes = user.reels.reduce((sum: number, reel: any) => sum + (reel._count?.likes || 0), 0);
-            const profileViews = user.profileViews || 0;
-            const score = (totalViews * 1) + (profileViews * 2) + (totalLikes * 3);
-
-            return {
-                id: user.id,
-                username: user.username,
-                displayName: user.displayName,
-                avatar: user.avatar,
-                isVerified: user.isVerified,
-                level: user.level,
-                xp: user.xp,
-                position: user.position || 'ST',
-                countryFlag: user.countryFlag || '🇪🇬',
-                clubLogo: user.clubLogo,
-                followersCount: user._count.followers,
-                stats: { totalViews, totalLikes, profileViews },
-                score,
-            };
-        });
-
-        // XP first, engagement score as tiebreaker, then created-id stable order.
-        const topPlayers = scored
-            .sort((a: any, b: any) => {
-                if (b.xp !== a.xp) return b.xp - a.xp;
-                if (b.score !== a.score) return b.score - a.score;
-                return a.id.localeCompare(b.id);
-            })
-            .slice(0, take)
-            .map((player: any, index: any) => ({
-                ...player,
-                rank: index + 1,
-                badge: index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : null,
-            }));
+        const topPlayers = await getTopPlayers(take, periodKey);
 
         res.json({
             status: 'SUCCESS',
             data: {
                 players: topPlayers,
                 totalCount: topPlayers.length,
-                period: period as string,
+                period: periodKey,
             }
         });
     } catch (error: any) {
@@ -2962,55 +2921,14 @@ router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, 
 router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const { category, period = '3_days' } = req.body;
-        
+
         if (!category || !['views', 'shares', 'comments', 'predictions'].includes(category)) {
             sendError(req, res, ErrorCode.VALIDATION, 'Invalid category');
             return;
         }
 
-        const threeDaysAgo = new Date();
-        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const rankedUsers = await getCategoryRankingList(category as BadgeCategory, 100);
 
-        let rankedUsers: { rank: number; userId: string }[] = [];
-
-        // Get rankings based on category
-        if (category === 'views') {
-            const topReels = await prisma.reel.findMany({
-                where: { createdAt: { gte: threeDaysAgo } },
-                take: 100,
-                orderBy: { views: 'desc' },
-                select: { userId: true }
-            });
-            rankedUsers = topReels.map((r: any, i: any) => ({ rank: i + 1, userId: r.userId }));
-        } else if (category === 'shares') {
-            const topReels = await prisma.reel.findMany({
-                where: { createdAt: { gte: threeDaysAgo }, sharesCount: { gt: 0 } },
-                take: 100,
-                orderBy: { sharesCount: 'desc' },
-                select: { userId: true }
-            });
-            rankedUsers = topReels.map((r: any, i: any) => ({ rank: i + 1, userId: r.userId }));
-        } else if (category === 'comments') {
-            const topCommenters = await prisma.comment.groupBy({
-                by: ['userId'],
-                where: { createdAt: { gte: threeDaysAgo } },
-                _count: { id: true },
-                orderBy: { _count: { id: 'desc' } },
-                take: 100,
-            });
-            rankedUsers = topCommenters.map((c: any, i: any) => ({ rank: i + 1, userId: c.userId }));
-        } else if (category === 'predictions') {
-            const topPredictors = await prisma.prediction.groupBy({
-                by: ['userId'],
-                where: { isCorrect: true },
-                _count: { id: true },
-                orderBy: { _count: { id: 'desc' } },
-                take: 100,
-            });
-            rankedUsers = topPredictors.map((p: any, i: any) => ({ rank: i + 1, userId: p.userId }));
-        }
-
-        // Award badges
         const badges = [];
         for (const user of rankedUsers) {
             let badgeType: string;
@@ -3030,7 +2948,6 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
             });
             badges.push(badge);
 
-            // Create notification for top 3
             if (user.rank <= 3) {
                 const lang = await getUserLanguage(user.userId);
                 const medalKey =
@@ -3278,70 +3195,23 @@ router.get('/rankings/user-rank', requireAuth, responseCacheMiddleware({ ttl: 5 
             return;
         }
 
-        // Calculate date 3 days ago
-        const threeDaysAgo = new Date();
-        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-
-        // Get user's rank in each category
-        const [viewsRank, sharesRank, predictionsRank, commentersRank] = await Promise.all([
-            // Views rank
-            (async () => {
-                const reels = await prisma.reel.findMany({
-                    where: { createdAt: { gte: threeDaysAgo } },
-                    orderBy: { views: 'desc' },
-                    select: { userId: true, views: true }
-                });
-                const userReel = reels.find((r: any) => r.userId === user.id);
-                if (!userReel) return null;
-                const rank = reels.findIndex((r: any) => r.userId === user.id) + 1;
-                return rank <= 10 ? rank : null;
-            })(),
-            // Shares rank
-            (async () => {
-                const reels = await prisma.reel.findMany({
-                    where: { createdAt: { gte: threeDaysAgo } },
-                    orderBy: { sharesCount: 'desc' },
-                    select: { userId: true, sharesCount: true }
-                });
-                const userReel = reels.find((r: any) => r.userId === user.id);
-                if (!userReel) return null;
-                const rank = reels.findIndex((r: any) => r.userId === user.id) + 1;
-                return rank <= 10 ? rank : null;
-            })(),
-            // Predictions rank
-            (async () => {
-                const topPredictors = await prisma.prediction.groupBy({
-                    by: ['userId'],
-                    where: { isCorrect: true },
-                    _count: { id: true },
-                    orderBy: { _count: { id: 'desc' } },
-                    take: 10
-                });
-                const userIndex = topPredictors.findIndex((p: any) => p.userId === user.id);
-                return userIndex >= 0 ? userIndex + 1 : null;
-            })(),
-            // Commenters rank
-            (async () => {
-                const topCommenters = await prisma.comment.groupBy({
-                    by: ['userId'],
-                    where: { createdAt: { gte: threeDaysAgo } },
-                    _count: { id: true },
-                    orderBy: { _count: { id: 'desc' } },
-                    take: 10
-                });
-                const userIndex = topCommenters.findIndex((c: any) => c.userId === user.id);
-                return userIndex >= 0 ? userIndex + 1 : null;
-            })()
-        ]);
+        const ranks = await getUserCategoryRanks(user.id);
 
         res.json({
             status: 'SUCCESS',
             data: {
-                views: viewsRank,
-                shares: sharesRank,
-                predictions: predictionsRank,
-                comments: commentersRank,
-                hasAnyRank: !!(viewsRank || sharesRank || predictionsRank || commentersRank)
+                views: ranks.views,
+                shares: ranks.shares,
+                predictions: ranks.predictions,
+                comments: ranks.comments,
+                globalXpRank: ranks.globalXpRank,
+                hasAnyRank: !!(
+                    ranks.views ||
+                    ranks.shares ||
+                    ranks.predictions ||
+                    ranks.comments ||
+                    ranks.globalXpRank
+                ),
             }
         });
     } catch (error: any) {

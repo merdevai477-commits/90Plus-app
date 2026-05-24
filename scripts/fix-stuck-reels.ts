@@ -1,111 +1,87 @@
 /**
- * Script to fix reels stuck in PROCESSING state by querying Mux directly.
+ * Fix reels stuck in PROCESSING or incorrectly FAILED when Mux asset is ready.
+ *
+ * Usage:
+ *   npm run fix:stuck-reels
+ *   npm run fix:stuck-reels -- --dry-run
  */
-import Mux from '@mux/mux-node';
 import * as dotenv from 'dotenv';
-dotenv.config();
+import * as path from 'path';
 
-async function main() {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-    try {
-        // Find all reels stuck in PROCESSING with a muxUploadId but no playbackId
-        const stuckReels = await prisma.reel.findMany({
-            where: {
-                status: 'PROCESSING',
-                muxUploadId: { not: null },
-            },
-            select: {
-                id: true,
-                muxUploadId: true,
-                muxAssetId: true,
-                muxPlaybackId: true,
-                videoUrl: true,
-                status: true,
-                createdAt: true,
-            },
-            orderBy: { createdAt: 'desc' },
-        });
-
-        console.log(`\n📋 Found ${stuckReels.length} stuck PROCESSING reels:\n`);
-        stuckReels.forEach(r => {
-            console.log(`  ID: ${r.id}`);
-            console.log(`  UploadId: ${r.muxUploadId}`);
-            console.log(`  AssetId: ${r.muxAssetId}`);
-            console.log(`  Status: ${r.status}`);
-            console.log(`  Created: ${r.createdAt}`);
-            console.log('---');
-        });
-
-        if (stuckReels.length === 0) {
-            console.log('✅ No stuck reels found!');
-            return;
-        }
-
-        // Try to get asset info from Mux for each stuck reel
-        const muxClient = new Mux({
-            tokenId: process.env.MUX_TOKEN_ID,
-            tokenSecret: process.env.MUX_TOKEN_SECRET,
-        });
-
-        for (const reel of stuckReels) {
-            console.log(`\n🔍 Checking Mux for reel ${reel.id}...`);
-
-            try {
-                // Try to get the upload to find the linked asset
-                if (reel.muxUploadId) {
-                    const upload = await muxClient.video.uploads.retrieve(reel.muxUploadId);
-                    console.log(`  Upload status: ${upload.status}`);
-                    console.log(`  Asset ID: ${upload.asset_id}`);
-
-                    if (upload.asset_id) {
-                        // Get the asset
-                        const asset = await muxClient.video.assets.retrieve(upload.asset_id);
-                        console.log(`  Asset status: ${asset.status}`);
-                        console.log(`  Playback IDs: ${JSON.stringify(asset.playback_ids)}`);
-
-                        if (asset.status === 'ready' && asset.playback_ids && asset.playback_ids.length > 0) {
-                            const playbackId = asset.playback_ids[0].id;
-                            const videoUrl = `https://stream.mux.com/${playbackId}.m3u8`;
-                            const thumbnailUrl = `https://image.mux.com/${playbackId}/thumbnail.jpg?time=1`;
-
-                            // Update the reel!
-                            await prisma.reel.update({
-                                where: { id: reel.id },
-                                data: {
-                                    status: 'READY',
-                                    muxAssetId: upload.asset_id,
-                                    muxPlaybackId: playbackId,
-                                    videoUrl,
-                                    thumbnail: thumbnailUrl,
-                                },
-                            });
-
-                            console.log(`  ✅ FIXED! Reel ${reel.id} is now READY`);
-                            console.log(`  videoUrl: ${videoUrl}`);
-                        } else if (asset.status === 'errored') {
-                            await prisma.reel.update({
-                                where: { id: reel.id },
-                                data: { status: 'FAILED' },
-                            });
-                            console.log(`  ❌ Asset errored — marked reel as FAILED`);
-                        } else {
-                            console.log(`  ⏳ Asset still ${asset.status} — skipping`);
-                        }
-                    } else {
-                        console.log(`  ⚠️ Upload not linked to asset yet (status: ${upload.status})`);
-                    }
-                }
-            } catch (muxErr: any) {
-                console.log(`  ❌ Mux error: ${muxErr.message}`);
-            }
-        }
-
-        console.log('\n✅ Done fixing stuck reels!');
-    } finally {
-        await prisma.$disconnect();
-    }
+function maskDatabaseUrl(url: string | undefined): string {
+  if (!url) return '(not set)';
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.username ? '***@' : ''}${u.host}${u.pathname}`;
+  } catch {
+    return '(invalid DATABASE_URL)';
+  }
 }
 
-main().catch(console.error);
+async function assertDatabaseReachable(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    console.error('\n❌ DATABASE_URL is not set in .env\n');
+    process.exit(1);
+  }
+
+  console.log(`Database host: ${maskDatabaseUrl(process.env.DATABASE_URL)}\n`);
+
+  const { default: prisma } = await import('../src/lib/prisma');
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err: any) {
+    const msg = err?.message ?? String(err);
+    console.error('\n❌ Cannot reach the database from this machine.\n');
+    console.error(msg);
+    console.error(`
+This script needs a working DATABASE_URL (same as production).
+
+Common fixes:
+  1. Railway → your Postgres service → ensure it is running (not paused).
+  2. Copy a fresh "Public network" connection URL into .env as DATABASE_URL.
+  3. Add sslmode if missing: ...?sslmode=require
+  4. If the port changed after redeploy, update .env (host was trolley.proxy.rlwy.net:51741).
+  5. Or run heal on deploy: startup in main.ts already heals FAILED reels < 7 days.
+
+`);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function main() {
+  const dryRun = process.argv.includes('--dry-run');
+
+  await assertDatabaseReachable();
+
+  const { healStuckReels } = await import('../src/services/reel-mux-heal.service');
+
+  console.log(`Reel Mux heal — dryRun=${dryRun}\n`);
+
+  const summary = await healStuckReels({
+    dryRun,
+    statuses: ['PROCESSING', 'FAILED'],
+    notify: !dryRun,
+    invalidateCaches: !dryRun,
+  });
+
+  console.log('\nSummary:', summary);
+  console.log(dryRun ? '\n(dry-run — no DB writes)\n' : '\nDone.\n');
+}
+
+main()
+  .catch((err) => {
+    console.error(err?.message ?? err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    try {
+      const { default: prisma } = await import('../src/lib/prisma');
+      await prisma.$disconnect();
+    } catch {
+      /* ignore */
+    }
+  });

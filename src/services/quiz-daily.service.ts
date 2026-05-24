@@ -5,6 +5,7 @@
 import prisma from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { awardXp } from './xp.service';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { redisCacheService } from './redis-cache.service';
 import { generateDailyQuizPack, todayPackDate, packExpiresAt, packDateYmd } from './quiz-generator.service';
@@ -397,7 +398,7 @@ export async function submitQuizAnswer(
   }
 
   // Find user inside transaction to ensure atomic read-modify-write
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { clerkUserId },
       select: { id: true, coins: true, xp: true, level: true },
@@ -425,7 +426,7 @@ export async function submitQuizAnswer(
       const stats = countStats(progress, pack);
       return {
         alreadyDone: true,
-        isCorrect: existing.isCorrect,
+        isCorrect: existing.isCorrect ?? false,
         correctKey: question.correctKey,
         imageUrl:
           question.type === 'guess_player' && question.imageUrl
@@ -444,21 +445,6 @@ export async function submitQuizAnswer(
 
     const isCorrect = question.correctKey === selectedKey;
     const hintOrSkip = existing?.hintUsed === true;
-    
-    // Inline XP granting logic for QUIZ_ANSWER_CORRECT to make it atomic
-    let xpAwarded = 0;
-    let newXp = user.xp;
-    if (isCorrect && !hintOrSkip) {
-      // Very simple inline XP award logic for answer correctness
-      xpAwarded = 2; // Fixed 2 XP per correct answer
-      newXp += xpAwarded;
-      
-      await tx.user.update({
-        where: { id: user.id },
-        data: { xp: newXp }
-      });
-      // Optionally create XP event log if needed, simplified here
-    }
 
     progress.byQuestionId[questionId] = {
       status: 'answered',
@@ -467,7 +453,7 @@ export async function submitQuizAnswer(
       correctKey: question.correctKey,
       hintUsed: existing?.hintUsed,
       timeTaken,
-      xpAwarded,
+      xpAwarded: 0,
       answeredAt: new Date().toISOString(),
     };
 
@@ -487,22 +473,129 @@ export async function submitQuizAnswer(
     });
 
     return {
+      alreadyDone: false,
       isCorrect,
-      correctKey: question.correctKey,
-      imageUrl:
-        question.type === 'guess_player' && question.imageUrl
-          ? question.imageUrl
-          : undefined,
-      xpAwarded,
+      hintOrSkip,
+      userId: user.id,
+      sessionId: activeSession.id,
       coins: user.coins,
-      xp: newXp,
+      xp: user.xp,
       level: user.level,
       stats,
       completed: allDone,
       currentIndex: computeCurrentIndex(progress, pack),
       progress: progress.byQuestionId,
+      packSize: pack.length,
     };
   });
+
+  if ('alreadyDone' in result && result.alreadyDone) {
+    return {
+      isCorrect: result.isCorrect ?? false,
+      correctKey: question.correctKey,
+      imageUrl:
+        question.type === 'guess_player' && question.imageUrl
+          ? question.imageUrl
+          : undefined,
+      xpAwarded: result.xpAwarded ?? 0,
+      coins: result.coins,
+      xp: result.xp,
+      level: result.level,
+      stats: result.stats,
+      completed: result.completed,
+      currentIndex: result.currentIndex,
+      progress: result.progress,
+    };
+  }
+
+  const txResult = result as {
+    isCorrect: boolean;
+    hintOrSkip: boolean;
+    userId: string;
+    sessionId: string;
+    coins: number;
+    xp: number;
+    level: number;
+    stats: QuizSessionStats;
+    completed: boolean;
+    currentIndex: number;
+    progress: Record<string, QuestionProgress>;
+    packSize: number;
+  };
+
+  let xpAwarded = 0;
+  let newXp = txResult.xp;
+  let newLevel = txResult.level;
+
+  if (txResult.isCorrect && !txResult.hintOrSkip) {
+    const xpResult = await awardXp({
+      userId: txResult.userId,
+      action: 'QUIZ_ANSWER_CORRECT',
+      idempotencyKey: `quiz.${packDate}.${questionId}`,
+      dailyCap: 50,
+      timezone,
+    });
+    xpAwarded = xpResult.awarded;
+    newXp = xpResult.newXp;
+    newLevel = xpResult.newLevel;
+
+    if (xpAwarded > 0) {
+      await prisma.$transaction(async (tx) => {
+        const session = await tx.userDailyQuizSession.findUnique({
+          where: { id: txResult.sessionId },
+        });
+        if (!session) return;
+        const progress = parseProgress(session.progress);
+        const entry = progress.byQuestionId[questionId];
+        if (entry) {
+          entry.xpAwarded = xpAwarded;
+        }
+        const stats = countStats(progress, pack);
+        await tx.userDailyQuizSession.update({
+          where: { id: txResult.sessionId },
+          data: {
+            progress: progress as unknown as Prisma.InputJsonValue,
+            xpEarned: stats.xp,
+          },
+        });
+      });
+    }
+  }
+
+  if (txResult.completed && txResult.packSize > 0) {
+    const accuracy = txResult.stats.correct / txResult.packSize;
+    if (accuracy >= 0.8) {
+      await awardXp({
+        userId: txResult.userId,
+        action: 'QUIZ_COMPLETED_HIGH',
+        idempotencyKey: `quiz.complete.${packDate}.${language}`,
+        timezone,
+      });
+    }
+  }
+
+  const sessionAfter = await prisma.userDailyQuizSession.findUnique({
+    where: { id: txResult.sessionId },
+    select: { progress: true },
+  });
+  const finalStats = countStats(parseProgress(sessionAfter!.progress), pack);
+
+  return {
+    isCorrect: txResult.isCorrect,
+    correctKey: question.correctKey,
+    imageUrl:
+      question.type === 'guess_player' && question.imageUrl
+        ? question.imageUrl
+        : undefined,
+    xpAwarded,
+    coins: txResult.coins,
+    xp: newXp,
+    level: newLevel,
+    stats: finalStats,
+    completed: txResult.completed,
+    currentIndex: txResult.currentIndex,
+    progress: txResult.progress,
+  };
 }
 
 export async function skipQuizQuestion(

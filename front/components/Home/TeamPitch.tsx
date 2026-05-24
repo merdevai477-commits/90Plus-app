@@ -1,16 +1,22 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 // TypeScript suppression reason: This project's StyleSheet.create() returns
 // 'ViewStyle | ImageStyle | TextStyle' union (not narrowed), which causes
 // TS2769 on all View/Text style props. This is a project-wide tsconfig issue,
 // not a logic error. All component logic and prop types are correct.
 // See: https://github.com/facebook/react-native/issues/29265
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Image, LayoutChangeEvent } from 'react-native';
-import { Trophy } from 'lucide-react-native';
+import {
+    View,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    Image,
+    LayoutChangeEvent,
+    useWindowDimensions,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SCREEN_PADDING_H } from '../../constants/tokens';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -23,7 +29,38 @@ import Animated, {
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const REF_WIDTH = 390;
+
+/** Fine-tune image crop + grass overlay (fractions of pitchWrapper layout box). */
+const CALIBRATION = {
+    imageWidthPct: 300,
+    imageAspect: 1.1,
+    imageScale: 0.6,
+    /** Less negative = image shifts right on screen. */
+    imageMarginLeftPct: -121,
+    /** Nudge stadium image after scale (px at REF_WIDTH). */
+    imageNudgeX: 14,
+    imageNudgeY: 10,
+    wrapperMarginTop: -178,
+    wrapperMarginBottom: -172,
+    /** Grass rectangle on the visible wrapper — matches PNG pitch after zoom. */
+    pitchLeft: 0.158,
+    pitchRight: 0.842,
+    pitchTop: 0.308,
+    pitchBottom: 0.688,
+    /** Extra px nudge for player overlay only. */
+    overlayNudgeX: 6,
+    overlayNudgeY: 4,
+} as const;
+
+function displayLabel(player: PitchPlayerItem): string {
+    const u = player.username?.trim();
+    if (u) return u.length > 10 ? `${u.slice(0, 9)}…` : u;
+    const last = (player.name || '').split(' ').slice(-1)[0];
+    return last || player.short || '?';
+}
+
+// ظ¤ظ¤ظ¤ Types ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 export type PitchPlayerItem = {
     name: string;
     short: string;
@@ -34,29 +71,24 @@ export type PitchPlayerItem = {
     username?: string;
 };
 
-// ─── Fixed 4-3-3 formation layout ────────────────────────────────────────────
-// x = 0→100 left (GK) to right (ATT)
-// y = 0→100 top to bottom
+// ظ¤ظ¤ظ¤ Fixed 4-3-3 formation layout ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
+// x = 0ظْ100 left (GK) to right (ATT)
+// y = 0ظْ100 top to bottom
 const FORMATION_433: Array<{ x: number; y: number; label: string }> = [
-    // GK
-    { x: 1,  y: 51, label: 'GK' },
-    // DEF (4)
-    { x: 28, y: 20, label: 'RB' },
-    { x: 18, y: 38, label: 'CB' },
-    { x: 18, y: 63, label: 'CB' },
-    { x: 28, y: 79, label: 'LB' },
-    // MID (3)
-    { x: 59, y: 36, label: 'CM' },
-    { x: 42, y: 50, label: 'CM' },
-    { x: 59, y: 67, label: 'CM' },
-    // ATT (3)
-    { x: 86, y: 25, label: 'RW' },
-    { x: 96, y: 50, label: 'ST' },
-    { x: 89, y: 75, label: 'LW' },
+    { x: -22,  y: 40, label: 'GK' },
+    { x: 6, y: 16, label: 'RB' },
+    { x: -2, y: 29, label: 'CB' },
+    { x: -2, y: 46, label: 'CB' },
+    { x: 26, y: 66, label: 'LB' },
+    { x: 54, y: 35, label: 'CM' },
+    { x: 44, y: 50, label: 'CM' },
+    { x: 54, y: 65, label: 'CM' },
+    { x: 76, y: 23, label: 'RW' },
+    { x: 86, y: 50, label: 'ST' },
+    { x: 76, y: 77, label: 'LW' },
 ];
-
 // Maps each slot label to the position strings that belong to it.
-// Order matters: first match wins. Fallback chains go from specific → generic.
+// Order matters: first match wins. Fallback chains go from specific ظْ generic.
 const SLOT_POSITION_MAP: Record<string, string[]> = {
     GK:  ['GK'],
     RB:  ['RB', 'RWB', 'DEF'],
@@ -72,7 +104,7 @@ const SLOT_POSITION_MAP: Record<string, string[]> = {
  * Assigns each player to the best-matching 4-3-3 slot based on their position.
  * Falls back to sequential assignment for unmatched players.
  */
-function buildPitchPositions(players: PitchPlayerItem[]): PitchPlayerItem[] {
+function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | null)[] {
     const slots = [...FORMATION_433]; // 11 slots
     const result: (PitchPlayerItem | null)[] = new Array(slots.length).fill(null);
     const usedSlots = new Set<number>();
@@ -106,7 +138,7 @@ function buildPitchPositions(players: PitchPlayerItem[]): PitchPlayerItem[] {
         }
     }
 
-    return result.filter(Boolean) as PitchPlayerItem[];
+    return result;
 }
 
 export function detectFormation(_players: PitchPlayerItem[]): string {
@@ -115,7 +147,7 @@ export function detectFormation(_players: PitchPlayerItem[]): string {
 
 const SKELETON_POSITIONS = FORMATION_433.map(s => ({ x: s.x, y: s.y }));
 
-// ─── Player node ──────────────────────────────────────────────────────────────
+// ظ¤ظ¤ظ¤ Player node ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 function PlayerNode({
     player,
     index,
@@ -165,7 +197,7 @@ function PlayerNode({
                     </View>
                     <View style={styles.nameBadge}>
                         <Text style={styles.nameText} numberOfLines={1}>
-                            {(player.name || '').split(' ').slice(-1)[0] || player.name}
+                            {displayLabel(player)}
                         </Text>
                     </View>
                 </TouchableOpacity>
@@ -174,7 +206,7 @@ function PlayerNode({
     );
 }
 
-// ─── Skeleton node ────────────────────────────────────────────────────────────
+// ظ¤ظ¤ظ¤ Skeleton node ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 function SkeletonPlayerNode({
     x, y, index, containerW, containerH,
 }: { x: number; y: number; index: number; containerW: number; containerH: number }) {
@@ -202,7 +234,7 @@ function SkeletonPlayerNode({
     );
 }
 
-// ─── Empty node ───────────────────────────────────────────────────────────────
+// ظ¤ظ¤ظ¤ Empty node ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 function EmptyPlayerNode({
     x, y, index, containerW, containerH,
 }: { x: number; y: number; index: number; containerW: number; containerH: number }) {
@@ -236,7 +268,7 @@ function EmptyPlayerNode({
     );
 }
 
-// ─── Public component ─────────────────────────────────────────────────────────
+// ظ¤ظ¤ظ¤ Public component ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 interface TeamPitchProps {
     isLoading?: boolean;
     hasLineup?: boolean;
@@ -247,14 +279,14 @@ interface TeamPitchProps {
 
 export function TeamPitch({
     isLoading = false,
-    hasLineup,
     players: playersProp,
     onPlayerPress,
     onDetailsPress,
 }: TeamPitchProps) {
     const router = useRouter();
+    const { width: screenW } = useWindowDimensions();
+    const uiScale = screenW / REF_WIDTH;
 
-    // Dimensions of the outer wrapper (full image area)
     const [wrapperSize, setWrapperSize] = useState({ w: 0, h: 0 });
 
     const onWrapperLayout = useCallback((e: LayoutChangeEvent) => {
@@ -262,45 +294,58 @@ export function TeamPitch({
         setWrapperSize({ w: width, h: height });
     }, []);
 
-    // ── Pitch crop factors ────────────────────────────────────────────────────
-    // The stadium image has stands/sky around the green pitch.
-    // These factors define where the actual grass starts/ends as a fraction
-    // of the full image dimensions. Tweak if the pitch drifts.
-    //
-    //   pitchLeft   = 10% from left edge of image
-    //   pitchRight  = 90% from left edge  (so pitch width = 80% of image)
-    //   pitchTop    = 33% from top edge
-    //   pitchBottom = 67% from top edge   (so pitch height = 34% of image)
-    //
-    const PITCH_LEFT   = 0.10;
-    const PITCH_RIGHT  = 0.90;
-    const PITCH_TOP    = 0.33;
-    const PITCH_BOTTOM = 0.67;
-
-    const pitchW = wrapperSize.w * (PITCH_RIGHT  - PITCH_LEFT);
-    const pitchH = wrapperSize.h * (PITCH_BOTTOM - PITCH_TOP);
-    const pitchX = wrapperSize.w * PITCH_LEFT;
-    const pitchY = wrapperSize.h * PITCH_TOP;
-
-    const placedPlayers = useMemo<PitchPlayerItem[]>(
+    const pitchW = wrapperSize.w * (CALIBRATION.pitchRight - CALIBRATION.pitchLeft);
+    const pitchH = wrapperSize.h * (CALIBRATION.pitchBottom - CALIBRATION.pitchTop);
+    const pitchX =
+        wrapperSize.w * CALIBRATION.pitchLeft +
+        (CALIBRATION.imageNudgeX + CALIBRATION.overlayNudgeX) * uiScale;
+    const pitchY =
+        wrapperSize.h * CALIBRATION.pitchTop +
+        (CALIBRATION.imageNudgeY + CALIBRATION.overlayNudgeY) * uiScale;
+    const placedPlayers = useMemo<(PitchPlayerItem | null)[]>(
         () => (playersProp && playersProp.length > 0 ? buildPitchPositions(playersProp) : []),
         [playersProp],
     );
 
-    const formation = useMemo<string | undefined>(
-        () => detectFormation(placedPlayers),
+    const filledPlayers = useMemo(
+        () => placedPlayers.filter((p): p is PitchPlayerItem => p != null),
         [placedPlayers],
     );
 
-    const showSkeleton = isLoading && placedPlayers.length === 0;
-    const hasData = hasLineup ?? placedPlayers.length > 0;
-    const showData = !showSkeleton && hasData && placedPlayers.length > 0;
+    const formation = useMemo<string | undefined>(
+        () => detectFormation(filledPlayers),
+        [filledPlayers],
+    );
+
+    const showSkeleton = isLoading && filledPlayers.length === 0;
+
+    const wrapperStyle = useMemo(
+        () => ({
+            marginTop: CALIBRATION.wrapperMarginTop * uiScale,
+            marginBottom: CALIBRATION.wrapperMarginBottom * uiScale,
+        }),
+        [uiScale],
+    );
+
+    const pitchContainerStyle = useMemo(
+        () => ({
+            width: `${CALIBRATION.imageWidthPct}%`,
+            aspectRatio: CALIBRATION.imageAspect,
+            marginLeft: `${CALIBRATION.imageMarginLeftPct + (REF_WIDTH - screenW) * 0.04}%`,
+            transform: [
+                { scale: CALIBRATION.imageScale },
+                { translateX: CALIBRATION.imageNudgeX * uiScale },
+                { translateY: CALIBRATION.imageNudgeY * uiScale },
+            ],
+        }),
+        [screenW, uiScale],
+    );
 
     const ready = wrapperSize.w > 0;
 
     return (
         <View style={styles.container}>
-            <View style={{ paddingHorizontal: SCREEN_PADDING_H, marginBottom: 0 }}>
+            <View style={styles.sectionHeaderWrap}>
                 <SectionHeader
                     subtitle="Formation"
                     title="Team of the month"
@@ -310,14 +355,14 @@ export function TeamPitch({
                 />
             </View>
 
-            {/* Outer clip — hides left/right overflow from the wide image */}
+            {/* Outer clip ظ¤ hides left/right overflow from the wide image */}
             <View style={styles.pitchOuterClip}>
                 {/* pitchWrapper: the image is rendered here at 300% width + scaled down.
                     We measure this wrapper so we know the real pixel dimensions. */}
-                <View style={styles.pitchWrapper} onLayout={onWrapperLayout}>
+                <View style={[styles.pitchWrapper, wrapperStyle]} onLayout={onWrapperLayout}>
 
                     {/* Stadium image */}
-                    <View style={styles.pitchContainer}>
+                    <View style={[styles.pitchContainer, pitchContainerStyle]}>
                         <Image
                             source={require('../../assets/images/team of the month.png')}
                             resizeMode="contain"
@@ -337,7 +382,7 @@ export function TeamPitch({
                         />
                     </View>
 
-                    {/* Players overlay — positioned absolutely over the grass area */}
+                    {/* Players overlay ظ¤ positioned absolutely over the grass area */}
                     {ready && !showSkeleton && (
                         <View
                             style={[
@@ -398,28 +443,25 @@ export function TeamPitch({
     );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ظ¤ظ¤ظ¤ Styles ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 const styles = StyleSheet.create({
     container: { paddingBottom: 0 },
+
+    sectionHeaderWrap: {
+        zIndex: 20,
+        position: 'relative',
+    },
 
     pitchOuterClip: {
         overflow: 'hidden',
     },
 
-    // Negative margins pull the image up/down so the grass fills the visible area.
-    // The image is 300% wide + scale(0.6) so it looks full-width on screen.
     pitchWrapper: {
-        marginTop: -193,
-        marginBottom: -186,
         position: 'relative',
     },
 
     pitchContainer: {
-        width: '300%',
-        aspectRatio: 1.1,
         overflow: 'hidden',
-        transform: [{ scale: 0.6 }],
-        marginLeft: '-129%',
     },
 
     pitchShadowTop: {

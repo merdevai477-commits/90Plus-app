@@ -1185,14 +1185,27 @@ export default function ProfileScreen() {
 
   // Handle upload video function
   const handleUploadVideo = async (newVideo: any) => {
-    if (!cooldowns) {
-      await refreshCache(false);
+    // Cooldowns load in the background after profile paint — fetch explicitly
+    // so upload is not blocked by a stale cache missing cooldowns.
+    let reelCooldowns = cooldowns;
+    if (!reelCooldowns) {
+      try {
+        const token = await getToken();
+        if (token) {
+          reelCooldowns = (await ProfileService.getCooldowns(token)) ?? null;
+        }
+      } catch (err) {
+        logger.warn('[Profile] Failed to fetch cooldowns before reel upload:', err);
+      }
+    }
+    if (!reelCooldowns) {
+      logger.warn('[ReelUpload] Cooldowns unavailable after fetch');
       toastManager.showInfo(t.common.loading, t.profile.loadingUploadInfo);
       return;
     }
 
     // UX Fix 3: Show cooldown block modal BEFORE opening upload modal
-    if (!cooldowns.reelUpload.canChange) {
+    if (!reelCooldowns.reelUpload.canChange) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setCooldownBlockType('reel');
       setCooldownBlockVisible(true);
@@ -1274,6 +1287,10 @@ export default function ProfileScreen() {
 
       setReelUploadUi({ active: true, progress: 0, phaseLabel: t.profile.preparingUpload });
       await reelUploadNotification.begin();
+
+      logger.info('[ReelUpload] Starting POST to /api/upload/reel...', {
+        uri: newVideo.uri?.slice(0, 80),
+      });
 
       const uploadResult = await StorageService.uploadReel(
         token,

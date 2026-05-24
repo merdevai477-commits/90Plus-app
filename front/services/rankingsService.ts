@@ -113,6 +113,7 @@ export interface RankedPlayer {
   isVerified: boolean;
   level: number;
   xp: number;
+  lifetimeXp?: number;
   position: string;
   countryFlag: string;
   clubLogo: string | null;

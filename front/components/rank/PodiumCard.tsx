@@ -27,6 +27,8 @@ export interface PodiumCardProps {
   heightCm?: number | string;
   weightKg?: number | string;
   foot?: string;
+  /** When true, render a neutral placeholder card (no fake stats). */
+  isPlaceholder?: boolean;
 }
 
 const PodiumCard: React.FC<PodiumCardProps> = ({
@@ -40,6 +42,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
   heightCm,
   weightKg,
   foot,
+  isPlaceholder = false,
 }) => {
   const isFirst = rank === 1;
   const cardType: 'gold' | 'silver' | 'bronze' =
@@ -48,14 +51,6 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
   const playerImage: ImageSourcePropType =
     typeof avatar === 'string' ? { uri: avatar } : avatar;
 
-  const fallbackPosition = isFirst ? 'ST' : rank === 2 ? 'LW' : 'RW';
-  const fallbackFlag = isFirst ? '🇪🇬' : rank === 2 ? '🇵🇹' : '🇦🇷';
-  const fallbackAge = isFirst ? 31 : rank === 2 ? 39 : 36;
-  const fallbackHeight = isFirst ? 175 : 187;
-  const fallbackWeight = isFirst ? 71 : 83;
-  const fallbackFoot = isFirst ? 'Left' : 'Right';
-
-  // Used only for accessibility; visible label is the explicit `xp` prop.
   const { t } = useTranslation();
 
   return (
@@ -65,12 +60,12 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
         playerImage={playerImage}
         cardType={cardType}
         scale={isFirst ? 0.42 : 0.33}
-        position={position ?? fallbackPosition}
-        countryFlag={countryFlag ?? fallbackFlag}
-        age={age ?? fallbackAge}
-        height={heightCm ?? fallbackHeight}
-        weight={weightKg ?? fallbackWeight}
-        foot={foot ?? fallbackFoot}
+        position={isPlaceholder ? '—' : (position ?? 'ST')}
+        countryFlag={isPlaceholder ? '🏳️' : (countryFlag ?? '🏳️')}
+        age={isPlaceholder ? '—' : (age ?? '—')}
+        height={isPlaceholder ? '—' : (heightCm ?? '—')}
+        weight={isPlaceholder ? '—' : (weightKg ?? '—')}
+        foot={isPlaceholder ? '—' : (foot ?? '—')}
       />
       <Text style={s.podXpLabel} accessibilityLabel={`${t.rank.xpSuffix}: ${xp}`}>
         {xp}

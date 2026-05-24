@@ -23,6 +23,7 @@ import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
 import * as muxService from '../services/mux.service';
+import { healReelFromMux } from '../services/reel-mux-heal.service';
 import multer from 'multer';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
@@ -875,6 +876,11 @@ router.post(
 // ─── GET /api/upload/reels/:id/status ────────────────────────────────────────
 
 router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  // Expected flow after upload fixes:
+  // 1. Client POST /upload/reel → PROCESSING + reelId
+  // 2. Mux webhook or self-heal → READY within ~60s
+  // 3. This endpoint returns READY + stream.mux.com videoUrl
+  // 4. No new files under reels/ in R2 (Mux-only pipeline)
   try {
     const clerkUserId = req.auth?.userId;
     if (!clerkUserId) {
@@ -921,123 +927,27 @@ router.get('/reels/:id/status', requireAuth, async (req: Request, res: Response)
 
     if (processingTooLong) {
       try {
-        let asset: Awaited<ReturnType<typeof muxService.getAsset>> | null = null;
-        if (reel.muxAssetId) {
-          asset = await muxService.getAsset(reel.muxAssetId);
-        } else if (reel.muxUploadId) {
-          asset = await muxService.getUploadAsset(reel.muxUploadId);
-        }
-
-        if (asset?.status === 'ready') {
-          const publicPlayback = asset.playbackIds?.find((p) => p.policy === 'public') ?? asset.playbackIds?.[0];
-          if (publicPlayback) {
-            const playbackId = publicPlayback.id;
-            const newVideoUrl = muxService.getPlaybackUrl(playbackId);
-            const newThumb = reel.thumbnail || muxService.getThumbnailUrl(playbackId);
-
-            reel = await prisma.reel.update({
-              where: { id: reel.id },
-              data: {
-                muxAssetId: asset.id,
-                muxPlaybackId: playbackId,
-                videoUrl: newVideoUrl,
-                thumbnail: newThumb,
-                status: 'READY',
-              },
-              select: {
-                id: true,
-                status: true,
-                videoUrl: true,
-                processedVideoUrl: true,
-                thumbnail: true,
-                muxUploadId: true,
-                muxAssetId: true,
-                muxPlaybackId: true,
-                userId: true,
-                createdAt: true,
-              },
-            });
-
-            // Invalidate the feed cache so the new READY reel appears immediately.
-            try {
-              const { clearReelsFeedCache } = await import('./reels.routes');
-              clearReelsFeedCache();
-            } catch { /* non-critical */ }
-
-            // ✅ Webhook-equivalent: also bust Redis feed cache + send the
-            // "video ready" notification, since this code path runs only when
-            // the webhook did not fire (or has not arrived yet). Without this
-            // the user never gets a notification when self-heal recovers.
-            try {
-              const { getRedisClient } = await import('../lib/redis');
-              const redis = getRedisClient();
-              if (redis) {
-                let cursor = '0';
-                const keysToDelete: string[] = [];
-                do {
-                  const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'reels:feed:*', 'COUNT', 100);
-                  cursor = nextCursor;
-                  keysToDelete.push(...keys);
-                } while (cursor !== '0');
-                if (keysToDelete.length > 0) {
-                  await redis.del(...keysToDelete);
-                }
-              }
-            } catch { /* non-critical */ }
-
-            try {
-              const { NotificationService } = await import('../services/notification.service');
-              const lang = await getUserLanguage(reel.userId);
-              await NotificationService.createNotification({
-                userId: reel.userId,
-                title: renderPushTemplate('videoReadyTitle', lang),
-                message: renderPushTemplate('videoReadyBody', lang),
-                type: 'VIDEO_PROCESSED',
-                data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'READY', muxPlaybackId: playbackId },
-              });
-            } catch (notifyErr: any) {
-              logger.warn('[upload/status] Self-heal notification failed:', notifyErr?.message);
-            }
-
-            logger.info(`[upload/status] Self-healed reel ${reel.id} → READY via poll fallback`);
-          }
-        } else if (asset?.status === 'errored') {
-          reel = await prisma.reel.update({
-            where: { id: reel.id },
-            data: { status: 'FAILED' },
-            select: {
-              id: true,
-              status: true,
-              videoUrl: true,
-              processedVideoUrl: true,
-              thumbnail: true,
-              muxUploadId: true,
-              muxAssetId: true,
-              muxPlaybackId: true,
-              userId: true,
-              createdAt: true,
-            },
-          });
-          logger.warn(`[upload/status] Reel ${reel.id} marked FAILED via poll fallback`);
-
-          // ✅ Notify uploader that processing failed (webhook-equivalent)
-          try {
-            const { NotificationService } = await import('../services/notification.service');
-            const lang = await getUserLanguage(reel.userId);
-            await NotificationService.createNotification({
-              userId: reel.userId,
-              title: renderPushTemplate('videoFailedTitle', lang),
-              message: renderPushTemplate('videoFailedBody', lang),
-              type: 'VIDEO_PROCESSED',
-              data: { type: 'VIDEO_PROCESSED', reelId: reel.id, status: 'FAILED' },
-            });
-          } catch (notifyErr: any) {
-            logger.warn('[upload/status] Self-heal failure notification failed:', notifyErr?.message);
-          }
+        const healResult = await healReelFromMux(reel, { notify: true, invalidateCaches: true });
+        if (healResult.outcome === 'ready' || healResult.outcome === 'failed') {
+          reel = healResult.reel;
+          logger.info(
+            `[upload/status] Self-healed reel ${reel.id} → ${reel.status} via poll fallback`,
+          );
         }
       } catch (pollErr: any) {
         logger.warn(`[upload/status] Poll fallback failed for reel ${reelId}: ${pollErr?.message}`);
-        // Non-fatal — fall through and return whatever state we have.
+      }
+    }
+
+    if (reel.status === 'FAILED' && reel.muxUploadId) {
+      logger.info('[ReelStatus] Self-heal check for reelId:', reelId);
+      try {
+        const healResult = await healReelFromMux(reel, { notify: true, invalidateCaches: true });
+        if (healResult.outcome === 'ready' || healResult.outcome === 'failed') {
+          reel = healResult.reel;
+        }
+      } catch (failedHealErr: any) {
+        logger.warn(`[ReelStatus] FAILED self-heal failed for reel ${reelId}:`, failedHealErr?.message);
       }
     }
 

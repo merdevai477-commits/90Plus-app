@@ -142,14 +142,15 @@ export default function HomeScreen() {
             if (response.ok) {
                 const data = await response.json();
                 if (data.status === 'SUCCESS' && data.data) {
-                    const { views, shares, predictions, comments } = data.data as {
+                    const { views, shares, predictions, comments, globalXpRank } = data.data as {
                         views: number | null;
                         shares: number | null;
                         predictions: number | null;
                         comments: number | null;
+                        globalXpRank: number | null;
                     };
                     // Pick the best (lowest) rank across all categories, or null if none.
-                    const candidates = [views, shares, predictions, comments].filter(
+                    const candidates = [views, shares, predictions, comments, globalXpRank].filter(
                         (v): v is number => v !== null && v !== undefined,
                     );
                     const bestRank = candidates.length > 0 ? Math.min(...candidates) : null;

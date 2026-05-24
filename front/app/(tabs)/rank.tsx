@@ -19,12 +19,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Trophy } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   I18nManager,
   ImageSourcePropType,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -43,7 +44,7 @@ import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkel
 import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
-import { useTopPlayers, type TopPlayer } from '../../hooks/useTopPlayers';
+import { useTopPlayers, type TopPlayer, type TopPlayersPeriod } from '../../hooks/useTopPlayers';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 
@@ -133,11 +134,38 @@ export default function RankScreen() {
   const { t } = useTranslation();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSoonVisible, setIsSoonVisible] = useState(false);
+  const [period, setPeriod] = useState<TopPlayersPeriod>('weekly');
 
-  const { players, isLoading, isError } = useTopPlayers({
+  const { players, isLoading, isError, refetch } = useTopPlayers({
     limit: 11,
-    period: 'weekly',
+    period,
   });
+
+  const handleShareApp = useCallback(async () => {
+    try {
+      await Share.share({
+        message: t.rank.shareAppMessage,
+        title: '90Plus',
+      });
+    } catch {
+      // User cancelled
+    }
+  }, [t]);
+
+  const handleCompetitionPress = useCallback(
+    (id: string) => {
+      if (id === '1') {
+        router.push({ pathname: '/matches', params: { filter: 'Predictions' } } as never);
+      } else if (id === '3') {
+        router.push('/quiz' as never);
+      } else if (id === '4') {
+        router.push('/(tabs)/reels' as never);
+      } else if (id === '2') {
+        void handleShareApp();
+      }
+    },
+    [router, handleShareApp],
+  );
 
   const competitions = useMemo(
     () => [
@@ -221,6 +249,7 @@ export default function RankScreen() {
   const titleRowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
   const secHeadDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
   const viewAllDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
+  const chevronStyle = I18nManager.isRTL ? { transform: [{ scaleX: -1 as const }] } : undefined;
 
   return (
     <View style={s.root}>
@@ -281,16 +310,7 @@ export default function RankScreen() {
             <CompCard
               key={c.id}
               {...c}
-              onPress={() => {
-                if (c.id === '1') {
-                  router.push({
-                    pathname: '/matches',
-                    params: { filter: 'Predictions' },
-                  } as never);
-                } else if (c.id === '3') {
-                  router.push('/quiz' as never);
-                }
-              }}
+              onPress={() => handleCompetitionPress(c.id)}
             />
           ))}
         </ScrollView>
@@ -315,6 +335,21 @@ export default function RankScreen() {
 
           <View style={[s.secHead, { flexDirection: secHeadDirection }]}>
             <Text style={s.secTitle}>{t.rank.topPlayers}</Text>
+            <View style={[s.periodToggle, { flexDirection: titleRowDirection }]}>
+              {(['weekly', 'monthly'] as const).map(p => (
+                <Pressable
+                  key={p}
+                  onPress={() => setPeriod(p)}
+                  style={[s.periodBtn, period === p && s.periodBtnActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: period === p }}
+                >
+                  <Text style={[s.periodBtnTxt, period === p && s.periodBtnTxtActive]}>
+                    {p === 'weekly' ? t.rank.periodWeekly : t.rank.periodMonthly}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
 
           {isLoading ? (
@@ -326,11 +361,15 @@ export default function RankScreen() {
               </View>
             </>
           ) : isError ? (
-            // Quietly show an empty leaderboard. The list refetches on tab
-            // focus / mount so a manual retry button would just be noise —
-            // the user explicitly asked for it to be removed.
             <View style={s.errorCard}>
               <Text style={s.errorText}>{t.rank.errors.loadFailed}</Text>
+              <Pressable
+                style={({ pressed }) => [s.retryBtn, pressed && { opacity: 0.85 }]}
+                onPress={() => void refetch()}
+                accessibilityRole="button"
+              >
+                <Text style={s.retryTxt}>{t.rank.errors.retry}</Text>
+              </Pressable>
             </View>
           ) : (
             <>
@@ -355,6 +394,7 @@ export default function RankScreen() {
                       avatar={p.avatar}
                       countryFlag={p.countryFlag}
                       position={p.position}
+                      isPlaceholder={p.isPlaceholder}
                     />
                   </View>
                 ))}
@@ -420,7 +460,7 @@ export default function RankScreen() {
               end={{ x: 1, y: 0 }}
             >
               <Text style={s.viewAllLeaderboardTxt}>{t.rank.viewAll}</Text>
-              <ChevronRight size={16} color={ACCENT} />
+              <ChevronRight size={16} color={ACCENT} style={chevronStyle} />
             </LinearGradient>
           </Pressable>
         </View>
@@ -500,6 +540,29 @@ const s = StyleSheet.create({
   },
   secTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
+  periodToggle: {
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    padding: 3,
+  },
+  periodBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  periodBtnActive: {
+    backgroundColor: 'rgba(168,85,247,0.35)',
+  },
+  periodBtnTxt: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  periodBtnTxtActive: {
+    color: '#fff',
+  },
+
   hScroll: { paddingHorizontal: 16, gap: 12 },
 
   bottomContentGroup: {
@@ -572,6 +635,16 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center' },
+  retryBtn: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(168,85,247,0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.4)',
+  },
+  retryTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   viewAllLeaderboardBtn: {
     marginHorizontal: 16,
