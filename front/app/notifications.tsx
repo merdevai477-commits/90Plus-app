@@ -31,6 +31,12 @@ import {
     Gift,
     Clock,
     ChevronRight,
+    Flag,
+    UserCircle,
+    Bot,
+    TrendingUp,
+    Award,
+    Video,
 } from 'lucide-react-native';
 import BottomNav from './(tabs)/BottomNav';
 import {
@@ -57,7 +63,23 @@ import { toastManager } from '../services/toastManager';
 import { useTranslation } from '../src/i18n';
 import LuckyWheelModal from '../components/common/LuckyWheelModal';
 
-type Kind = 'match' | 'quiz' | 'social' | 'system' | 'like' | 'comment' | 'mention' | 'moderation';
+type Kind =
+    | 'match'
+    | 'quiz'
+    | 'social'
+    | 'system'
+    | 'like'
+    | 'comment'
+    | 'mention'
+    | 'moderation'
+    | 'report'
+    | 'avatar'
+    | 'ai'
+    | 'leaderboard'
+    | 'levelup'
+    | 'video'
+    | 'gift'
+    | 'lucky';
 
 const KIND_META: Record<Kind, { Icon: LucideIcon; color: string }> = {
     match: { Icon: Trophy, color: GOLD_PRIMARY },
@@ -68,17 +90,34 @@ const KIND_META: Record<Kind, { Icon: LucideIcon; color: string }> = {
     comment: { Icon: MessageCircle, color: BLUE_PRIMARY },
     mention: { Icon: AtSign, color: PURPLE_SOFT },
     moderation: { Icon: Shield, color: '#fcd34d' },
+    report: { Icon: Flag, color: '#fb923c' },
+    avatar: { Icon: UserCircle, color: BLUE_PRIMARY },
+    ai: { Icon: Bot, color: PURPLE_PRIMARY },
+    leaderboard: { Icon: TrendingUp, color: GOLD_PRIMARY },
+    levelup: { Icon: Award, color: '#22c55e' },
+    video: { Icon: Video, color: PURPLE_SOFT },
+    gift: { Icon: Gift, color: '#ec4899' },
+    lucky: { Icon: Sparkles, color: GOLD_PRIMARY },
 };
 
 function mapTypeToKind(type: SocialNotification['type']): Kind {
     switch (type) {
         case 'MATCH_UPDATE':
         case 'MATCH_FAVORITE':
+        case 'MATCH_GOAL':
+        case 'MATCH_START':
+        case 'MATCH_END':
+        case 'MATCH_HALFTIME':
+        case 'MATCH_YELLOW_CARD':
+        case 'MATCH_RED_CARD':
         case 'PREDICTION_RESULT':
             return 'match';
         case 'FOLLOW':
+        case 'FOLLOW_ACTIVITY':
+        case 'SHARE':
             return 'social';
         case 'LIKE':
+        case 'COMMENT_LIKE':
             return 'like';
         case 'COMMENT':
         case 'REPLY':
@@ -87,6 +126,31 @@ function mapTypeToKind(type: SocialNotification['type']): Kind {
             return 'mention';
         case 'MODERATION_ALERT':
             return 'moderation';
+        case 'REPORT_SUBMITTED':
+        case 'REPORT_RESOLVED':
+            return 'report';
+        case 'AVATAR_UPLOAD':
+            return 'avatar';
+        case 'AI_CHECKIN':
+            return 'ai';
+        case 'LEADERBOARD_TOP10':
+        case 'LEADERBOARD_TOP3':
+            return 'leaderboard';
+        case 'LEVEL_UP':
+            return 'levelup';
+        case 'VIDEO_PROCESSED':
+            return 'video';
+        case 'GIFT':
+        case 'COIN_MILESTONE':
+        case 'MILESTONE':
+        case 'ACHIEVEMENT':
+        case 'QUIZ_REWARD':
+            return 'gift';
+        case 'LUCKY_WHEEL':
+        case 'LUCKY_WHEEL_RENEWED':
+            return 'lucky';
+        case 'DAILY_QUIZ_RENEWED':
+            return 'quiz';
         default:
             return 'system';
     }

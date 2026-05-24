@@ -4,6 +4,8 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { strictLimiter } from '../middleware/rateLimit.middleware';
 import { ErrorCode, sendError } from '../constants/errors';
+import { notifyUser } from '../services/notify.service';
+import { NotificationType } from '../services/notification.service';
 
 const router = Router();
 
@@ -67,7 +69,7 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
       return;
     }
 
-    await prisma.report.create({
+    const createdReport = await prisma.report.create({
       data: {
         reporterId: user.id,
         reportedReelId: reelIdStr,
@@ -76,9 +78,26 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
         reason: additionalInfo || reason,
         status: 'PENDING',
       },
+      select: { id: true },
     });
 
     logger.info(`User ${user.id} reported reel ${reelIdStr} for: ${reason}`);
+
+    // Acknowledge the reporter — inbox + push + WebSocket, localized.
+    // Idempotency is keyed off the report id so a retried POST cannot double-notify.
+    notifyUser({
+      userId: user.id,
+      type: NotificationType.REPORT_SUBMITTED,
+      titleKey: 'reportSubmittedTitle',
+      bodyKey: 'reportSubmittedBody',
+      data: {
+        screen: '/(tabs)/reels',
+        reportId: createdReport.id,
+        reportedReelId: reelIdStr,
+        contentType: 'reel',
+      },
+      idempotencyKey: `report-submitted:${createdReport.id}`,
+    }).catch((err) => logger.warn('[report/reel] reporter notify failed:', err?.message));
 
     res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {
@@ -139,7 +158,7 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
       return;
     }
 
-    await prisma.report.create({
+    const createdReport = await prisma.report.create({
       data: {
         reporterId: user.id,
         reportedCommentId: commentIdStr,
@@ -148,9 +167,24 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
         reason: additionalInfo || reason,
         status: 'PENDING',
       },
+      select: { id: true },
     });
 
     logger.info(`User ${user.id} reported comment ${commentIdStr} for: ${reason}`);
+
+    notifyUser({
+      userId: user.id,
+      type: NotificationType.REPORT_SUBMITTED,
+      titleKey: 'reportCommentSubmittedTitle',
+      bodyKey: 'reportCommentSubmittedBody',
+      data: {
+        screen: '/(tabs)/reels',
+        reportId: createdReport.id,
+        reportedCommentId: commentIdStr,
+        contentType: 'comment',
+      },
+      idempotencyKey: `report-submitted:${createdReport.id}`,
+    }).catch((err) => logger.warn('[report/comment] reporter notify failed:', err?.message));
 
     res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {
@@ -217,7 +251,7 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
 
     const reportType = reasonToType[reason] || 'OTHER';
 
-    await prisma.report.create({
+    const createdUserReport = await prisma.report.create({
       data: {
         reporterId: user.id,
         reportedUserId: targetUserId,
@@ -225,9 +259,24 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
         reason: (additionalInfo || reason).trim(),
         status: 'PENDING',
       },
+      select: { id: true },
     });
 
     logger.info(`User ${user.id} reported user ${targetUserId} for: ${reason}`);
+
+    notifyUser({
+      userId: user.id,
+      type: NotificationType.REPORT_SUBMITTED,
+      titleKey: 'reportSubmittedTitle',
+      bodyKey: 'reportSubmittedBody',
+      data: {
+        screen: '/(tabs)/profile',
+        reportId: createdUserReport.id,
+        reportedUserId: targetUserId,
+        contentType: 'user',
+      },
+      idempotencyKey: `report-submitted:${createdUserReport.id}`,
+    }).catch((err) => logger.warn('[report/user] reporter notify failed:', err?.message));
 
     res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {

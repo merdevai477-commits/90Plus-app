@@ -3,8 +3,8 @@ import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { bullCreateClient } from '../lib/bull-redis';
 import { logger } from '../utils/logger';
-import PushNotificationService from './push-notification.service';
-import { renderPushTemplate, readLanguageFromSettings } from './push-templates.service';
+import { notifyUsers } from './notify.service';
+import { NotificationType } from './notification.service';
 
 const BATCH_SIZE = 100;
 
@@ -81,31 +81,24 @@ function getLuckyWheelQueue(): Queue<LuckyWheelBatchJob> | null {
         const { userIds, date } = job.data;
         logger.info(`🎡 Processing lucky wheel batch: ${userIds.length} users for ${date}`);
 
-        const users = await prisma.user.findMany({
-            where: {
-                id: { in: userIds },
-                expoPushToken: { not: null },
-                pushNotificationsConsent: true,
-            },
-            select: { id: true, expoPushToken: true, settings: true },
-        });
+        // notifyUsers handles preference gating, inbox row creation,
+        // WebSocket fan-out, and the push delivery in one shot.
+        const result = await notifyUsers(
+            userIds.map((userId) => ({
+                userId,
+                type: NotificationType.LUCKY_WHEEL_RENEWED,
+                titleKey: 'luckyWheelRenewedTitle',
+                bodyKey: 'luckyWheelRenewedBody',
+                data: { screen: '/(tabs)/Home', openLuckyWheel: 'true' },
+                idempotencyKey: `lucky-wheel-renewed:${userId}:${date}`,
+            })),
+            { concurrency: 20 },
+        );
 
-        const payloads = users
-            .filter(u => u.expoPushToken)
-            .map(u => {
-                const lang = readLanguageFromSettings(u.settings);
-                return {
-                    to: u.expoPushToken!,
-                    title: renderPushTemplate('luckyWheelTitle', lang),
-                    body: renderPushTemplate('luckyWheelBody', lang),
-                    data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
-                };
-            });
-
-        if (payloads.length > 0) {
-            const result = await PushNotificationService.sendBulkNotifications(payloads);
-            logger.info(`🎡 Lucky wheel batch sent: ${result.success} success, ${result.failed} failed`);
-        }
+        logger.info(
+            `🎡 Lucky wheel batch sent: delivered=${result.delivered} ` +
+            `suppressed=${result.suppressed} failed=${result.failed}`,
+        );
     });
 
     luckyWheelQueue.on('failed', (job, err) => {
@@ -242,20 +235,18 @@ async function runHourlyLuckyWheelNotifier(): Promise<void> {
                     { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true, removeOnFail: 50 }
                 );
             } else {
-                const users = await prisma.user.findMany({
-                    where: { id: { in: batch }, expoPushToken: { not: null } },
-                    select: { id: true, expoPushToken: true, settings: true },
-                });
-                const payloads = users.filter(u => u.expoPushToken).map(u => {
-                    const lang = readLanguageFromSettings(u.settings);
-                    return {
-                        to: u.expoPushToken!,
-                        title: renderPushTemplate('luckyWheelTitle', lang),
-                        body: renderPushTemplate('luckyWheelBody', lang),
-                        data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
-                    };
-                });
-                if (payloads.length > 0) await PushNotificationService.sendBulkNotifications(payloads);
+                // Fallback path (no Bull queue): notify directly.
+                await notifyUsers(
+                    batch.map((userId) => ({
+                        userId,
+                        type: NotificationType.LUCKY_WHEEL_RENEWED,
+                        titleKey: 'luckyWheelRenewedTitle',
+                        bodyKey: 'luckyWheelRenewedBody',
+                        data: { screen: '/(tabs)/Home', openLuckyWheel: 'true' },
+                        idempotencyKey: `lucky-wheel-renewed:${userId}:${dateKey}`,
+                    })),
+                    { concurrency: 20 },
+                );
             }
         }
 

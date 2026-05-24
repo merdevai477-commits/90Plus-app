@@ -14,7 +14,8 @@ export type WSPayload =
   | LikePayload
   | FollowPayload
   | MatchUpdatePayload
-  | ReelUpdatePayload;
+  | ReelUpdatePayload
+  | AvatarProgressPayload;
 
 /**
  * WebSocket Event Types
@@ -26,7 +27,8 @@ export type WSEventType =
   | 'like'
   | 'follow'
   | 'match_update'
-  | 'reel_update';
+  | 'reel_update'
+  | 'avatar:progress';
 
 /**
  * WebSocket Message structure
@@ -121,4 +123,15 @@ export interface ReelUpdatePayload {
   reelId: string;
   action: 'created' | 'updated' | 'deleted';
   userId: string;
+}
+
+/**
+ * Avatar upload progress payload — emitted by the backend during the multi-stage
+ * server-side avatar upload pipeline so the UI can show a live percentage.
+ */
+export interface AvatarProgressPayload {
+  pct: number; // 0-100
+  stage: 'received' | 'validating' | 'uploading' | 'persisting' | 'completed' | 'failed';
+  url?: string; // present when stage === 'completed'
+  reason?: string; // present when stage === 'failed'
 }

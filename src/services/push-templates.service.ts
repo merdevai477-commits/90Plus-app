@@ -147,7 +147,47 @@ export type PushTemplateKey =
     | 'followerMilestoneBody'
     // Mux webhook: new video from followed user
     | 'newVideoFromFollowTitle'
-    | 'newVideoFromFollowBody';
+    | 'newVideoFromFollowBody'
+    // Level up (XP service)
+    | 'levelUpTitle'
+    | 'levelUpBody'
+    // Leaderboard top-3 (elite, sits above top-10)
+    | 'leaderboardTop3Title'
+    | 'leaderboardTop3Body'
+    // Report lifecycle confirmations
+    | 'reportSubmittedTitle'
+    | 'reportSubmittedBody'
+    | 'reportCommentSubmittedTitle'
+    | 'reportCommentSubmittedBody'
+    | 'reportResolvedTitle'
+    | 'reportResolvedBody'
+    // Avatar upload completion
+    | 'avatarUploadCompleteTitle'
+    | 'avatarUploadCompleteBody'
+    | 'avatarUploadFailedTitle'
+    | 'avatarUploadFailedBody'
+    // Daily quiz / lucky wheel renewal (inbox parity with push-only cron)
+    | 'dailyQuizRenewedTitle'
+    | 'dailyQuizRenewedBody'
+    | 'luckyWheelRenewedTitle'
+    | 'luckyWheelRenewedBody'
+    // Cooldown ready (already covered by cooldown* family, generic key
+    // for the unified notify helper)
+    | 'cooldownReadyTitle'
+    | 'cooldownReadyBody'
+    // AI coach 12-hour check-in
+    | 'aiCheckinTitle'
+    | 'aiCheckinBody'
+    | 'aiCheckinFallbackBody'
+    // Extended live match events (subs / VAR / penalty / lineup)
+    | 'matchSubstitutionTitle'
+    | 'matchSubstitutionBody'
+    | 'matchVarTitle'
+    | 'matchVarBody'
+    | 'matchPenaltyTitle'
+    | 'matchPenaltyBody'
+    | 'matchLineupTitle'
+    | 'matchLineupBody';
 
 type TemplateMap = Record<PushTemplateKey, string>;
 
@@ -272,6 +312,45 @@ const en: TemplateMap = {
     // Mux webhook: new video from followed user
     newVideoFromFollowTitle: '🎬 New video!',
     newVideoFromFollowBody: '{user} posted a new video — check it out!',
+    // Level up
+    levelUpTitle: '🎉 Level up!',
+    levelUpBody: 'You reached level {level} — keep going!',
+    // Leaderboard top-3
+    leaderboardTop3Title: '🥇 Elite predictor!',
+    leaderboardTop3Body: 'You broke into the top 3 — only the best stay there 🔥',
+    // Report lifecycle
+    reportSubmittedTitle: '🚩 Report received',
+    reportSubmittedBody: 'Thanks for the report. Our team is reviewing it.',
+    reportCommentSubmittedTitle: '🚩 Report received',
+    reportCommentSubmittedBody: 'Thanks for reporting the comment. We are looking into it.',
+    reportResolvedTitle: '✅ Report resolved',
+    reportResolvedBody: 'We reviewed your report and took action where needed.',
+    // Avatar upload
+    avatarUploadCompleteTitle: '✅ Avatar updated',
+    avatarUploadCompleteBody: 'Your new profile picture is live.',
+    avatarUploadFailedTitle: '❌ Avatar upload failed',
+    avatarUploadFailedBody: 'Something went wrong while uploading your avatar. Try again.',
+    // Daily quiz / lucky wheel renewal
+    dailyQuizRenewedTitle: '🧠 New daily quiz!',
+    dailyQuizRenewedBody: 'Your daily quiz is ready — play now and earn XP.',
+    luckyWheelRenewedTitle: '🎡 Wheel of fortune is back!',
+    luckyWheelRenewedBody: 'You can spin again — claim today\'s prize.',
+    // Generic cooldown
+    cooldownReadyTitle: '✨ Ready again',
+    cooldownReadyBody: 'You can {resource} now. Tap to continue.',
+    // AI coach
+    aiCheckinTitle: '🏆 Coach check-in',
+    aiCheckinBody: '{name}, did you train today? Let\'s keep going so you can level up.',
+    aiCheckinFallbackBody: '{name}, ready for another round? Tap to keep your streak alive.',
+    // Extended live match events
+    matchSubstitutionTitle: '🔁 Substitution',
+    matchSubstitutionBody: "{playerIn} on for {playerOut} ({team}) - {minute}'",
+    matchVarTitle: '📺 VAR review',
+    matchVarBody: "{team} - {detail} ({minute}')",
+    matchPenaltyTitle: '🎯 Penalty!',
+    matchPenaltyBody: "{team} awarded a penalty ({minute}')",
+    matchLineupTitle: '📋 Lineup announced',
+    matchLineupBody: '{home} vs {away} — lineups are out',
 };
 
 
@@ -396,6 +475,45 @@ const ar: TemplateMap = {
     // Mux webhook: فيديو جديد من متابَع
     newVideoFromFollowTitle: '🎬 فيديو جديد!',
     newVideoFromFollowBody: '{user} نشر فيديو جديد — شوفه دلوقتي!',
+    // ترقي المستوى
+    levelUpTitle: '🎉 ترقيت لمستوى جديد!',
+    levelUpBody: 'وصلت للمستوى {level} — كمّل وارتقي!',
+    // أفضل 3 على لوحة الصدارة
+    leaderboardTop3Title: '🥇 من أبطال التوقعات!',
+    leaderboardTop3Body: 'دخلت قائمة أفضل 3 متوقعين — في النخبة 🔥',
+    // دورة حياة البلاغ
+    reportSubmittedTitle: '🚩 تم استلام بلاغك',
+    reportSubmittedBody: 'شكراً على البلاغ. فريقنا بيراجعه.',
+    reportCommentSubmittedTitle: '🚩 تم استلام بلاغك',
+    reportCommentSubmittedBody: 'شكراً على إبلاغك عن التعليق. بنراجعه دلوقتي.',
+    reportResolvedTitle: '✅ تم حل البلاغ',
+    reportResolvedBody: 'راجعنا بلاغك واتخذنا الإجراء المناسب.',
+    // رفع الأفاتار
+    avatarUploadCompleteTitle: '✅ تم تحديث الأفاتار',
+    avatarUploadCompleteBody: 'صورة بروفايلك الجديدة ظهرت دلوقتي.',
+    avatarUploadFailedTitle: '❌ فشل رفع الأفاتار',
+    avatarUploadFailedBody: 'حصلت مشكلة وأنت بترفع الأفاتار. حاول تاني.',
+    // الكويز اليومي / عجلة الحظ
+    dailyQuizRenewedTitle: '🧠 كويز اليوم جاهز!',
+    dailyQuizRenewedBody: 'كويز اليوم جاهز — العب دلوقتي واكسب XP.',
+    luckyWheelRenewedTitle: '🎡 عجلة الحظ رجعت!',
+    luckyWheelRenewedBody: 'تقدر تلف دلوقتي — اكسب جايزة اليوم.',
+    // كولداون عام
+    cooldownReadyTitle: '✨ تقدر تعمل دي تاني',
+    cooldownReadyBody: 'تقدر {resource} دلوقتي. اضغط للمتابعة.',
+    // AI كوتش
+    aiCheckinTitle: '🏆 وقت المراجعة مع المدرب',
+    aiCheckinBody: '{name}، عملت تمارينك النهاردة؟ يلا نتابع ونشوف عشان تتطور لأحسن.',
+    aiCheckinFallbackBody: '{name}، جاهز لجولة تانية؟ ادخل وكمّل ستريكك.',
+    // أحداث المباراة الموسعة
+    matchSubstitutionTitle: '🔁 تبديل',
+    matchSubstitutionBody: '{playerIn} مكان {playerOut} ({team}) - الدقيقة {minute}',
+    matchVarTitle: '📺 تدخل VAR',
+    matchVarBody: '{team} - {detail} (الدقيقة {minute})',
+    matchPenaltyTitle: '🎯 ضربة جزاء!',
+    matchPenaltyBody: 'احتسبت ضربة جزاء لـ{team} (الدقيقة {minute})',
+    matchLineupTitle: '📋 التشكيلات اتعلنت',
+    matchLineupBody: '{home} ضد {away} — التشكيلات ظهرت',
 };
 
 const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };

@@ -12,14 +12,16 @@
 import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import PushNotificationService from './push-notification.service';
-import {
-    renderPushTemplate,
-    readLanguageFromSettings,
-    type PushTemplateKey,
-} from './push-templates.service';
+import { notifyUsers } from './notify.service';
+import { NotificationType } from './notification.service';
+import { type PushTemplateKey } from './push-templates.service';
 
 const BATCH_SIZE = 100;
+
+/** ISO date (YYYY-MM-DD) used to dedupe idempotency keys per day. */
+function isoDateUTC(): string {
+    return new Date().toISOString().slice(0, 10);
+}
 
 /**
  * Find users who should be notified about the new daily quiz.
@@ -73,37 +75,34 @@ async function runDailyQuizNotifier(): Promise<void> {
             return;
         }
 
-        logger.info(`[DailyQuiz] Sending quiz renewal notification to ${users.length} users`);
+        logger.info(`[DailyQuiz] Dispatching quiz renewal notifications to ${users.length} users`);
 
-        // Pick a variant key per call. Each user receives the same
-        // variant in this run to keep "Today's challenge" cohesion;
-        // the body is rendered per-user in the user's language.
+        // Pick a variant per run for cohesion. The variant's title/body keys
+        // are localized per-user inside notifyUser based on user.settings.language.
         const variants: Array<{ title: PushTemplateKey; body: PushTemplateKey }> = [
+            { title: 'dailyQuizRenewedTitle', body: 'dailyQuizRenewedBody' },
             { title: 'dailyQuizReadyTitle', body: 'dailyQuizReadyBody' },
             { title: 'dailyQuizTimeTitle', body: 'dailyQuizTimeBody' },
             { title: 'dailyQuizChallengeTitle', body: 'dailyQuizChallengeBody' },
         ];
         const variant = variants[Math.floor(Math.random() * variants.length)];
 
-        let sent = 0;
-        for (let i = 0; i < users.length; i += BATCH_SIZE) {
-            const batch = users.slice(i, i + BATCH_SIZE);
-            const payloads = batch.map(u => {
-                const lang = readLanguageFromSettings(u.settings);
-                return {
-                    to: u.expoPushToken,
-                    title: renderPushTemplate(variant.title, lang),
-                    body: renderPushTemplate(variant.body, lang),
-                    data: { type: 'QUIZ_RENEWAL', screen: '/(tabs)/quiz' },
-                    channelId: 'general',
-                };
-            });
+        const today = isoDateUTC();
+        const payloads = users.map((u) => ({
+            userId: u.id,
+            type: NotificationType.DAILY_QUIZ_RENEWED,
+            titleKey: variant.title,
+            bodyKey: variant.body,
+            data: { screen: '/(tabs)/quiz' },
+            // One push + one inbox row per user per day.
+            idempotencyKey: `daily-quiz-renewed:${u.id}:${today}`,
+        }));
 
-            const result = await PushNotificationService.sendBulkNotifications(payloads);
-            sent += result.success;
-        }
-
-        logger.info(`[DailyQuiz] ✅ Sent ${sent}/${users.length} quiz renewal notifications`);
+        const result = await notifyUsers(payloads, { concurrency: BATCH_SIZE / 4 });
+        logger.info(
+            `[DailyQuiz] ✅ Sent ${result.delivered}/${users.length} renewal notifications ` +
+            `(suppressed=${result.suppressed}, failed=${result.failed})`,
+        );
     } catch (error) {
         logger.error('[DailyQuiz] ❌ Notifier error:', error);
     }

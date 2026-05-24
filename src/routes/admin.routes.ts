@@ -5,9 +5,10 @@ import { logger } from '../utils/logger';
 import { StrikeService } from '../services/strike.service';
 import { AuditService, AuditAction, AuditTargetType } from '../services/audit.service';
 import { suspendUser, autoDeleteContent } from '../services/moderation.service';
-import { NotificationService } from '../services/notification.service';
+import { NotificationService, NotificationType } from '../services/notification.service';
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
 import { ErrorCode, sendError } from '../constants/errors';
+import { notifyUser } from '../services/notify.service';
 
 const router = Router();
 
@@ -256,17 +257,22 @@ router.post('/reports/:id/review', requireAdmin, async (req: Request, res: Respo
             metadata: { action, reportId: report.id },
         });
 
-        // Notify the REPORTER about the outcome
+        // Notify the REPORTER about the outcome — localized template,
+        // preference gated, inbox + push + WebSocket.
         const actionTaken = action !== 'NO_ACTION';
-        await NotificationService.createNotification({
+        notifyUser({
             userId: report.reporterId,
-            title: actionTaken ? '✅ تم مراجعة بلاغك' : 'بلاغك اتراجع',
-            message: actionTaken
-                ? 'شكراً، تم اتخاذ الإجراء المناسب بناءً على بلاغك'
-                : 'بعد المراجعة، المحتوى لم يخالف قواعد المجتمع',
-            type: 'REPORT_RESOLVED',
-            data: { type: 'REPORT_RESOLVED', reportId: report.id, action },
-        });
+            type: NotificationType.REPORT_RESOLVED,
+            titleKey: 'reportResolvedTitle',
+            bodyKey: 'reportResolvedBody',
+            data: {
+                screen: '/notifications',
+                reportId: report.id,
+                action,
+                actionTaken,
+            },
+            idempotencyKey: `report-resolved:${report.id}`,
+        }).catch((err) => logger.warn('[admin/report] reporter notify failed:', err?.message));
 
         res.json({
             status: 'SUCCESS',

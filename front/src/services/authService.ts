@@ -2040,7 +2040,44 @@ export class ProfileService {
 
 export interface SocialNotification {
     id: string;
-    type: 'FOLLOW' | 'LIKE' | 'COMMENT' | 'REPLY' | 'MENTION' | 'SHARE' | 'COMMENT_LIKE' | 'MATCH_UPDATE' | 'MATCH_FAVORITE' | 'PREDICTION_RESULT' | 'GENERAL' | 'MODERATION_ALERT';
+    type:
+        | 'FOLLOW'
+        | 'FOLLOW_ACTIVITY'
+        | 'LIKE'
+        | 'COMMENT'
+        | 'COMMENT_LIKE'
+        | 'REPLY'
+        | 'MENTION'
+        | 'SHARE'
+        | 'MATCH_UPDATE'
+        | 'MATCH_GOAL'
+        | 'MATCH_START'
+        | 'MATCH_END'
+        | 'MATCH_HALFTIME'
+        | 'MATCH_FAVORITE'
+        | 'MATCH_YELLOW_CARD'
+        | 'MATCH_RED_CARD'
+        | 'PREDICTION_RESULT'
+        | 'GENERAL'
+        | 'MODERATION_ALERT'
+        | 'REPORT_SUBMITTED'
+        | 'REPORT_RESOLVED'
+        | 'AVATAR_UPLOAD'
+        | 'AI_CHECKIN'
+        | 'LEVEL_UP'
+        | 'ACHIEVEMENT'
+        | 'QUIZ_REWARD'
+        | 'LEADERBOARD_TOP10'
+        | 'LEADERBOARD_TOP3'
+        | 'VIDEO_PROCESSED'
+        | 'GIFT'
+        | 'COIN_MILESTONE'
+        | 'MILESTONE'
+        | 'LUCKY_WHEEL'
+        | 'LUCKY_WHEEL_RENEWED'
+        | 'DAILY_QUIZ_RENEWED'
+        | 'COOLDOWN_EXPIRED'
+        | 'RE_ENGAGEMENT';
     title: string;
     message: string;
     isRead: boolean;

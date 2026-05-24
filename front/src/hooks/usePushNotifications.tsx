@@ -240,13 +240,27 @@ export function usePushNotifications(): PushNotificationState {
                 r.push({ pathname: '/(tabs)/profile', params: { tab: 'wallet' } });
             } else if (type === 'COIN_MILESTONE') {
                 r.push({ pathname: '/(tabs)/profile', params: { tab: 'wallet' } });
-            } else if (type === 'MILESTONE' || type === 'REPORT_RESOLVED') {
+            } else if (type === 'MILESTONE' || type === 'REPORT_RESOLVED' || type === 'REPORT_SUBMITTED') {
                 const screen = data.screen;
                 if (screen) {
                     r.push(screen as any);
                 } else {
                     r.push('/notifications');
                 }
+            } else if (type === 'LEVEL_UP') {
+                r.push({ pathname: '/(tabs)/profile', params: { tab: 'stats' } });
+            } else if (type === 'LEADERBOARD_TOP10' || type === 'LEADERBOARD_TOP3') {
+                r.push('/(tabs)/rank' as any);
+            } else if (type === 'AVATAR_UPLOAD') {
+                r.push('/(tabs)/profile' as any);
+            } else if (type === 'AI_CHECKIN') {
+                r.push('/(tabs)/chat' as any);
+            } else if (type === 'DAILY_QUIZ_RENEWED' || type === 'QUIZ_REWARD') {
+                r.push('/(tabs)/quiz' as any);
+            } else if (type === 'LUCKY_WHEEL_RENEWED') {
+                r.push({ pathname: '/(tabs)/Home', params: { openLuckyWheel: 'true' } });
+            } else if (type === 'COOLDOWN_EXPIRED') {
+                r.push('/(tabs)/profile' as any);
             } else if (data.screen) {
                 r.push(data.screen as any);
             } else if (data.url) {

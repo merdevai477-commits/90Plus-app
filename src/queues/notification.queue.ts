@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { NotificationService } from '../services/notification.service';
 import PushNotificationService from '../services/push-notification.service';
 import prisma from '../lib/prisma';
+import { isAllowedByPreference } from '../services/notify.service';
 
 export type NotificationJob =
   | {
@@ -52,6 +53,15 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
 
     if (kind === 'SOCIAL') {
       const { payload } = job.data;
+      // Enforce per-category preferences for legacy callers that bypass
+      // the unified notifyUser helper (follow / like / comment / reply / etc).
+      const allowed = await isAllowedByPreference(payload.userId, payload.type);
+      if (!allowed) {
+        logger.debug('[NotifQueue] social suppressed by preference', {
+          userId: payload.userId, type: payload.type,
+        });
+        return;
+      }
       await NotificationService.createSocialNotification({
         userId: payload.userId,
         actorId: payload.actorId,
@@ -65,6 +75,13 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
 
     if (kind === 'GENERIC') {
       const { payload } = job.data;
+      const allowed = await isAllowedByPreference(payload.userId, payload.type);
+      if (!allowed) {
+        logger.debug('[NotifQueue] generic suppressed by preference', {
+          userId: payload.userId, type: payload.type,
+        });
+        return;
+      }
       await NotificationService.createNotification({
         userId: payload.userId,
         title: payload.title,
@@ -181,10 +198,16 @@ export async function enqueueSocialNotification(params: {
 }): Promise<void> {
   const q = getNotificationQueue();
   if (!q) {
-    setImmediate(() => {
-      NotificationService.createSocialNotification(params).catch((err) => {
-        logger.warn('In-process notification failed:', err);
-      });
+    // In-process fallback: still respect preferences so behaviour is
+    // identical whether Redis is available or not.
+    setImmediate(async () => {
+      try {
+        const allowed = await isAllowedByPreference(params.userId, params.type);
+        if (!allowed) return;
+        await NotificationService.createSocialNotification(params);
+      } catch (err) {
+        logger.warn('In-process social notification failed:', err);
+      }
     });
     return;
   }
@@ -211,10 +234,14 @@ export async function enqueueNotification(params: {
 }): Promise<void> {
   const q = getNotificationQueue();
   if (!q) {
-    setImmediate(() => {
-      NotificationService.createNotification(params).catch((err) => {
-        logger.warn('In-process notification failed:', err);
-      });
+    setImmediate(async () => {
+      try {
+        const allowed = await isAllowedByPreference(params.userId, params.type);
+        if (!allowed) return;
+        await NotificationService.createNotification(params);
+      } catch (err) {
+        logger.warn('In-process generic notification failed:', err);
+      }
     });
     return;
   }

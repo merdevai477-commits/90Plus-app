@@ -4,7 +4,9 @@ import { WebSocketService } from './websocket.service';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
-import { getUserLanguage, renderPushTemplate } from './push-templates.service';
+import { renderPushTemplate, type PushTemplateKey } from './push-templates.service';
+import { notifyUser } from './notify.service';
+import { NotificationType } from './notification.service';
 
 interface ApiFootballMatch {
     fixture: {
@@ -22,14 +24,22 @@ interface ApiFootballMatch {
 interface ApiFootballEvent {
     time: { elapsed: number };
     team: { id: number; name: string };
+    // API-Football also returns the player coming OFF in the `player` field
+    // for substitutions, with the player coming ON in `assist`. We capture both.
     player: { id: number | null; name: string | null };
     assist: { id: number | null; name: string | null };
     type: string;    // 'Goal', 'Card', 'subst', 'Var'
-    detail: string;  // 'Normal Goal', 'Yellow Card', 'Red Card', 'Second Yellow card'
+    detail: string;  // 'Normal Goal', 'Yellow Card', 'Red Card', 'Second Yellow card',
+                     // 'Substitution 1', 'Penalty confirmed', 'Goal cancelled', etc.
 }
 
 // In-memory store for last-seen event count per match (resets on server restart)
 const seenEventCounts = new Map<number, number>();
+
+// Deduplicate lineup-announcement notifications across cron drift. Lineups
+// are not in /fixtures/events; we infer "lineup announced" from the lineup
+// being available for a fixture and emit once per fixture.
+const seenLineupMatches = new Set<number>();
 
 export class MatchWatcherService {
     private static isRunning = false;
@@ -312,9 +322,18 @@ export class MatchWatcherService {
             });
         }
 
-        // Process card events for all users who favorited this match
+        // Process all live in-match events (cards / subs / VAR / penalty)
+        // for users who favorited this match.
         if (isLive && liveEvents.length > 0) {
-            await this.processCardEvents(matchId, liveEvents, matchFavorites);
+            await this.processLiveEvents(matchId, liveEvents, matchFavorites);
+        }
+
+        // Lineup announcements arrive ~30-60 min before kickoff. Re-check
+        // for matches still in NS/TBD; if a lineup is present we emit once.
+        if (status === 'NS' || status === 'TBD') {
+            await this.checkLineupAnnouncements(matchId, matchFavorites).catch((err) =>
+                logger.debug('[MatchWatcher] lineup check skipped:', err?.message),
+            );
         }
 
         // Send WebSocket match update to all subscribed clients
@@ -341,65 +360,233 @@ export class MatchWatcherService {
     }
 
     /**
-     * Process card events and notify users who favorited the match.
-     * Uses seenEventCounts to avoid sending duplicate notifications for the same events.
+     * Process all live in-match events (cards / subs / VAR / penalty) and
+     * notify users who favorited the match. Each event type maps to its own
+     * notification type + template + preference toggle so the user can
+     * silence noisy categories independently.
+     *
+     * We dedupe via `seenEventCounts` on the *total* count of relevant
+     * events for this match in the current process. API-Football events are
+     * append-only, so any new arrivals are at the tail of the array.
      */
-    private static async processCardEvents(
+    private static async processLiveEvents(
         matchId: number,
         events: ApiFootballEvent[],
         matchFavorites: any[]
     ) {
-        const cardEvents = events.filter(e =>
-            e.type === 'Card' &&
-            ['Yellow Card', 'Red Card', 'Second Yellow card'].includes(e.detail)
-        );
+        // Filter to event types we care about.
+        const relevant = events.filter((e) => this.classifyEvent(e) !== null);
 
         const prevCount = seenEventCounts.get(matchId) ?? 0;
-        const newEvents = cardEvents.slice(prevCount);
+        const newEvents = relevant.slice(prevCount);
 
         if (newEvents.length === 0) return;
 
-        seenEventCounts.set(matchId, cardEvents.length);
-        logger.info(`[MatchWatcher] ${newEvents.length} new card event(s) for match ${matchId}`);
+        seenEventCounts.set(matchId, relevant.length);
+        logger.info(`[MatchWatcher] ${newEvents.length} new live event(s) for match ${matchId}`);
 
         for (const event of newEvents) {
-            const isRed = event.detail === 'Red Card' || event.detail === 'Second Yellow card';
-            const playerName = event.player?.name;
-            const teamName = event.team?.name || '';
-            const elapsed = event.time?.elapsed ?? '';
+            const classified = this.classifyEvent(event);
+            if (!classified) continue;
+            await this.dispatchEvent(matchId, event, classified, matchFavorites);
+        }
+    }
+
+    /**
+     * Decide which notification + template family an API-Football event maps
+     * to. Returns `null` when the event is ignored (e.g. a normal Goal which
+     * is handled separately via the scoreline update path).
+     */
+    private static classifyEvent(event: ApiFootballEvent): null | {
+        kind: 'card_yellow' | 'card_red' | 'substitution' | 'var' | 'penalty';
+        type: NotificationType;
+        titleKey: PushTemplateKey;
+        bodyKey: PushTemplateKey;
+    } {
+        // Cards
+        if (event.type === 'Card') {
+            if (event.detail === 'Yellow Card') {
+                return {
+                    kind: 'card_yellow',
+                    type: NotificationType.MATCH_YELLOW_CARD,
+                    titleKey: 'matchYellowCardTitle',
+                    bodyKey: 'matchCardBody',
+                };
+            }
+            if (event.detail === 'Red Card' || event.detail === 'Second Yellow card') {
+                return {
+                    kind: 'card_red',
+                    type: NotificationType.MATCH_RED_CARD,
+                    titleKey: 'matchRedCardTitle',
+                    bodyKey: 'matchCardBody',
+                };
+            }
+        }
+        // Substitutions
+        if (event.type === 'subst') {
+            return {
+                kind: 'substitution',
+                type: NotificationType.MATCH_UPDATE,
+                titleKey: 'matchSubstitutionTitle',
+                bodyKey: 'matchSubstitutionBody',
+            };
+        }
+        // VAR review (Goal cancelled / Penalty confirmed / Goal confirmed)
+        if (event.type === 'Var') {
+            return {
+                kind: 'var',
+                type: NotificationType.MATCH_UPDATE,
+                titleKey: 'matchVarTitle',
+                bodyKey: 'matchVarBody',
+            };
+        }
+        // Penalty awarded (subset of Goal: "Penalty" detail or VAR penalty)
+        if (event.type === 'Goal' && event.detail === 'Penalty') {
+            return {
+                kind: 'penalty',
+                type: NotificationType.MATCH_UPDATE,
+                titleKey: 'matchPenaltyTitle',
+                bodyKey: 'matchPenaltyBody',
+            };
+        }
+        return null;
+    }
+
+    /**
+     * Send the localized push + inbox row + WebSocket emit for one (event,
+     * favorite) pair. Each event type honours its own pref toggle through
+     * the `notifyUser` helper.
+     */
+    private static async dispatchEvent(
+        matchId: number,
+        event: ApiFootballEvent,
+        classified: NonNullable<ReturnType<typeof MatchWatcherService['classifyEvent']>>,
+        matchFavorites: any[],
+    ): Promise<void> {
+        const elapsed = event.time?.elapsed ?? '';
+        const team = event.team?.name || '';
+
+        // For subst events the player coming OFF is in `player`, coming ON
+        // in `assist`. For all other types we use `player` directly.
+        const playerOff = event.player?.name || '';
+        const playerOn = event.assist?.name || playerOff;
+
+        const vars: Record<string, string | number> = {
+            player: event.player?.name || '',
+            playerIn: playerOn,
+            playerOut: playerOff,
+            team,
+            minute: elapsed,
+            detail: event.detail || '',
+        };
+
+        // Each event kind maps to its own preference column on
+        // NotificationPreferences. We check it here so users can mute
+        // (e.g.) substitutions without muting goals.
+        const prefKey: string | null =
+            classified.kind === 'card_yellow' || classified.kind === 'card_red'
+                ? 'matchCards'
+                : classified.kind === 'substitution'
+                    ? 'matchSubs'
+                    : classified.kind === 'var'
+                        ? 'matchVar'
+                        : classified.kind === 'penalty'
+                            ? 'matchGoals' // penalty is a goal-flavoured event
+                            : null;
+
+        // Bulk fetch preferences once per dispatch — favorites can be many.
+        const userIds = matchFavorites.map((f) => f.userId);
+        const prefRows = prefKey
+            ? await (prisma as any).notificationPreferences.findMany({
+                where: { userId: { in: userIds } },
+                select: { userId: true, [prefKey]: true },
+            }).catch(() => [] as any[])
+            : ([] as any[]);
+        const optedOut = new Set<string>(
+            prefKey
+                ? prefRows.filter((r: any) => r[prefKey] === false).map((r: any) => r.userId)
+                : [],
+        );
+
+        // Fan-out with idempotency so retries can't double-notify.
+        for (const favorite of matchFavorites) {
+            if (optedOut.has(favorite.userId)) continue;
+            try {
+                await notifyUser({
+                    userId: favorite.userId,
+                    type: classified.type,
+                    titleKey: classified.titleKey,
+                    bodyKey: classified.bodyKey,
+                    vars,
+                    data: {
+                        screen: '/match-details',
+                        matchId,
+                        eventKind: classified.kind,
+                        team,
+                        elapsed,
+                    },
+                    // We already enforced the per-kind preference above; the
+                    // helper's coarser TYPE_TO_PREF maps the generic
+                    // MATCH_UPDATE to matchGoals which would be wrong here.
+                    bypassPreferences: true,
+                    idempotencyKey: `match-event:${matchId}:${classified.kind}:${elapsed}:${event.player?.id ?? 'na'}:${favorite.userId}`,
+                });
+            } catch (err: any) {
+                logger.warn(
+                    `[MatchWatcher] ${classified.kind} notify failed for user ${favorite.userId}:`,
+                    err?.message,
+                );
+            }
+        }
+    }
+
+    /**
+     * Detect lineup announcements and emit a one-shot notification per match.
+     * API-Football exposes /fixtures/lineups; if at least one team has a
+     * `startXI` we treat the lineup as announced and fan out to favorites.
+     */
+    static async checkLineupAnnouncements(matchId: number, matchFavorites: any[]): Promise<void> {
+        if (seenLineupMatches.has(matchId)) return;
+        try {
+            const data = await footballService.fetchFromApi<any[]>('/fixtures/lineups', { fixture: matchId });
+            if (!Array.isArray(data) || data.length === 0) return;
+            const hasStartXI = data.some((team) => Array.isArray(team?.startXI) && team.startXI.length > 0);
+            if (!hasStartXI) return;
+
+            seenLineupMatches.add(matchId);
+
+            const home = data[0]?.team?.name ?? '';
+            const away = data[1]?.team?.name ?? '';
+
+            // Bulk-check matchLineups preference so muted users are skipped.
+            const userIds = matchFavorites.map((f) => f.userId);
+            const prefRows = await (prisma as any).notificationPreferences.findMany({
+                where: { userId: { in: userIds } },
+                select: { userId: true, matchLineups: true },
+            }).catch(() => [] as any[]);
+            const optedOut = new Set<string>(
+                prefRows.filter((r: any) => r.matchLineups === false).map((r: any) => r.userId),
+            );
 
             for (const favorite of matchFavorites) {
+                if (optedOut.has(favorite.userId)) continue;
                 try {
-                    const lang = await getUserLanguage(favorite.userId);
-                    const fallbackPlayer = renderPushTemplate('matchCardPlayerFallback', lang);
-                    const title = renderPushTemplate(
-                        isRed ? 'matchRedCardTitle' : 'matchYellowCardTitle',
-                        lang,
-                    );
-                    const message = renderPushTemplate('matchCardBody', lang, {
-                        player: playerName || fallbackPlayer,
-                        team: teamName,
-                        minute: elapsed,
-                    });
-                    await NotificationService.createNotification({
+                    await notifyUser({
                         userId: favorite.userId,
-                        pushToken: favorite.user?.expoPushToken ?? null,
-                        title,
-                        message,
-                        type: 'MATCH_UPDATE',
-                        channelId: 'match-updates',
-                        data: {
-                            type: isRed ? 'MATCH_RED_CARD' : 'MATCH_YELLOW_CARD',
-                            matchId,
-                            playerName,
-                            teamName,
-                            elapsed,
-                        },
+                        type: NotificationType.MATCH_UPDATE,
+                        titleKey: 'matchLineupTitle',
+                        bodyKey: 'matchLineupBody',
+                        vars: { home, away },
+                        data: { screen: '/match-details', matchId, eventKind: 'lineup' },
+                        bypassPreferences: true,
+                        idempotencyKey: `match-lineup:${matchId}:${favorite.userId}`,
                     });
-                } catch (err) {
-                    logger.warn(`[MatchWatcher] Card notification failed for user ${favorite.userId}:`, err);
+                } catch (err: any) {
+                    logger.warn(`[MatchWatcher] lineup notify failed for user ${favorite.userId}:`, err?.message);
                 }
             }
+        } catch (err: any) {
+            logger.debug('[MatchWatcher] checkLineupAnnouncements skipped:', err?.message);
         }
     }
 }

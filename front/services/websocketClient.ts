@@ -28,7 +28,8 @@ export type WSEventType =
   | 'like'
   | 'follow'
   | 'match_update'
-  | 'reel_update';
+  | 'reel_update'
+  | 'avatar:progress';
 
 /**
  * WebSocket Message structure (matching backend)
@@ -355,6 +356,7 @@ class WebSocketClient {
       'follow',
       'match_update',
       'reel_update',
+      'avatar:progress',
     ];
 
     eventTypes.forEach(eventType => {

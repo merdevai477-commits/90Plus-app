@@ -4,6 +4,10 @@ import { WebSocketService } from './websocket.service';
 import PushNotificationService from './push-notification.service';
 import { renderPushTemplate, getUserLanguage } from './push-templates.service';
 
+// Source of truth: this enum MUST stay in sync with the Prisma `NotificationType`
+// enum at prisma/schema.prisma. Each new value here requires a migration that
+// runs `ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS ...` before the
+// first row using it can be written.
 export enum NotificationType {
     MATCH_UPDATE = 'MATCH_UPDATE',
     MATCH_GOAL = 'MATCH_GOAL',
@@ -14,6 +18,9 @@ export enum NotificationType {
     MATCH_YELLOW_CARD = 'MATCH_YELLOW_CARD',
     MATCH_RED_CARD = 'MATCH_RED_CARD',
     PREDICTION_RESULT = 'PREDICTION_RESULT',
+    QUIZ_REWARD = 'QUIZ_REWARD',
+    LEVEL_UP = 'LEVEL_UP',
+    ACHIEVEMENT = 'ACHIEVEMENT',
     FOLLOW = 'FOLLOW',
     LIKE = 'LIKE',
     COMMENT = 'COMMENT',
@@ -22,16 +29,24 @@ export enum NotificationType {
     GIFT = 'GIFT',
     VIDEO_PROCESSED = 'VIDEO_PROCESSED',
     REPORT_RESOLVED = 'REPORT_RESOLVED',
+    REPORT_SUBMITTED = 'REPORT_SUBMITTED',     // Confirmation to reporter
     MILESTONE = 'MILESTONE',
     COIN_MILESTONE = 'COIN_MILESTONE',
     GENERAL = 'GENERAL',
+    MODERATION_ALERT = 'MODERATION_ALERT',
     // ── New triggers ──────────────────────────────────
-    LUCKY_WHEEL = 'LUCKY_WHEEL',         // Lucky wheel spin result
-    COMMENT_LIKE = 'COMMENT_LIKE',       // Like on a comment
-    FOLLOW_ACTIVITY = 'FOLLOW_ACTIVITY', // Someone you follow uploaded a new video
-    LEADERBOARD_TOP10 = 'LEADERBOARD_TOP10', // User entered top 10 ranking
-    RE_ENGAGEMENT = 'RE_ENGAGEMENT',     // Re-engagement motivational push
-    SHARE = 'SHARE',                     // Someone shared your reel
+    LUCKY_WHEEL = 'LUCKY_WHEEL',               // Lucky wheel spin result
+    LUCKY_WHEEL_RENEWED = 'LUCKY_WHEEL_RENEWED', // Daily wheel reset / availability
+    COMMENT_LIKE = 'COMMENT_LIKE',             // Like on a comment
+    FOLLOW_ACTIVITY = 'FOLLOW_ACTIVITY',       // Someone you follow uploaded a new video
+    LEADERBOARD_TOP10 = 'LEADERBOARD_TOP10',   // User entered top 10 ranking
+    LEADERBOARD_TOP3 = 'LEADERBOARD_TOP3',     // User entered top 3 (elite)
+    RE_ENGAGEMENT = 'RE_ENGAGEMENT',           // Re-engagement motivational push
+    SHARE = 'SHARE',                           // Someone shared your reel
+    AVATAR_UPLOAD = 'AVATAR_UPLOAD',           // Avatar upload completed / failed
+    AI_CHECKIN = 'AI_CHECKIN',                 // 12-hourly AI coach check-in
+    COOLDOWN_EXPIRED = 'COOLDOWN_EXPIRED',     // Avatar/cover/reel/username cooldown ended
+    DAILY_QUIZ_RENEWED = 'DAILY_QUIZ_RENEWED', // Daily quiz pack ready
 }
 
 export interface NotificationActor {

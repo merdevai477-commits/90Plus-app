@@ -58,6 +58,8 @@ import { ProfileSavedGrid } from '../../components/profile/ProfileVideoGrid';
 import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from '../../components/common/ImagePreviewModal';
 import { CooldownBlockModal } from '../../components/common/CooldownBlockModal';
 import { useReelStatusPoller } from '../../hooks/useReelStatusPoller';
+import { useWebSocketEvent } from '../../hooks/useWebSocket';
+import type { AvatarProgressPayload } from '../../types/websocket';
 import { useScreenFont } from '../../utils/fontSetup';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -534,7 +536,27 @@ export default function ProfileScreen() {
 
   // Loading states for profile operations
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [avatarUploadProgress, setAvatarUploadProgress] = useState(0);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
+
+  // Subscribe to real-time server-side avatar upload progress.
+  // The backend emits 'avatar:progress' events as the upload moves through
+  // (received -> validating -> uploading -> persisting -> completed/failed).
+  // We only animate while the local upload UI is active to avoid resetting
+  // the bar on stale events from a previous attempt.
+  useWebSocketEvent('avatar:progress', useCallback((message) => {
+    const payload = message.payload as unknown as AvatarProgressPayload;
+    if (!payload || typeof payload.pct !== 'number') return;
+    if (!isAvatarUploading && payload.stage !== 'completed' && payload.stage !== 'failed') {
+      // Late event for a finished session — ignore.
+      return;
+    }
+    setAvatarUploadProgress(payload.pct);
+    if (payload.stage === 'completed' || payload.stage === 'failed') {
+      // Reset shortly so the next session starts from 0.
+      setTimeout(() => setAvatarUploadProgress(0), 600);
+    }
+  }, [isAvatarUploading]));
   const [isCountryUpdating, setIsCountryUpdating] = useState(false);
   const [isClubUpdating, setIsClubUpdating] = useState(false);
   const [isBrandUpdating, setIsBrandUpdating] = useState(false);
@@ -1153,6 +1175,8 @@ export default function ProfileScreen() {
     const originalAvatar = userData.avatar;
     setLocalImage(finalUri);
     setImageUploadMessage(t.profile.uploading || 'جاري رفع الصورة...');
+    setIsAvatarUploading(true);
+    setAvatarUploadProgress(5);
     try {
       const uploadResult = await uploadImage(finalUri, {
         endpoint: '/upload/avatar',
@@ -1180,6 +1204,8 @@ export default function ProfileScreen() {
       logger.error('Avatar upload exception:', err);
       setLocalImage(originalAvatar || null);
       toastManager.showError(t.common.error, t.profile.avatarUploadFailed || t.profile.avatarUploadFailedFallback);
+    } finally {
+      setIsAvatarUploading(false);
     }
   };
 
@@ -1769,7 +1795,7 @@ export default function ProfileScreen() {
         imageUri={previewUri}
         type={previewType}
         isUploading={previewType === 'avatar' ? isAvatarUploading : isCoverUploading}
-        uploadProgress={0}
+        uploadProgress={previewType === 'avatar' ? avatarUploadProgress : 0}
         onConfirm={() => {
           setIsPreviewVisible(false);
           if (pendingUploadFn) pendingUploadFn();

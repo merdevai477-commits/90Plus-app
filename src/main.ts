@@ -774,6 +774,10 @@ async function startServer() {
                         const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
                         startDailyQuizNotifier();
 
+                        // ✅ Start AI coach 12-hour check-in (opt-in, twice daily)
+                        const { startAICheckinNotifier } = await import('./services/ai-checkin-notifier.service');
+                        startAICheckinNotifier();
+
                         const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
                         ensureDailyPacksForToday().catch((err) =>
                             logger.error('Quiz pack warmup failed:', err),

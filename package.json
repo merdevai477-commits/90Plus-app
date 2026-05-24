@@ -49,6 +49,7 @@
     "fix:stuck-reels": "ts-node --project tsconfig.scripts.json scripts/fix-stuck-reels.ts",
     "check:connectivity": "ts-node --project tsconfig.scripts.json scripts/check-connectivity.ts",
     "check:external": "ts-node --project tsconfig.scripts.json scripts/check-external-services.ts",
+    "check:notifications": "ts-node --project tsconfig.scripts.json scripts/check-notifications.ts",
     "backfill:xp": "ts-node src/scripts/backfill-xp.ts"
   },
   "keywords": [

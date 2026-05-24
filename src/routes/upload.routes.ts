@@ -31,8 +31,44 @@ import path from 'path';
 import { strictLimiter } from '../middleware/rateLimit.middleware';
 import { ErrorCode, sendError as sendApiError, type ErrorCodeValue } from '../constants/errors';
 import { renderPushTemplate, getUserLanguage } from '../services/push-templates.service';
+import { WebSocketService } from '../services/websocket.service';
+import { notifyUser } from '../services/notify.service';
+import { NotificationType } from '../services/notification.service';
 
 const router = Router();
+
+/**
+ * Emit a granular progress event to the user's connected WebSocket clients.
+ * The avatar UI listens to these and animates the progress bar smoothly.
+ *
+ * `pct` is 0–100; `stage` is one of:
+ *   'received'    -> Multer parsed the upload
+ *   'validating'  -> moderation / magic-byte / quota checks
+ *   'uploading'   -> server-to-R2 PutObject in flight
+ *   'persisting'  -> writing avatar URL to user row
+ *   'completed'   -> all done (also dispatches the AVATAR_UPLOAD push)
+ *   'failed'      -> any error in the pipeline
+ */
+function emitAvatarProgress(userId: string, pct: number, stage:
+    | 'received'
+    | 'validating'
+    | 'uploading'
+    | 'persisting'
+    | 'completed'
+    | 'failed',
+    extra?: Record<string, any>,
+): void {
+    try {
+        WebSocketService.sendToUser(userId, 'avatar:progress', {
+            pct: Math.max(0, Math.min(100, Math.round(pct))),
+            stage,
+            ...extra,
+        });
+    } catch (err: any) {
+        // Progress emission is best-effort — never block an upload on it.
+        logger.debug('[upload/avatar] emitAvatarProgress failed (non-fatal):', err?.message);
+    }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -341,6 +377,10 @@ router.post(
 
       if (!user) { sendError(req, res, 404, ErrorCode.NOT_FOUND, 'USER_NOT_FOUND', 'User not found'); return; }
 
+      // Stage 1: server received the multipart payload + image was validated
+      // by the upstream middleware chain.
+      emitAvatarProgress(user.id, 15, 'received');
+
       // Fix 6: Rich cooldown
       if (user.lastAvatarChange) {
         const daysSince = Math.floor(
@@ -367,9 +407,21 @@ router.post(
         }
       }
 
+      emitAvatarProgress(user.id, 25, 'validating');
+
       // Fix 7: Check quota BEFORE upload (don't increment yet)
       const quotaOk = await checkQuota(user.id, file.buffer.length, req, res);
-      if (!quotaOk) return;
+      if (!quotaOk) {
+        emitAvatarProgress(user.id, 0, 'failed', { reason: 'quota_exceeded' });
+        notifyUser({
+          userId: user.id,
+          type: NotificationType.AVATAR_UPLOAD,
+          titleKey: 'avatarUploadFailedTitle',
+          bodyKey: 'avatarUploadFailedBody',
+          data: { screen: '/(tabs)/profile', stage: 'failed', reason: 'quota_exceeded' },
+        }).catch((err) => logger.warn('[upload/avatar] failure notify failed:', err?.message));
+        return;
+      }
 
       // Delete old avatar from R2 (non-blocking)
       if (user.avatarStoragePath) {
@@ -378,11 +430,21 @@ router.post(
         );
       }
 
+      emitAvatarProgress(user.id, 45, 'uploading');
+
       const safeName = sanitizeOriginalName(file.originalname, 'avatar');
       const result = await r2MediaStorage.uploadPublic('avatars', user.id, file.buffer, safeName, file.mimetype);
 
       if (!result.success || !result.url || !result.key) {
         sendError(req, res, 500, ErrorCode.EXTERNAL_SERVICE, 'STORAGE_UPLOAD_FAILED', result.error || 'Upload failed');
+        emitAvatarProgress(user.id, 0, 'failed', { reason: 'storage_upload_failed' });
+        notifyUser({
+          userId: user.id,
+          type: NotificationType.AVATAR_UPLOAD,
+          titleKey: 'avatarUploadFailedTitle',
+          bodyKey: 'avatarUploadFailedBody',
+          data: { screen: '/(tabs)/profile', stage: 'failed', reason: 'storage_upload_failed' },
+        }).catch((err) => logger.warn('[upload/avatar] failure notify failed:', err?.message));
         await UploadAnalyticsService.record({
           userId: user.id, type: 'AVATAR', status: 'FAILED',
           fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -390,6 +452,8 @@ router.post(
         });
         return;
       }
+
+      emitAvatarProgress(user.id, 85, 'persisting');
 
       // Fix 7: Increment quota AFTER successful upload
       await incrementQuota(user.id, file.buffer.length);
@@ -404,6 +468,14 @@ router.post(
         logger.error('[upload/avatar] DB update failed after R2 upload — rolling back:', dbErr?.message);
         await rollbackR2Upload(user.id, result.key!, file.buffer.length);
         sendError(req, res, 500, ErrorCode.DATABASE, 'DB_UPDATE_FAILED', 'Could not save the image. The uploaded file was removed.');
+        emitAvatarProgress(user.id, 0, 'failed', { reason: 'db_update_failed' });
+        notifyUser({
+          userId: user.id,
+          type: NotificationType.AVATAR_UPLOAD,
+          titleKey: 'avatarUploadFailedTitle',
+          bodyKey: 'avatarUploadFailedBody',
+          data: { screen: '/(tabs)/profile', stage: 'failed', reason: 'db_update_failed' },
+        }).catch((err) => logger.warn('[upload/avatar] failure notify failed:', err?.message));
         await UploadAnalyticsService.record({
           userId: user.id, type: 'AVATAR', status: 'FAILED',
           fileSizeMB: file.buffer.length / 1e6, durationMs: Date.now() - startTime,
@@ -423,6 +495,8 @@ router.post(
       }
 
       invalidateUserCache(clerkUserId);
+
+      emitAvatarProgress(user.id, 100, 'completed', { url: result.url });
 
       // ✅ FIX: Move heavy post-upload work off the request path so the
       // client gets the new avatar URL immediately. Profile completion
@@ -455,17 +529,18 @@ router.post(
         }
 
         try {
-          const { enqueueNotification } = await import('../queues/notification.queue');
-          const lang = await getUserLanguage(user.id);
-          await enqueueNotification({
+          // Single completion notification — localized, preference-gated,
+          // inbox + push + WebSocket via the unified helper.
+          await notifyUser({
             userId: user.id,
-            title: renderPushTemplate('avatarUpdatedTitle', lang),
-            message: renderPushTemplate('avatarUpdatedBody', lang),
-            type: 'GENERAL',
-            data: { type: 'UPLOAD_SUCCESS', screen: '/(tabs)/Profile' },
+            type: NotificationType.AVATAR_UPLOAD,
+            titleKey: 'avatarUploadCompleteTitle',
+            bodyKey: 'avatarUploadCompleteBody',
+            data: { screen: '/(tabs)/Profile', stage: 'completed', url: result.url },
+            idempotencyKey: `avatar-upload:${user.id}:${result.key}`,
           });
         } catch (err) {
-          logger.error('[upload/avatar] Enqueue notification failed for avatar:', err);
+          logger.error('[upload/avatar] notifyUser failed for avatar:', err);
         }
 
         try {

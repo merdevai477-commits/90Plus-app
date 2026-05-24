@@ -23,15 +23,28 @@ interface NotificationPreferences {
     matchStart: boolean;
     matchEnd: boolean;
     matchHalftime: boolean;
+    matchCards: boolean;
+    matchSubs: boolean;
+    matchVar: boolean;
+    matchLineups: boolean;
     leagueMatches: boolean;
     socialFollow: boolean;
     socialLike: boolean;
     socialComment: boolean;
     socialReply: boolean;
     socialMention: boolean;
+    socialShare: boolean;
     predictionResults: boolean;
     luckyWheel: boolean;
     gifts: boolean;
+    dailyQuiz: boolean;
+    cooldown: boolean;
+    levelUp: boolean;
+    reportUpdates: boolean;
+    avatarUpload: boolean;
+    videoProcessed: boolean;
+    leaderboard: boolean;
+    aiCoach: boolean;
 }
 
 const DEFAULT_PREFS: NotificationPreferences = {
@@ -39,15 +52,29 @@ const DEFAULT_PREFS: NotificationPreferences = {
     matchStart: true,
     matchEnd: true,
     matchHalftime: true,
+    matchCards: true,
+    matchSubs: true,
+    matchVar: true,
+    matchLineups: true,
     leagueMatches: true,
     socialFollow: true,
     socialLike: true,
     socialComment: true,
     socialReply: true,
     socialMention: true,
+    socialShare: true,
     predictionResults: true,
     luckyWheel: true,
     gifts: true,
+    dailyQuiz: true,
+    cooldown: true,
+    levelUp: true,
+    reportUpdates: true,
+    avatarUpload: true,
+    videoProcessed: true,
+    leaderboard: true,
+    // Opt-in by design — surprise AI pushes feel spammy.
+    aiCoach: false,
 };
 
 async function fetchPreferences(token: string): Promise<NotificationPreferences> {
@@ -200,6 +227,14 @@ export default function NotificationPreferencesScreen() {
                         <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefHalftime} subtitle={t.notifications.prefHalftimeSub} value={current.matchHalftime} field="matchHalftime" onToggle={handleToggle} loading={loadingField === 'matchHalftime'} />
                         <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefMatchCards} subtitle={t.notifications.prefMatchCardsSub} value={current.matchCards} field="matchCards" onToggle={handleToggle} loading={loadingField === 'matchCards'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefMatchSubs} subtitle={t.notifications.prefMatchSubsSub} value={current.matchSubs} field="matchSubs" onToggle={handleToggle} loading={loadingField === 'matchSubs'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefMatchVar} subtitle={t.notifications.prefMatchVarSub} value={current.matchVar} field="matchVar" onToggle={handleToggle} loading={loadingField === 'matchVar'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefMatchLineups} subtitle={t.notifications.prefMatchLineupsSub} value={current.matchLineups} field="matchLineups" onToggle={handleToggle} loading={loadingField === 'matchLineups'} />
+                        <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefLeague} subtitle={t.notifications.prefLeagueSub} value={current.leagueMatches} field="leagueMatches" onToggle={handleToggle} loading={loadingField === 'leagueMatches'} />
                     </View>
                 </View>
@@ -217,6 +252,8 @@ export default function NotificationPreferencesScreen() {
                         <SwitchRow label={t.notifications.prefReply} subtitle={t.notifications.prefReplySub} value={current.socialReply} field="socialReply" onToggle={handleToggle} loading={loadingField === 'socialReply'} />
                         <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefMention} subtitle={t.notifications.prefMentionSub} value={current.socialMention} field="socialMention" onToggle={handleToggle} loading={loadingField === 'socialMention'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefShare} subtitle={t.notifications.prefShareSub} value={current.socialShare} field="socialShare" onToggle={handleToggle} loading={loadingField === 'socialShare'} />
                     </View>
                 </View>
 
@@ -229,6 +266,28 @@ export default function NotificationPreferencesScreen() {
                         <SwitchRow label={t.notifications.prefLuckyWheel} subtitle={t.notifications.prefLuckyWheelSub} value={current.luckyWheel} field="luckyWheel" onToggle={handleToggle} loading={loadingField === 'luckyWheel'} />
                         <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefGifts} subtitle={t.notifications.prefGiftsSub} value={current.gifts} field="gifts" onToggle={handleToggle} loading={loadingField === 'gifts'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefDailyQuiz} subtitle={t.notifications.prefDailyQuizSub} value={current.dailyQuiz} field="dailyQuiz" onToggle={handleToggle} loading={loadingField === 'dailyQuiz'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefCooldown} subtitle={t.notifications.prefCooldownSub} value={current.cooldown} field="cooldown" onToggle={handleToggle} loading={loadingField === 'cooldown'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefLevelUp} subtitle={t.notifications.prefLevelUpSub} value={current.levelUp} field="levelUp" onToggle={handleToggle} loading={loadingField === 'levelUp'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefLeaderboard} subtitle={t.notifications.prefLeaderboardSub} value={current.leaderboard} field="leaderboard" onToggle={handleToggle} loading={loadingField === 'leaderboard'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefReportUpdates} subtitle={t.notifications.prefReportUpdatesSub} value={current.reportUpdates} field="reportUpdates" onToggle={handleToggle} loading={loadingField === 'reportUpdates'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefAvatarUpload} subtitle={t.notifications.prefAvatarUploadSub} value={current.avatarUpload} field="avatarUpload" onToggle={handleToggle} loading={loadingField === 'avatarUpload'} />
+                        <View style={styles.divider} />
+                        <SwitchRow label={t.notifications.prefVideoProcessed} subtitle={t.notifications.prefVideoProcessedSub} value={current.videoProcessed} field="videoProcessed" onToggle={handleToggle} loading={loadingField === 'videoProcessed'} />
+                    </View>
+                </View>
+
+                {/* AI Coach Section (opt-in) */}
+                <View style={styles.section}>
+                    <SectionHeader title={t.notifications.sectionAi} icon="sparkles-outline" />
+                    <View style={styles.card}>
+                        <SwitchRow label={t.notifications.prefAiCoach} subtitle={t.notifications.prefAiCoachSub} value={current.aiCoach} field="aiCoach" onToggle={handleToggle} loading={loadingField === 'aiCoach'} />
                     </View>
                 </View>
 

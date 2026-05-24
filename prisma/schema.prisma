@@ -939,13 +939,20 @@ enum NotificationType {
   SHARE
   VIDEO_PROCESSED
   REPORT_RESOLVED
+  REPORT_SUBMITTED
   MILESTONE
   COIN_MILESTONE
   LUCKY_WHEEL
+  LUCKY_WHEEL_RENEWED
   LEADERBOARD_TOP10
+  LEADERBOARD_TOP3
   RE_ENGAGEMENT
   GENERAL
   MODERATION_ALERT
+  AVATAR_UPLOAD
+  AI_CHECKIN
+  COOLDOWN_EXPIRED
+  DAILY_QUIZ_RENEWED
 }
 
 model Report {
@@ -1813,6 +1820,10 @@ model NotificationPreferences {
   matchStart     Boolean @default(true)
   matchEnd       Boolean @default(true)
   matchHalftime  Boolean @default(true)
+  matchCards     Boolean @default(true)
+  matchSubs      Boolean @default(true)
+  matchVar       Boolean @default(true)
+  matchLineups   Boolean @default(true)
   leagueMatches  Boolean @default(true)
 
   // Social notifications
@@ -1821,11 +1832,22 @@ model NotificationPreferences {
   socialComment  Boolean @default(true)
   socialReply    Boolean @default(true)
   socialMention  Boolean @default(true)
+  socialShare    Boolean @default(true)
 
   // General notifications
   predictionResults Boolean @default(true)
   luckyWheel        Boolean @default(true)
   gifts             Boolean @default(true)
+  dailyQuiz         Boolean @default(true)
+  cooldown          Boolean @default(true)
+  levelUp           Boolean @default(true)
+  reportUpdates     Boolean @default(true)
+  avatarUpload      Boolean @default(true)
+  videoProcessed    Boolean @default(true)
+  leaderboard       Boolean @default(true)
+
+  // Opt-in (default off): personalised AI coach check-in twice a day.
+  aiCoach           Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

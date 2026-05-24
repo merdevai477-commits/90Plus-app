@@ -14,12 +14,9 @@
 import cron from 'node-cron';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import PushNotificationService from './push-notification.service';
-import {
-    renderPushTemplate,
-    readLanguageFromSettings,
-    type PushTemplateKey,
-} from './push-templates.service';
+import { notifyUsers } from './notify.service';
+import { NotificationType } from './notification.service';
+import { type PushTemplateKey } from './push-templates.service';
 
 const BATCH_SIZE = 50;
 
@@ -122,22 +119,26 @@ async function notifyCooldownExpiry(type: CooldownType): Promise<number> {
 
     if (eligibleUsers.length === 0) return 0;
 
-    let sent = 0;
+    let totalDelivered = 0;
     for (let i = 0; i < eligibleUsers.length; i += BATCH_SIZE) {
         const batch = eligibleUsers.slice(i, i + BATCH_SIZE);
-        const payloads = batch.map(u => {
-            const lang = readLanguageFromSettings(u.settings);
-            return {
-                to: u.expoPushToken,
-                title: renderPushTemplate(config.titleKey, lang),
-                body: renderPushTemplate(config.bodyKey, lang),
-                data: { type: 'COOLDOWN_EXPIRED', cooldownType: type, screen: '/(tabs)/profile' },
-                channelId: 'general',
-            };
-        });
-
-        const result = await PushNotificationService.sendBulkNotifications(payloads);
-        sent += result.success;
+        const result = await notifyUsers(
+            batch.map((u) => ({
+                userId: u.id,
+                type: NotificationType.COOLDOWN_EXPIRED,
+                titleKey: config.titleKey,
+                bodyKey: config.bodyKey,
+                data: {
+                    screen: '/(tabs)/profile',
+                    cooldownType: type,
+                    resource: type,
+                },
+                // Idempotent across cron drift / restarts within the day.
+                idempotencyKey: `cooldown:${type}:${u.id}:${dateKey}`,
+            })),
+            { concurrency: 20 },
+        );
+        totalDelivered += result.delivered;
     }
 
     // Mark as notified in Redis (TTL = cooldown days, so we don't notify again until next expiry)
@@ -150,7 +151,7 @@ async function notifyCooldownExpiry(type: CooldownType): Promise<number> {
         await pipeline.exec();
     }
 
-    return sent;
+    return totalDelivered;
 }
 
 /**

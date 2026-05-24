@@ -175,9 +175,16 @@ router.put('/preferences', requireAuth, async (req: Request, res: Response): Pro
         if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
 
         const allowedFields = [
-            'matchGoals', 'matchStart', 'matchEnd', 'matchHalftime', 'leagueMatches',
-            'socialFollow', 'socialLike', 'socialComment', 'socialReply', 'socialMention',
-            'predictionResults', 'luckyWheel', 'gifts',
+            // Match events
+            'matchGoals', 'matchStart', 'matchEnd', 'matchHalftime',
+            'matchCards', 'matchSubs', 'matchVar', 'matchLineups', 'leagueMatches',
+            // Social
+            'socialFollow', 'socialLike', 'socialComment', 'socialReply', 'socialMention', 'socialShare',
+            // Predictions / rewards / lifecycle
+            'predictionResults', 'luckyWheel', 'gifts', 'dailyQuiz', 'cooldown',
+            'levelUp', 'reportUpdates', 'avatarUpload', 'videoProcessed', 'leaderboard',
+            // Opt-in AI coach
+            'aiCoach',
         ];
 
         const updateData: Record<string, boolean> = {};

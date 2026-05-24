@@ -13,7 +13,11 @@ export type WSEventType =
     | 'like'
     | 'follow'
     | 'match_update'
-    | 'reel_update';
+    | 'reel_update'
+    // Real-time upload progress for the active client. Used by the avatar
+    // upload UI to render a percentage during the multi-stage server-side
+    // pipeline (received -> R2 -> DB).
+    | 'avatar:progress';
 
 /**
  * WebSocket Message Payload Interface

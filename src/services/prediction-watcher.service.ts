@@ -11,8 +11,18 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
-import { enqueueNotification } from '../queues/notification.queue';
-import { getUserLanguage, renderPushTemplate } from './push-templates.service';
+import { notifyUser } from './notify.service';
+import { NotificationType } from './notification.service';
+
+/**
+ * Stable bucket for idempotency on leaderboard notifications. We use UTC
+ * day so a user crossing 4→3 multiple times in the same day still gets only
+ * one push for that day. Periodic resets (weekly/monthly) can drift in/out
+ * across this boundary but the user will be re-notified next day at worst.
+ */
+function leaderboardPeriodKey(): string {
+    return new Date().toISOString().slice(0, 10);
+}
 
 
 export class PredictionWatcherService {
@@ -85,7 +95,7 @@ export class PredictionWatcherService {
             const matchIds = unresolvedPredictions.map((p: any) => p.apiMatchId);
             logger.info(`📊 Checking ${matchIds.length} matches with unresolved predictions...`);
 
-            const oldTop10 = await this.getTop10UserIds();
+            const oldBoard = await this.getTopUserIds(10);
             let resolvedAny = false;
 
             // Check each match
@@ -100,20 +110,8 @@ export class PredictionWatcherService {
 
             // If predictions were resolved, check leaderboard changes
             if (resolvedAny) {
-                const newTop10 = await this.getTop10UserIds();
-                const newIds = newTop10.filter((id) => !oldTop10.includes(id));
-                
-                for (const userId of newIds) {
-                    logger.info(`🏆 User ${userId} entered Top 10 Leaderboard! Sending notification...`);
-                    const lang = await getUserLanguage(userId);
-                    await enqueueNotification({
-                        userId,
-                        type: 'LEADERBOARD_TOP10',
-                        title: renderPushTemplate('leaderboardTop10Title', lang),
-                        message: renderPushTemplate('leaderboardTop10Body', lang),
-                        data: { type: 'LEADERBOARD_TOP10', screen: '/(tabs)/rank' }
-                    }).catch(() => {});
-                }
+                const newBoard = await this.getTopUserIds(10);
+                await this.notifyLeaderboardEntries(oldBoard, newBoard);
             }
 
             logger.info('✅ Prediction check completed');
@@ -180,22 +178,11 @@ export class PredictionWatcherService {
                 return { success: false, message: `Match not finished yet (status: ${status})` };
             }
 
-            const oldTop10 = await this.getTop10UserIds();
+            const oldBoard = await this.getTopUserIds(10);
             await PredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
-            const newTop10 = await this.getTop10UserIds();
+            const newBoard = await this.getTopUserIds(10);
+            await this.notifyLeaderboardEntries(oldBoard, newBoard);
 
-            const newIds = newTop10.filter((id) => !oldTop10.includes(id));
-            for (const userId of newIds) {
-                const lang = await getUserLanguage(userId);
-                await enqueueNotification({
-                    userId,
-                    type: 'LEADERBOARD_TOP10',
-                    title: renderPushTemplate('leaderboardTop10Title', lang),
-                    message: renderPushTemplate('leaderboardTop10Body', lang),
-                    data: { type: 'LEADERBOARD_TOP10', screen: '/(tabs)/rank' }
-                }).catch(() => {});
-            }
-            
             return { success: true, message: `Resolved predictions for match ${matchId} (${homeScore}-${awayScore})` };
         } catch (error: any) {
             return { success: false, message: error.message || 'Unknown error' };
@@ -203,9 +190,57 @@ export class PredictionWatcherService {
     }
 
     /**
-     * Get IDs of current Top 10 predictors in leaderboard
+     * Dispatch leaderboard celebration notifications when a user newly enters
+     * either the top-3 (elite) or the top-10. Both branches share the same
+     * `idempotencyKey` per day to avoid spamming a yo-yoing user.
+     *
+     * Order matters: a user crossing from rank 5 -> 2 receives BOTH the
+     * top-10 push (if they were not in top-10 before) and the top-3 push.
+     * Most users will already be top-10 when they crack top-3, so the
+     * top-10 branch is a no-op.
      */
-    private static async getTop10UserIds(): Promise<string[]> {
+    private static async notifyLeaderboardEntries(
+        oldBoard: string[],
+        newBoard: string[],
+    ): Promise<void> {
+        const oldTop10 = new Set(oldBoard.slice(0, 10));
+        const newTop10 = newBoard.slice(0, 10);
+        const oldTop3 = new Set(oldBoard.slice(0, 3));
+        const newTop3 = newBoard.slice(0, 3);
+        const period = leaderboardPeriodKey();
+
+        const top10New = newTop10.filter((id) => !oldTop10.has(id));
+        for (const userId of top10New) {
+            logger.info(`🏆 User ${userId} entered Top 10 Leaderboard`);
+            await notifyUser({
+                userId,
+                type: NotificationType.LEADERBOARD_TOP10,
+                titleKey: 'leaderboardTop10Title',
+                bodyKey: 'leaderboardTop10Body',
+                data: { screen: '/(tabs)/rank', rank: newBoard.indexOf(userId) + 1 },
+                idempotencyKey: `top10:${userId}:${period}`,
+            }).catch((err) => logger.warn('[predictionWatcher] top10 notify failed:', err?.message));
+        }
+
+        const top3New = newTop3.filter((id) => !oldTop3.has(id));
+        for (const userId of top3New) {
+            logger.info(`🥇 User ${userId} entered Top 3 Leaderboard (elite)`);
+            await notifyUser({
+                userId,
+                type: NotificationType.LEADERBOARD_TOP3,
+                titleKey: 'leaderboardTop3Title',
+                bodyKey: 'leaderboardTop3Body',
+                data: { screen: '/(tabs)/rank', rank: newBoard.indexOf(userId) + 1 },
+                idempotencyKey: `top3:${userId}:${period}`,
+            }).catch((err) => logger.warn('[predictionWatcher] top3 notify failed:', err?.message));
+        }
+    }
+
+    /**
+     * Get IDs of the current top-N predictors, ordered. We fetch with `n`
+     * so the same query backs both the top-3 and top-10 branches.
+     */
+    private static async getTopUserIds(n: number = 10): Promise<string[]> {
         try {
             const countsByUserAndState = await (prisma as any).prediction.groupBy({
                 by: ['userId', 'isCorrect'],
@@ -233,11 +268,11 @@ export class PredictionWatcherService {
                     if (b.stats.accuracy !== a.stats.accuracy) return b.stats.accuracy - a.stats.accuracy;
                     return b.stats.correct - a.stats.correct;
                 })
-                .slice(0, 10);
+                .slice(0, Math.max(1, n));
 
             return candidates.map(c => c.userId);
         } catch (err) {
-            logger.warn('Error fetching Top 10 user IDs for leaderboard check:', err);
+            logger.warn('Error fetching top user IDs for leaderboard check:', err);
             return [];
         }
     }

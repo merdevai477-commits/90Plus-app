@@ -9,6 +9,8 @@ import { XpActionType, Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { pushXpUpdate } from './xp-sse.service';
+import { notifyUser } from './notify.service';
+import { NotificationType } from './notification.service';
 
 // ─── XP Values Map ──────────────────────────────────────────────────────────
 
@@ -223,22 +225,14 @@ export async function awardXp(input: AwardXpInput): Promise<AwardXpResult> {
       const previousLevel = updatedUser.level;
       const leveledUp = newLevel > previousLevel;
 
-      // 5. Update level if changed
+      // 5. Update level if changed. The LEVEL_UP notification is dispatched
+      //    *after* the transaction commits via notifyUser, so push/WS are
+      //    not blocked on the DB transaction and we get proper localization
+      //    + preference gating + idempotency.
       if (leveledUp) {
         await tx.user.update({
           where: { id: userId },
           data: { level: newLevel },
-        });
-
-        // Create LEVEL_UP notification
-        await tx.notification.create({
-          data: {
-            userId,
-            title: 'Level Up! 🎉',
-            message: `You reached Level ${newLevel} — ${levelTitle(newLevel)}!`,
-            type: 'LEVEL_UP',
-            data: { previousLevel, newLevel, title: levelTitle(newLevel) },
-          },
         });
       }
 
@@ -263,6 +257,29 @@ export async function awardXp(input: AwardXpInput): Promise<AwardXpResult> {
         action,
         leveledUp: result.leveledUp,
         newTitle: result.leveledUp ? levelTitle(result.newLevel) : undefined,
+      });
+    }
+
+    // Fire the LEVEL_UP notification out-of-band so a failure here can never
+    // roll back the XP award. Idempotency key includes (userId, newLevel) so
+    // repeated calls for the same level are silently coalesced.
+    if (result.leveledUp) {
+      notifyUser({
+        userId,
+        type: NotificationType.LEVEL_UP,
+        titleKey: 'levelUpTitle',
+        bodyKey: 'levelUpBody',
+        vars: { level: String(result.newLevel) },
+        data: {
+          screen: '/(tabs)/profile',
+          stat: 'level',
+          previousLevel: result.previousLevel,
+          newLevel: result.newLevel,
+          title: levelTitle(result.newLevel),
+        },
+        idempotencyKey: `level-up:${userId}:${result.newLevel}`,
+      }).catch((err) => {
+        logger.warn('[xp] LEVEL_UP notify failed (non-fatal):', err?.message);
       });
     }
 
