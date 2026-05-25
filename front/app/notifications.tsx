@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import type { LucideIcon } from 'lucide-react-native';
@@ -58,6 +58,7 @@ import { useNotifications } from '../components/notifications/hooks/useNotificat
 import { useAuth } from '@clerk/clerk-expo';
 import { NotificationService, type SocialNotification } from '../src/services/authService';
 import { useHomeStore } from '../src/store/home.store';
+import { syncExpoPushTokenIfGranted } from '../src/hooks/usePushNotifications';
 import { logger } from '../utils/logger';
 import { toastManager } from '../services/toastManager';
 import { useTranslation } from '../src/i18n';
@@ -606,6 +607,12 @@ export default function NotificationsScreen() {
 
     const [showLuckyWheel, setShowLuckyWheel] = useState(false);
     const loadingToastShownRef = useRef(false);
+
+    useFocusEffect(
+        useCallback(() => {
+            void syncExpoPushTokenIfGranted(getToken);
+        }, [getToken]),
+    );
 
     // Toast feedback for loading state — only if first-load is taking a moment
     useEffect(() => {

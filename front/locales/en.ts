@@ -617,9 +617,17 @@ export const en = {
     difficultyEasy: 'Easy',
     difficultyMedium: 'Medium',
     difficultyHard: 'Hard',
-    langArabic: 'العربية',
+    langArabic: 'Arabic',
     langEnglish: 'English',
     switchQuizLang: 'Switch quiz language',
+    chooseLangTitle: 'Choose quiz language',
+    chooseLangSubtitle: 'You can change it later with the language button',
+    scoreLabel: 'Score',
+    xpEarnedLabel: 'XP earned',
+    rateLimit: 'Too many requests. Please wait a moment and try again.',
+    secondsUnit: 's',
+    xpBonus: '+{amount} XP',
+    backToRank: 'Back to rank',
     // QuizPopup (interstitial CTA shown after a delay on screens that
     // pull the user toward the daily quiz).
     popupTitle: 'Daily Quiz',
@@ -1795,6 +1803,7 @@ export const en = {
     // Input
     inputPlaceholder: 'Type your message...',
     inputPlaceholderEdit: 'Edit...',
+    tableScrollHint: 'Swipe horizontally to see all columns',
     editingMessage: 'Edit message',
     cancelEdit: 'Cancel',
     sendButton: 'Send',
@@ -1905,6 +1914,18 @@ export const en = {
     unknown: 'Something went wrong. Please try again.',
   },
 
+  searchModal: {
+    placeholder: 'Search players, videos, hashtags...',
+    searching: 'Searching...',
+    tabAll: 'All',
+    tabUsers: 'Users',
+    tabReels: 'Reels',
+    tabHashtags: 'Hashtags',
+    noResults: 'No results found',
+    recentSearches: 'Recent searches',
+    trending: 'Trending now',
+  },
+
   // ── Settings screen — full translation surface ───────────────────────
   settingsScreen: {
     title: 'Settings',
@@ -1922,6 +1943,8 @@ export const en = {
     sectionAccount: 'Account',
 
     // Notifications group
+    notificationPreferences: 'Notification preferences',
+    notificationPreferencesSub: 'Goals, predictions, reels, and more',
     notificationInbox: 'Notification inbox',
     notificationInboxSub: 'View alerts and history',
     matchReminders: 'Match reminders',
@@ -1952,6 +1975,7 @@ export const en = {
 
     // Support group
     contactUs: 'Contact us',
+    contactUsSub: 'Support, bugs, and ideas',
     reportBug: 'Report a bug',
     reportBugSub: 'Tell us about technical issues',
     featureRequest: 'Feature request',

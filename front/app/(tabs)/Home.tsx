@@ -36,7 +36,6 @@ import LuckyWheelModal from '../../components/common/LuckyWheelModal';
 import { HomeSectionError } from '../../components/home/HomeSectionError';
 import { useHomeStore } from '../../src/store/home.store';
 import { APP_BG } from '../../constants/ui';
-import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useHomeLikes } from '../../hooks/useHomeLikes';
 import { globalState } from '../../globalState';
@@ -357,8 +356,6 @@ export default function HomeScreen() {
         }
     }, [isSignedIn, user]);
 
-    useMatchEventsMonitor();
-
     // Refs to avoid stale closures in useFocusEffect
     const fetchUserProfileRef = useRef(fetchUserProfile);
     const fetchSpinWheelStatusRef = useRef(fetchSpinWheelStatus);
@@ -372,6 +369,7 @@ export default function HomeScreen() {
     const getTokenRef = useRef(getToken);
     const setUserModeRef = useRef(setUserMode);
     const lastLoadTimeRef = useRef(0);
+    const secondaryLoadedSessionRef = useRef(false);
     const LOAD_THROTTLE_MS = 2500;
 
     useEffect(() => {
@@ -460,9 +458,13 @@ export default function HomeScreen() {
                     ];
 
                     await Promise.all(criticalPromises);
-                    Promise.all(secondaryPromises).catch(() => {});
-                    preloadProfileDataRef.current().catch(() => {});
-                    preloadQuizDataRef.current().catch(() => {});
+
+                    if (!secondaryLoadedSessionRef.current) {
+                        secondaryLoadedSessionRef.current = true;
+                        Promise.all(secondaryPromises).catch(() => {});
+                        preloadProfileDataRef.current().catch(() => {});
+                        preloadQuizDataRef.current().catch(() => {});
+                    }
                 } catch (error) {
                     logger.error('Error loading home screen data:', error);
                 } finally {
@@ -493,6 +495,9 @@ export default function HomeScreen() {
                 fetchRankingsDataRef.current(token).catch(() => null),
                 fetchUserProfileRef.current().catch(() => null),
                 fetchSubscribedIdsRef.current().catch(() => null),
+                fetchSpinWheelStatusRef.current().catch(() => null),
+                fetchPredictionsDataRef.current(token).catch(() => null),
+                fetchUserRankRef.current().catch(() => null),
             ]);
         } catch (error) {
             logger.error('Error refreshing home screen:', error);

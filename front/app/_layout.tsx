@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, ErrorInfo } from "react";
@@ -31,7 +31,6 @@ import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StatusBar, I18nManager, Linking, StyleSheet, Text } from 'react-native';
-import * as Updates from 'expo-updates';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
 import { CoinsProvider } from "../contexts/CoinsContext";
@@ -49,6 +48,7 @@ import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { logger } from "../services/logger";
 import { preloadManager } from "../services/preloadManager";
+import { cacheService, CACHE_KEYS } from "../services/cacheService";
 
 // ✅ Required for OAuth redirects to close the in-app browser and resume the
 // JS thread. Must be called once at module scope before any OAuth flow runs.
@@ -143,22 +143,27 @@ const tokenCache = {
   },
 };
 
+function HideSplashWhenReady({ fontsReady }: { fontsReady: boolean }) {
+  useEffect(() => {
+    if (!fontsReady) return;
+    // Let React paint the JS splash layer before removing the native one.
+    const id = requestAnimationFrame(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    });
+    return () => cancelAnimationFrame(id);
+  }, [fontsReady]);
+
+  // Never leave the native splash up indefinitely.
+  useEffect(() => {
+    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 8000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return null;
+}
+
 function ClerkGate({ children }: { children: React.ReactNode }) {
   const { isLoaded } = useAuth();
-
-  // Hide splash as soon as Clerk is ready
-  useEffect(() => {
-    if (!isLoaded) return;
-    SplashScreen.hideAsync().catch(() => {});
-  }, [isLoaded]);
-
-  // Absolute safety — hide splash after 5s no matter what
-  useEffect(() => {
-    const safetyTimer = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 5000);
-    return () => clearTimeout(safetyTimer);
-  }, []);
 
   if (!isLoaded) {
     return <AppSplashScreen />;
@@ -225,13 +230,13 @@ import { LevelUpModal } from "../components/common/LevelUpModal";
 import { Image } from "expo-image";
 import { CLUBS } from "../data/clubs";
 import { BRANDS } from "../data/brands";
-import { cacheService } from "../services/cacheService";
 import { TamaguiProvider } from 'tamagui';
 import config from '../tamagui.config';
 
 function WebSocketInitializer({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isSignedIn, isLoaded, userId: clerkUserId } = useAuth();
   const { user } = useUser();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -248,6 +253,11 @@ function WebSocketInitializer({ children }: { children: React.ReactNode }) {
 
           unsubscribers.push(wsClient.subscribe('notification', (message: any) => {
             logger.debug('[WebSocket] Received notification:', message.payload);
+            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+            if (clerkUserId) {
+              cacheService.invalidate(`${CACHE_KEYS.NOTIFICATIONS}_${clerkUserId}`).catch(() => {});
+            }
           }));
 
           unsubscribers.push(wsClient.subscribe('comment', (message: any) => {
@@ -280,7 +290,7 @@ function WebSocketInitializer({ children }: { children: React.ReactNode }) {
         }
       };
     }
-  }, [isSignedIn, isLoaded, user?.id]);
+  }, [isSignedIn, isLoaded, user?.id, clerkUserId, queryClient]);
 
   return <>{children}</>;
 }
@@ -391,81 +401,38 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useLanguageStore(state => state.initialize);
   const isInitialized = useLanguageStore(state => state.isInitialized);
   const isRTL = useLanguageStore(state => state.isRTL);
-  const isReloadingRef = React.useRef(false); // In-flight guard only
-  const [reloadFailed, setReloadFailed] = React.useState(false);
   const [forceShow, setForceShow] = React.useState(false);
-  // null = unknown, true = already reloaded once, false = not yet
-  const [alreadyReloaded, setAlreadyReloaded] = React.useState<boolean | null>(null);
-
-  // Read persisted reload flag on mount
-  useEffect(() => {
-    AsyncStorage.getItem(RTL_RELOAD_FLAG_KEY)
-      .then(val => setAlreadyReloaded(val === 'true'))
-      .catch(() => setAlreadyReloaded(false));
-  }, []);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  // Safety net: after 5s always show children regardless of state
+  // Apply RTL flags without Updates.reloadAsync — reloadAsync causes a white
+  // screen on iOS production/TestFlight builds. Layout direction fixes itself
+  // on the next cold start after forceRTL is set.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      // Clear the reload flag in case it caused the loop
-      AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
-      setForceShow(true);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    // Wait until we know if we already reloaded
-    if (!isInitialized || alreadyReloaded === null) return;
-
+    if (!isInitialized) return;
     if (I18nManager.isRTL !== isRTL) {
       I18nManager.allowRTL(isRTL);
       I18nManager.forceRTL(isRTL);
-
-      // CRITICAL: Only reload ONCE across app restarts using AsyncStorage
-      // useRef resets on every restart → causes infinite reload loop
-      if (!alreadyReloaded && !isReloadingRef.current) {
-        isReloadingRef.current = true;
-        logger.info('[LanguageInitializer] RTL mismatch — reloading once to fix layout direction');
-        AsyncStorage.setItem(RTL_RELOAD_FLAG_KEY, 'true')
-          .then(() => Updates.reloadAsync())
-          .catch(() => {
-            // Reload failed — clear flag and continue without RTL fix
-            isReloadingRef.current = false;
-            AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
-            setReloadFailed(true);
-          });
-      } else {
-        // Already reloaded once — don't loop. Clear flag for next cold start.
-        logger.info('[LanguageInitializer] RTL mismatch after reload — skipping to avoid loop');
-        AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
-      }
-    } else {
-      // RTL is now correct — clear the persisted flag
-      AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
     }
-  }, [isInitialized, isRTL, alreadyReloaded]);
+    AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
+  }, [isInitialized, isRTL]);
 
-  // Safety net fired — show children no matter what
-  if (forceShow) return <>{children}</>;
+  // Safety net: never block boot longer than 5s
+  useEffect(() => {
+    const timer = setTimeout(() => setForceShow(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
-  // Still reading AsyncStorage or initializing language
-  if (alreadyReloaded === null || !isInitialized) return <AppSplashScreen />;
+  if (forceShow || isInitialized) {
+    return <>{children}</>;
+  }
 
-  // Reload failed — proceed without RTL fix (better than stuck forever)
-  if (reloadFailed) return <>{children}</>;
-
-  // Reload in progress — wait for it (safety net will unblock after 5s)
-  if (isReloadingRef.current) return <AppSplashScreen />;
-
-  return <>{children}</>;
+  return <AppSplashScreen />;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   // ── Load Poppins (Latin) + Cairo (Arabic) globally ────────────────────
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -646,13 +613,17 @@ export default function RootLayout() {
   // system fonts. A safety fallback ensures we never block forever on a
   // missing font download.
   const [fontTimeout, setFontTimeout] = React.useState(false);
+  const fontsReady = fontsLoaded || fontTimeout;
   useEffect(() => {
     if (fontsLoaded) return;
     const t = setTimeout(() => setFontTimeout(true), 4000);
     return () => clearTimeout(t);
   }, [fontsLoaded]);
-  if (!fontsLoaded && !fontTimeout) {
-    return null;
+
+  // Solid brand color if native splash drops before fonts are ready — avoids a
+  // blank white frame on iOS release builds.
+  if (!fontsReady) {
+    return <View style={{ flex: 1, backgroundColor: '#4A148C' }} />;
   }
 
   return (
@@ -665,6 +636,7 @@ export default function RootLayout() {
           publishableKey={clerkPublishableKey}
           tokenCache={tokenCache}
         >
+          <HideSplashWhenReady fontsReady={fontsReady} />
           <SentryUserTracker />
           <QueryClientProvider client={queryClient}>
             <PushNotificationSetup />
@@ -710,3 +682,5 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayout);

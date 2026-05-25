@@ -12,6 +12,8 @@ import { Trophy } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   Animated,
+  AppState,
+  type AppStateStatus,
   Modal,
   Platform,
   Pressable,
@@ -44,11 +46,15 @@ const SoonModal: React.FC<SoonModalProps> = ({ visible, onClose }) => {
   useEffect(() => {
     if (!visible) return;
     setTime(getWorldCupTimeLeft());
-    const tickRate = time.days > 1 ? 60_000 : 1_000;
-    const id = setInterval(() => setTime(getWorldCupTimeLeft()), tickRate);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, time.days > 1]);
+    const id = setInterval(() => setTime(getWorldCupTimeLeft()), 1_000);
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') setTime(getWorldCupTimeLeft());
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [visible]);
 
   const countdownItems: ReadonlyArray<{ val: number; lbl: string }> = [
     { val: time.days, lbl: t.rank.worldCup.days },

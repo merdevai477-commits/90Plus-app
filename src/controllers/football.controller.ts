@@ -285,7 +285,7 @@ export class FootballController {
    * compared to TV broadcasts and reported as a bug.
    */
   private static liveFixturesCache: { data: any[]; timestamp: number } | null = null;
-  private static readonly LIVE_CACHE_TTL = 30 * 1000; // 30 seconds
+  private static readonly LIVE_CACHE_TTL = 8 * 1000; // 8 seconds — aligned with live sync + matches tab
 
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
     try {
@@ -328,11 +328,18 @@ export class FootballController {
         }
       }
 
-      // Update cache
+      // Update cache + persist full payload for calendar/history
       FootballController.liveFixturesCache = {
         data: fixtures,
         timestamp: now,
       };
+
+      if (fixtures.length > 0) {
+        const { matchCacheService } = await import('../services/match-cache.service');
+        matchCacheService.upsertFixtures(fixtures).catch((err) => {
+          logger.warn('getLiveFixtures: DB upsert failed (non-fatal):', err);
+        });
+      }
 
       res.json({
         status: 'SUCCESS',

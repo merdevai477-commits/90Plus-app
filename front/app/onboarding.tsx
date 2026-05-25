@@ -15,7 +15,6 @@ import { router } from 'expo-router';
 import { Check, ChevronRight, ChevronLeft } from 'lucide-react-native';
 import { COLORS } from '../components/reels/constants';
 import { CLUBS } from '../data/clubs';
-import { BRANDS } from '../data/brands';
 import { COUNTRIES } from '../data/countries';
 import { LEAGUES } from '../data/leagues';
 import { useAuth } from '@clerk/clerk-expo';
@@ -30,236 +29,171 @@ import { globalState } from '../globalState';
 import { useHomeStore } from '../src/store/home.store';
 import { useTranslation } from '../src/i18n';
 import { clubLogoService } from '../services/clubLogoService';
-import { brandLogoService } from '../services/brandLogoService';
 import { useSettings } from '../contexts/SettingsContext';
 
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 3;
 
-type Step = 'club' | 'brand' | 'country' | 'leagues';
+type Step = 'club' | 'country' | 'leagues';
 
 export default function OnboardingScreen() {
     const { t } = useTranslation();
     const [step, setStep] = useState<Step>('club');
     const [selectedClub, setSelectedClub] = useState<string | null>(null);
-    const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
     const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
     const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]);
 
     const { getToken } = useAuth();
     const { addFavoriteLeague } = useSettings();
-    const progress = useSharedValue(0.25);
+    const progress = useSharedValue(0.33);
 
     useEffect(() => {
-        const stepProgress = { club: 0.25, brand: 0.5, country: 0.75, leagues: 1 };
+        const stepProgress = { club: 0.33, country: 0.66, leagues: 1 };
         progress.value = withSpring(stepProgress[step], { damping: 15 });
     }, [step]);
 
     const handleNext = useCallback(async () => {
         try {
             if (step === 'club' && selectedClub) {
-                setStep('brand');
-            } else if (step === 'brand' && selectedBrand) {
                 setStep('country');
             } else if (step === 'country' && selectedCountry) {
                 setStep('leagues');
             } else if (step === 'leagues' && selectedLeagues.length >= 3) {
-                // Save preferences first, then navigate
                 try {
-                    // Validate token before proceeding
                     const token = await getToken();
                     if (!token) {
-                        console.error('No auth token available');
                         Alert.alert(
                             t.onboardingFlow.authError,
                             t.onboardingFlow.pleaseLoginAgain,
-                            [
-                                {
-                                    text: t.onboardingFlow.okay,
-                                    onPress: () => router.replace('/auth')
-                                }
-                            ]
+                            [{ text: t.onboardingFlow.okay, onPress: () => router.replace('/auth') }],
                         );
                         return;
                     }
 
                     await savePreferences();
-                    
-                    // Save favorite leagues to local settings
+
                     for (const leagueId of selectedLeagues) {
                         await addFavoriteLeague(leagueId);
                     }
-                    
-                    // Update global state safely
+
                     try {
                         globalState.setUserType('diamond');
                         useHomeStore.getState().setUserMode('diamond');
                     } catch (stateError) {
                         console.error('Error updating global state:', stateError);
-                        // Continue anyway - state update is not critical
                     }
-                    
-                    // Navigate safely
+
                     try {
                         router.replace('/(tabs)/Home');
                     } catch (navError) {
-                        console.error('Navigation error:', navError);
-                        // Fallback navigation
                         router.push('/(tabs)/Home');
                     }
                 } catch (error) {
                     console.error('Save preferences error:', error);
-                    Alert.alert(
-                        t.common.error,
-                        t.onboardingFlow.saveError,
-                        [
-                            {
-                                text: t.onboardingFlow.retry,
-                                onPress: () => handleNext()
+                    Alert.alert(t.common.error, t.onboardingFlow.saveError, [
+                        { text: t.onboardingFlow.retry, onPress: () => handleNext() },
+                        {
+                            text: t.onboardingFlow.skip,
+                            onPress: () => {
+                                try {
+                                    router.replace('/(tabs)/Home');
+                                } catch {
+                                    router.push('/(tabs)/Home');
+                                }
                             },
-                            {
-                                text: t.onboardingFlow.skip,
-                                onPress: () => {
-                                    try {
-                                        router.replace('/(tabs)/Home');
-                                    } catch (navError) {
-                                        router.push('/(tabs)/Home');
-                                    }
-                                },
-                                style: 'cancel'
-                            }
-                        ]
-                    );
+                            style: 'cancel',
+                        },
+                    ]);
                 }
             }
         } catch (error) {
             console.error('Unexpected error in handleNext:', error);
-            Alert.alert(
-                t.onboardingFlow.unexpectedError,
-                t.onboardingFlow.unexpectedErrorMessage,
-                [
-                    {
-                        text: t.onboardingFlow.okay,
-                        onPress: () => {
-                            // Safe fallback - go to home anyway
-                            try {
-                                router.replace('/(tabs)/Home');
-                            } catch (navError) {
-                                router.push('/(tabs)/Home');
-                            }
+            Alert.alert(t.onboardingFlow.unexpectedError, t.onboardingFlow.unexpectedErrorMessage, [
+                {
+                    text: t.onboardingFlow.okay,
+                    onPress: () => {
+                        try {
+                            router.replace('/(tabs)/Home');
+                        } catch {
+                            router.push('/(tabs)/Home');
                         }
-                    }
-                ]
-            );
+                    },
+                },
+            ]);
         }
-    }, [step, selectedClub, selectedBrand, selectedCountry, selectedLeagues, addFavoriteLeague, getToken]);
+    }, [step, selectedClub, selectedCountry, selectedLeagues, addFavoriteLeague, getToken, t]);
 
     const handleBack = useCallback(() => {
-        if (step === 'brand') setStep('club');
-        else if (step === 'country') setStep('brand');
+        if (step === 'country') setStep('club');
         else if (step === 'leagues') setStep('country');
     }, [step]);
 
     const toggleLeague = useCallback((leagueId: number) => {
         setSelectedLeagues(prev =>
-            prev.includes(leagueId) ? prev.filter(id => id !== leagueId) : [...prev, leagueId]
+            prev.includes(leagueId) ? prev.filter(id => id !== leagueId) : [...prev, leagueId],
         );
     }, []);
 
-    // Save preferences to backend with comprehensive error handling
     const savePreferences = async () => {
+        const token = await getToken();
+        if (!token) throw new Error('No authentication token available');
+
+        const clubData = CLUBS.find(c => c.name === selectedClub);
+        const countryData = COUNTRIES.find(c => c.id === selectedCountry);
+
+        let realClubLogo: string | null = null;
         try {
-            const token = await getToken();
-            
-            if (!token) {
-                throw new Error('No authentication token available');
+            if (clubData?.apiId) {
+                realClubLogo = await Promise.race([
+                    clubLogoService.getClubLogo(clubData.apiId),
+                    new Promise<null>((_, reject) =>
+                        setTimeout(() => reject(new Error('Club logo fetch timeout')), 5000),
+                    ),
+                ]).catch(() => null);
             }
-            
-            // Get the full club and brand objects to send logos
-            const clubData = CLUBS.find(c => c.name === selectedClub);
-            const brandData = BRANDS.find(b => b.name === selectedBrand);
-            const countryData = COUNTRIES.find(c => c.id === selectedCountry);
-            
-            // Fetch real logos from external APIs with timeout
-            let realClubLogo: string | null = null;
-            let realBrandLogo: string | null = null;
-            
-            try {
-                if (clubData?.apiId) {
-                    realClubLogo = await Promise.race([
-                        clubLogoService.getClubLogo(clubData.apiId),
-                        new Promise<null>((_, reject) => 
-                            setTimeout(() => reject(new Error('Club logo fetch timeout')), 5000)
-                        )
-                    ]).catch(() => null);
-                }
-            } catch (logoError) {
-                console.warn('Failed to fetch club logo:', logoError);
-                // Continue with default logo
-            }
-            
-            try {
-                if (brandData?.apiId) {
-                    realBrandLogo = await Promise.race([
-                        brandLogoService.fetchBrandLogo(brandData.apiId),
-                        new Promise<null>((_, reject) => 
-                            setTimeout(() => reject(new Error('Brand logo fetch timeout')), 5000)
-                        )
-                    ]).catch(() => null);
-                }
-            } catch (logoError) {
-                console.warn('Failed to fetch brand logo:', logoError);
-                // Continue with default logo
-            }
-            
-            const apiUrl = getApiUrl();
-            if (!apiUrl) {
-                throw new Error('API URL not configured');
-            }
-            
-            const response = await fetch(`${apiUrl}/api/clerk/preferences`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    favoriteTeam: selectedClub,
-                    favoriteBrand: selectedBrand,
-                    country: selectedCountry,
-                    favoriteLeagues: selectedLeagues,
-                    // Send real logos for profile card (or fallback to default)
-                    clubLogo: realClubLogo || clubData?.logo || '',
-                    brandLogo: realBrandLogo || brandData?.logo || '',
-                    countryFlag: countryData?.flag,
-                }),
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                throw new Error(`Failed to save preferences: ${response.status} - ${errorText}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('Error in savePreferences:', error);
-            throw error;
+        } catch (logoError) {
+            console.warn('Failed to fetch club logo:', logoError);
         }
+
+        const apiUrl = getApiUrl();
+        if (!apiUrl) throw new Error('API URL not configured');
+
+        const response = await fetch(`${apiUrl}/api/clerk/preferences`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                favoriteTeam: selectedClub,
+                country: selectedCountry,
+                favoriteLeagues: selectedLeagues,
+                clubLogo: realClubLogo || clubData?.logo || '',
+                countryFlag: countryData?.flag,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            throw new Error(`Failed to save preferences: ${response.status} - ${errorText}`);
+        }
+
+        return await response.json();
     };
 
     const progressStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
 
-    const canProceed = step === 'club' ? !!selectedClub 
-        : step === 'brand' ? !!selectedBrand 
-        : step === 'country' ? !!selectedCountry 
-        : selectedLeagues.length >= 3;
+    const canProceed =
+        step === 'club' ? !!selectedClub : step === 'country' ? !!selectedCountry : selectedLeagues.length >= 3;
 
     const titles: Record<Step, string> = {
         club: t.onboardingFlow.titleClub,
-        brand: t.onboardingFlow.titleBrand,
         country: t.onboardingFlow.titleCountry,
         leagues: t.onboardingFlow.titleLeagues,
     };
+
+    const progressLabel =
+        step === 'club' ? '1/3' : step === 'country' ? '2/3' : '3/3';
 
     const renderClubItem = useCallback(({ item }: { item: typeof CLUBS[0] }) => {
         const isSelected = selectedClub === item.name;
@@ -277,19 +211,6 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
         );
     }, [selectedClub]);
-
-    const renderBrandItem = useCallback(({ item }: { item: typeof BRANDS[0] }) => {
-        const isSelected = selectedBrand === item.name;
-        return (
-            <TouchableOpacity style={[styles.gridItem, isSelected && styles.selectedItem, { backgroundColor: item.color || '#333' }]} onPress={() => setSelectedBrand(item.name)} activeOpacity={0.7}>
-                {item.logo ? (
-                    <Image source={{ uri: item.logo }} style={styles.brandLogo} contentFit="contain" />
-                ) : null}
-                <Text style={styles.brandItemName} numberOfLines={1}>{item.name}</Text>
-                {isSelected && <View style={styles.checkBadge}><Check size={12} color="#000" strokeWidth={3} /></View>}
-            </TouchableOpacity>
-        );
-    }, [selectedBrand]);
 
     const renderCountryItem = useCallback(({ item }: { item: typeof COUNTRIES[0] }) => {
         const isSelected = selectedCountry === item.id;
@@ -323,7 +244,7 @@ export default function OnboardingScreen() {
 
             <View style={styles.progressContainer}>
                 <View style={styles.progressBg}><Animated.View style={[styles.progressFill, progressStyle]} /></View>
-                <Text style={styles.progressText}>{step === 'club' ? '1/4' : step === 'brand' ? '2/4' : step === 'country' ? '3/4' : '4/4'}</Text>
+                <Text style={styles.progressText}>{progressLabel}</Text>
             </View>
 
             <Animated.View entering={FadeIn.duration(200)} style={styles.header}>
@@ -333,7 +254,6 @@ export default function OnboardingScreen() {
 
             <View style={styles.content}>
                 {step === 'club' && <FlatList data={CLUBS} renderItem={renderClubItem} keyExtractor={item => item.id} numColumns={3} showsVerticalScrollIndicator={false} contentContainerStyle={styles.gridContainer} removeClippedSubviews maxToRenderPerBatch={15} windowSize={5} />}
-                {step === 'brand' && <FlatList data={BRANDS} renderItem={renderBrandItem} keyExtractor={item => item.id} numColumns={3} showsVerticalScrollIndicator={false} contentContainerStyle={styles.gridContainer} />}
                 {step === 'country' && <FlatList data={COUNTRIES} renderItem={renderCountryItem} keyExtractor={item => item.id} numColumns={2} showsVerticalScrollIndicator={false} contentContainerStyle={styles.gridContainer} removeClippedSubviews />}
                 {step === 'leagues' && <FlatList data={LEAGUES} renderItem={renderLeagueItem} keyExtractor={item => item.id.toString()} showsVerticalScrollIndicator={false} contentContainerStyle={styles.leaguesContainer} removeClippedSubviews />}
             </View>
@@ -355,7 +275,6 @@ export default function OnboardingScreen() {
     );
 }
 
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     progressContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, gap: 12 },
@@ -372,8 +291,6 @@ const styles = StyleSheet.create({
     itemLogo: { width: 50, height: 50, borderRadius: 25 },
     itemLogoFallback: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
     itemLogoText: { color: '#fff', fontSize: 20, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-    brandLogo: { width: 50, height: 35, backgroundColor: '#fff', borderRadius: 6 },
-    brandItemName: { color: '#fff', fontSize: 11, marginTop: 6, textAlign: 'center', fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
     itemName: { color: '#fff', fontSize: 11, marginTop: 6, textAlign: 'center', fontWeight: '500' },
     checkBadge: { position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center' },
     checkBadgeSmall: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center' },

@@ -1071,6 +1071,18 @@ export interface CooldownsResponse {
     reelDelete?: ReelDeleteInfo;  // Requirements 13.4, 13.5, 13.6, 13.7
 }
 
+function parseReelsCommentApiError(data: Record<string, unknown>, status: number): string {
+    const message = typeof data?.message === 'string' ? data.message : undefined;
+    if (message) return message;
+    const details = data?.details as Record<string, unknown> | undefined;
+    if (details?.reason && typeof details.reason === 'string') return details.reason;
+    if (status === 404) return 'الريل غير موجود';
+    if (status === 401) return 'يرجى تسجيل الدخول مرة أخرى';
+    if (status === 429) return message || 'تم الوصول للحد الأقصى للتعليقات';
+    if (status === 400) return 'محتوى التعليق غير مسموح';
+    return 'فشل الطلب';
+}
+
 export class ReelsService {
     /**
      * Get reels feed with pagination (5 reels per request)
@@ -1268,7 +1280,11 @@ export class ReelsService {
     /**
      * Get comments for a reel
      */
-    static async getComments(token: string, reelId: string, limit: number = 3): Promise<any[]> {
+    static async getComments(
+        token: string,
+        reelId: string,
+        limit: number = 3,
+    ): Promise<{ comments: any[]; error?: string }> {
         try {
             const response = await fetch(`${API_URL}/reels/${reelId}/comments?limit=${limit}`, {
                 method: 'GET',
@@ -1279,13 +1295,16 @@ export class ReelsService {
             });
 
             const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return data.data.comments || [];
+            if (response.ok && data.status === 'SUCCESS') {
+                return { comments: data.data.comments || [] };
             }
-            return [];
+            return {
+                comments: [],
+                error: parseReelsCommentApiError(data, response.status),
+            };
         } catch (error) {
             console.error('Error getting comments:', error);
-            return [];
+            return { comments: [], error: 'تعذر تحميل التعليقات' };
         }
     }
 
@@ -1297,7 +1316,7 @@ export class ReelsService {
         reelId: string, 
         content: string,
         mentions?: string[]
-    ): Promise<{ success: boolean; comment?: any; error?: string }> {
+    ): Promise<{ success: boolean; comment?: any; error?: string; status?: number }> {
         try {
             const response = await fetch(`${API_URL}/reels/${reelId}/comments`, {
                 method: 'POST',
@@ -1312,10 +1331,14 @@ export class ReelsService {
             });
 
             const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            if (response.ok && data.status === 'SUCCESS') {
                 return { success: true, comment: data.data.comment };
             }
-            return { success: false, error: data.message };
+            return {
+                success: false,
+                error: parseReelsCommentApiError(data, response.status),
+                status: response.status,
+            };
         } catch (error: any) {
             console.error('Error adding comment:', error);
             return { success: false, error: error.message };
@@ -1332,7 +1355,7 @@ export class ReelsService {
         parentCommentId: string,
         content: string,
         mentions?: string[]
-    ): Promise<{ success: boolean; reply?: any; error?: string }> {
+    ): Promise<{ success: boolean; reply?: any; error?: string; status?: number }> {
         try {
             const response = await fetch(`${API_URL}/reels/${reelId}/comments`, {
                 method: 'POST',
@@ -1348,10 +1371,14 @@ export class ReelsService {
             });
 
             const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            if (response.ok && data.status === 'SUCCESS') {
                 return { success: true, reply: data.data.comment };
             }
-            return { success: false, error: data.message };
+            return {
+                success: false,
+                error: parseReelsCommentApiError(data, response.status),
+                status: response.status,
+            };
         } catch (error: any) {
             console.error('Error adding reply:', error);
             return { success: false, error: error.message };

@@ -33,7 +33,7 @@ interface QuizFooterActionsProps {
   isCorrect?: boolean | null;
 }
 
-export function QuizFooterActions({
+function QuizFooterActionsInner({
   onSkip,
   onNext,
   skipDisabled = false,
@@ -163,3 +163,5 @@ const styles = StyleSheet.create({
   },
   arrowRTL: { transform: [{ scaleX: -1 }] },
 });
+
+export const QuizFooterActions = React.memo(QuizFooterActionsInner);

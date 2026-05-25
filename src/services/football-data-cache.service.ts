@@ -109,34 +109,36 @@ class FootballDataCacheService {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const isPastDate = date < today;
+            const isToday = date.getTime() === today.getTime();
 
-            // ✅ For past dates, try database first (permanent, shared for all users, no API call)
+            // Calendar past days: serve from DB when we already have fixtures (any status)
             if (isPastDate) {
                 try {
-                    const dbMatches = await matchCacheService.getFinishedMatchesFromDb(startOfDay, endOfDay);
+                    const dbMatches = await matchCacheService.getMatchesFromDbByDateRange(startOfDay, endOfDay);
                     if (dbMatches.length > 0) {
-                        logger.debug(`📦 [${dateString}] Got ${dbMatches.length} matches from DB (shared for all users, no API call)`);
-                        return dbMatches.map(m => matchCacheService.convertDbMatchToApiFormat(m));
+                        logger.debug(`📦 [${dateString}] ${dbMatches.length} matches from DB (calendar cache)`);
+                        return dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
                     }
                 } catch (dbError) {
-                    logger.warn(`[${dateString}] Error getting matches from DB, falling back to API:`, dbError);
+                    logger.warn(`[${dateString}] DB read failed, falling back to API:`, dbError);
                 }
             }
 
-            // ✅ Fetch from API (with request deduplication - if 1000 users request, only 1 API call)
-            // Fetch ALL leagues (no league filter = maximum matches)
-            logger.debug(`📡 [${dateString}] Fetching matches from API (all leagues, request will be shared with concurrent users)...`);
+            logger.debug(`📡 [${dateString}] Fetching matches from API...`);
             const apiMatches = await footballService.getFixtures({ date: dateString });
 
-            // ✅ Archive finished matches to database (permanent, shared for all users)
             if (apiMatches.length > 0) {
                 try {
-                    await matchCacheService.archiveFinishedMatches(apiMatches);
-                    logger.debug(`💾 [${dateString}] Archived finished matches to DB (shared for all users)`);
+                    await matchCacheService.upsertFixtures(apiMatches);
+                    logger.debug(`💾 [${dateString}] Upserted ${apiMatches.length} fixtures to DB`);
                 } catch (archiveError) {
-                    logger.warn(`[${dateString}] Error archiving matches to DB:`, archiveError);
-                    // Continue even if archiving fails
+                    logger.warn(`[${dateString}] Error upserting matches to DB:`, archiveError);
                 }
+            }
+
+            // Today must return fresh API payload (live scores + elapsed)
+            if (isToday) {
+                return apiMatches;
             }
 
             return apiMatches;

@@ -35,8 +35,7 @@ const PROFILE_STEPS = {
   bio: { label: 'Bio', required: false, weight: 10 },
   position: { label: 'Playing position', required: false, weight: 10 },
   cardData: { label: 'Player card stats', required: false, weight: 20 }, // Combined: age, height, weight, foot
-  brand: { label: 'Favorite brand', required: false, weight: 5 },
-  socialLinks: { label: 'Social links', required: false, weight: 5 },
+  socialLinks: { label: 'Social links', required: false, weight: 10 },
 };
 
 function buildFallbackCompletionStatus(): ProfileCompletionStatus {
@@ -212,20 +211,6 @@ export class ProfileCompletionService {
       if (cardDataCompleted) {
         completedCount++;
         totalPercentage += PROFILE_STEPS.cardData.weight;
-      }
-
-      // Brand
-      const brandCompleted = !!user.brandLogo && user.brandLogo.trim() !== '';
-      steps.push({
-        id: 'brand',
-        label: PROFILE_STEPS.brand.label,
-        completed: brandCompleted,
-        required: PROFILE_STEPS.brand.required,
-        weight: PROFILE_STEPS.brand.weight,
-      });
-      if (brandCompleted) {
-        completedCount++;
-        totalPercentage += PROFILE_STEPS.brand.weight;
       }
 
       // Social Links

@@ -161,7 +161,7 @@ const MatchCard = React.memo(function MatchCard({
     }, [match.id, onFavoritePress]);
 
     return (
-        <Animated.View entering={FadeInDown.delay(index * 80).springify().damping(14)}>
+        <View>
             <TouchableOpacity
                 activeOpacity={0.92}
                 onPress={onOpenHub}
@@ -310,7 +310,7 @@ const MatchCard = React.memo(function MatchCard({
                     </TouchableOpacity>
                 </View>
             </TouchableOpacity>
-        </Animated.View>
+        </View>
     );
 });
 

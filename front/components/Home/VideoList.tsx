@@ -115,10 +115,7 @@ function VideoCard({
     };
 
     return (
-        <Animated.View
-            entering={FadeInDown.delay(index * 60).springify().damping(14)}
-            style={[styles.card, animStyle]}
-        >
+        <Animated.View style={[styles.card, animStyle]}>
             <TouchableOpacity
                 activeOpacity={0.9}
                 onPress={handlePress}

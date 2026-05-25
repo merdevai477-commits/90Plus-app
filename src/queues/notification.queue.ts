@@ -68,7 +68,11 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
         title: payload.title,
         message: payload.message,
         type: payload.type,
-        data: payload.data,
+        data: {
+          type: payload.type,
+          ...payload.data,
+        },
+        skipPush: Boolean(payload.data?.__skipPush),
       });
       return;
     }
@@ -87,7 +91,11 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
         title: payload.title,
         message: payload.message,
         type: payload.type,
-        data: payload.data,
+        data: {
+          type: payload.type,
+          ...payload.data,
+        },
+        skipPush: Boolean(payload.data?.__skipPush),
       });
       return;
     }
@@ -100,6 +108,48 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
 
   queue.on('error', (err) => {
     logger.warn('Notification queue error:', err);
+  });
+
+  queue.on('failed', (job, err) => {
+    logger.error('[NotifQueue] job failed', {
+      id: job?.id,
+      kind: job?.data?.kind,
+      err: err?.message,
+    });
+    const data = job?.data;
+    if (!data) return;
+    setImmediate(async () => {
+      try {
+        if (data.kind === 'GENERIC') {
+          const { payload } = data;
+          const allowed = await isAllowedByPreference(payload.userId, payload.type);
+          if (!allowed) return;
+          await NotificationService.createNotification({
+            userId: payload.userId,
+            title: payload.title,
+            message: payload.message,
+            type: payload.type,
+            data: { type: payload.type, ...payload.data },
+            skipPush: Boolean(payload.data?.__skipPush),
+          });
+        } else if (data.kind === 'SOCIAL') {
+          const { payload } = data;
+          const allowed = await isAllowedByPreference(payload.userId, payload.type);
+          if (!allowed) return;
+          await NotificationService.createSocialNotification({
+            userId: payload.userId,
+            actorId: payload.actorId,
+            title: payload.title,
+            message: payload.message,
+            type: payload.type,
+            data: { type: payload.type, ...payload.data },
+            skipPush: Boolean(payload.data?.__skipPush),
+          });
+        }
+      } catch (fallbackErr) {
+        logger.error('[NotifQueue] sync fallback after failure failed:', fallbackErr);
+      }
+    });
   });
 
   // ─── Re-engagement cron: every 12 hours ──────────────────────────────────
@@ -246,11 +296,23 @@ export async function enqueueNotification(params: {
     return;
   }
 
-  await q.add(
-    {
-      kind: 'GENERIC',
-      payload: params,
-    },
-    { attempts: 3, backoff: 2000, removeOnComplete: true, removeOnFail: 1000 }
-  );
+  try {
+    await q.add(
+      {
+        kind: 'GENERIC',
+        payload: params,
+      },
+      { attempts: 3, backoff: 2000, removeOnComplete: true, removeOnFail: 1000 }
+    );
+  } catch (err) {
+    logger.warn('enqueueNotification failed — sync fallback:', err);
+    const allowed = await isAllowedByPreference(params.userId, params.type);
+    if (allowed) {
+      await NotificationService.createNotification({
+        ...params,
+        data: { type: params.type, ...params.data },
+        skipPush: Boolean(params.data?.__skipPush),
+      });
+    }
+  }
 }

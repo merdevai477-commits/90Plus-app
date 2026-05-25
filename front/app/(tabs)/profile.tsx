@@ -21,6 +21,7 @@ import { ProfileTheme } from '../../constants/ProfileTheme';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import * as ImagePicker from 'expo-image-picker';
+import { usePhotoPermission } from '../../hooks/usePhotoPermission';
 import { useVideos, Comment } from '../../contexts/VideosContext';
 import { globalState } from '../../globalState';
 import { AuthService, CardProfileService, ProfileService, ReelsService } from '../../src/services/authService';
@@ -42,7 +43,6 @@ import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 import CountryPickerModal from '../../components/common/CountryPickerModal';
 import PositionPickerModal from '../../components/common/PositionPickerModal';
 import ClubPickerModal from '../../components/common/ClubPickerModal';
-import BrandPickerModal from '../../components/common/BrandPickerModal';
 import StatsEditModal, { Stats } from '../../components/common/StatsEditModal';
 import ProfileEditModal from '../../components/profile/ProfileEditModal';
 import { usePredictionsStore } from '../../src/store/usePredictionsStore';
@@ -109,12 +109,6 @@ interface Country {
   flag: string;
 }
 
-interface Brand {
-  id: string;
-  name: string;
-  logo: string;
-}
-
 // Performance: Memoize expensive calculations outside component
 const DEFAULT_FOLLOW_STATS = { followersCount: 0, followingCount: 0, reelsCount: 0 };
 // Helper function to get step icons
@@ -126,7 +120,6 @@ const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
     case 'bio': return 'document-text-outline';
     case 'position': return 'location-outline';
     case 'cardData': return 'card-outline';
-    case 'brand': return 'shirt-outline';
     case 'socialLinks': return 'link-outline';
     default: return 'checkmark-circle-outline';
   }
@@ -320,6 +313,7 @@ export default function ProfileScreen() {
     resetReelUploadUi,
   } = useVideos();
   const { t, language } = useTranslation();
+  const { requestLibraryPermission, requestCameraPermission } = usePhotoPermission();
 
   // Optimization: Prevent guest access - redirect to auth
   useEffect(() => {
@@ -472,7 +466,6 @@ export default function ProfileScreen() {
   const [isCountryModalVisible, setIsCountryModalVisible] = useState(false);
   const [isPositionModalVisible, setIsPositionModalVisible] = useState(false);
   const [isClubModalVisible, setIsClubModalVisible] = useState(false);
-  const [isBrandModalVisible, setIsBrandModalVisible] = useState(false);
   const [isStatsModalVisible, setIsStatsModalVisible] = useState(false);
   const [isEditProfileModalVisible, setIsEditProfileModalVisible] = useState(false);
   const [isUploadModalVisible, setIsUploadModalVisible] = useState(false);
@@ -559,7 +552,6 @@ export default function ProfileScreen() {
   }, [isAvatarUploading]));
   const [isCountryUpdating, setIsCountryUpdating] = useState(false);
   const [isClubUpdating, setIsClubUpdating] = useState(false);
-  const [isBrandUpdating, setIsBrandUpdating] = useState(false);
   const [isStatsUpdating, setIsStatsUpdating] = useState(false);
 
   // Video upload progress state
@@ -631,7 +623,6 @@ export default function ProfileScreen() {
     [userData?.position]
   );
   const displayClubLogo = userData?.clubLogo;
-  const displayBrandLogo = userData?.brandLogo;
   const displayStats = useMemo(
     () => ({
       age:
@@ -769,7 +760,6 @@ export default function ProfileScreen() {
       userData.country ?? '',
       userData.position ?? '',
       userData.clubLogo ?? '',
-      userData.brandLogo ?? '',
       userData.age ?? '',
       userData.height ?? '',
       userData.weight ?? '',
@@ -803,12 +793,6 @@ export default function ProfileScreen() {
         }
         if (merged.favoriteTeam != null && merged.favoriteTeam !== userData.favoriteTeam) {
           patch.favoriteTeam = merged.favoriteTeam;
-        }
-        if (merged.brandLogo != null && merged.brandLogo !== userData.brandLogo) {
-          patch.brandLogo = merged.brandLogo;
-        }
-        if (merged.favoriteBrand != null && merged.favoriteBrand !== userData.favoriteBrand) {
-          patch.favoriteBrand = merged.favoriteBrand;
         }
         if (merged.age != null && merged.age !== userData.age) patch.age = merged.age;
         if (merged.height != null && merged.height !== userData.height) patch.height = merged.height;
@@ -941,12 +925,8 @@ export default function ProfileScreen() {
       return;
     }
 
-    // UX Fix 6: Check permission FIRST, then show toast
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      toastManager.showWarning(t.profile.permissionRequired, t.profile.coverPermissionRequired);
-      return;
-    }
+    const hasLibrary = await requestLibraryPermission();
+    if (!hasLibrary) return;
 
     // UX Fix 2: Cross-platform action sheet
     showImageSourceSheet(
@@ -980,6 +960,8 @@ export default function ProfileScreen() {
   };
 
   const _pickCoverFromCamera = async () => {
+    const hasCamera = await requestCameraPermission();
+    if (!hasCamera) return;
     isPickerActiveRef.current = true;
     try {
       const result = await ImagePicker.launchCameraAsync({
@@ -1112,11 +1094,8 @@ export default function ProfileScreen() {
   };
 
   const _pickAvatarFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      toastManager.showWarning(t.profile.permissionRequired, t.profile.avatarPermissionRequired);
-      return;
-    }
+    const hasLibrary = await requestLibraryPermission();
+    if (!hasLibrary) return;
     isPickerActiveRef.current = true;
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -1135,11 +1114,8 @@ export default function ProfileScreen() {
   };
 
   const _pickAvatarFromCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      toastManager.showWarning(t.profile.permissionRequired, t.profile.avatarPermissionRequired);
-      return;
-    }
+    const hasCamera = await requestCameraPermission();
+    if (!hasCamera) return;
     isPickerActiveRef.current = true;
     try {
       const result = await ImagePicker.launchCameraAsync({
@@ -1605,12 +1581,9 @@ export default function ProfileScreen() {
             onStatsPress={() => setIsStatsModalVisible(true)}
             clubLogo={displayClubLogo}
             onClubPress={() => setIsClubModalVisible(true)}
-            brandLogo={displayBrandLogo}
-            onBrandPress={() => setIsBrandModalVisible(true)}
             isAvatarUploading={isAvatarUploading}
             isCountryUpdating={isCountryUpdating}
             isClubUpdating={isClubUpdating}
-            isBrandUpdating={isBrandUpdating}
             isStatsUpdating={isStatsUpdating}
           />
         </View>
@@ -1921,38 +1894,6 @@ export default function ProfileScreen() {
             toastManager.showSuccess(t.profile.updated, t.profile.clubUpdatedSuccess.replace('{club}', selectedClub.nameAr));
             // Mark club step as completed
             await markStepCompleted('club');
-          }
-        }}
-      />
-
-      <BrandPickerModal
-        visible={isBrandModalVisible}
-        onClose={() => setIsBrandModalVisible(false)}
-        onSelect={async (selectedBrand) => {
-          await localProfileStorage.saveProfileData({
-            brandLogo: selectedBrand.logo,
-            favoriteBrand: selectedBrand.nameAr
-          });
-
-          updateCachedUserData({
-            brandLogo: selectedBrand.logo,
-            favoriteBrand: selectedBrand.nameAr
-          });
-          
-          setIsBrandModalVisible(false);
-          
-          toastManager.showInfo(t.profile.updating, t.profile.updatingBrand.replace('{brand}', selectedBrand.nameAr));
-          
-          // Send to backend with optimistic updates
-          const result = await updateFavorites({ 
-            favoriteBrand: selectedBrand.nameAr,
-            brandLogo: selectedBrand.logo
-          });
-          
-          if (result.success) {
-            toastManager.showSuccess(t.profile.updated, t.profile.brandUpdatedSuccess.replace('{brand}', selectedBrand.nameAr));
-            // Mark brand step as completed
-            await markStepCompleted('brand');
           }
         }}
       />

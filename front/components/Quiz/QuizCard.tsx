@@ -228,7 +228,7 @@ interface QuizCardProps {
   disableOptions?: boolean;
 }
 
-export function QuizCard({
+function QuizCardInner({
   question,
   questionType = 'normal',
   imageUrl,
@@ -449,3 +449,5 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
   },
 });
+
+export const QuizCard = React.memo(QuizCardInner);

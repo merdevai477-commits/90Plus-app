@@ -76,16 +76,16 @@ export type PitchPlayerItem = {
 // y = 0ظْ100 top to bottom
 const FORMATION_433: Array<{ x: number; y: number; label: string }> = [
     { x: -22,  y: 40, label: 'GK' },
-    { x: 6, y: 16, label: 'RB' },
+    { x: 7, y: 16, label: 'RB' },
     { x: -2, y: 29, label: 'CB' },
     { x: -2, y: 46, label: 'CB' },
-    { x: 26, y: 66, label: 'LB' },
-    { x: 54, y: 35, label: 'CM' },
-    { x: 44, y: 50, label: 'CM' },
-    { x: 54, y: 65, label: 'CM' },
-    { x: 76, y: 23, label: 'RW' },
-    { x: 86, y: 50, label: 'ST' },
-    { x: 76, y: 77, label: 'LW' },
+    { x: 15, y: 60, label: 'LB' },
+    { x: 44, y: 24, label: 'CM' },
+    { x: 24, y: 40, label: 'CM' },
+    { x: 44, y: 55, label: 'CM' },
+    { x: 76, y: 21, label: 'RW' },
+    { x: 76, y: 40, label: 'ST' },
+    { x: 76, y: 57, label: 'LW' },
 ];
 // Maps each slot label to the position strings that belong to it.
 // Order matters: first match wins. Fallback chains go from specific ظْ generic.

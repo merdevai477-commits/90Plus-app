@@ -79,10 +79,12 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
             type: 'MATCH_FAVORITE',
             data: {
                 type: 'MATCH_FAVORITE',
-                matchId: apiMatchId,
+                matchId: String(apiMatchId),
+                fixtureId: String(apiMatchId),
                 homeTeam: home,
                 awayTeam: away,
                 leagueName,
+                screen: '/(tabs)/match-details',
             },
         }).catch(err => logger.warn('[matches/favorite] Notification enqueue failed (non-fatal):', err));
 

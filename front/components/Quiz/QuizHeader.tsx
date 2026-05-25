@@ -27,7 +27,7 @@ interface QuizHeaderProps {
   topInset: number;
 }
 
-export function QuizHeader({ topInset }: QuizHeaderProps) {
+function QuizHeaderInner({ topInset }: QuizHeaderProps) {
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
   const display = loading ? '—' : String(coins);
@@ -41,7 +41,7 @@ export function QuizHeader({ topInset }: QuizHeaderProps) {
           onPress={() => router.push('/(tabs)/rank')}
           style={styles.glassChip}
           activeOpacity={0.75}
-          accessibilityLabel={t.common.cancel}
+          accessibilityLabel={t.quiz.backToRank}
         >
           <ChevronLeft
             size={20}
@@ -179,3 +179,5 @@ const styles = StyleSheet.create({
     transform: [{ scaleX: -1 }],
   },
 });
+
+export const QuizHeader = React.memo(QuizHeaderInner);

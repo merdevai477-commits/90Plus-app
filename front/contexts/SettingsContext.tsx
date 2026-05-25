@@ -486,7 +486,12 @@ export const scheduleMatchNotification = async (
       content: {
         title: '⚽ المباراة على وشك البدء!',
         body: `${homeTeam} ضد ${awayTeam} - بعد ${minutesBefore} دقيقة`,
-        data: { matchId, type: 'match_reminder' },
+        data: {
+          matchId: String(matchId),
+          fixtureId: String(matchId),
+          type: 'MATCH_START',
+          screen: '/(tabs)/match-details',
+        },
         sound: true,
       },
       trigger,
@@ -514,7 +519,7 @@ export const sendGoalNotification = async (
       content: {
         title: '⚽ هدف!',
         body: `${player} يسجل لـ ${team} في الدقيقة ${minute}`,
-        data: { type: 'goal' },
+        data: { type: 'MATCH_GOAL', screen: '/(tabs)/matches' },
         sound: true,
       },
       trigger: null, // Send immediately

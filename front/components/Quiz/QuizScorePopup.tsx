@@ -1,6 +1,5 @@
 import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../../src/i18n';
@@ -15,14 +14,20 @@ interface QuizScorePopupProps {
 
 const { width } = Dimensions.get('window');
 
-export const QuizScorePopup: React.FC<QuizScorePopupProps> = ({ visible, score, total, xpEarned, onClose }) => {
+function QuizScorePopupInner({
+  visible,
+  score,
+  total,
+  xpEarned,
+  onClose,
+}: QuizScorePopupProps) {
   const { t } = useTranslation();
 
   if (!visible) return null;
 
   return (
     <Modal transparent animationType="slide" visible={visible}>
-      <BlurView intensity={80} tint="dark" style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.popup}>
           <LinearGradient
             colors={['rgba(20, 10, 40, 0.95)', 'rgba(10, 5, 20, 0.98)']}
@@ -31,30 +36,36 @@ export const QuizScorePopup: React.FC<QuizScorePopupProps> = ({ visible, score, 
             <View style={styles.iconContainer}>
               <Ionicons name="trophy" size={48} color="#FFD700" />
             </View>
-            <Text style={styles.title}>{t.quiz?.quizCompleted || 'Quiz Completed!'}</Text>
-            
+            <Text style={styles.title}>{t.quiz.quizCompleted}</Text>
+
             <View style={styles.statsContainer}>
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Score</Text>
-                <Text style={styles.statValue}>{score} / {total}</Text>
+                <Text style={styles.statLabel}>{t.quiz.scoreLabel}</Text>
+                <Text style={styles.statValue}>
+                  {score} / {total}
+                </Text>
               </View>
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>XP Earned</Text>
-                <Text style={[styles.statValue, { color: '#4ADE80' }]}>+{xpEarned}</Text>
+                <Text style={styles.statLabel}>{t.quiz.xpEarnedLabel}</Text>
+                <Text style={[styles.statValue, { color: '#4ADE80' }]}>
+                  +{xpEarned}
+                </Text>
               </View>
             </View>
 
             <TouchableOpacity style={styles.button} onPress={onClose} activeOpacity={0.8}>
               <LinearGradient colors={['#7C3AED', '#5B21B6']} style={styles.buttonGradient}>
-                <Text style={styles.buttonText}>Continue</Text>
+                <Text style={styles.buttonText}>{t.quiz.continue}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </LinearGradient>
         </View>
-      </BlurView>
+      </View>
     </Modal>
   );
-};
+}
+
+export const QuizScorePopup = React.memo(QuizScorePopupInner);
 
 const styles = StyleSheet.create({
   container: {
@@ -96,6 +107,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 24,
+    textAlign: 'center',
   },
   statsContainer: {
     flexDirection: 'row',

@@ -63,12 +63,9 @@ export interface ProfileCardProps {
   onStatsPress?: () => void;
   clubLogo?: string;
   onClubPress?: () => void;
-  brandLogo?: string;
-  onBrandPress?: () => void;
   isAvatarUploading?: boolean;
   isCountryUpdating?: boolean;
   isClubUpdating?: boolean;
-  isBrandUpdating?: boolean;
   isStatsUpdating?: boolean;
 }
 
@@ -124,8 +121,6 @@ const ProfileCard = memo(function ProfileCard({
   onStatsPress,
   clubLogo,
   onClubPress,
-  brandLogo,
-  onBrandPress,
 }: ProfileCardProps) {
   // Animations
   const shimmer  = useSafeLoop(0, 1, 3800);
@@ -420,21 +415,6 @@ const ProfileCard = memo(function ProfileCard({
                   alignItems: 'center', justifyContent: 'center',
                   borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)' }}>
                   <Text style={{ fontSize: 16 * scale }}>⚽</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={onBrandPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              {brandLogo ? (
-                <Image source={{ uri: brandLogo }}
-                  style={{ width: 32 * scale, height: 32 * scale }}
-                  contentFit="contain" cachePolicy="memory-disk" />
-              ) : (
-                <View style={{ width: 32 * scale, height: 32 * scale,
-                  backgroundColor: 'rgba(124,58,237,0.18)', borderRadius: 16 * scale,
-                  alignItems: 'center', justifyContent: 'center',
-                  borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)' }}>
-                  <Text style={{ fontSize: 16 * scale }}>👟</Text>
                 </View>
               )}
             </TouchableOpacity>

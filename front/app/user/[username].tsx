@@ -533,7 +533,6 @@ export default function UserProfileScreen() {
             weight={(user as any).weight?.toString()}
             foot={(user as any).preferredFoot || 'R'}
             clubLogo={(user as any).clubLogo || undefined}
-            brandLogo={(user as any).brandLogo || undefined}
           />
         </View>
 

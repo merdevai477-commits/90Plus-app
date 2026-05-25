@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Dimensions, View } from 'react-native';
+import { StyleSheet, Dimensions, View, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -117,9 +117,9 @@ export function AppSplashScreen() {
       </View>
 
       {/* Tagline — shown during boot before i18n is initialized */}
-      <Animated.Text style={styles.tagline}>
+      <Text style={styles.tagline}>
         90 Plus · Your football world
-      </Animated.Text>
+      </Text>
     </LinearGradient>
   );
 }

@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useTranslation } from '../../src/i18n';
 
 import {
   Colors, Radius, FontSize, LineHeight, Spacing, Gradients, BlurIntensity,
@@ -83,11 +84,19 @@ function renderInline(text: string): React.ReactNode {
 
 function colMinWidth(text: string, isHeader: boolean): number {
   const len = text.length;
-  const base = isHeader ? 96 : 88;
-  return Math.min(Math.max(base, len * 8 + 24), 180);
+  const base = isHeader ? 108 : 96;
+  return Math.min(Math.max(base, len * 9 + 28), 280);
 }
 
-function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+function MarkdownTable({
+  headers,
+  rows,
+  scrollHint,
+}: {
+  headers: string[];
+  rows: string[][];
+  scrollHint?: string;
+}) {
   const colCount = headers.length;
   const colWidths = useMemo(() => {
     const widths = headers.map((h, i) => {
@@ -102,6 +111,10 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
   }, [headers, rows]);
 
   return (
+    <View>
+      {scrollHint ? (
+        <Text style={s.tableHint}>{scrollHint}</Text>
+      ) : null}
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator
@@ -125,7 +138,7 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
                 hi === colCount - 1 && s.tableCellLast,
               ]}
             >
-              <Text style={s.tableHeadText} numberOfLines={3}>{h}</Text>
+              <Text style={s.tableHeadText}>{h}</Text>
             </View>
           ))}
         </LinearGradient>
@@ -148,7 +161,7 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
                   ci === colCount - 1 && s.tableCellLast,
                 ]}
               >
-                <Text style={s.tableCellText} numberOfLines={6}>
+                <Text style={s.tableCellText}>
                   {row[ci] ?? '—'}
                 </Text>
               </View>
@@ -157,10 +170,11 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
         ))}
       </View>
     </ScrollView>
+    </View>
   );
 }
 
-function renderMarkdown(text: string): React.ReactNode[] {
+function renderMarkdown(text: string, tableScrollHint?: string): React.ReactNode[] {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
 
@@ -171,7 +185,12 @@ function renderMarkdown(text: string): React.ReactNode[] {
     const tbl = extractTable(lines, i);
     if (tbl) {
       out.push(
-        <MarkdownTable key={`tbl-${i}`} headers={tbl.headers} rows={tbl.rows} />,
+        <MarkdownTable
+          key={`tbl-${i}`}
+          headers={tbl.headers}
+          rows={tbl.rows}
+          scrollHint={tableScrollHint}
+        />,
       );
       i = tbl.end;
       continue;
@@ -274,6 +293,7 @@ export const TypingIndicator = React.memo(() => (
 // ─── AI Bubble ────────────────────────────────────────────────────────────────
 
 export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false }: MessageBubbleProps) {
+  const { t } = useTranslation();
   const prevId = useRef<string | null>(null);
   const initialText = useRef<string | null>(null);
   const [visible, setVisible] = useState('');
@@ -327,7 +347,10 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
   const display = done ? (message.text ?? '') : visible;
   const isStreaming = initialText.current === '' && message.text !== '' && !done;
   const showCursor = !isHistory && (isStreaming || (!done && initialText.current !== ''));
-  const content = useMemo(() => renderMarkdown(display), [display]);
+  const content = useMemo(
+    () => renderMarkdown(display, t.chat.tableScrollHint),
+    [display, t.chat.tableScrollHint],
+  );
 
   return (
     <Animated.View
@@ -628,6 +651,13 @@ const s = StyleSheet.create({
   },
 
   // ── Markdown: table ──
+  tableHint: {
+    fontSize: 11,
+    color: 'rgba(167,139,250,0.75)',
+    textAlign: 'right',
+    marginBottom: 4,
+    paddingHorizontal: 2,
+  },
   tableScroll: {
     marginVertical: 8,
     maxWidth: '100%',

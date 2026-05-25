@@ -64,6 +64,19 @@ export const MatchFavoritesStorage = {
     },
 
     /**
+     * Replace local favorites with server list (sync on app start).
+     */
+    async setFavorites(matchIds: string[]): Promise<void> {
+        try {
+            const unique = [...new Set(matchIds.map(String))];
+            await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(unique));
+        } catch (error) {
+            logger.error('Error setting favorites:', error);
+            throw error;
+        }
+    },
+
+    /**
      * Clear all favorites
      */
     async clearAll(): Promise<void> {

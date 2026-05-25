@@ -677,8 +677,16 @@ export const ar = {
     difficultyMedium: 'متوسط',
     difficultyHard: 'صعب',
     langArabic: 'العربية',
-    langEnglish: 'English',
+    langEnglish: 'الإنجليزية',
     switchQuizLang: 'تبديل لغة الأسئلة',
+    chooseLangTitle: 'اختر لغة الكويز',
+    chooseLangSubtitle: 'يمكنك تغييرها لاحقاً من زر اللغة',
+    scoreLabel: 'النتيجة',
+    xpEarnedLabel: 'XP المكتسب',
+    rateLimit: 'طلبات كثيرة. انتظر قليلاً وحاول مرة أخرى.',
+    secondsUnit: 'ث',
+    xpBonus: '+{amount} XP',
+    backToRank: 'العودة للترتيب',
     // QuizPopup
     popupTitle: 'الكويز اليومي',
     popupSubtitle: 'سؤال جديد بانتظارك. أجب صح واكسب عملات.',
@@ -1740,6 +1748,7 @@ export const ar = {
     dailyLimitOver: 'انتهت رسائلك اليومية',
     inputPlaceholder: 'اكتب رسالتك...',
     inputPlaceholderEdit: 'عدّل...',
+    tableScrollHint: 'اسحب لليسار لعرض كل الأعمدة',
     editingMessage: 'تعديل الرسالة',
     cancelEdit: 'إلغاء',
     sendButton: 'إرسال',
@@ -1846,6 +1855,18 @@ export const ar = {
     unknown: 'حدث خطأ. يرجى المحاولة مرة أخرى.',
   },
 
+  searchModal: {
+    placeholder: 'ابحث عن لاعبين، فيديوهات، هاشتاجات...',
+    searching: 'جاري البحث...',
+    tabAll: 'الكل',
+    tabUsers: 'لاعبون',
+    tabReels: 'ريلز',
+    tabHashtags: 'هاشتاج',
+    noResults: 'لا توجد نتائج',
+    recentSearches: 'عمليات البحث الأخيرة',
+    trending: 'رائج الآن',
+  },
+
   // ── شاشة الإعدادات — تغطية كاملة ───────────────────────────────────────
   settingsScreen: {
     title: 'الإعدادات',
@@ -1861,6 +1882,8 @@ export const ar = {
     sectionAbout: 'حول التطبيق',
     sectionAccount: 'الحساب',
 
+    notificationPreferences: 'تفضيلات الإشعارات',
+    notificationPreferencesSub: 'أهداف، توقعات، ريلز، والمزيد',
     notificationInbox: 'صندوق الإشعارات',
     notificationInboxSub: 'عرض التنبيهات والسجل',
     matchReminders: 'تنبيهات المباريات',
@@ -1888,6 +1911,7 @@ export const ar = {
     blockedUsersSub: 'إدارة المستخدمين المحظورين',
 
     contactUs: 'تواصل معنا',
+    contactUsSub: 'دعم، أخطاء، واقتراحات',
     reportBug: 'الإبلاغ عن مشكلة',
     reportBugSub: 'أخبرنا بأي مشاكل تقنية',
     featureRequest: 'اقتراح ميزة',

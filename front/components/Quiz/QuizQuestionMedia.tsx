@@ -18,7 +18,7 @@ interface QuizQuestionMediaProps {
   onLoadFailed?: () => void;
 }
 
-export function QuizQuestionMedia({
+function QuizQuestionMediaInner({
   imageUrl,
   layout = 'square',
   onLoadFailed,
@@ -42,7 +42,7 @@ export function QuizQuestionMedia({
       contentFit="cover"
       cachePolicy="memory-disk"
       recyclingKey={uri}
-      transition={200}
+      transition={100}
       onError={() => {
         if (__DEV__) {
           console.warn('[Quiz] image failed:', uri);
@@ -70,3 +70,5 @@ const styles = StyleSheet.create({
     maxHeight: 168,
   },
 });
+
+export const QuizQuestionMedia = React.memo(QuizQuestionMediaInner);

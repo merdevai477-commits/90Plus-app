@@ -2,7 +2,7 @@
  * QuizHubScreen — Daily AI quiz (OpenRouter), API images, XP & coins via backend.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -53,10 +53,12 @@ type AnswerPhase = 'idle' | 'submitting' | 'revealed';
 
 const AUTO_NEXT_MS = 3000;
 
-function mapDifficulty(d: string): 'Easy' | 'Medium' | 'Hard' {
-  if (d === 'EASY') return 'Easy';
-  if (d === 'HARD') return 'Hard';
-  return 'Medium';
+function difficultyLocaleKey(
+  d: string,
+): 'difficultyEasy' | 'difficultyMedium' | 'difficultyHard' {
+  if (d === 'EASY') return 'difficultyEasy';
+  if (d === 'HARD') return 'difficultyHard';
+  return 'difficultyMedium';
 }
 
 function patchDailyStats(
@@ -118,7 +120,6 @@ export default function QuizHubScreen() {
   const [answerPhase, setAnswerPhase] = useState<AnswerPhase>('idle');
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [correctKey, setCorrectKey] = useState<OptionKey | null>(null);
-  const [seconds, setSeconds] = useState(QUIZ_TIME_LIMIT_SEC);
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState<string | null>(null);
   const [revealedImageUrl, setRevealedImageUrl] = useState<string | null>(null);
@@ -191,7 +192,6 @@ export default function QuizHubScreen() {
     setIsCorrect(null);
     setCorrectKey(null);
     setRevealedImageUrl(null);
-    setSeconds(QUIZ_TIME_LIMIT_SEC);
     setHintUsed(currentQuestion.hintUsed ?? false);
     setHintText(null);
     questionStartedAt.current = Date.now();
@@ -211,14 +211,6 @@ export default function QuizHubScreen() {
       setAnswerPhase('revealed');
     }
   }, [currentIndex, currentQuestion?.id, currentQuestion?.status, clearAutoNextTimer]);
-
-  useEffect(() => {
-    if (!currentQuestion || answerPhase !== 'idle') return;
-    const interval = setInterval(() => {
-      setSeconds((prev) => (prev <= 0 ? 0 : prev - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [currentIndex, currentQuestion?.id, answerPhase]);
 
   const showCompletionPopup = useCallback(
     (stats?: QuizDailyPayload['stats']) => {
@@ -380,11 +372,6 @@ export default function QuizHubScreen() {
     startAutoNext,
   ]);
 
-  useEffect(() => {
-    if (!currentQuestion || answerPhase !== 'idle' || seconds > 0) return;
-    void handleTimeout();
-  }, [seconds, currentQuestion?.id, answerPhase, handleTimeout]);
-
   const handleSelectOption = useCallback(
     async (key: OptionKey) => {
       if (!currentQuestion || answerPhase !== 'idle') return;
@@ -465,7 +452,11 @@ export default function QuizHubScreen() {
         });
 
         if (d.isCorrect) {
-          toastManager.showSuccess(t.quiz.excellent, `+${d.xpEvents?.[0]?.amount ?? 2} XP`);
+          const xpAmount = d.xpEvents?.[0]?.amount ?? 2;
+          toastManager.showSuccess(
+            t.quiz.excellent,
+            t.quiz.xpBonus.replace('{amount}', String(xpAmount)),
+          );
         } else {
           toastManager.showInfo(t.quiz.wrong, t.quiz.wrong);
         }
@@ -656,13 +647,18 @@ export default function QuizHubScreen() {
 
   const progress = questionNumber / Math.max(totalQuestions, QUIZ_SESSION_TOTAL);
 
-  const difficultyKey =
-    `difficulty${mapDifficulty(currentQuestion?.difficulty ?? 'MEDIUM')}` as
-      | 'difficultyEasy'
-      | 'difficultyMedium'
-      | 'difficultyHard';
-  const difficultyText =
-    t.quiz[difficultyKey] || mapDifficulty(currentQuestion?.difficulty ?? 'MEDIUM');
+  const difficultyText = t.quiz[difficultyLocaleKey(currentQuestion?.difficulty ?? 'MEDIUM')];
+
+  const cardOptions = useMemo(
+    () =>
+      currentQuestion
+        ? currentQuestion.options.map((o) => ({
+            key: o.key as OptionKey,
+            text: o.text,
+          }))
+        : [],
+    [currentQuestion?.id, currentQuestion?.options],
+  );
 
   const HEADER_H = insets.top + 10 + 44 + 12;
 
@@ -682,9 +678,7 @@ export default function QuizHubScreen() {
       <View style={[styles.root, styles.centered]}>
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
-        <Text style={styles.noQuestionsText}>
-          {t.common.error ?? 'Too many requests. Please wait a moment and try again.'}
-        </Text>
+        <Text style={styles.noQuestionsText}>{t.quiz.rateLimit}</Text>
       </View>
     );
   }
@@ -715,13 +709,17 @@ export default function QuizHubScreen() {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews
       >
         <QuizProgressCard
           current={questionNumber}
           total={Math.max(totalQuestions, QUIZ_SESSION_TOTAL)}
           progress={progress}
-          seconds={seconds}
           questionLabel={t.quiz.questionNumber}
+          timerKey={currentQuestion.id}
+          timerActive={answerPhase === 'idle'}
+          timeLimitSec={QUIZ_TIME_LIMIT_SEC}
+          onTimeUp={handleTimeout}
         />
 
         <View style={styles.badgeRow}>
@@ -746,10 +744,7 @@ export default function QuizHubScreen() {
           imageUrl={resolvedImageUrl}
           revealImageUrl={revealedImageUrl}
           imageLayout={currentQuestion.imageLayout ?? 'square'}
-          options={currentQuestion.options.map((o) => ({
-            key: o.key as OptionKey,
-            text: o.text,
-          }))}
+          options={cardOptions}
           selectedKey={selected}
           onSelectOption={handleSelectOption}
           onUseHint={handleHint}

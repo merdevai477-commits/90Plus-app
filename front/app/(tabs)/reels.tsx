@@ -329,6 +329,11 @@ const ReelsFeed: React.FC = () => {
   const { getToken } = useAuth();
   const { uploadedVideos, userVideoData, reelComments, addComment, toggleCommentLike, likedReelIds, toggleReelLike } = useVideos();
 
+  const ownReelIds = useMemo(
+    () => new Set(uploadedVideos.map((v) => v.id)),
+    [uploadedVideos],
+  );
+
   // Unified report system for reels
   const {
     isVisible: isReportVisible,
@@ -1299,13 +1304,27 @@ const ReelsFeed: React.FC = () => {
     }
   }, [haptic, getToken, follow, unfollow, updateReelsFollowState]);
 
-  // Get current user ID for follow button visibility - Requirement 18.1
   const currentUserId = globalState.userProfile?.id;
+  const currentUsername = globalState.userProfile?.username?.toLowerCase();
+
+  const resolveIsOwnReel = useCallback(
+    (item: ReelData): boolean => {
+      if (ownReelIds.has(item.id)) return true;
+      if (currentUserId && item.user?.id && String(currentUserId) === String(item.user.id)) {
+        return true;
+      }
+      const reelUsername = item.user?.username?.toLowerCase();
+      if (currentUsername && reelUsername && currentUsername === reelUsername) return true;
+      return false;
+    },
+    [ownReelIds, currentUserId, currentUsername],
+  );
 
   const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => (
     <ReelItem
       reel={item}
       isActive={index === currentIndex}
+      isOwnReel={resolveIsOwnReel(item)}
       onLike={() => handleLike(item.id)}
       onToggleMute={() => handleToggleMute(item.id)}
       onComment={() => openComments(item.id)}
@@ -1318,11 +1337,10 @@ const ReelsFeed: React.FC = () => {
       onHashtagPress={handleHashtagPress}
       onMentionPress={handleMentionPress}
       onVideoRef={handleVideoRef}
-      currentUserId={currentUserId}
       onDeleteReel={handleDeleteReel}
       onEditReel={handleEditReel}
     />
-  ), [currentIndex, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, currentUserId, handleDeleteReel, handleEditReel]);
+  ), [currentIndex, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
   const getItemLayout = useCallback((_: any, index: number) => ({
     length: SCREEN_HEIGHT,

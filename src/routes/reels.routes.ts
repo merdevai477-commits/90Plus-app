@@ -746,7 +746,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
                     title,
                     message,
                     type: 'LIKE',
-                    data: { reelId: id, likeCount },
+                    data: { type: 'LIKE', reelId: idStr, likeCount, screen: '/(tabs)/reels' },
                 });
             }
         }
@@ -860,6 +860,15 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
         const idStr = ensureString(id);
         const { limit = '20', cursor } = req.query;
         const take = Math.min(parseInt(limit as string) || 20, 50);
+
+        const reelExists = await prisma.reel.findUnique({
+            where: { id: idStr },
+            select: { id: true },
+        });
+        if (!reelExists) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
+            return;
+        }
 
         const clerkUserId = req.auth?.userId;
         const currentUser = clerkUserId
@@ -977,6 +986,15 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
 
         if (!user) {
             sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+            return;
+        }
+
+        const reel = await prisma.reel.findUnique({
+            where: { id: idStr },
+            select: { id: true, userId: true },
+        });
+        if (!reel) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
             return;
         }
 
@@ -1122,25 +1140,17 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                                 }),
                                 type: 'MENTION',
                                 data: {
+                                    type: 'MENTION',
                                     reelId: idStr,
                                     commentId: comment.id,
                                     parentCommentId: parentId || null,
+                                    screen: '/(tabs)/reels',
                                 },
                             });
                         }),
                     );
                 }
             }
-        }
-
-        // Get reel info — only when we still need it (top-level comments).
-        // For replies we already have the parent comment.
-        let reel: { userId: string } | null = null;
-        if (!parentComment) {
-            reel = await prisma.reel.findUnique({
-                where: { id: idStr },
-                select: { userId: true },
-            });
         }
 
         // ✅ Defer the WebSocket + notification + XP fan-out to setImmediate
@@ -1177,9 +1187,11 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                             }),
                             type: 'REPLY',
                             data: {
+                                type: 'REPLY',
                                 reelId: idStr,
                                 commentId: comment.id,
                                 parentCommentId: parentId,
+                                screen: '/(tabs)/reels',
                             },
                         });
 
@@ -1224,8 +1236,10 @@ router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, modera
                             ),
                             type: 'COMMENT',
                             data: {
+                                type: 'COMMENT',
                                 reelId: idStr,
                                 commentId: comment.id,
+                                screen: '/(tabs)/reels',
                             },
                         });
 
@@ -1583,6 +1597,7 @@ router.post('/comments/:commentId/like', requireAuth, writeLimiter, async (req: 
                         }),
                         type: 'COMMENT_LIKE',
                         data: {
+                            type: 'COMMENT_LIKE',
                             commentId: commentIdStr,
                             reelId: comment.reelId,
                             screen: '/(tabs)/reels',
@@ -2096,7 +2111,7 @@ router.post('/:id/share', requireAuth, writeLimiter, async (req: Request, res: R
                     platform: platform || 'social',
                 }),
                 type: 'SHARE',
-                data: { reelId: idStr, platform, screen: '/(tabs)/reels' }
+                data: { type: 'SHARE', reelId: idStr, platform, screen: '/(tabs)/reels' },
             });
         }
 

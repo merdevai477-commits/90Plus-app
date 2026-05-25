@@ -51,8 +51,10 @@ export function filterContentMiddleware(options: FilterContentOptions) {
             if (strict) {
               // Strict mode: reject the request
               res.status(400).json({
+                status: 'ERROR',
                 error: 'E001',
                 message: 'Your content violates our community guidelines',
+                code: 'CONTENT_MODERATION_FAILED',
                 details: {
                   field,
                   reason: 'Inappropriate language detected',

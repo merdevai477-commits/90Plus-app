@@ -17,7 +17,6 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -27,14 +26,11 @@ import {
   Globe,
   Trash2,
   Star,
-  Share2,
   FileText,
   LogOut,
   UserX,
   Ban,
   Mail,
-  Bug,
-  Lightbulb,
 } from 'lucide-react-native';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useVideos } from '../../contexts/VideosContext';
@@ -71,12 +67,7 @@ export default function SettingsScreen() {
 
   const { clearVideos } = useVideos();
   const {
-    settings,
     loading: contextLoading,
-    toggleNotifications,
-    toggleMatchNotifications,
-    toggleGoalNotifications,
-    togglePredictionReminders,
     clearCache,
   } = useSettings();
 
@@ -89,9 +80,6 @@ export default function SettingsScreen() {
 
   const [cacheSize, setCacheSize] = useState('12.5 MB');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [soundEffects, setSoundEffects] = useState(true);
-  const [hapticFeedback, setHapticFeedback] = useState(true);
   const [deletionModalVisible, setDeletionModalVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isChangingLanguage, setIsChangingLanguage] = useState(false);
@@ -117,42 +105,6 @@ export default function SettingsScreen() {
   };
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleToggleNotifications = async () => {
-    try {
-      await toggleNotifications(!settings.notificationsEnabled);
-      toastManager.showSettingsUpdateSuccess();
-    } catch {
-      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedNotifications);
-    }
-  };
-
-  const handleToggleMatchNotifications = async () => {
-    try {
-      await toggleMatchNotifications(!settings.matchNotifications);
-      toastManager.showSettingsUpdateSuccess();
-    } catch {
-      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedMatch);
-    }
-  };
-
-  const handleToggleGoalNotifications = async () => {
-    try {
-      await toggleGoalNotifications(!settings.goalNotifications);
-      toastManager.showSettingsUpdateSuccess();
-    } catch {
-      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedGoals);
-    }
-  };
-
-  const handleTogglePredictionReminders = async () => {
-    try {
-      await togglePredictionReminders(!settings.predictionReminders);
-      toastManager.showSettingsUpdateSuccess();
-    } catch {
-      toastManager.showError(tCommon.error, tSettings.settingsUpdateFailedPredictions);
-    }
-  };
 
   const handleClearCache = async () => {
     try {
@@ -244,17 +196,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleShareApp = async () => {
-    try {
-      await Share.share({
-        message: tSettings.shareMessage,
-        title: '90Plus Football App',
-      });
-    } catch {
-      // User cancelled share
-    }
-  };
-
   const handleContactUs = () => {
     Linking.openURL(LEGAL_URLS.support);
   };
@@ -273,14 +214,6 @@ export default function SettingsScreen() {
     } else {
       Linking.openSettings();
     }
-  };
-
-  const handleReportBug = () => {
-    Linking.openURL('mailto:merdevai477@gmail.com?subject=Bug Report - 90Plus App');
-  };
-
-  const handleFeatureRequest = () => {
-    Linking.openURL('mailto:merdevai477@gmail.com?subject=Feature Request - 90Plus App');
   };
 
   const handleLanguageChange = async (lang: Language) => {
@@ -346,42 +279,29 @@ export default function SettingsScreen() {
             <Bell size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
+            <Text style={styles.linkTitle}>{tSettings.notificationPreferences}</Text>
+            <Text style={styles.linkSub}>{tSettings.notificationPreferencesSub}</Text>
+          </View>
+        </View>
+        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.88}
+        style={[styles.linkRow, { marginTop: 8 }]}
+        onPress={() => router.push('/notifications')}
+      >
+        <View style={styles.linkLeft}>
+          <View style={[styles.linkIcon, { backgroundColor: PURPLE_GLOW_SM }]}>
+            <Bell size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
+          </View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.linkTitle}>{tSettings.notificationInbox}</Text>
             <Text style={styles.linkSub}>{tSettings.notificationInboxSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
-
-      <View style={styles.switchCard}>
-        <RowToggle
-          label={tSettings.matchReminders}
-          sub={tSettings.matchRemindersSub}
-          value={settings.matchNotifications}
-          onValueChange={handleToggleMatchNotifications}
-        />
-        <View style={styles.divider} />
-        <RowToggle
-          label={tSettings.goalAlerts}
-          sub={tSettings.goalAlertsSub}
-          value={settings.goalNotifications}
-          onValueChange={handleToggleGoalNotifications}
-        />
-        <View style={styles.divider} />
-        <RowToggle
-          label={tSettings.predictionReminders}
-          sub={tSettings.predictionRemindersSub}
-          value={settings.predictionReminders}
-          onValueChange={handleTogglePredictionReminders}
-        />
-        <View style={styles.divider} />
-        <RowToggle
-          label={tSettings.allNotifications}
-          sub={tSettings.allNotificationsSub}
-          value={settings.notificationsEnabled}
-          onValueChange={handleToggleNotifications}
-        />
-      </View>
 
       {/* ── Preferences ───────────────────────────────────────────────────── */}
       <Text style={styles.sectionLabel}>{tSettings.sectionPreferences}</Text>
@@ -403,38 +323,6 @@ export default function SettingsScreen() {
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
-
-      <View style={styles.switchCard}>
-        <RowToggle
-          label={tSettings.soundEffects}
-          sub={tSettings.soundEffectsSub}
-          value={soundEffects}
-          onValueChange={(v) => {
-            setSoundEffects(v);
-            toastManager.showSettingsUpdateSuccess();
-          }}
-        />
-        <View style={styles.divider} />
-        <RowToggle
-          label={tSettings.hapticFeedback}
-          sub={tSettings.hapticFeedbackSub}
-          value={hapticFeedback}
-          onValueChange={(v) => {
-            setHapticFeedback(v);
-            toastManager.showSettingsUpdateSuccess();
-          }}
-        />
-        <View style={styles.divider} />
-        <RowToggle
-          label={tSettings.autoRefresh}
-          sub={tSettings.autoRefreshSub}
-          value={autoRefresh}
-          onValueChange={(v) => {
-            setAutoRefresh(v);
-            toastManager.showSettingsUpdateSuccess();
-          }}
-        />
-      </View>
 
       {/* ── Data & Storage ────────────────────────────────────────────────── */}
       <Text style={styles.sectionLabel}>{tSettings.sectionData}</Text>
@@ -497,33 +385,7 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkTitle}>{tSettings.contactUs}</Text>
-            <Text style={styles.linkSub}>merdevai477@gmail.com</Text>
-          </View>
-        </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
-      </TouchableOpacity>
-
-      <TouchableOpacity activeOpacity={0.88} style={[styles.linkRow, { marginTop: 8 }]} onPress={handleReportBug}>
-        <View style={styles.linkLeft}>
-          <View style={[styles.linkIcon, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
-            <Bug size={18} color="#fca5a5" strokeWidth={2.2} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{tSettings.reportBug}</Text>
-            <Text style={styles.linkSub}>{tSettings.reportBugSub}</Text>
-          </View>
-        </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
-      </TouchableOpacity>
-
-      <TouchableOpacity activeOpacity={0.88} style={[styles.linkRow, { marginTop: 8 }]} onPress={handleFeatureRequest}>
-        <View style={styles.linkLeft}>
-          <View style={[styles.linkIcon, { backgroundColor: GOLD_SOFT }]}>
-            <Lightbulb size={18} color="#fcd34d" strokeWidth={2.2} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{tSettings.featureRequest}</Text>
-            <Text style={styles.linkSub}>{tSettings.featureRequestSub}</Text>
+            <Text style={styles.linkSub}>{tSettings.contactUsSub}</Text>
           </View>
         </View>
         <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
@@ -563,13 +425,15 @@ export default function SettingsScreen() {
           <Text style={styles.infoLabel}>{tSettings.version}</Text>
           <Text style={styles.infoValue}>{APP_VERSION} ({BUILD_NUMBER})</Text>
         </View>
-        <View style={styles.divider} />
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{tSettings.environment}</Text>
-          <Text style={styles.infoValue}>
-            {__DEV__ ? tSettings.envDevelopment : tSettings.envProduction}
-          </Text>
-        </View>
+        {__DEV__ ? (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>{tSettings.environment}</Text>
+              <Text style={styles.infoValue}>{tSettings.envDevelopment}</Text>
+            </View>
+          </>
+        ) : null}
       </View>
 
       <TouchableOpacity activeOpacity={0.88} style={styles.linkRow} onPress={handleRateApp}>
@@ -580,18 +444,6 @@ export default function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.linkTitle}>{tSettings.rateApp}</Text>
             <Text style={styles.linkSub}>{tSettings.rateAppSub}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity activeOpacity={0.88} style={[styles.linkRow, { marginTop: 8 }]} onPress={handleShareApp}>
-        <View style={styles.linkLeft}>
-          <View style={[styles.linkIcon, { backgroundColor: 'rgba(59,130,246,0.12)' }]}>
-            <Share2 size={18} color="#93c5fd" strokeWidth={2.2} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.linkTitle}>{tSettings.shareApp}</Text>
-            <Text style={styles.linkSub}>{tSettings.shareAppSub}</Text>
           </View>
         </View>
       </TouchableOpacity>

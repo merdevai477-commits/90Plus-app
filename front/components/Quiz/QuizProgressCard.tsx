@@ -1,8 +1,8 @@
 /**
- * QuizProgressCard — Question counter, progress bar, timer (mock layout).
+ * QuizProgressCard — Question counter, progress bar, isolated countdown timer.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 
+import { useTranslation } from '../../src/i18n';
 import {
   ACCENT_SOFT,
   NEON_PURPLE,
@@ -27,25 +28,59 @@ interface QuizProgressCardProps {
   current: number;
   total: number;
   progress: number;
-  seconds: number;
   questionLabel: string;
+  /** Changes when the active question changes — resets the timer. */
+  timerKey: string;
+  timerActive: boolean;
+  timeLimitSec: number;
+  onTimeUp: () => void;
 }
 
-export function QuizProgressCard({
+function QuizProgressCardInner({
   current,
   total,
   progress,
-  seconds,
   questionLabel,
+  timerKey,
+  timerActive,
+  timeLimitSec,
+  onTimeUp,
 }: QuizProgressCardProps) {
+  const { t } = useTranslation();
   const barWidth = useSharedValue(0);
+  const [seconds, setSeconds] = React.useState(timeLimitSec);
+  const onTimeUpRef = useRef(onTimeUp);
+  const firedRef = useRef(false);
+  onTimeUpRef.current = onTimeUp;
 
   useEffect(() => {
     barWidth.value = withTiming(progress, {
-      duration: 700,
+      duration: 500,
       easing: Easing.out(Easing.cubic),
     });
   }, [progress, barWidth]);
+
+  useEffect(() => {
+    setSeconds(timeLimitSec);
+    firedRef.current = false;
+  }, [timerKey, timeLimitSec]);
+
+  useEffect(() => {
+    if (!timerActive) return;
+    const interval = setInterval(() => {
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          if (!firedRef.current) {
+            firedRef.current = true;
+            onTimeUpRef.current();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timerKey, timerActive]);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${barWidth.value * 100}%` as `${number}%`,
@@ -60,7 +95,7 @@ export function QuizProgressCard({
             <Text style={styles.countCurrent}>{current}</Text>
             <Text style={styles.countRest}>
               {' '}
-              / {total}
+              {t.quiz.of} {total}
             </Text>
           </View>
         </View>
@@ -80,12 +115,17 @@ export function QuizProgressCard({
 
         <View style={styles.rightCol}>
           <MaterialCommunityIcons name="timer-outline" size={26} color={ACCENT_SOFT} />
-          <Text style={styles.timerTxt}>{seconds}s</Text>
+          <Text style={styles.timerTxt}>
+            {seconds}
+            {t.quiz.secondsUnit}
+          </Text>
         </View>
       </View>
     </View>
   );
 }
+
+export const QuizProgressCard = React.memo(QuizProgressCardInner);
 
 const styles = StyleSheet.create({
   wrap: {

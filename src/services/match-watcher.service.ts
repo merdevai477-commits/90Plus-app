@@ -64,7 +64,7 @@ export class MatchWatcherService {
         // Then run every 2 minutes
         this.intervalId = setInterval(() => {
             this.checkMatches();
-        }, 2 * 60 * 1000); // 2 minutes
+        }, 60 * 1000); // 1 minute — faster goal/event push for live favorites
 
         logger.info('✅ Match watcher started (first check in 30s, then every 2 minutes)');
     }
@@ -508,6 +508,9 @@ export class MatchWatcherService {
                 : [],
         );
 
+        const matchMeta = matchFavorites[0];
+        const fixtureIdStr = String(matchId);
+
         // Fan-out with idempotency so retries can't double-notify.
         for (const favorite of matchFavorites) {
             if (optedOut.has(favorite.userId)) continue;
@@ -519,8 +522,14 @@ export class MatchWatcherService {
                     bodyKey: classified.bodyKey,
                     vars,
                     data: {
-                        screen: '/match-details',
-                        matchId,
+                        screen: '/(tabs)/match-details',
+                        matchId: fixtureIdStr,
+                        fixtureId: fixtureIdStr,
+                        homeTeam: favorite.homeTeam ?? matchMeta?.homeTeam ?? '',
+                        awayTeam: favorite.awayTeam ?? matchMeta?.awayTeam ?? '',
+                        homeTeamLogo: favorite.homeTeamLogo ?? matchMeta?.homeTeamLogo ?? '',
+                        awayTeamLogo: favorite.awayTeamLogo ?? matchMeta?.awayTeamLogo ?? '',
+                        leagueName: favorite.leagueName ?? matchMeta?.leagueName ?? '',
                         eventKind: classified.kind,
                         team,
                         elapsed,
@@ -577,7 +586,17 @@ export class MatchWatcherService {
                         titleKey: 'matchLineupTitle',
                         bodyKey: 'matchLineupBody',
                         vars: { home, away },
-                        data: { screen: '/match-details', matchId, eventKind: 'lineup' },
+                        data: {
+                            screen: '/(tabs)/match-details',
+                            matchId: String(matchId),
+                            fixtureId: String(matchId),
+                            homeTeam: favorite.homeTeam ?? home,
+                            awayTeam: favorite.awayTeam ?? away,
+                            homeTeamLogo: favorite.homeTeamLogo ?? '',
+                            awayTeamLogo: favorite.awayTeamLogo ?? '',
+                            leagueName: favorite.leagueName ?? '',
+                            eventKind: 'lineup',
+                        },
                         bypassPreferences: true,
                         idempotencyKey: `match-lineup:${matchId}:${favorite.userId}`,
                     });

@@ -318,6 +318,10 @@ export function usePushNotifications(): PushNotificationState {
                         
                         // If user is signed in, send the token to the backend immediately
                         if (isSignedIn) {
+                            const authToken = await getTokenRef.current();
+                            if (authToken) {
+                                await updatePushNotificationsConsent(authToken, true);
+                            }
                             await syncTokenWithBackendWithRetry.current(token, 0);
                         }
                     }
@@ -364,7 +368,7 @@ export function usePushNotifications(): PushNotificationState {
             const data = notification.request.content.data as Record<string, any>;
 
             // Handle silent background notifications - invalidate cache, no UI
-            if (data?.silent === true) {
+            if (data?.silent === true || data?.silent === 'true') {
                 logger.debug('🔕 Silent notification received, invalidating cache:', data.type);
                 handleSilentNotification(data);
                 return;
@@ -415,6 +419,52 @@ export function usePushNotifications(): PushNotificationState {
     };
 }
 
+/** Re-register device token with backend (e.g. when opening the inbox). */
+export async function syncExpoPushTokenIfGranted(
+    getAuthToken: () => Promise<string | null>,
+): Promise<void> {
+    const Notifications = loadNotifications();
+    if (!Notifications || !Device.isDevice) return;
+
+    try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') return;
+
+        const token = await registerForPushNotificationsAsync();
+        if (!token) return;
+
+        const authToken = await getAuthToken();
+        if (!authToken) return;
+
+        await MatchesService.registerPushToken(authToken, token);
+        logger.debug('✅ Push token re-synced from inbox focus');
+    } catch (err) {
+        logger.warn('Push token re-sync on focus failed:', err);
+    }
+}
+
+export async function updatePushNotificationsConsent(
+    authToken: string,
+    granted: boolean,
+): Promise<void> {
+    try {
+        const apiUrl = getApiUrl();
+        await fetch(`${apiUrl}/gdpr/consent`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                consentType: 'PUSH_NOTIFICATIONS',
+                granted,
+            }),
+        });
+    } catch (err) {
+        logger.warn('Failed to sync push consent with backend:', err);
+    }
+}
+
 async function registerForPushNotificationsAsync(): Promise<string | null> {
     if (!Device.isDevice) {
         logger.debug('Push notifications require a physical device');
@@ -451,6 +501,22 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
                 importance: Notifications.AndroidImportance.MAX,
                 vibrationPattern: [0, 500, 250, 500],
                 lightColor: '#22c55e',
+                sound: 'default',
+            });
+
+            await Notifications.setNotificationChannelAsync('social', {
+                name: 'تفاعلات اجتماعية',
+                importance: Notifications.AndroidImportance.HIGH,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#a855f7',
+                sound: 'default',
+            });
+
+            await Notifications.setNotificationChannelAsync('general', {
+                name: 'إشعارات التطبيق',
+                importance: Notifications.AndroidImportance.DEFAULT,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#32cd32',
                 sound: 'default',
             });
         }
@@ -500,6 +566,10 @@ export function PushNotificationSetup() {
                     if (status === 'granted') {
                         const token = await registerForPushNotificationsAsync();
                         if (token && isSignedIn) {
+                            const authToken = await getToken();
+                            if (authToken) {
+                                await updatePushNotificationsConsent(authToken, true);
+                            }
                             await syncToken(token);
                         }
                     }

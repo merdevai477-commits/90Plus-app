@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -22,7 +22,6 @@ import {
     SCREEN_PADDING_H,
 } from '../../constants/tokens';
 import { useCoins } from '../../contexts/CoinsContext';
-import { useHomeStore } from '../../src/store/home.store';
 import { NotificationService } from '../../src/services/authService';
 
 const ICON_SIZE = 18;
@@ -53,14 +52,7 @@ export const HomeHeader = React.memo(function HomeHeader({
     const appState = useRef<AppStateStatus>(AppState.currentState);
     const lastFetchTime = useRef<number>(0);
 
-    const { notifications: matchNotifications } = useHomeStore();
-
-    const localUnreadCount = useMemo<number>(
-        () => matchNotifications.filter((n) => !n.read).length,
-        [matchNotifications],
-    );
-
-    const notificationCount = backendUnreadCount + localUnreadCount;
+    const notificationCount = backendUnreadCount;
 
     const fetchUnreadCount = useCallback(async (): Promise<void> => {
         const now = Date.now();
@@ -101,9 +93,8 @@ export const HomeHeader = React.memo(function HomeHeader({
 
     const handleSearch = useCallback((): void => {
         void Haptics.selectionAsync();
-        if (onSearchPress) onSearchPress();
-        else router.push('/(tabs)/matches');
-    }, [onSearchPress, router]);
+        onSearchPress?.();
+    }, [onSearchPress]);
 
     const handleNotifications = useCallback((): void => {
         void Haptics.selectionAsync();

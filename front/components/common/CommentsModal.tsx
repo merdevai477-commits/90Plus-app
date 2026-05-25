@@ -326,7 +326,12 @@ export default function CommentsModal({
                 // Mark as loading immediately
                 loadedReelIdRef.current = reelId;
 
-                const backendComments = await ReelsService.getComments(token, reelId, 50);
+                const { comments: backendComments, error: loadError } = await ReelsService.getComments(token, reelId, 50);
+                if (loadError) {
+                    toastManager.showError('خطأ', loadError);
+                    loadedReelIdRef.current = null;
+                    return;
+                }
                 const transformedComments = backendComments.map((c: any) => ({
                     ...mapBackendComment(c),
                     replies: (c.replies || []).map((r: any) => mapBackendComment(r)),
@@ -896,7 +901,11 @@ export default function CommentsModal({
                             } : c
                         ));
                         setReplyingTo(null);
-                    } else if (result.error?.includes('الحد الأقصى') || result.error?.includes('LIMIT')) {
+                    } else if (
+                        result.error?.includes('الحد الأقصى') ||
+                        result.error?.includes('LIMIT') ||
+                        result.error?.includes('maximum number')
+                    ) {
                         triggerShake();
                         setCommentLimitReached(true);
                         setTimeout(() => setCommentLimitReached(false), 3000);
@@ -907,7 +916,13 @@ export default function CommentsModal({
                     // Adding a comment
                     const result = await ReelsService.addComment(token, reelId, newComment.trim(), mentions);
                     if (!result.success) {
-                        if (result.error?.includes('الحد الأقصى') || result.error?.includes('MAX_COMMENTS')) {
+                        if (
+                            result.error?.includes('الحد الأقصى') ||
+                            result.error?.includes('MAX_COMMENTS') ||
+                            result.error?.includes('maximum number') ||
+                            result.error?.includes('COMMENT_LIMIT') ||
+                            result.error?.includes('REPLY_LIMIT')
+                        ) {
                             triggerShake();
                             setCommentLimitReached(true);
                             setTimeout(() => setCommentLimitReached(false), 3000);

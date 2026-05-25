@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '../../src/i18n';
@@ -22,8 +21,8 @@ export const QuizLanguagePopup: React.FC<QuizLanguagePopupProps> = ({ onSelectLa
         if (!shown) {
           setVisible(true);
         }
-      } catch (e) {
-        // Handle error silently
+      } catch {
+        // ignore
       }
     };
     checkPopup();
@@ -33,8 +32,8 @@ export const QuizLanguagePopup: React.FC<QuizLanguagePopupProps> = ({ onSelectLa
     try {
       await AsyncStorage.setItem('quiz_lang_popup_shown', 'true');
       await AsyncStorage.setItem('quiz_language', lang);
-    } catch (e) {
-      // Ignore
+    } catch {
+      // ignore
     }
     setVisible(false);
     onSelectLanguage(lang);
@@ -44,31 +43,29 @@ export const QuizLanguagePopup: React.FC<QuizLanguagePopupProps> = ({ onSelectLa
 
   return (
     <Modal transparent animationType="fade" visible={visible}>
-      <BlurView intensity={70} tint="dark" style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.popup}>
           <LinearGradient
             colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.05)']}
             style={styles.gradient}
           >
-            <Text style={styles.title}>اختر لغة الكويز / Choose Quiz Language</Text>
-            <Text style={styles.subtitle}>
-              يمكنك تغييرها لاحقاً / You can change it later
-            </Text>
-            
+            <Text style={styles.title}>{t.quiz.chooseLangTitle}</Text>
+            <Text style={styles.subtitle}>{t.quiz.chooseLangSubtitle}</Text>
+
             <TouchableOpacity style={styles.button} onPress={() => handleSelect('ar')} activeOpacity={0.8}>
               <LinearGradient colors={['#7C3AED', '#5B21B6']} style={styles.buttonGradient}>
-                <Text style={styles.buttonText}>العربية</Text>
+                <Text style={styles.buttonText}>{t.quiz.langArabic}</Text>
               </LinearGradient>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.button} onPress={() => handleSelect('en')} activeOpacity={0.8}>
               <LinearGradient colors={['#3B82F6', '#1D4ED8']} style={styles.buttonGradient}>
-                <Text style={styles.buttonText}>English</Text>
+                <Text style={styles.buttonText}>{t.quiz.langEnglish}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </LinearGradient>
         </View>
-      </BlurView>
+      </View>
     </Modal>
   );
 };
@@ -78,7 +75,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   popup: {
     width: width * 0.85,

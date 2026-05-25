@@ -508,7 +508,8 @@ export default function ChatScreen() {
              */}
             <KeyboardAvoidingView
                 style={[styles.kav, { marginTop: insets.top + HEADER_BODY_OFFSET }]}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + HEADER_BODY_OFFSET : 0}
             >
                 <View style={styles.body}>
                     {!hasMessages ? (
@@ -516,6 +517,7 @@ export default function ChatScreen() {
                             onPickChip={handleSend}
                             greetingName={greetingName}
                             tChat={tChat}
+                            keyboardOpen={keyboardHeight > 0}
                         />
                     ) : (
                         <View style={styles.messagesPane}>
@@ -525,7 +527,7 @@ export default function ChatScreen() {
                                 contentContainerStyle={styles.messagesContent}
                                 keyboardShouldPersistTaps="handled"
                                 keyboardDismissMode="interactive"
-                                automaticallyAdjustKeyboardInsets={false}
+                                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
                                 data={displayMessages}
                                 keyExtractor={keyExtractor}
                                 renderItem={renderMessage}
@@ -628,7 +630,16 @@ export default function ChatScreen() {
                     )}
 
                     {/* ── Composer (normal flow — always above keyboard) ── */}
-                    <View style={[styles.composerDock, { paddingBottom: baseInset }]}>
+                    <View
+                        style={[
+                            styles.composerDock,
+                            {
+                                paddingBottom: keyboardHeight > 0
+                                    ? Math.max(keyboardHeight - insets.bottom, 8)
+                                    : baseInset,
+                            },
+                        ]}
+                    >
                         {messagesRemaining === 0 && resetTime ? (
                             <View style={styles.limitBanner}>
                                 <Text style={styles.limitText}>{tChat.dailyLimitOver}</Text>
@@ -746,18 +757,22 @@ function SendButton({
 // ─── Welcome Screen ───────────────────────────────────────────────────────────
 
 const WelcomeScreen = React.memo(function WelcomeScreen({
-    onPickChip, greetingName, tChat,
+    onPickChip, greetingName, tChat, keyboardOpen,
 }: {
     onPickChip: (text: string) => void;
     greetingName: string;
+    keyboardOpen?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tChat: any;
 }) {
     const greeting = (tChat.welcomeGreeting as string).replace('{name}', greetingName);
     return (
         <ScrollView
-            style={styles.welcomeScroll}
-            contentContainerStyle={styles.welcomeContent}
+            style={[styles.welcomeScroll, keyboardOpen && styles.welcomeScrollCompact]}
+            contentContainerStyle={[
+                styles.welcomeContent,
+                keyboardOpen && styles.welcomeContentCompact,
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
         >
@@ -772,6 +787,7 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
                 <Text style={styles.welcomeBrand}>{tChat.welcomeBrand}</Text>
             </Animated.View>
 
+            {!keyboardOpen && (
             <Animated.View
                 entering={FadeIn.duration(400).delay(120)}
                 style={styles.chipGrid}
@@ -808,6 +824,7 @@ const WelcomeScreen = React.memo(function WelcomeScreen({
                     />
                 </View>
             </Animated.View>
+            )}
         </ScrollView>
     );
 });
@@ -898,6 +915,10 @@ const styles = StyleSheet.create({
     welcomeScroll: {
         flex: 1,
     },
+    welcomeScrollCompact: {
+        flexGrow: 0,
+        flexShrink: 1,
+    },
     welcomeContent: {
         flexGrow: 1,
         paddingHorizontal: 20,
@@ -905,6 +926,11 @@ const styles = StyleSheet.create({
         paddingBottom: 24,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    welcomeContentCompact: {
+        paddingTop: 12,
+        paddingBottom: 8,
+        justifyContent: 'flex-start',
     },
     welcomeHero: {
         alignItems: 'center',

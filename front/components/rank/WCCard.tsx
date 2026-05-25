@@ -15,6 +15,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronRight } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
+  AppState,
+  type AppStateStatus,
   I18nManager,
   ImageStyle,
   Pressable,
@@ -44,12 +46,15 @@ const WCCard: React.FC<WCCardProps> = ({ onPressSoon }) => {
   useEffect(() => {
     if (!isFocused) return;
     setTime(getWorldCupTimeLeft());
-    const tickRate = time.days > 1 ? 60_000 : 1_000;
-    const id = setInterval(() => setTime(getWorldCupTimeLeft()), tickRate);
-    return () => clearInterval(id);
-    // Re-evaluate when day boundary crosses to update tick rate.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFocused, time.days > 1]);
+    const id = setInterval(() => setTime(getWorldCupTimeLeft()), 1_000);
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') setTime(getWorldCupTimeLeft());
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [isFocused]);
 
   const countdownItems: ReadonlyArray<{ val: number; lbl: string }> = [
     { val: time.days, lbl: t.rank.worldCup.days },

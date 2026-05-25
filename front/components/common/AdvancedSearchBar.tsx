@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { 
   Search, 
@@ -33,8 +35,9 @@ import MiniProfileCard from '../profile/MiniProfileCard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COLORS } from '../reels/constants';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from '../../src/i18n';
+import { PURPLE_PRIMARY, PURPLE_SOFT } from '../../constants/tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -43,15 +46,14 @@ const searchCache = new Map<string, { results: any; timestamp: number }>();
 const SEARCH_CACHE_TTL = 5 * 60 * 1000;
 const SEARCH_TIMEOUT = 10000; // 10 seconds timeout for search operations
 
-// Clean up expired cache entries periodically
-setInterval(() => {
+function pruneSearchCache(): void {
   const now = Date.now();
   for (const [key, value] of searchCache.entries()) {
     if (now - value.timestamp > SEARCH_CACHE_TTL) {
       searchCache.delete(key);
     }
   }
-}, 60000); // Clean every minute
+}
 
 // Recent searches storage key
 const RECENT_SEARCHES_KEY = '@search_recent_searches';
@@ -92,6 +94,8 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const { getToken } = useAuth();
+  const { t } = useTranslation();
+  const tSearch = t.searchModal;
   const haptic = useHapticFeedback();
   const fadeAnim = useFadeIn(300);
   const slideAnim = useSlideIn('down', 300);
@@ -145,6 +149,12 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   loadRecentSearchesRef.current = loadRecentSearches;
   loadTrendingHashtagsRef.current = loadTrendingHashtags;
   
+  useEffect(() => {
+    if (!visible) return;
+    const pruneTimer = setInterval(pruneSearchCache, 60_000);
+    return () => clearInterval(pruneTimer);
+  }, [visible]);
+
   useEffect(() => {
     if (visible && !hasLoadedRef.current) {
       hasLoadedRef.current = true;
@@ -431,6 +441,10 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   if (!visible) return null;
 
   return (
+    <KeyboardAvoidingView
+      style={styles.keyboardRoot}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
     <Animated.View 
       style={[
         styles.container,
@@ -450,13 +464,13 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
       <View style={styles.header}>
         <View style={styles.searchContainer}>
           <View style={styles.searchInputContainer}>
-            <Search size={20} color={COLORS.neonGreen} />
+            <Search size={20} color={PURPLE_PRIMARY} />
             <TextInput
               ref={searchInputRef}
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={handleSearch}
-              placeholder="ابحث عن لاعبين، فيديوهات، هاشتاجات..."
+              placeholder={tSearch.placeholder}
               placeholderTextColor="#666"
               autoFocus
               returnKeyType="search"
@@ -490,7 +504,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
               >
                 <LinearGradient
                   colors={activeTab === tab 
-                    ? [COLORS.neonGreen, '#22c55e']
+                    ? [PURPLE_PRIMARY, PURPLE_SOFT]
                     : ['transparent', 'transparent']
                   }
                   style={styles.tabGradient}
@@ -515,7 +529,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         {isSearching && (
           <View style={styles.loadingContainer}>
             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <ActivityIndicator size="large" color={COLORS.neonGreen} />
+              <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
             </Animated.View>
             <Text style={styles.loadingText}>جاري البحث...</Text>
           </View>
@@ -532,7 +546,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                 onPress={() => handleSuggestionSelect(suggestion)}
                 activeOpacity={0.7}
               >
-                <Search size={16} color={COLORS.neonGreen} />
+                <Search size={16} color={PURPLE_PRIMARY} />
                 <Text style={styles.suggestionText}>{suggestion}</Text>
               </TouchableOpacity>
             ))}
@@ -562,7 +576,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                         <Text style={styles.profileName} numberOfLines={1}>
                           {item.title}
                         </Text>
-                        {item.data?.isVerified && <BadgeCheck size={14} color={COLORS.neonGreen} />}
+                        {item.data?.isVerified && <BadgeCheck size={14} color={PURPLE_PRIMARY} />}
                         {item.data?.isDeveloper && <Code size={12} color="#3b82f6" />}
                       </View>
                       <Text style={styles.profileUsername} numberOfLines={1}>
@@ -581,11 +595,11 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                         {item.subtitle}
                       </Text>
                     </View>
-                    <Play size={20} color={COLORS.neonGreen} />
+                    <Play size={20} color={PURPLE_PRIMARY} />
                   </View>
                 ) : (
                   <View style={styles.hashtagResult}>
-                    <Hash size={24} color={COLORS.neonGreen} />
+                    <Hash size={24} color={PURPLE_PRIMARY} />
                     <View style={styles.hashtagInfo}>
                       <Text style={styles.hashtagTitle}>{item.title}</Text>
                       <Text style={styles.hashtagSubtitle}>{item.subtitle}</Text>
@@ -635,7 +649,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         {showTrending && (
           <View style={styles.trendingContainer}>
             <View style={styles.trendingHeader}>
-              <TrendingUp size={20} color={COLORS.neonGreen} />
+              <TrendingUp size={20} color={PURPLE_PRIMARY} />
               <Text style={styles.trendingTitle}>الهاشتاجات الشائعة</Text>
             </View>
             <View style={styles.trendingGrid}>
@@ -666,10 +680,20 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         )}
       </ScrollView>
     </Animated.View>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardRoot: {
+    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
   container: {
     position: 'absolute',
     top: 0,
@@ -696,7 +720,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 2,
-    borderColor: COLORS.neonGreen + '40',
+    borderColor: PURPLE_PRIMARY + '40',
   },
   searchInput: {
     flex: 1,
@@ -728,7 +752,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tabActive: {
-    shadowColor: COLORS.neonGreen,
+    shadowColor: PURPLE_PRIMARY,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 4,
@@ -745,7 +769,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabTextActive: {
-    color: COLORS.deepBlack,
+    color: '#0a0a0a',
     fontWeight: 'bold',
   },
   content: {
@@ -852,7 +876,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   hashtagTitle: {
-    color: COLORS.neonGreen,
+    color: PURPLE_PRIMARY,
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 4,
@@ -893,7 +917,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   clearRecentText: {
-    color: COLORS.neonGreen,
+    color: PURPLE_PRIMARY,
     fontSize: 14,
   },
   recentItem: {
@@ -938,7 +962,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   trendingText: {
-    color: COLORS.neonGreen,
+    color: PURPLE_PRIMARY,
     fontSize: 14,
     fontWeight: '600',
   },

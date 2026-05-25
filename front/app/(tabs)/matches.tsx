@@ -21,7 +21,9 @@ import { offlineQueue } from '../../src/services/offlineQueue';
 import NetInfo from '@react-native-community/netinfo';
 import { useTranslation } from '../../src/i18n';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
+import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
 import { useScreenFont } from '../../utils/fontSetup';
+import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
@@ -579,6 +581,7 @@ const LeagueCard = memo(function LeagueCard({
 
 export default function MatchesHubScreenV2() {
   useScreenFont();
+  useMatchEventsMonitor();
   const params = useLocalSearchParams();
   const initialFilter = (params.filter as typeof FILTERS[number]) || 'All';
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>(initialFilter);
@@ -1000,6 +1003,7 @@ export default function MatchesHubScreenV2() {
             awayTeamLogo: fixture.awayLogo,
             leagueName: fixture.leagueName,
           });
+          await MatchFavoritesStorage.addFavorite(String(fixture.id));
           toastManager.showSuccess(
             t('matches.bell.subscribedTitle'),
             t('matches.bell.subscribedMessage'),
@@ -1007,6 +1011,7 @@ export default function MatchesHubScreenV2() {
           );
         } else {
           await MatchSubscriptionsService.unsubscribe(token, fixture.id);
+          await MatchFavoritesStorage.removeFavorite(String(fixture.id));
           toastManager.showInfo(
             t('matches.bell.unsubscribedTitle'),
             t('matches.bell.unsubscribedMessage'),

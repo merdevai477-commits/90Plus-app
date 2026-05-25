@@ -1236,6 +1236,7 @@ model CachedFixture {
   matchTimestamp Int // Unix timestamp for easy sorting
   status         String // FT, AET, PEN, PST, CANC, etc.
   statusLong     String? // Full status name
+  elapsed        Int? // Live minute from API (1H/2H/ET)
   venue          String?
   referee        String?
 
@@ -1246,6 +1247,7 @@ model CachedFixture {
   updatedAt DateTime @updatedAt
 
   @@index([matchDate])
+  @@index([matchDate, status])
   @@index([matchTimestamp])
   @@index([leagueId])
   @@index([status])

@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MatchFavoritesStorage } from '../src/storage/matchFavorites.storage';
 import { ApiFootballService } from '../services/apiFootball';
+import { MatchesService } from '../src/services/authService';
 import { useAuth } from '@clerk/clerk-expo';
 import { logger } from '../utils/logger';
 import { Match } from '../components/Matches/matchCardUtils';
@@ -20,12 +21,22 @@ interface UseFavoriteMatchesResult {
 export const useFavoriteMatches = (): UseFavoriteMatchesResult => {
   const [favoriteMatchIds, setFavoriteMatchIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
 
-  // Load favorites on mount
+  // Load favorites on mount and sync from backend when signed in
   useEffect(() => {
     const loadFavorites = async () => {
       try {
+        const token = isSignedIn ? await getToken() : null;
+        if (token) {
+          const serverFavorites = await MatchesService.getFavorites(token);
+          const serverIds = serverFavorites.map((f) => String(f.apiMatchId));
+          if (serverIds.length > 0) {
+            await MatchFavoritesStorage.setFavorites(serverIds);
+            setFavoriteMatchIds(serverIds);
+            return;
+          }
+        }
         const favorites = await MatchFavoritesStorage.getFavorites();
         setFavoriteMatchIds(favorites);
       } catch (error) {
@@ -36,7 +47,7 @@ export const useFavoriteMatches = (): UseFavoriteMatchesResult => {
     };
 
     loadFavorites();
-  }, []);
+  }, [getToken, isSignedIn]);
 
   const isFavorite = useCallback((matchId: string): boolean => {
     return favoriteMatchIds.includes(matchId);

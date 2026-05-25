@@ -108,7 +108,6 @@ export class ProfileCompletionService {
       { id: 'bio', label: label('bio'), completed: false, required: false, weight: 10 },
       { id: 'position', label: label('position'), completed: false, required: false, weight: 10 },
       { id: 'cardData', label: label('cardData'), completed: false, required: false, weight: 20 },
-      { id: 'brand', label: label('brand'), completed: false, required: false, weight: 5 },
       { id: 'socialLinks', label: label('socialLinks'), completed: false, required: false, weight: 5 },
     ];
 

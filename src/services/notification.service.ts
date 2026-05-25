@@ -66,6 +66,8 @@ export interface CreateNotificationParams {
     pushToken?: string | null;
     threadId?: string;
     channelId?: string; // Android notification channel
+    /** When true, persist inbox + WebSocket only — no Expo push. */
+    skipPush?: boolean;
 }
 
 /**
@@ -116,7 +118,10 @@ function resolveChannelId(type: string, explicitChannelId?: string): string {
         case 'COIN_MILESTONE':
         case 'MILESTONE':
         case 'LUCKY_WHEEL':
+        case 'LUCKY_WHEEL_RENEWED':
         case 'LEADERBOARD_TOP10':
+        case 'LEADERBOARD_TOP3':
+        case 'PREDICTION_RESULT':
         case 'RE_ENGAGEMENT':
             return 'general';
         default:
@@ -130,7 +135,7 @@ export class NotificationService {
      */
     static async createNotification(params: CreateNotificationParams) {
         try {
-            const { userId, title, message, type, data, actor, pushToken, threadId, channelId } = params;
+            const { userId, title, message, type, data, actor, pushToken, threadId, channelId, skipPush } = params;
 
             // Ensure actor info is included in data
             const notificationData = {
@@ -161,34 +166,57 @@ export class NotificationService {
             });
 
             // 3. Send push notification (auto-resolve token + consent if not provided)
-            let effectivePushToken = pushToken ?? null;
-            if (!effectivePushToken) {
-                try {
-                    const user = await prisma.user.findUnique({
-                        where: { id: userId },
-                        select: { expoPushToken: true, pushNotificationsConsent: true },
-                    });
-                    // Only push if the user has given consent and has a valid token.
-                    if (user?.pushNotificationsConsent && user?.expoPushToken) {
-                        effectivePushToken = user.expoPushToken;
-                    }
-                } catch (err) {
-                    logger.warn('Failed to resolve push token for user:', { userId, err });
-                }
-            }
+            if (!skipPush) {
+                let effectivePushToken = pushToken ?? null;
+                let pushSkipReason: string | null = null;
 
-            if (effectivePushToken) {
-                await PushNotificationService.sendNotification({
-                    to: effectivePushToken,
-                    title,
-                    body: message,
-                    ...(threadId ? { threadId } : {}),
-                    channelId: resolveChannelId(type, channelId),
-                    data: {
-                        ...notificationData,
+                if (!effectivePushToken) {
+                    try {
+                        const user = await prisma.user.findUnique({
+                            where: { id: userId },
+                            select: { expoPushToken: true, pushNotificationsConsent: true },
+                        });
+                        if (!user?.pushNotificationsConsent) {
+                            pushSkipReason = 'no_consent';
+                        } else if (!user?.expoPushToken) {
+                            pushSkipReason = 'no_token';
+                        } else {
+                            effectivePushToken = user.expoPushToken;
+                        }
+                    } catch (err) {
+                        pushSkipReason = 'token_lookup_failed';
+                        logger.warn('Failed to resolve push token for user:', { userId, err });
+                    }
+                }
+
+                if (effectivePushToken) {
+                    const sent = await PushNotificationService.sendNotification({
+                        to: effectivePushToken,
+                        title,
+                        body: message,
+                        ...(threadId ? { threadId } : {}),
+                        channelId: resolveChannelId(type, channelId),
+                        data: {
+                            type: String(type),
+                            ...notificationData,
+                            notificationId: notification.id,
+                        },
+                    });
+                    if (!sent) {
+                        logger.warn('[Push] Expo send returned false', {
+                            userId,
+                            type: String(type),
+                            notificationId: notification.id,
+                        });
+                    }
+                } else if (pushSkipReason) {
+                    logger.debug('[Push] skipped', {
+                        userId,
+                        type: String(type),
+                        reason: pushSkipReason,
                         notificationId: notification.id,
-                    },
-                });
+                    });
+                }
             }
 
             return notification;
@@ -209,6 +237,7 @@ export class NotificationService {
         type: string;
         data?: any;
         pushToken?: string | null;
+        skipPush?: boolean;
     }) {
         try {
             // Fetch actor info

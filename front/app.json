@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
       "usesAppleSignIn": true,
-      "buildNumber": "100",
+      "buildNumber": "101",
       "requireFullScreen": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -167,7 +167,7 @@
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
+      "fallbackToCacheTimeout": 3000,
       "url": "https://u.expo.dev/254843d8-c368-4507-9a58-033539c77298"
     },
     "extra": {

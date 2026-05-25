@@ -13,13 +13,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Check, ChevronRight, ChevronLeft } from 'lucide-react-native';
 import { CLUBS } from '../../data/clubs';
-import { BRANDS } from '../../data/brands';
 import { COUNTRIES } from '../../data/countries';
 import { LEAGUES } from '../../data/leagues';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../../config/api.config';
 import { getClubLogo } from '../../services/clubLogoService';
-import { brandLogoService } from '../../services/brandLogoService';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -34,29 +32,26 @@ import { useTranslation } from '../../src/i18n';
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 3;
 
-type Step = 'club' | 'brand' | 'country' | 'leagues';
+type Step = 'club' | 'country' | 'leagues';
 
 export default function OnboardingScreen() {
     const { t } = useTranslation();
     const [step, setStep] = useState<Step>('club');
     const [selectedClub, setSelectedClub] = useState<string | null>(null);
-    const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
     const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
     const [selectedLeagues, setSelectedLeagues] = useState<number[]>([]);
 
     const { getToken } = useAuth();
     const { addFavoriteLeague } = useSettings();
-    const progress = useSharedValue(0.25);
+    const progress = useSharedValue(0.33);
 
-    // Update progress bar instantly
     useEffect(() => {
-        const stepProgress = { club: 0.25, brand: 0.5, country: 0.75, leagues: 1 };
+        const stepProgress = { club: 0.33, country: 0.66, leagues: 1 };
         progress.value = withSpring(stepProgress[step], { damping: 15 });
     }, [step]);
 
     const handleNext = useCallback(async () => {
-        if (step === 'club' && selectedClub) setStep('brand');
-        else if (step === 'brand' && selectedBrand) setStep('country');
+        if (step === 'club' && selectedClub) setStep('country');
         else if (step === 'country' && selectedCountry) setStep('leagues');
         else if (step === 'leagues' && selectedLeagues.length >= 3) {
             // Save preferences first, then navigate
@@ -75,11 +70,10 @@ export default function OnboardingScreen() {
             useHomeStore.getState().setUserMode('diamond');
             router.replace('/(tabs)/Home');
         }
-    }, [step, selectedClub, selectedBrand, selectedCountry, selectedLeagues, addFavoriteLeague]);
+    }, [step, selectedClub, selectedCountry, selectedLeagues, addFavoriteLeague]);
 
     const handleBack = useCallback(() => {
-        if (step === 'brand') setStep('club');
-        else if (step === 'country') setStep('brand');
+        if (step === 'country') setStep('club');
         else if (step === 'leagues') setStep('country');
     }, [step]);
 
@@ -98,20 +92,13 @@ export default function OnboardingScreen() {
         
         // Get the full club and brand objects to send logos
         const clubData = CLUBS.find(c => c.name === selectedClub);
-        const brandData = BRANDS.find(b => b.name === selectedBrand);
         const countryData = COUNTRIES.find(c => c.id === selectedCountry);
-        
-        // Fetch real logos from external APIs
+
         let realClubLogo: string | null = null;
-        let realBrandLogo: string | null = null;
-        
         if (clubData?.apiId) {
             realClubLogo = await getClubLogo(clubData.apiId);
         }
-        if (brandData?.apiId) {
-            realBrandLogo = await brandLogoService.fetchBrandLogo(brandData.apiId);
-        }
-        
+
         const response = await fetch(`${getApiUrl()}/api/clerk/preferences`, {
             method: 'POST',
             headers: {
@@ -120,12 +107,9 @@ export default function OnboardingScreen() {
             },
             body: JSON.stringify({
                 favoriteTeam: selectedClub,
-                favoriteBrand: selectedBrand,
                 country: selectedCountry,
                 favoriteLeagues: selectedLeagues,
-                // Send real logos for profile card (or fallback to default)
                 clubLogo: realClubLogo || clubData?.logo || '',
-                brandLogo: realBrandLogo || brandData?.logo || '',
                 countryFlag: countryData?.flag,
             }),
         });
@@ -141,14 +125,12 @@ export default function OnboardingScreen() {
         width: `${progress.value * 100}%`,
     }));
 
-    const canProceed = step === 'club' ? !!selectedClub 
-        : step === 'brand' ? !!selectedBrand 
-        : step === 'country' ? !!selectedCountry 
+    const canProceed = step === 'club' ? !!selectedClub
+        : step === 'country' ? !!selectedCountry
         : selectedLeagues.length >= 3;
 
     const titles: Record<Step, string> = {
         club: t.onboardingFlow.titleClub,
-        brand: t.onboardingFlow.titleBrand,
         country: t.onboardingFlow.titleCountry,
         leagues: t.onboardingFlow.titleLeagues,
     };
@@ -182,31 +164,6 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
         );
     }, [selectedClub]);
-
-    const renderBrandItem = useCallback(({ item }: { item: typeof BRANDS[0] }) => {
-        const isSelected = selectedBrand === item.name;
-        return (
-            <TouchableOpacity
-                style={[styles.gridItem, isSelected && styles.selectedItem, { backgroundColor: item.color || '#333' }]}
-                onPress={() => setSelectedBrand(item.name)}
-                activeOpacity={0.7}
-            >
-                {item.logo ? (
-                    <Image 
-                        source={{ uri: item.logo }} 
-                        style={styles.brandLogo} 
-                        contentFit="contain"
-                    />
-                ) : null}
-                <Text style={styles.brandItemName} numberOfLines={1}>{item.name}</Text>
-                {isSelected && (
-                    <View style={styles.checkBadge}>
-                        <Check size={12} color="#000" strokeWidth={3} />
-                    </View>
-                )}
-            </TouchableOpacity>
-        );
-    }, [selectedBrand]);
 
     const renderCountryItem = useCallback(({ item }: { item: typeof COUNTRIES[0] }) => {
         const isSelected = selectedCountry === item.id;
@@ -264,7 +221,7 @@ export default function OnboardingScreen() {
                     <Animated.View style={[styles.progressFill, progressStyle]} />
                 </View>
                 <Text style={styles.progressText}>
-                    {step === 'club' ? '1/4' : step === 'brand' ? '2/4' : step === 'country' ? '3/4' : '4/4'}
+                    {step === 'club' ? '1/3' : step === 'country' ? '2/3' : '3/3'}
                 </Text>
             </View>
 
@@ -291,17 +248,6 @@ export default function OnboardingScreen() {
                         removeClippedSubviews={true}
                         maxToRenderPerBatch={15}
                         windowSize={5}
-                    />
-                )}
-
-                {step === 'brand' && (
-                    <FlatList
-                        data={BRANDS}
-                        renderItem={renderBrandItem}
-                        keyExtractor={item => item.id}
-                        numColumns={3}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.gridContainer}
                     />
                 )}
 

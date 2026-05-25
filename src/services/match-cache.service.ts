@@ -24,9 +24,9 @@ const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
 
 // Cache TTL values
 const CACHE_TTL = {
-    LIVE: 30 * 1000,        // 30 seconds for live matches
+    LIVE: 8 * 1000,           // 8 seconds — aligned with matches tab poll
     SCHEDULED: 5 * 60 * 1000, // 5 minutes for scheduled matches
-    FINISHED: Infinity,      // Permanent (stored in DB)
+    FINISHED: Infinity,       // Permanent (stored in DB)
 };
 
 interface CacheEntry<T> {
@@ -225,6 +225,104 @@ class MatchCacheService {
     }
 
     /**
+     * Build Prisma create/update payloads from API fixture (full snapshot in fullData).
+     */
+    private buildFixtureDbPayload(fixture: FixtureFromAPI): { create: Record<string, unknown>; update: Record<string, unknown> } {
+        const status = fixture.fixture.status.short;
+        const base = {
+            fixtureId: fixture.fixture.id,
+            leagueId: fixture.league.id,
+            leagueName: fixture.league.name,
+            leagueLogo: fixture.league.logo,
+            leagueCountry: fixture.league.country,
+            leagueSeason: fixture.league.season,
+            leagueRound: fixture.league.round,
+            homeTeamId: fixture.teams.home.id,
+            homeTeamName: fixture.teams.home.name,
+            homeTeamLogo: fixture.teams.home.logo,
+            awayTeamId: fixture.teams.away.id,
+            awayTeamName: fixture.teams.away.name,
+            awayTeamLogo: fixture.teams.away.logo,
+            homeScore: fixture.goals.home,
+            awayScore: fixture.goals.away,
+            homeHalftimeScore: fixture.score?.halftime?.home ?? null,
+            awayHalftimeScore: fixture.score?.halftime?.away ?? null,
+            matchDate: new Date(fixture.fixture.date),
+            matchTimestamp: fixture.fixture.timestamp,
+            status,
+            statusLong: fixture.fixture.status.long,
+            elapsed: fixture.fixture.status.elapsed ?? null,
+            venue: fixture.fixture.venue?.name ?? null,
+            referee: fixture.fixture.referee,
+            fullData: fixture as any,
+        };
+        return {
+            create: base,
+            update: { ...base, updatedAt: new Date() },
+        };
+    }
+
+    /**
+     * Upsert ALL fixtures (live, scheduled, finished) with complete API payload.
+     * Calendar + match list can read historical dates from DB.
+     */
+    async upsertFixtures(
+        fixtures: FixtureFromAPI[],
+        options?: { fetchDetails?: boolean },
+    ): Promise<number> {
+        if (!fixtures.length) return 0;
+
+        const fetchDetails =
+            options?.fetchDetails === true && process.env.FETCH_MATCH_DETAILS === 'true';
+
+        let upserted = 0;
+        for (const fixture of fixtures) {
+            try {
+                const { create, update } = this.buildFixtureDbPayload(fixture);
+                await prisma.cachedFixture.upsert({
+                    where: { fixtureId: fixture.fixture.id },
+                    create: create as any,
+                    update: update as any,
+                });
+                this.dbFixtureIds.add(fixture.fixture.id);
+                upserted++;
+
+                if (fetchDetails && this.isFinishedStatus(fixture.fixture.status.short)) {
+                    this.fetchAndStoreMatchDetails(fixture.fixture.id).catch((error) => {
+                        logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
+                    });
+                }
+            } catch (error) {
+                logger.error(`Failed to upsert fixture ${fixture.fixture.id}:`, error);
+            }
+        }
+
+        if (upserted > 0) {
+            logger.debug(`💾 Upserted ${upserted} fixtures to DB (live + scheduled + finished)`);
+        }
+        return upserted;
+    }
+
+    /**
+     * All matches in DB for a calendar day (any status).
+     */
+    async getMatchesFromDbByDateRange(from: Date, to: Date): Promise<CachedFixture[]> {
+        try {
+            const matches = await prisma.cachedFixture.findMany({
+                where: {
+                    matchDate: { gte: from, lte: to },
+                },
+                orderBy: { matchTimestamp: 'asc' },
+            });
+            logger.debug(`📦 Retrieved ${matches.length} fixtures from DB for date range`);
+            return matches;
+        } catch (error) {
+            logger.error('Failed to get matches from database by date:', error);
+            return [];
+        }
+    }
+
+    /**
      * Get finished matches from database for a date range
      */
     async getFinishedMatchesFromDb(from: Date, to: Date): Promise<CachedFixture[]> {
@@ -258,81 +356,8 @@ class MatchCacheService {
      * ✅ This ensures all match data is permanently cached (0 API calls for future requests)
      */
     async archiveFinishedMatches(fixtures: FixtureFromAPI[]): Promise<number> {
-        const finishedFixtures = fixtures.filter(f =>
-            this.isFinishedStatus(f.fixture.status.short) &&
-            !this.isFixtureInDb(f.fixture.id)
-        );
-
-        if (finishedFixtures.length === 0) {
-            return 0;
-        }
-
-        let archivedCount = 0;
-
-        for (const fixture of finishedFixtures) {
-            try {
-                // ✅ Store basic match data first
-                await prisma.cachedFixture.upsert({
-                    where: { fixtureId: fixture.fixture.id },
-                    update: {
-                        homeScore: fixture.goals.home,
-                        awayScore: fixture.goals.away,
-                        status: fixture.fixture.status.short,
-                        statusLong: fixture.fixture.status.long,
-                        fullData: fixture as any,
-                        updatedAt: new Date(),
-                    },
-                    create: {
-                        fixtureId: fixture.fixture.id,
-                        leagueId: fixture.league.id,
-                        leagueName: fixture.league.name,
-                        leagueLogo: fixture.league.logo,
-                        leagueCountry: fixture.league.country,
-                        leagueSeason: fixture.league.season,
-                        leagueRound: fixture.league.round,
-                        homeTeamId: fixture.teams.home.id,
-                        homeTeamName: fixture.teams.home.name,
-                        homeTeamLogo: fixture.teams.home.logo,
-                        awayTeamId: fixture.teams.away.id,
-                        awayTeamName: fixture.teams.away.name,
-                        awayTeamLogo: fixture.teams.away.logo,
-                        homeScore: fixture.goals.home,
-                        awayScore: fixture.goals.away,
-                        homeHalftimeScore: fixture.score?.halftime?.home,
-                        awayHalftimeScore: fixture.score?.halftime?.away,
-                        matchDate: new Date(fixture.fixture.date),
-                        matchTimestamp: fixture.fixture.timestamp,
-                        status: fixture.fixture.status.short,
-                        statusLong: fixture.fixture.status.long,
-                        venue: fixture.fixture.venue?.name,
-                        referee: fixture.fixture.referee,
-                        fullData: fixture as any,
-                    },
-                });
-
-                // Add to local cache
-                this.dbFixtureIds.add(fixture.fixture.id);
-                archivedCount++;
-
-                // ⚠️ Background detail fetch burns 3 API calls per match (lineups +
-                // statistics + events). On the Free plan (100/day) that exhausts the
-                // quota in <10 archived matches and causes cascading 429 errors.
-                // Only fetch details when explicitly opted in via env flag.
-                if (process.env.FOOTBALL_API_PLAN === 'pro' || process.env.FETCH_MATCH_DETAILS === 'true') {
-                    this.fetchAndStoreMatchDetails(fixture.fixture.id).catch(error => {
-                        logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
-                    });
-                }
-            } catch (error) {
-                logger.error(`Failed to archive fixture ${fixture.fixture.id}:`, error);
-            }
-        }
-
-        if (archivedCount > 0) {
-            logger.info(`✅ Archived ${archivedCount} finished matches to database (fetching details in background)`);
-        }
-
-        return archivedCount;
+        const finished = fixtures.filter((f) => this.isFinishedStatus(f.fixture.status.short));
+        return this.upsertFixtures(finished);
     }
 
     /**
@@ -399,7 +424,11 @@ class MatchCacheService {
     convertDbMatchToApiFormat(dbMatch: CachedFixture): FixtureFromAPI {
         // If we have the full data stored, use it
         if (dbMatch.fullData && typeof dbMatch.fullData === 'object') {
-            return dbMatch.fullData as unknown as FixtureFromAPI;
+            const fromJson = dbMatch.fullData as unknown as FixtureFromAPI;
+            if (dbMatch.elapsed != null && fromJson.fixture?.status) {
+                fromJson.fixture.status.elapsed = dbMatch.elapsed;
+            }
+            return fromJson;
         }
 
         // Otherwise, reconstruct from individual fields
@@ -419,7 +448,7 @@ class MatchCacheService {
                 status: {
                     long: dbMatch.statusLong || dbMatch.status,
                     short: dbMatch.status,
-                    elapsed: null,
+                    elapsed: dbMatch.elapsed ?? null,
                 },
             },
             league: {
@@ -479,12 +508,13 @@ class MatchCacheService {
         to: Date,
         fetchFromApi: () => Promise<FixtureFromAPI[]>
     ): Promise<FixtureFromAPI[]> {
-        // 1. Get finished matches from database (no API call needed, shared across all users)
-        const dbMatches = await this.getFinishedMatchesFromDb(from, to);
-        const dbMatchesConverted = dbMatches.map(m => this.convertDbMatchToApiFormat(m));
-        const dbFixtureIds = new Set(dbMatches.map(m => m.fixtureId));
+        // 1. All cached fixtures for range (any status) — calendar + finished history
+        const dbMatches = await this.getMatchesFromDbByDateRange(from, to);
+        const dbByFixtureId = new Map(
+            dbMatches.map((m) => [m.fixtureId, this.convertDbMatchToApiFormat(m)]),
+        );
 
-        logger.debug(`📦 Got ${dbMatchesConverted.length} finished matches from DB (shared for all users)`);
+        logger.debug(`📦 Got ${dbByFixtureId.size} fixtures from DB for range`);
 
         // 2. Check memory cache for live/scheduled matches
         const cacheKey = `matches_${from.toISOString()}_${to.toISOString()}`;
@@ -493,11 +523,10 @@ class MatchCacheService {
         if (cachedApiMatches) {
             logger.debug(`📦 Got ${cachedApiMatches.length} matches from memory cache (shared for all users)`);
 
-            // Filter out any matches that are now in DB
-            const filteredApiMatches = cachedApiMatches.filter(m => !dbFixtureIds.has(m.fixture.id));
-
-            // Combine DB + cached API matches
-            return [...dbMatchesConverted, ...filteredApiMatches];
+            for (const m of cachedApiMatches) {
+                dbByFixtureId.set(m.fixture.id, m);
+            }
+            return this.sortFixturesByKickoff(Array.from(dbByFixtureId.values()));
         }
 
         // ✅ 3. Request deduplication: Check if there's already a pending request for this data
@@ -506,12 +535,10 @@ class MatchCacheService {
         if (pendingRequest) {
             logger.debug(`⏳ Waiting for pending API request (${this.pendingRequests.size} concurrent requests)`);
             const apiMatches = await pendingRequest;
-            
-            // Filter out matches that are already in DB
-            const nonDbMatches = apiMatches.filter(m => !this.isFixtureInDb(m.fixture.id));
-            
-            // Combine DB + API matches
-            return [...dbMatchesConverted, ...nonDbMatches];
+            for (const m of apiMatches) {
+                dbByFixtureId.set(m.fixture.id, m);
+            }
+            return this.sortFixturesByKickoff(Array.from(dbByFixtureId.values()));
         }
 
         // ✅ 4. Create new API request and share it with all concurrent requests
@@ -520,16 +547,13 @@ class MatchCacheService {
             try {
                 const apiMatches = await fetchFromApi();
 
-                // Archive any newly finished matches to database (shared for all users)
-                await this.archiveFinishedMatches(apiMatches);
+                await this.upsertFixtures(apiMatches);
 
-                // Cache live/scheduled matches with appropriate TTL
-                const nonDbMatches = apiMatches.filter(m => !this.isFixtureInDb(m.fixture.id));
-                const hasLive = nonDbMatches.some(m => this.isLiveStatus(m.fixture.status.short));
+                const hasLive = apiMatches.some((m) => this.isLiveStatus(m.fixture.status.short));
                 const ttl = hasLive ? CACHE_TTL.LIVE : CACHE_TTL.SCHEDULED;
-                await this.setInMemoryCache(cacheKey, nonDbMatches, ttl);
+                await this.setInMemoryCache(cacheKey, apiMatches, ttl);
 
-                logger.debug(`✅ API request completed. ${nonDbMatches.length} live/scheduled matches cached (shared for all users)`);
+                logger.debug(`✅ API request completed. ${apiMatches.length} fixtures upserted + memory cached`);
                 return apiMatches;
             } finally {
                 // Remove from pending requests after completion
@@ -543,11 +567,14 @@ class MatchCacheService {
         // Wait for the API request to complete
         const apiMatches = await apiRequestPromise;
 
-        // Filter out matches that are already in DB
-        const nonDbMatches = apiMatches.filter(m => !this.isFixtureInDb(m.fixture.id));
+        for (const m of apiMatches) {
+            dbByFixtureId.set(m.fixture.id, m);
+        }
+        return this.sortFixturesByKickoff(Array.from(dbByFixtureId.values()));
+    }
 
-        // Combine all matches
-        return [...dbMatchesConverted, ...nonDbMatches];
+    private sortFixturesByKickoff(fixtures: FixtureFromAPI[]): FixtureFromAPI[] {
+        return fixtures.sort((a, b) => a.fixture.timestamp - b.fixture.timestamp);
     }
 
     /**

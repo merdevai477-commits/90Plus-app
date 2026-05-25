@@ -815,7 +815,12 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
                 user: currentUser.displayName || currentUser.username,
             }),
             type: 'FOLLOW',
-            data: { followerId: currentUser.id },
+            data: {
+                type: 'FOLLOW',
+                followerId: currentUser.id,
+                actorUsername: currentUser.username,
+                screen: `/user/${currentUser.username}`,
+            },
         });
 
         // ✅ XP Award to the followed user for receiving a follow (non-blocking)
@@ -1324,8 +1329,10 @@ router.post('/follow/id/:userId', requireAuth, async (req: Request, res: Respons
             }),
             type: 'FOLLOW',
             data: {
+                type: 'FOLLOW',
                 followerId: currentUser.id,
                 actorUsername: currentUser.username,
+                screen: `/user/${currentUser.username}`,
             },
         });
 

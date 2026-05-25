@@ -298,20 +298,17 @@ export async function notifyUser(params: NotifyUserParams): Promise<{ delivered:
         type: String(type),
         title: resolvedTitle,
         message: resolvedBody,
-        data: { type: String(type), ...data },
+        data: {
+            type: String(type),
+            ...data,
+            ...(skipPush ? { __skipPush: true } : {}),
+        },
     };
 
     if (actor) {
         await enqueueSocialNotification({ ...payload, actorId: actor.id });
     } else {
         await enqueueNotification(payload);
-    }
-
-    if (skipPush) {
-        // The Bull worker honors `skipPush` indirectly via data flag; the
-        // upstream NotificationService already respects `pushNotificationsConsent`,
-        // so we just mark it for downstream inspection.
-        (payload.data as any).__skipPush = true;
     }
 
     return { delivered: true };

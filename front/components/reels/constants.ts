@@ -1,15 +1,20 @@
-import { Colors } from '../../src/designSystem/designSystem';
+import {
+    PURPLE_PRIMARY,
+    PURPLE_SOFT,
+} from '../../constants/tokens';
 
-const BRAND_GREEN = Colors.primary[600]; // #22c55e — app-wide accent
+const BRAND_PURPLE = PURPLE_PRIMARY;
+const BRAND_PURPLE_LIGHT = PURPLE_SOFT;
+const BRAND_PURPLE_DARK = '#5B21B6';
 
-// Reels / video UI — aligned with designSystem primary600
+// Reels / video UI — purple brand identity
 export const COLORS = {
-    brandPurple: BRAND_GREEN,
-    brandPurpleLight: Colors.primary[400],
-    brandPurpleDark: Colors.primary[700],
-    neonGreen: BRAND_GREEN,
-    electricGreen: Colors.primary[400],
-    darkGreen: Colors.primary[700],
+    brandPurple: BRAND_PURPLE,
+    brandPurpleLight: BRAND_PURPLE_LIGHT,
+    brandPurpleDark: BRAND_PURPLE_DARK,
+    neonGreen: BRAND_PURPLE,
+    electricGreen: BRAND_PURPLE_LIGHT,
+    darkGreen: BRAND_PURPLE_DARK,
     neonBlue: '#00D9FF',
     neonRed: '#FF3B30',
 
@@ -19,12 +24,12 @@ export const COLORS = {
     mediumGray: '#2A2A2A',        // Card backgrounds
 
     // Semantic Colors
-    primary: BRAND_GREEN,
-    secondary: Colors.primary[400],
+    primary: BRAND_PURPLE,
+    secondary: BRAND_PURPLE_LIGHT,
     accent: '#00D9FF',             // Electric blue (stats)
     error: '#FF3B30',              // Red for errors
     warning: '#FF9500',            // Orange warnings
-    success: BRAND_GREEN,
+    success: BRAND_PURPLE,
     info: '#2196F3',               // Info blue
 
     // UI Colors
@@ -55,12 +60,12 @@ export const COLORS = {
 
 // Premium Gradients
 export const GRADIENTS = {
-    brandGlow: [BRAND_GREEN, Colors.primary[400]] as const,
+    brandGlow: [BRAND_PURPLE, BRAND_PURPLE_LIGHT] as const,
     /** @deprecated use brandGlow */
-    greenGlow: [BRAND_GREEN, Colors.primary[400]] as const,
+    greenGlow: [BRAND_PURPLE, BRAND_PURPLE_LIGHT] as const,
     darkFade: ['rgba(0, 0, 0, 0.9)', 'transparent'] as const,
     bottomFade: ['transparent', 'rgba(0, 0, 0, 0.95)'] as const,
-    cardGradient: ['rgba(34, 197, 94, 0.22)', 'rgba(34, 197, 94, 0.1)'] as const,
+    cardGradient: ['rgba(124, 58, 237, 0.35)', 'rgba(124, 58, 237, 0.12)'] as const,
 };
 
 // Animation Timings
@@ -74,7 +79,7 @@ export const ANIMATION = {
 // Shadows & Effects
 export const EFFECTS = {
     brandGlow: {
-        shadowColor: BRAND_GREEN,
+        shadowColor: BRAND_PURPLE,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.55,
         shadowRadius: 12,
@@ -82,7 +87,7 @@ export const EFFECTS = {
     },
     /** @deprecated use brandGlow */
     greenGlow: {
-        shadowColor: BRAND_GREEN,
+        shadowColor: BRAND_PURPLE,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.55,
         shadowRadius: 12,

@@ -62,8 +62,8 @@ interface ReelItemProps {
     fadeAnim?: RNAnimated.Value;
     slideAnim?: RNAnimated.Value;
     pulseAnim?: RNAnimated.Value;
-    /** Current user's ID - used to hide follow button on own reels (Requirement 18.1) */
-    currentUserId?: string;
+    /** Hide follow button on the viewer's own reels */
+    isOwnReel?: boolean;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -98,7 +98,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     fadeAnim,
     slideAnim,
     pulseAnim,
-    currentUserId,
+    isOwnReel = false,
     onDeleteReel,
     onEditReel,
 }) => {
@@ -322,8 +322,6 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
     const handleMoreOptions = useCallback(() => {
         haptics.lightImpact();
-        const isOwnReel = currentUserId && reel?.user?.id &&
-            String(currentUserId) === String(reel.user.id);
 
         if (Platform.OS === 'ios') {
             const options = isOwnReel
@@ -390,7 +388,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 onReport();
             }
         }
-    }, [haptics, currentUserId, reel.id, reel?.user?.id, reel.description, t, onDeleteReel, onReport]);
+    }, [haptics, isOwnReel, reel.id, reel.description, t, onDeleteReel, onReport]);
 
     const handleLikePress = () => {
         haptics.mediumImpact(); // Vibration on like
@@ -504,12 +502,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
                     {/* Follow Button Logic - Requirements 18.1, 18.2, 18.4 */}
                     {/* Hide for own reels (18.1), Show for other users (18.2), Show correct state (18.4) */}
-                    {(() => {
-                        // Type-safe comparison: ensure own videos NEVER show follow button
-                        const isOwnReel = currentUserId && reel?.user?.id && 
-                            String(currentUserId) === String(reel.user.id);
-                        return !isOwnReel && (onFollow || onUnfollow);
-                    })() && (
+                    {!isOwnReel && (onFollow || onUnfollow) && (
                         <TouchableOpacity
                             style={[
                                 styles.followButton,

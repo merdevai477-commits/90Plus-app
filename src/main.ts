@@ -751,6 +751,9 @@ async function startServer() {
                     MatchWatcherService.start();
                     PredictionWatcherService.start();
 
+                    const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
+                    liveFixtureSyncService.start();
+
                     // ── Always-on queues & verification ──────────────────
                     // These have nothing to do with API-Football quota; they
                     // process push receipts and notification fan-out, which
@@ -939,6 +942,8 @@ process.on('SIGINT', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
+    const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
+    liveFixtureSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
 
     stopKeepAlive();
@@ -951,6 +956,8 @@ process.on('SIGTERM', async () => {
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
+    liveFixtureSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
 
     stopKeepAlive();
