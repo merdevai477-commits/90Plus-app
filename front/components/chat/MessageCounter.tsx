@@ -84,7 +84,7 @@ function getLoadingColors(): CounterColors {
 
 export function MessageCounter({
   messagesRemaining,
-  total = 5,
+  total = 10,
 }: MessageCounterProps) {
   const isLoading = messagesRemaining === null;
 

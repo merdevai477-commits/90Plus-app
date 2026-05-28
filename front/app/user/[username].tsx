@@ -10,7 +10,6 @@ import {
   RefreshControl,
   Animated,
   Modal,
-  I18nManager,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -72,8 +71,6 @@ function UserTopBar({
   onBack: () => void;
 }) {
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-
   const xpDisplay = xp != null ? (xp >= 1000 ? `${(xp / 1000).toFixed(1)}K` : String(xp)) : '—';
 
   return (
@@ -81,10 +78,7 @@ function UserTopBar({
       intensity={20}
       tint="dark"
       effect="regular"
-      style={[
-        tb.container,
-        { paddingTop: topInset + 10, flexDirection: rowDirection },
-      ]}
+      style={[tb.container, { paddingTop: topInset + 10 }]}
     >
       {/* Back button */}
       <TouchableOpacity onPress={onBack} style={tb.backBtn} hitSlop={12}>
@@ -112,9 +106,10 @@ const tb = StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
-    start: 0,
-    end: 0,
+    left: 0,
+    right: 0,
     zIndex: 200,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,

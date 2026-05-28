@@ -102,11 +102,7 @@ class LiveFixtureSyncService {
             });
         }
 
-        WebSocketService.broadcast('match_update', {
-            type: 'live_batch',
-            count: liveFixtures.length,
-            updatedAt: new Date().toISOString(),
-        });
+        // Per-match updates above are enough; avoid noisy global match_update broadcasts.
     }
 }
 

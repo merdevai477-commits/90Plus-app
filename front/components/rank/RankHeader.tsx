@@ -10,7 +10,7 @@ import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe
 import { BlurView } from 'expo-blur';
 import { Zap } from 'lucide-react-native';
 import React from 'react';
-import { I18nManager, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
@@ -26,7 +26,6 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
 
-  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
   const display: string = loading ? '—' : String(coins);
 
   return (
@@ -34,10 +33,7 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
       intensity={20}
       tint="dark"
       effect="regular"
-      style={[
-        s.headerContainer,
-        { paddingTop: topInset + 10, flexDirection: rowDirection },
-      ]}
+      style={[s.headerContainer, { paddingTop: topInset + 10 }]}
     >
       <View style={s.logoPillSmall}>
         <Text style={s.logo90Small}>90</Text>
@@ -64,9 +60,10 @@ const s = StyleSheet.create({
   headerContainer: {
     position: 'absolute',
     top: 0,
-    start: 0,
-    end: 0,
+    left: 0,
+    right: 0,
     zIndex: 100,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,

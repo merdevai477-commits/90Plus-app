@@ -96,20 +96,17 @@ class FootballDataCacheService {
      */
     async getMatchesByDate(dateString: string): Promise<any[]> {
         try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
                 throw new Error(`Invalid date: ${dateString}`);
             }
 
-            const startOfDay = new Date(date);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(date);
-            endOfDay.setHours(23, 59, 59, 999);
+            // UTC day bounds — aligns with API-Football date=YYYY-MM-DD queries
+            const startOfDay = new Date(`${dateString}T00:00:00.000Z`);
+            const endOfDay = new Date(`${dateString}T23:59:59.999Z`);
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const isPastDate = date < today;
-            const isToday = date.getTime() === today.getTime();
+            const todayKey = new Date().toISOString().split('T')[0];
+            const isPastDate = dateString < todayKey;
+            const isToday = dateString === todayKey;
 
             // Calendar past days: serve from DB when we already have fixtures (any status)
             if (isPastDate) {

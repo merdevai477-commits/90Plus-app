@@ -45,7 +45,7 @@ export default function LanguagePickerModal({
   onClose,
   onLanguageChange,
 }: LanguagePickerModalProps) {
-  const { language: currentLanguage, setLanguage, t, isRTL } = useTranslation();
+  const { language: currentLanguage, setLanguage, t } = useTranslation();
   const [isChanging, setIsChanging] = useState(false);
   const [changingLanguage, setChangingLanguage] = useState<Language | null>(null);
 
@@ -127,9 +127,9 @@ export default function LanguagePickerModal({
       <View style={styles.container}>
         <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
 
-        <View style={[styles.content, isRTL && styles.contentRTL]}>
+        <View style={styles.content}>
           {/* Header */}
-          <View style={[styles.header, isRTL && styles.headerRTL]}>
+          <View style={styles.header}>
             <Text style={styles.title}>
               {t?.settings?.language || 'Language'}
             </Text>
@@ -177,9 +177,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  contentRTL: {
-    // RTL-specific styles if needed
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -188,9 +185,6 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  headerRTL: {
-    flexDirection: 'row-reverse',
   },
   title: {
     fontSize: 20,

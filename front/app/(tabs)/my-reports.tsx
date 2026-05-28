@@ -115,7 +115,6 @@ export default function MyReportsScreen() {
   const { getToken } = useAuth();
   const router = useRouter();
   const { language, t } = useLanguage();
-  const isRTL = language === 'ar';
   const tReports = t.myReports;
 
   const [reports, setReports] = useState<Report[]>([]);
@@ -153,7 +152,7 @@ export default function MyReportsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [getToken, isRTL]);
+  }, [getToken, tReports]);
 
   useEffect(() => {
     fetchReports();
@@ -196,13 +195,13 @@ export default function MyReportsScreen() {
         onPress={() => handleReportPress(item)}
         activeOpacity={0.7}
       >
-        <View style={[styles.reportHeader, isRTL && styles.reportHeaderRTL]}>
+        <View style={styles.reportHeader}>
           <View style={[styles.reportIcon, { backgroundColor: `${statusColor}20` }]}>
             <Ionicons name="flag" size={20} color={statusColor} />
           </View>
-          <View style={[styles.reportInfo, isRTL && styles.reportInfoRTL]}>
-            <Text style={[styles.reportType, isRTL && styles.textRTL]}>{typeLabel}</Text>
-            <Text style={[styles.reportDate, isRTL && styles.textRTL]}>
+          <View style={styles.reportInfo}>
+            <Text style={styles.reportType}>{typeLabel}</Text>
+            <Text style={styles.reportDate}>
               {new Date(item.createdAt).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
             </Text>
           </View>
@@ -211,11 +210,11 @@ export default function MyReportsScreen() {
           </View>
         </View>
 
-        <Text style={[styles.reportReason, isRTL && styles.textRTL]} numberOfLines={2}>
+        <Text style={styles.reportReason} numberOfLines={2}>
           {item.reason}
         </Text>
 
-        <View style={[styles.reportFooter, isRTL && styles.reportFooterRTL]}>
+        <View style={styles.reportFooter}>
           <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
           <Text style={styles.reportContentType}>
             {item.contentType === 'reel'
@@ -275,7 +274,7 @@ export default function MyReportsScreen() {
           }}
         >
           <Ionicons
-            name={isRTL ? 'chevron-forward' : 'chevron-back'}
+            name="chevron-back"
             size={28}
             color={COLORS.textPrimary}
           />
@@ -367,9 +366,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  reportHeaderRTL: {
-    flexDirection: 'row-reverse',
-  },
   reportIcon: {
     width: 40,
     height: 40,
@@ -381,9 +377,6 @@ const styles = StyleSheet.create({
   reportInfo: {
     flex: 1,
   },
-  reportInfoRTL: {
-    alignItems: 'flex-end',
-  },
   reportType: {
     fontSize: 16,
     fontWeight: '600',
@@ -393,9 +386,6 @@ const styles = StyleSheet.create({
   reportDate: {
     fontSize: 13,
     color: COLORS.textSecondary,
-  },
-  textRTL: {
-    textAlign: 'right',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -416,9 +406,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  reportFooterRTL: {
-    flexDirection: 'row-reverse',
   },
   reportContentType: {
     fontSize: 13,

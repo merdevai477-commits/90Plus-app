@@ -17,7 +17,6 @@ import React, { useEffect, useState } from 'react';
 import {
   AppState,
   type AppStateStatus,
-  I18nManager,
   ImageStyle,
   Pressable,
   StyleSheet,
@@ -63,9 +62,6 @@ const WCCard: React.FC<WCCardProps> = ({ onPressSoon }) => {
     { val: time.secs, lbl: t.rank.worldCup.secs },
   ];
 
-  const innerDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-  const ctaDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-
   const countdownContent = (
     <>
       <Text style={s.cdLabel}>{t.rank.worldCup.countdownLabel}</Text>
@@ -94,7 +90,7 @@ const WCCard: React.FC<WCCardProps> = ({ onPressSoon }) => {
         cachePolicy="memory-disk"
       />
 
-      <View style={[s.wcInner, { flexDirection: innerDirection }]}>
+      <View style={s.wcInner}>
         <View style={s.wcLeft}>
           <Text style={s.wcTitle}>{t.rank.worldCup.headline}</Text>
           <Text style={s.wcSub}>{t.rank.worldCup.body}</Text>
@@ -104,7 +100,6 @@ const WCCard: React.FC<WCCardProps> = ({ onPressSoon }) => {
             accessibilityLabel={t.rank.worldCup.comingSoon}
             style={({ pressed }) => [
               s.wcBtnDisabled,
-              { flexDirection: ctaDirection },
               pressed && { opacity: 0.85 },
             ]}
           >
@@ -163,7 +158,7 @@ const s = StyleSheet.create<{
     opacity: 1,
     transform: [{ scale: 1.4 }, { translateY: -10 }],
   },
-  wcInner: { padding: 24, minHeight: 250, zIndex: 2 },
+  wcInner: { flexDirection: 'row', padding: 24, minHeight: 250, zIndex: 2 },
   wcLeft: { flex: 1, justifyContent: 'center', paddingEnd: 10, gap: 8 },
   wcTitle: { color: '#fff', fontSize: 24, fontWeight: '900', lineHeight: 30 },
   wcSub: {
@@ -174,6 +169,7 @@ const s = StyleSheet.create<{
     marginBottom: 8,
   },
   wcBtnDisabled: {
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 14,

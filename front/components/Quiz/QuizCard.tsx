@@ -8,7 +8,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CircleCheck, Lightbulb, User, Zap } from 'lucide-react-native';
@@ -246,7 +245,7 @@ function QuizCardInner({
   disableOptions = false,
 }: QuizCardProps) {
   const { t } = useTranslation();
-  const textAlign = I18nManager.isRTL ? 'right' : 'left';
+  const textAlign = 'left' as const;
   const isGuessPlayer = questionType === 'guess_player';
   const effectiveImageUrl = answerRevealed
     ? (revealImageUrl?.trim() || imageUrl?.trim() || null)
@@ -309,7 +308,7 @@ function QuizCardInner({
         ))}
       </View>
 
-      <View style={[styles.hintRow, I18nManager.isRTL && styles.hintRowRTL]}>
+      <View style={styles.hintRow}>
         <Lightbulb size={20} color="#FACC15" strokeWidth={2} />
         <View style={styles.hintTexts}>
           <Text style={[styles.hintTitle, { textAlign }]}>{t.quiz.needHint}</Text>
@@ -410,7 +409,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
-  hintRowRTL: { flexDirection: 'row-reverse' },
   hintTexts: { flex: 1 },
   hintTitle: {
     color: '#FFFFFF',

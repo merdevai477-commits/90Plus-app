@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { I18nManager, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Zap } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -24,7 +24,6 @@ const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const { coins, loading } = useCoins();
 
-  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
   const display: string = loading ? '—' : String(coins);
 
   return (
@@ -34,7 +33,7 @@ const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
       effect="regular"
       style={[
         s.container,
-        { paddingTop: topInset + 10, flexDirection: rowDirection },
+        { paddingTop: topInset + 10 },
       ]}
     >
       {/* Leading: LVL badge */}
@@ -66,9 +65,10 @@ const s = StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
-    start: 0,
-    end: 0,
+    left: 0,
+    right: 0,
     zIndex: 200,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,

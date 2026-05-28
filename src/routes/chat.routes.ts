@@ -382,7 +382,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 sendToken(
                     'اعتذر، لا يمكنني متابعة المحادثة بهذه اللغة. ابدأ محادثة جديدة بصياغة محترمة.',
                 );
-                sendDone({ remaining, resetAt: getResetTime(tz) });
+                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
                 return;
             }
 
@@ -394,7 +394,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     ? "I'm 90Plus AI — your smart football & sports assistant, developed by mr.dev ai. I help with football info, training plans, sports nutrition, and recovery advice."
                     : 'أنا 90Plus AI ⚽ — مساعدك الرياضي الذكي، طوّرني mr.dev ai. أقدر أساعدك في كرة القدم، خطط التدريب، التغذية الرياضية، ونصائح الاستشفاء.';
                 sendToken(identityText);
-                sendDone({ remaining, resetAt: getResetTime(tz) });
+                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
                 return;
             }
 
@@ -402,7 +402,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 sendToken(
                     'أهلًا بك! جاهز أساعدك في كرة القدم، التمارين، الاستشفاء، والإعداد الغذائي.',
                 );
-                sendDone({ remaining, resetAt: getResetTime(tz) });
+                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
                 return;
             }
 
@@ -414,7 +414,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     '• **يلا كورة** — yallakora.com\n\n' +
                     'عندك أي سؤال تاني عن كرة القدم أو التمارين أو التغذية؟ 🎯',
                 );
-                sendDone({ remaining, resetAt: getResetTime(tz) });
+                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
                 return;
             }
         }
@@ -571,6 +571,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
             sendDone({
                 remaining: await getRemaining(userId, tz),
+                limit: DAILY_LIMIT,
                 resetAt: getResetTime(tz),
                 usedModel: usedProvider.model,
                 usedProvider: usedProvider.name,
@@ -579,6 +580,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);
             sendDone({
                 remaining: await getRemaining(userId, tz).catch(() => 0),
+                limit: DAILY_LIMIT,
                 resetAt: getResetTime(tz),
                 usedModel: usedProvider.model,
             });

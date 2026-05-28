@@ -8,7 +8,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SkipForward, ArrowRight, Zap } from 'lucide-react-native';
@@ -44,7 +43,7 @@ function QuizFooterActionsInner({
   const { t } = useTranslation();
 
   return (
-    <View style={[styles.row, I18nManager.isRTL && styles.rowRTL]}>
+    <View style={styles.row}>
       <TouchableOpacity
         style={[styles.skipBtn, skipDisabled && styles.skipBtnDisabled]}
         activeOpacity={0.85}
@@ -88,7 +87,6 @@ function QuizFooterActionsInner({
             size={18}
             color="#fff"
             strokeWidth={2.5}
-            style={I18nManager.isRTL ? styles.arrowRTL : undefined}
           />
         </LinearGradient>
       </TouchableOpacity>
@@ -104,7 +102,6 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 8,
   },
-  rowRTL: { flexDirection: 'row-reverse' },
   skipBtn: {
     height: 50,
     minWidth: 118,
@@ -161,7 +158,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  arrowRTL: { transform: [{ scaleX: -1 }] },
 });
 
 export const QuizFooterActions = React.memo(QuizFooterActionsInner);

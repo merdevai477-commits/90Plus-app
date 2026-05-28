@@ -400,24 +400,23 @@ const RTL_RELOAD_FLAG_KEY = '@rtl_reload_requested_v1';
 function LanguageInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useLanguageStore(state => state.initialize);
   const isInitialized = useLanguageStore(state => state.isInitialized);
-  const isRTL = useLanguageStore(state => state.isRTL);
   const [forceShow, setForceShow] = React.useState(false);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  // Apply RTL flags without Updates.reloadAsync — reloadAsync causes a white
-  // screen on iOS production/TestFlight builds. Layout direction fixes itself
-  // on the next cold start after forceRTL is set.
+  // Layout stays LTR for all languages. forceRTL is cleared without
+  // Updates.reloadAsync — a cold start may be needed once for native mirror
+  // to fully reset on devices that previously ran Arabic in RTL mode.
   useEffect(() => {
     if (!isInitialized) return;
-    if (I18nManager.isRTL !== isRTL) {
-      I18nManager.allowRTL(isRTL);
-      I18nManager.forceRTL(isRTL);
+    if (I18nManager.isRTL) {
+      I18nManager.allowRTL(false);
+      I18nManager.forceRTL(false);
     }
     AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
-  }, [isInitialized, isRTL]);
+  }, [isInitialized]);
 
   // Safety net: never block boot longer than 5s
   useEffect(() => {

@@ -306,7 +306,9 @@ export function HistoryItem({
 
 interface HistoryPanelProps {
   isOpen: boolean; onClose: () => void;
-  messagesRemaining: number | null; resetTime: Date | null;
+  messagesRemaining: number | null;
+  dailyMessageLimit: number | null;
+  resetTime: Date | null;
   conversations: Conversation[]; activeConversationId: string | null;
   onSelectConversation: (id: string) => Promise<void>;
   onTogglePin: (id: string, isPinned: boolean) => Promise<void>;
@@ -321,7 +323,7 @@ interface HistoryPanelProps {
 }
 
 export function HistoryPanel({
-  isOpen, onClose, messagesRemaining, resetTime,
+  isOpen, onClose, messagesRemaining, dailyMessageLimit, resetTime,
   conversations, activeConversationId,
   onSelectConversation, onTogglePin, onRenameConversation, onDeleteConversation,
   onNewChat, isOnline, isLoading,
@@ -482,7 +484,10 @@ export function HistoryPanel({
                     </View>
                   </View>
                 </View>
-                <MessageCounter messagesRemaining={messagesRemaining} />
+                <MessageCounter
+                  messagesRemaining={messagesRemaining}
+                  total={dailyMessageLimit ?? 10}
+                />
               </View>
 
               {/* New chat button (top, more prominent) */}
@@ -597,7 +602,6 @@ export function HistoryPanel({
             setContextMenu(null);
           }}
           onRename={() => { setContextMenu(null); setRenameModal({ conversation: contextMenu.conversation }); }}
-          onShare={() => { setToast({ message: 'سيتم إضافة هذه الميزة قريباً', type: 'info' }); setContextMenu(null); }}
           onDelete={() => {
             const c = contextMenu.conversation;
             setContextMenu(null);
@@ -678,7 +682,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   panelHeader: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
@@ -713,7 +717,7 @@ const styles = StyleSheet.create({
 
   // Profile card
   profileCard: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -731,7 +735,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   profileLeft: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
@@ -762,7 +766,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   onlineRow: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 2,
@@ -775,7 +779,7 @@ const styles = StyleSheet.create({
 
   conversationsList: { flex: 1, marginTop: 4 },
   sectionHeader: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 10,
@@ -790,7 +794,7 @@ const styles = StyleSheet.create({
   },
   conversationsGroup: { gap: 6 },
   historyItem: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     padding: 12,
@@ -810,7 +814,7 @@ const styles = StyleSheet.create({
   },
   historyItemContent: { flex: 1, gap: 2 },
   historyItemTitleRow: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -874,7 +878,7 @@ const styles = StyleSheet.create({
 
   // Search bar
   searchBar: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: StyleSheet.hairlineWidth,
@@ -912,7 +916,7 @@ const styles = StyleSheet.create({
   renameTitle: { fontSize: 20, fontWeight: '700', color: 'white', marginBottom: 8 },
   renameSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 24 },
   renameInput: { width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 16, color: 'white', fontSize: 16, marginBottom: 24 },
-  renameActions: { flexDirection: 'row-reverse', gap: 12, width: '100%' },
+  renameActions: { flexDirection: 'row', gap: 12, width: '100%' },
   renameCancelBtn: { flex: 1, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   renameCancelText: { color: 'white', fontSize: 16, fontWeight: '600' },
   renameConfirmBtn: { flex: 1, height: 48, borderRadius: 12, overflow: 'hidden' },
@@ -929,7 +933,7 @@ const styles = StyleSheet.create({
 
   // ── Chips ──
   chipButton: {
-    flexDirection: 'row-reverse',
+        flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderRadius: 18,

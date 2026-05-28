@@ -114,7 +114,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [editCaption, setEditCaption] = useState('');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-    const { t, isRTL } = useLanguage();
+    const { t } = useLanguage();
 
     const haptics = {
         lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
@@ -731,7 +731,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         {/* Input */}
                         <View style={editStyles.inputWrapper}>
                             <TextInput
-                                style={[editStyles.input, { textAlign: isRTL ? 'right' : 'left' }]}
+                                style={[editStyles.input, { textAlign: 'left' }]}
                                 value={editCaption}
                                 onChangeText={setEditCaption}
                                 placeholder={t.reels.editModalPlaceholder}

@@ -44,6 +44,7 @@ interface SSEToken { token: string }
 interface SSEDone {
   done: true;
   remaining?: number;
+  limit?: number;
   resetAt?: string;
   usedModel?: string;
 }
@@ -56,6 +57,8 @@ const BACKEND_URL = API_CONFIG.baseUrl;
 const MAX_STREAM_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
 const DRAFT_KEY_PREFIX = '@chat_draft_v1_';
+/** Fallback when API omits `limit` — must match production CHAT_DAILY_MESSAGE_LIMIT. */
+const DEFAULT_DAILY_MESSAGE_LIMIT = 10;
 
 /**
  * Typing renderer cadence — independent from network speed.
@@ -246,6 +249,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // `null` = we have not yet fetched the real limit from the backend. The UI
   // renders a neutral placeholder instead of a misleading hardcoded number.
   const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
+  const [dailyMessageLimit, setDailyMessageLimit] = useState<number | null>(null);
   const [resetTime, setResetTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Retry state for the reconnect banner
@@ -302,8 +306,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         headers: commonHeaders(),
       });
       if (res.ok) {
-        const data = await res.json() as { remaining: number; resetAt?: string };
+        const data = await res.json() as { remaining: number; limit?: number; resetAt?: string };
         setMessagesRemaining(data.remaining);
+        setDailyMessageLimit(
+          typeof data.limit === 'number' && data.limit > 0
+            ? data.limit
+            : DEFAULT_DAILY_MESSAGE_LIMIT,
+        );
         if (data.remaining === 0 && data.resetAt) {
           setResetTime(new Date(data.resetAt));
         }
@@ -603,6 +612,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           if ('done' in event && event.done) {
             const doneEvent = event as SSEDone;
             if (doneEvent.remaining !== undefined) setMessagesRemaining(doneEvent.remaining);
+            if (typeof doneEvent.limit === 'number' && doneEvent.limit > 0) {
+              setDailyMessageLimit(doneEvent.limit);
+            }
             if (doneEvent.resetAt) setResetTime(new Date(doneEvent.resetAt));
             const usedModel = doneEvent.usedModel;
             const finishedConvId = conversationId;
@@ -967,6 +979,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     isThinking,
     isRetrying,
     messagesRemaining,
+    dailyMessageLimit,
     resetTime,
     error,
     /** ID of the AI message that is currently streaming (or null). */

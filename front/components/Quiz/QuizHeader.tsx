@@ -8,7 +8,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  I18nManager,
 } from 'react-native';
 import { BlurView, type BlurTint } from 'expo-blur';
 import { ChevronLeft, Zap } from 'lucide-react-native';
@@ -35,8 +34,8 @@ function QuizHeaderInner({ topInset }: QuizHeaderProps) {
   const shellStyle = [styles.shell, { paddingTop: topInset + 10 }];
 
   const content = (
-    <View style={[styles.row, I18nManager.isRTL && styles.rowRTL]}>
-      <View style={[styles.sideSlot, I18nManager.isRTL && styles.sideSlotRTL]}>
+    <View style={styles.row}>
+      <View style={styles.sideSlot}>
         <TouchableOpacity
           onPress={() => router.push('/(tabs)/rank')}
           style={styles.glassChip}
@@ -47,7 +46,6 @@ function QuizHeaderInner({ topInset }: QuizHeaderProps) {
             size={20}
             color="#FFFFFF"
             strokeWidth={2.5}
-            style={I18nManager.isRTL ? styles.chevronRTL : undefined}
           />
         </TouchableOpacity>
       </View>
@@ -61,7 +59,7 @@ function QuizHeaderInner({ topInset }: QuizHeaderProps) {
         </View>
       </View>
 
-      <View style={[styles.sideSlot, styles.sideSlotEnd, I18nManager.isRTL && styles.sideSlotEndRTL]}>
+      <View style={[styles.sideSlot, styles.sideSlotEnd]}>
         <View
           style={styles.glassChip}
           accessibilityRole="text"
@@ -93,8 +91,8 @@ const styles = StyleSheet.create({
   shell: {
     position: 'absolute',
     top: 0,
-    start: 0,
-    end: 0,
+    left: 0,
+    right: 0,
     zIndex: 100,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -107,22 +105,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     minHeight: 44,
   },
-  rowRTL: {
-    flexDirection: 'row-reverse',
-  },
   sideSlot: {
     width: SIDE_SLOT_W,
     alignItems: 'flex-start',
     justifyContent: 'center',
   },
-  sideSlotRTL: {
-    alignItems: 'flex-end',
-  },
   sideSlotEnd: {
     alignItems: 'flex-end',
-  },
-  sideSlotEndRTL: {
-    alignItems: 'flex-start',
   },
   centerSlot: {
     flex: 1,
@@ -174,9 +163,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '800',
-  },
-  chevronRTL: {
-    transform: [{ scaleX: -1 }],
   },
 });
 

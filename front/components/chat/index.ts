@@ -1,5 +1,7 @@
 // Chat components barrel export
 export { AIMessageBubble, UserMessageBubble, TypingIndicator } from './MessageBubble';
+export { ChatComposer } from './ChatComposer';
+export { isArabicText, getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 export { ThinkingIndicator } from './ThinkingIndicator';
 export { MessageCounter } from './MessageCounter';
 export { LimitReachedCountdown } from './LimitReachedCountdown';

@@ -325,7 +325,7 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
     <>
       {/* Header */}
       <View style={styles.header}>
-        <View style={[styles.headerLeft, isRTL && styles.headerLeftRTL]}>
+        <View style={styles.headerLeft}>
           <Ionicons name="flag-outline" size={24} color={COLORS.error} />
           <Text style={styles.title}>
             {isRTL ? `الإبلاغ عن ${getContentTypeLabel()}` : `Report ${getContentTypeLabel()}`}
@@ -364,7 +364,6 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
                 style={[
                   styles.reasonText,
                   selectedReason === reason.id && styles.reasonTextSelected,
-                  isRTL && styles.reasonTextRTL,
                 ]}
               >
                 {isRTL ? reason.labelAr : reason.labelEn}
@@ -377,7 +376,7 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
         </View>
 
         {/* Additional Details */}
-        <Text style={[styles.detailsLabel, isRTL && styles.textRTL]}>
+        <Text style={styles.detailsLabel}>
           {isRTL ? 'تفاصيل إضافية (اختياري)' : 'Additional details (optional)'}
           {selectedReason === 'other' && (
             <Text style={styles.requiredMark}> *</Text>
@@ -386,7 +385,6 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
         <TextInput
           style={[
             styles.detailsInput,
-            isRTL && styles.detailsInputRTL,
             error && styles.detailsInputError,
           ]}
           placeholder={
@@ -404,9 +402,9 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
           numberOfLines={4}
           maxLength={500}
           editable={!loading}
-          textAlign={isRTL ? 'right' : 'left'}
+          textAlign="left"
         />
-        <View style={[styles.characterCountRow, isRTL && styles.characterCountRowRTL]}>
+        <View style={styles.characterCountRow}>
           {error && <Text style={styles.errorText}>{error}</Text>}
           <Text style={styles.characterCount}>{additionalInfo.length}/500</Text>
         </View>
@@ -414,7 +412,7 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
         {/* Info */}
         <View style={styles.infoContainer}>
           <Ionicons name="information-circle-outline" size={20} color={COLORS.primary} />
-          <Text style={[styles.infoText, isRTL && styles.infoTextRTL]}>
+          <Text style={styles.infoText}>
             {isRTL
               ? 'بلاغك سري تماماً. سنراجعه ونتخذ الإجراء المناسب.'
               : 'Your report is completely anonymous. We will review it and take appropriate action.'}
@@ -425,7 +423,7 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.cancelButton, isRTL && styles.buttonRTL]}
+          style={styles.cancelButton}
           onPress={handleClose}
           disabled={loading}
           activeOpacity={0.7}
@@ -439,7 +437,6 @@ export const ReportSystem: React.FC<ReportSystemProps> = ({
           style={[
             styles.submitButton,
             (!selectedReason || loading) && styles.submitButtonDisabled,
-            isRTL && styles.buttonRTL,
           ]}
           onPress={handleSubmit}
           disabled={!selectedReason || loading}
@@ -551,9 +548,6 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
-  headerLeftRTL: {
-    flexDirection: 'row-reverse',
-  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -600,17 +594,11 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontWeight: '600',
   },
-  reasonTextRTL: {
-    textAlign: 'right',
-  },
   detailsLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: 8,
-  },
-  textRTL: {
-    textAlign: 'right',
   },
   requiredMark: {
     color: COLORS.error,
@@ -626,9 +614,6 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  detailsInputRTL: {
-    textAlign: 'right',
-  },
   detailsInputError: {
     borderColor: COLORS.error,
   },
@@ -638,9 +623,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
     marginBottom: 16,
-  },
-  characterCountRowRTL: {
-    flexDirection: 'row-reverse',
   },
   characterCount: {
     fontSize: 12,
@@ -664,9 +646,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     lineHeight: 18,
-  },
-  infoTextRTL: {
-    textAlign: 'right',
   },
   footer: {
     flexDirection: 'row',
@@ -708,9 +687,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.white,
-  },
-  buttonRTL: {
-    // RTL specific button styles if needed
   },
   successContainer: {
     alignItems: 'center',

@@ -2,8 +2,7 @@
  * Settings Screen - 90Plus
  *
  * Fully localized: every user-facing string comes from front/locales/*.ts
- * via the i18n hook. RTL is handled by Arabic translations themselves and
- * `start`/`end` style props elsewhere.
+ * via the i18n hook. Layout stays LTR for all languages; only copy changes.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -60,7 +59,6 @@ import {
 } from '../../constants/tokens';
 
 const APP_VERSION = '1.0.0';
-const BUILD_NUMBER = '100';
 
 export default function SettingsScreen() {
   useScreenFont();
@@ -423,17 +421,8 @@ export default function SettingsScreen() {
       <View style={styles.switchCard}>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>{tSettings.version}</Text>
-          <Text style={styles.infoValue}>{APP_VERSION} ({BUILD_NUMBER})</Text>
+          <Text style={styles.infoValue}>{APP_VERSION}</Text>
         </View>
-        {__DEV__ ? (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{tSettings.environment}</Text>
-              <Text style={styles.infoValue}>{tSettings.envDevelopment}</Text>
-            </View>
-          </>
-        ) : null}
       </View>
 
       <TouchableOpacity activeOpacity={0.88} style={styles.linkRow} onPress={handleRateApp}>

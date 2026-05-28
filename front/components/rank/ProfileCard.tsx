@@ -22,7 +22,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import {
-  I18nManager,
   Pressable,
   StyleSheet,
   Text,
@@ -80,8 +79,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   const xpForNextLevel = Math.max(1, xpSpanProp ?? xpCtx.xpForNextLevel ?? 290);
 
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-
   const resolvedName: string =
     (displayName && displayName.trim()) ||
     (profile?.displayName && profile.displayName.trim()) ||
@@ -129,7 +126,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
       >
         <View style={s.profileCardOverlay} />
 
-        <View style={[s.profileRow, { flexDirection: rowDirection }]}>
+        <View style={s.profileRow}>
           <View style={s.avatarWrap}>
             <Image
               source={remoteAvatar ? { uri: remoteAvatar } : PROFILE_PLACEHOLDER}
@@ -144,7 +141,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
           </View>
 
           <View style={s.profileInfo}>
-            <View style={[s.nameRow, { flexDirection: rowDirection }]}>
+            <View style={s.nameRow}>
               <Text style={s.username} numberOfLines={1}>
                 {resolvedName}
               </Text>
@@ -153,7 +150,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
               {rankLabel}
             </Text>
 
-            <View style={[s.xpRow, { flexDirection: rowDirection }]}>
+            <View style={s.xpRow}>
               <View style={s.lvlBadge}>
                 <Text style={s.lvlTxt}>
                   {t.rank.levelPrefix} {level}
@@ -200,7 +197,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(80,20,160,0.00)',
     borderRadius: 22,
   },
-  profileRow: { alignItems: 'center', gap: 14 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatarWrap: { position: 'relative' },
   avatar: {
     width: 68,
@@ -219,7 +216,7 @@ const s = StyleSheet.create({
     borderColor: ACCENT,
   },
   profileInfo: { flex: 1, gap: 10 },
-  nameRow: { alignItems: 'center', gap: 7 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   username: { color: '#fff', fontSize: 18, fontWeight: '800', flexShrink: 1 },
   rankLabel: {
     color: 'rgba(255,255,255,0.55)',
@@ -227,7 +224,7 @@ const s = StyleSheet.create({
     fontWeight: '600',
     marginTop: -4,
   },
-  xpRow: { alignItems: 'center', gap: 8, marginTop: 6 },
+  xpRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   lvlBadge: {
     backgroundColor: ACCENT,
     borderRadius: 8,

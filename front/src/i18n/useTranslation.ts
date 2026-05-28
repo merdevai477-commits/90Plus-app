@@ -9,7 +9,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useLanguageStore } from './store';
-import { Language, TextDirection, getTextDirection } from './types';
+import { Language, TextDirection } from './types';
 import { getTranslation, getTranslationsForLanguage, TranslationKeys } from './utils';
 import { syncToBackend } from './syncService';
 
@@ -85,7 +85,7 @@ const DEFAULT_NUMBER_OPTIONS: Intl.NumberFormatOptions = {
  * const { t, language, setLanguage, formatDate, isRTL } = useTranslation();
  * 
  * return (
- *   <View style={{ direction: isRTL ? 'rtl' : 'ltr' }}>
+ *   <View>
  *     <Text>{t.common.loading}</Text>
  *     <Text>{formatDate(new Date())}</Text>
  *   </View>
@@ -99,8 +99,8 @@ export function useTranslation(): UseTranslationReturn {
   const isLoading = useLanguageStore(state => state.isLoading);
   const storeSetLanguage = useLanguageStore(state => state.setLanguage);
 
-  // Get text direction
-  const direction = useMemo(() => getTextDirection(language), [language]);
+  // Layout direction is always LTR; Arabic only changes copy and font.
+  const direction = useMemo((): TextDirection => 'ltr', []);
 
   // Get locale for Intl APIs
   const locale = useMemo(() => getLocale(language), [language]);

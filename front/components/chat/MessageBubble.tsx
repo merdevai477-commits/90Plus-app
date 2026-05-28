@@ -1,15 +1,13 @@
 /**
  * MessageBubble.tsx — Native
- * AI bubble: right-aligned, glass effect, purple border glow
- * User bubble: left-aligned, purple gradient, shadow glow
- * Matches screenshots exactly.
+ * AI bubble: left-aligned; user bubble: right-aligned.
  */
 
 import React, {
   useEffect, useRef, useState, useMemo, useCallback,
 } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, Platform,
+  View, Text, Pressable, ScrollView, StyleSheet, Platform, TextStyle, useWindowDimensions,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -25,24 +23,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTranslation } from '../../src/i18n';
 
-import {
-  Colors, Radius, FontSize, LineHeight, Spacing, Gradients, BlurIntensity,
-} from '../../constants/theme';
+import { Colors } from '../../constants/theme';
 import { MessageContextMenu } from '../chat/MessageContextMenu';
 import { Message } from '../../hooks/useAIChatNative';
+import { getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MessageBubbleProps {
   message: Message;
   index?: number;
-  /**
-   * When true, the bubble skips the per-character typing animation and
-   * renders its full text instantly. Set on history messages (already
-   * persisted on the server) so reopening a conversation does not replay
-   * every message. Leave undefined/false for the currently-streaming
-   * assistant response.
-   */
   isHistory?: boolean;
   onResend?: () => void;
   onEdit?: () => void;
@@ -70,6 +60,10 @@ function extractTable(lines: string[], start: number) {
   return { headers, rows, end: i - 1 };
 }
 
+function lineTextStyle(line: string, base: TextStyle): TextStyle {
+  return { ...base, flexShrink: 1, ...getTextDirectionStyles(line) };
+}
+
 function renderInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   if (parts.length === 1) return text;
@@ -82,106 +76,128 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
-function colMinWidth(text: string, isHeader: boolean): number {
+function colMinWidth(text: string, isHeader: boolean, maxColWidth: number): number {
   const len = text.length;
-  const base = isHeader ? 108 : 96;
-  return Math.min(Math.max(base, len * 9 + 28), 280);
+  const base = isHeader ? 108 : 120;
+  const computed = Math.max(base, len * 8 + 24);
+  return Math.min(computed, maxColWidth);
 }
 
 function MarkdownTable({
   headers,
   rows,
   scrollHint,
+  bubbleMaxWidth,
 }: {
   headers: string[];
   rows: string[][];
   scrollHint?: string;
+  bubbleMaxWidth: number;
 }) {
   const colCount = headers.length;
+  const maxColWidth = Math.max(100, Math.floor((bubbleMaxWidth - 28) / Math.max(colCount, 1)));
+
   const colWidths = useMemo(() => {
     const widths = headers.map((h, i) => {
-      let max = colMinWidth(h, true);
+      let max = colMinWidth(h, true, maxColWidth);
       for (const row of rows) {
         const cell = row[i] ?? '';
-        max = Math.max(max, colMinWidth(cell, false));
+        max = Math.max(max, colMinWidth(cell, false, maxColWidth));
       }
       return max;
     });
     return widths;
-  }, [headers, rows]);
+  }, [headers, rows, maxColWidth]);
+
+  const tableIntrinsicWidth = colWidths.reduce((a, b) => a + b, 0);
+  const showHint = tableIntrinsicWidth > bubbleMaxWidth - 32;
 
   return (
-    <View>
-      {scrollHint ? (
+    <View style={s.tableBlock}>
+      {showHint && scrollHint ? (
         <Text style={s.tableHint}>{scrollHint}</Text>
       ) : null}
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator
-      style={s.tableScroll}
-      contentContainerStyle={s.tableScrollContent}
-    >
-      <View style={s.table}>
-        <LinearGradient
-          colors={['rgba(124,58,237,0.55)', 'rgba(76,29,149,0.45)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={s.tableHead}
-        >
-          {headers.map((h, hi) => (
-            <View
-              key={hi}
-              style={[
-                s.tableCell,
-                { width: colWidths[hi] },
-                hi === 0 && s.tableCellFirst,
-                hi === colCount - 1 && s.tableCellLast,
-              ]}
-            >
-              <Text style={s.tableHeadText}>{h}</Text>
-            </View>
-          ))}
-        </LinearGradient>
-        {rows.map((row, ri) => (
-          <View
-            key={ri}
-            style={[
-              s.tableRow,
-              ri % 2 === 1 && s.tableRowAlt,
-              ri === rows.length - 1 && s.tableRowLast,
-            ]}
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        bounces={false}
+        style={s.tableScroll}
+        contentContainerStyle={s.tableScrollContent}
+      >
+        <View style={s.table}>
+          <LinearGradient
+            colors={['rgba(124,58,237,0.55)', 'rgba(76,29,149,0.45)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.tableHead}
           >
-            {headers.map((_, ci) => (
+            {headers.map((h, hi) => (
               <View
-                key={ci}
+                key={hi}
                 style={[
                   s.tableCell,
-                  { width: colWidths[ci] },
-                  ci === 0 && s.tableCellFirst,
-                  ci === colCount - 1 && s.tableCellLast,
+                  { minWidth: colWidths[hi] },
+                  hi === 0 && s.tableCellFirst,
+                  hi === colCount - 1 && s.tableCellLast,
                 ]}
               >
-                <Text style={s.tableCellText}>
-                  {row[ci] ?? '—'}
-                </Text>
+                    <Text
+                      style={[s.tableHeadText, getTextDirectionStyles(h)]}
+                    >
+                      {h}
+                    </Text>
               </View>
             ))}
-          </View>
-        ))}
-      </View>
-    </ScrollView>
+          </LinearGradient>
+          {rows.map((row, ri) => (
+            <View
+              key={ri}
+              style={[
+                s.tableRow,
+                ri % 2 === 1 && s.tableRowAlt,
+                ri === rows.length - 1 && s.tableRowLast,
+              ]}
+            >
+              {headers.map((_, ci) => {
+                const cell = row[ci] ?? '—';
+                return (
+                  <View
+                    key={ci}
+                    style={[
+                      s.tableCell,
+                      { minWidth: colWidths[ci] },
+                      ci === 0 && s.tableCellFirst,
+                      ci === colCount - 1 && s.tableCellLast,
+                    ]}
+                  >
+                    <Text
+                      style={[s.tableCellText, getTextDirectionStyles(cell)]}
+                    >
+                      {cell}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
-function renderMarkdown(text: string, tableScrollHint?: string): React.ReactNode[] {
+function renderMarkdown(
+  text: string,
+  tableScrollHint: string | undefined,
+  bubbleMaxWidth: number,
+): React.ReactNode[] {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Table
     const tbl = extractTable(lines, i);
     if (tbl) {
       out.push(
@@ -190,13 +206,13 @@ function renderMarkdown(text: string, tableScrollHint?: string): React.ReactNode
           headers={tbl.headers}
           rows={tbl.rows}
           scrollHint={tableScrollHint}
+          bubbleMaxWidth={bubbleMaxWidth}
         />,
       );
       i = tbl.end;
       continue;
     }
 
-    // Code block
     if (line.trim().startsWith('```')) {
       const codeLines: string[] = [];
       let j = i + 1;
@@ -211,12 +227,25 @@ function renderMarkdown(text: string, tableScrollHint?: string): React.ReactNode
     }
 
     if (/^-{3,}$/.test(line.trim())) { out.push(<View key={`hr-${i}`} style={s.divider} />); continue; }
-    if (line.startsWith('# '))  { out.push(<Text key={`h1-${i}`} style={s.h1}>{line.slice(2)}</Text>); continue; }
-    if (line.startsWith('## ')) { out.push(<Text key={`h2-${i}`} style={s.h2}>{line.slice(3)}</Text>); continue; }
-    if (line.startsWith('### ')){ out.push(<Text key={`h3-${i}`} style={s.h3}>{line.slice(4)}</Text>); continue; }
+    if (line.startsWith('# ')) {
+      out.push(<Text key={`h1-${i}`} style={lineTextStyle(line.slice(2), s.h1)}>{line.slice(2)}</Text>);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      out.push(<Text key={`h2-${i}`} style={lineTextStyle(line.slice(3), s.h2)}>{line.slice(3)}</Text>);
+      continue;
+    }
+    if (line.startsWith('### ')) {
+      out.push(<Text key={`h3-${i}`} style={lineTextStyle(line.slice(4), s.h3)}>{line.slice(4)}</Text>);
+      continue;
+    }
 
     if (line.startsWith('**') && line.endsWith('**') && line.length > 4) {
-      out.push(<Text key={`bt-${i}`} style={s.boldTitle}>{line.slice(2, -2)}</Text>);
+      out.push(
+        <Text key={`bt-${i}`} style={lineTextStyle(line.slice(2, -2), s.boldTitle)}>
+          {line.slice(2, -2)}
+        </Text>,
+      );
       continue;
     }
 
@@ -225,17 +254,18 @@ function renderMarkdown(text: string, tableScrollHint?: string): React.ReactNode
       out.push(
         <View key={`num-${i}`} style={s.listRow}>
           <View style={s.numBadge}><Text style={s.numText}>{numMatch[1]}</Text></View>
-          <Text style={s.listText}>{renderInline(numMatch[2])}</Text>
+          <Text style={lineTextStyle(numMatch[2], s.listText)}>{renderInline(numMatch[2])}</Text>
         </View>,
       );
       continue;
     }
 
     if (line.startsWith('• ') || line.startsWith('- ')) {
+      const body = line.slice(2);
       out.push(
         <View key={`bul-${i}`} style={s.listRow}>
           <Text style={s.bullet}>•</Text>
-          <Text style={s.listText}>{renderInline(line.slice(2))}</Text>
+          <Text style={lineTextStyle(body, s.listText)}>{renderInline(body)}</Text>
         </View>,
       );
       continue;
@@ -243,7 +273,11 @@ function renderMarkdown(text: string, tableScrollHint?: string): React.ReactNode
 
     if (!line.trim()) { out.push(<View key={`sp-${i}`} style={s.spacer} />); continue; }
 
-    out.push(<Text key={`p-${i}`} style={s.paragraph}>{renderInline(line)}</Text>);
+    out.push(
+      <Text key={`p-${i}`} style={lineTextStyle(line, s.paragraph)}>
+        {renderInline(line)}
+      </Text>,
+    );
   }
   return out;
 }
@@ -279,21 +313,30 @@ const WaveDot = React.memo(({ delay }: { delay: number }) => {
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
-export const TypingIndicator = React.memo(() => (
-  <Animated.View entering={FadeIn.duration(300)} style={s.aiRow}>
-    <View style={s.aiBubble}>
-      <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={s.typingDots}>
-        {[0, 150, 300].map((d, i) => <WaveDot key={i} delay={d} />)}
+export const TypingIndicator = React.memo(() => {
+  const { width } = useWindowDimensions();
+  const { maxWidth, minWidth } = useBubbleMaxWidth(width);
+
+  return (
+    <Animated.View entering={FadeIn.duration(300)} style={s.aiRow}>
+      <View style={[s.aiBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-start' }]}>
+        <View style={s.aiBubble}>
+          <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={s.typingDots}>
+            {[0, 150, 300].map((d, i) => <WaveDot key={i} delay={d} />)}
+          </View>
+        </View>
       </View>
-    </View>
-  </Animated.View>
-));
+    </Animated.View>
+  );
+});
 
 // ─── AI Bubble ────────────────────────────────────────────────────────────────
 
 export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false }: MessageBubbleProps) {
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const { maxWidth, minWidth } = useBubbleMaxWidth(width);
   const prevId = useRef<string | null>(null);
   const initialText = useRef<string | null>(null);
   const [visible, setVisible] = useState('');
@@ -312,27 +355,23 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
     if (prevId.current !== message.id) { prevId.current = message.id; initialText.current = null; }
     if (initialText.current === null) initialText.current = full;
 
-    // History message: render full text instantly, no animation.
     if (isHistory) {
       setVisible(full);
       setDone(true);
       return () => { mounted = false; };
     }
 
-    // Streaming: text arrives live — render as it comes
     if (initialText.current === '') {
       setVisible(full);
       setDone(true);
       return () => { mounted = false; };
     }
 
-    // Non-history message that arrived fully-formed (e.g. resend): animate.
     setVisible(''); setDone(false);
     if (!full) { setDone(true); return () => { mounted = false; }; }
 
     let idx = 0;
     const len = full.length;
-    // Faster step sizes for long content — keeps UI responsive
     const step = len > 2000 ? 12 : len > 1000 ? 8 : len > 500 ? 5 : 3;
     const iv = len > 1000 ? 6 : 10;
     const timer = setInterval(() => {
@@ -342,14 +381,14 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
       if (idx >= len) { clearInterval(timer); setDone(true); }
     }, iv);
     return () => { mounted = false; clearInterval(timer); };
-  }, [message.id, isHistory]);
+  }, [message.id, isHistory, message.text]);
 
   const display = done ? (message.text ?? '') : visible;
   const isStreaming = initialText.current === '' && message.text !== '' && !done;
   const showCursor = !isHistory && (isStreaming || (!done && initialText.current !== ''));
   const content = useMemo(
-    () => renderMarkdown(display, t.chat.tableScrollHint),
-    [display, t.chat.tableScrollHint],
+    () => renderMarkdown(display, t.chat.tableScrollHint, maxWidth),
+    [display, t.chat.tableScrollHint, maxWidth],
   );
 
   return (
@@ -358,19 +397,16 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
         .springify().stiffness(180).damping(14).delay(index * 40)}
       style={s.aiRow}
     >
-      <View style={s.aiMaxW}>
+      <View style={[s.aiBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-start' }]}>
         <Pressable onPress={onPress} accessibilityRole="text">
           <View style={s.aiBubble}>
-            {/* Glass blur background */}
             <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
-            {/* Subtle purple tint overlay */}
             <LinearGradient
               colors={['rgba(124,58,237,0.12)', 'rgba(76,29,149,0.06)']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
-            {/* Inset top highlight */}
             <View style={s.aiBubbleTopHighlight} pointerEvents="none" />
             <View style={s.aiBubbleInner}>
               {content}
@@ -391,6 +427,12 @@ const AnimPressable = Animated.createAnimatedComponent(Pressable);
 export const UserMessageBubble = React.memo(function UserMessageBubble({
   message, index = 0, onResend, onEdit, onDelete, onCopy,
 }: MessageBubbleProps) {
+  const { width } = useWindowDimensions();
+  const { maxWidth, minWidth } = useBubbleMaxWidth(width);
+  const userTextStyle = useMemo(
+    () => [s.userText, getTextDirectionStyles(message.text ?? '')],
+    [message.text],
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const scale = useSharedValue(1);
   const tsOp = useSharedValue(0);
@@ -419,7 +461,7 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
           .springify().stiffness(180).damping(14).delay(index * 40)}
         style={s.userRow}
       >
-        <View style={s.userMaxW}>
+        <View style={[s.userBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-end' }]}>
           <AnimPressable
             style={scaleStyle}
             onPressIn={onPressIn}
@@ -430,15 +472,13 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
             accessibilityRole="text"
           >
             <View style={s.userBubble}>
-              {/* Purple gradient fill — solid colors */}
               <LinearGradient
                 colors={['#7C3AED', '#5B21B6']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
-              {/* Subtle inner border glow */}
               <View style={s.userBubbleInnerBorder} />
-              <Text style={s.userText}>{message.text}</Text>
+              <Text style={userTextStyle}>{message.text}</Text>
             </View>
           </AnimPressable>
           <Animated.Text style={[s.userTs, tsStyle]}>{message.time}</Animated.Text>
@@ -460,22 +500,22 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // ── AI row ──
   aiRow: {
+    width: '100%',
+    alignSelf: 'stretch',
     flexDirection: 'row',
-    justifyContent: 'flex-start',  // AI bubble hugs the left edge
+    justifyContent: 'flex-start',
     marginVertical: 6,
     paddingHorizontal: 12,
   },
-  aiMaxW: { maxWidth: '82%' },
+  aiBubbleWrap: {},
   aiBubble: {
     borderRadius: 18,
-    borderTopLeftRadius: 4,        // small tail on the left
-    borderBottomLeftRadius: 4,     // cleaner shape
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
     borderWidth: 0.5,
     borderColor: 'rgba(167,139,250,0.35)',
     overflow: 'hidden',
-    // Glow shadow
     ...Platform.select({
       ios: {
         shadowColor: '#7C3AED',
@@ -494,6 +534,8 @@ const s = StyleSheet.create({
     zIndex: 2,
   },
   aiBubbleInner: {
+    width: '100%',
+    alignSelf: 'stretch',
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 2,
@@ -507,22 +549,22 @@ const s = StyleSheet.create({
     paddingLeft: 4,
   },
 
-  // ── User row ──
   userRow: {
+    width: '100%',
+    alignSelf: 'stretch',
     flexDirection: 'row',
-    justifyContent: 'flex-end',    // user bubble hugs the right edge
+    justifyContent: 'flex-end',
     marginVertical: 6,
     paddingHorizontal: 12,
   },
-  userMaxW: { maxWidth: '78%' },
+  userBubbleWrap: {},
   userBubble: {
     borderRadius: 18,
-    borderTopRightRadius: 4,       // small tail on the right
-    borderBottomRightRadius: 4,    // cleaner shape
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
     overflow: 'hidden',
     borderWidth: 0.5,
     borderColor: 'rgba(167,139,250,0.4)',
-    // Purple glow shadow
     ...Platform.select({
       ios: {
         shadowColor: '#7C3AED',
@@ -546,7 +588,7 @@ const s = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     lineHeight: 22,
-    textAlign: 'right',
+    flexShrink: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
     zIndex: 3,
@@ -559,7 +601,6 @@ const s = StyleSheet.create({
     paddingRight: 4,
   },
 
-  // ── Typing indicator dots ──
   typingDots: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -572,18 +613,15 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(167,139,250,0.8)',
   },
 
-  // ── Streaming cursor ──
   cursor: {
     color: 'rgba(196,181,253,0.75)',
     fontSize: 14,
   },
 
-  // ── Markdown: paragraph ──
   paragraph: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.88)',
     lineHeight: 21,
-    textAlign: 'right',
   },
   boldTitle: {
     fontSize: 14,
@@ -591,20 +629,18 @@ const s = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 6,
     marginBottom: 2,
-    textAlign: 'right',
   },
   bold:   { fontWeight: '700', color: '#FFFFFF' },
   italic: { fontStyle: 'italic', color: 'rgba(255,255,255,0.8)' },
 
-  // ── Markdown: list ──
-  listRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8 },
-  bullet:  { color: '#A78BFA', fontSize: 15, marginTop: 2 },
+  listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, width: '100%' },
+  bullet:  { color: '#A78BFA', fontSize: 15, marginTop: 2, flexShrink: 0 },
   listText: {
     flex: 1,
+    flexShrink: 1,
     fontSize: 14,
     color: 'rgba(255,255,255,0.85)',
     lineHeight: 21,
-    textAlign: 'right',
   },
   numBadge: {
     width: 20, height: 20, borderRadius: 10,
@@ -615,48 +651,51 @@ const s = StyleSheet.create({
   },
   numText: { fontSize: 10, fontWeight: '700', color: '#A78BFA' },
 
-  // ── Markdown: spacer / divider ──
   spacer:  { height: 4 },
   divider: { height: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 10 },
 
-  // ── Markdown: headings ──
   h1: {
     fontSize: 20, fontWeight: '800', color: '#FFFFFF',
-    marginTop: 10, marginBottom: 6, textAlign: 'right',
+    marginTop: 10, marginBottom: 6,
     borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.1)',
     paddingBottom: 4,
   },
   h2: {
     fontSize: 17, fontWeight: '700', color: 'rgba(255,255,255,0.95)',
-    marginTop: 8, marginBottom: 4, textAlign: 'right',
+    marginTop: 8, marginBottom: 4,
   },
   h3: {
     fontSize: 15, fontWeight: '600', color: '#A78BFA',
-    marginTop: 6, marginBottom: 4, textAlign: 'right',
+    marginTop: 6, marginBottom: 4,
   },
 
-  // ── Markdown: code ──
   codeBlock: {
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderRadius: 10,
     borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)',
     borderLeftWidth: 3, borderLeftColor: '#7C3AED',
     padding: 12, marginVertical: 6,
+    alignSelf: 'stretch',
   },
   codeText: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontSize: 12,
     color: '#a78bfa',
     lineHeight: 19,
+    flexShrink: 1,
   },
 
-  // ── Markdown: table ──
+  tableBlock: {
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: '100%',
+  },
   tableHint: {
     fontSize: 11,
     color: 'rgba(167,139,250,0.75)',
-    textAlign: 'right',
     marginBottom: 4,
     paddingHorizontal: 2,
+    flexShrink: 1,
   },
   tableScroll: {
     marginVertical: 8,
@@ -682,10 +721,10 @@ const s = StyleSheet.create({
     }),
   },
   tableHead: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
   },
   tableRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.08)',
   },
@@ -702,6 +741,7 @@ const s = StyleSheet.create({
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   tableCellFirst: {
     borderLeftWidth: 0,
@@ -711,13 +751,13 @@ const s = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
-    textAlign: 'right',
     letterSpacing: 0.2,
+    flexShrink: 1,
   },
   tableCellText: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.88)',
-    textAlign: 'right',
     lineHeight: 18,
+    flexShrink: 1,
   },
 });

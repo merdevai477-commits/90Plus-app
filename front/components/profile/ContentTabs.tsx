@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     tabsWrapper: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         borderRadius: 16,
         padding: 4,
         borderWidth: 1,
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.05)',
     },
     tabContent: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,

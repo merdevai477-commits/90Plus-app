@@ -10,7 +10,7 @@
 import { create } from 'zustand';
 import { I18nManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Language, DEFAULT_LANGUAGE, isLanguageSupported, isRTL as checkIsRTL } from './types';
+import { Language, DEFAULT_LANGUAGE, isLanguageSupported } from './types';
 import { detectDeviceLanguage } from './utils';
 
 /**
@@ -75,13 +75,13 @@ const defaultState: LanguageState = {
 };
 
 /**
- * Apply RTL settings to the app
- * Requirements: 4.1, 4.2
+ * Keep layout LTR for all languages. Arabic uses translated strings + Cairo
+ * font only; we do not mirror the native UI via I18nManager.
  */
-function applyRTLSettings(shouldBeRTL: boolean): void {
-  if (I18nManager.isRTL !== shouldBeRTL) {
-    I18nManager.allowRTL(shouldBeRTL);
-    I18nManager.forceRTL(shouldBeRTL);
+function applyLayoutDirection(): void {
+  if (I18nManager.isRTL) {
+    I18nManager.allowRTL(false);
+    I18nManager.forceRTL(false);
   }
 }
 
@@ -116,7 +116,7 @@ async function saveLanguage(language: Language): Promise<void> {
  * Zustand language store
  * 
  * Provides centralized language state management with:
- * - RTL support (Requirements: 4.1, 4.2)
+ * - LTR layout for all languages
  * - Device language detection (Requirements: 2.1, 2.2)
  * - Saved preference priority (Requirements: 2.4)
  * - Immediate UI updates (Requirements: 1.1)
@@ -127,8 +127,7 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
   /**
    * Set the current language
    * Requirements: 1.1 - Immediately update UI to selected language
-   * Requirements: 4.1 - Set app direction to RTL for Arabic
-   * Requirements: 4.2 - Set app direction to LTR for non-Arabic
+   * Layout stays LTR for all languages (Arabic affects copy/font only).
    */
   setLanguage: async (lang: Language) => {
     // Validate language
@@ -140,16 +139,12 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
     set({ isLoading: true });
 
     try {
-      // Determine RTL status
-      const shouldBeRTL = checkIsRTL(lang);
-      
-      // Apply RTL settings (Requirements: 4.1, 4.2)
-      applyRTLSettings(shouldBeRTL);
-      
+      applyLayoutDirection();
+
       // Update state immediately (Requirements: 1.1)
       set({
         language: lang,
-        isRTL: shouldBeRTL,
+        isRTL: false,
         isLoading: false,
       });
       
@@ -191,16 +186,12 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
         await saveLanguage(languageToUse);
       }
       
-      // Determine RTL status
-      const shouldBeRTL = checkIsRTL(languageToUse);
-      
-      // Apply RTL settings
-      applyRTLSettings(shouldBeRTL);
-      
+      applyLayoutDirection();
+
       // Update state
       set({
         language: languageToUse,
-        isRTL: shouldBeRTL,
+        isRTL: false,
         isInitialized: true,
         isLoading: false,
       });
@@ -238,8 +229,9 @@ export const selectIsLoading = (state: LanguageStore) => state.isLoading;
  * Exported for testing purposes
  * Requirements: 4.2 - Non-Arabic languages should be LTR
  */
-export function shouldLanguageBeRTL(language: Language): boolean {
-  return checkIsRTL(language);
+/** Layout is always LTR; Arabic only affects copy and font. */
+export function shouldLanguageBeRTL(_language: Language): boolean {
+  return false;
 }
 
 /**

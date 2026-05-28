@@ -11,7 +11,6 @@ import { BlurView } from 'expo-blur';
 import { Play } from 'lucide-react-native';
 import React from 'react';
 import {
-  I18nManager,
   Image,
   ImageSourcePropType,
   Platform,
@@ -47,8 +46,6 @@ const CompCard: React.FC<CompCardProps> = ({
 
   const { t } = useTranslation();
   const cta: string = actionText ?? t.rank.playNow;
-  const livePillDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-
   // Only apply manual press feedback on the non-LiquidGlass path so we
   // don't double up the visual response on iOS.
   const useManualFeedback = !(isLiquidGlassSupported && Platform.OS === 'ios');
@@ -74,7 +71,7 @@ const CompCard: React.FC<CompCardProps> = ({
         <Text style={s.compSub} numberOfLines={2}>
           {sub}
         </Text>
-        <View style={[s.livePill, { flexDirection: livePillDirection }]}>
+        <View style={s.livePill}>
           <Play size={12} color={ACCENT} fill={ACCENT} />
           <Text style={s.liveTxt}>{cta}</Text>
         </View>
@@ -133,6 +130,7 @@ const s = StyleSheet.create({
     minHeight: 32,
   },
   livePill: {
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 1)',
     paddingHorizontal: 14,

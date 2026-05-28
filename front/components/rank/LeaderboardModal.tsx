@@ -11,7 +11,6 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import React from 'react';
 import {
-  I18nManager,
   ImageSourcePropType,
   Modal,
   Platform,
@@ -53,9 +52,6 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   topInset,
 }) => {
   const { t } = useTranslation();
-  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-  const headerDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-
   return (
     <Modal
       visible={visible}
@@ -81,7 +77,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
         />
 
         <View style={[s.modalContent, { paddingTop: topInset + 20 }]}>
-          <View style={[s.modalHeader, { flexDirection: headerDirection }]}>
+          <View style={s.modalHeader}>
             <Text style={s.modalTitle}>{t.rank.leaderboardTitle}</Text>
             <Pressable
               onPress={onClose}
@@ -110,7 +106,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
               return (
                 <View
                   key={`${entry.rank}-${entry.id}`}
-                  style={[s.modalRow, { flexDirection: rowDirection }]}
+                  style={s.modalRow}
                 >
                   <View style={s.modalRankBox}>
                     <Text style={s.modalRankTxt}>{rankLabel}</Text>
@@ -149,6 +145,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   modalContent: { flex: 1, paddingHorizontal: 20 },
   modalHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 25,
@@ -165,6 +162,7 @@ const s = StyleSheet.create({
   modalCloseText: { color: '#fff', fontSize: 18, fontWeight: '300' },
   modalScroll: { gap: 12 },
   modalRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.05)',
     padding: 16,

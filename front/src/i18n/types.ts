@@ -38,7 +38,7 @@ export interface LanguageInfo {
  * Requirements: 7.3 - Show a flag or icon for each language
  */
 export const SUPPORTED_LANGUAGES: readonly LanguageInfo[] = [
-  { code: 'ar', name: 'Arabic', nativeName: 'العربية', flag: '🇸🇦', direction: 'rtl' },
+  { code: 'ar', name: 'Arabic', nativeName: 'العربية', flag: '🇸🇦', direction: 'ltr' },
   { code: 'en', name: 'English', nativeName: 'English', flag: '🇬🇧', direction: 'ltr' },
 ] as const;
 

@@ -94,8 +94,18 @@ router.get('/fixtures/optimized', SHARED_CACHE_8S, FootballController.getOptimiz
 // These endpoints use PostgreSQL for permanent storage
 // ============================================
 
-// GET /api/football/cached/matches/:date - Get matches by date (permanent cache)
-router.get('/cached/matches/:date', SHARED_CACHE_5MIN, FootballController.getCachedMatchesByDate);
+// GET /api/football/cached/matches/:date — TTL by date (today must be 8s for live scores)
+router.get('/cached/matches/:date', (req, res, next) => {
+  const dateParam = req.params.date as string;
+  const today = new Date().toISOString().split('T')[0];
+  if (dateParam < today) {
+    return SHARED_CACHE_24H(req, res, next);
+  }
+  if (dateParam === today) {
+    return SHARED_CACHE_8S(req, res, next);
+  }
+  return SHARED_CACHE_5MIN(req, res, next);
+}, FootballController.getCachedMatchesByDate);
 
 // GET /api/football/cached/player/:id - Get player (permanent cache)
 router.get('/cached/player/:id', SHARED_CACHE_1H, FootballController.getCachedPlayer);

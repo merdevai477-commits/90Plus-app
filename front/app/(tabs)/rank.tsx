@@ -21,7 +21,6 @@ import { useRouter } from 'expo-router';
 import { ChevronRight, Trophy } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  I18nManager,
   ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -246,11 +245,6 @@ export default function RankScreen() {
     });
   }, [players, t]);
 
-  const titleRowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-  const secHeadDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-  const viewAllDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-  const chevronStyle = I18nManager.isRTL ? { transform: [{ scaleX: -1 as const }] } : undefined;
-
   return (
     <View style={s.root}>
       <RankHeader topInset={insets.top} />
@@ -284,7 +278,7 @@ export default function RankScreen() {
           />
 
           <View style={s.heroText}>
-            <View style={[s.titleRow, { flexDirection: titleRowDirection }]}>
+            <View style={s.titleRow}>
               <View style={s.trophyIconBox}>
                 <Trophy size={20} color="#fff" />
               </View>
@@ -298,7 +292,7 @@ export default function RankScreen() {
         </View>
 
         {/* ── Competitions carousel ── */}
-        <View style={[s.secHead, { flexDirection: secHeadDirection }]}>
+        <View style={s.secHead}>
           <Text style={s.secTitle}>{t.rank.allCompetitions}</Text>
         </View>
         <ScrollView
@@ -333,9 +327,9 @@ export default function RankScreen() {
             />
           </View>
 
-          <View style={[s.secHead, { flexDirection: secHeadDirection }]}>
+          <View style={s.secHead}>
             <Text style={s.secTitle}>{t.rank.topPlayers}</Text>
-            <View style={[s.periodToggle, { flexDirection: titleRowDirection }]}>
+            <View style={s.periodToggle}>
               {(['weekly', 'monthly'] as const).map(p => (
                 <Pressable
                   key={p}
@@ -407,8 +401,6 @@ export default function RankScreen() {
                   const rowProps = isLiquidGlassSupported
                     ? { effect: 'clear' as const, interactive: true }
                     : { intensity: 15, tint: 'dark' as const };
-                  const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
-
                   return (
                     <RowWrapper
                       key={row.id}
@@ -416,7 +408,6 @@ export default function RankScreen() {
                       {...(rowProps as any)}
                       style={[
                         s.boardRowGlass,
-                        { flexDirection: rowDirection },
                         i < lowerSlots.length - 1 && { marginBottom: 8 },
                       ]}
                     >
@@ -455,12 +446,12 @@ export default function RankScreen() {
           >
             <LinearGradient
               colors={['rgba(168,85,247,0.2)', 'rgba(124,58,237,0.1)']}
-              style={[s.viewAllLeaderboardGrad, { flexDirection: viewAllDirection }]}
+              style={s.viewAllLeaderboardGrad}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
               <Text style={s.viewAllLeaderboardTxt}>{t.rank.viewAll}</Text>
-              <ChevronRight size={16} color={ACCENT} style={chevronStyle} />
+              <ChevronRight size={16} color={ACCENT} />
             </LinearGradient>
           </Pressable>
         </View>
@@ -506,7 +497,7 @@ const s = StyleSheet.create({
     height: 100,
   },
   heroText: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12, zIndex: 1 },
-  titleRow: { alignItems: 'center', gap: 10, marginBottom: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   trophyIconBox: {
     width: 44,
     height: 44,
@@ -532,6 +523,7 @@ const s = StyleSheet.create({
   pageSub2: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
 
   secHead: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -541,6 +533,7 @@ const s = StyleSheet.create({
   secTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
 
   periodToggle: {
+    flexDirection: 'row',
     gap: 6,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 12,
@@ -591,6 +584,7 @@ const s = StyleSheet.create({
 
   board: { paddingHorizontal: 16, marginTop: 10 },
   boardRowGlass: {
+    flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     backgroundColor: 'rgba(255, 255, 255, 0)',
@@ -655,6 +649,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(168,85,247,0.3)',
   },
   viewAllLeaderboardGrad: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
