@@ -563,8 +563,9 @@ class FootballDataCacheService {
         // a single transient empty response (e.g. quota cooldown) would lock
         // the cache for hours.
         const isEmpty = !Array.isArray(statistics) || statistics.length === 0;
+        const isLive = dbMatch && !['FT', 'AET', 'PEN'].includes(dbMatch.status);
         const ttl = isEmpty
-            ? this.TTL.EMPTY
+            ? (isLive ? 30 * 1000 : this.TTL.EMPTY)
             : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
         const cacheEntry: MemoryCacheEntry<any> = {
             data: statistics,

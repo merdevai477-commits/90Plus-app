@@ -64,6 +64,22 @@ const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'International', 'Finished', 'Predictions'] as const;
 
+/** Local midnight — calendar/filter sync uses device timezone. */
+function startOfLocalDay(d: Date = new Date()): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Pick the tab that matches a calendar day (past → Finished, future → Upcoming, today → All). */
+function filterForCalendarDay(day: Date): (typeof FILTERS)[number] {
+  const t = startOfLocalDay(day).getTime();
+  const today = startOfLocalDay().getTime();
+  if (t < today) return 'Finished';
+  if (t > today) return 'Upcoming';
+  return 'All';
+}
+
 // Translation keys for the filter tab labels. Kept in lock-step with FILTERS
 // above — if a filter is added here, add its label key in locales/*.ts.
 const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
@@ -720,9 +736,30 @@ export default function MatchesHubScreenV2() {
 
   useEffect(() => {
     if (params.filter && FILTERS.includes(params.filter as any)) {
-      setFilter(params.filter as typeof FILTERS[number]);
+      const f = params.filter as typeof FILTERS[number];
+      if (f === 'Live') {
+        setSelectedDate(startOfLocalDay());
+      }
+      setFilter(f);
     }
   }, [params.filter]);
+
+  // Live tab always shows today's fixtures — snap calendar back when selected.
+  const handleFilterPress = useCallback((f: (typeof FILTERS)[number]) => {
+    if (f === 'Live') {
+      setSelectedDate(startOfLocalDay());
+    }
+    setFilter(f);
+  }, []);
+
+  const handleCalendarDayPress = useCallback((day: number) => {
+    const next = new Date(selectedDate);
+    next.setDate(day);
+    next.setHours(0, 0, 0, 0);
+    setSelectedDate(next);
+    setShowCalendar(false);
+    setFilter(filterForCalendarDay(next));
+  }, [selectedDate]);
 
   // Convert groupedMatches from hook to LeagueGroup format for the UI
   const groups = useMemo((): LeagueGroup[] => {
@@ -1222,7 +1259,7 @@ export default function MatchesHubScreenV2() {
           {FILTERS.map((f) => {
             const active = filter === f;
             return (
-              <TouchableOpacity key={f} onPress={() => setFilter(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
+              <TouchableOpacity key={f} onPress={() => handleFilterPress(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
                 {isLiquidGlassSupported ? (
                   <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
                 ) : (
@@ -1247,7 +1284,7 @@ export default function MatchesHubScreenV2() {
         </TouchableOpacity>
       </View>
     </View>
-  ), [filter, t]);
+  ), [filter, t, handleFilterPress]);
 
   const listEmptyNode = useMemo(() => {
     if (loading) {
@@ -1417,24 +1454,7 @@ export default function MatchesHubScreenV2() {
                     <TouchableOpacity
                       key={`d-${day}`}
                       style={[styles.calDay, isSelected && styles.calDayActive]}
-                      onPress={() => {
-                        const next = new Date(selectedDate);
-                        next.setDate(day);
-                        next.setHours(0, 0, 0, 0);
-                        setSelectedDate(next);
-                        setShowCalendar(false);
-
-                        // Auto-switch filter based on selected date
-                        const todayMidnight = new Date();
-                        todayMidnight.setHours(0, 0, 0, 0);
-                        if (next.getTime() < todayMidnight.getTime()) {
-                          setFilter('Finished');
-                        } else if (next.getTime() > todayMidnight.getTime()) {
-                          setFilter('Upcoming');
-                        } else {
-                          setFilter('All');
-                        }
-                      }}
+                      onPress={() => handleCalendarDayPress(day)}
                     >
                       {isSelected && (
                         <LinearGradient colors={['rgba(168,85,247,0.9)', 'rgba(126,34,206,0.6)']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />

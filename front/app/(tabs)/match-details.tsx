@@ -36,6 +36,10 @@ import {
 } from '../../components/match-details/MatchDetailsSkeleton';
 import { useMatchUpdateEvents } from '../../hooks/useWebSocket';
 import { MatchUpdatePayload } from '../../services/websocketClient';
+import {
+  buildFallbackStatisticsFromEvents,
+  hasApiStatistics,
+} from '../../utils/matchStatsFallback';
 
 const { width, height } = Dimensions.get('window');
 
@@ -93,6 +97,7 @@ const MatchDetailsScreen = () => {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [standingsError, setStandingsError] = useState<string | null>(null);
+  const [statsFromEvents, setStatsFromEvents] = useState(false);
 
   // Track which tabs have already loaded their data (lazy loading)
   const loadedTabsRef = useRef<Set<string>>(new Set());
@@ -114,6 +119,7 @@ const MatchDetailsScreen = () => {
   // Live polling interval refs
   const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleWsMatchUpdate = useCallback((update: MatchUpdatePayload) => {
     setFixture((prev) => {
@@ -219,29 +225,6 @@ const MatchDetailsScreen = () => {
     };
   }, [fixtureId, fixture?.fixture?.status?.short, params.status, isLive]);
 
-  // Lineups may be published shortly before kickoff — refresh every 60s while live
-  useEffect(() => {
-    if (lineupsPollingRef.current) {
-      clearInterval(lineupsPollingRef.current);
-      lineupsPollingRef.current = null;
-    }
-    if (!isLive() || !fixtureId) return;
-
-    lineupsPollingRef.current = setInterval(async () => {
-      try {
-        const data = await ApiFootballService.getFixtureLineups(fixtureId);
-        if (data?.length) setLineups(data);
-      } catch { /* silent */ }
-    }, 60_000);
-
-    return () => {
-      if (lineupsPollingRef.current) {
-        clearInterval(lineupsPollingRef.current);
-        lineupsPollingRef.current = null;
-      }
-    };
-  }, [fixtureId, isLive]);
-
   const loadMatchDetails = async () => {
     if (!fixtureId) {
       setError(t.matchDetails.invalidMatchId);
@@ -301,33 +284,99 @@ const MatchDetailsScreen = () => {
   };
 
   // ── Lazy loaders — called when a tab is first activated ───────────────────
-  const loadLineupsIfNeeded = useCallback(async () => {
-    if (loadedTabsRef.current.has('lineups')) return;
-    loadedTabsRef.current.add('lineups');
+  const loadLineupsIfNeeded = useCallback(async (force = false) => {
+    if (!force && loadedTabsRef.current.has('lineups')) return;
+    if (!force) loadedTabsRef.current.add('lineups');
     setLineupsLoading(true);
+    setLineupsError(null);
     try {
       const data = await ApiFootballService.getFixtureLineups(fixtureId);
-      setLineups(data);
+      setLineups(data ?? []);
+      if (isLive() && (!data || data.length === 0)) {
+        loadedTabsRef.current.delete('lineups');
+      }
     } catch (err: any) {
       setLineupsError(err?.message || t.matchDetails.loadLineupsFailed);
+      loadedTabsRef.current.delete('lineups');
     } finally {
       setLineupsLoading(false);
     }
-  }, [fixtureId]);
+  }, [fixtureId, isLive, t.matchDetails.loadLineupsFailed]);
 
-  const loadStatsIfNeeded = useCallback(async () => {
-    if (loadedTabsRef.current.has('stats')) return;
-    loadedTabsRef.current.add('stats');
+  // Lineups may be published shortly before kickoff — refresh every 60s while live
+  useEffect(() => {
+    if (lineupsPollingRef.current) {
+      clearInterval(lineupsPollingRef.current);
+      lineupsPollingRef.current = null;
+    }
+    if (!isLive() || !fixtureId) return;
+
+    lineupsPollingRef.current = setInterval(async () => {
+      try {
+        loadedTabsRef.current.delete('lineups');
+        await loadLineupsIfNeeded(true);
+      } catch { /* silent */ }
+    }, 60_000);
+
+    return () => {
+      if (lineupsPollingRef.current) {
+        clearInterval(lineupsPollingRef.current);
+        lineupsPollingRef.current = null;
+      }
+    };
+  }, [fixtureId, isLive, loadLineupsIfNeeded]);
+
+  const loadStatsIfNeeded = useCallback(async (force = false) => {
+    if (!force && loadedTabsRef.current.has('stats')) return;
+    if (!force) loadedTabsRef.current.add('stats');
     setStatsLoading(true);
+    setStatsError(null);
     try {
-      const data = await ApiFootballService.getFixtureStatistics(fixtureId);
-      setStatistics(data);
+      let data = await ApiFootballService.getFixtureStatistics(fixtureId);
+      if (!hasApiStatistics(data) && isLive()) {
+        data = await ApiFootballService.getFixtureStatistics(fixtureId, { skipCache: true });
+      }
+      let fromEvents = false;
+      if (!hasApiStatistics(data) && fixture) {
+        const ev = events.length ? events : await ApiFootballService.getFixtureEvents(fixtureId).catch(() => []);
+        if (ev.length) {
+          data = buildFallbackStatisticsFromEvents(fixture, ev);
+          fromEvents = true;
+        }
+      }
+      setStatistics(data ?? []);
+      setStatsFromEvents(fromEvents);
+      if (isLive() && !hasApiStatistics(data) && !fromEvents) {
+        loadedTabsRef.current.delete('stats');
+      }
     } catch (err: any) {
       setStatsError(err?.message || t.matchDetails.loadStatsFailed);
+      loadedTabsRef.current.delete('stats');
     } finally {
       setStatsLoading(false);
     }
-  }, [fixtureId]);
+  }, [fixtureId, fixture, events, isLive, t.matchDetails.loadStatsFailed]);
+
+  // Retry stats every 45s while live (lower-tier leagues often publish late)
+  useEffect(() => {
+    if (statsPollingRef.current) {
+      clearInterval(statsPollingRef.current);
+      statsPollingRef.current = null;
+    }
+    if (!isLive() || !fixtureId) return;
+
+    statsPollingRef.current = setInterval(() => {
+      loadedTabsRef.current.delete('stats');
+      loadStatsIfNeeded(true).catch(() => {});
+    }, 45_000);
+
+    return () => {
+      if (statsPollingRef.current) {
+        clearInterval(statsPollingRef.current);
+        statsPollingRef.current = null;
+      }
+    };
+  }, [fixtureId, isLive, loadStatsIfNeeded]);
 
   const loadFormIfNeeded = useCallback(async () => {
     if (loadedTabsRef.current.has('form') || !fixture) return;
@@ -713,8 +762,12 @@ const MatchDetailsScreen = () => {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="stats-chart-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>{t.matchDetails.statistics || 'No statistics'}</Text>
-          <Text style={styles.emptyStateSubtext}>{'Statistics are not available yet'}</Text>
+          <Text style={styles.emptyStateText}>{t.matchDetails.noStats || 'Statistics not available'}</Text>
+          <Text style={styles.emptyStateSubtext}>
+            {isLive()
+              ? (t.matchDetails.statsLiveRetry || 'Stats may appear later for this league. Retrying…')
+              : (t.matchDetails.statsLeagueLimited || 'Full statistics are not provided for this competition.')}
+          </Text>
         </View>
       );
     }
@@ -725,6 +778,11 @@ const MatchDetailsScreen = () => {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.statsContainer}>
+          {statsFromEvents && (
+            <Text style={styles.statsPartialNote}>
+              {t.matchDetails.statsFromEvents || 'Partial stats derived from match events'}
+            </Text>
+          )}
           <Text style={styles.sectionTitle}>{t.matchDetails.statistics || 'Match Statistics'}</Text>
           {statistics[0]?.statistics.map((stat: any, index: number) => {
             const homeValue = stat.value;
@@ -1454,6 +1512,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
     padding: 20,
+  },
+  statsPartialNote: {
+    color: '#A855F7',
+    fontSize: 12,
+    marginBottom: 12,
+    textAlign: 'center',
+    opacity: 0.9,
   },
   statsHeader: {
     flexDirection: 'row',

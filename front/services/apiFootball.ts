@@ -1264,12 +1264,16 @@ export const ApiFootballService = {
    * Get team statistics for a specific fixture
    * Uses backend permanent cache for finished matches
    */
-  async getFixtureStatistics(fixtureId: number): Promise<TeamStatistics[]> {
+  async getFixtureStatistics(
+    fixtureId: number,
+    options?: { skipCache?: boolean },
+  ): Promise<TeamStatistics[]> {
     try {
-      // Use cached endpoint (permanent for finished matches)
+      if (options?.skipCache) {
+        return await fetchFromProxy<TeamStatistics[]>(`/fixtures/${fixtureId}/statistics`);
+      }
       return await fetchFromProxy<TeamStatistics[]>(`/cached/fixture/${fixtureId}/statistics`);
     } catch (error) {
-      // Fallback to regular endpoint
       return fetchFromProxy<TeamStatistics[]>(`/fixtures/${fixtureId}/statistics`);
     }
   },

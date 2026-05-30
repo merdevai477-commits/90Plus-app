@@ -132,10 +132,10 @@ router.get('/cached/h2h', SHARED_CACHE_24H, FootballController.getCachedH2H);
 // 5min route cache lets the inner cache logic (which tracks empty vs full
 // results) actually surface fresh data — a 24h shared HTTP cache would lock
 // an empty array for a day.
-router.get('/cached/fixture/:id/lineups', SHARED_CACHE_5MIN, FootballController.getCachedLineups);
+router.get('/cached/fixture/:id/lineups', SHARED_CACHE_8S, FootballController.getCachedLineups);
 
 // GET /api/football/cached/fixture/:id/statistics - Get statistics (permanent for finished, short for empty/live)
-router.get('/cached/fixture/:id/statistics', SHARED_CACHE_5MIN, FootballController.getCachedStatistics);
+router.get('/cached/fixture/:id/statistics', SHARED_CACHE_8S, FootballController.getCachedStatistics);
 
 // GET /api/football/cached/fixture/:id/events - Get events (permanent for finished, short for empty/live)
 router.get('/cached/fixture/:id/events', SHARED_CACHE_8S, FootballController.getCachedEvents);
