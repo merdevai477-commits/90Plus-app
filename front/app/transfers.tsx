@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Network from 'expo-network';
 import * as Haptics from 'expo-haptics';
 import ApiFootballService, { Transfer, TransfersByLeague, MAJOR_LEAGUES } from '../services/apiFootball';
+import { getFootballSeasonYear, playerPhotoUrl } from '../utils/playerStatsAggregate';
 import { useTranslation } from '../src/i18n';
 import { TransferCardSkeleton } from '../components/Transfers/TransferCardSkeleton';
 import { FiltersModal, TransferFilters } from '../components/Transfers/FiltersModal';
@@ -372,27 +373,22 @@ export default function TransfersScreen() {
 
   // Navigation handlers
   const handlePlayerPress = useCallback((transfer: Transfer) => {
-    console.log('🔄 Navigating to player profile:', transfer.player.name, transfer.player.id);
-    
-    // Get the current team (team "in" from the latest transfer)
-    const latestTransfer = transfer.transfers && transfer.transfers.length > 0 
-      ? transfer.transfers[transfer.transfers.length - 1] 
+    const latestTransfer = transfer.transfers?.length
+      ? transfer.transfers[transfer.transfers.length - 1]
       : null;
     const currentTeam = latestTransfer?.teams.in;
-    
-    const params = {
-      id: transfer.player.id.toString(),
-      name: transfer.player.name,
-      photo: transfer.player.photo || '',
-      teamName: currentTeam?.name || '',
-      teamLogo: currentTeam?.logo || '',
-    };
-    
-    console.log('📋 Navigation params:', params);
-    
+
     router.push({
       pathname: '/player-profile' as any,
-      params: params
+      params: {
+        id: transfer.player.id.toString(),
+        name: transfer.player.name,
+        photo: playerPhotoUrl(transfer.player.id, transfer.player.photo),
+        teamName: currentTeam?.name || '',
+        teamLogo: currentTeam?.logo || '',
+        teamId: currentTeam?.id ? String(currentTeam.id) : '',
+        season: String(getFootballSeasonYear()),
+      },
     } as any);
   }, [router]);
 

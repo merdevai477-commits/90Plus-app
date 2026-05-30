@@ -20,6 +20,7 @@ import ApiFootballService, { Injury, Trophy, Coach } from '../services/apiFootba
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 import { useHaptic } from '../hooks/useHaptic';
+import { getFootballSeasonYear, playerPhotoUrl } from '../utils/playerStatsAggregate';
 
 const { width, height } = Dimensions.get('window');
 
@@ -216,12 +217,14 @@ export default function TeamProfileScreen() {
         router.push({
             pathname: '/player-profile',
             params: {
-                id: player.id,
+                id: String(player.id),
                 name: player.name,
-                photo: player.photo,
-                teamName: team?.team?.name,
-                teamLogo: team?.team?.logo
-            }
+                photo: playerPhotoUrl(player.id, player.photo),
+                teamName: team?.team?.name || '',
+                teamLogo: team?.team?.logo || '',
+                teamId: team?.team?.id ? String(team.team.id) : '',
+                season: String(getFootballSeasonYear()),
+            },
         } as any);
     };
 

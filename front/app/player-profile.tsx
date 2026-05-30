@@ -143,45 +143,48 @@ const getTeamColors = (teamName: string): readonly [string, string, ...string[]]
     return TEAM_COLORS.default;
 };
 
-// Helper to get preferred foot from goals statistics
-const getPreferredFoot = (statistics: PlayerData['statistics']): string | null => {
-    if (!statistics || statistics.length === 0) return null;
-    
-    const stats = statistics[0];
-    const goals = stats.goals as any;
-    
-    if (goals?.by?.right && goals?.by?.left) {
-        const right = goals.by.right || 0;
-        const left = goals.by.left || 0;
-        if (right > left) return 'Right';
-        if (left > right) return 'Left';
-        return 'Both';
-    }
-    
-    return null;
-};
-
 // Helper to format date
-const formatDate = (dateString: string | null): string => {
+const formatDate = (dateString: string | null, language: Language): string => {
     if (!dateString) return 'N/A';
     try {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        const locale = language === 'ar' ? 'ar-EG' : 'en-US';
+        return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
     } catch {
         return dateString;
     }
 };
 
 // Helper to format transfer value
-const formatTransferValue = (type: string | null): string => {
-    if (!type) return 'Free Transfer';
+const formatTransferValue = (type: string | null, labels: Record<string, string>): string => {
+    if (!type) return labels.freeTransfer;
     if (type.includes('€') || type.includes('M') || type.includes('K')) {
         return type;
     }
-    if (type.toLowerCase().includes('free')) return 'Free Transfer';
-    if (type.toLowerCase().includes('loan')) return 'Loan';
+    if (type.toLowerCase().includes('free')) return labels.freeTransfer;
+    if (type.toLowerCase().includes('loan')) return labels.loan;
     return type;
 };
+
+function formatPreferredFoot(
+    statistics: PlayerData['statistics'],
+    labels: Record<string, string>,
+): string | null {
+    if (!statistics || statistics.length === 0) return null;
+
+    const stats = statistics[0];
+    const goals = stats.goals as { by?: { right?: number; left?: number } };
+
+    if (goals?.by?.right != null && goals?.by?.left != null) {
+        const right = goals.by.right || 0;
+        const left = goals.by.left || 0;
+        if (right > left) return labels.footRight;
+        if (left > right) return labels.footLeft;
+        return labels.footBoth;
+    }
+
+    return null;
+}
 
 function PlayerHeroPhoto({
     playerId,
@@ -198,6 +201,11 @@ function PlayerHeroPhoto({
 }) {
     const candidates = useMemo(() => playerPhotoCandidates(playerId, photo), [playerId, photo]);
     const [uriIndex, setUriIndex] = useState(0);
+
+    useEffect(() => {
+        setUriIndex(0);
+    }, [playerId, photo]);
+
     const uri = candidates[uriIndex] ?? '';
 
     if (!uri || uriIndex >= candidates.length) {
@@ -268,6 +276,11 @@ function LeagueStatCard({
         ? `${stat.league.season}/${stat.league.season + 1}`
         : '';
     const rating = stat.games.rating ? parseFloat(stat.games.rating).toFixed(1) : '—';
+    const showPassAcc = stat.passes?.accuracy != null;
+    const showShots = statNum(stat.shots?.on) > 0;
+    const showTackles = statNum(stat.tackles?.total) > 0;
+    const showDribbles = statNum(stat.dribbles?.success) > 0;
+    const showAdvanced = showPassAcc || showShots || showTackles || showDribbles;
 
     return (
         <View style={leagueCardStyles.card}>
@@ -328,6 +341,43 @@ function LeagueStatCard({
                 )}
             </View>
 
+            {showAdvanced && (
+                <View style={leagueCardStyles.advancedRow}>
+                    {showPassAcc && (
+                        <View style={leagueCardStyles.detailItem}>
+                            <Ionicons name="git-network-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                            <Text style={leagueCardStyles.detailText}>
+                                {labels.passAccuracy}: {stat.passes!.accuracy}%
+                            </Text>
+                        </View>
+                    )}
+                    {showShots && (
+                        <View style={leagueCardStyles.detailItem}>
+                            <Ionicons name="radio-button-on-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                            <Text style={leagueCardStyles.detailText}>
+                                {labels.shotsOnTarget}: {statNum(stat.shots?.on)}
+                            </Text>
+                        </View>
+                    )}
+                    {showTackles && (
+                        <View style={leagueCardStyles.detailItem}>
+                            <Ionicons name="shield-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                            <Text style={leagueCardStyles.detailText}>
+                                {labels.tackles}: {statNum(stat.tackles?.total)}
+                            </Text>
+                        </View>
+                    )}
+                    {showDribbles && (
+                        <View style={leagueCardStyles.detailItem}>
+                            <Ionicons name="flash-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                            <Text style={leagueCardStyles.detailText}>
+                                {labels.successfulDribbles}: {statNum(stat.dribbles?.success)}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            )}
+
             {(statNum(stat.cards.yellow) > 0 || statNum(stat.cards.red) > 0) && (
                 <View style={leagueCardStyles.cardsRow}>
                     {statNum(stat.cards.yellow) > 0 && (
@@ -376,6 +426,7 @@ const leagueCardStyles = StyleSheet.create({
         overflow: 'hidden',
     },
     detailsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
+    advancedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
     detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     detailText: { fontSize: 12, color: ProfileTheme.colors.textSecondary },
     cardsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
@@ -403,7 +454,6 @@ export default function PlayerProfileScreen() {
     const playerId = parseInt(params.id || '0');
     const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
     const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
-    const teamColors = getTeamColors(params.teamName || '');
 
     useEffect(() => {
         loadPlayerData();
@@ -608,7 +658,11 @@ export default function PlayerProfileScreen() {
     const seasonTotals = useMemo(() => sumSeasonTotals(leagueStats), [leagueStats]);
     const primaryPosition = leagueStats[0]?.games?.position ?? null;
     const primaryTeam = leagueStats[0]?.team ?? (params.teamName ? { id: 0, name: params.teamName, logo: params.teamLogo || '' } : null);
-    const preferredFoot = player ? getPreferredFoot(player.statistics) : null;
+    const teamColors = useMemo(
+        () => getTeamColors(primaryTeam?.name || params.teamName || ''),
+        [primaryTeam?.name, params.teamName],
+    );
+    const preferredFoot = player ? formatPreferredFoot(player.statistics, t.playerProfile) : null;
     const pp = t.playerProfile;
 
     if (loading && !player) {
@@ -672,6 +726,7 @@ export default function PlayerProfileScreen() {
                     >
                         <View style={styles.heroRow}>
                             <PlayerHeroPhoto
+                                key={playerId}
                                 playerId={playerId}
                                 photo={player.player.photo ?? params.photo}
                                 name={player.player.name}
@@ -681,6 +736,12 @@ export default function PlayerProfileScreen() {
 
                             <View style={styles.heroInfo}>
                                 <Text style={styles.playerName} numberOfLines={2}>{player.player.name}</Text>
+                                {player.player.injured && (
+                                    <View style={styles.injuredBadge}>
+                                        <Ionicons name="medkit-outline" size={12} color="#fca5a5" />
+                                        <Text style={styles.injuredText}>{pp.injured}</Text>
+                                    </View>
+                                )}
                                 <View style={styles.playerSubInfo}>
                                     {player.player.nationality && (
                                         <Text style={styles.playerMeta}>{player.player.nationality}</Text>
@@ -767,7 +828,7 @@ export default function PlayerProfileScreen() {
                                     <Ionicons name="calendar-outline" size={18} color={ProfileTheme.colors.textSecondary} />
                                     <Text style={styles.infoLabel}>{pp.dateOfBirth}</Text>
                                     <Text style={styles.infoValue}>
-                                        {player.player.birth?.date ? formatDate(player.player.birth.date) : 'N/A'}
+                                        {player.player.birth?.date ? formatDate(player.player.birth.date, language) : 'N/A'}
                                     </Text>
                                 </View>
                                 <View style={styles.infoGridDivider} />
@@ -834,16 +895,21 @@ export default function PlayerProfileScreen() {
                                                 <View key={tIndex} style={styles.transferItem}>
                                                     <View style={styles.transferDateContainer}>
                                                         <Text style={styles.transferDate}>
-                                                            {tr.date ? formatDate(tr.date) : 'N/A'}
+                                                            {tr.date ? formatDate(tr.date, language) : 'N/A'}
                                                         </Text>
                                                         <Text style={styles.transferType}>
-                                                            {formatTransferValue(tr.type)}
+                                                            {formatTransferValue(tr.type, pp)}
                                                         </Text>
                                                     </View>
                                                     <View style={styles.transferTeams}>
                                                         {tr.teams.out && (
                                                             <View style={styles.transferTeam}>
-                                                                <TeamBadge name={tr.teams.out.name} color={teamColors[0]} size={32} />
+                                                                <TeamBadge
+                                                                    name={tr.teams.out.name}
+                                                                    color={teamColors[0]}
+                                                                    size={32}
+                                                                    logo={teamLogoUrl(tr.teams.out.id, tr.teams.out.logo)}
+                                                                />
                                                                 <Text style={styles.transferTeamName} numberOfLines={1}>
                                                                     {tr.teams.out.name}
                                                                 </Text>
@@ -852,7 +918,12 @@ export default function PlayerProfileScreen() {
                                                         <Ionicons name="arrow-forward" size={20} color={ProfileTheme.colors.textSecondary} />
                                                         {tr.teams.in && (
                                                             <View style={styles.transferTeam}>
-                                                                <TeamBadge name={tr.teams.in.name} color={teamColors[0]} size={32} />
+                                                                <TeamBadge
+                                                                    name={tr.teams.in.name}
+                                                                    color={teamColors[0]}
+                                                                    size={32}
+                                                                    logo={teamLogoUrl(tr.teams.in.id, tr.teams.in.logo)}
+                                                                />
                                                                 <Text style={styles.transferTeamName} numberOfLines={1}>
                                                                     {tr.teams.in.name}
                                                                 </Text>
@@ -959,6 +1030,24 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#fff',
         marginBottom: 6,
+    },
+    injuredBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 4,
+        backgroundColor: 'rgba(239,68,68,0.25)',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        marginBottom: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(239,68,68,0.45)',
+    },
+    injuredText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#fca5a5',
     },
     playerSubInfo: {
         flexDirection: 'row',

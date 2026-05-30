@@ -594,6 +594,12 @@ export const ar = {
     goBack: 'رجوع',
     years: 'سنة',
     yes: 'نعم',
+    injured: 'مصاب',
+    footRight: 'يمين',
+    footLeft: 'يسار',
+    footBoth: 'الاثنتين',
+    freeTransfer: 'انتقال حر',
+    loan: 'إعارة',
   },
 
   predictions: {

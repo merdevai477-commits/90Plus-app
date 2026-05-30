@@ -425,6 +425,12 @@ export const en = {
     goBack: 'Go Back',
     years: 'years',
     yes: 'Yes',
+    injured: 'Injured',
+    footRight: 'Right',
+    footLeft: 'Left',
+    footBoth: 'Both',
+    freeTransfer: 'Free Transfer',
+    loan: 'Loan',
   },
 
   offlineQueue: {
