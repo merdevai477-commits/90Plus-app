@@ -1275,15 +1275,26 @@ export const ApiFootballService = {
   },
 
   /**
-   * Get last fixtures for a team
+   * Get last fixtures for a team in a specific league/season
    */
-  async getTeamLastFixtures(teamId: number, count: number = 5): Promise<TeamFixture[]> {
+  async getTeamLastFixtures(
+    teamId: number,
+    count: number = 5,
+    options?: { leagueId?: number; season?: number },
+  ): Promise<TeamFixture[]> {
     try {
-      const fixtures = await fetchFromProxy<TeamFixture[]>('/fixtures', {
+      const season = options?.season ?? new Date().getFullYear();
+      const params: Record<string, string | number> = {
         team: teamId,
-        season: 2023,
-        status: 'FT'
-      });
+        season,
+        status: 'FT',
+        last: count,
+      };
+      if (options?.leagueId) {
+        params.league = options.leagueId;
+      }
+
+      const fixtures = await fetchFromProxy<TeamFixture[]>('/fixtures', params);
 
       return fixtures
         .sort((a, b) => b.fixture.timestamp - a.fixture.timestamp)

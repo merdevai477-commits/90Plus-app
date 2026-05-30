@@ -43,12 +43,12 @@ export class PredictionWatcherService {
         // Run immediately on start
         this.checkPredictions();
 
-        // Then run every 5 minutes
+        // Then run every 2 minutes
         this.intervalId = setInterval(() => {
             this.checkPredictions();
-        }, 5 * 60 * 1000); // 5 minutes
+        }, 2 * 60 * 1000); // 2 minutes
 
-        logger.info('✅ Prediction watcher started (checking every 5 minutes)');
+        logger.info('✅ Prediction watcher started (checking every 2 minutes)');
     }
 
     /**

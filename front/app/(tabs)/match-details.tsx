@@ -34,6 +34,8 @@ import {
   StandingsSkeleton,
   useShimmer,
 } from '../../components/match-details/MatchDetailsSkeleton';
+import { useMatchUpdateEvents } from '../../hooks/useWebSocket';
+import { MatchUpdatePayload } from '../../services/websocketClient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -109,8 +111,30 @@ const MatchDetailsScreen = () => {
     return params.status === 'live';
   }, [fixture, params.status]);
 
-  // Live polling interval ref
+  // Live polling interval refs
   const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const handleWsMatchUpdate = useCallback((update: MatchUpdatePayload) => {
+    setFixture((prev) => {
+      if (!prev) return prev;
+      const elapsed = update.minute ?? prev.fixture.status.elapsed;
+      return {
+        ...prev,
+        goals: { home: update.homeScore, away: update.awayScore },
+        fixture: {
+          ...prev.fixture,
+          status: {
+            ...prev.fixture.status,
+            short: update.status,
+            elapsed: elapsed ?? null,
+          },
+        },
+      };
+    });
+  }, []);
+
+  useMatchUpdateEvents(fixtureId > 0 ? fixtureId : null, handleWsMatchUpdate);
 
   useEffect(() => {
     // Reset state immediately when fixtureId changes to prevent stale data
@@ -149,9 +173,8 @@ const MatchDetailsScreen = () => {
     ]).start();
   }, [fixtureId]);
 
-  // Live match polling: refresh fixture data + events every 30 seconds
+  // Live match polling: fallback when WebSocket is disconnected (every 15s)
   useEffect(() => {
-    // Clear any existing interval
     if (livePollingRef.current) {
       clearInterval(livePollingRef.current);
       livePollingRef.current = null;
@@ -170,24 +193,23 @@ const MatchDetailsScreen = () => {
         if (fixtureData.status === 'fulfilled' && fixtureData.value) {
           setFixture(fixtureData.value);
 
-          // If match just finished, stop polling
           const finishedStatuses = ['FT', 'AET', 'PEN'];
           if (finishedStatuses.includes(fixtureData.value.fixture.status.short)) {
             if (livePollingRef.current) {
               clearInterval(livePollingRef.current);
               livePollingRef.current = null;
             }
-            // Reset stats tab so it reloads with final data
             loadedTabsRef.current.delete('stats');
+            loadedTabsRef.current.delete('lineups');
           }
         }
       } catch {
-        // Silent fail — don't disrupt the UI for a background poll
+        // Silent fail — background poll
       }
     };
 
-    // Poll every 8 seconds for live matches (matches the home list cadence)
-    livePollingRef.current = setInterval(pollLiveData, 8_000);
+    // Fast events poll (5s) + slower full fixture poll (15s) via single interval at 5s
+    livePollingRef.current = setInterval(pollLiveData, 5_000);
 
     return () => {
       if (livePollingRef.current) {
@@ -195,7 +217,30 @@ const MatchDetailsScreen = () => {
         livePollingRef.current = null;
       }
     };
-  }, [fixtureId, fixture?.fixture?.status?.short, params.status]);
+  }, [fixtureId, fixture?.fixture?.status?.short, params.status, isLive]);
+
+  // Lineups may be published shortly before kickoff — refresh every 60s while live
+  useEffect(() => {
+    if (lineupsPollingRef.current) {
+      clearInterval(lineupsPollingRef.current);
+      lineupsPollingRef.current = null;
+    }
+    if (!isLive() || !fixtureId) return;
+
+    lineupsPollingRef.current = setInterval(async () => {
+      try {
+        const data = await ApiFootballService.getFixtureLineups(fixtureId);
+        if (data?.length) setLineups(data);
+      } catch { /* silent */ }
+    }, 60_000);
+
+    return () => {
+      if (lineupsPollingRef.current) {
+        clearInterval(lineupsPollingRef.current);
+        lineupsPollingRef.current = null;
+      }
+    };
+  }, [fixtureId, isLive]);
 
   const loadMatchDetails = async () => {
     if (!fixtureId) {
@@ -291,9 +336,11 @@ const MatchDetailsScreen = () => {
     try {
       const homeId = fixture.teams.home.id;
       const awayId = fixture.teams.away.id;
+      const leagueId = fixture.league.id;
+      const season = fixture.league.season;
       const [homeRes, awayRes] = await Promise.allSettled([
-        ApiFootballService.getTeamLastFixtures(homeId, 5),
-        ApiFootballService.getTeamLastFixtures(awayId, 5),
+        ApiFootballService.getTeamLastFixtures(homeId, 5, { leagueId, season }),
+        ApiFootballService.getTeamLastFixtures(awayId, 5, { leagueId, season }),
       ]);
       if (homeRes.status === 'fulfilled') setHomeLastFixtures(homeRes.value);
       if (awayRes.status === 'fulfilled') setAwayLastFixtures(awayRes.value);
@@ -319,15 +366,55 @@ const MatchDetailsScreen = () => {
   }, [fixtureId, fixture]);
 
   const loadVenueIfNeeded = useCallback(async () => {
-    if (loadedTabsRef.current.has('stadium') || !fixture?.fixture.venue?.id) return;
+    if (loadedTabsRef.current.has('stadium') || !fixture) return;
     loadedTabsRef.current.add('stadium');
     setVenueLoading(true);
     try {
-      const data = await ApiFootballService.getVenueInfo(fixture.fixture.venue.id);
-      setVenue(data);
-    } catch { /* silent */ }
-    finally { setVenueLoading(false); }
+      const venueId = fixture.fixture.venue?.id;
+      if (venueId) {
+        const data = await ApiFootballService.getVenueInfo(venueId);
+        if (data) {
+          setVenue(data);
+          return;
+        }
+      }
+      if (fixture.fixture.venue?.name) {
+        setVenue({
+          id: venueId ?? 0,
+          name: fixture.fixture.venue.name,
+          address: null,
+          city: fixture.fixture.venue.city ?? null,
+          capacity: null,
+          surface: null,
+          image: null,
+        } as Venue);
+      }
+    } catch {
+      if (fixture.fixture.venue?.name) {
+        setVenue({
+          id: fixture.fixture.venue?.id ?? 0,
+          name: fixture.fixture.venue.name,
+          address: null,
+          city: fixture.fixture.venue.city ?? null,
+          capacity: null,
+          surface: null,
+          image: null,
+        } as Venue);
+      }
+    } finally { setVenueLoading(false); }
   }, [fixtureId, fixture]);
+
+  // Reload stats when match reaches HT or full time
+  useEffect(() => {
+    const short = fixture?.fixture?.status?.short;
+    if (!short) return;
+    if (short === 'HT' || short === 'FT' || short === 'AET' || short === 'PEN') {
+      loadedTabsRef.current.delete('stats');
+      if (activeTab === 'stats') {
+        loadStatsIfNeeded();
+      }
+    }
+  }, [fixture?.fixture?.status?.short, activeTab, loadStatsIfNeeded]);
 
   // ── Tab change handler — triggers lazy load ───────────────────────────────
   const handleTabChange = useCallback((tab: string) => {

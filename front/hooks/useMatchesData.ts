@@ -6,10 +6,17 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
-import { fetchMatchesByDate, fetchLiveMatches, getLocalTodayKey } from '../components/Matches/leagueApiUtils';
+import {
+  fetchMatchesByDate,
+  fetchLiveMatches,
+  getLocalTodayKey,
+  formatLiveMinuteDisplay,
+  formatLocalDateKey,
+} from '../components/Matches/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { Image } from 'expo-image';
+import { websocketClient, MatchUpdatePayload } from '../services/websocketClient';
 
 export interface GroupedMatches {
   leagueId: number;
@@ -71,9 +78,8 @@ const getCacheTTL = (dateString: string): number => {
   if (isPast) {
     return 60 * 60 * 1000; // 60 minutes for past matches
   } else if (isToday) {
-    // Today's matches include live games. We refresh the UI every 8s so
-    // memory cache must be at least that fresh.
-    return 8 * 1000; // 8 seconds for today's matches
+    // Live scores also arrive via WebSocket; 3s memory TTL keeps polling fallback fresh.
+    return 3 * 1000;
   } else {
     return 30 * 60 * 1000; // 30 minutes for future matches
   }
@@ -90,7 +96,40 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 // 6s aligns with the 8s UI poll while preventing duplicate concurrent fetches
 // when the user switches dates rapidly. Backend `/fixtures` for today is
 // shared-cached for 8s, so this won't multiply API quota usage.
-const BACKGROUND_REFRESH_THROTTLE = 6 * 1000; // 6 seconds
+const BACKGROUND_REFRESH_THROTTLE = 4 * 1000; // 4 seconds
+
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
+
+/** Apply a WebSocket score/minute patch to a list match row. */
+const patchMatchFromWsUpdate = (match: Match, update: MatchUpdatePayload): Match => {
+  let status: Match['status'] = match.status;
+  if (FINISHED_STATUSES.has(update.status)) status = 'finished';
+  else if (LIVE_STATUSES.has(update.status)) status = 'live';
+
+  const minute =
+    update.minute != null
+      ? formatLiveMinuteDisplay(update.status, update.minute)
+      : match.minute;
+
+  if (
+    match.score.home === update.homeScore &&
+    match.score.away === update.awayScore &&
+    match.status === status &&
+    match.statusShort === update.status &&
+    match.minute === minute
+  ) {
+    return match;
+  }
+
+  return {
+    ...match,
+    score: { home: update.homeScore, away: update.awayScore },
+    status,
+    statusShort: update.status,
+    minute,
+  };
+};
 
 /**
  * Country sort priority:
@@ -208,7 +247,6 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
   const [isDataStale, setIsDataStale] = useState<boolean>(false);
   const isFetchingRef = useRef(false);
-  const initialLoadRef = useRef(true);
 
   // Use LOCAL date string (not UTC) so a user in UTC+3 at 00:30 local
   // doesn't accidentally fetch yesterday's matches.
@@ -228,17 +266,48 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   const isToday = dateString === today;
   const isPastDate = dateString < today;
   
-  // Try to load from memory cache immediately on mount
+  // Stale-while-revalidate: show disk cache immediately when date changes
   useEffect(() => {
-    if (initialLoadRef.current) {
-      initialLoadRef.current = false;
-      const memoryCached = memoryCache.get(dateString);
-      if (memoryCached && isCacheValid(memoryCached, dateString)) {
-        setMatches(memoryCached.data);
-        setLoading(false);
-      }
+    let cancelled = false;
+    const memoryCached = memoryCache.get(dateString);
+    if (memoryCached) {
+      setMatches(memoryCached.data);
+      setLoading(false);
+    } else {
+      setLoading(true);
     }
+
+    const cacheKey = getMatchesCacheKey(dateString);
+    cacheService.get<Match[]>(cacheKey).then((cached) => {
+      if (cancelled || !cached?.length) return;
+      evictOldestIfNeeded(memoryCache);
+      memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
+      setMatches(cached);
+      setLoading(false);
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
   }, [dateString]);
+
+  // Prefetch today + yesterday in background for instant tab switches
+  useEffect(() => {
+    const todayKey = getLocalTodayKey();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayKey = formatLocalDateKey(yesterday);
+
+    [todayKey, yesterdayKey].forEach((key) => {
+      if (memoryCache.has(key)) return;
+      const date = key === todayKey ? new Date() : yesterday;
+      fetchMatchesByDate(date).then((data) => {
+        if (data.length > 0) {
+          evictOldestIfNeeded(memoryCache);
+          memoryCache.set(key, { data, timestamp: Date.now() });
+          cacheService.set(getMatchesCacheKey(key), data, key === todayKey ? 2 * 60 * 1000 : Number.MAX_SAFE_INTEGER).catch(() => {});
+        }
+      }).catch(() => {});
+    });
+  }, []);
 
   // Group matches by league
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
@@ -463,7 +532,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
       // Today: short TTL so the disk cache doesn't override fresh polls.
       // Future: 3 days. Past dates handled by the foreground fetch.
-      const cacheTTL = isTodayFlag ? 8 * 1000 : 3 * 24 * 60 * 60 * 1000;
+      const cacheTTL = isTodayFlag ? 3 * 1000 : 3 * 24 * 60 * 60 * 1000;
       const cacheKey = getMatchesCacheKey(dateStr);
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });
@@ -485,17 +554,54 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
     fetchDataRef.current();
   }, [dateString, isToday, isPastDate]); // Re-fetch when date changes or when isToday/isPastDate change (e.g. at midnight)
 
+  // WebSocket: patch live scores instantly; polling remains fallback
+  const liveMatchIdsKey = useMemo(
+    () => matches.filter((m) => m.status === 'live').map((m) => m.id).join(','),
+    [matches],
+  );
+
+  useEffect(() => {
+    if (!isToday || !liveMatchIdsKey) return;
+
+    const liveIds = liveMatchIdsKey
+      .split(',')
+      .map((id) => parseInt(id, 10))
+      .filter((id) => !Number.isNaN(id));
+
+    liveIds.forEach((id) => websocketClient.subscribeToRoom(`match:${id}`));
+
+    const unsub = websocketClient.subscribeToAllMatchUpdates((update) => {
+      setMatches((prev) => {
+        const idx = prev.findIndex((m) => m.id === String(update.matchId));
+        if (idx === -1) return prev;
+        const patched = patchMatchFromWsUpdate(prev[idx], update);
+        if (patched === prev[idx]) return prev;
+        const next = [...prev];
+        next[idx] = patched;
+        const cached = memoryCache.get(dateString);
+        if (cached) {
+          memoryCache.set(dateString, { data: next, timestamp: Date.now() });
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      unsub();
+      liveIds.forEach((id) => websocketClient.unsubscribeFromRoom(`match:${id}`));
+    };
+  }, [isToday, dateString, liveMatchIdsKey]);
+
   // ─── Silent auto-refresh ────────────────────────────────────────────────
   // Schedule a background tick based on how "live" the current day is:
-  //   - today  → every 8 s (live scores, requested cadence)
+  //   - today  → every 10 s (WS handles instant updates; this is fallback)
   //   - future → every 5 minutes (fixtures rarely change last-minute)
   //   - past   → no refresh at all (permanent cache)
   //
-  // The call goes through `fetchDataInBackground` which is throttled at 6s
-  // so we won't double-fire if the user quickly toggles tabs.
+  // The call goes through `fetchDataInBackground` which is throttled at 4s
   useEffect(() => {
-    if (isPastDate) return; // finished — nothing to refresh
-    const intervalMs = isToday ? 8_000 : 5 * 60_000;
+    if (isPastDate) return;
+    const intervalMs = isToday ? 10_000 : 5 * 60_000;
     const id = setInterval(() => {
       fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
     }, intervalMs);

@@ -618,7 +618,7 @@ export default function MatchesHubScreenV2() {
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
   // Real matches data from backend
-  const { groupedMatches, countryGroups, loading, error, refetch } = useMatchesData(selectedDate);
+  const { groupedMatches, countryGroups, matches, loading, error, refetch } = useMatchesData(selectedDate);
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -743,6 +743,11 @@ export default function MatchesHubScreenV2() {
     if (filter === 'Finished') {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'FT') })).filter(g => g.fixtures.length > 0);
     }
+    if (filter === 'All') {
+      return allGroups
+        .map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status !== 'FT') }))
+        .filter(g => g.fixtures.length > 0);
+    }
     return allGroups;
   }, [groupedMatches, filter]);
 
@@ -752,10 +757,10 @@ export default function MatchesHubScreenV2() {
     (m: Match): boolean => {
       if (filter === 'Live') return m.status === 'live';
       if (filter === 'Upcoming' || filter === 'Predictions') {
-        // Treat UPCOMING / NS / TBD / PST all as "not yet kicked off".
         return m.status !== 'live' && m.status !== 'finished';
       }
       if (filter === 'Finished') return m.status === 'finished';
+      if (filter === 'All') return m.status !== 'finished';
       return true;
     },
     [filter],
@@ -788,17 +793,18 @@ export default function MatchesHubScreenV2() {
     for (const cg of countryGroups) {
       if (!INTL_COUNTRIES.has(cg.country)) continue;
       for (const league of cg.leagues) {
-        if (league.matches.length === 0) continue;
+        const filtered = league.matches.filter(matchPassesFilter);
+        if (filtered.length === 0) continue;
         out.push({
           id: String(league.leagueId),
           league: league.leagueName,
           leagueLogo: league.leagueLogo || '',
-          fixtures: league.matches.map(matchToFixture),
+          fixtures: filtered.map(matchToFixture),
         });
       }
     }
     return out;
-  }, [countryGroups]);
+  }, [countryGroups, matchPassesFilter]);
 
   // Handle prediction submission
   //
@@ -823,9 +829,14 @@ export default function MatchesHubScreenV2() {
 
     // Find fixture details BEFORE optimistic update (used for both API + toast)
     let fixtureDetails: Fixture | undefined;
-    for (const g of groups) {
-      const found = g.fixtures.find(f => f.id === fixtureId);
-      if (found) { fixtureDetails = found; break; }
+    const fromList = matches.find(m => m.id === fixtureId);
+    if (fromList) {
+      fixtureDetails = matchToFixture(fromList);
+    } else {
+      for (const g of groups) {
+        const found = g.fixtures.find(f => f.id === fixtureId);
+        if (found) { fixtureDetails = found; break; }
+      }
     }
 
     // Build next state (for persistence) and apply optimistic updates.
@@ -1290,23 +1301,18 @@ export default function MatchesHubScreenV2() {
             - Default (All/Live/Upcoming/Finished): Country → League accordions */}
       {filter === 'Predictions' ? (
         <FlashList
-          data={groups}
-          keyExtractor={g => g.id}
+          data={filteredCountryGroups}
+          keyExtractor={cg => cg.country}
           renderItem={({ item }) => (
-            <LeagueCard
-              group={item}
-              filter={filter}
-              onPredict={handlePredict}
-              submittingId={submittingId}
-              predictedMatches={predictedMatches}
-              subscribedFixtures={subscribedFixtures}
-              subscribingFixtureId={subscribingFixtureId}
-              onToggleSubscription={handleToggleSubscription}
-              onOpenDetails={handleOpenMatchDetails}
+            <CountryAccordion
+              countryGroup={item}
+              renderMatchCard={renderCountryMatchCard}
+              onViewAllLeague={handleViewAllLeague}
+              defaultExpanded={TOP5_COUNTRIES.has(item.country)}
             />
           )}
-          ItemSeparatorComponent={ITEM_SEPARATOR_10}
           drawDistance={250}
+          ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderNode}

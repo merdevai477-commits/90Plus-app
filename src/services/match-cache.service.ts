@@ -24,7 +24,7 @@ const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
 
 // Cache TTL values
 const CACHE_TTL = {
-    LIVE: 8 * 1000,           // 8 seconds — aligned with matches tab poll
+    LIVE: 3 * 1000,           // 3 seconds — aligned with matches tab + WS
     SCHEDULED: 5 * 60 * 1000, // 5 minutes for scheduled matches
     FINISHED: Infinity,       // Permanent (stored in DB)
 };
@@ -362,9 +362,58 @@ class MatchCacheService {
 
     /**
      * ✅ Fetch and store match details (lineups, statistics, events) for finished matches
-     * This is called automatically when a match finishes
-     * Future requests for this data = 0 API calls (from DB)
+     * Retries up to 3 times with backoff when API returns empty payloads.
      */
+    async handleMatchFinished(fixtureId: number): Promise<void> {
+        await this.fetchAndStoreMatchDetailsWithRetry(fixtureId);
+    }
+
+    /**
+     * Backfill FT fixtures missing events/lineups in fullData (rate-limited).
+     */
+    async backfillMissingMatchDetails(limit = 30): Promise<number> {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const candidates = await prisma.cachedFixture.findMany({
+            where: {
+                status: { in: ['FT', 'AET', 'PEN'] },
+                matchDate: { gte: weekAgo },
+            },
+            take: limit * 3,
+            orderBy: { matchDate: 'desc' },
+        });
+
+        let processed = 0;
+        for (const row of candidates) {
+            if (processed >= limit) break;
+            const fd = (row.fullData as Record<string, unknown>) || {};
+            const hasEvents = Array.isArray(fd.events) && (fd.events as unknown[]).length > 0;
+            const hasLineups = Array.isArray(fd.lineups) && (fd.lineups as unknown[]).length > 0;
+            if (hasEvents && hasLineups) continue;
+
+            await this.fetchAndStoreMatchDetailsWithRetry(row.fixtureId);
+            processed++;
+            await new Promise((r) => setTimeout(r, 400));
+        }
+        return processed;
+    }
+
+    private async fetchAndStoreMatchDetailsWithRetry(fixtureId: number, maxAttempts = 3): Promise<void> {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            await this.fetchAndStoreMatchDetails(fixtureId);
+
+            const row = await prisma.cachedFixture.findUnique({
+                where: { fixtureId },
+                select: { fullData: true },
+            });
+            const fd = (row?.fullData as Record<string, unknown>) || {};
+            const hasEvents = Array.isArray(fd.events) && (fd.events as unknown[]).length > 0;
+            const hasLineups = Array.isArray(fd.lineups) && (fd.lineups as unknown[]).length > 0;
+            if (hasEvents || hasLineups || attempt === maxAttempts) return;
+
+            await new Promise((r) => setTimeout(r, 800 * attempt));
+        }
+    }
+
     private async fetchAndStoreMatchDetails(fixtureId: number): Promise<void> {
         try {
             // Import here to avoid circular dependencies

@@ -24,6 +24,7 @@
 
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
+import { getRedisClient } from '../lib/redis';
 import { footballService } from './football.service';
 import { matchCacheService } from './match-cache.service';
 import { playerCacheService } from './player-cache.service';
@@ -133,15 +134,43 @@ class FootballDataCacheService {
                 }
             }
 
-            // Today must return fresh API payload (live scores + elapsed)
+            // Today: merge Redis live snapshot over scheduled API rows for fresher scores
             if (isToday) {
-                return apiMatches;
+                return this.mergeLiveFromRedis(apiMatches);
             }
 
             return apiMatches;
         } catch (error) {
             logger.error(`[${dateString}] Error in getMatchesByDate:`, error);
             throw error;
+        }
+    }
+
+    /** Overlay live scores from Redis (written by live-fixture-sync) onto today's fixture list. */
+    private async mergeLiveFromRedis(apiMatches: any[]): Promise<any[]> {
+        const redis = getRedisClient();
+        if (!redis || apiMatches.length === 0) return apiMatches;
+
+        try {
+            const raw = await redis.get('football:live_matches');
+            if (!raw) return apiMatches;
+
+            const liveFixtures: any[] = JSON.parse(raw);
+            if (!Array.isArray(liveFixtures) || liveFixtures.length === 0) return apiMatches;
+
+            const byId = new Map<number, any>();
+            for (const m of apiMatches) {
+                const id = m?.fixture?.id;
+                if (id != null) byId.set(id, m);
+            }
+            for (const live of liveFixtures) {
+                const id = live?.fixture?.id;
+                if (id != null) byId.set(id, live);
+            }
+            return Array.from(byId.values());
+        } catch (err) {
+            logger.warn('Redis live merge failed, using API payload:', err);
+            return apiMatches;
         }
     }
 

@@ -5,12 +5,14 @@
  */
 
 import { footballService } from './football.service';
-import { matchCacheService, FixtureFromAPI, LIVE_STATUSES } from './match-cache.service';
+import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
 import { WebSocketService } from './websocket.service';
+import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
+const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
 
 type LiveSnapshot = {
     homeScore: number;
@@ -23,6 +25,8 @@ class LiveFixtureSyncService {
     private intervalRef: NodeJS.Timeout | null = null;
     private running = false;
     private lastSnapshots = new Map<number, LiveSnapshot>();
+    private previouslyLiveIds = new Set<number>();
+    private finishingInFlight = new Set<number>();
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -33,7 +37,7 @@ class LiveFixtureSyncService {
 
         const intervalMs = Math.max(
             8_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '12000', 10) || 12_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '8000', 10) || 8_000,
         );
 
         this.running = true;
@@ -54,13 +58,78 @@ class LiveFixtureSyncService {
         }
         this.running = false;
         this.lastSnapshots.clear();
+        this.previouslyLiveIds.clear();
+        this.finishingInFlight.clear();
         logger.info('🔴 Live fixture sync stopped');
+    }
+
+    private async onMatchFinished(
+        fixtureId: number,
+        homeScore: number,
+        awayScore: number,
+    ): Promise<void> {
+        if (this.finishingInFlight.has(fixtureId)) return;
+        this.finishingInFlight.add(fixtureId);
+
+        try {
+            await matchCacheService.handleMatchFinished(fixtureId);
+            await PredictionResolverService.resolveMatchPredictions(fixtureId, homeScore, awayScore);
+            logger.info(`✅ Match ${fixtureId} archived and predictions resolved (${homeScore}-${awayScore})`);
+        } catch (err) {
+            logger.warn(`Failed to finalize match ${fixtureId}:`, err);
+        } finally {
+            this.finishingInFlight.delete(fixtureId);
+            this.lastSnapshots.delete(fixtureId);
+        }
+    }
+
+    private async handlePotentiallyFinished(fixtureId: number): Promise<void> {
+        if (this.finishingInFlight.has(fixtureId)) return;
+
+        try {
+            const fixtures = await footballService.getFixtures({ id: fixtureId });
+            const fixture = fixtures?.[0];
+            if (!fixture) return;
+
+            const status = fixture.fixture?.status?.short;
+            if (!FINISHED_STATUSES_SET.has(status)) return;
+
+            await matchCacheService.upsertFixtures([fixture as FixtureFromAPI]);
+
+            const homeScore = fixture.goals?.home ?? 0;
+            const awayScore = fixture.goals?.away ?? 0;
+            await this.onMatchFinished(fixtureId, homeScore, awayScore);
+        } catch (err) {
+            logger.debug(`Could not verify finished status for match ${fixtureId}:`, err);
+        }
     }
 
     private async syncOnce(): Promise<void> {
         if (!footballService.isConfigured()) return;
 
         const liveFixtures: FixtureFromAPI[] = await footballService.getLiveFixtures();
+
+        const currentLiveIds = new Set<number>();
+        for (const fixture of liveFixtures) {
+            const id = fixture.fixture.id;
+            const status = fixture.fixture.status.short;
+            if (LIVE_STATUSES_SET.has(status)) {
+                currentLiveIds.add(id);
+            }
+            if (FINISHED_STATUSES_SET.has(status)) {
+                const homeScore = fixture.goals.home ?? 0;
+                const awayScore = fixture.goals.away ?? 0;
+                await this.onMatchFinished(id, homeScore, awayScore);
+            }
+        }
+
+        for (const prevId of this.previouslyLiveIds) {
+            if (!currentLiveIds.has(prevId)) {
+                await this.handlePotentiallyFinished(prevId);
+            }
+        }
+        this.previouslyLiveIds = currentLiveIds;
+
         if (liveFixtures.length === 0) {
             return;
         }
@@ -101,8 +170,6 @@ class LiveFixtureSyncService {
                 minute: elapsed ?? undefined,
             });
         }
-
-        // Per-match updates above are enough; avoid noisy global match_update broadcasts.
     }
 }
 

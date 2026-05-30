@@ -111,11 +111,10 @@ export const PredictionsService = {
         if (result.success && result.data) return result.data;
         // Return safe defaults instead of crashing
         logger.warn('Predictions remaining: invalid response format, using defaults');
-        return { remaining: 5, total: 5, coins: 0 } as PredictionRemaining;
+        return { remaining: 10, total: 10, coins: 0 } as PredictionRemaining;
       } catch (error) {
         logger.error('Error getting remaining predictions:', error);
-        // Return safe defaults when backend is unreachable
-        return { remaining: 5, total: 5, coins: 0 } as PredictionRemaining;
+        return { remaining: 10, total: 10, coins: 0 } as PredictionRemaining;
       } finally {
         _inFlightRemaining = null;
       }

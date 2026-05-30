@@ -64,7 +64,7 @@ export default function HomeScreen() {
         username: '',
         avatar: null as string | null,
         loginStreak: 0,
-        remainingPredictions: 5,
+        remainingPredictions: 10,
         rank: null as number | null,
         spinWheelAvailable: true,
         nextSpinTime: undefined as Date | undefined,

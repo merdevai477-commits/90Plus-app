@@ -93,9 +93,17 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
         const { apiMatchId, predictionType, homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, matchDate, leagueName } = req.body;
 
-        if (!apiMatchId || !predictionType) {
-            sendError(req, res, ErrorCode.VALIDATION, 'Missing required fields', {
-                required: ['apiMatchId', 'predictionType'],
+        const parsedMatchId = parseInt(String(apiMatchId), 10);
+        if (!apiMatchId || Number.isNaN(parsedMatchId) || parsedMatchId <= 0) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid apiMatchId', {
+                field: 'apiMatchId',
+            });
+            return;
+        }
+
+        if (!predictionType) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Missing predictionType', {
+                required: ['predictionType'],
             });
             return;
         }
@@ -162,7 +170,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                     where: {
                         userId_apiMatchId: {
                             userId: user.id,
-                            apiMatchId: parseInt(apiMatchId)
+                            apiMatchId: parsedMatchId
                         }
                     }
                 });
@@ -173,7 +181,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                 const newPrediction = await tx.prediction.create({
                     data: {
                         userId: user.id,
-                        apiMatchId: parseInt(apiMatchId),
+                        apiMatchId: parsedMatchId,
                         predictionType,
                         coinsSpent: PREDICTION_COST, // = 0
                         isCorrect: null,

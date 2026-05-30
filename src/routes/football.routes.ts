@@ -3,6 +3,7 @@ import { FootballController } from '../controllers/football.controller';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
 // Shared public cache TTLs for football data (no userId in key — same response for all users)
+const SHARED_CACHE_3S   = responseCacheMiddleware({ ttl: 3   * 1000, sharedCache: true });
 const SHARED_CACHE_8S   = responseCacheMiddleware({ ttl: 8   * 1000, sharedCache: true });
 const SHARED_CACHE_30S  = responseCacheMiddleware({ ttl: 30  * 1000, sharedCache: true });
 const SHARED_CACHE_60S  = responseCacheMiddleware({ ttl: 60  * 1000, sharedCache: true });
@@ -60,8 +61,8 @@ router.get('/fixtures', (req, res, next) => {
       // Past date — permanent-ish cache (24h)
       return SHARED_CACHE_24H(req, res, next);
     } else if (dateParam === today) {
-      // Today — refresh every 8s to keep live scores in sync with the UI
-      return SHARED_CACHE_8S(req, res, next);
+      // Today — refresh every 3s to keep live scores in sync with the UI
+      return SHARED_CACHE_3S(req, res, next);
     } else {
       // Future date — 5min cache
       return SHARED_CACHE_5MIN(req, res, next);
@@ -79,7 +80,7 @@ router.get('/search', SHARED_CACHE_5MIN, FootballController.search);
 // GET /api/football/fixtures/live
 // Get live fixtures — shared 8s cache (same for all users)
 // ============================================
-router.get('/fixtures/live', SHARED_CACHE_8S, FootballController.getLiveFixtures);
+router.get('/fixtures/live', SHARED_CACHE_3S, FootballController.getLiveFixtures);
 
 // ============================================
 // GET /api/football/fixtures/optimized
@@ -102,7 +103,7 @@ router.get('/cached/matches/:date', (req, res, next) => {
     return SHARED_CACHE_24H(req, res, next);
   }
   if (dateParam === today) {
-    return SHARED_CACHE_8S(req, res, next);
+    return SHARED_CACHE_3S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedMatchesByDate);

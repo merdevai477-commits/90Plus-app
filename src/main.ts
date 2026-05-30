@@ -819,12 +819,25 @@ async function startServer() {
                     footballBackgroundService.start();
                     logger.info('✅ Football Background Service started (API optimization)');
                     
-                    // ✅ Setup Cron Job for Prediction Watcher (every 5 minutes)
-                    cron.schedule('*/5 * * * *', () => {
+                    // ✅ Setup Cron Job for Prediction Watcher (every 2 minutes)
+                    cron.schedule('*/2 * * * *', () => {
                         logger.info('⏰ Cron: Running prediction check...');
                         PredictionWatcherService.checkPredictions();
                     });
-                    logger.info('✅ Prediction Watcher Cron Job scheduled (every 5 minutes)');
+                    logger.info('✅ Prediction Watcher Cron Job scheduled (every 2 minutes)');
+
+                    // Backfill finished fixtures missing events/lineups in fullData
+                    cron.schedule('0 5 * * *', async () => {
+                        logger.info('⏰ Cron: Backfilling missing finished match details...');
+                        try {
+                            const { matchCacheService } = await import('./services/match-cache.service');
+                            const count = await matchCacheService.backfillMissingMatchDetails(40);
+                            logger.info(`✅ Backfilled details for ${count} finished fixtures`);
+                        } catch (error) {
+                            logger.error('❌ Finished match backfill cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ Finished match details backfill scheduled (daily 05:00 UTC)');
                     
                     // ✅ Setup Cron Job for Account Deletion (daily at 2 AM)
                     cron.schedule('0 2 * * *', async () => {

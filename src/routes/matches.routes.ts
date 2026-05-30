@@ -353,18 +353,56 @@ router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
 // The frontend stores archives in AsyncStorage; this endpoint exists to
 // prevent 404 errors. Future: store in a dedicated cache table.
 // ============================================
-router.post('/archive', async (_req: Request, res: Response): Promise<void> => {
-    // Accept and acknowledge — local AsyncStorage is the primary store
-    res.json({ status: 'SUCCESS', message: 'Archive received' });
+router.post('/archive', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const body = req.body?.match ?? req.body;
+        const fixtureId = parseInt(String(body?.fixture?.id ?? body?.fixtureId ?? ''), 10);
+        if (Number.isNaN(fixtureId) || fixtureId <= 0) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid fixture id');
+            return;
+        }
+
+        const { matchCacheService } = await import('../services/match-cache.service');
+        if (body?.fixture || body?.teams) {
+            await matchCacheService.upsertFixtures([body]);
+        }
+
+        const status = body?.fixture?.status?.short ?? body?.status;
+        if (['FT', 'AET', 'PEN'].includes(status)) {
+            await matchCacheService.handleMatchFinished(fixtureId);
+        }
+
+        res.json({ status: 'SUCCESS', message: 'Match archived in cached_fixtures', fixtureId });
+    } catch (error) {
+        logger.error('Archive endpoint error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Archive failed');
+    }
 });
 
-// ============================================
-// GET /api/matches/archive/:matchId
-// Get a specific archived match (returns 404 if not in backend cache)
-// ============================================
 router.get('/archive/:matchId', async (req: Request, res: Response): Promise<void> => {
-    // Backend archive not yet implemented — client falls back to local storage
-    sendError(req, res, ErrorCode.NOT_FOUND, 'Archive not found in backend cache');
+    try {
+        const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
+        const fixtureId = parseInt(matchIdParam, 10);
+        if (Number.isNaN(fixtureId)) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid match ID');
+            return;
+        }
+
+        const row = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+        if (!row) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Archive not found in backend cache');
+            return;
+        }
+
+        const { matchCacheService } = await import('../services/match-cache.service');
+        res.json({
+            status: 'SUCCESS',
+            data: matchCacheService.convertDbMatchToApiFormat(row),
+        });
+    } catch (error) {
+        logger.error('Get archive error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load archive');
+    }
 });
 
 export default router;

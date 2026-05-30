@@ -89,14 +89,14 @@ interface PredictionsState {
             leagueName?: string;
         }
     ) => Promise<{ success: boolean; error?: string }>;
-    fetchMatchPredictionCounts: (matchIds: number[]) => Promise<void>;
+    fetchMatchPredictionCounts: (matchIds: number[], token?: string | null) => Promise<void>;
     reset: () => void;
 }
 
 export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     userCoins: 0,
-    remainingPredictions: 5,
-    totalDailyPredictions: 5,
+    remainingPredictions: 10,
+    totalDailyPredictions: 10,
     userPredictions: {},
     allPredictions: [],
     matchPredictionCounts: {},
@@ -291,18 +291,23 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         }
     },
 
-    fetchMatchPredictionCounts: async (matchIds: number[]) => {
+    fetchMatchPredictionCounts: async (matchIds: number[], token?: string | null) => {
         if (matchIds.length === 0) return;
 
         try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
             const response = await fetchWithTimeout(`${getApiUrl()}/predictions/matches/counts`, {
                 method: 'POST',
-                timeout: 30000, // 30s to tolerate Railway cold-starts
+                timeout: 30000,
                 retries: 1,
                 retryDelay: 1500,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers,
                 body: JSON.stringify({ matchIds }),
             });
 
@@ -325,8 +330,8 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     reset: () => {
         set({
             userCoins: 0,
-            remainingPredictions: 5,
-            totalDailyPredictions: 5,
+            remainingPredictions: 10,
+            totalDailyPredictions: 10,
             userPredictions: {},
             allPredictions: [],
             matchPredictionCounts: {},
