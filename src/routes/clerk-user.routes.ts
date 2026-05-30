@@ -12,6 +12,7 @@ import { enqueueSocialNotification } from '../queues/notification.queue';
 import { getOrSetWithLock } from '../lib/cache-mutex';
 import { ErrorCode, sendError } from '../constants/errors';
 import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
+import { getBlockRelation } from '../services/block.service';
 
 const router = Router();
 
@@ -681,37 +682,62 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
 
         logger.info(`[/clerk/user/:username] ✅ User found: ${user.username} (${user.id})`);
 
-        // Check if current user is following this user AND if this user is following current user
-        let isFollowing = false;
-        let isFollowingMe = false;
+        let currentUserId: string | null = null;
         if (currentClerkUserId) {
             const currentUser = await prisma.user.findUnique({
                 where: { clerkUserId: currentClerkUserId },
                 select: { id: true },
             });
-            if (currentUser) {
-                // Check if I'm following them
-                const follow = await prisma.follow.findUnique({
-                    where: {
-                        followerId_followingId: {
-                            followerId: currentUser.id,
-                            followingId: user.id,
-                        },
+            currentUserId = currentUser?.id ?? null;
+        }
+
+        const blockStatus = currentUserId
+            ? await getBlockRelation(currentUserId, user.id)
+            : { blockedByMe: false, blockedMe: false };
+
+        // Target blocked the viewer — return minimal profile only.
+        if (blockStatus.blockedMe) {
+            res.json({
+                status: 'SUCCESS',
+                data: {
+                    user: {
+                        id: user.id,
+                        username: user.username,
+                        displayName: user.displayName,
+                        avatar: user.avatar,
+                        isVerified: user.isVerified,
+                        isDeveloper: user.isDeveloper,
+                        level: user.level,
+                        blockStatus,
                     },
-                });
-                isFollowing = !!follow;
-                
-                // Check if they're following me (for "Follow Back" button)
-                const followBack = await prisma.follow.findUnique({
-                    where: {
-                        followerId_followingId: {
-                            followerId: user.id,
-                            followingId: currentUser.id,
-                        },
+                },
+            });
+            return;
+        }
+
+        // Check if current user is following this user AND if this user is following current user
+        let isFollowing = false;
+        let isFollowingMe = false;
+        if (currentUserId) {
+            const follow = await prisma.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: currentUserId,
+                        followingId: user.id,
                     },
-                });
-                isFollowingMe = !!followBack;
-            }
+                },
+            });
+            isFollowing = !!follow;
+
+            const followBack = await prisma.follow.findUnique({
+                where: {
+                    followerId_followingId: {
+                        followerId: user.id,
+                        followingId: currentUserId,
+                    },
+                },
+            });
+            isFollowingMe = !!followBack;
         }
 
         logger.info(`[/clerk/user/:username] ✅ Returning profile data for: ${username}`);
@@ -727,6 +753,7 @@ router.get('/user/:username', requireAuth, async (req: Request, res: Response): 
                     reelsCount: user._count.reels,
                     isFollowing,
                     isFollowingMe,
+                    blockStatus,
                 },
             },
         });
@@ -976,6 +1003,20 @@ router.get('/user/:username/reels', requireAuth, async (req: Request, res: Respo
         if (!user) {
             sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
             return;
+        }
+
+        if (requestingClerkUserId) {
+            const viewer = await prisma.user.findUnique({
+                where: { clerkUserId: requestingClerkUserId },
+                select: { id: true },
+            });
+            if (viewer) {
+                const blockStatus = await getBlockRelation(viewer.id, user.id);
+                if (blockStatus.blockedByMe || blockStatus.blockedMe) {
+                    res.json({ status: 'SUCCESS', data: { reels: [] } });
+                    return;
+                }
+            }
         }
 
         // Owner sees their own PROCESSING reels too so upload feels responsive.

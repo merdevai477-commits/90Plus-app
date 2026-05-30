@@ -26,6 +26,8 @@ import VideoGrid from '../../components/profile/VideoGrid';
 import UserInfo from '../../components/profile/UserInfo';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import SocialLinksSection from '../../components/profile/SocialLinksSection';
+import FollowersListModal from '../../components/profile/FollowersListModal';
+import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import {
@@ -47,6 +49,7 @@ import { useTranslation } from '../../src/i18n';
 // Cache keys for the public-profile screen
 const USER_PROFILE_CACHE = 'user_profile';
 const USER_VIDEOS_CACHE  = 'user_videos';
+const REELS_PAGE_SIZE = 30;
 
 // ─── XP helpers (mirrors backend formula) ────────────────────────────────────
 const xpForLevel = (level: number): number => {
@@ -184,14 +187,19 @@ export default function UserProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [userVideos, setUserVideos] = useState<UserReel[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [hasMoreVideos, setHasMoreVideos] = useState(true);
+  const [loadingMoreVideos, setLoadingMoreVideos] = useState(false);
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<UserReel | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [blockedMe, setBlockedMe] = useState(false);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
   const [isBlockModalVisible, setIsBlockModalVisible] = useState(false);
+  const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
+  const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const hasLoadedRef = useRef(false);
   const hasRecordedViewRef = useRef(false);
 
   const { follow, unfollow } = useFollowStore();
@@ -212,6 +220,9 @@ export default function UserProfileScreen() {
         if (cached) {
           setUser(cached);
           setError(null);
+          const bs = cached.blockStatus;
+          setIsBlocked(!!bs?.blockedByMe);
+          setBlockedMe(!!bs?.blockedMe);
           setIsLoading(false); // show cached profile NOW
         }
       } catch { /* silent */ }
@@ -224,7 +235,9 @@ export default function UserProfileScreen() {
       if (userData) {
         setUser(userData);
         setError(null);
-        // Refresh cache (5 min TTL — reasonable for non-self profiles).
+        const bs = userData.blockStatus;
+        setIsBlocked(!!bs?.blockedByMe);
+        setBlockedMe(!!bs?.blockedMe);
         cacheService.set(cacheKey, userData, 5 * 60 * 1000).catch(() => {});
       } else {
         setError(t.publicProfile.notFound);
@@ -240,36 +253,52 @@ export default function UserProfileScreen() {
     }
   }, [username, getToken, t]);
 
-  const loadUserVideos = useCallback(async (skipCache = false) => {
+  const loadUserVideos = useCallback(async (skipCache = false, appendOffset?: number) => {
     if (!username) return;
 
     const cacheKey = `${USER_VIDEOS_CACHE}_${username.toLowerCase()}`;
+    const isAppend = appendOffset != null && appendOffset > 0;
+    const offset = appendOffset ?? 0;
 
-    if (!skipCache) {
-      try {
-        const cached = await cacheService.get<UserReel[]>(cacheKey);
-        if (cached && cached.length > 0) {
-          setUserVideos(cached);
-          // Don't show spinner — we already have content.
-          setIsLoadingVideos(false);
-        } else {
+    if (!isAppend) {
+      if (!skipCache) {
+        try {
+          const cached = await cacheService.get<UserReel[]>(cacheKey);
+          if (cached && cached.length > 0) {
+            setUserVideos(cached);
+            setHasMoreVideos(cached.length >= REELS_PAGE_SIZE);
+            setIsLoadingVideos(false);
+          } else {
+            setIsLoadingVideos(true);
+          }
+        } catch {
           setIsLoadingVideos(true);
         }
-      } catch {
+      } else {
         setIsLoadingVideos(true);
       }
-    } else {
-      setIsLoadingVideos(true);
     }
 
     try {
       const token = await getToken();
       if (!token) return;
-      const reels = await AuthService.getUserReels(token, username);
-      setUserVideos(reels);
-      cacheService.set(cacheKey, reels, 2 * 60 * 1000).catch(() => {});
+      const reels = await AuthService.getUserReels(
+        token,
+        username,
+        REELS_PAGE_SIZE,
+        offset,
+        skipCache,
+      );
+      setUserVideos((prev) => (isAppend ? [...prev, ...reels] : reels));
+      setHasMoreVideos(reels.length >= REELS_PAGE_SIZE);
+      if (!isAppend) {
+        cacheService.set(cacheKey, reels, 2 * 60 * 1000).catch(() => {});
+      }
     } catch { /* silent */ }
-    finally { setIsLoadingVideos(false); }
+    finally {
+      setIsLoadingVideos(false);
+      setLoadingMoreVideos(false);
+    }
   }, [username, getToken]);
 
   const recordProfileView = useCallback(async () => {
@@ -282,12 +311,25 @@ export default function UserProfileScreen() {
   }, [username, getToken]);
 
   useEffect(() => {
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
-      loadUserProfile();
-      loadUserVideos();
+    if (!username) return;
+
+    hasRecordedViewRef.current = false;
+    setUser(null);
+    setUserVideos([]);
+    setError(null);
+    setIsLoading(true);
+    setIsBlocked(false);
+    setBlockedMe(false);
+    setHasMoreVideos(true);
+
+    const bootstrap = async () => {
+      const token = await getToken();
+      setAuthToken(token);
+      await Promise.all([loadUserProfile(), loadUserVideos()]);
       recordProfileView();
-    }
+    };
+
+    bootstrap();
   }, [username]);
 
   useEffect(() => {
@@ -295,16 +337,34 @@ export default function UserProfileScreen() {
       if (!user) return;
       try {
         const token = await getToken();
-        if (token) setIsBlocked(await BlockService.isUserBlocked(user.id, token));
+        if (token) {
+          setAuthToken(token);
+          const blocked = await BlockService.isUserBlocked(user.id, token);
+          setIsBlocked(blocked);
+        }
       } catch { /* silent */ }
     };
     check();
-  }, [user?.id]);
+  }, [user?.id, getToken]);
+
+  useEffect(() => {
+    if (blockedMe || isBlocked) {
+      setUserVideos([]);
+      setHasMoreVideos(false);
+    }
+  }, [blockedMe, isBlocked]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadUserProfile(true), loadUserVideos(true)]);
+    setHasMoreVideos(true);
+    await Promise.all([loadUserProfile(true), loadUserVideos(true, 0)]);
     setRefreshing(false);
+  };
+
+  const loadMoreVideos = async () => {
+    if (loadingMoreVideos || !hasMoreVideos || isBlocked || blockedMe) return;
+    setLoadingMoreVideos(true);
+    await loadUserVideos(false, userVideos.length);
   };
 
   // ── Follow / Unfollow ───────────────────────────────────────────────────────
@@ -324,8 +384,16 @@ export default function UserProfileScreen() {
       const token = await getToken();
       if (!token) { unfollow(user.id); setUser(p => p ? { ...p, ...prev } : null); return; }
       const res = await FollowService.followUser(token, user.username);
-      if (!res.success) { unfollow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
-    } catch { unfollow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
+      if (!res.success) {
+        unfollow(user.id);
+        setUser(p => p ? { ...p, ...prev } : null);
+        toast.showError('', t.publicProfile.followFailed);
+      }
+    } catch {
+      unfollow(user.id);
+      setUser(p => p ? { ...p, ...prev } : null);
+      toast.showError('', t.publicProfile.followFailed);
+    }
   };
 
   const performUnfollow = async () => {
@@ -337,8 +405,16 @@ export default function UserProfileScreen() {
       const token = await getToken();
       if (!token) { follow(user.id); setUser(p => p ? { ...p, ...prev } : null); return; }
       const res = await FollowService.unfollowUser(token, user.username);
-      if (!res.success) { follow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
-    } catch { follow(user.id); setUser(p => p ? { ...p, ...prev } : null); }
+      if (!res.success) {
+        follow(user.id);
+        setUser(p => p ? { ...p, ...prev } : null);
+        toast.showError('', t.publicProfile.followFailed);
+      }
+    } catch {
+      follow(user.id);
+      setUser(p => p ? { ...p, ...prev } : null);
+      toast.showError('', t.publicProfile.followFailed);
+    }
   };
 
   const handleFollow = () => {
@@ -363,22 +439,28 @@ export default function UserProfileScreen() {
       if (isBlocked) {
         await BlockService.unblockUser(user.id, token);
         setIsBlocked(false);
+        toast.showSuccess('', t.publicProfile.unblockSuccess);
+        await loadUserProfile(true);
+        await loadUserVideos(true, 0);
       } else {
         await BlockService.blockUser(user.id, token);
         setIsBlocked(true);
+        setUserVideos([]);
+        toast.showSuccess('', t.publicProfile.blockSuccess);
         if (user.isFollowing) await performUnfollow();
       }
-    } catch { /* silent */ }
+    } catch {
+      toast.showError('', t.publicProfile.blockFailed);
+    }
     finally { setIsBlockLoading(false); }
   };
 
   // ── States ──────────────────────────────────────────────────────────────────
-  if (isLoading) {
+  if (isLoading && !user) {
     return (
-      <View style={[s.container, s.center]}>
+      <View style={s.container}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color={ACCENT} />
-        <Text style={s.loadingTxt}>{t.publicProfile.loading}</Text>
+        <ProfileSkeleton />
       </View>
     );
   }
@@ -402,11 +484,13 @@ export default function UserProfileScreen() {
   const relativeXp = Math.max(0, userXp - xpForLevel(userLevel));
 
   // Social links
-  const socialLinks = Array.isArray((user as any).socialLinks)
-    ? (user as any).socialLinks
-        .map((l: any) => ({ platform: l.platform || 'website', url: l.url || '', username: l.username }))
-        .filter((l: any) => l.url.trim() !== '')
+  const socialLinks = Array.isArray(user.socialLinks)
+    ? user.socialLinks
+        .map((l) => ({ platform: l.platform || 'website', url: l.url || '', username: l.username }))
+        .filter((l) => l.url.trim() !== '')
     : [];
+
+  const showFullProfile = !blockedMe && !isBlocked;
 
   const formattedVideos = userVideos.map(v => ({
     id: v.id,
@@ -511,9 +595,17 @@ export default function UserProfileScreen() {
       >
         {/* Cover */}
         <ProfileHeader
-          coverImage={(user as any).coverImage ? { uri: (user as any).coverImage } : undefined}
+          coverImage={user.coverImage ? { uri: user.coverImage } : undefined}
         />
 
+        {blockedMe ? (
+          <View style={s.restrictedWrap}>
+            <Ionicons name="lock-closed-outline" size={48} color="#666" />
+            <Text style={s.restrictedTitle}>{t.publicProfile.youWereBlocked}</Text>
+            <Text style={s.restrictedSub}>{t.publicProfile.youWereBlockedSub}</Text>
+          </View>
+        ) : (
+          <>
         {/* FIFA Card — read-only */}
         <View style={s.cardContainer}>
           <ProfileCard
@@ -521,43 +613,53 @@ export default function UserProfileScreen() {
             cardType="gold"
             scale={0.60}
             uploadedImage={user.avatar || null}
-            countryFlag={(user as any).countryFlag || '🌍'}
-            position={(user as any).position || 'ST'}
-            age={(user as any).age?.toString()}
-            height={(user as any).height?.toString()}
-            weight={(user as any).weight?.toString()}
-            foot={(user as any).preferredFoot || 'R'}
-            clubLogo={(user as any).clubLogo || undefined}
+            countryFlag={user.countryFlag || '🌍'}
+            position={user.position || 'ST'}
+            age={user.age?.toString()}
+            height={user.height?.toString()}
+            weight={user.weight?.toString()}
+            foot={user.preferredFoot || 'R'}
+            clubLogo={user.clubLogo || undefined}
           />
         </View>
 
-        {/* User info — reuse same component, no edit handlers */}
         <UserInfo
           name={user.displayName || user.username}
           username={user.username}
-          bio={user.bio || undefined}
-          location={(user as any).country || (user as any).location || ''}
-          team={user.favoriteTeam || ''}
+          bio={showFullProfile ? user.bio || undefined : undefined}
+          location={user.country || user.location || ''}
+          team={showFullProfile ? user.favoriteTeam || '' : ''}
           isVerified={user.isVerified}
           isDeveloper={user.isDeveloper}
-          clubLogo={(user as any).clubLogo || undefined}
-          consecutiveLoginDays={(user as any).consecutiveLoginDays || 0}
-          // No edit handlers for other users
+          clubLogo={user.clubLogo || undefined}
+          consecutiveLoginDays={user.consecutiveLoginDays || 0}
         />
 
-        {/* Badges */}
-        {user.id && !String(user.id).startsWith('user_') && (
+        {showFullProfile && user.id && !String(user.id).startsWith('user_') && (
           <View style={s.badgesWrap}>
-            <BadgesDisplay userId={user.id} token={null} compact />
+            <BadgesDisplay userId={user.id} token={authToken} compact />
           </View>
         )}
 
-        {/* Social links */}
-        {socialLinks.length > 0 && (
+        {showFullProfile && socialLinks.length > 0 && (
           <SocialLinksSection links={socialLinks} isOwnProfile={false} />
         )}
 
-        {/* ── Follow + Block buttons ─────────────────────────────── */}
+        <StatsRow
+          followers={(user.followersCount || 0).toString()}
+          following={(user.followingCount || 0).toString()}
+          videos={(user.reelsCount || 0).toString()}
+          onFollowersPress={showFullProfile ? () => {
+            setFollowersModalTab('followers');
+            setIsFollowersModalVisible(true);
+          } : undefined}
+          onFollowingPress={showFullProfile ? () => {
+            setFollowersModalTab('following');
+            setIsFollowersModalVisible(true);
+          } : undefined}
+        />
+
+        {/* Follow + Block */}
         <View style={s.actionRow}>
           {/* Follow button */}
           <Animated.View style={[s.followWrap, { transform: [{ scale: scaleAnim }] }]}>
@@ -622,14 +724,18 @@ export default function UserProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats */}
-        <StatsRow
-          followers={(user.followersCount || 0).toString()}
-          following={(user.followingCount || 0).toString()}
-          videos={(user.reelsCount || 0).toString()}
-        />
+        {isBlocked && (
+          <View style={s.restrictedBanner}>
+            <Ionicons name="ban" size={20} color="#ef4444" />
+            <View style={s.restrictedBannerText}>
+              <Text style={s.restrictedBannerTitle}>{t.publicProfile.blockedTitle}</Text>
+              <Text style={s.restrictedBannerSub}>{t.publicProfile.blockedSub}</Text>
+            </View>
+          </View>
+        )}
 
-        {/* Videos section */}
+        {showFullProfile && (
+          <>
         <View style={s.sectionHeader}>
           <Text style={s.sectionTitle}>{t.publicProfile.videosTitle}</Text>
           {userVideos.length > 0 && (
@@ -658,8 +764,35 @@ export default function UserProfileScreen() {
           />
         )}
 
+        {hasMoreVideos && userVideos.length > 0 && (
+          <TouchableOpacity
+            style={s.loadMoreBtn}
+            onPress={loadMoreVideos}
+            disabled={loadingMoreVideos}
+            activeOpacity={0.8}
+          >
+            {loadingMoreVideos ? (
+              <ActivityIndicator size="small" color={ACCENT} />
+            ) : (
+              <Text style={s.loadMoreTxt}>{t.publicProfile.loadMoreVideos}</Text>
+            )}
+          </TouchableOpacity>
+        )}
+          </>
+        )}
+          </>
+        )}
+
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <FollowersListModal
+        visible={isFollowersModalVisible}
+        onClose={() => setIsFollowersModalVisible(false)}
+        userId={user.id}
+        initialTab={followersModalTab}
+        username={user.username}
+      />
     </View>
   );
 }
@@ -779,6 +912,65 @@ const s = StyleSheet.create({
   loadingVideos: { paddingVertical: 24, alignItems: 'center' },
   emptyVideos: { alignItems: 'center', paddingVertical: 60 },
   emptyTxt: { color: '#555', fontSize: 15, marginTop: 12 },
+
+  restrictedWrap: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 48,
+  },
+  restrictedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+  },
+  restrictedBannerText: { flex: 1 },
+  restrictedBannerTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  restrictedBannerSub: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  restrictedTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  restrictedSub: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  loadMoreBtn: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.3)',
+  },
+  loadMoreTxt: {
+    color: ACCENT,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   /* Block modal */
   modalOverlay: {

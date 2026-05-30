@@ -756,11 +756,17 @@ export interface SearchUserResult {
     preferredFoot?: string | null;
     clubLogo?: string | null;
     brandLogo?: string | null;
-    socialLinks?: Array<{ // ✅ NEW
+    socialLinks?: Array<{
         platform: string;
         url: string;
         username?: string;
     }>;
+    coverImage?: string | null;
+    consecutiveLoginDays?: number;
+    blockStatus?: {
+        blockedByMe: boolean;
+        blockedMe: boolean;
+    };
 }
 
 export interface UserReel {

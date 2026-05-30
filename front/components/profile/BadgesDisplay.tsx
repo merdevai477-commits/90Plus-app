@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Award, Trophy, Star, Crown, Medal } from 'lucide-react-native';
 import { getUserBadges, UserBadgesResponse, UserBadge } from '../../services/rankingsService';
+import { useTranslation } from '../../src/i18n';
 
 interface BadgesDisplayProps {
   userId: string;
@@ -60,39 +61,27 @@ const getBadgeEmoji = (badgeType: string): string => {
   }
 };
 
-// Category name in Arabic
-const getCategoryName = (category: string): string => {
-  switch (category) {
-    case 'views':
-      return 'المشاهدات';
-    case 'shares':
-      return 'المشاركات';
-    case 'comments':
-      return 'التعليقات';
-    case 'predictions':
-      return 'التوقعات';
-    case 'team_of_month':
-      return 'تشكيلة الشهر';
-    default:
-      return category;
-  }
-};
+// Category / period labels via i18n
+function categoryLabel(category: string, t: ReturnType<typeof useTranslation>['t']): string {
+  const map: Record<string, string> = {
+    views: t.profile.badgeCategoryViews,
+    shares: t.profile.badgeCategoryShares,
+    comments: t.profile.badgeCategoryComments,
+    predictions: t.profile.badgeCategoryPredictions,
+    team_of_month: t.profile.badgeCategoryTeamOfMonth,
+  };
+  return map[category] ?? category;
+}
 
-// Period name in Arabic
-const getPeriodName = (period: string): string => {
-  switch (period) {
-    case 'daily':
-      return 'يومي';
-    case 'weekly':
-      return 'أسبوعي';
-    case 'monthly':
-      return 'شهري';
-    case '3_days':
-      return '3 أيام';
-    default:
-      return period;
-  }
-};
+function periodLabel(period: string, t: ReturnType<typeof useTranslation>['t']): string {
+  const map: Record<string, string> = {
+    daily: t.profile.badgePeriodDaily,
+    weekly: t.profile.badgePeriodWeekly,
+    monthly: t.profile.badgePeriodMonthly,
+    '3_days': t.profile.badgePeriodThreeDays,
+  };
+  return map[period] ?? period;
+}
 
 // Compact badges row for profile header
 const CompactBadges = memo(({ summary, onPress }: { summary: any; onPress: () => void }) => {
@@ -140,7 +129,7 @@ const BadgesModal = memo(({
   onClose, 
   badges, 
   summary, 
-  streak 
+  streak,
 }: { 
   visible: boolean; 
   onClose: () => void; 
@@ -148,6 +137,9 @@ const BadgesModal = memo(({
   summary: any;
   streak: any;
 }) => {
+  const { t, language } = useTranslation();
+  const dateLocale = language === 'ar' ? 'ar-EG' : 'en-US';
+
   return (
     <Modal
       visible={visible}
@@ -163,7 +155,7 @@ const BadgesModal = memo(({
           >
             {/* Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>الميداليات والإنجازات</Text>
+              <Text style={styles.modalTitle}>{t.profile.badgesTitle}</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <X color="#fff" size={24} />
               </TouchableOpacity>
@@ -175,22 +167,22 @@ const BadgesModal = memo(({
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryEmoji}>💎</Text>
                   <Text style={styles.summaryCount}>{summary.diamond}</Text>
-                  <Text style={styles.summaryLabel}>دايموند</Text>
+                  <Text style={styles.summaryLabel}>{t.profile.badgesDiamond}</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryEmoji}>🥇</Text>
                   <Text style={styles.summaryCount}>{summary.gold}</Text>
-                  <Text style={styles.summaryLabel}>ذهبية</Text>
+                  <Text style={styles.summaryLabel}>{t.profile.badgesGold}</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryEmoji}>🥈</Text>
                   <Text style={styles.summaryCount}>{summary.silver}</Text>
-                  <Text style={styles.summaryLabel}>فضية</Text>
+                  <Text style={styles.summaryLabel}>{t.profile.badgesSilver}</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryEmoji}>🥉</Text>
                   <Text style={styles.summaryCount}>{summary.bronze}</Text>
-                  <Text style={styles.summaryLabel}>برونزية</Text>
+                  <Text style={styles.summaryLabel}>{t.profile.badgesBronze}</Text>
                 </View>
               </View>
 
@@ -198,11 +190,11 @@ const BadgesModal = memo(({
               {streak && streak.consecutiveMonths > 0 && (
                 <View style={styles.streakContainer}>
                   <Text style={styles.streakText}>
-                    🔥 {streak.consecutiveMonths} شهر متتالي في تشكيلة الشهر
+                    🔥 {t.profile.badgesStreak.replace('{count}', String(streak.consecutiveMonths))}
                   </Text>
                   {!streak.diamondAwarded && streak.consecutiveMonths < 3 && (
                     <Text style={styles.streakHint}>
-                      باقي {3 - streak.consecutiveMonths} شهر للحصول على 💎
+                      {t.profile.badgesStreakHint.replace('{remaining}', String(3 - streak.consecutiveMonths))}
                     </Text>
                   )}
                 </View>
@@ -214,8 +206,8 @@ const BadgesModal = memo(({
               {badges.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Trophy color="#666" size={48} />
-                  <Text style={styles.emptyText}>لا توجد ميداليات بعد</Text>
-                  <Text style={styles.emptyHint}>شارك وتفاعل للحصول على ميداليات!</Text>
+                  <Text style={styles.emptyText}>{t.profile.badgesEmpty}</Text>
+                  <Text style={styles.emptyHint}>{t.profile.badgesEmptyHint}</Text>
                 </View>
               ) : (
                 badges.map((badge, index) => (
@@ -224,12 +216,12 @@ const BadgesModal = memo(({
                       <Text style={styles.badgeEmoji}>{getBadgeEmoji(badge.badgeType)}</Text>
                     </View>
                     <View style={styles.badgeInfo}>
-                      <Text style={styles.badgeCategory}>{getCategoryName(badge.category)}</Text>
+                      <Text style={styles.badgeCategory}>{categoryLabel(badge.category, t)}</Text>
                       <Text style={styles.badgePeriod}>
-                        {getPeriodName(badge.period)} • المركز {badge.rank}
+                        {periodLabel(badge.period, t)} • {t.profile.badgeRank.replace('{rank}', String(badge.rank))}
                       </Text>
                       <Text style={styles.badgeDate}>
-                        {new Date(badge.earnedAt).toLocaleDateString('ar-EG')}
+                        {new Date(badge.earnedAt).toLocaleDateString(dateLocale)}
                       </Text>
                     </View>
                   </View>
