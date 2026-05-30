@@ -40,6 +40,7 @@ import {
   buildFallbackStatisticsFromEvents,
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
+import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 
 const { width, height } = Dimensions.get('window');
 
@@ -477,6 +478,27 @@ const MatchDetailsScreen = () => {
     }
   }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
 
+  const openPlayerProfile = useCallback(
+    (
+      player: { id: number; name: string; photo?: string | null },
+      lineupTeam: { id: number; name: string; logo: string },
+    ) => {
+      router.push({
+        pathname: '/player-profile' as any,
+        params: {
+          id: String(player.id),
+          name: player.name,
+          photo: playerPhotoUrl(player.id, player.photo),
+          teamName: lineupTeam.name,
+          teamLogo: lineupTeam.logo,
+          teamId: String(lineupTeam.id),
+          season: fixture?.league?.season != null ? String(fixture.league.season) : '',
+        },
+      } as any);
+    },
+    [router, fixture?.league?.season],
+  );
+
   const parseFormation = (formation: string | null): number[] => {
     if (!formation) return [];
     return formation.split('-').map(Number).filter(n => !isNaN(n));
@@ -683,16 +705,10 @@ const MatchDetailsScreen = () => {
                   teamColor={index === 0 ? params.homeTeam === lineup.team.name ? '#A855F7' : '#3b82f6' : params.awayTeam === lineup.team.name ? '#3b82f6' : '#A855F7'}
                   onPlayerPress={(player) => {
                     if (player.id) {
-                      router.push({
-                        pathname: '/player-profile' as any,
-                        params: {
-                          id: player.id.toString(),
-                          name: player.name,
-                          photo: player.photo || '',
-                          teamName: lineup.team.name,
-                          teamLogo: lineup.team.logo,
-                        }
-                      } as any);
+                      openPlayerProfile(
+                        { id: player.id, name: player.name, photo: player.photo },
+                        lineup.team,
+                      );
                     }
                   }}
                 />
@@ -707,16 +723,14 @@ const MatchDetailsScreen = () => {
                           key={item.player.id}
                           style={styles.substituteCard}
                           onPress={() => {
-                            router.push({
-                              pathname: '/player-profile' as any,
-                              params: {
-                                id: item.player.id.toString(),
+                            openPlayerProfile(
+                              {
+                                id: item.player.id,
                                 name: item.player.name,
-                                photo: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png`,
-                                teamName: lineup.team.name,
-                                teamLogo: lineup.team.logo,
-                              }
-                            } as any);
+                                photo: item.player.photo,
+                              },
+                              lineup.team,
+                            );
                           }}
                         >
                           <ExpoImage

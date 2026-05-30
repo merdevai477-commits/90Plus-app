@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     View,
     Text,
@@ -6,11 +6,9 @@ import {
     TouchableOpacity,
     ScrollView,
     ActivityIndicator,
-    Dimensions,
     Animated,
     StatusBar,
     RefreshControl,
-    Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,9 +22,18 @@ import PlayerAvatar from '../components/common/PlayerAvatar';
 import TeamBadge from '../components/common/TeamBadge';
 import { getAPIConfig } from '../config/api.config';
 import { useTranslation } from '../src/i18n';
+import type { Language } from '../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
-
-const { width, height } = Dimensions.get('window');
+import { Image as ExpoImage } from 'expo-image';
+import LeagueIcon from '../components/common/LeagueIcon';
+import {
+  getFootballSeasonYear,
+  getPlayerLeagueStats,
+  playerPhotoUrl,
+  statNum,
+  sumSeasonTotals,
+  type PlayerStatRow,
+} from '../utils/playerStatsAggregate';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -39,6 +46,8 @@ interface PlayerParams {
     teamName?: string;
     teamLogo?: string;
     teamColor?: string;
+    teamId?: string;
+    season?: string;
 }
 
 interface PlayerData {
@@ -173,6 +182,141 @@ const formatTransferValue = (type: string | null): string => {
     return type;
 };
 
+function MiniStat({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
+    return (
+        <View style={miniStatStyles.box}>
+            <Text style={[miniStatStyles.value, accent ? { color: accent } : null]}>{value}</Text>
+            <Text style={miniStatStyles.label}>{label}</Text>
+        </View>
+    );
+}
+
+function LeagueStatCard({
+    stat,
+    language,
+    labels,
+    teamColor,
+}: {
+    stat: PlayerStatRow;
+    language: Language;
+    labels: Record<string, string>;
+    teamColor: string;
+}) {
+    const leagueName = getLeagueDisplayName(stat.league.name, language);
+    const seasonLabel = stat.league.season
+        ? `${stat.league.season}/${stat.league.season + 1}`
+        : '';
+    const rating = stat.games.rating ? parseFloat(stat.games.rating).toFixed(1) : '—';
+
+    return (
+        <View style={leagueCardStyles.card}>
+            <View style={leagueCardStyles.header}>
+                <LeagueIcon
+                    name={stat.league.name}
+                    logo={stat.league.logo}
+                    size={44}
+                    color={teamColor}
+                />
+                <View style={leagueCardStyles.headerText}>
+                    <Text style={leagueCardStyles.leagueName} numberOfLines={2}>{leagueName}</Text>
+                    <Text style={leagueCardStyles.leagueMeta} numberOfLines={1}>
+                        {stat.league.country}{seasonLabel ? ` • ${seasonLabel}` : ''}
+                    </Text>
+                </View>
+                <View style={leagueCardStyles.teamChip}>
+                    <TeamBadge name={stat.team.name} color={teamColor} size={28} />
+                    <Text style={leagueCardStyles.teamName} numberOfLines={1}>
+                        {getTeamDisplayName(stat.team.name, language)}
+                    </Text>
+                </View>
+            </View>
+
+            <View style={leagueCardStyles.statsRow}>
+                <MiniStat label={labels.matches} value={statNum(stat.games.appearences)} accent={ProfileTheme.colors.neonBlue} />
+                <MiniStat label={labels.goals} value={statNum(stat.goals.total)} accent={ProfileTheme.colors.neonGreen} />
+                <MiniStat label={labels.assists} value={statNum(stat.goals.assists)} accent={ProfileTheme.colors.neonPurple} />
+                <MiniStat label={labels.rating} value={rating} accent={ProfileTheme.colors.gold} />
+            </View>
+
+            <View style={leagueCardStyles.detailsRow}>
+                <View style={leagueCardStyles.detailItem}>
+                    <Ionicons name="time-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                    <Text style={leagueCardStyles.detailText}>
+                        {statNum(stat.games.minutes).toLocaleString()} {labels.minutesPlayed}
+                    </Text>
+                </View>
+                {stat.games.lineups != null && (
+                    <View style={leagueCardStyles.detailItem}>
+                        <Ionicons name="shirt-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                        <Text style={leagueCardStyles.detailText}>
+                            {statNum(stat.games.lineups)} {labels.lineups}
+                        </Text>
+                    </View>
+                )}
+                {stat.games.position && (
+                    <View style={leagueCardStyles.detailItem}>
+                        <Ionicons name="locate-outline" size={14} color={ProfileTheme.colors.textSecondary} />
+                        <Text style={leagueCardStyles.detailText}>{stat.games.position}</Text>
+                    </View>
+                )}
+            </View>
+
+            {(statNum(stat.cards.yellow) > 0 || statNum(stat.cards.red) > 0) && (
+                <View style={leagueCardStyles.cardsRow}>
+                    {statNum(stat.cards.yellow) > 0 && (
+                        <View style={leagueCardStyles.cardBadge}>
+                            <View style={[leagueCardStyles.cardDot, { backgroundColor: '#f59e0b' }]} />
+                            <Text style={leagueCardStyles.cardText}>{statNum(stat.cards.yellow)} {labels.yellowCards}</Text>
+                        </View>
+                    )}
+                    {statNum(stat.cards.red) > 0 && (
+                        <View style={leagueCardStyles.cardBadge}>
+                            <View style={[leagueCardStyles.cardDot, { backgroundColor: '#ef4444' }]} />
+                            <Text style={leagueCardStyles.cardText}>{statNum(stat.cards.red)} {labels.redCards}</Text>
+                        </View>
+                    )}
+                </View>
+            )}
+        </View>
+    );
+}
+
+const miniStatStyles = StyleSheet.create({
+    box: { flex: 1, alignItems: 'center', paddingVertical: 10 },
+    value: { fontSize: 22, fontWeight: '800', color: ProfileTheme.colors.textPrimary },
+    label: { fontSize: 11, color: ProfileTheme.colors.textSecondary, marginTop: 4, textAlign: 'center' },
+});
+
+const leagueCardStyles = StyleSheet.create({
+    card: {
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.border,
+    },
+    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 12 },
+    headerText: { flex: 1 },
+    leagueName: { fontSize: 16, fontWeight: '700', color: ProfileTheme.colors.textPrimary },
+    leagueMeta: { fontSize: 12, color: ProfileTheme.colors.textSecondary, marginTop: 2 },
+    teamChip: { alignItems: 'center', maxWidth: 72, gap: 4 },
+    teamName: { fontSize: 10, color: ProfileTheme.colors.textSecondary, textAlign: 'center' },
+    statsRow: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(0,0,0,0.25)',
+        borderRadius: 14,
+        overflow: 'hidden',
+    },
+    detailsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
+    detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    detailText: { fontSize: 12, color: ProfileTheme.colors.textSecondary },
+    cardsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
+    cardBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    cardDot: { width: 8, height: 8, borderRadius: 4 },
+    cardText: { fontSize: 12, color: ProfileTheme.colors.textSecondary },
+});
+
 export default function PlayerProfileScreen() {
     const router = useRouter();
     const params = useLocalSearchParams() as unknown as PlayerParams;
@@ -190,7 +334,10 @@ export default function PlayerProfileScreen() {
     const slideAnim = useRef(new Animated.Value(50)).current;
 
     const playerId = parseInt(params.id || '0');
+    const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
+    const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
     const teamColors = getTeamColors(params.teamName || '');
+    const heroPhotoUri = playerPhotoUrl(playerId, player?.player?.photo ?? params.photo);
 
     useEffect(() => {
         loadPlayerData();
@@ -210,47 +357,7 @@ export default function PlayerProfileScreen() {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, [playerId]);
-
-    // ✅ Get current season (2024 or 2025 based on current date)
-    const getCurrentSeason = (): number => {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth(); // 0-11
-        // If we're in July or later, use current year as season start
-        // Otherwise use previous year
-        return month >= 6 ? year : year - 1;
-    };
-
-    // ✅ Get current team from statistics (most recent season)
-    const getCurrentTeamStats = (statistics: PlayerData['statistics']): PlayerData['statistics'][0] | null => {
-        if (!statistics || statistics.length === 0) return null;
-        
-        const currentSeason = getCurrentSeason();
-        
-        // ✅ 1. Try to find statistics from current season
-        const currentSeasonStats = statistics.find(stat => stat.league?.season === currentSeason);
-        if (currentSeasonStats) {
-            logger.debug(`✅ Found current season (${currentSeason}) stats for player`);
-            return currentSeasonStats;
-        }
-        
-        // ✅ 2. Find most recent season (highest season number)
-        const sortedBySeason = [...statistics].sort((a, b) => {
-            const seasonA = a.league?.season || 0;
-            const seasonB = b.league?.season || 0;
-            return seasonB - seasonA; // Descending order
-        });
-        
-        if (sortedBySeason.length > 0) {
-            logger.debug(`✅ Using most recent season (${sortedBySeason[0].league?.season}) stats`);
-            return sortedBySeason[0];
-        }
-        
-        // ✅ 3. Fallback to first statistics
-        logger.debug('⚠️ Using first statistics as fallback');
-        return statistics[0];
-    };
+    }, [playerId, contextSeason, contextTeamId]);
 
     const loadPlayerData = async (forceRefresh = false) => {
         if (!playerId) {
@@ -286,9 +393,9 @@ export default function PlayerProfileScreen() {
             }
 
             // ✅ 2. Fetch from API with current season (real-time data)
-            const currentSeason = getCurrentSeason();
-            logger.debug(`📡 Fetching player from API (season ${currentSeason}):`, playerId);
-            const data = await ApiFootballService.getPlayerById(playerId, currentSeason);
+            const seasonToFetch = contextSeason ?? getFootballSeasonYear();
+            logger.debug(`📡 Fetching player from API (season ${seasonToFetch}):`, playerId);
+            const data = await ApiFootballService.getPlayerById(playerId, seasonToFetch);
 
             if (data && data.length > 0) {
                 const playerData = data[0];
@@ -297,7 +404,10 @@ export default function PlayerProfileScreen() {
                 if (!playerData.statistics || playerData.statistics.length === 0) {
                     logger.warn('⚠️ Player data has no statistics, trying previous season');
                     // Try previous season as fallback
-                    const previousSeasonData = await ApiFootballService.getPlayerById(playerId, currentSeason - 1);
+                    const previousSeasonData = await ApiFootballService.getPlayerById(
+                        playerId,
+                        seasonToFetch - 1,
+                    );
                     if (previousSeasonData && previousSeasonData.length > 0) {
                         setPlayer(previousSeasonData[0]);
                         await cachePlayer(playerId, previousSeasonData[0]);
@@ -418,23 +528,29 @@ export default function PlayerProfileScreen() {
         }
     };
 
-    // ✅ Get current team statistics (most recent season)
-    const stats = player ? getCurrentTeamStats(player.statistics) : null;
-    const games = stats?.games;
-    const goals = stats?.goals;
+    const seasonYear = contextSeason ?? getFootballSeasonYear();
+    const leagueStats = useMemo(
+        () =>
+            player
+                ? getPlayerLeagueStats(player.statistics as PlayerStatRow[], {
+                      season: seasonYear,
+                      teamId: contextTeamId,
+                  })
+                : [],
+        [player, seasonYear, contextTeamId],
+    );
+    const seasonTotals = useMemo(() => sumSeasonTotals(leagueStats), [leagueStats]);
+    const primaryPosition = leagueStats[0]?.games?.position ?? null;
+    const primaryTeam = leagueStats[0]?.team ?? (params.teamName ? { id: 0, name: params.teamName, logo: params.teamLogo || '' } : null);
     const preferredFoot = player ? getPreferredFoot(player.statistics) : null;
-
-    // Get all unique teams the player has played for
-    const allTeams = player?.statistics
-        ? Array.from(new Map(player.statistics.map(stat => [stat.team.id, stat.team])).values())
-        : [];
+    const pp = t.playerProfile;
 
     if (loading && !player) {
         return (
             <View style={styles.loadingContainer}>
                 <StatusBar barStyle="light-content" />
                 <ActivityIndicator size="large" color={ProfileTheme.colors.neonGreen} />
-                <Text style={styles.loadingText}>Loading player...</Text>
+                <Text style={styles.loadingText}>{pp.loadingPlayer}</Text>
             </View>
         );
     }
@@ -446,7 +562,7 @@ export default function PlayerProfileScreen() {
                 <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
                 <Text style={styles.errorText}>{error || t.playerProfile.playerNotFound}</Text>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Text style={styles.backButtonText}>Go Back</Text>
+                    <Text style={styles.backButtonText}>{pp.goBack}</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -458,188 +574,182 @@ export default function PlayerProfileScreen() {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
 
-            {/* Hero Section with Gradient Background */}
-            <LinearGradient
-                colors={[teamColors[0], teamColors[1] || teamColors[0], ProfileTheme.colors.deepBlack]}
-                style={styles.heroGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={ProfileTheme.colors.neonGreen}
+                        colors={[ProfileTheme.colors.neonGreen]}
+                    />
+                }
+                contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
             >
-                {/* Back Button */}
-                <TouchableOpacity 
-                    style={[styles.backButtonFloat, { top: insets.top + 10 }]} 
-                    onPress={() => router.back()}
-                    activeOpacity={0.7}
+                {/* Hero: photo + name */}
+                <LinearGradient
+                    colors={[teamColors[0], teamColors[1] || teamColors[0], ProfileTheme.colors.deepBlack]}
+                    style={[styles.hero, { paddingTop: insets.top + 12 }]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                 >
-                    <Ionicons name="chevron-back" size={24} color="#fff" />
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.backButtonFloat}
+                        onPress={() => router.back()}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="chevron-back" size={24} color="#fff" />
+                    </TouchableOpacity>
 
-                {/* Player Name Watermark */}
-                <Text style={styles.nameWatermark}>
-                    {player.player.lastname?.toUpperCase() || player.player.name.split(' ').pop()?.toUpperCase() || ''}
-                </Text>
+                    <Animated.View
+                        style={[styles.heroContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+                    >
+                        <View style={styles.heroRow}>
+                            {heroPhotoUri ? (
+                                <View style={styles.playerPhotoCircle}>
+                                    <ExpoImage
+                                        source={{ uri: heroPhotoUri }}
+                                        style={styles.playerPhotoImage}
+                                        contentFit="cover"
+                                        cachePolicy="memory-disk"
+                                        recyclingKey={`player-${playerId}`}
+                                        transition={200}
+                                    />
+                                </View>
+                            ) : (
+                                <PlayerAvatar
+                                    name={player.player.name}
+                                    position={primaryPosition}
+                                    size={112}
+                                    colors={teamColors}
+                                />
+                            )}
 
-                {/* Player Photo */}
-                <Animated.View
-                    style={[
-                        styles.playerPhotoContainer,
-                        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-                    ]}
-                >
-                    {player.player.photo || params.photo ? (
-                        <View style={styles.playerPhotoCircle}>
-                            <Image
-                                source={{ uri: player.player.photo || params.photo || `https://media.api-sports.io/football/players/${playerId}.png` }}
-                                style={styles.playerPhotoImage}
-                                resizeMode="cover"
-                            />
-                        </View>
-                    ) : (
-                        <PlayerAvatar
-                            name={player.player.name}
-                            position={games?.position || null}
-                            size={width * 0.5}
-                            colors={teamColors}
-                        />
-                    )}
-                </Animated.View>
-            </LinearGradient>
-
-            {/* Info Card */}
-            <Animated.View
-                style={[
-                    styles.infoCard,
-                    { opacity: fadeAnim }
-                ]}
-            >
-                <ScrollView 
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor={ProfileTheme.colors.neonGreen}
-                            colors={[ProfileTheme.colors.neonGreen]}
-                        />
-                    }
-                >
-                    {/* Player Header */}
-                    <View style={styles.playerHeader}>
-                        {stats?.team && (
-                            <TeamBadge
-                                name={stats.team.name}
-                                color={teamColors[0]}
-                                size={56}
-                            />
-                        )}
-                        <View style={styles.playerNameSection}>
-                            <Text style={styles.playerName}>{player.player.name}</Text>
-                            <View style={styles.playerSubInfo}>
-                                <Ionicons name="location" size={14} color={ProfileTheme.colors.textSecondary} />
-                                <Text style={styles.playerCountry}>
-                                    {player.player.nationality || 'Unknown'}
-                                </Text>
-                                {player.player.age != null && player.player.age > 0 && (
-                                    <>
-                                        <Text style={styles.separator}>•</Text>
-                                        <Text style={styles.playerAge}>{player.player.age} years</Text>
-                                    </>
+                            <View style={styles.heroInfo}>
+                                <Text style={styles.playerName} numberOfLines={2}>{player.player.name}</Text>
+                                <View style={styles.playerSubInfo}>
+                                    {player.player.nationality && (
+                                        <Text style={styles.playerMeta}>{player.player.nationality}</Text>
+                                    )}
+                                    {player.player.age != null && player.player.age > 0 && (
+                                        <>
+                                            <Text style={styles.separator}>•</Text>
+                                            <Text style={styles.playerMeta}>{player.player.age} {pp.years}</Text>
+                                        </>
+                                    )}
+                                    {primaryPosition && (
+                                        <>
+                                            <Text style={styles.separator}>•</Text>
+                                            <Text style={styles.playerMeta}>{primaryPosition}</Text>
+                                        </>
+                                    )}
+                                </View>
+                                {primaryTeam && (
+                                    <View style={styles.heroTeamRow}>
+                                        <TeamBadge name={primaryTeam.name} color={teamColors[0]} size={32} />
+                                        <Text style={styles.heroTeamName} numberOfLines={1}>
+                                            {getTeamDisplayName(primaryTeam.name, language)}
+                                        </Text>
+                                    </View>
                                 )}
+                                <Text style={styles.seasonBadge}>
+                                    {pp.seasonStats} {seasonYear}/{seasonYear + 1}
+                                </Text>
                             </View>
                         </View>
-                    </View>
+                    </Animated.View>
+                </LinearGradient>
 
-                    {/* Stats Grid */}
-                    <View style={styles.statsGrid}>
-                        <View style={styles.statBox}>
-                            <View style={styles.statIconContainer}>
-                                <Ionicons name="football" size={24} color={ProfileTheme.colors.neonBlue} />
+                <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
+                    {/* Season total summary */}
+                    {leagueStats.length > 0 && (
+                        <View style={styles.totalCard}>
+                            <Text style={styles.totalTitle}>{pp.seasonTotal}</Text>
+                            <View style={styles.totalRow}>
+                                <MiniStat label={pp.matches} value={seasonTotals.appearences} accent={ProfileTheme.colors.neonBlue} />
+                                <MiniStat label={pp.goals} value={seasonTotals.goals} accent={ProfileTheme.colors.neonGreen} />
+                                <MiniStat label={pp.assists} value={seasonTotals.assists} accent={ProfileTheme.colors.neonPurple} />
+                                <MiniStat
+                                    label={pp.rating}
+                                    value={seasonTotals.rating ? parseFloat(seasonTotals.rating).toFixed(1) : '—'}
+                                    accent={ProfileTheme.colors.gold}
+                                />
                             </View>
-                            <Text style={styles.statValue}>{games?.appearences || 0}</Text>
-                            <Text style={styles.statLabel}>Matches</Text>
                         </View>
-                        <View style={[styles.statBox, styles.statBoxMiddle]}>
-                            <View style={styles.statIconContainer}>
-                                <Ionicons name="football-outline" size={24} color={ProfileTheme.colors.neonGreen} />
-                            </View>
-                            <Text style={styles.statValue}>{goals?.total || 0}</Text>
-                            <Text style={styles.statLabel}>Goals</Text>
-                        </View>
-                        <View style={styles.statBox}>
-                            <View style={styles.statIconContainer}>
-                                <Ionicons name="share-outline" size={24} color={ProfileTheme.colors.neonPurple} />
-                            </View>
-                            <Text style={styles.statValue}>{goals?.assists || 0}</Text>
-                            <Text style={styles.statLabel}>Assists</Text>
-                        </View>
-                    </View>
+                    )}
 
-                    {/* ============================================ */}
-                    {/* SECTION 1: Personal Information */}
-                    {/* ============================================ */}
+                    {/* Per-league stats */}
                     <View style={styles.infoSection}>
-                        <Text style={styles.sectionTitle}>{t.playerProfile?.personalInfo || 'Personal Information'}</Text>
+                        <Text style={styles.sectionTitle}>{pp.competitions}</Text>
+                        {leagueStats.length === 0 ? (
+                            <View style={styles.emptyCard}>
+                                <Ionicons name="stats-chart-outline" size={32} color={ProfileTheme.colors.textSecondary} />
+                                <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
+                            </View>
+                        ) : (
+                            leagueStats.map((stat) => (
+                                <LeagueStatCard
+                                    key={`${stat.league.id}-${stat.league.season}-${stat.team.id}`}
+                                    stat={stat}
+                                    language={language}
+                                    labels={pp}
+                                    teamColor={teamColors[0]}
+                                />
+                            ))
+                        )}
+                    </View>
+
+                    {/* Personal info */}
+                    <View style={styles.infoSection}>
+                        <Text style={styles.sectionTitle}>{pp.personalInfo}</Text>
                         <View style={styles.infoCardContainer}>
                             <View style={styles.infoGrid}>
                                 <View style={styles.infoGridItem}>
-                                    <Ionicons name="calendar-outline" size={20} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>Date of Birth</Text>
+                                    <Ionicons name="calendar-outline" size={18} color={ProfileTheme.colors.textSecondary} />
+                                    <Text style={styles.infoLabel}>{pp.dateOfBirth}</Text>
                                     <Text style={styles.infoValue}>
                                         {player.player.birth?.date ? formatDate(player.player.birth.date) : 'N/A'}
                                     </Text>
                                 </View>
                                 <View style={styles.infoGridDivider} />
                                 <View style={styles.infoGridItem}>
-                                    <Ionicons name="location-outline" size={20} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>Birth Place</Text>
-                                    <Text style={styles.infoValue}>
-                                        {player.player.birth?.place || 'N/A'}
-                                    </Text>
+                                    <Ionicons name="location-outline" size={18} color={ProfileTheme.colors.textSecondary} />
+                                    <Text style={styles.infoLabel}>{pp.birthPlace}</Text>
+                                    <Text style={styles.infoValue}>{player.player.birth?.place || 'N/A'}</Text>
                                 </View>
                             </View>
-                            
                             <View style={styles.infoGridDividerHorizontal} />
-                            
                             <View style={styles.infoGrid}>
                                 <View style={styles.infoGridItem}>
-                                    <Ionicons name="resize-outline" size={20} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>Height</Text>
+                                    <Ionicons name="resize-outline" size={18} color={ProfileTheme.colors.textSecondary} />
+                                    <Text style={styles.infoLabel}>{pp.height}</Text>
                                     <Text style={styles.infoValue}>{player.player.height || 'N/A'}</Text>
                                 </View>
                                 <View style={styles.infoGridDivider} />
                                 <View style={styles.infoGridItem}>
-                                    <Ionicons name="barbell-outline" size={20} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>Weight</Text>
+                                    <Ionicons name="barbell-outline" size={18} color={ProfileTheme.colors.textSecondary} />
+                                    <Text style={styles.infoLabel}>{pp.weight}</Text>
                                     <Text style={styles.infoValue}>{player.player.weight || 'N/A'}</Text>
                                 </View>
-                                {preferredFoot && (
-                                    <>
-                                        <View style={styles.infoGridDivider} />
-                                        <View style={styles.infoGridItem}>
-                                            <Ionicons name="footsteps-outline" size={20} color={ProfileTheme.colors.textSecondary} />
-                                            <Text style={styles.infoLabel}>Preferred Foot</Text>
-                                            <Text style={styles.infoValue}>{preferredFoot}</Text>
-                                        </View>
-                                    </>
-                                )}
                             </View>
-                            
-                            {games?.position && (
+                            {(preferredFoot || leagueStats.some((s) => s.games.captain)) && (
                                 <>
                                     <View style={styles.infoGridDividerHorizontal} />
                                     <View style={styles.infoGrid}>
-                                        <View style={styles.infoGridItem}>
-                                            <Ionicons name="shirt-outline" size={20} color={ProfileTheme.colors.textSecondary} />
-                                            <Text style={styles.infoLabel}>Position</Text>
-                                            <Text style={styles.infoValue}>{games.position}</Text>
-                                        </View>
-                                        {games.captain && (
+                                        {preferredFoot && (
+                                            <View style={styles.infoGridItem}>
+                                                <Ionicons name="footsteps-outline" size={18} color={ProfileTheme.colors.textSecondary} />
+                                                <Text style={styles.infoLabel}>{pp.preferredFoot}</Text>
+                                                <Text style={styles.infoValue}>{preferredFoot}</Text>
+                                            </View>
+                                        )}
+                                        {leagueStats.some((s) => s.games.captain) && (
                                             <>
-                                                <View style={styles.infoGridDivider} />
+                                                {preferredFoot && <View style={styles.infoGridDivider} />}
                                                 <View style={styles.infoGridItem}>
-                                                    <Ionicons name="star" size={20} color={ProfileTheme.colors.gold} />
-                                                    <Text style={styles.infoLabel}>Captain</Text>
-                                                    <Text style={[styles.infoValue, { color: ProfileTheme.colors.gold }]}>Yes</Text>
+                                                    <Ionicons name="star" size={18} color={ProfileTheme.colors.gold} />
+                                                    <Text style={styles.infoLabel}>{pp.captain}</Text>
+                                                    <Text style={[styles.infoValue, { color: ProfileTheme.colors.gold }]}>{pp.yes}</Text>
                                                 </View>
                                             </>
                                         )}
@@ -649,151 +759,10 @@ export default function PlayerProfileScreen() {
                         </View>
                     </View>
 
-                    {/* ============================================ */}
-                    {/* SECTION 2: Current Team */}
-                    {/* ============================================ */}
-                    {stats?.team && (
-                        <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>Current Team</Text>
-                            <TouchableOpacity style={styles.teamCard} activeOpacity={0.7}>
-                                <TeamBadge
-                                    name={stats.team.name}
-                                    color={teamColors[0]}
-                                    size={48}
-                                />
-                                <View style={styles.teamCardInfo}>
-                                    <Text style={styles.teamCardName} numberOfLines={2}>{getTeamDisplayName(stats.team.name, language)}</Text>
-                                    {stats.league && stats.league.name && stats.league.season != null && (
-                                        <Text style={styles.teamCardLeague} numberOfLines={1}>
-                                            {getLeagueDisplayName(stats.league.name, language)} • {stats.league.season}/{stats.league.season + 1}
-                                        </Text>
-                                    )}
-                                </View>
-                                <Ionicons name="chevron-forward" size={20} color={ProfileTheme.colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    {/* ============================================ */}
-                    {/* SECTION 3: Season Statistics */}
-                    {/* ============================================ */}
-                    {stats && (
-                        <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>
-                                {t.playerProfile?.seasonStats || 'Season Statistics'} {stats.league?.season ? `(${stats.league.season}/${stats.league.season + 1})` : ''}
-                            </Text>
-                            <View style={styles.statsCard}>
-                                <View style={styles.statRow}>
-                                    <View style={styles.statRowLeft}>
-                                        <Ionicons name="time-outline" size={18} color={ProfileTheme.colors.textSecondary} />
-                                        <Text style={styles.statRowLabel}>Minutes Played</Text>
-                                    </View>
-                                    <Text style={styles.statRowValue}>{games?.minutes?.toLocaleString() || 0}</Text>
-                                </View>
-
-                                <View style={styles.statRowDivider} />
-
-                                <View style={styles.statRow}>
-                                    <View style={styles.statRowLeft}>
-                                        <Ionicons name="star-outline" size={18} color={ProfileTheme.colors.gold} />
-                                        <Text style={styles.statRowLabel}>Rating</Text>
-                                    </View>
-                                    <Text style={[styles.statRowValue, { color: ProfileTheme.colors.gold }]}>
-                                        {games?.rating ? parseFloat(games.rating).toFixed(1) : 'N/A'}
-                                    </Text>
-                                </View>
-
-                                {stats.cards && (stats.cards.yellow || stats.cards.red) && (
-                                    <>
-                                        <View style={styles.statRowDivider} />
-                                        <View style={styles.statRow}>
-                                            <View style={styles.statRowLeft}>
-                                                <Ionicons name="warning-outline" size={18} color="#f59e0b" />
-                                                <Text style={styles.statRowLabel}>Yellow Cards</Text>
-                                            </View>
-                                            <Text style={[styles.statRowValue, { color: '#f59e0b' }]}>
-                                                {stats.cards.yellow || 0}
-                                            </Text>
-                                        </View>
-                                    </>
-                                )}
-
-                                {stats.cards?.red != null && stats.cards.red > 0 && (
-                                    <>
-                                        <View style={styles.statRowDivider} />
-                                        <View style={styles.statRow}>
-                                            <View style={styles.statRowLeft}>
-                                                <Ionicons name="close-circle-outline" size={18} color="#ef4444" />
-                                                <Text style={styles.statRowLabel}>Red Cards</Text>
-                                            </View>
-                                            <Text style={[styles.statRowValue, { color: '#ef4444' }]}>
-                                                {stats.cards.red || 0}
-                                            </Text>
-                                        </View>
-                                    </>
-                                )}
-
-                                {stats.passes?.accuracy != null && (
-                                    <>
-                                        <View style={styles.statRowDivider} />
-                                        <View style={styles.statRow}>
-                                            <View style={styles.statRowLeft}>
-                                                <Ionicons name="git-merge-outline" size={18} color={ProfileTheme.colors.neonBlue} />
-                                                <Text style={styles.statRowLabel}>Pass Accuracy</Text>
-                                            </View>
-                                            <Text style={styles.statRowValue}>{stats.passes.accuracy}%</Text>
-                                        </View>
-                                    </>
-                                )}
-
-                                {stats.shots?.on != null && (
-                                    <>
-                                        <View style={styles.statRowDivider} />
-                                        <View style={styles.statRow}>
-                                            <View style={styles.statRowLeft}>
-                                                <Ionicons name="radio-button-on-outline" size={18} color={ProfileTheme.colors.neonGreen} />
-                                                <Text style={styles.statRowLabel}>Shots on Target</Text>
-                                            </View>
-                                            <Text style={styles.statRowValue}>{stats.shots.on || 0}</Text>
-                                        </View>
-                                    </>
-                                )}
-
-                                {stats.dribbles?.success != null && (
-                                    <>
-                                        <View style={styles.statRowDivider} />
-                                        <View style={styles.statRow}>
-                                            <View style={styles.statRowLeft}>
-                                                <Ionicons name="flash-outline" size={18} color={ProfileTheme.colors.neonPurple} />
-                                                <Text style={styles.statRowLabel}>Successful Dribbles</Text>
-                                            </View>
-                                            <Text style={styles.statRowValue}>{stats.dribbles.success || 0}</Text>
-                                        </View>
-                                    </>
-                                )}
-
-                                {stats.tackles?.total != null && (
-                                    <>
-                                        <View style={styles.statRowDivider} />
-                                        <View style={styles.statRow}>
-                                            <View style={styles.statRowLeft}>
-                                                <Ionicons name="shield-outline" size={18} color={ProfileTheme.colors.neonBlue} />
-                                                <Text style={styles.statRowLabel}>Tackles</Text>
-                                            </View>
-                                            <Text style={styles.statRowValue}>{stats.tackles.total || 0}</Text>
-                                        </View>
-                                    </>
-                                )}
-                            </View>
-                        </View>
-                    )}
-
-                    {/* ============================================ */}
-                    {/* SECTION 4: Transfer History */}
-                    {/* ============================================ */}
+                    {/* Transfers */}
                     {transfers.length > 0 && (
                         <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>Transfer History</Text>
+                            <Text style={styles.sectionTitle}>{pp.transfers}</Text>
                             {loadingTransfers ? (
                                 <View style={styles.loadingContainerSmall}>
                                     <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
@@ -802,86 +771,45 @@ export default function PlayerProfileScreen() {
                                 <View style={styles.transfersContainer}>
                                     {transfers.map((transfer, index) => (
                                         <View key={index} style={styles.transferCard}>
-                                            {transfer.transfers && transfer.transfers.length > 0 && (
-                                                <>
-                                                    {transfer.transfers.map((t, tIndex) => (
-                                                        <View key={tIndex} style={styles.transferItem}>
-                                                            <View style={styles.transferDateContainer}>
-                                                                <Text style={styles.transferDate}>
-                                                                    {t.date ? formatDate(t.date) : 'N/A'}
-                                                                </Text>
-                                                                <Text style={styles.transferType}>
-                                                                    {formatTransferValue(t.type)}
+                                            {transfer.transfers?.map((tr, tIndex) => (
+                                                <View key={tIndex} style={styles.transferItem}>
+                                                    <View style={styles.transferDateContainer}>
+                                                        <Text style={styles.transferDate}>
+                                                            {tr.date ? formatDate(tr.date) : 'N/A'}
+                                                        </Text>
+                                                        <Text style={styles.transferType}>
+                                                            {formatTransferValue(tr.type)}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.transferTeams}>
+                                                        {tr.teams.out && (
+                                                            <View style={styles.transferTeam}>
+                                                                <TeamBadge name={tr.teams.out.name} color={teamColors[0]} size={32} />
+                                                                <Text style={styles.transferTeamName} numberOfLines={1}>
+                                                                    {tr.teams.out.name}
                                                                 </Text>
                                                             </View>
-                                                            <View style={styles.transferTeams}>
-                                                                {t.teams.out && (
-                                                                    <View style={styles.transferTeam}>
-                                                                        <TeamBadge
-                                                                            name={t.teams.out.name}
-                                                                            color={teamColors[0]}
-                                                                            size={32}
-                                                                        />
-                                                                        <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                                            {t.teams.out.name}
-                                                                        </Text>
-                                                                    </View>
-                                                                )}
-                                                                <Ionicons 
-                                                                    name="arrow-forward" 
-                                                                    size={20} 
-                                                                    color={ProfileTheme.colors.textSecondary} 
-                                                                />
-                                                                {t.teams.in && (
-                                                                    <View style={styles.transferTeam}>
-                                                                        <TeamBadge
-                                                                            name={t.teams.in.name}
-                                                                            color={teamColors[0]}
-                                                                            size={32}
-                                                                        />
-                                                                        <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                                            {t.teams.in.name}
-                                                                        </Text>
-                                                                    </View>
-                                                                )}
+                                                        )}
+                                                        <Ionicons name="arrow-forward" size={20} color={ProfileTheme.colors.textSecondary} />
+                                                        {tr.teams.in && (
+                                                            <View style={styles.transferTeam}>
+                                                                <TeamBadge name={tr.teams.in.name} color={teamColors[0]} size={32} />
+                                                                <Text style={styles.transferTeamName} numberOfLines={1}>
+                                                                    {tr.teams.in.name}
+                                                                </Text>
                                                             </View>
-                                                        </View>
-                                                    ))}
-                                                </>
-                                            )}
+                                                        )}
+                                                    </View>
+                                                </View>
+                                            ))}
                                         </View>
                                     ))}
                                 </View>
                             )}
                         </View>
                     )}
-
-                    {/* ============================================ */}
-                    {/* SECTION 5: Career Teams */}
-                    {/* ============================================ */}
-                    {allTeams.length > 1 && (
-                        <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>{t.playerProfile?.careerTeams || 'Career Teams'}</Text>
-                            <View style={styles.teamsGrid}>
-                                {allTeams.map((team) => (
-                                    <View key={team.id} style={styles.careerTeamCard}>
-                                        <TeamBadge
-                                            name={team.name}
-                                            color={teamColors[0]}
-                                            size={40}
-                                        />
-                                        <Text style={styles.careerTeamName} numberOfLines={2}>
-                                            {getTeamDisplayName(team.name, language)}
-                                        </Text>
-                                    </View>
-                                ))}
-                            </View>
-                        </View>
-                    )}
-
-                    <View style={{ height: insets.bottom + 40 }} />
-                </ScrollView>
-            </Animated.View>
+                </Animated.View>
+            </ScrollView>
         </View>
     );
 }
@@ -930,149 +858,106 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
     },
-    heroGradient: {
-        height: height * 0.45,
-        width: '100%',
-        position: 'relative',
-        overflow: 'hidden',
+    hero: {
+        paddingHorizontal: 20,
+        paddingBottom: 24,
     },
     backButtonFloat: {
-        position: 'absolute',
-        left: 20,
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'rgba(0,0,0,0.35)',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 10,
+        marginBottom: 16,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)',
     },
-    nameWatermark: {
-        position: 'absolute',
-        top: '25%',
-        left: 0,
-        right: 0,
-        fontSize: 100,
-        fontWeight: '900',
-        color: 'rgba(255,255,255,0.08)',
-        textAlign: 'center',
-        letterSpacing: -3,
-    },
-    playerPhotoContainer: {
-        position: 'absolute',
-        bottom: -40,
-        left: 0,
-        right: 0,
+    heroContent: {},
+    heroRow: {
+        flexDirection: 'row',
         alignItems: 'center',
-        zIndex: 5,
+        gap: 16,
     },
     playerPhotoCircle: {
-        width: width * 0.4,
-        height: width * 0.4,
-        borderRadius: width * 0.2,
+        width: 112,
+        height: 112,
+        borderRadius: 56,
         overflow: 'hidden',
-        backgroundColor: 'rgba(168,85,247,0.2)',
+        backgroundColor: 'rgba(0,0,0,0.2)',
         borderWidth: 3,
-        borderColor: 'rgba(168,85,247,0.4)',
+        borderColor: 'rgba(255,255,255,0.35)',
     },
     playerPhotoImage: {
         width: '100%',
         height: '100%',
     },
-    playerPhoto: {
-        width: width * 0.75,
-        height: height * 0.4,
-    },
-    playerPhotoPlaceholder: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 20,
-    },
-    infoCard: {
-        flex: 1,
-        backgroundColor: ProfileTheme.colors.deepBlack,
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
-        marginTop: -30,
-        paddingTop: 50,
-        paddingHorizontal: 20,
-    },
-    playerHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    teamLogo: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#fff',
-        marginRight: 16,
-        borderWidth: 2,
-        borderColor: ProfileTheme.colors.border,
-    },
-    playerNameSection: {
+    heroInfo: {
         flex: 1,
     },
     playerName: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: ProfileTheme.colors.textPrimary,
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#fff',
         marginBottom: 6,
     },
     playerSubInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        flexWrap: 'wrap',
+        gap: 4,
+        marginBottom: 8,
     },
-    playerCountry: {
-        fontSize: 14,
-        color: ProfileTheme.colors.textSecondary,
+    playerMeta: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.85)',
     },
     separator: {
-        fontSize: 14,
-        color: ProfileTheme.colors.textSecondary,
-        marginHorizontal: 4,
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.5)',
     },
-    playerAge: {
-        fontSize: 14,
-        color: ProfileTheme.colors.textSecondary,
-    },
-    statsGrid: {
+    heroTeamRow: {
         flexDirection: 'row',
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 20,
-        marginBottom: 24,
-        overflow: 'hidden',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 6,
+    },
+    heroTeamName: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.9)',
+    },
+    seasonBadge: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.65)',
+        fontWeight: '500',
+    },
+    body: {
+        paddingHorizontal: 20,
+        paddingTop: 8,
+    },
+    totalCard: {
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 20,
         borderWidth: 1,
         borderColor: ProfileTheme.colors.border,
     },
-    statBox: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: 24,
-    },
-    statBoxMiddle: {
-        borderLeftWidth: 1,
-        borderRightWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    statIconContainer: {
-        marginBottom: 12,
-    },
-    statLabel: {
-        fontSize: 12,
+    totalTitle: {
+        fontSize: 14,
+        fontWeight: '700',
         color: ProfileTheme.colors.textSecondary,
-        textAlign: 'center',
-        marginTop: 8,
+        marginBottom: 10,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
-    statValue: {
-        fontSize: 32,
-        fontWeight: 'bold',
-        color: ProfileTheme.colors.textPrimary,
+    totalRow: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(0,0,0,0.25)',
+        borderRadius: 14,
+        overflow: 'hidden',
     },
     infoSection: {
         marginBottom: 24,
@@ -1081,7 +966,21 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         color: ProfileTheme.colors.textPrimary,
-        marginBottom: 16,
+        marginBottom: 14,
+    },
+    emptyCard: {
+        alignItems: 'center',
+        padding: 32,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.border,
+        gap: 10,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: ProfileTheme.colors.textSecondary,
+        textAlign: 'center',
     },
     infoCardContainer: {
         backgroundColor: 'rgba(255,255,255,0.05)',
@@ -1098,7 +997,7 @@ const styles = StyleSheet.create({
     infoGridItem: {
         flex: 1,
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
     },
     infoGridDivider: {
         width: 1,
@@ -1109,78 +1008,18 @@ const styles = StyleSheet.create({
         height: 1,
         width: '100%',
         backgroundColor: ProfileTheme.colors.border,
-        marginVertical: 16,
+        marginVertical: 14,
     },
     infoLabel: {
-        fontSize: 12,
+        fontSize: 11,
         color: ProfileTheme.colors.textSecondary,
         textAlign: 'center',
     },
     infoValue: {
-        fontSize: 16,
+        fontSize: 15,
         color: ProfileTheme.colors.textPrimary,
         fontWeight: '600',
         textAlign: 'center',
-    },
-    statsCard: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    statRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-    },
-    statRowLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    statRowLabel: {
-        fontSize: 15,
-        color: ProfileTheme.colors.textSecondary,
-    },
-    statRowValue: {
-        fontSize: 16,
-        color: ProfileTheme.colors.textPrimary,
-        fontWeight: '600',
-    },
-    statRowDivider: {
-        height: 1,
-        backgroundColor: ProfileTheme.colors.border,
-        marginVertical: 4,
-    },
-    teamCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    teamCardLogo: {
-        width: 48,
-        height: 48,
-        marginRight: 16,
-        borderRadius: 24,
-    },
-    teamCardInfo: {
-        flex: 1,
-    },
-    teamCardName: {
-        fontSize: 17,
-        color: ProfileTheme.colors.textPrimary,
-        fontWeight: '600',
-        marginBottom: 4,
-    },
-    teamCardLeague: {
-        fontSize: 13,
-        color: ProfileTheme.colors.textSecondary,
     },
     transfersContainer: {
         gap: 12,
@@ -1221,41 +1060,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
-    transferTeamLogo: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-    },
     transferTeamName: {
         flex: 1,
         fontSize: 14,
         color: ProfileTheme.colors.textPrimary,
-        fontWeight: '500',
-    },
-    teamsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-    },
-    careerTeamCard: {
-        width: (width - 60) / 3,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 12,
-        padding: 12,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    careerTeamLogo: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        marginBottom: 8,
-    },
-    careerTeamName: {
-        fontSize: 12,
-        color: ProfileTheme.colors.textPrimary,
-        textAlign: 'center',
         fontWeight: '500',
     },
 });
