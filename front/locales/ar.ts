@@ -1754,9 +1754,11 @@ export const ar = {
     sendButton: 'إرسال',
     suggestionFootballInfo: 'معلومات كرة القدم',
     suggestionLeagueStats: 'إحصائيات الدوريات',
-    suggestionTrainingPlan: 'خطة تمرين',
-    suggestionDietPlan: 'نظام غذائي',
+    suggestionTrainingPlan: 'نظام تدريب',
+    suggestionDietPlan: 'نظام أكل',
     suggestionRecoveryTips: 'نصائح الاستشفاء',
+    suggestionSectionRecovery: 'استشفاء',
+    suggestionSectionFootball: 'كرة القدم',
     a11yBack: 'العودة للرئيسية',
     a11yMenu: 'فتح سجل المحادثات',
 

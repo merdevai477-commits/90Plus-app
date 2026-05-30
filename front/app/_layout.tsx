@@ -29,6 +29,7 @@ import { applyGlobalFont } from '../utils/fontSetup';
 import '../services/notificationForegroundSetup';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { AppKeyboardProvider } from '@/utils/keyboardControllerSafe';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StatusBar, I18nManager, Linking, StyleSheet, Text } from 'react-native';
 import { SettingsProvider } from "../contexts/SettingsContext";
@@ -649,6 +650,7 @@ function RootLayout() {
                         <ProfessionalToastProvider>
                           <GestureHandlerRootView style={{ flex: 1 }}>
                             <SafeAreaProvider>
+                              <AppKeyboardProvider>
                               <View style={{ flex: 1, backgroundColor: '#000' }}>
                                 <GlobalOfflineBanner />
                                 <StatusBar
@@ -664,6 +666,7 @@ function RootLayout() {
                                   </WebSocketInitializer>
                                 </ClerkGate>
                               </View>
+                              </AppKeyboardProvider>
                             </SafeAreaProvider>
                           </GestureHandlerRootView>
                         </ProfessionalToastProvider>

@@ -76,11 +76,14 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
-function colMinWidth(text: string, isHeader: boolean, maxColWidth: number): number {
+const TABLE_MIN_COL_WIDTH = 72;
+const TABLE_MAX_COL_WIDTH = 160;
+
+function colMinWidth(text: string, isHeader: boolean): number {
   const len = text.length;
-  const base = isHeader ? 108 : 120;
-  const computed = Math.max(base, len * 8 + 24);
-  return Math.min(computed, maxColWidth);
+  const base = isHeader ? 88 : 72;
+  const computed = Math.max(base, len * 7 + 28);
+  return Math.min(computed, TABLE_MAX_COL_WIDTH);
 }
 
 function MarkdownTable({
@@ -95,22 +98,22 @@ function MarkdownTable({
   bubbleMaxWidth: number;
 }) {
   const colCount = headers.length;
-  const maxColWidth = Math.max(100, Math.floor((bubbleMaxWidth - 28) / Math.max(colCount, 1)));
+  const scrollViewportWidth = Math.max(200, bubbleMaxWidth - 16);
 
   const colWidths = useMemo(() => {
     const widths = headers.map((h, i) => {
-      let max = colMinWidth(h, true, maxColWidth);
+      let max = colMinWidth(h, true);
       for (const row of rows) {
         const cell = row[i] ?? '';
-        max = Math.max(max, colMinWidth(cell, false, maxColWidth));
+        max = Math.max(max, colMinWidth(cell, false));
       }
-      return max;
+      return Math.max(max, TABLE_MIN_COL_WIDTH);
     });
     return widths;
-  }, [headers, rows, maxColWidth]);
+  }, [headers, rows]);
 
   const tableIntrinsicWidth = colWidths.reduce((a, b) => a + b, 0);
-  const showHint = tableIntrinsicWidth > bubbleMaxWidth - 32;
+  const showHint = tableIntrinsicWidth > scrollViewportWidth - 8;
 
   return (
     <View style={s.tableBlock}>
@@ -122,8 +125,11 @@ function MarkdownTable({
         nestedScrollEnabled
         showsHorizontalScrollIndicator
         bounces={false}
-        style={s.tableScroll}
-        contentContainerStyle={s.tableScrollContent}
+        style={[s.tableScroll, { width: scrollViewportWidth, maxWidth: scrollViewportWidth }]}
+        contentContainerStyle={[
+          s.tableScrollContent,
+          { minWidth: tableIntrinsicWidth, width: tableIntrinsicWidth },
+        ]}
       >
         <View style={s.table}>
           <LinearGradient
@@ -699,10 +705,10 @@ const s = StyleSheet.create({
   },
   tableScroll: {
     marginVertical: 8,
-    maxWidth: '100%',
+    alignSelf: 'flex-start',
   },
   tableScrollContent: {
-    flexGrow: 1,
+    flexGrow: 0,
   },
   table: {
     borderRadius: 12,
@@ -752,12 +758,12 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.2,
-    flexShrink: 1,
+    flexShrink: 0,
   },
   tableCellText: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.88)',
     lineHeight: 18,
-    flexShrink: 1,
+    flexShrink: 0,
   },
 });

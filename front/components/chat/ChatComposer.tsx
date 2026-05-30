@@ -18,55 +18,14 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
-import { SpinnerRing } from './ChatInternalComponents';
-import { Colors, Gradients, BlurIntensity } from '../../constants/theme';
+import { ChatSpinner } from './ChatSpinner';
+import { ChatGlassSurface } from './ChatGlassSurface';
+import { Colors, Gradients } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-function GlassSurface({
-  style,
-  children,
-  tint = 'rgba(14,10,22,0.72)',
-  effect = 'regular' as const,
-  interactive = false,
-}: {
-  style?: object;
-  children?: React.ReactNode;
-  tint?: string;
-  effect?: 'regular' | 'clear';
-  interactive?: boolean;
-}) {
-  if (isLiquidGlassSupported) {
-    return (
-      <LiquidGlassView
-        {...({
-          style: [{ overflow: 'hidden' }, style],
-          tint,
-          effect,
-          interactive,
-        } as object)}
-      >
-        {children}
-      </LiquidGlassView>
-    );
-  }
-  return (
-    <View style={[{ overflow: 'hidden' }, style]}>
-      <BlurView intensity={BlurIntensity.header} tint="dark" style={StyleSheet.absoluteFill} />
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, { backgroundColor: tint }]}
-      />
-      {children}
-    </View>
-  );
-}
 
 function SendButton({
   active,
@@ -102,7 +61,7 @@ function SendButton({
           />
         )}
         {loading ? (
-          <SpinnerRing />
+          <ChatSpinner />
         ) : (
           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
             <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
@@ -127,6 +86,9 @@ export interface ChatComposerProps {
   messagesRemaining: number | null;
   resetTime: Date | null;
   dailyLimitOverText: string;
+  /** Safe-area padding when KeyboardStickyView is not active (Expo Go). */
+  bottomInset?: number;
+  onInputFocus?: () => void;
 }
 
 export function ChatComposer({
@@ -143,19 +105,19 @@ export function ChatComposer({
   messagesRemaining,
   resetTime,
   dailyLimitOverText,
+  bottomInset = 0,
+  onInputFocus,
 }: ChatComposerProps) {
-  const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 8);
   const inputDirection = useMemo(() => getTextDirectionStyles(value), [value]);
 
   return (
-    <View style={[styles.dock, { paddingBottom: bottomPad }]}>
+    <View style={[styles.dock, bottomInset > 0 && { paddingBottom: bottomInset }]}>
       {messagesRemaining !== null && messagesRemaining <= 0 && resetTime ? (
         <View style={styles.limitBanner}>
           <Text style={styles.limitText}>{dailyLimitOverText}</Text>
         </View>
       ) : (
-        <GlassSurface
+        <ChatGlassSurface
           style={styles.inputWrapper}
           tint="rgba(16,10,28,0.92)"
           effect="regular"
@@ -190,6 +152,7 @@ export function ChatComposer({
               style={[styles.textInput, inputDirection]}
               value={value}
               onChangeText={onChangeText}
+              onFocus={onInputFocus}
               placeholder={editingMessage ? editPlaceholder : placeholder}
               placeholderTextColor="rgba(255,255,255,0.35)"
               multiline
@@ -205,7 +168,7 @@ export function ChatComposer({
               onPress={onSend}
             />
           </View>
-        </GlassSurface>
+        </ChatGlassSurface>
       )}
 
       <View style={styles.footerInfo}>

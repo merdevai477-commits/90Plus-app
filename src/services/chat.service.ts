@@ -82,9 +82,36 @@ export async function listConversations(userId: string, take = 50): Promise<Conv
     }));
 }
 
-export async function createConversation(userId: string, title = 'New conversation') {
+/** Titles that should be replaced after the first user message. */
+export function isPlaceholderConversationTitle(title: string | null | undefined): boolean {
+    const t = (title ?? '').trim().toLowerCase();
+    if (!t) return true;
+    return (
+        t === 'محادثة جديدة' ||
+        t === 'new chat' ||
+        t === 'new conversation' ||
+        t === 'new conversation.'
+    );
+}
+
+/** Short title from the first user message (history sidebar). */
+export function buildTitleFromFirstMessage(message: string): string {
+    const cleaned = message
+        .replace(/[\n\r]+/g, ' ')
+        .replace(/[?!.,،؟؛]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const candidate = cleaned.split(/\s+/).slice(0, 6).join(' ').slice(0, 50);
+    return candidate.length >= 2 ? candidate : 'محادثة جديدة';
+}
+
+export async function createConversation(userId: string, title = 'محادثة جديدة') {
+    const trimmed = title.trim().slice(0, 100);
     return prisma.chatConversation.create({
-        data: { userId, title: title.trim().slice(0, 100) || 'New conversation' },
+        data: {
+            userId,
+            title: trimmed && !isPlaceholderConversationTitle(trimmed) ? trimmed : 'محادثة جديدة',
+        },
     });
 }
 

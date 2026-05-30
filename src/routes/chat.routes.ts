@@ -36,6 +36,8 @@ import {
     appendMessage,
     deleteMessageCascade,
     countMessages,
+    isPlaceholderConversationTitle,
+    buildTitleFromFirstMessage,
     getRemaining,
     incrementLimit,
     decrementLimit,
@@ -550,22 +552,18 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             // Auto-title on first exchange (≤ 2 messages total in the convo
             // after we just saved the assistant reply — meaning we're finishing
             // the very first user/assistant pair).
-            const total = await countMessages(targetConversation.id);
-            if (
-                (targetConversation.title === 'محادثة جديدة' || !targetConversation.title) &&
-                total <= 2
-            ) {
-                // Generate a clean title from the first user message — first
-                // 5 meaningful words, trimmed to 50 chars max. Avoid the
-                // generic fallback unless the message itself is unusable.
-                const cleaned = trimmedMessage
-                    .replace(/[\n\r]+/g, ' ')
-                    .replace(/[?!.,،؟]/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-                const titleCandidate = cleaned.split(/\s+/).slice(0, 5).join(' ').slice(0, 50);
+            let conversationTitle: string | undefined;
+            if (isPlaceholderConversationTitle(targetConversation.title)) {
+                let titleSource = trimmedMessage;
+                const total = await countMessages(targetConversation.id);
+                if (total > 2) {
+                    const history = await listMessages(userId, targetConversation.id, 50);
+                    const firstUser = history?.find((m) => m.role === 'user');
+                    if (firstUser?.text?.trim()) titleSource = firstUser.text;
+                }
+                conversationTitle = buildTitleFromFirstMessage(titleSource);
                 await updateConversation(userId, targetConversation.id, {
-                    title: titleCandidate.length >= 2 ? titleCandidate : 'محادثة جديدة',
+                    title: conversationTitle,
                 });
             }
 
@@ -575,6 +573,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 resetAt: getResetTime(tz),
                 usedModel: usedProvider.model,
                 usedProvider: usedProvider.name,
+                ...(conversationTitle ? { conversationTitle } : {}),
             });
         } catch (err: any) {
             logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);

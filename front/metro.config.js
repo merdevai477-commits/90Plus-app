@@ -1,20 +1,28 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
+const path = require('path');
+const os = require('os');
 const { getDefaultConfig } = require('expo/metro-config');
+const { FileStore } = require('metro-cache');
 const { withNativeWind } = require('nativewind/metro');
 
 const config = getDefaultConfig(__dirname);
 
-// Fix for socket.io-client in React Native — force CJS builds instead of ESM
-// These packages ship both CJS and ESM; RN's Metro cannot correctly resolve their ESM entry.
+// Windows: Metro's default parallelism can hit EMFILE (too many open files) in
+// %TEMP%/metro-cache. Cap workers and keep cache inside the project.
+const parsedWorkers = Number.parseInt(process.env.METRO_MAX_WORKERS ?? '', 10);
+const maxWorkers = Number.isFinite(parsedWorkers) && parsedWorkers > 0
+  ? parsedWorkers
+  : process.platform === 'win32'
+    ? 2
+    : Math.min(os.cpus().length, 4);
+
+config.maxWorkers = maxWorkers;
+config.cacheStores = [
+  new FileStore({ root: path.join(__dirname, '.metro-cache') }),
+];
+
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === 'socket.io-client') {
-    return context.resolveRequest(context, 'socket.io-client/build/cjs/index.js', platform);
-  }
-  if (moduleName === 'engine.io-client') {
-    return context.resolveRequest(context, 'engine.io-client/build/cjs/index.js', platform);
-  }
-
   if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);
   }

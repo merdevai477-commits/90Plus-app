@@ -24,13 +24,6 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, {
-  Defs,
-  RadialGradient as SvgRadialGradient,
-  Stop,
-  Rect,
-} from 'react-native-svg';
-
 import { Conversation } from '../../hooks/useAIChatNative';
 import { MessageCounter } from './MessageCounter';
 import { Toast } from './Toast';
@@ -58,66 +51,6 @@ function formatConversationDate(isoString: string): string {
   if (diffDays < 7) return `منذ ${diffDays} أيام`;
   if (diffDays < 30) return `منذ ${Math.floor(diffDays / 7)} أسابيع`;
   return `منذ ${Math.floor(diffDays / 30)} شهور`;
-}
-
-// ─── Background ───────────────────────────────────────────────────────────────
-
-/**
- * Solid deep-purple → black background with a soft glass blur on top.
- * The bottom half fades to near-black so the input bar reads cleanly,
- * the top retains a stronger purple wash to anchor the "AI" feel. The
- * Skia/SVG radial blob from the previous version was replaced because
- * it produced a "thin" wash on dark phones; this gives a richer,
- * solid look as requested.
- */
-export function AppBackground() {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* Solid base — deep purple at the top, fading aggressively to black */}
-      <LinearGradient
-        colors={['#1A0830', '#100422', '#070110', '#020005']}
-        locations={[0, 0.3, 0.65, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Side accents — very subtle violet on the edges */}
-      <LinearGradient
-        colors={['rgba(60,20,110,0.18)', 'transparent', 'rgba(40,10,80,0.14)']}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Glass blur layer on top of the gradient — gives the "frosted purple"
-          look. iOS reads this as a real material; Android falls back to a
-          tinted overlay because BlurView is heavier there. */}
-      {Platform.OS === 'ios' ? (
-        <BlurView
-          intensity={30}
-          tint="dark"
-          style={StyleSheet.absoluteFill}
-        />
-      ) : (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: 'rgba(10,5,20,0.18)' },
-          ]}
-        />
-      )}
-      {/* Inner border highlight — gives a hint of depth */}
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 1,
-          backgroundColor: 'rgba(167,139,250,0.18)',
-        }}
-      />
-    </View>
-  );
 }
 
 // ─── Online Pulse ─────────────────────────────────────────────────────────────
@@ -202,79 +135,6 @@ export function RenameModal({ visible, initialValue, onConfirm, onCancel }: Rena
   );
 }
 
-// ─── Chips ────────────────────────────────────────────────────────────────────
-
-/**
- * Quick-action chip used on the welcome screen. Glass tile with a soft
- * gradient border, a small icon "badge" and proper padding — feels closer
- * to a card button than the previous bare pill. Pressed state shrinks
- * very slightly for tactile feedback.
- */
-export function ChipButton({ icon, text, onClick }: { icon: string; text: string; onClick: () => void }) {
-  const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const onPressIn = () => {
-    scale.value = withSpring(0.96, { stiffness: 400, damping: 22 });
-  };
-  const onPressOut = () => {
-    scale.value = withSpring(1, { stiffness: 400, damping: 22 });
-  };
-
-  return (
-    <AnimatedPressable
-      onPress={onClick}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-      style={[styles.chipButton, animStyle]}
-      accessibilityRole="button"
-      accessibilityLabel={text}
-    >
-      {/* Inner glass + gradient base */}
-      <LinearGradient
-        colors={['rgba(124,58,237,0.18)', 'rgba(76,29,149,0.06)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {Platform.OS === 'ios' && (
-        <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
-      )}
-      {/* Top inset highlight */}
-      <View style={styles.chipInsetHighlight} pointerEvents="none" />
-
-      {/* Content */}
-      <View style={styles.chipIconBadge}>
-        <Text style={styles.chipIcon}>{icon}</Text>
-      </View>
-      <Text style={styles.chipText} numberOfLines={1}>
-        {text}
-      </Text>
-    </AnimatedPressable>
-  );
-}
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// ─── Spinner ──────────────────────────────────────────────────────────────────
-
-export function SpinnerRing() {
-  const rotation = useSharedValue(0);
-  useEffect(() => {
-    rotation.value = withRepeat(withTiming(360, { duration: 800 }), -1, false);
-  }, []);
-  const spinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
-  return (
-    <View style={styles.spinnerContainer}>
-      <Animated.View style={[styles.spinnerRing, spinStyle]} />
-      <View style={styles.spinnerSquare} />
-    </View>
-  );
-}
-
 // ─── History Item ─────────────────────────────────────────────────────────────
 
 export function HistoryItem({
@@ -304,7 +164,7 @@ export function HistoryItem({
 
 // ─── History Panel ────────────────────────────────────────────────────────────
 
-interface HistoryPanelProps {
+export interface ChatHistoryPanelProps {
   isOpen: boolean; onClose: () => void;
   messagesRemaining: number | null;
   dailyMessageLimit: number | null;
@@ -322,13 +182,13 @@ interface HistoryPanelProps {
   avatar?: string | null;
 }
 
-export function HistoryPanel({
+export function ChatHistoryPanel({
   isOpen, onClose, messagesRemaining, dailyMessageLimit, resetTime,
   conversations, activeConversationId,
   onSelectConversation, onTogglePin, onRenameConversation, onDeleteConversation,
   onNewChat, isOnline, isLoading,
   displayName, avatar,
-}: HistoryPanelProps) {
+}: ChatHistoryPanelProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [contextMenu, setContextMenu] = useState<{ conversation: Conversation } | null>(null);
@@ -923,60 +783,8 @@ const styles = StyleSheet.create({
   renameConfirmGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   renameConfirmText: { color: 'white', fontSize: 16, fontWeight: '600' },
 
-  // ── Spinner & Online Pulse ──
-  spinnerContainer: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
-  spinnerRing: { position: 'absolute', width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' },
-  spinnerSquare: { width: 6, height: 6, backgroundColor: 'white', borderRadius: 1 },
   onlinePulseContainer: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
   onlinePulseRing: { position: 'absolute', width: 14, height: 14, borderRadius: 7, backgroundColor: '#10B981' },
   onlinePulseDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
 
-  // ── Chips ──
-  chipButton: {
-        flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 52,
-    minWidth: 150,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.32)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.25,
-        shadowRadius: 14,
-      },
-      android: { elevation: 5 },
-    }),
-  },
-  chipInsetHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  chipIconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.32)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.5)',
-  },
-  chipIcon: { fontSize: 18 },
-  chipText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.95)',
-    fontWeight: '600',
-    letterSpacing: 0.1,
-  },
 });

@@ -1,6 +1,15 @@
 // Chat components barrel export
 export { AIMessageBubble, UserMessageBubble, TypingIndicator } from './MessageBubble';
 export { ChatComposer } from './ChatComposer';
+export { ChatComposerDock } from './ChatComposerDock';
+export { ChatHeader } from './ChatHeader';
+export { ChatScreenLayout } from './ChatScreenLayout';
+export { ChatScreenBackground } from './ChatScreenBackground';
+export { ChatWelcomeView } from './ChatWelcomeView';
+export { ChatMessageList } from './ChatMessageList';
+export { ChatHistoryPanel } from './ChatHistoryPanel';
+export { ChatGlassSurface } from './ChatGlassSurface';
+export { ChatSpinner, SpinnerRing } from './ChatSpinner';
 export { isArabicText, getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 export { ThinkingIndicator } from './ThinkingIndicator';
 export { MessageCounter } from './MessageCounter';
@@ -12,3 +21,5 @@ export { ErrorBanner } from './ErrorBanner';
 export { MessageContextMenu } from './MessageContextMenu';
 export { ConversationContextMenu } from './ConversationContextMenu';
 export { ConversationSkeleton, UserProfileSkeleton } from './SkeletonLoader';
+export { chatColors, chatSpacing, chatRadii, chatTypography } from './chatTheme';
+export { chatScreenStyles } from './chatScreen.styles';

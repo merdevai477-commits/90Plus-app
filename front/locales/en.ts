@@ -1810,9 +1810,11 @@ export const en = {
     // Suggested prompts
     suggestionFootballInfo: 'Football info',
     suggestionLeagueStats: 'League stats',
-    suggestionTrainingPlan: 'Training plan',
-    suggestionDietPlan: 'Diet plan',
+    suggestionTrainingPlan: 'Training program',
+    suggestionDietPlan: 'Meal plan',
     suggestionRecoveryTips: 'Recovery tips',
+    suggestionSectionRecovery: 'Recovery',
+    suggestionSectionFootball: 'Football',
     // Accessibility
     a11yBack: 'Back to home',
     a11yMenu: 'Open conversation history',

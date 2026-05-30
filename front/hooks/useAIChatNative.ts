@@ -47,6 +47,8 @@ interface SSEDone {
   limit?: number;
   resetAt?: string;
   usedModel?: string;
+  /** Set when the server auto-titles the conversation from the first message. */
+  conversationTitle?: string;
 }
 interface SSEError { error: string; done?: boolean }
 type SSEData = SSEToken | SSEDone | SSEError;
@@ -338,7 +340,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const res = await fetch(`${BACKEND_URL}/api/conversations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...commonHeaders() },
-      body: JSON.stringify({ title: 'New chat' }),
+      body: JSON.stringify({}),
     });
     if (!res.ok) throw new Error('Failed to create conversation');
     const data = await res.json() as { conversation: Conversation };
@@ -618,6 +620,14 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             if (doneEvent.resetAt) setResetTime(new Date(doneEvent.resetAt));
             const usedModel = doneEvent.usedModel;
             const finishedConvId = conversationId;
+            const autoTitle = doneEvent.conversationTitle?.trim();
+            if (autoTitle && finishedConvId) {
+              setConversations(prev =>
+                prev.map(c =>
+                  c.id === finishedConvId ? { ...c, title: autoTitle } : c,
+                ),
+              );
+            }
             // Tag the model on the message immediately — independent of how
             // long the typing renderer takes to drain.
             if (usedModel && activeAssistantMessageIdRef.current) {
