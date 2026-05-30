@@ -708,9 +708,10 @@ export default function HomeScreen() {
         () =>
             teamOfMonth.slice(0, 11).map((p) => ({
                 name: p.name,
-                short: (p.name || '??').slice(0, 3).toUpperCase(),
+                short: (p.name || p.username || '??').slice(0, 3).toUpperCase(),
                 rating: Math.round((p.rating ?? 80) * 10) / 10,
                 position: p.position || 'CM',
+                photoUri: p.image || '',
                 username: p.username,
             })),
         [teamOfMonth],

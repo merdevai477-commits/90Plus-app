@@ -1,22 +1,26 @@
 ﻿// @ts-nocheck
-// TypeScript suppression reason: This project's StyleSheet.create() returns
-// 'ViewStyle | ImageStyle | TextStyle' union (not narrowed), which causes
-// TS2769 on all View/Text style props. This is a project-wide tsconfig issue,
-// not a logic error. All component logic and prop types are correct.
-// See: https://github.com/facebook/react-native/issues/29265
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
     View,
     StyleSheet,
     Text,
     TouchableOpacity,
-    Image,
     LayoutChangeEvent,
     useWindowDimensions,
+    Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
 import { LinearGradient } from 'expo-linear-gradient';
+import {
+    PURPLE_PRIMARY,
+    PURPLE_GLOW_SM,
+    GLASS_BORDER_TOP,
+    RADIUS_LG,
+    RATING_GOLD,
+    RATING_GREEN,
+    RATING_TEAL,
+} from '../../constants/tokens';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -26,116 +30,143 @@ import Animated, {
     withSpring,
     Easing,
 } from 'react-native-reanimated';
+import {
+    FootballPitchSvg,
+    FOOTBALL_PITCH_ASPECT,
+    GRASS_BASE,
+    PITCH_SURROUND,
+    pitchPercentToContainer,
+} from '../common/FootballPitchSvg';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
-const REF_WIDTH = 390;
-
-/** Fine-tune image crop + grass overlay (fractions of pitchWrapper layout box). */
-const CALIBRATION = {
-    imageWidthPct: 300,
-    imageAspect: 1.1,
-    imageScale: 0.6,
-    /** Less negative = image shifts right on screen. */
-    imageMarginLeftPct: -121,
-    /** Nudge stadium image after scale (px at REF_WIDTH). */
-    imageNudgeX: 14,
-    imageNudgeY: 10,
-    wrapperMarginTop: -178,
-    wrapperMarginBottom: -172,
-    /** Grass rectangle on the visible wrapper — matches PNG pitch after zoom. */
-    pitchLeft: 0.158,
-    pitchRight: 0.842,
-    pitchTop: 0.308,
-    pitchBottom: 0.688,
-    /** Extra px nudge for player overlay only. */
-    overlayNudgeX: 6,
-    overlayNudgeY: 4,
-} as const;
+const HORIZONTAL_PADDING = 16;
 
 function displayLabel(player: PitchPlayerItem): string {
-    const u = player.username?.trim();
-    if (u) return u.length > 10 ? `${u.slice(0, 9)}…` : u;
-    const last = (player.name || '').split(' ').slice(-1)[0];
-    return last || player.short || '?';
+    const name = player.name?.trim();
+    if (name) return name.length > 12 ? `${name.slice(0, 11)}…` : name;
+    return player.short || '?';
 }
 
-// ظ¤ظ¤ظ¤ Types ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 export type PitchPlayerItem = {
     name: string;
     short: string;
     rating: number;
     position: string;
+    photoUri?: string;
     x?: number;
     y?: number;
     username?: string;
 };
 
-// ظ¤ظ¤ظ¤ Fixed 4-3-3 formation layout ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
-// x = 0ظْ100 left (GK) to right (ATT)
-// y = 0ظْ100 top to bottom
+/**
+ * 4-3-3 on horizontal pitch — GK left, attack right.
+ * Four straight lines: 1 GK | 4 DEF | 3 MID | 3 ATT (same x per line).
+ */
 const FORMATION_433: Array<{ x: number; y: number; label: string }> = [
-    { x: -22,  y: 40, label: 'GK' },
-    { x: 7, y: 16, label: 'RB' },
-    { x: -2, y: 29, label: 'CB' },
-    { x: -2, y: 46, label: 'CB' },
-    { x: 15, y: 60, label: 'LB' },
-    { x: 44, y: 24, label: 'CM' },
-    { x: 24, y: 40, label: 'CM' },
-    { x: 44, y: 55, label: 'CM' },
-    { x: 76, y: 21, label: 'RW' },
-    { x: 76, y: 40, label: 'ST' },
-    { x: 76, y: 57, label: 'LW' },
+    { x: 1, y: 50, label: 'GK' },
+    { x: 21, y: 88, label: 'RB' },
+    { x: 21, y: 64, label: 'CB' },
+    { x: 21, y: 36, label: 'CB' },
+    { x: 21, y: 12, label: 'LB' },
+    { x: 47, y: 78, label: 'RCM' },
+    { x: 47, y: 50, label: 'CM' },
+    { x: 47, y: 22, label: 'LCM' },
+    { x: 73, y: 88, label: 'RW' },
+    { x: 73, y: 50, label: 'ST' },
+    { x: 73, y: 12, label: 'LW' },
 ];
-// Maps each slot label to the position strings that belong to it.
-// Order matters: first match wins. Fallback chains go from specific ظْ generic.
+
+/** Preferred positions per slot (first match wins). */
 const SLOT_POSITION_MAP: Record<string, string[]> = {
-    GK:  ['GK'],
-    RB:  ['RB', 'RWB', 'DEF'],
-    CB:  ['CB', 'SW', 'DEF'],
-    LB:  ['LB', 'LWB', 'DEF'],
-    CM:  ['CM', 'CDM', 'DM', 'CAM', 'AM', 'LM', 'RM', 'MID'],
-    RW:  ['RW', 'RM', 'ATT'],
-    ST:  ['ST', 'CF', 'SS', 'ATT'],
-    LW:  ['LW', 'LM', 'ATT'],
+    GK: ['GK'],
+    RB: ['RB', 'RWB'],
+    CB: ['CB', 'SW', 'DEF'],
+    LB: ['LB', 'LWB'],
+    RCM: ['RM', 'RCM', 'CDM', 'CM', 'MID'],
+    CM: ['CM', 'CAM', 'AM', 'CDM', 'DM', 'MID'],
+    LCM: ['LM', 'LCM', 'CM', 'MID'],
+    RW: ['RW', 'RM', 'ATT', 'ST'],
+    ST: ['ST', 'CF', 'SS', 'ATT'],
+    LW: ['LW', 'LM', 'ATT', 'ST'],
 };
 
-/**
- * Assigns each player to the best-matching 4-3-3 slot based on their position.
- * Falls back to sequential assignment for unmatched players.
- */
+const FORMATION_LINE_FOR_POS: Record<string, number> = {
+    GK: 0,
+    RB: 1, RWB: 1, LB: 1, LWB: 1, CB: 1, SW: 1, DEF: 1,
+    CM: 2, CDM: 2, CAM: 2, DM: 2, AM: 2, LM: 2, RM: 2, LCM: 2, RCM: 2, MID: 2,
+    RW: 3, LW: 3, ST: 3, CF: 3, SS: 3, ATT: 3,
+};
+
+const LINE_SLOT_INDICES = [
+    [0],
+    [1, 2, 3, 4],
+    [5, 6, 7],
+    [8, 9, 10],
+] as const;
+
+function slotCoords(slotIndex: number): { x: number; y: number } {
+    const slot = FORMATION_433[slotIndex];
+    return { x: slot.x, y: slot.y };
+}
+
+function normalizePos(pos?: string): string {
+    return (pos || 'CM').toUpperCase().trim();
+}
+
 function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | null)[] {
-    const slots = [...FORMATION_433]; // 11 slots
+    const slots = FORMATION_433;
     const result: (PitchPlayerItem | null)[] = new Array(slots.length).fill(null);
-    const usedSlots = new Set<number>();
-    const unmatched: PitchPlayerItem[] = [];
+    const used = new Set<number>();
 
-    for (const player of players) {
-        const pos = (player.position || '').toUpperCase();
-        let placed = false;
+    const place = (slotIndex: number, player: PitchPlayerItem) => {
+        const { x, y } = slotCoords(slotIndex);
+        result[slotIndex] = { ...player, x, y };
+    };
 
-        // Try each slot; pick the first whose accepted positions include this player's position
-        for (let si = 0; si < slots.length; si++) {
-            if (usedSlots.has(si)) continue;
-            const accepted = SLOT_POSITION_MAP[slots[si].label] ?? [];
-            if (accepted.includes(pos)) {
-                result[si] = { ...player, x: slots[si].x, y: slots[si].y };
-                usedSlots.add(si);
-                placed = true;
+    // Pass 1 — exact slot by position label
+    for (let si = 0; si < slots.length; si++) {
+        const accepted = SLOT_POSITION_MAP[slots[si].label] ?? [slots[si].label];
+        for (let pi = 0; pi < players.length; pi++) {
+            if (used.has(pi)) continue;
+            const pos = normalizePos(players[pi].position);
+            if (accepted.includes(pos) || pos === slots[si].label) {
+                place(si, players[pi]);
+                used.add(pi);
                 break;
             }
         }
-
-        if (!placed) unmatched.push(player);
     }
 
-    // Fill remaining empty slots with unmatched players in order
-    let ui = 0;
-    for (let si = 0; si < slots.length && ui < unmatched.length; si++) {
-        if (!usedSlots.has(si)) {
-            result[si] = { ...unmatched[ui], x: slots[si].x, y: slots[si].y };
-            ui++;
+    // Pass 2 — fill empty slots by formation line (DEF/MID/ATT bucket)
+    for (let line = 0; line < LINE_SLOT_INDICES.length; line++) {
+        const emptySlots = LINE_SLOT_INDICES[line].filter((si) => !result[si]);
+        if (emptySlots.length === 0) continue;
+
+        const candidates: number[] = [];
+        for (let pi = 0; pi < players.length; pi++) {
+            if (used.has(pi)) continue;
+            const pos = normalizePos(players[pi].position);
+            if ((FORMATION_LINE_FOR_POS[pos] ?? 2) === line) candidates.push(pi);
         }
+
+        for (const si of emptySlots) {
+            const pi = candidates.shift();
+            if (pi === undefined) break;
+            place(si, players[pi]);
+            used.add(pi);
+        }
+    }
+
+    // Pass 3 — remaining players in rank order into empty slots
+    let pi = 0;
+    for (let si = 0; si < slots.length; si++) {
+        if (result[si]) continue;
+        while (pi < players.length && used.has(pi)) pi++;
+        if (pi >= players.length) break;
+        place(si, players[pi]);
+        used.add(pi);
+        pi++;
     }
 
     return result;
@@ -145,9 +176,30 @@ export function detectFormation(_players: PitchPlayerItem[]): string {
     return '4-3-3';
 }
 
-const SKELETON_POSITIONS = FORMATION_433.map(s => ({ x: s.x, y: s.y }));
+const SKELETON_POSITIONS = FORMATION_433.map((s) => ({ x: s.x, y: s.y }));
 
-// ظ¤ظ¤ظ¤ Player node ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
+function PlayerAvatar({ player }: { player: PitchPlayerItem }) {
+    const [failed, setFailed] = React.useState(false);
+    const uri = player.photoUri?.trim();
+
+    if (uri && !failed) {
+        return (
+            <Image
+                source={{ uri }}
+                style={styles.playerAvatar}
+                resizeMode="cover"
+                onError={() => setFailed(true)}
+            />
+        );
+    }
+
+    return (
+        <View style={styles.playerAvatarFallback}>
+            <Text style={styles.playerShort}>{player.short}</Text>
+        </View>
+    );
+}
+
 function PlayerNode({
     player,
     index,
@@ -178,10 +230,9 @@ function PlayerNode({
     }));
 
     const ratingColor =
-        player.rating >= 90 ? '#FFD700' : player.rating >= 85 ? '#32CD32' : '#11998E';
+        player.rating >= 90 ? RATING_GOLD : player.rating >= 85 ? RATING_GREEN : RATING_TEAL;
 
-    const left = (player.x ?? 50) / 100 * containerW;
-    const top  = (player.y ?? 50) / 100 * containerH;
+    const { left, top } = pitchPercentToContainer(player.x ?? 50, player.y ?? 50, containerW, containerH);
 
     return (
         <View style={[styles.playerNode, { left, top }]}>
@@ -189,7 +240,7 @@ function PlayerNode({
                 <TouchableOpacity activeOpacity={0.8} onPress={onPress} disabled={!onPress}>
                     <View style={styles.circleWrapper}>
                         <View style={styles.playerCircle}>
-                            <Text style={styles.playerShort}>{player.short}</Text>
+                            <PlayerAvatar player={player} />
                         </View>
                         <View style={[styles.ratingBadge, { backgroundColor: ratingColor }]}>
                             <Text style={styles.ratingText}>{player.rating}</Text>
@@ -206,10 +257,19 @@ function PlayerNode({
     );
 }
 
-// ظ¤ظ¤ظ¤ Skeleton node ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 function SkeletonPlayerNode({
-    x, y, index, containerW, containerH,
-}: { x: number; y: number; index: number; containerW: number; containerH: number }) {
+    x,
+    y,
+    index,
+    containerW,
+    containerH,
+}: {
+    x: number;
+    y: number;
+    index: number;
+    containerW: number;
+    containerH: number;
+}) {
     const opacity = useSharedValue(0.35);
     useEffect(() => {
         opacity.value = withDelay(
@@ -218,8 +278,7 @@ function SkeletonPlayerNode({
         );
     }, [index]);
     const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-    const left = x / 100 * containerW;
-    const top  = y / 100 * containerH;
+    const { left, top } = pitchPercentToContainer(x, y, containerW, containerH);
 
     return (
         <View style={[styles.playerNode, { left, top }]}>
@@ -234,10 +293,19 @@ function SkeletonPlayerNode({
     );
 }
 
-// ظ¤ظ¤ظ¤ Empty node ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 function EmptyPlayerNode({
-    x, y, index, containerW, containerH,
-}: { x: number; y: number; index: number; containerW: number; containerH: number }) {
+    x,
+    y,
+    index,
+    containerW,
+    containerH,
+}: {
+    x: number;
+    y: number;
+    index: number;
+    containerW: number;
+    containerH: number;
+}) {
     const opacity = useSharedValue(0.4);
     useEffect(() => {
         opacity.value = withDelay(
@@ -246,8 +314,7 @@ function EmptyPlayerNode({
         );
     }, [index]);
     const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-    const left = x / 100 * containerW;
-    const top  = y / 100 * containerH;
+    const { left, top } = pitchPercentToContainer(x, y, containerW, containerH);
 
     return (
         <View style={[styles.playerNode, { left, top }]}>
@@ -268,7 +335,6 @@ function EmptyPlayerNode({
     );
 }
 
-// ظ¤ظ¤ظ¤ Public component ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 interface TeamPitchProps {
     isLoading?: boolean;
     hasLineup?: boolean;
@@ -285,23 +351,16 @@ export function TeamPitch({
 }: TeamPitchProps) {
     const router = useRouter();
     const { width: screenW } = useWindowDimensions();
-    const uiScale = screenW / REF_WIDTH;
 
-    const [wrapperSize, setWrapperSize] = useState({ w: 0, h: 0 });
+    const [pitchSize, setPitchSize] = useState({ w: 0, h: 0 });
 
-    const onWrapperLayout = useCallback((e: LayoutChangeEvent) => {
+    const pitchLayoutWidth = screenW - HORIZONTAL_PADDING * 2;
+
+    const onPitchLayout = useCallback((e: LayoutChangeEvent) => {
         const { width, height } = e.nativeEvent.layout;
-        setWrapperSize({ w: width, h: height });
+        setPitchSize({ w: width, h: height });
     }, []);
 
-    const pitchW = wrapperSize.w * (CALIBRATION.pitchRight - CALIBRATION.pitchLeft);
-    const pitchH = wrapperSize.h * (CALIBRATION.pitchBottom - CALIBRATION.pitchTop);
-    const pitchX =
-        wrapperSize.w * CALIBRATION.pitchLeft +
-        (CALIBRATION.imageNudgeX + CALIBRATION.overlayNudgeX) * uiScale;
-    const pitchY =
-        wrapperSize.h * CALIBRATION.pitchTop +
-        (CALIBRATION.imageNudgeY + CALIBRATION.overlayNudgeY) * uiScale;
     const placedPlayers = useMemo<(PitchPlayerItem | null)[]>(
         () => (playersProp && playersProp.length > 0 ? buildPitchPositions(playersProp) : []),
         [playersProp],
@@ -318,30 +377,7 @@ export function TeamPitch({
     );
 
     const showSkeleton = isLoading && filledPlayers.length === 0;
-
-    const wrapperStyle = useMemo(
-        () => ({
-            marginTop: CALIBRATION.wrapperMarginTop * uiScale,
-            marginBottom: CALIBRATION.wrapperMarginBottom * uiScale,
-        }),
-        [uiScale],
-    );
-
-    const pitchContainerStyle = useMemo(
-        () => ({
-            width: `${CALIBRATION.imageWidthPct}%`,
-            aspectRatio: CALIBRATION.imageAspect,
-            marginLeft: `${CALIBRATION.imageMarginLeftPct + (REF_WIDTH - screenW) * 0.04}%`,
-            transform: [
-                { scale: CALIBRATION.imageScale },
-                { translateX: CALIBRATION.imageNudgeX * uiScale },
-                { translateY: CALIBRATION.imageNudgeY * uiScale },
-            ],
-        }),
-        [screenW, uiScale],
-    );
-
-    const ready = wrapperSize.w > 0;
+    const ready = pitchSize.w > 0 && pitchSize.h > 0;
 
     return (
         <View style={styles.container}>
@@ -355,41 +391,31 @@ export function TeamPitch({
                 />
             </View>
 
-            {/* Outer clip ظ¤ hides left/right overflow from the wide image */}
-            <View style={styles.pitchOuterClip}>
-                {/* pitchWrapper: the image is rendered here at 300% width + scaled down.
-                    We measure this wrapper so we know the real pixel dimensions. */}
-                <View style={[styles.pitchWrapper, wrapperStyle]} onLayout={onWrapperLayout}>
-
-                    {/* Stadium image */}
-                    <View style={[styles.pitchContainer, pitchContainerStyle]}>
-                        <Image
-                            source={require('../../assets/images/team of the month.png')}
-                            resizeMode="contain"
-                            style={StyleSheet.absoluteFill}
-                        />
-                        <LinearGradient
-                            colors={['rgba(3,0,8,0.85)', 'rgba(3,0,8,0.35)', 'transparent'] as const}
-                            locations={[0, 0.35, 1]}
-                            style={styles.pitchShadowTop}
-                            pointerEvents="none"
-                        />
-                        <LinearGradient
-                            colors={['transparent', 'rgba(3,0,8,0.35)', 'rgba(3,0,8,0.85)'] as const}
-                            locations={[0, 0.65, 1]}
-                            style={styles.pitchShadowBottom}
-                            pointerEvents="none"
+            <View style={styles.pitchOuter}>
+                <LinearGradient
+                    colors={['rgba(74,154,92,0.12)', 'rgba(8,12,16,0)', 'transparent']}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={[styles.pitchAmbient, { width: pitchLayoutWidth + 16 }]}
+                    pointerEvents="none"
+                />
+                <View
+                    style={[styles.pitchFrame, { width: pitchLayoutWidth }]}
+                    onLayout={onPitchLayout}
+                >
+                    <View style={styles.pitchSvgFill}>
+                        <FootballPitchSvg
+                            width={pitchSize.w > 0 ? pitchSize.w : pitchLayoutWidth}
+                            height={
+                                pitchSize.h > 0
+                                    ? pitchSize.h
+                                    : pitchLayoutWidth / FOOTBALL_PITCH_ASPECT
+                            }
                         />
                     </View>
 
-                    {/* Players overlay ظ¤ positioned absolutely over the grass area */}
                     {ready && !showSkeleton && (
-                        <View
-                            style={[
-                                styles.playersOverlay,
-                                { left: pitchX, top: pitchY, width: pitchW, height: pitchH },
-                            ]}
-                        >
+                        <View style={styles.playersOverlay}>
                             {FORMATION_433.map((slot, i) => {
                                 const player = placedPlayers[i];
                                 if (player) {
@@ -398,8 +424,8 @@ export function TeamPitch({
                                             key={`player-${i}`}
                                             player={player}
                                             index={i}
-                                            containerW={pitchW}
-                                            containerH={pitchH}
+                                            containerW={pitchSize.w}
+                                            containerH={pitchSize.h}
                                             onPress={onPlayerPress ? () => onPlayerPress(player) : undefined}
                                         />
                                     );
@@ -410,8 +436,8 @@ export function TeamPitch({
                                         x={slot.x}
                                         y={slot.y}
                                         index={i}
-                                        containerW={pitchW}
-                                        containerH={pitchH}
+                                        containerW={pitchSize.w}
+                                        containerH={pitchSize.h}
                                     />
                                 );
                             })}
@@ -419,20 +445,15 @@ export function TeamPitch({
                     )}
 
                     {ready && showSkeleton && (
-                        <View
-                            style={[
-                                styles.playersOverlay,
-                                { left: pitchX, top: pitchY, width: pitchW, height: pitchH },
-                            ]}
-                        >
+                        <View style={styles.playersOverlay}>
                             {SKELETON_POSITIONS.map((pos, i) => (
                                 <SkeletonPlayerNode
                                     key={`sk-${i}`}
                                     x={pos.x}
                                     y={pos.y}
                                     index={i}
-                                    containerW={pitchW}
-                                    containerH={pitchH}
+                                    containerW={pitchSize.w}
+                                    containerH={pitchSize.h}
                                 />
                             ))}
                         </View>
@@ -443,70 +464,81 @@ export function TeamPitch({
     );
 }
 
-// ظ¤ظ¤ظ¤ Styles ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
 const styles = StyleSheet.create({
-    container: { paddingBottom: 0 },
-
+    container: {
+        paddingBottom: 8,
+    },
     sectionHeaderWrap: {
         zIndex: 20,
         position: 'relative',
+        paddingHorizontal: HORIZONTAL_PADDING,
     },
-
-    pitchOuterClip: {
-        overflow: 'hidden',
+    pitchOuter: {
+        paddingHorizontal: HORIZONTAL_PADDING,
+        marginTop: 8,
+        alignItems: 'center',
     },
-
-    pitchWrapper: {
-        position: 'relative',
-    },
-
-    pitchContainer: {
-        overflow: 'hidden',
-    },
-
-    pitchShadowTop: {
+    pitchAmbient: {
         position: 'absolute',
-        top: 0, left: 0, right: 0,
-        height: '25%',
+        top: '12%',
+        height: '76%',
+        borderRadius: RADIUS_LG + 8,
+        opacity: 0.9,
     },
-    pitchShadowBottom: {
-        position: 'absolute',
-        bottom: 0, left: 0, right: 0,
-        height: '25%',
+    pitchFrame: {
+        aspectRatio: FOOTBALL_PITCH_ASPECT,
+        borderRadius: RADIUS_LG,
+        overflow: 'hidden',
+        borderWidth: 1.5,
+        borderColor: 'rgba(74, 154, 92, 0.45)',
+        backgroundColor: PITCH_SURROUND,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.55,
+        shadowRadius: 16,
+        elevation: 10,
     },
-
-    // Absolutely positioned box that covers exactly the green pitch area.
-    // Its size/position is computed from wrapperSize + PITCH_* constants above.
+    pitchSvgFill: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: GRASS_BASE,
+    },
     playersOverlay: {
-        position: 'absolute',
+        ...StyleSheet.absoluteFillObject,
         zIndex: 20,
     },
-
-    // Each player node is positioned with absolute left/top (in px, computed from %).
-    // translateX/Y -20 centres the 40px circle on the coordinate point.
     playerNode: {
         position: 'absolute',
         alignItems: 'center',
         transform: [{ translateX: -20 }, { translateY: -20 }],
         zIndex: 10,
     },
-
     circleWrapper: { position: 'relative', alignItems: 'center' },
-
     playerCircle: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        borderWidth: 2.5,
-        borderColor: 'rgba(255,255,255,0.9)',
+        borderWidth: 2,
+        borderColor: 'rgba(167,139,250,0.75)',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(59,130,246,0.35)',
-        shadowColor: '#fff',
+        backgroundColor: 'rgba(124,58,237,0.32)',
+        overflow: 'hidden',
+        shadowColor: PURPLE_PRIMARY,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.6,
-        shadowRadius: 8,
-        elevation: 6,
+        shadowOpacity: 0.55,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    playerAvatar: {
+        width: '100%',
+        height: '100%',
+    },
+    playerAvatarFallback: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(124,58,237,0.45)',
     },
     playerShort: {
         color: '#fff',
@@ -518,20 +550,25 @@ const styles = StyleSheet.create({
     },
     ratingBadge: {
         position: 'absolute',
-        bottom: -4, right: -6,
-        width: 20, height: 20, borderRadius: 10,
+        bottom: -4,
+        right: -6,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
         borderWidth: 1.5,
         borderColor: 'rgba(0,0,0,0.9)',
-        alignItems: 'center', justifyContent: 'center',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     ratingText: { color: '#000', fontSize: 7.5, fontWeight: '900' },
     nameBadge: {
-        backgroundColor: 'rgba(0,0,0,0.85)',
-        borderRadius: 5,
-        paddingHorizontal: 5, paddingVertical: 2,
-        maxWidth: 68,
-        borderWidth: 0.5,
-        borderColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(10,6,18,0.88)',
+        borderRadius: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        maxWidth: 84,
+        borderWidth: 1,
+        borderColor: PURPLE_GLOW_SM,
         marginTop: 4,
     },
     nameText: {
@@ -541,42 +578,71 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         letterSpacing: 0.2,
     },
-
     skeletonPlayerCircle: {
-        width: 40, height: 40, borderRadius: 20,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: 'rgba(255,255,255,0.08)',
-        borderWidth: 2, borderColor: 'rgba(255,255,255,0.14)',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.14)',
     },
     skeletonRatingBadge: {
-        position: 'absolute', bottom: -4, right: -6,
-        width: 20, height: 20, borderRadius: 10,
+        position: 'absolute',
+        bottom: -4,
+        right: -6,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
         backgroundColor: 'rgba(255,255,255,0.12)',
-        borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.9)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(0,0,0,0.9)',
     },
     skeletonNameBadge: {
-        width: 42, height: 10, borderRadius: 4,
-        backgroundColor: 'rgba(0,0,0,0.55)', marginTop: 4,
+        width: 42,
+        height: 10,
+        borderRadius: 4,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        marginTop: 4,
     },
-
     emptyPlayerCircle: {
-        width: 40, height: 40, borderRadius: 20,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)',
-        borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.25)',
+        borderStyle: 'dashed',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     emptyPlayerIcon: { color: 'rgba(255, 255, 255, 0.35)', fontSize: 14, fontWeight: '700' },
     emptyRatingBadge: {
-        position: 'absolute', bottom: -4, right: -6,
-        width: 20, height: 20, borderRadius: 10,
+        position: 'absolute',
+        bottom: -4,
+        right: -6,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
         backgroundColor: 'rgba(0, 0, 0, 0.2)',
-        borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.9)',
-        alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1.5,
+        borderColor: 'rgba(0,0,0,0.9)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     emptyRatingText: { color: 'rgba(103, 21, 136, 0.5)', fontSize: 7, fontWeight: '900' },
     emptyNameBadge: {
-        backgroundColor: 'rgba(0, 0, 0, 0.6)', borderRadius: 5,
-        paddingHorizontal: 5, paddingVertical: 2,
-        borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.06)', marginTop: 4,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        borderRadius: 5,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.06)',
+        marginTop: 4,
     },
-    emptyNameText: { color: 'rgba(255,255,255,0.3)', fontSize: 7.5, fontWeight: '700', textAlign: 'center' },
+    emptyNameText: {
+        color: 'rgba(255,255,255,0.3)',
+        fontSize: 7.5,
+        fontWeight: '700',
+        textAlign: 'center',
+    },
 });

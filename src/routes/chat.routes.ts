@@ -318,6 +318,19 @@ router.get('/chat/limit', async (req: Request, res: Response): Promise<void> => 
     }
 });
 
+/** Rename placeholder conversations from the first user message text. */
+async function maybeAutoTitleConversation(
+    userId: string,
+    conversationId: string,
+    titleSource: string,
+): Promise<string | undefined> {
+    const conv = await findConversation(userId, conversationId);
+    if (!conv || !isPlaceholderConversationTitle(conv.title)) return undefined;
+    const title = buildTitleFromFirstMessage(titleSource);
+    await updateConversation(userId, conversationId, { title });
+    return title;
+}
+
 // ─── POST /chat/stream (SSE) ─────────────────────────────────────────────────
 router.post('/chat/stream', async (req: Request, res: Response): Promise<void> => {
     const userId = getUserId(req);
@@ -378,49 +391,6 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        // ─── Fast-path short-circuits (skipped on resume) ────────────────────
-        if (!isResume) {
-            if (containsProfanity(trimmedMessage)) {
-                sendToken(
-                    'اعتذر، لا يمكنني متابعة المحادثة بهذه اللغة. ابدأ محادثة جديدة بصياغة محترمة.',
-                );
-                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
-                return;
-            }
-
-            if (isIdentityQuestion(trimmedMessage)) {
-                const isEnglish =
-                    /[a-zA-Z]{3,}/.test(trimmedMessage) &&
-                    !/[\u0600-\u06FF]/.test(trimmedMessage);
-                const identityText = isEnglish
-                    ? "I'm 90Plus AI — your smart football & sports assistant, developed by mr.dev ai. I help with football info, training plans, sports nutrition, and recovery advice."
-                    : 'أنا 90Plus AI ⚽ — مساعدك الرياضي الذكي، طوّرني mr.dev ai. أقدر أساعدك في كرة القدم، خطط التدريب، التغذية الرياضية، ونصائح الاستشفاء.';
-                sendToken(identityText);
-                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
-                return;
-            }
-
-            if (isGreeting(trimmedMessage)) {
-                sendToken(
-                    'أهلًا بك! جاهز أساعدك في كرة القدم، التمارين، الاستشفاء، والإعداد الغذائي.',
-                );
-                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
-                return;
-            }
-
-            if (isSportsNewsRequest(trimmedMessage)) {
-                sendToken(
-                    'الأخبار اللحظية مش في نطاقي، بس تقدر تتابعها على:\n\n' +
-                    '• **BBC Sport Arabic** — bbc.com/arabic/sports\n' +
-                    '• **Goal بالعربي** — goal.com/ar\n' +
-                    '• **يلا كورة** — yallakora.com\n\n' +
-                    'عندك أي سؤال تاني عن كرة القدم أو التمارين أو التغذية؟ 🎯',
-                );
-                sendDone({ remaining, limit: DAILY_LIMIT, resetAt: getResetTime(tz) });
-                return;
-            }
-        }
-
         // ─── Ensure conversation exists ──────────────────────────────────────
         let targetConversation = conversationId ? await findConversation(userId, conversationId) : null;
         if (!targetConversation) {
@@ -435,6 +405,61 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 return;
             }
             await incrementLimit(userId, tz);
+        }
+
+        const finishCannedReply = async (replyText: string): Promise<void> => {
+            sendToken(replyText);
+            await appendMessage(userId, targetConversation!.id, 'assistant', replyText);
+            const conversationTitle = await maybeAutoTitleConversation(
+                userId,
+                targetConversation!.id,
+                trimmedMessage,
+            );
+            sendDone({
+                remaining,
+                limit: DAILY_LIMIT,
+                resetAt: getResetTime(tz),
+                ...(conversationTitle ? { conversationTitle } : {}),
+            });
+        };
+
+        // ─── Fast-path short-circuits (skipped on resume) ────────────────────
+        if (!isResume) {
+            if (containsProfanity(trimmedMessage)) {
+                await finishCannedReply(
+                    'اعتذر، لا يمكنني متابعة المحادثة بهذه اللغة. ابدأ محادثة جديدة بصياغة محترمة.',
+                );
+                return;
+            }
+
+            if (isIdentityQuestion(trimmedMessage)) {
+                const isEnglish =
+                    /[a-zA-Z]{3,}/.test(trimmedMessage) &&
+                    !/[\u0600-\u06FF]/.test(trimmedMessage);
+                const identityText = isEnglish
+                    ? "I'm 90Plus AI — your smart football & sports assistant, developed by mr.dev ai. I help with football info, training plans, sports nutrition, and recovery advice."
+                    : 'أنا 90Plus AI ⚽ — مساعدك الرياضي الذكي، طوّرني mr.dev ai. أقدر أساعدك في كرة القدم، خطط التدريب، التغذية الرياضية، ونصائح الاستشفاء.';
+                await finishCannedReply(identityText);
+                return;
+            }
+
+            if (isGreeting(trimmedMessage)) {
+                await finishCannedReply(
+                    'أهلًا بك! جاهز أساعدك في كرة القدم، التمارين، الاستشفاء، والإعداد الغذائي.',
+                );
+                return;
+            }
+
+            if (isSportsNewsRequest(trimmedMessage)) {
+                await finishCannedReply(
+                    'الأخبار اللحظية مش في نطاقي، بس تقدر تتابعها على:\n\n' +
+                    '• **BBC Sport Arabic** — bbc.com/arabic/sports\n' +
+                    '• **Goal بالعربي** — goal.com/ar\n' +
+                    '• **يلا كورة** — yallakora.com\n\n' +
+                    'عندك أي سؤال تاني عن كرة القدم أو التمارين أو التغذية؟ 🎯',
+                );
+                return;
+            }
         }
 
         // ─── Build prompt ────────────────────────────────────────────────────
@@ -552,20 +577,18 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             // Auto-title on first exchange (≤ 2 messages total in the convo
             // after we just saved the assistant reply — meaning we're finishing
             // the very first user/assistant pair).
-            let conversationTitle: string | undefined;
-            if (isPlaceholderConversationTitle(targetConversation.title)) {
-                let titleSource = trimmedMessage;
-                const total = await countMessages(targetConversation.id);
-                if (total > 2) {
-                    const history = await listMessages(userId, targetConversation.id, 50);
-                    const firstUser = history?.find((m) => m.role === 'user');
-                    if (firstUser?.text?.trim()) titleSource = firstUser.text;
-                }
-                conversationTitle = buildTitleFromFirstMessage(titleSource);
-                await updateConversation(userId, targetConversation.id, {
-                    title: conversationTitle,
-                });
+            let titleSource = trimmedMessage;
+            const total = await countMessages(targetConversation.id);
+            if (total > 2) {
+                const history = await listMessages(userId, targetConversation.id, 50);
+                const firstUser = history?.find((m) => m.role === 'user');
+                if (firstUser?.text?.trim()) titleSource = firstUser.text;
             }
+            const conversationTitle = await maybeAutoTitleConversation(
+                userId,
+                targetConversation.id,
+                titleSource,
+            );
 
             sendDone({
                 remaining: await getRemaining(userId, tz),

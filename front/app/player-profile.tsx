@@ -29,9 +29,10 @@ import LeagueIcon from '../components/common/LeagueIcon';
 import {
   getFootballSeasonYear,
   getPlayerLeagueStats,
-  playerPhotoUrl,
+  playerPhotoCandidates,
   statNum,
   sumSeasonTotals,
+  teamLogoUrl,
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
 
@@ -182,6 +183,66 @@ const formatTransferValue = (type: string | null): string => {
     return type;
 };
 
+function PlayerHeroPhoto({
+    playerId,
+    photo,
+    name,
+    position,
+    colors,
+}: {
+    playerId: number;
+    photo?: string | null;
+    name: string;
+    position: string | null;
+    colors: readonly [string, string, ...string[]];
+}) {
+    const candidates = useMemo(() => playerPhotoCandidates(playerId, photo), [playerId, photo]);
+    const [uriIndex, setUriIndex] = useState(0);
+    const uri = candidates[uriIndex] ?? '';
+
+    if (!uri || uriIndex >= candidates.length) {
+        return (
+            <PlayerAvatar name={name} position={position} size={112} colors={colors} />
+        );
+    }
+
+    return (
+        <View style={heroPhotoStyles.circle}>
+            <ExpoImage
+                source={{ uri }}
+                style={heroPhotoStyles.image}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                recyclingKey={`player-${playerId}-${uriIndex}`}
+                transition={200}
+                onError={() => {
+                    if (uriIndex + 1 < candidates.length) {
+                        setUriIndex((i) => i + 1);
+                    } else {
+                        setUriIndex(candidates.length);
+                    }
+                }}
+            />
+        </View>
+    );
+}
+
+const heroPhotoStyles = StyleSheet.create({
+    circle: {
+        width: 112,
+        height: 112,
+        borderRadius: 56,
+        overflow: 'hidden',
+        backgroundColor: '#ffffff',
+        borderWidth: 3,
+        borderColor: 'rgba(255,255,255,0.45)',
+    },
+    image: {
+        width: '100%',
+        height: '100%',
+    },
+});
+
 function MiniStat({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
     return (
         <View style={miniStatStyles.box}>
@@ -214,6 +275,7 @@ function LeagueStatCard({
                 <LeagueIcon
                     name={stat.league.name}
                     logo={stat.league.logo}
+                    leagueId={stat.league.id}
                     size={44}
                     color={teamColor}
                 />
@@ -224,7 +286,12 @@ function LeagueStatCard({
                     </Text>
                 </View>
                 <View style={leagueCardStyles.teamChip}>
-                    <TeamBadge name={stat.team.name} color={teamColor} size={28} />
+                    <TeamBadge
+                        name={stat.team.name}
+                        color={teamColor}
+                        size={28}
+                        logo={stat.team.logo}
+                    />
                     <Text style={leagueCardStyles.teamName} numberOfLines={1}>
                         {getTeamDisplayName(stat.team.name, language)}
                     </Text>
@@ -337,7 +404,6 @@ export default function PlayerProfileScreen() {
     const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
     const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
     const teamColors = getTeamColors(params.teamName || '');
-    const heroPhotoUri = playerPhotoUrl(playerId, player?.player?.photo ?? params.photo);
 
     useEffect(() => {
         loadPlayerData();
@@ -605,25 +671,13 @@ export default function PlayerProfileScreen() {
                         style={[styles.heroContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
                     >
                         <View style={styles.heroRow}>
-                            {heroPhotoUri ? (
-                                <View style={styles.playerPhotoCircle}>
-                                    <ExpoImage
-                                        source={{ uri: heroPhotoUri }}
-                                        style={styles.playerPhotoImage}
-                                        contentFit="cover"
-                                        cachePolicy="memory-disk"
-                                        recyclingKey={`player-${playerId}`}
-                                        transition={200}
-                                    />
-                                </View>
-                            ) : (
-                                <PlayerAvatar
-                                    name={player.player.name}
-                                    position={primaryPosition}
-                                    size={112}
-                                    colors={teamColors}
-                                />
-                            )}
+                            <PlayerHeroPhoto
+                                playerId={playerId}
+                                photo={player.player.photo ?? params.photo}
+                                name={player.player.name}
+                                position={primaryPosition}
+                                colors={teamColors}
+                            />
 
                             <View style={styles.heroInfo}>
                                 <Text style={styles.playerName} numberOfLines={2}>{player.player.name}</Text>
@@ -646,7 +700,12 @@ export default function PlayerProfileScreen() {
                                 </View>
                                 {primaryTeam && (
                                     <View style={styles.heroTeamRow}>
-                                        <TeamBadge name={primaryTeam.name} color={teamColors[0]} size={32} />
+                                        <TeamBadge
+                                            name={primaryTeam.name}
+                                            color={teamColors[0]}
+                                            size={32}
+                                            logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
+                                        />
                                         <Text style={styles.heroTeamName} numberOfLines={1}>
                                             {getTeamDisplayName(primaryTeam.name, language)}
                                         </Text>

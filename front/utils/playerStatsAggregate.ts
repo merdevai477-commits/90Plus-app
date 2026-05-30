@@ -185,7 +185,7 @@ export function getPlayerLeagueStats(
 
   return [...rows].sort(
     (a, b) => num(b.games?.appearences) - num(a.games?.appearences),
-  );
+  ).map(normalizeStatRow);
 }
 
 export function sumSeasonTotals(rows: PlayerStatRow[]) {
@@ -202,12 +202,53 @@ export function statNum(v: number | null | undefined): number {
   return num(v);
 }
 
-export function playerPhotoUrl(playerId: number, _photo?: string | null): string {
-  if (playerId > 0) {
-    return `https://media.api-sports.io/football/players/${playerId}.png`;
+export function leagueLogoUrl(leagueId: number, logo?: string | null): string {
+  if (logo && logo.trim() && !logo.includes('placeholder')) {
+    return logo.trim();
   }
-  if (_photo && !_photo.includes('placeholder')) {
-    return _photo;
+  if (leagueId > 0) {
+    return `https://media.api-sports.io/football/leagues/${leagueId}.png`;
   }
   return '';
+}
+
+export function teamLogoUrl(teamId: number, logo?: string | null): string {
+  if (logo && logo.trim() && !logo.includes('placeholder')) {
+    return logo.trim();
+  }
+  if (teamId > 0) {
+    return `https://media.api-sports.io/football/teams/${teamId}.png`;
+  }
+  return '';
+}
+
+/** Ordered photo candidates — API url first, then canonical png/jpg. */
+export function playerPhotoCandidates(playerId: number, photo?: string | null): string[] {
+  const urls: string[] = [];
+  if (photo && photo.trim() && !photo.includes('placeholder')) {
+    urls.push(photo.trim());
+  }
+  if (playerId > 0) {
+    urls.push(`https://media.api-sports.io/football/players/${playerId}.png`);
+    urls.push(`https://media.api-sports.io/football/players/${playerId}.jpg`);
+  }
+  return [...new Set(urls)];
+}
+
+export function playerPhotoUrl(playerId: number, photo?: string | null): string {
+  return playerPhotoCandidates(playerId, photo)[0] ?? '';
+}
+
+export function normalizeStatRow(stat: PlayerStatRow): PlayerStatRow {
+  return {
+    ...stat,
+    team: {
+      ...stat.team,
+      logo: teamLogoUrl(stat.team.id, stat.team.logo),
+    },
+    league: {
+      ...stat.league,
+      logo: leagueLogoUrl(stat.league.id, stat.league.logo),
+    },
+  };
 }
