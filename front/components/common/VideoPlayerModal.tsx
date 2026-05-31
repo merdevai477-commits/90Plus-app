@@ -53,6 +53,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useReelReport } from '../../hooks/useReportSystem';
 import { useReelSocialActions } from '../../hooks/useReelSocialActions';
 import { ReportSystem } from './ReportSystem';
+import { buildReelShareUrl } from '../../constants/shareLinks';
 import { ReelsService } from '../../src/services/authService';
 
 interface VideoPlayerModalProps {

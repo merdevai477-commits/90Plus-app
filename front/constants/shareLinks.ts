@@ -1,10 +1,24 @@
 import { Platform } from 'react-native';
 
+/** Public HTTPS domain — all in-app shares use this for Android App Links */
+export const SHARE_DOMAIN = '90plus.app';
+export const SHARE_BASE_URL = `https://${SHARE_DOMAIN}`;
+
 /** Public HTTPS links for reel sharing (Android App Links + web fallback) */
-export const REEL_SHARE_BASE_URL = 'https://90plus.app/reels';
-export const PROFILE_SHARE_BASE_URL = 'https://90plus.app';
+export const REEL_SHARE_BASE_URL = `${SHARE_BASE_URL}/reels`;
+export const PROFILE_SHARE_BASE_URL = SHARE_BASE_URL;
+export const APP_SHARE_BASE_URL = SHARE_BASE_URL;
 
 export const ANDROID_PACKAGE = 'com.mhmdsh1892.ninetyplusapp';
+
+/**
+ * Release signing fingerprints — must match Google Play upload key.
+ * Server serves SHA-256 via /.well-known/assetlinks.json
+ */
+export const ANDROID_RELEASE_SHA1 =
+  '7D:17:3D:86:F4:B5:95:A3:AC:ED:23:3E:BD:B0:23:B3:CA:4F:F8:29';
+export const ANDROID_RELEASE_SHA256 =
+  'B9:AF:90:A5:F8:31:6E:B3:67:D2:94:EA:ED:ED:58:99:F6:BE:9C:FE:6A:9B:29:70:72:32:C4:D4:D0:07:C6:E8';
 
 export const PLAY_STORE_URL =
   `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
@@ -22,7 +36,9 @@ export function isValidShareUsername(username: string): boolean {
 }
 
 export function buildReelShareUrl(reelId: string): string {
-  return `${REEL_SHARE_BASE_URL}/${reelId}`;
+  const id = reelId?.trim();
+  if (!id) return REEL_SHARE_BASE_URL;
+  return `${REEL_SHARE_BASE_URL}/${id}`;
 }
 
 export function buildReelDeepLink(reelId: string): string {
@@ -32,12 +48,18 @@ export function buildReelDeepLink(reelId: string): string {
 /** HTTPS profile link — Android App Links open the app when installed */
 export function buildProfileShareUrl(username: string): string {
   const clean = normalizeShareUsername(username);
+  if (!isValidShareUsername(clean)) return PROFILE_SHARE_BASE_URL;
   return `${PROFILE_SHARE_BASE_URL}/@${clean}`;
 }
 
 export function buildProfileDeepLink(username: string): string {
   const clean = normalizeShareUsername(username);
   return `ninetyplus://user/${clean}`;
+}
+
+/** HTTPS app invite link — opens app or store landing page */
+export function buildAppShareUrl(): string {
+  return APP_SHARE_BASE_URL;
 }
 
 /** Parse reel id from custom scheme or https share URLs */
@@ -72,6 +94,12 @@ export function parseProfileUsernameFromUrl(url: string): string | null {
     return isValidShareUsername(username) ? username : null;
   }
 
+  const httpsMatch = trimmed.match(/90plus\.app\/@([a-zA-Z0-9_]{1,64})/i);
+  if (httpsMatch?.[1]) {
+    const username = normalizeShareUsername(httpsMatch[1]);
+    return isValidShareUsername(username) ? username : null;
+  }
+
   return null;
 }
 
@@ -91,11 +119,12 @@ export function getStoreReviewUrl(): string {
   return getStoreUrl();
 }
 
-/** Share message with store link for Rank / Settings */
+/** Share message with verified App Link + store fallback */
 export function buildAppShareMessage(lang: 'ar' | 'en'): string {
-  const url = getStoreUrl();
+  const appUrl = buildAppShareUrl();
+  const storeUrl = getStoreUrl();
   if (lang === 'ar') {
-    return `جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!\n${url}`;
+    return `جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!\n${appUrl}\n${storeUrl}`;
   }
-  return `Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!\n${url}`;
+  return `Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!\n${appUrl}\n${storeUrl}`;
 }

@@ -12,6 +12,10 @@ import { logger } from './utils/logger';
 import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
+import {
+    resolveAndroidSha256Fingerprints,
+    buildAssetLinksJson,
+} from './config/androidAppLinks';
 
 // Fix: BigInt cannot be serialized by JSON.stringify by default
 // This adds a global toJSON so any BigInt field is safely converted to Number
@@ -319,22 +323,11 @@ app.use(`${API_PREFIX}/quiz`, quizRoutes);
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
 
-// Android App Links verification (sha256 from env ANDROID_RELEASE_SHA256)
+// Android App Links verification (SHA-256 release fingerprint)
 app.get('/.well-known/assetlinks.json', (_req, res) => {
-    const fingerprint = process.env.ANDROID_RELEASE_SHA256?.trim();
-    const fingerprints = fingerprint
-        ? fingerprint.split(',').map((s) => s.trim()).filter(Boolean)
-        : [];
-    res.json([
-        {
-            relation: ['delegate_permission/common.handle_all_urls'],
-            target: {
-                namespace: 'android_app',
-                package_name: 'com.mhmdsh1892.ninetyplusapp',
-                sha256_cert_fingerprints: fingerprints,
-            },
-        },
-    ]);
+    const fingerprints = resolveAndroidSha256Fingerprints(process.env.ANDROID_RELEASE_SHA256);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(buildAssetLinksJson(fingerprints));
 });
 
 // Serve static files for privacy and terms (Apple compliance)
