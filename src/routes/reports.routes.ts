@@ -121,7 +121,7 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
     if (reportCount === 5) {
       notifyUser({
         userId: reel.userId,
-        type: NotificationType.SYSTEM,
+        type: NotificationType.MODERATION_ALERT,
         titleKey: 'reelReportWarningTitle',
         bodyKey: 'reelReportWarningBody',
         data: {

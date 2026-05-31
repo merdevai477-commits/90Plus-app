@@ -91,7 +91,7 @@ export async function getTopPlayers(
           _count: { select: { likes: true } },
         },
       },
-      _count: { select: { followers: true } },
+      _count: { select: { followers: true, following: true } },
     },
   });
 
