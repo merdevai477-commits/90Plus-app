@@ -4,6 +4,7 @@ import { useAuth } from '@clerk/clerk-expo';
 
 import { useXp } from '../contexts/XpContext';
 import { syncNextPendingCelebration } from '../utils/levelUpCelebration.sync';
+import { FIRST_CELEBRATION_LEVEL } from '../utils/levelUpCelebration.storage';
 import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUpCelebration';
 
 /** Extra trigger when Profile / Rank is opened (backfill + pending). */
@@ -13,7 +14,7 @@ export function useLevelUpCelebrationOnFocus(): void {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isSignedIn || !userId || loading || level <= 1) return;
+      if (!isSignedIn || !userId || loading || level < FIRST_CELEBRATION_LEVEL) return;
 
       let cancelled = false;
 

@@ -1,6 +1,8 @@
 import {
+  baselineCelebratedLevel,
   getCelebratedLevel,
   queueLevelUpCelebration,
+  FIRST_CELEBRATION_LEVEL,
 } from './levelUpCelebration.storage';
 
 export function titleForLevel(level: number): string {
@@ -13,14 +15,14 @@ export function titleForLevel(level: number): string {
   return 'Rookie';
 }
 
-/** Queue the next uncelebrated level (supports users who leveled up before this feature). */
+/** Queue the next uncelebrated level (first popup is always 1 → 2). */
 export async function syncNextPendingCelebration(
   userId: string,
   currentLevel: number,
 ): Promise<void> {
-  if (currentLevel <= 1) return;
+  if (currentLevel < FIRST_CELEBRATION_LEVEL) return;
 
-  const celebrated = await getCelebratedLevel(userId);
+  const celebrated = baselineCelebratedLevel(await getCelebratedLevel(userId));
   if (celebrated >= currentLevel) return;
 
   const nextLevel = celebrated + 1;

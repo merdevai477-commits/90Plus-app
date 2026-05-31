@@ -19,6 +19,10 @@ import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
 import { logger } from '../services/logger';
 import { ensureNotificationForegroundHandler } from '../services/notificationForegroundSetup';
+import {
+  syncExpoPushToken,
+  updatePushNotificationsConsent,
+} from '../services/pushTokenRegistration.service';
 
 // Conditionally import notifications only if not in Expo Go
 let Notifications: any = null;
@@ -232,18 +236,15 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     try {
       ensureNotificationForegroundHandler();
 
-      // Request permissions
       if (Platform.OS !== 'web') {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-
-        if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-
-        if (finalStatus !== 'granted') {
-          logger.warn('Notification permissions not granted');
+        const { status } = await Notifications.getPermissionsAsync();
+        const granted = status === 'granted';
+        setSettings((prev) => ({
+          ...prev,
+          notificationsEnabled: granted,
+        }));
+        if (!granted) {
+          logger.debug('Notification permissions not yet granted');
         }
       }
     } catch (error) {
@@ -277,14 +278,25 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (!isExpoGo && Notifications) {
       try {
         if (enabled) {
-          // Request permissions if enabling
           const { status } = await Notifications.requestPermissionsAsync();
           if (status !== 'granted') {
             throw new Error('Notification permissions not granted');
           }
+          if (isSignedIn) {
+            const authToken = await getToken();
+            if (authToken) {
+              await updatePushNotificationsConsent(authToken, true);
+            }
+            await syncExpoPushToken(getToken);
+          }
         } else {
-          // Cancel all scheduled notifications if disabling
           await Notifications.cancelAllScheduledNotificationsAsync();
+          if (isSignedIn) {
+            const authToken = await getToken();
+            if (authToken) {
+              await updatePushNotificationsConsent(authToken, false);
+            }
+          }
         }
       } catch (error) {
         logger.error('Notification operation failed:', error);

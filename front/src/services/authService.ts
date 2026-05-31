@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { getApiUrl } from '../../config/api.config';
 import { requestDeduplicator } from '../../services/requestDeduplicator';
 import { logger } from './logger';
@@ -2476,7 +2477,10 @@ export class MatchesService {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ token: pushToken }),
+                body: JSON.stringify({
+                    token: pushToken,
+                    platform: Platform.OS,
+                }),
             });
 
             const data = await response.json();

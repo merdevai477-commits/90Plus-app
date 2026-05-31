@@ -253,7 +253,7 @@ router.get('/favorite/:matchId/check', requireAuth, async (req: Request, res: Re
 router.post('/push-token', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const clerkUserId = req.auth?.userId;
-        const { token } = req.body;
+        const { token, platform } = req.body;
 
         if (!clerkUserId) {
             sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
@@ -272,10 +272,32 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             return;
         }
 
-        // Update user's push token
+        const resolvedPlatform =
+            typeof platform === 'string' && platform.length > 0
+                ? platform
+                : (req.headers['x-platform'] as string | undefined) ?? 'unknown';
+
+        // One Expo token belongs to one device — clear stale assignments on other users
+        await prisma.user.updateMany({
+            where: {
+                expoPushToken: token,
+                NOT: { clerkUserId },
+            },
+            data: { expoPushToken: null },
+        });
+
         await prisma.user.update({
             where: { clerkUserId },
-            data: { expoPushToken: token },
+            data: {
+                expoPushToken: token,
+                pushNotificationsConsent: true,
+            },
+        });
+
+        logger.info('[Push] token registered', {
+            clerkUserId,
+            platform: resolvedPlatform,
+            tokenPrefix: token.substring(0, 25),
         });
 
         res.json({

@@ -33,6 +33,7 @@ import { StorageService } from '../../src/services/storageService';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { toastManager } from '../../services/toastManager';
 import { reelUploadNotification } from '../../services/reelUploadNotification';
+import { syncExpoPushToken } from '../../services/pushTokenRegistration.service';
 import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
 import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCache';
@@ -1315,7 +1316,7 @@ export default function ProfileScreen() {
       };
 
       setReelUploadUi({ active: true, progress: 0, phaseLabel: t.profile.preparingUpload });
-      await reelUploadNotification.begin();
+      await reelUploadNotification.begin(getToken);
 
       logger.info('[ReelUpload] Starting POST to /api/upload/reel...', {
         uri: newVideo.uri?.slice(0, 80),
@@ -1348,7 +1349,8 @@ export default function ProfileScreen() {
         setVideoUploadMessage(t.profile.uploadSuccessPhase);
         setVideoUploadProgress(100);
         setReelUploadUi({ active: true, progress: 100, phaseLabel: t.profile.uploadSuccessPhase });
-        await reelUploadNotification.success();
+        await reelUploadNotification.success(undefined, getToken);
+        void syncExpoPushToken(getToken);
 
         await new Promise(resolve => setTimeout(resolve, 1000));
 

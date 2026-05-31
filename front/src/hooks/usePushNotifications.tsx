@@ -1,36 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus } from 'react-native';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
-import { MatchesService } from '../services/authService';
 import { logger } from '../services/logger';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationPermissionModal } from '../../components/common/NotificationPermissionModal';
 import '../../services/notificationForegroundSetup';
 import { getApiUrl } from '../../config/api.config';
-
-// Lazy-load expo-notifications. In Expo Go on SDK 53+ the module crashes at
-// import time because push-token auto-registration is no longer available —
-// see https://docs.expo.dev/develop/development-builds/introduction/
-type NotificationsModule = typeof import('expo-notifications');
-const isExpoGo = Constants.appOwnership === 'expo';
-let cachedNotifications: NotificationsModule | null | undefined;
-
-function loadNotifications(): NotificationsModule | null {
-    if (Platform.OS === 'web') return null;
-    if (isExpoGo) return null;
-    if (cachedNotifications !== undefined) return cachedNotifications;
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        cachedNotifications = require('expo-notifications') as NotificationsModule;
-    } catch {
-        cachedNotifications = null;
-    }
-    return cachedNotifications;
-}
+import {
+    loadNotifications,
+    syncExpoPushToken,
+    syncExpoPushTokenIfGranted,
+    flushPendingPushToken,
+    capturePushTokenAfterPermission,
+    updatePushNotificationsConsent,
+} from '../../services/pushTokenRegistration.service';
 
 const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
 
@@ -64,36 +49,6 @@ export function usePushNotifications(): PushNotificationState {
     isSignedInRef.current = isSignedIn;
     routerRef.current = router;
     queryClientRef.current = queryClient;
-
-    const syncTokenWithBackendWithRetry = useRef(async (pushToken: string, attempt: number = 0) => {
-        try {
-            const authToken = await getTokenRef.current();
-            if (authToken) {
-                const success = await MatchesService.registerPushToken(authToken, pushToken);
-                if (success) {
-                    logger.debug('✅ Push token synced successfully with backend');
-                } else {
-                    throw new Error('Backend rejected token sync');
-                }
-            }
-        } catch (err: any) {
-            logger.error(`❌ Push token sync failed (attempt ${attempt}):`, err);
-            if (attempt < 3) {
-                const delay = Math.pow(2, attempt) * 2000;
-                setTimeout(() => syncTokenWithBackendWithRetry.current(pushToken, attempt + 1), delay);
-            } else {
-                // All retries exhausted — report to Sentry so we know users
-                // are silently missing push notifications.
-                try {
-                    const Sentry = await import('@sentry/react-native');
-                    Sentry.captureException(err, {
-                        tags: { component: 'PushNotifications', action: 'syncToken' },
-                        extra: { tokenPrefix: pushToken.substring(0, 20) },
-                    });
-                } catch { /* Sentry may not be initialized */ }
-            }
-        }
-    });
 
     const trackNotificationOpen = useRef(async (notificationId: string) => {
         try {
@@ -157,7 +112,6 @@ export function usePushNotifications(): PushNotificationState {
                             awayTeam: data.awayTeam || '',
                             homeLogo: data.homeTeamLogo || '',
                             awayLogo: data.awayTeamLogo || '',
-                            // Preserve 0-0 instead of coercing it to ''
                             homeScore: data.homeScore != null ? String(data.homeScore) : '',
                             awayScore: data.awayScore != null ? String(data.awayScore) : '',
                             league: data.leagueName || '',
@@ -206,8 +160,6 @@ export function usePushNotifications(): PushNotificationState {
                     r.push('/notifications');
                 }
             } else if (type === 'PREDICTION_RESULT') {
-                // Prefer match-details when the backend included a fixtureId
-                // in the payload; fall back to the matches hub.
                 const fId = data.matchId || data.fixtureId;
                 if (fId) {
                     r.push({
@@ -273,6 +225,26 @@ export function usePushNotifications(): PushNotificationState {
         }
     }).current;
 
+    const processNotificationResponse = useRef((data: Record<string, any> | undefined) => {
+        if (!data) return;
+        const Notifications = loadNotifications();
+        Notifications?.setBadgeCountAsync(0);
+
+        if (data.notificationId && isSignedInRef.current) {
+            trackNotificationOpen(data.notificationId);
+            getTokenRef.current().then((token) => {
+                if (!token) return;
+                const apiUrl = getApiUrl();
+                fetch(`${apiUrl}/notifications/${data.notificationId}/read`, {
+                    method: 'PUT',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                }).catch((err) => logger.warn('Auto mark-as-read failed:', err));
+            }).catch(() => {});
+        }
+
+        handleDeepLinking(data);
+    }).current;
+
     const requestPermissionExplicitly = useCallback(async (): Promise<boolean> => {
         try {
             const Notifications = loadNotifications();
@@ -281,14 +253,13 @@ export function usePushNotifications(): PushNotificationState {
                 return false;
             }
             const { status: existingStatus } = await Notifications.getPermissionsAsync();
-            
+
             if (existingStatus === 'granted') {
-                const token = await registerForPushNotificationsAsync();
+                const token = await capturePushTokenAfterPermission(getTokenRef.current);
                 if (token) setExpoPushToken(token);
                 return true;
             }
 
-            // Show our custom soft-prompt first
             setShowPermissionModal(true);
             return false;
         } catch (err) {
@@ -299,8 +270,6 @@ export function usePushNotifications(): PushNotificationState {
 
     useEffect(() => {
         if (!loadNotifications()) return;
-
-        // Only run after authentication is definitively loaded
         if (!isLoaded) return;
 
         let isMounted = true;
@@ -310,26 +279,18 @@ export function usePushNotifications(): PushNotificationState {
                 const Notifications = loadNotifications();
                 if (!Notifications) return;
                 const { status } = await Notifications.getPermissionsAsync();
-                
+
                 if (status === 'granted') {
-                    const token = await registerForPushNotificationsAsync();
+                    const token = await capturePushTokenAfterPermission(getTokenRef.current);
                     if (token && isMounted) {
                         setExpoPushToken(token);
-                        
-                        // If user is signed in, send the token to the backend immediately
-                        if (isSignedIn) {
-                            const authToken = await getTokenRef.current();
-                            if (authToken) {
-                                await updatePushNotificationsConsent(authToken, true);
-                            }
-                            await syncTokenWithBackendWithRetry.current(token, 0);
-                        }
+                    }
+                    if (isSignedIn) {
+                        await flushPendingPushToken(getTokenRef.current);
                     }
                 } else if (status === 'undetermined') {
-                    // Check if we've already asked (soft-prompt persistence)
                     const alreadyAsked = await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY);
                     if (!alreadyAsked && isMounted) {
-                        // Delay showing the modal slightly to ensure app is ready/interactive
                         setTimeout(() => {
                             if (isMounted) setShowPermissionModal(true);
                         }, 2500);
@@ -342,17 +303,20 @@ export function usePushNotifications(): PushNotificationState {
 
         checkInitialPermissions();
 
-        // Re-sync token when user signs in (handles case where user logs in after app launch)
-        if (isSignedIn && expoPushToken) {
-            syncTokenWithBackendWithRetry.current(expoPushToken, 0);
+        if (isSignedIn) {
+            void flushPendingPushToken(getTokenRef.current);
+            void syncExpoPushTokenIfGranted(getTokenRef.current);
         }
 
         const Notifications = loadNotifications();
 
-        // Handle AppState changes (works even without notifications module)
         const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
             if (nextAppState === 'active') {
                 Notifications?.setBadgeCountAsync(0);
+                if (isSignedInRef.current) {
+                    void syncExpoPushTokenIfGranted(getTokenRef.current);
+                    void flushPendingPushToken(getTokenRef.current);
+                }
             }
         });
 
@@ -363,42 +327,33 @@ export function usePushNotifications(): PushNotificationState {
             };
         }
 
-        // 1. Foreground Notification arrives
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-            const data = notification.request.content.data as Record<string, any>;
+        // Cold start: app opened from a notification tap while terminated
+        Notifications.getLastNotificationResponseAsync()
+            .then((response) => {
+                if (!response) return;
+                const data = response.notification.request.content.data as Record<string, any>;
+                logger.debug('📲 Cold-start notification response:', data);
+                processNotificationResponse(data);
+            })
+            .catch((err) => logger.warn('getLastNotificationResponseAsync failed:', err));
 
-            // Handle silent background notifications - invalidate cache, no UI
+        notificationListener.current = Notifications.addNotificationReceivedListener((incoming) => {
+            const data = incoming.request.content.data as Record<string, any>;
+
             if (data?.silent === true || data?.silent === 'true') {
                 logger.debug('🔕 Silent notification received, invalidating cache:', data.type);
                 handleSilentNotification(data);
                 return;
             }
 
-            logger.debug('🔔 Notification received in foreground:', notification.request.identifier);
-            setNotification(notification);
+            logger.debug('🔔 Notification received in foreground:', incoming.request.identifier);
+            setNotification(incoming);
         });
 
-        // 2. User taps a notification (Background / Terminated -> Foreground)
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
             const data = response.notification.request.content.data as Record<string, any>;
             logger.debug('📲 Notification tapped. Payload:', data);
-
-            Notifications.setBadgeCountAsync(0);
-
-            // Auto mark-as-read when user taps a notification
-            if (data?.notificationId && isSignedInRef.current) {
-                trackNotificationOpen(data.notificationId);
-                getTokenRef.current().then(token => {
-                    if (!token) return;
-                    const apiUrl = getApiUrl();
-                    fetch(`${apiUrl}/notifications/${data.notificationId}/read`, {
-                        method: 'PUT',
-                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    }).catch(err => logger.warn('Auto mark-as-read failed:', err));
-                }).catch(() => {});
-            }
-
-            handleDeepLinking(data);
+            processNotificationResponse(data);
         });
 
         return () => {
@@ -419,134 +374,18 @@ export function usePushNotifications(): PushNotificationState {
     };
 }
 
-/** Re-register device token with backend (e.g. when opening the inbox). */
-export async function syncExpoPushTokenIfGranted(
-    getAuthToken: () => Promise<string | null>,
-): Promise<void> {
-    const Notifications = loadNotifications();
-    if (!Notifications || !Device.isDevice) return;
+export {
+    syncExpoPushTokenIfGranted,
+    syncExpoPushToken,
+    updatePushNotificationsConsent,
+    capturePushTokenAfterPermission,
+} from '../../services/pushTokenRegistration.service';
 
-    try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status !== 'granted') return;
-
-        const token = await registerForPushNotificationsAsync();
-        if (!token) return;
-
-        const authToken = await getAuthToken();
-        if (!authToken) return;
-
-        await MatchesService.registerPushToken(authToken, token);
-        logger.debug('✅ Push token re-synced from inbox focus');
-    } catch (err) {
-        logger.warn('Push token re-sync on focus failed:', err);
-    }
-}
-
-export async function updatePushNotificationsConsent(
-    authToken: string,
-    granted: boolean,
-): Promise<void> {
-    try {
-        const apiUrl = getApiUrl();
-        await fetch(`${apiUrl}/gdpr/consent`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${authToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                consentType: 'PUSH_NOTIFICATIONS',
-                granted,
-            }),
-        });
-    } catch (err) {
-        logger.warn('Failed to sync push consent with backend:', err);
-    }
-}
-
-async function registerForPushNotificationsAsync(): Promise<string | null> {
-    if (!Device.isDevice) {
-        logger.debug('Push notifications require a physical device');
-        return null;
-    }
-
-    const Notifications = loadNotifications();
-    if (!Notifications) {
-        logger.debug('Push notifications not available (Expo Go / web)');
-        return null;
-    }
-
-    try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status !== 'granted') return null;
-
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-        const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-        
-        const token = pushTokenData.data;
-        logger.debug('📱 Expo Push Token successfully extracted:', token);
-
-        if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('default', {
-                name: 'إشعارات عامة',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#32cd32',
-                sound: 'default',
-            });
-            
-            await Notifications.setNotificationChannelAsync('match-updates', {
-                name: 'تحديثات المباريات',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 500, 250, 500],
-                lightColor: '#22c55e',
-                sound: 'default',
-            });
-
-            await Notifications.setNotificationChannelAsync('social', {
-                name: 'تفاعلات اجتماعية',
-                importance: Notifications.AndroidImportance.HIGH,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#a855f7',
-                sound: 'default',
-            });
-
-            await Notifications.setNotificationChannelAsync('general', {
-                name: 'إشعارات التطبيق',
-                importance: Notifications.AndroidImportance.DEFAULT,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#32cd32',
-                sound: 'default',
-            });
-        }
-        
-        return token;
-    } catch (error) {
-        logger.error('Error getting push token:', error);
-        return null;
-    }
-}
-
-// Global Injection Component
 export function PushNotificationSetup() {
-    if (!loadNotifications()) return null;
+    const { showPermissionModal, setShowPermissionModal } = usePushNotifications();
+    const { isSignedIn, getToken } = useAuth();
 
-    const { showPermissionModal, setShowPermissionModal, expoPushToken } = usePushNotifications();
-    const { isSignedIn } = useAuth();
-    
-    // Manual sync ref for the confirm action
-    const { getToken } = useAuth();
-    const syncToken = async (pushToken: string) => {
-        try {
-            const authToken = await getToken();
-            if (authToken) {
-                await MatchesService.registerPushToken(authToken, pushToken);
-            }
-        } catch (err) {
-            logger.error('Manual token sync failed:', err);
-        }
-    };
+    if (!loadNotifications()) return null;
 
     return (
         <NotificationPermissionModal
@@ -562,16 +401,11 @@ export function PushNotificationSetup() {
                     }
                     const { status } = await Notifications.requestPermissionsAsync();
                     await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
-                    
+
                     if (status === 'granted') {
-                        const token = await registerForPushNotificationsAsync();
-                        if (token && isSignedIn) {
-                            const authToken = await getToken();
-                            if (authToken) {
-                                await updatePushNotificationsConsent(authToken, true);
-                            }
-                            await syncToken(token);
-                        }
+                        await capturePushTokenAfterPermission(
+                            isSignedIn ? getToken : undefined,
+                        );
                     }
                 } catch (err) {
                     logger.error('Permission request error:', err);

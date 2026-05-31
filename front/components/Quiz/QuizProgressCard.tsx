@@ -68,19 +68,16 @@ function QuizProgressCardInner({
   useEffect(() => {
     if (!timerActive) return;
     const interval = setInterval(() => {
-      setSeconds((prev) => {
-        if (prev <= 1) {
-          if (!firedRef.current) {
-            firedRef.current = true;
-            onTimeUpRef.current();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
+      setSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(interval);
   }, [timerKey, timerActive]);
+
+  useEffect(() => {
+    if (!timerActive || seconds !== 0 || firedRef.current) return;
+    firedRef.current = true;
+    onTimeUpRef.current();
+  }, [seconds, timerActive]);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${barWidth.value * 100}%` as `${number}%`,

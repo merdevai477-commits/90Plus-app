@@ -1,9 +1,26 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+/** Player levels start at 1 — the first popup is 1 → 2. */
+export const MIN_PLAYER_LEVEL = 1;
+export const FIRST_CELEBRATION_LEVEL = 2;
+
 export interface StoredLevelUpEvent {
   previousLevel: number;
   newLevel: number;
   newTitle: string;
+}
+
+/** Treat storage 0 as "still on baseline level 1" (no celebration yet). */
+export function baselineCelebratedLevel(celebrated: number): number {
+  return Math.max(celebrated, MIN_PLAYER_LEVEL);
+}
+
+export function isValidLevelUpEvent(event: StoredLevelUpEvent): boolean {
+  return (
+    event.newLevel >= FIRST_CELEBRATION_LEVEL &&
+    event.previousLevel >= MIN_PLAYER_LEVEL &&
+    event.previousLevel === event.newLevel - 1
+  );
 }
 
 function seenKey(userId: string): string {
@@ -41,7 +58,8 @@ export async function queueLevelUpCelebration(
   event: StoredLevelUpEvent,
 ): Promise<void> {
   try {
-    const celebrated = await getCelebratedLevel(userId);
+    if (!isValidLevelUpEvent(event)) return;
+    const celebrated = baselineCelebratedLevel(await getCelebratedLevel(userId));
     if (event.newLevel <= celebrated) return;
     await AsyncStorage.setItem(pendingKey(userId), JSON.stringify(event));
   } catch {
@@ -59,7 +77,8 @@ export async function getPendingLevelUpCelebration(
     if (
       typeof parsed?.newLevel !== 'number' ||
       typeof parsed?.previousLevel !== 'number' ||
-      typeof parsed?.newTitle !== 'string'
+      typeof parsed?.newTitle !== 'string' ||
+      !isValidLevelUpEvent(parsed)
     ) {
       return null;
     }
@@ -83,7 +102,7 @@ export async function consumePendingLevelUpCelebration(
 ): Promise<StoredLevelUpEvent | null> {
   const pending = await getPendingLevelUpCelebration(userId);
   if (!pending) return null;
-  const celebrated = await getCelebratedLevel(userId);
+  const celebrated = baselineCelebratedLevel(await getCelebratedLevel(userId));
   if (pending.newLevel <= celebrated) {
     await clearPendingLevelUpCelebration(userId);
     return null;

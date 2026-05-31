@@ -245,10 +245,10 @@ export class PushNotificationService {
                         if ((ticket as any).status === 'error') {
                             const errCode = (ticket as any).details?.error;
                             logger.error('Push notification error:', (ticket as any).message, errCode);
-                            if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidCredentials') {
-                                await handleInvalidToken(payload.to);
-                            }
-                            if (errCode === 'InvalidCredentials') {
+                        if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidRegistration') {
+                            await handleInvalidToken(payload.to);
+                        }
+                        if (errCode === 'InvalidCredentials') {
                                 try {
                                     const Sentry = await import('@sentry/node');
                                     Sentry.captureException(
@@ -340,7 +340,7 @@ export class PushNotificationService {
                         failed++;
                         const errCode = (ticket as any).details?.error;
                         logger.error('Push error:', (ticket as any).message, errCode);
-                        if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidCredentials') {
+                        if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidRegistration') {
                             if (originalToken) await handleInvalidToken(originalToken);
                         }
                     }

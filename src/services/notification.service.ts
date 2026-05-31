@@ -177,7 +177,7 @@ export class NotificationService {
                             select: { expoPushToken: true, pushNotificationsConsent: true },
                         });
                         if (!user?.pushNotificationsConsent) {
-                            pushSkipReason = 'no_consent';
+                            pushSkipReason = 'consent_false';
                         } else if (!user?.expoPushToken) {
                             pushSkipReason = 'no_token';
                         } else {
@@ -210,7 +210,7 @@ export class NotificationService {
                         });
                     }
                 } else if (pushSkipReason) {
-                    logger.debug('[Push] skipped', {
+                    logger.info('[Push] skipped', {
                         userId,
                         type: String(type),
                         reason: pushSkipReason,

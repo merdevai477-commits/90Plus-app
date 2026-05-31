@@ -17,6 +17,7 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { logger } from './logger';
+import { capturePushTokenAfterPermission } from './pushTokenRegistration.service';
 import { useLanguageStore } from '../src/i18n/store';
 import { translations } from '../src/i18n/utils';
 
@@ -86,14 +87,23 @@ async function ensureChannels(): Promise<void> {
     });
 }
 
-async function ensurePermission(): Promise<boolean> {
+async function ensurePermission(
+    getAuthToken?: () => Promise<string | null>,
+): Promise<boolean> {
     const Notifications = getNotificationsModule();
     if (!Notifications) return false;
     try {
         const { status: existing } = await Notifications.getPermissionsAsync();
-        if (existing === 'granted') return true;
+        if (existing === 'granted') {
+            void capturePushTokenAfterPermission(getAuthToken);
+            return true;
+        }
         const { status } = await Notifications.requestPermissionsAsync();
-        return status === 'granted';
+        if (status === 'granted') {
+            void capturePushTokenAfterPermission(getAuthToken);
+            return true;
+        }
+        return false;
     } catch (e) {
         logger.warn('[reelUploadNotification] permission:', e);
         return false;
@@ -113,14 +123,14 @@ async function ensurePermission(): Promise<boolean> {
  * All methods degrade to no-ops in Expo Go / on web.
  */
 export const reelUploadNotification = {
-    async begin(): Promise<void> {
+    async begin(getAuthToken?: () => Promise<string | null>): Promise<void> {
         if (Platform.OS === 'web') return;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
 
         lastProgressRounded = -1;
 
-        const ok = await ensurePermission();
+        const ok = await ensurePermission(getAuthToken);
         if (!ok) return;
         await ensureChannels();
 
@@ -198,7 +208,10 @@ export const reelUploadNotification = {
         }
     },
 
-    async success(message?: string): Promise<void> {
+    async success(
+        message?: string,
+        getAuthToken?: () => Promise<string | null>,
+    ): Promise<void> {
         if (Platform.OS === 'web') return;
         const Notifications = getNotificationsModule();
         if (!Notifications) return;
@@ -211,6 +224,7 @@ export const reelUploadNotification = {
 
         const perm = await Notifications.getPermissionsAsync();
         if (perm.status !== 'granted') return;
+        void capturePushTokenAfterPermission(getAuthToken);
         await ensureChannels();
 
         try {
