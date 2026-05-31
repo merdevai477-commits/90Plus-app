@@ -12,6 +12,7 @@ import {
   type AppShareStatus,
 } from '../services/appShare.service';
 import { useTranslation } from '../src/i18n';
+import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
 export function useAppShareReward() {
   const { getToken } = useAuth();
@@ -20,7 +21,7 @@ export function useAppShareReward() {
   const [shareStatus, setShareStatus] = useState<AppShareStatus | null>(null);
 
   const loadShareStatus = useCallback(async () => {
-    const token = await getToken();
+    const token = await getClerkBearerToken(getToken);
     if (!token) {
       setShareStatus(null);
       return;
@@ -44,7 +45,7 @@ export function useAppShareReward() {
           return;
         }
 
-        const token = await getToken();
+        const token = await getClerkBearerToken(getToken);
         if (!token) return;
 
         const claim = await claimAppShareReward(token);

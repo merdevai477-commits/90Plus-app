@@ -59,6 +59,17 @@ interface MatchDetailsParams {
   status: string;
 }
 
+/** Win/loss/draw from the displayed team's score — not fixture home/away winner flags. */
+function resolveFormResult(
+  teamScore: number | null | undefined,
+  opponentScore: number | null | undefined,
+): 'win' | 'lose' | 'draw' {
+  if (teamScore == null || opponentScore == null) return 'draw';
+  if (teamScore > opponentScore) return 'win';
+  if (teamScore < opponentScore) return 'lose';
+  return 'draw';
+}
+
 const MatchDetailsScreen = () => {
   useScreenFont();
   const router = useRouter();
@@ -876,8 +887,7 @@ const MatchDetailsScreen = () => {
                 const opponent = isHome ? fixture.teams.away : fixture.teams.home;
                 const teamScore = isHome ? fixture.goals.home : fixture.goals.away;
                 const opponentScore = isHome ? fixture.goals.away : fixture.goals.home;
-                const result = fixture.teams.home.winner === true ? 'win' :
-                  fixture.teams.away.winner === true ? 'lose' : 'draw';
+                const result = resolveFormResult(teamScore, opponentScore);
 
                 return (
                   <View key={index} style={styles.fixtureCard}>
@@ -916,8 +926,7 @@ const MatchDetailsScreen = () => {
                 const opponent = isHome ? fixture.teams.away : fixture.teams.home;
                 const teamScore = isHome ? fixture.goals.home : fixture.goals.away;
                 const opponentScore = isHome ? fixture.goals.away : fixture.goals.home;
-                const result = fixture.teams.home.winner === true ? 'win' :
-                  fixture.teams.away.winner === true ? 'lose' : 'draw';
+                const result = resolveFormResult(teamScore, opponentScore);
 
                 return (
                   <View key={index} style={styles.fixtureCard}>

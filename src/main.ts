@@ -290,6 +290,65 @@ app.use(`${API_PREFIX}/matches/push-token`, userSyncLimiterPushToken);
 // Apply general rate limiting to all API routes (skips the endpoints above inside middleware)
 app.use(`${API_PREFIX}`, generalLimiter);
 
+// Public health — register BEFORE chatRoutes at /api (must not require auth)
+app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
+    const timestamp = new Date().toISOString();
+    const environment = process.env.NODE_ENV || 'development';
+    const uptime = process.uptime();
+    const memoryUsage = process.memoryUsage();
+
+    try {
+        await Promise.race([
+            prisma.$queryRawUnsafe('SELECT 1'),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Database connection timeout')), 30000)
+            )
+        ]);
+
+        const { TokenRevocationService } = await import('./services/token-revocation.service');
+        const { AbuseDetectionService } = await import('./services/abuse-detection.service');
+
+        const tokenStats = TokenRevocationService.getStats();
+        const abuseStats = AbuseDetectionService.getStats();
+
+        res.status(200).json({
+            status: 'OK',
+            message: '90Plus API is running',
+            timestamp,
+            database: 'Connected',
+            environment,
+            server: 'Running',
+            uptime: {
+                seconds: Math.floor(uptime),
+                formatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
+            },
+            memory: {
+                heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+                rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+                external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+            },
+            security: {
+                revokedTokens: tokenStats.totalRevoked,
+                trackedUsers: abuseStats.trackedUsers,
+                trackedIPs: abuseStats.trackedIPs,
+                blockedUsers: abuseStats.blockedUsers,
+                blockedIPs: abuseStats.blockedIPs,
+            },
+        });
+    } catch (error: any) {
+        res.status(200).json({
+            status: 'PARTIAL',
+            message: '90Plus API is running, but database is not connected',
+            timestamp,
+            database: 'Disconnected',
+            environment,
+            server: 'Running',
+            error: error?.message || 'Database connection failed',
+        });
+    }
+});
+
 // Register routes
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/clerk`, clerkUserRoutes);
@@ -435,73 +494,6 @@ app.get(`${API_PREFIX}/metrics`, getMetricsHandler);
 // ✅ TASK 10: CSRF token endpoint
 import { getCSRFTokenHandler } from './middleware/csrf.middleware';
 app.get(`${API_PREFIX}/csrf-token`, getCSRFTokenHandler);
-
-app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
-    const timestamp = new Date().toISOString();
-    const environment = process.env.NODE_ENV || 'development';
-    const uptime = process.uptime();
-    const memoryUsage = process.memoryUsage();
-
-    try {
-        await Promise.race([
-            prisma.$queryRawUnsafe('SELECT 1'),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Database connection timeout')), 30000) // ✅ CRITICAL: Increased from 5s to 30s
-            )
-        ]);
-
-        // ✅ ENTERPRISE IMMUNITY: Include security metrics
-        const { TokenRevocationService } = await import('./services/token-revocation.service');
-        const { AbuseDetectionService } = await import('./services/abuse-detection.service');
-        
-        const tokenStats = TokenRevocationService.getStats();
-        const abuseStats = AbuseDetectionService.getStats();
-
-        res.status(200).json({
-            status: 'OK',
-            message: '90Plus API is running',
-            timestamp,
-            database: 'Connected',
-            environment,
-            server: 'Running',
-            uptime: {
-                seconds: Math.floor(uptime),
-                formatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
-            },
-            memory: {
-                heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-                heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-                rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
-                external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
-            },
-            security: {
-                revokedTokens: tokenStats.totalRevoked,
-                trackedUsers: abuseStats.trackedUsers,
-                trackedIPs: abuseStats.trackedIPs,
-                blockedUsers: abuseStats.blockedUsers,
-                blockedIPs: abuseStats.blockedIPs,
-            },
-        });
-    } catch (error: any) {
-        res.status(200).json({
-            status: 'PARTIAL',
-            message: '90Plus API is running, but database is not connected',
-            timestamp,
-            database: 'Disconnected',
-            environment,
-            server: 'Running',
-            error: error?.message || 'Database connection failed',
-            help: {
-                message: 'To connect the database:',
-                steps: [
-                    '1. Make sure PostgreSQL is installed and running',
-                    '2. Update DATABASE_URL in .env file',
-                    '3. Run: npm run prisma:migrate',
-                ],
-            },
-        });
-    }
-});
 
 app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
     res.json({

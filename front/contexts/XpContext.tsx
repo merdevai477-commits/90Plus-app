@@ -6,6 +6,7 @@ import { queueLevelUpCelebration } from '../utils/levelUpCelebration.storage';
 import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUpCelebration';
 import { syncNextPendingCelebration } from '../utils/levelUpCelebration.sync';
 import { setXpEventsHandler } from '../utils/xpEventsBridge';
+import { getClerkBearerToken, authHeaders } from '../utils/clerkAuthToken';
 
 export interface XpEvent {
   action: string;
@@ -129,7 +130,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
   const [progressPct, setProgressPct] = useState(0);
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
-  const { isSignedIn, getToken, userId } = useAuth();
+  const { isSignedIn, isLoaded, getToken, userId } = useAuth();
   const { user } = useUser();
 
   const getTokenRef = useRef(getToken);
@@ -145,20 +146,16 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
   const suppressNextAutoLevelUpRef = useRef(false);
 
   const fetchXpData = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isLoaded || !isSignedIn) {
       setLoading(false);
       return;
     }
     try {
-      const token = await getTokenRef.current();
+      const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return;
 
       const res = await fetch(`${getApiUrl()}/xp/me`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache'
-        },
+        headers: authHeaders(token),
       });
 
       if (!res.ok) return;
@@ -230,13 +227,13 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [isSignedIn, userId]);
+  }, [isLoaded, isSignedIn, userId]);
 
   // Fetch on mount and user change
   useEffect(() => {
-    if (isSignedIn && user?.id) {
+    if (isLoaded && isSignedIn && user?.id) {
       fetchXpData();
-    } else {
+    } else if (isLoaded && !isSignedIn) {
       setXp(0);
       setLevel(1);
       setTitle('Rookie');
@@ -252,11 +249,11 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       lastSeenLevelRef.current = null;
       suppressNextAutoLevelUpRef.current = false;
     }
-  }, [isSignedIn, user?.id, fetchXpData]);
+  }, [isLoaded, isSignedIn, user?.id, fetchXpData]);
 
   // SSE stream with polling fallback
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isLoaded || !isSignedIn) return;
 
     let eventSource: EventSource | null = null;
     let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -264,7 +261,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
 
     const setupSSE = async () => {
       try {
-        const token = await getTokenRef.current();
+        const token = await getClerkBearerToken(getTokenRef.current);
         if (!token || cancelled) return;
 
         const url = `${getApiUrl()}/xp/stream`;
@@ -303,7 +300,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       if (pollInterval) clearInterval(pollInterval);
       sub.remove();
     };
-  }, [isSignedIn, fetchXpData]);
+  }, [isLoaded, isSignedIn, fetchXpData]);
 
   const handleXpEvents = useCallback(async (events: XpEvent[]) => {
     if (!events || events.length === 0) return;

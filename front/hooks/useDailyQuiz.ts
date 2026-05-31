@@ -7,6 +7,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 
+import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import {
   QuizApiService,
   type QuizApiLanguage,
@@ -78,7 +79,7 @@ async function fetchAndCacheDaily(
   getToken: () => Promise<string | null>,
   lang: QuizApiLanguage,
 ): Promise<QuizDailyPayload> {
-  const token = await getToken();
+  const token = await getClerkBearerToken(getToken);
   if (!token) throw new Error('AUTH_REQUIRED');
   const data = await QuizApiService.fetchDaily(token, lang);
   if (!data?.questions?.length) throw new Error('EMPTY_PACK');
@@ -88,7 +89,7 @@ async function fetchAndCacheDaily(
 }
 
 export function useDailyQuiz(lang: QuizApiLanguage) {
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   const [cachedData, setCachedData] = useState<QuizDailyPayload | undefined>();
 
   useEffect(() => {
@@ -104,7 +105,7 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
   return useQuery({
     queryKey: ['dailyQuiz', lang],
     queryFn: () => fetchAndCacheDaily(getToken, lang),
-    enabled: Boolean(lang) && isSignedIn === true,
+    enabled: Boolean(lang) && isLoaded === true && isSignedIn === true,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -129,7 +130,7 @@ export async function prefetchDailyQuiz(
     prefetchQuizImages(cached.questions, cached.currentIndex ?? 0);
   }
 
-  const token = await getToken();
+  const token = await getClerkBearerToken(getToken);
   if (!token) return;
 
   await queryClient.prefetchQuery({

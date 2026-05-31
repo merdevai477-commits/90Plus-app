@@ -49,7 +49,15 @@ import {
 
 const router = Router();
 
-router.use(requireAuth);
+/** Only chat + conversation paths belong to this router — skip auth for unrelated /api/* traffic. */
+router.use((req, res, next) => {
+    const path = (req.path || '').split('?')[0];
+    if (!path.startsWith('/chat') && !path.startsWith('/conversations')) {
+        next('router');
+        return;
+    }
+    void requireAuth(req, res, next);
+});
 
 // Run the one-shot file-store → Prisma migration at module load (non-blocking).
 // Safe to call repeatedly — it short-circuits once the legacy file is archived.

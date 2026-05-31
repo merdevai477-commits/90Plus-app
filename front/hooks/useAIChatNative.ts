@@ -17,6 +17,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { API_CONFIG } from '../constants/theme';
 import { Storage } from '../services/chatStorageService';
 import { logger } from '../services/logger';
+import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -341,12 +342,14 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // ─── Common headers ───────────────────────────────────────────────────────
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    const token = await getTokenRef.current();
+    const token = await getClerkBearerToken(getTokenRef.current);
     const headers: Record<string, string> = {
       'x-user-timezone': getTimezone(),
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
+    } else {
+      logger.warn('[AIChat] Missing Clerk token for authenticated request');
     }
     return headers;
   }, []);
