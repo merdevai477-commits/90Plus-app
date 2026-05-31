@@ -259,6 +259,7 @@ import {
 
 // Apply lenient rate limiting to high-frequency endpoints (must be before generalLimiter)
 app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
+app.use(`${API_PREFIX}/football/cached/matches`, lenientLimiter);
 app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
 // Chat routes: streaming + long polling — use lenient limiter

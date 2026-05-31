@@ -213,13 +213,13 @@ class MatchCacheService {
             ttl,
         };
 
-        const redisKey = `match:${key}`;
-        
-        // Store in Redis
-        await redisCacheService.set(redisKey, entry, ttl);
-
-        // Also store in memory cache as fallback
+        // In-process first so the next request on this instance never waits on Redis I/O.
         this.memoryCache.set(key, entry);
+
+        const redisKey = `match:${key}`;
+        redisCacheService.set(redisKey, entry, ttl).catch((err) => {
+            logger.warn(`match cache Redis set failed for ${key}:`, err);
+        });
     }
 
     /**
@@ -310,17 +310,57 @@ class MatchCacheService {
 
     /**
      * All matches in DB for a calendar day (any status).
+     * @param lightweight When true (default), omits fullData JSON — ~10x faster for list endpoints.
      */
-    async getMatchesFromDbByDateRange(from: Date, to: Date): Promise<CachedFixture[]> {
+    async getMatchesFromDbByDateRange(
+        from: Date,
+        to: Date,
+        options: { lightweight?: boolean } = {},
+    ): Promise<CachedFixture[]> {
+        const lightweight = options.lightweight !== false;
         try {
-            const matches = await prisma.cachedFixture.findMany({
-                where: {
-                    matchDate: { gte: from, lte: to },
-                },
-                orderBy: { matchTimestamp: 'asc' },
-            });
-            logger.debug(`📦 Retrieved ${matches.length} fixtures from DB for date range`);
-            return matches;
+            const matches = lightweight
+                ? await prisma.cachedFixture.findMany({
+                    where: { matchDate: { gte: from, lte: to } },
+                    orderBy: { matchTimestamp: 'asc' },
+                    select: {
+                        id: true,
+                        fixtureId: true,
+                        leagueId: true,
+                        leagueName: true,
+                        leagueLogo: true,
+                        leagueCountry: true,
+                        leagueSeason: true,
+                        leagueRound: true,
+                        homeTeamId: true,
+                        homeTeamName: true,
+                        homeTeamLogo: true,
+                        awayTeamId: true,
+                        awayTeamName: true,
+                        awayTeamLogo: true,
+                        homeScore: true,
+                        awayScore: true,
+                        homeHalftimeScore: true,
+                        awayHalftimeScore: true,
+                        matchDate: true,
+                        matchTimestamp: true,
+                        status: true,
+                        statusLong: true,
+                        elapsed: true,
+                        venue: true,
+                        referee: true,
+                        createdAt: true,
+                        updatedAt: true,
+                    },
+                })
+                : await prisma.cachedFixture.findMany({
+                    where: { matchDate: { gte: from, lte: to } },
+                    orderBy: { matchTimestamp: 'asc' },
+                });
+            logger.debug(
+                `📦 Retrieved ${matches.length} fixtures from DB (${lightweight ? 'lightweight' : 'full'})`,
+            );
+            return matches as CachedFixture[];
         } catch (error) {
             logger.error('Failed to get matches from database by date:', error);
             return [];

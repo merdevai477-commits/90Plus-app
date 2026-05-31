@@ -85,7 +85,7 @@ class ResponseCache {
                 const filled = await Promise.race([
                     pending,
                     new Promise<CacheEntry>((_, reject) =>
-                        setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 2000),
+                        setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 15_000),
                     ),
                 ]);
                 return filled;

@@ -140,6 +140,7 @@ class WarmupService {
       logger.info('📦 Warming up critical data...');
       
       const prisma = getPrisma();
+      const today = new Date().toISOString().split('T')[0];
 
       // Run all warmup queries in parallel for faster startup
       await Promise.all([
@@ -161,6 +162,16 @@ class WarmupService {
           select: { fixtureId: true },
           take: 200,
         }),
+
+        // Pre-fill matches-by-date for today (avoids 8s cold GET /cached/matches/:date)
+        (async () => {
+          try {
+            const { footballDataCacheService } = await import('./football-data-cache.service');
+            await footballDataCacheService.warmMatchesByDate(today);
+          } catch (err) {
+            logger.warn('Matches-by-date warmup failed (non-fatal):', err);
+          }
+        })(),
       ]);
 
       const duration = Date.now() - startTime;
@@ -269,6 +280,14 @@ export function startKeepAlivePing(port: number) {
         logger.debug('✅ Keep-alive ping successful');
       } else {
         logger.warn(`⚠️ Keep-alive ping returned ${response.status}`);
+      }
+
+      try {
+        const { footballDataCacheService } = await import('./football-data-cache.service');
+        const today = new Date().toISOString().split('T')[0];
+        void footballDataCacheService.warmMatchesByDate(today);
+      } catch {
+        /* non-fatal */
       }
     } catch (error: any) {
       logger.warn('⚠️ Keep-alive ping failed:', error.message);
