@@ -251,23 +251,33 @@ router.get('/favorite/:matchId/check', requireAuth, async (req: Request, res: Re
 // Register Expo Push Token
 // ============================================
 router.post('/push-token', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    const { pushApiTrace } = await import('../utils/pushTrace');
     try {
+        pushApiTrace('[PUSH API] request received');
         const clerkUserId = req.auth?.userId;
         const { token, platform } = req.body;
 
+        pushApiTrace(`[PUSH API] userId=${clerkUserId ?? 'undefined'}`);
+        pushApiTrace(`[PUSH API] token=${typeof token === 'string' ? token : 'undefined'}`);
+
         if (!clerkUserId) {
+            pushApiTrace('[PUSH API] EXIT → reason: Unauthorized (no clerkUserId)');
             sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
             return;
         }
 
         if (!token) {
+            pushApiTrace('[PUSH API] EXIT → reason: token missing in body');
             sendError(req, res, ErrorCode.VALIDATION, 'Push token is required');
             return;
         }
 
-        // Validate Expo push token format before saving
         const { Expo } = await import('expo-server-sdk');
-        if (!Expo.isExpoPushToken(token)) {
+        const isValidExpoToken = Expo.isExpoPushToken(token);
+        pushApiTrace(`[PUSH API] isValidExpoToken=${String(isValidExpoToken)}`);
+
+        if (!isValidExpoToken) {
+            pushApiTrace('[PUSH API] EXIT → reason: Invalid Expo push token format');
             sendError(req, res, ErrorCode.VALIDATION, 'Invalid Expo push token format');
             return;
         }
@@ -277,7 +287,6 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
                 ? platform
                 : (req.headers['x-platform'] as string | undefined) ?? 'unknown';
 
-        // One Expo token belongs to one device — clear stale assignments on other users
         await prisma.user.updateMany({
             where: {
                 expoPushToken: token,
@@ -294,17 +303,38 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             },
         });
 
+        const verify = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { expoPushToken: true, pushNotificationsConsent: true },
+        });
+
+        const dbOk =
+            verify?.expoPushToken === token && verify?.pushNotificationsConsent === true;
+        pushApiTrace(`[PUSH API] DB update result=${dbOk ? 'success' : 'failed'}`);
+        if (!dbOk) {
+            pushApiTrace('[PUSH API] EXIT → reason: post-UPDATE verify mismatch');
+            logger.error('[Push] token verify failed after UPDATE', {
+                clerkUserId,
+                expectedPrefix: token.substring(0, 25),
+                gotPrefix: verify?.expoPushToken?.substring(0, 25) ?? null,
+                consent: verify?.pushNotificationsConsent,
+            });
+        }
+
         logger.info('[Push] token registered', {
             clerkUserId,
             platform: resolvedPlatform,
             tokenPrefix: token.substring(0, 25),
+            dbVerified: dbOk,
         });
 
         res.json({
             status: 'SUCCESS',
             message: 'Push token registered',
+            data: { dbVerified: dbOk },
         });
     } catch (error: any) {
+        pushApiTrace(`[PUSH API] EXIT → reason: exception — ${error?.message ?? error}`);
         logger.error('Register push token error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Failed to register push token');
     }

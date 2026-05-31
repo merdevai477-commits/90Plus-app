@@ -13,6 +13,7 @@ import Constants from 'expo-constants';
 import { MatchesService } from '../src/services/authService';
 import { logger } from './logger';
 import { getApiUrl } from '../config/api.config';
+import { pushTrace } from '../utils/pushTrace';
 
 type NotificationsModule = typeof import('expo-notifications');
 
@@ -20,6 +21,12 @@ const isExpoGo = Constants.appOwnership === 'expo';
 let cachedNotifications: NotificationsModule | null | undefined;
 
 export const PENDING_PUSH_TOKEN_KEY = '@90plus/pendingExpoPushToken';
+
+function ownershipLabel(): string {
+    const o = Constants.appOwnership;
+    if (o === 'expo' || o === 'standalone' || o === 'guest') return o;
+    return o ?? 'null';
+}
 
 function loadNotifications(): NotificationsModule | null {
     if (Platform.OS === 'web') return null;
@@ -76,45 +83,63 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
 
 /** Read Expo push token when OS permission is already granted. */
 export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
+    pushTrace('[PUSH TRACE] start');
+    pushTrace(`[PUSH TRACE] platform=${Platform.OS}`);
+    pushTrace(`[PUSH TRACE] appOwnership=${ownershipLabel()}`);
+    pushTrace(`[PUSH TRACE] isDevice=${String(Device.isDevice)}`);
+
     if (!Device.isDevice) {
+        pushTrace('[PUSH TRACE] EXIT → reason: Device.isDevice=false');
         logger.debug('Push notifications require a physical device');
         return null;
     }
 
     const Notifications = loadNotifications();
-    if (!Notifications) return null;
+    if (!Notifications) {
+        if (Platform.OS === 'web') {
+            pushTrace('[PUSH TRACE] EXIT → reason: Platform.OS=web');
+        } else if (isExpoGo) {
+            pushTrace('[PUSH TRACE] EXIT → reason: Expo Go (appOwnership=expo, no remote push)');
+        } else {
+            pushTrace('[PUSH TRACE] EXIT → reason: expo-notifications module unavailable');
+        }
+        return null;
+    }
 
     try {
         const perm = await Notifications.getPermissionsAsync();
+        pushTrace(`[PUSH TRACE] permissions=${perm.status}`);
+
         if (perm.status !== 'granted') {
-            if (__DEV__) {
-                const projectId =
-                    Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-                console.log('[PushAudit]', JSON.stringify({
-                    permissions: perm.status,
-                    projectId: projectId ?? null,
-                    expoPushToken: null,
-                }));
-            }
+            pushTrace('[PUSH TRACE] EXIT → reason: permission denied');
             return null;
         }
 
         const projectId =
             Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-        const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-        const token = pushTokenData.data;
+        pushTrace(`[PUSH TRACE] projectId=${projectId ?? 'undefined'}`);
+        pushTrace('[PUSH TRACE] before getExpoPushTokenAsync');
+
+        let token: string;
+        try {
+            const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+            token = pushTokenData.data;
+            pushTrace(`[PUSH TRACE] token=${token}`);
+        } catch (tokenErr: unknown) {
+            const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+            pushTrace(`[PUSH TRACE] token=error:${msg}`);
+            pushTrace('[PUSH TRACE] EXIT → reason: getExpoPushTokenAsync failed');
+            logger.error('Error getting push token:', tokenErr);
+            return null;
+        }
 
         await setupAndroidChannels(Notifications);
         logger.debug('📱 Expo push token obtained:', token.substring(0, 25));
-        if (__DEV__) {
-            console.log('[PushAudit]', JSON.stringify({
-                permissions: 'granted',
-                projectId: projectId ?? null,
-                expoPushToken: token.substring(0, 30) + '...',
-            }));
-        }
         return token;
     } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        pushTrace(`[PUSH TRACE] token=error:${msg}`);
+        pushTrace('[PUSH TRACE] EXIT → reason: unexpected error in getExpoPushTokenIfPermitted');
         logger.error('Error getting push token:', error);
         return null;
     }
@@ -163,15 +188,21 @@ async function registerTokenWithBackend(
     pushToken: string,
     attempt = 0,
 ): Promise<boolean> {
+    pushTrace('[PUSH TRACE] before registerPushToken API call');
     try {
         const success = await MatchesService.registerPushToken(authToken, pushToken);
         if (success) {
+            pushTrace('[PUSH TRACE] registerPushToken response=success');
             logger.debug('✅ Push token synced with backend');
             await clearPendingPushToken();
+            pushTrace('[PUSH TRACE] success ✓');
             return true;
         }
+        pushTrace('[PUSH TRACE] registerPushToken response=failed (non-SUCCESS body)');
         throw new Error('Backend rejected token sync');
     } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        pushTrace(`[PUSH TRACE] registerPushToken response=error:${msg}`);
         logger.error(`❌ Push token sync failed (attempt ${attempt}):`, err);
         if (attempt < 3) {
             const delay = Math.pow(2, attempt) * 2000;
@@ -187,6 +218,7 @@ async function registerTokenWithBackend(
         } catch {
             /* Sentry may not be initialized */
         }
+        pushTrace('[PUSH TRACE] EXIT → reason: registerPushToken failed after retries');
         return false;
     }
 }
@@ -195,11 +227,16 @@ async function registerTokenWithBackend(
 export async function syncExpoPushToken(
     getAuthToken: () => Promise<string | null>,
 ): Promise<boolean> {
+    pushTrace('[PUSH TRACE] syncExpoPushToken() start');
     const pushToken = await getExpoPushTokenIfPermitted();
-    if (!pushToken) return false;
+    if (!pushToken) {
+        pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no token from getExpoPushTokenIfPermitted');
+        return false;
+    }
 
     const authToken = await getAuthToken();
     if (!authToken) {
+        pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no auth token, persisted pending');
         await persistPendingPushToken(pushToken);
         return false;
     }
@@ -212,7 +249,10 @@ export async function syncExpoPushToken(
 export async function syncExpoPushTokenIfGranted(
     getAuthToken: () => Promise<string | null>,
 ): Promise<void> {
-    if (!isPushRegistrationAvailable()) return;
+    if (!isPushRegistrationAvailable()) {
+        pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushTokenIfGranted — isPushRegistrationAvailable=false');
+        return;
+    }
     await syncExpoPushToken(getAuthToken);
 }
 
@@ -220,17 +260,25 @@ export async function syncExpoPushTokenIfGranted(
 export async function flushPendingPushToken(
     getAuthToken: () => Promise<string | null>,
 ): Promise<boolean> {
+    pushTrace('[PUSH TRACE] flushPendingPushToken() start');
     try {
         const pending = await AsyncStorage.getItem(PENDING_PUSH_TOKEN_KEY);
-        if (!pending) return false;
+        if (!pending) {
+            pushTrace('[PUSH TRACE] EXIT → reason: flushPendingPushToken — no pending token');
+            return false;
+        }
 
         const authToken = await getAuthToken();
-        if (!authToken) return false;
+        if (!authToken) {
+            pushTrace('[PUSH TRACE] EXIT → reason: flushPendingPushToken — no auth token');
+            return false;
+        }
 
         await updatePushNotificationsConsent(authToken, true);
         return registerTokenWithBackend(authToken, pending);
     } catch (err) {
         logger.warn('Failed to flush pending push token:', err);
+        pushTrace('[PUSH TRACE] EXIT → reason: flushPendingPushToken exception');
         return false;
     }
 }
@@ -242,8 +290,12 @@ export async function flushPendingPushToken(
 export async function capturePushTokenAfterPermission(
     getAuthToken?: () => Promise<string | null>,
 ): Promise<string | null> {
+    pushTrace('[PUSH TRACE] capturePushTokenAfterPermission() start');
     const pushToken = await getExpoPushTokenIfPermitted();
-    if (!pushToken) return null;
+    if (!pushToken) {
+        pushTrace('[PUSH TRACE] EXIT → reason: capturePushTokenAfterPermission — no token');
+        return null;
+    }
 
     if (getAuthToken) {
         const authToken = await getAuthToken();
@@ -251,9 +303,11 @@ export async function capturePushTokenAfterPermission(
             await updatePushNotificationsConsent(authToken, true);
             await registerTokenWithBackend(authToken, pushToken);
         } else {
+            pushTrace('[PUSH TRACE] EXIT → reason: capturePushTokenAfterPermission — pending (no auth)');
             await persistPendingPushToken(pushToken);
         }
     } else {
+        pushTrace('[PUSH TRACE] EXIT → reason: capturePushTokenAfterPermission — pending (no getAuthToken)');
         await persistPendingPushToken(pushToken);
     }
 

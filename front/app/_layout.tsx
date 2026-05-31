@@ -246,6 +246,7 @@ function RootLayoutNav() {
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+      <Stack.Screen name="push-diagnostics" options={{ title: 'Push Diagnostics' }} />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
     </Stack>
   );
