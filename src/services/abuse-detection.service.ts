@@ -10,7 +10,8 @@
 import { logger } from '../utils/logger';
 
 interface RequestTracker {
-  count: number;
+  readCount: number;
+  writeCount: number;
   firstRequest: Date;
   lastRequest: Date;
   failedAuthCount: number;
@@ -30,31 +31,41 @@ const blockedIPs = new Set<string>();
  * Thresholds for abuse detection
  */
 const THRESHOLDS = {
-  // Requests per minute
-  MAX_REQUESTS_PER_MINUTE_USER: 120, // 2 requests/second
-  MAX_REQUESTS_PER_MINUTE_IP: 300, // 5 requests/second
-  
+  // Mutating requests per minute (GET/HEAD are not counted — mobile startup is read-heavy).
+  MAX_WRITES_PER_MINUTE_USER: 120,
+  MAX_WRITES_PER_MINUTE_IP: 300,
+
+  // Soft cap for reads — returns 429 for that request only, never a 15-minute ban.
+  MAX_READS_PER_MINUTE_USER: 800,
+  MAX_READS_PER_MINUTE_IP: 1500,
+
+  // Hard ban only on extreme sustained write flooding (well above normal app usage).
+  BLOCK_WRITES_PER_MINUTE_USER: 400,
+  BLOCK_WRITES_PER_MINUTE_IP: 800,
+
   // Failed authorization
   MAX_FAILED_AUTH_PER_MINUTE: 10,
-  
+
   // Delete operations
   MAX_DELETES_PER_MINUTE: 20,
-  
+
   // Block duration
   BLOCK_DURATION_MS: 15 * 60 * 1000, // 15 minutes
-  
+
   // Cleanup interval
   CLEANUP_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
 };
 
 export class AbuseDetectionService {
   /**
-   * Track a request from a user
+   * Track a request from a user.
+   * @param isRead - GET/HEAD traffic; soft-limited only (no 15-minute ban).
    */
-  static trackUserRequest(userId: string, action?: string): boolean {
+  static trackUserRequest(userId: string, action?: string, isRead = false): boolean {
     const now = new Date();
     const tracker = userTracking.get(userId) || {
-      count: 0,
+      readCount: 0,
+      writeCount: 0,
       firstRequest: now,
       lastRequest: now,
       failedAuthCount: 0,
@@ -65,14 +76,19 @@ export class AbuseDetectionService {
     // Reset counter if more than 1 minute has passed
     const timeSinceFirst = now.getTime() - tracker.firstRequest.getTime();
     if (timeSinceFirst > 60 * 1000) {
-      tracker.count = 0;
+      tracker.readCount = 0;
+      tracker.writeCount = 0;
       tracker.firstRequest = now;
       tracker.failedAuthCount = 0;
       tracker.deleteCount = 0;
       tracker.suspiciousActions = [];
     }
 
-    tracker.count++;
+    if (isRead) {
+      tracker.readCount++;
+    } else {
+      tracker.writeCount++;
+    }
     tracker.lastRequest = now;
 
     // Track specific actions
@@ -84,10 +100,18 @@ export class AbuseDetectionService {
 
     userTracking.set(userId, tracker);
 
-    // Check thresholds
-    if (tracker.count > THRESHOLDS.MAX_REQUESTS_PER_MINUTE_USER) {
-      this.blockUser(userId, 'Request flooding');
-      return false;
+    if (isRead) {
+      if (tracker.readCount > THRESHOLDS.MAX_READS_PER_MINUTE_USER) {
+        return false;
+      }
+    } else {
+      if (tracker.writeCount > THRESHOLDS.MAX_WRITES_PER_MINUTE_USER) {
+        return false;
+      }
+      if (tracker.writeCount > THRESHOLDS.BLOCK_WRITES_PER_MINUTE_USER) {
+        this.blockUser(userId, 'Write request flooding');
+        return false;
+      }
     }
 
     if (tracker.failedAuthCount > THRESHOLDS.MAX_FAILED_AUTH_PER_MINUTE) {
@@ -104,12 +128,14 @@ export class AbuseDetectionService {
   }
 
   /**
-   * Track a request from an IP address
+   * Track a request from an IP address.
+   * @param isRead - GET/HEAD traffic; soft-limited only (no 15-minute ban).
    */
-  static trackIPRequest(ip: string, action?: string): boolean {
+  static trackIPRequest(ip: string, action?: string, isRead = false): boolean {
     const now = new Date();
     const tracker = ipTracking.get(ip) || {
-      count: 0,
+      readCount: 0,
+      writeCount: 0,
       firstRequest: now,
       lastRequest: now,
       failedAuthCount: 0,
@@ -120,14 +146,19 @@ export class AbuseDetectionService {
     // Reset counter if more than 1 minute has passed
     const timeSinceFirst = now.getTime() - tracker.firstRequest.getTime();
     if (timeSinceFirst > 60 * 1000) {
-      tracker.count = 0;
+      tracker.readCount = 0;
+      tracker.writeCount = 0;
       tracker.firstRequest = now;
       tracker.failedAuthCount = 0;
       tracker.deleteCount = 0;
       tracker.suspiciousActions = [];
     }
 
-    tracker.count++;
+    if (isRead) {
+      tracker.readCount++;
+    } else {
+      tracker.writeCount++;
+    }
     tracker.lastRequest = now;
 
     // Track specific actions
@@ -139,10 +170,18 @@ export class AbuseDetectionService {
 
     ipTracking.set(ip, tracker);
 
-    // Check thresholds
-    if (tracker.count > THRESHOLDS.MAX_REQUESTS_PER_MINUTE_IP) {
-      this.blockIP(ip, 'Request flooding');
-      return false;
+    if (isRead) {
+      if (tracker.readCount > THRESHOLDS.MAX_READS_PER_MINUTE_IP) {
+        return false;
+      }
+    } else {
+      if (tracker.writeCount > THRESHOLDS.MAX_WRITES_PER_MINUTE_IP) {
+        return false;
+      }
+      if (tracker.writeCount > THRESHOLDS.BLOCK_WRITES_PER_MINUTE_IP) {
+        this.blockIP(ip, 'Write request flooding');
+        return false;
+      }
     }
 
     if (tracker.failedAuthCount > THRESHOLDS.MAX_FAILED_AUTH_PER_MINUTE) {
@@ -296,20 +335,22 @@ export class AbuseDetectionService {
       blockedIPs: blockedIPs.size,
       thresholds: THRESHOLDS,
       topUsers: Array.from(userTracking.entries())
-        .sort((a, b) => b[1].count - a[1].count)
+        .sort((a, b) => (b[1].readCount + b[1].writeCount) - (a[1].readCount + a[1].writeCount))
         .slice(0, 10)
         .map(([userId, tracker]) => ({
           userId,
-          requests: tracker.count,
+          reads: tracker.readCount,
+          writes: tracker.writeCount,
           failedAuth: tracker.failedAuthCount,
           deletes: tracker.deleteCount,
         })),
       topIPs: Array.from(ipTracking.entries())
-        .sort((a, b) => b[1].count - a[1].count)
+        .sort((a, b) => (b[1].readCount + b[1].writeCount) - (a[1].readCount + a[1].writeCount))
         .slice(0, 10)
         .map(([ip, tracker]) => ({
           ip,
-          requests: tracker.count,
+          reads: tracker.readCount,
+          writes: tracker.writeCount,
           failedAuth: tracker.failedAuthCount,
           deletes: tracker.deleteCount,
         })),

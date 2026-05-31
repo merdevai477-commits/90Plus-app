@@ -18,9 +18,9 @@ export function PushTokenSyncBootstrap() {
     useEffect(() => {
         if (!isLoaded || !isSignedIn) return;
 
-        const sync = () => {
-            void flushPendingPushToken(() => getTokenRef.current());
-            void syncExpoPushTokenIfGranted(() => getTokenRef.current());
+        const sync = async () => {
+            await flushPendingPushToken(() => getTokenRef.current());
+            await syncExpoPushTokenIfGranted(() => getTokenRef.current());
         };
 
         sync();

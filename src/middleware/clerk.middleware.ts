@@ -216,8 +216,9 @@ export const requireAuth = async (
             return;
         }
 
-        // ✅ ENTERPRISE IMMUNITY: Track request
-        const allowed = AbuseDetectionService.trackUserRequest(userId);
+        // ✅ ENTERPRISE IMMUNITY: Track request (reads vs writes — startup is read-heavy)
+        const isRead = req.method === 'GET' || req.method === 'HEAD';
+        const allowed = AbuseDetectionService.trackUserRequest(userId, undefined, isRead);
         if (!allowed) {
             res.status(429).json({
                 status: 'ERROR',
@@ -225,6 +226,18 @@ export const requireAuth = async (
                 code: 'RATE_LIMIT_EXCEEDED',
             });
             return;
+        }
+
+        if (!isRead) {
+            const ipAllowed = AbuseDetectionService.trackIPRequest(clientIP, undefined, false);
+            if (!ipAllowed) {
+                res.status(429).json({
+                    status: 'ERROR',
+                    message: 'Too many requests - Please slow down',
+                    code: 'RATE_LIMIT_EXCEEDED',
+                });
+                return;
+            }
         }
 
         // Optional: Verify user exists in Clerk (with caching) for extra security

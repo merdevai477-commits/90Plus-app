@@ -136,6 +136,9 @@ export const generalLimiter = rateLimit({
         if (p.startsWith('/profile/me')) return true;
         if (p.startsWith('/profile/analytics')) return true;
         if (p.startsWith('/profile/cooldowns')) return true;
+        if (p.startsWith('/xp/')) return true;
+        if (p.startsWith('/gdpr/')) return true;
+        if (p === '/matches/push-token') return true;
         return false;
     },
     // Use keyGenerator to group by user ID if authenticated, otherwise by IP
@@ -181,7 +184,13 @@ function createLenientLimiter(policyId: string) {
 export const lenientLimiter = createLenientLimiter('lenient-feed-and-rankings');
 
 /** Home shell reads: predictions (all GET routes), daily spin, quiz status */
-export const lenientShellLimiter = createLenientLimiter('lenient-home-shell-reads');
+export const lenientShellDailySpinLimiter = createLenientLimiter('lenient-daily-spin-reads');
+
+/** Separate bucket for quiz — never share one limiter instance across URL prefixes */
+export const lenientShellQuizLimiter = createLenientLimiter('lenient-quiz-reads');
+
+/** @deprecated Use lenientShellDailySpinLimiter or lenientShellQuizLimiter */
+export const lenientShellLimiter = lenientShellDailySpinLimiter;
 
 /** Dedicated bucket for prediction reads so spin/quiz cannot starve match polling */
 export const lenientPredictionsReadLimiter = createLenientLimiter('lenient-predictions-reads');
@@ -321,6 +330,9 @@ export const userSyncLimiterCoinsBalance = createUserSyncLimiter('user-sync-coin
 export const userSyncLimiterProfileCompletion = createUserSyncLimiter(
     'user-sync-profile-completion'
 );
+export const userSyncLimiterXp = createUserSyncLimiter('user-sync-xp');
+export const userSyncLimiterGdpr = createUserSyncLimiter('user-sync-gdpr');
+export const userSyncLimiterPushToken = createUserSyncLimiter('user-sync-push-token');
 
 /** @deprecated Prefer userSyncLimiterClerkMe; kept for clerk-user.routes imports */
 export const userSyncLimiter = userSyncLimiterClerkMe;
@@ -329,6 +341,8 @@ export default {
     generalLimiter,
     lenientLimiter,
     lenientShellLimiter,
+    lenientShellDailySpinLimiter,
+    lenientShellQuizLimiter,
     lenientPredictionsReadLimiter,
     writeLimiter,
     authLimiter,
@@ -339,5 +353,8 @@ export default {
     userSyncLimiterClerkStats,
     userSyncLimiterCoinsBalance,
     userSyncLimiterProfileCompletion,
+    userSyncLimiterXp,
+    userSyncLimiterGdpr,
+    userSyncLimiterPushToken,
     skipRateLimitForTrusted,
 };

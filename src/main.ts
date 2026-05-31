@@ -248,12 +248,16 @@ import { PredictionWatcherService } from './services/prediction-watcher.service'
 import {
     generalLimiter,
     lenientLimiter,
-    lenientShellLimiter,
+    lenientShellDailySpinLimiter,
+    lenientShellQuizLimiter,
     lenientPredictionsReadLimiter,
     userSyncLimiterClerkMe,
     userSyncLimiterClerkStats,
     userSyncLimiterCoinsBalance,
     userSyncLimiterProfileCompletion,
+    userSyncLimiterXp,
+    userSyncLimiterGdpr,
+    userSyncLimiterPushToken,
     webhookLimiter,
 } from './middleware/rateLimit.middleware';
 
@@ -265,7 +269,7 @@ app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
 // Chat routes: streaming + long polling — use lenient limiter
 app.use(`${API_PREFIX}/chat`, lenientLimiter);
 app.use(`${API_PREFIX}/conversations`, lenientLimiter);
-app.use(`${API_PREFIX}/daily-spin`, lenientShellLimiter);
+app.use(`${API_PREFIX}/daily-spin`, lenientShellDailySpinLimiter);
 
 // All /predictions routes (GET-heavy from multiple tabs); POST still passes generalLimiter after.
 app.use(`${API_PREFIX}/predictions`, lenientPredictionsReadLimiter);
@@ -275,6 +279,9 @@ app.use(`${API_PREFIX}/clerk/me`, userSyncLimiterClerkMe);
 app.use(`${API_PREFIX}/clerk/stats`, userSyncLimiterClerkStats);
 app.use(`${API_PREFIX}/coins/balance`, userSyncLimiterCoinsBalance);
 app.use(`${API_PREFIX}/profile/completion`, userSyncLimiterProfileCompletion);
+app.use(`${API_PREFIX}/xp`, userSyncLimiterXp);
+app.use(`${API_PREFIX}/gdpr`, userSyncLimiterGdpr);
+app.use(`${API_PREFIX}/matches/push-token`, userSyncLimiterPushToken);
 
 // Apply general rate limiting to all API routes (skips the endpoints above inside middleware)
 app.use(`${API_PREFIX}`, generalLimiter);
@@ -306,7 +313,7 @@ app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
 app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
-app.use(`${API_PREFIX}/quiz`, lenientShellLimiter);
+app.use(`${API_PREFIX}/quiz`, lenientShellQuizLimiter);
 app.use(`${API_PREFIX}/quiz`, quizRoutes);
 
 // Support and legal pages (without API prefix)

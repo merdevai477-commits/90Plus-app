@@ -38,9 +38,6 @@ const deletionLimiter = rateLimit({
   message: 'Too many deletion requests. Please try again tomorrow.',
 });
 
-// All routes require authentication
-router.use(requireAuth);
-
 // ============================================================================
 // Data Export Routes
 // ============================================================================

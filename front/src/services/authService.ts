@@ -2469,7 +2469,10 @@ export class MatchesService {
     /**
      * Register push token for notifications
      */
-    static async registerPushToken(token: string, pushToken: string): Promise<boolean> {
+    static async registerPushToken(
+        token: string,
+        pushToken: string,
+    ): Promise<{ success: boolean; rateLimited?: boolean }> {
         try {
             const response = await fetch(`${API_URL}/matches/push-token`, {
                 method: 'POST',
@@ -2483,11 +2486,15 @@ export class MatchesService {
                 }),
             });
 
+            if (response.status === 429) {
+                return { success: false, rateLimited: true };
+            }
+
             const data = await response.json();
-            return data.status === 'SUCCESS';
+            return { success: data.status === 'SUCCESS' };
         } catch (error) {
             console.error('Register push token error:', error);
-            return false;
+            return { success: false };
         }
     }
 }

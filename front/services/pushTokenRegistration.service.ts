@@ -20,6 +20,10 @@ type NotificationsModule = typeof import('expo-notifications');
 const isExpoGo = Constants.appOwnership === 'expo';
 let cachedNotifications: NotificationsModule | null | undefined;
 
+/** One in-flight backend sync per session — avoids duplicate POST /push-token on startup */
+let inFlightPushSync: Promise<boolean> | null = null;
+let lastSyncedPushToken: string | null = null;
+
 export const PENDING_PUSH_TOKEN_KEY = '@90plus/pendingExpoPushToken';
 
 function ownershipLabel(): string {
@@ -188,15 +192,26 @@ async function registerTokenWithBackend(
     pushToken: string,
     attempt = 0,
 ): Promise<boolean> {
+    if (lastSyncedPushToken === pushToken && attempt === 0) {
+        pushTrace('[PUSH TRACE] skip registerPushToken — already synced this token');
+        return true;
+    }
+
     pushTrace('[PUSH TRACE] before registerPushToken API call');
     try {
-        const success = await MatchesService.registerPushToken(authToken, pushToken);
-        if (success) {
+        const result = await MatchesService.registerPushToken(authToken, pushToken);
+        if (result.success) {
             pushTrace('[PUSH TRACE] registerPushToken response=success');
             logger.debug('✅ Push token synced with backend');
+            lastSyncedPushToken = pushToken;
             await clearPendingPushToken();
             pushTrace('[PUSH TRACE] success ✓');
             return true;
+        }
+        if (result.rateLimited) {
+            pushTrace('[PUSH TRACE] registerPushToken response=429 (no retry)');
+            logger.warn('Push token sync rate-limited; will retry on next foreground');
+            return false;
         }
         pushTrace('[PUSH TRACE] registerPushToken response=failed (non-SUCCESS body)');
         throw new Error('Backend rejected token sync');
@@ -204,7 +219,7 @@ async function registerTokenWithBackend(
         const msg = err instanceof Error ? err.message : String(err);
         pushTrace(`[PUSH TRACE] registerPushToken response=error:${msg}`);
         logger.error(`❌ Push token sync failed (attempt ${attempt}):`, err);
-        if (attempt < 3) {
+        if (attempt < 2) {
             const delay = Math.pow(2, attempt) * 2000;
             await new Promise((r) => setTimeout(r, delay));
             return registerTokenWithBackend(authToken, pushToken, attempt + 1);
@@ -227,22 +242,35 @@ async function registerTokenWithBackend(
 export async function syncExpoPushToken(
     getAuthToken: () => Promise<string | null>,
 ): Promise<boolean> {
-    pushTrace('[PUSH TRACE] syncExpoPushToken() start');
-    const pushToken = await getExpoPushTokenIfPermitted();
-    if (!pushToken) {
-        pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no token from getExpoPushTokenIfPermitted');
-        return false;
+    if (inFlightPushSync) {
+        pushTrace('[PUSH TRACE] reusing in-flight syncExpoPushToken');
+        return inFlightPushSync;
     }
 
-    const authToken = await getAuthToken();
-    if (!authToken) {
-        pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no auth token, persisted pending');
-        await persistPendingPushToken(pushToken);
-        return false;
-    }
+    inFlightPushSync = (async () => {
+        pushTrace('[PUSH TRACE] syncExpoPushToken() start');
+        const pushToken = await getExpoPushTokenIfPermitted();
+        if (!pushToken) {
+            pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no token from getExpoPushTokenIfPermitted');
+            return false;
+        }
 
-    await updatePushNotificationsConsent(authToken, true);
-    return registerTokenWithBackend(authToken, pushToken);
+        const authToken = await getAuthToken();
+        if (!authToken) {
+            pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no auth token, persisted pending');
+            await persistPendingPushToken(pushToken);
+            return false;
+        }
+
+        await updatePushNotificationsConsent(authToken, true);
+        return registerTokenWithBackend(authToken, pushToken);
+    })();
+
+    try {
+        return await inFlightPushSync;
+    } finally {
+        inFlightPushSync = null;
+    }
 }
 
 /** Re-register when permission is already granted (inbox focus, foreground, etc.). */
