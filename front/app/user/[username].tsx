@@ -10,6 +10,8 @@ import {
   RefreshControl,
   Animated,
   Modal,
+  Share,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -17,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Zap } from 'lucide-react-native';
+import { Zap, Flag, MessageCircle } from 'lucide-react-native';
 
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
@@ -45,6 +47,9 @@ import { useVideos, Comment } from '../../contexts/VideosContext';
 import { BlockService } from '../../services/blockService';
 import { cacheService, CACHE_TTL } from '../../services/cacheService';
 import { useTranslation } from '../../src/i18n';
+import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
+import { ReportSystem } from '../../components/common/ReportSystem';
+import { useUserReport } from '../../hooks/useReportSystem';
 
 // Cache keys for the public-profile screen
 const USER_PROFILE_CACHE = 'user_profile';
@@ -175,11 +180,23 @@ const tb = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const toast = useToast();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
+  const cardOverlap = getProfileCardOverlapMargin(screenHeight);
   const { reelComments, addComment, toggleCommentLike } = useVideos();
+  const {
+    reportUser,
+    isVisible: reportVisible,
+    reportConfig,
+    closeReport,
+    handleSuccess: onReportSuccess,
+    getToken: getReportToken,
+  } = useUserReport({
+    onSuccess: () => toast.showSuccess('', t.publicProfile.reportSubmitted),
+  });
 
   const [user, setUser] = useState<SearchUserResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -191,6 +208,13 @@ export default function UserProfileScreen() {
   const [loadingMoreVideos, setLoadingMoreVideos] = useState(false);
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<UserReel | null>(null);
+  const [selectedReelSocial, setSelectedReelSocial] = useState({
+    liked: false,
+    likes: 0,
+    saved: false,
+    shares: 0,
+    views: 0,
+  });
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockedMe, setBlockedMe] = useState(false);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
@@ -230,7 +254,7 @@ export default function UserProfileScreen() {
 
     try {
       const token = await getToken();
-      if (!token) { setError(t.errorCodes.E002); setIsLoading(false); return; }
+      setAuthToken(token);
       const userData = await AuthService.getUserByUsername(token, username);
       if (userData) {
         setUser(userData);
@@ -281,7 +305,6 @@ export default function UserProfileScreen() {
 
     try {
       const token = await getToken();
-      if (!token) return;
       const reels = await AuthService.getUserReels(
         token,
         username,
@@ -325,39 +348,31 @@ export default function UserProfileScreen() {
     const bootstrap = async () => {
       const token = await getToken();
       setAuthToken(token);
-      await Promise.all([loadUserProfile(), loadUserVideos()]);
+      await loadUserProfile();
       recordProfileView();
     };
 
     bootstrap();
   }, [username]);
 
+  // Load reels only after profile is known and block status allows viewing.
   useEffect(() => {
-    const check = async () => {
-      if (!user) return;
-      try {
-        const token = await getToken();
-        if (token) {
-          setAuthToken(token);
-          const blocked = await BlockService.isUserBlocked(user.id, token);
-          setIsBlocked(blocked);
-        }
-      } catch { /* silent */ }
-    };
-    check();
-  }, [user?.id, getToken]);
-
-  useEffect(() => {
+    if (!username || !user) return;
     if (blockedMe || isBlocked) {
       setUserVideos([]);
       setHasMoreVideos(false);
+      return;
     }
-  }, [blockedMe, isBlocked]);
+    loadUserVideos();
+  }, [username, user?.id, blockedMe, isBlocked]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     setHasMoreVideos(true);
-    await Promise.all([loadUserProfile(true), loadUserVideos(true, 0)]);
+    await loadUserProfile(true);
+    if (!blockedMe && !isBlocked) {
+      await loadUserVideos(true, 0);
+    }
     setRefreshing(false);
   };
 
@@ -419,8 +434,48 @@ export default function UserProfileScreen() {
 
   const handleFollow = () => {
     if (!user) return;
+    if (!isSignedIn) {
+      router.push('/auth');
+      return;
+    }
     animateBtn();
     user.isFollowing ? performUnfollow() : performFollow();
+  };
+
+  const handleReportPress = async () => {
+    if (!user) return;
+    if (!(await getToken())) {
+      router.push('/auth');
+      return;
+    }
+    reportUser(user.id);
+  };
+
+  const handleMessagePress = async () => {
+    if (!user) return;
+    const profileUrl = `https://90plus.app/@${user.username}`;
+    try {
+      await Share.share({
+        message: `${t.profile.checkMyProfile} @${user.username}\n${profileUrl}`,
+        url: profileUrl,
+      });
+    } catch { /* cancelled */ }
+  };
+
+  const handleVideoPress = (video: UserReel) => {
+    const viewsRaw = video.views;
+    setSelectedReelSocial({
+      liked: false,
+      likes: Number(video.likes) || 0,
+      saved: false,
+      shares: 0,
+      views:
+        typeof viewsRaw === 'number'
+          ? viewsRaw
+          : parseInt(String(viewsRaw ?? '0').replace(/,/g, ''), 10) || 0,
+    });
+    setSelectedVideo(video);
+    setIsVideoPlayerVisible(true);
   };
 
   // ── Block ───────────────────────────────────────────────────────────────────
@@ -575,10 +630,26 @@ export default function UserProfileScreen() {
         userImage={user.avatar}
         username={user.username}
         reelId={selectedVideo?.id}
+        initialLiked={selectedReelSocial.liked}
+        initialLikes={selectedReelSocial.likes}
+        initialSaved={selectedReelSocial.saved}
+        initialShares={selectedReelSocial.shares}
+        initialViews={selectedReelSocial.views}
         comments={reelComments[selectedVideo?.id || ''] || []}
         onAddComment={(c: Comment) => { if (selectedVideo) addComment(selectedVideo.id, c); }}
         onToggleLike={(id: string) => { if (selectedVideo) toggleCommentLike(selectedVideo.id, id); }}
       />
+
+      {reportConfig && (
+        <ReportSystem
+          visible={reportVisible}
+          onClose={closeReport}
+          contentType={reportConfig.contentType}
+          contentId={reportConfig.contentId}
+          getToken={getReportToken}
+          onSuccess={onReportSuccess}
+        />
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -607,7 +678,7 @@ export default function UserProfileScreen() {
         ) : (
           <>
         {/* FIFA Card — read-only */}
-        <View style={s.cardContainer}>
+        <View style={[s.cardContainer, { marginTop: cardOverlap }]}>
           <ProfileCard
             playerImage={user.avatar ? { uri: user.avatar } : undefined}
             cardType="gold"
@@ -659,7 +730,7 @@ export default function UserProfileScreen() {
           } : undefined}
         />
 
-        {/* Follow + Block */}
+        {/* Follow + Message + Report + Block */}
         <View style={s.actionRow}>
           {/* Follow button */}
           <Animated.View style={[s.followWrap, { transform: [{ scale: scaleAnim }] }]}>
@@ -704,6 +775,24 @@ export default function UserProfileScreen() {
               )}
             </TouchableOpacity>
           </Animated.View>
+
+          <TouchableOpacity
+            style={s.secondaryBtn}
+            onPress={handleMessagePress}
+            activeOpacity={0.75}
+          >
+            <MessageCircle size={18} color="#fff" />
+            <Text style={s.secondaryBtnTxt}>{t.publicProfile.message}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.secondaryBtn}
+            onPress={handleReportPress}
+            activeOpacity={0.75}
+          >
+            <Flag size={18} color="#fbbf24" />
+            <Text style={s.secondaryBtnTxt}>{t.publicProfile.report}</Text>
+          </TouchableOpacity>
 
           {/* Block button */}
           <TouchableOpacity
@@ -757,7 +846,7 @@ export default function UserProfileScreen() {
         ) : (
           <VideoGrid
             videos={formattedVideos}
-            onVideoPress={v => { setSelectedVideo(v as any); setIsVideoPlayerVisible(true); }}
+            onVideoPress={v => handleVideoPress(v as UserReel)}
             onVideoLongPress={() => {}}
             onDeleteVideo={() => {}}
             isDeleteMode={false}
@@ -819,7 +908,6 @@ const s = StyleSheet.create({
   /* Card */
   cardContainer: {
     alignItems: 'center',
-    marginTop: -300,
     marginBottom: 20,
     zIndex: 10,
   },
@@ -834,13 +922,32 @@ const s = StyleSheet.create({
   /* Action row */
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 20,
     marginBottom: 24,
-    gap: 12,
+    gap: 10,
     alignItems: 'center',
   },
-  followWrap: { flex: 1 },
+  followWrap: { flex: 1, minWidth: 0 },
   followTouchable: { borderRadius: 16, overflow: 'hidden' },
+
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  secondaryBtnTxt: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 
   followBtn: {
     flexDirection: 'row',

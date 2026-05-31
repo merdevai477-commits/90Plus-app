@@ -704,18 +704,26 @@ export default function HomeScreen() {
         [players],
     );
 
-    const designPitchPlayers = useMemo(
-        () =>
-            teamOfMonth.slice(0, 11).map((p) => ({
-                name: p.name,
-                short: (p.name || p.username || '??').slice(0, 3).toUpperCase(),
-                rating: Math.round((p.rating ?? 80) * 10) / 10,
-                position: p.position || 'CM',
-                photoUri: p.image || '',
-                username: p.username,
-            })),
-        [teamOfMonth],
-    );
+    const designPitchPlayers = useMemo(() => {
+        const seen = new Set<string>();
+        const unique: typeof teamOfMonth = [];
+        for (const p of teamOfMonth) {
+            const key = p.id || p.username;
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            unique.push(p);
+            if (unique.length >= 11) break;
+        }
+        return unique.map((p) => ({
+            id: p.id,
+            name: p.name,
+            short: (p.name || p.username || '??').slice(0, 3).toUpperCase(),
+            rating: Math.round((p.rating ?? 80) * 10) / 10,
+            position: p.position || 'CM',
+            photoUri: p.image || '',
+            username: p.username,
+        }));
+    }, [teamOfMonth]);
 
     const NAV_BOTTOM_PADDING = Math.max(insets.bottom, 16) + 16 + 4;
     const headerOffset = insets.top + HOME_HEADER_BODY_HEIGHT + -1;

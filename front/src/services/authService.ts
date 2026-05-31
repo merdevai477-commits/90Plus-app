@@ -569,16 +569,19 @@ export class AuthService {
      * Get public user profile by username
      */
     static async getUserByUsername(
-        token: string,
+        token: string | null | undefined,
         username: string
     ): Promise<SearchUserResult | null> {
         try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
             const response = await fetch(`${API_URL}/clerk/user/${username}`, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
+                headers,
             });
 
             const data = await response.json();
@@ -596,7 +599,7 @@ export class AuthService {
      * Get user's reels/videos by username
      */
     static async getUserReels(
-        token: string,
+        token: string | null | undefined,
         username: string,
         limit: number = 20,
         offset: number = 0,
@@ -613,14 +616,17 @@ export class AuthService {
             const cacheBuster = bustCache ? `&_t=${Date.now()}` : '';
             const url = `${API_URL}/clerk/user/${cleanUsername}/reels?limit=${limit}&offset=${offset}${cacheBuster}`;
             
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...(bustCache && { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }),
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
             const response = await fetch(url, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                    // Prevent 304 Not Modified when we need fresh data
-                    ...(bustCache && { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }),
-                },
+                headers,
             });
 
             if (response.ok) {

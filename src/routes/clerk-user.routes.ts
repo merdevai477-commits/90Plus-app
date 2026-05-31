@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/clerk.middleware';
+import { optionalAuth, requireAuth } from '../middleware/clerk.middleware';
 import { ClerkUserService } from '../services/clerk-user.service';
 import { ProfileCompletionService } from '../services/profile-completion.service';
 import { awardXp, isValidSocialUrl, XpEvent } from '../services/xp.service';
@@ -625,7 +625,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
  * GET /api/clerk/user/:username
  * Get public profile by username (protected)
  */
-router.get('/user/:username', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/user/:username', optionalAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const username = ensureString(req.params.username);
         const currentClerkUserId = req.auth?.userId;
@@ -980,7 +980,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
  * GET /api/clerk/user/:username/reels
  * Get user's reels/videos by username (protected)
  */
-router.get('/user/:username/reels', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/user/:username/reels', optionalAuth, async (req: Request, res: Response): Promise<void> => {
     try {
         const username = ensureString(req.params.username);
         const { limit = '20', offset = '0' } = req.query;

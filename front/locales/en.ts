@@ -2103,6 +2103,7 @@ export const en = {
     unblockSuccess: 'User unblocked',
     report: 'Report',
     message: 'Message',
+    reportSubmitted: 'Report submitted',
     stats: 'Stats',
     saved: 'Saved',
   },

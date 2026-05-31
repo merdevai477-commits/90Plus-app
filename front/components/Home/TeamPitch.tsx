@@ -49,6 +49,7 @@ function displayLabel(player: PitchPlayerItem): string {
 }
 
 export type PitchPlayerItem = {
+    id?: string;
     name: string;
     short: string;
     rating: number;
@@ -86,9 +87,9 @@ const SLOT_POSITION_MAP: Record<string, string[]> = {
     RCM: ['RM', 'RCM', 'CDM', 'CM', 'MID'],
     CM: ['CM', 'CAM', 'AM', 'CDM', 'DM', 'MID'],
     LCM: ['LM', 'LCM', 'CM', 'MID'],
-    RW: ['RW', 'RM', 'ATT', 'ST'],
+    RW: ['RW', 'RM', 'ATT'],
     ST: ['ST', 'CF', 'SS', 'ATT'],
-    LW: ['LW', 'LM', 'ATT', 'ST'],
+    LW: ['LW', 'LM', 'ATT'],
 };
 
 const FORMATION_LINE_FOR_POS: Record<string, number> = {
@@ -114,26 +115,54 @@ function normalizePos(pos?: string): string {
     return (pos || 'CM').toUpperCase().trim();
 }
 
+function playerIdentity(player: PitchPlayerItem): string {
+    const id = player.id?.trim();
+    if (id) return `id:${id}`;
+    const user = player.username?.trim().toLowerCase();
+    if (user) return `u:${user}`;
+    return `n:${(player.name || '').trim().toLowerCase()}`;
+}
+
+/** One entry per user — max 11 for the formation. */
+function dedupePlayers(players: PitchPlayerItem[]): PitchPlayerItem[] {
+    const seen = new Set<string>();
+    const out: PitchPlayerItem[] = [];
+    for (const p of players) {
+        const key = playerIdentity(p);
+        if (!key || key === 'n:' || seen.has(key)) continue;
+        seen.add(key);
+        out.push(p);
+        if (out.length >= FORMATION_433.length) break;
+    }
+    return out;
+}
+
 function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | null)[] {
+    const roster = dedupePlayers(players);
     const slots = FORMATION_433;
     const result: (PitchPlayerItem | null)[] = new Array(slots.length).fill(null);
-    const used = new Set<number>();
+    const usedIndices = new Set<number>();
+    const usedIdentities = new Set<string>();
 
-    const place = (slotIndex: number, player: PitchPlayerItem) => {
+    const tryPlace = (slotIndex: number, pi: number): boolean => {
+        const player = roster[pi];
+        const identity = playerIdentity(player);
+        if (usedIdentities.has(identity)) return false;
+        usedIdentities.add(identity);
+        usedIndices.add(pi);
         const { x, y } = slotCoords(slotIndex);
         result[slotIndex] = { ...player, x, y };
+        return true;
     };
 
     // Pass 1 — exact slot by position label
     for (let si = 0; si < slots.length; si++) {
         const accepted = SLOT_POSITION_MAP[slots[si].label] ?? [slots[si].label];
-        for (let pi = 0; pi < players.length; pi++) {
-            if (used.has(pi)) continue;
-            const pos = normalizePos(players[pi].position);
+        for (let pi = 0; pi < roster.length; pi++) {
+            if (usedIndices.has(pi)) continue;
+            const pos = normalizePos(roster[pi].position);
             if (accepted.includes(pos) || pos === slots[si].label) {
-                place(si, players[pi]);
-                used.add(pi);
-                break;
+                if (tryPlace(si, pi)) break;
             }
         }
     }
@@ -144,17 +173,16 @@ function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | nul
         if (emptySlots.length === 0) continue;
 
         const candidates: number[] = [];
-        for (let pi = 0; pi < players.length; pi++) {
-            if (used.has(pi)) continue;
-            const pos = normalizePos(players[pi].position);
+        for (let pi = 0; pi < roster.length; pi++) {
+            if (usedIndices.has(pi)) continue;
+            const pos = normalizePos(roster[pi].position);
             if ((FORMATION_LINE_FOR_POS[pos] ?? 2) === line) candidates.push(pi);
         }
 
         for (const si of emptySlots) {
             const pi = candidates.shift();
             if (pi === undefined) break;
-            place(si, players[pi]);
-            used.add(pi);
+            tryPlace(si, pi);
         }
     }
 
@@ -162,10 +190,9 @@ function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | nul
     let pi = 0;
     for (let si = 0; si < slots.length; si++) {
         if (result[si]) continue;
-        while (pi < players.length && used.has(pi)) pi++;
-        if (pi >= players.length) break;
-        place(si, players[pi]);
-        used.add(pi);
+        while (pi < roster.length && usedIndices.has(pi)) pi++;
+        if (pi >= roster.length) break;
+        tryPlace(si, pi);
         pi++;
     }
 
@@ -421,7 +448,7 @@ export function TeamPitch({
                                 if (player) {
                                     return (
                                         <PlayerNode
-                                            key={`player-${i}`}
+                                            key={`player-${player.username || player.id || i}`}
                                             player={player}
                                             index={i}
                                             containerW={pitchSize.w}

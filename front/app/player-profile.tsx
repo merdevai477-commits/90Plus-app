@@ -68,6 +68,7 @@ interface PlayerData {
         weight: string | null;
         injured: boolean;
         photo: string | null;
+        foot?: string | null;
     };
     statistics: Array<{
         team: { id: number; name: string; logo: string };
@@ -169,7 +170,15 @@ const formatTransferValue = (type: string | null, labels: Record<string, string>
 function formatPreferredFoot(
     statistics: PlayerData['statistics'],
     labels: Record<string, string>,
+    profileFoot?: string | null,
 ): string | null {
+    if (profileFoot) {
+        const f = profileFoot.toLowerCase();
+        if (f.includes('left')) return labels.footLeft;
+        if (f.includes('right')) return labels.footRight;
+        if (f.includes('both')) return labels.footBoth;
+    }
+
     if (!statistics || statistics.length === 0) return null;
 
     const stats = statistics[0];
@@ -662,7 +671,9 @@ export default function PlayerProfileScreen() {
         () => getTeamColors(primaryTeam?.name || params.teamName || ''),
         [primaryTeam?.name, params.teamName],
     );
-    const preferredFoot = player ? formatPreferredFoot(player.statistics, t.playerProfile) : null;
+    const preferredFoot = player
+        ? formatPreferredFoot(player.statistics, t.playerProfile, player.player.foot)
+        : null;
     const pp = t.playerProfile;
 
     if (loading && !player) {

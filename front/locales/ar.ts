@@ -2035,6 +2035,7 @@ export const ar = {
     unblockSuccess: 'تم إلغاء الحظر',
     report: 'الإبلاغ',
     message: 'رسالة',
+    reportSubmitted: 'تم إرسال البلاغ',
     stats: 'الإحصائيات',
     saved: 'المحفوظات',
   },

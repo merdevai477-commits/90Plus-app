@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
@@ -18,6 +18,7 @@ import ActionButtons from '../../components/profile/ActionButtons';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import ProfileTopBar from '../../components/profile/ProfileTopBar';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import * as ImagePicker from 'expo-image-picker';
@@ -137,7 +138,6 @@ const styles = StyleSheet.create({
   },
   profileCardContainer: {
     alignItems: 'center',
-    marginTop: -300,
     marginBottom: 20,
     zIndex: 10,
   },
@@ -282,6 +282,8 @@ const completionStyles = StyleSheet.create({
 export default function ProfileScreen() {
   useScreenFont();
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
+  const cardOverlap = getProfileCardOverlapMargin(screenHeight);
   const [activeTab, setActiveTab] = useState('videos');
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
@@ -1563,7 +1565,7 @@ export default function ProfileScreen() {
         />
 
         {/* Profile FIFA Card Frame */}
-        <View style={styles.profileCardContainer}>
+        <View style={[styles.profileCardContainer, { marginTop: cardOverlap }]}>
           <ProfileCard
             playerImage={localImage ? { uri: localImage } : (userData?.avatar ? { uri: userData.avatar } : undefined)}
             cardType="gold"
