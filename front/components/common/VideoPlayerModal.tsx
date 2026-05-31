@@ -283,9 +283,9 @@ export default function VideoPlayerModal({
 
   const handleShare = async () => {
     lightImpact();
-    const deepLink = reelIdForApi ? `90plus://reel/${reelIdForApi}` : '';
-    const message = deepLink
-      ? `Check out this video from @${username}! ${deepLink}`
+    const shareUrl = reelIdForApi ? buildReelShareUrl(reelIdForApi) : '';
+    const message = shareUrl
+      ? `Check out this video from @${username}! ${shareUrl}`
       : `Check out this video from @${username}!`;
 
     if (Platform.OS === 'ios') {
