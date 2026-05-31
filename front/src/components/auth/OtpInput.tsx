@@ -51,17 +51,23 @@ export function OtpInput({
 
   return (
     <Pressable style={[styles.row, containerStyle]} onPress={focusInput}>
-      {digits.map((digit, i) => (
+      {digits.map((digit, i) => {
+        const filled = Boolean(digit.trim());
+        return (
         <View
           key={i}
-          style={[styles.cell, digit.trim() ? styles.cellFilled : null]}
+          style={[
+            styles.cell,
+            filled ? styles.cellFilled : styles.cellEmpty,
+          ]}
           pointerEvents="none"
         >
           <Text style={styles.cellText} allowFontScaling={false}>
             {digit.trim()}
           </Text>
         </View>
-      ))}
+      );
+      })}
 
       <TextInput
         ref={inputRef}
@@ -91,11 +97,13 @@ const styles = StyleSheet.create({
     width: 46,
     height: 54,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cellEmpty: {
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   cellFilled: {
     borderColor: 'rgba(124,58,237,0.5)',
@@ -113,9 +121,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   hiddenInput: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.02,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 1,
+    height: 1,
+    opacity: 0,
     color: 'transparent',
-    fontSize: 16,
+    fontSize: 1,
   },
 });

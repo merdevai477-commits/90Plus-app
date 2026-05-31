@@ -23,6 +23,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ImageSourcePropType,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
@@ -31,7 +32,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import BottomNav from './BottomNav';
 import CompCard from '../../components/rank/CompCard';
 import LeaderboardModal, {
   LeaderboardEntry,
@@ -43,9 +43,14 @@ import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkel
 import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
+import { buildAppShareMessage, getStoreUrl } from '../../constants/shareLinks';
+import { prefetchDailyQuiz } from '../../hooks/useDailyQuiz';
 import { useTopPlayers, type TopPlayer, type TopPlayersPeriod } from '../../hooks/useTopPlayers';
 import { useTranslation } from '../../src/i18n';
+import { useLanguageStore } from '../../src/i18n/store';
 import { useScreenFont } from '../../utils/fontSetup';
+import { useAuth } from '@clerk/clerk-expo';
+import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#A855F7';
 const PROFILE_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.png');
@@ -53,6 +58,7 @@ const PROFILE_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/pl
 interface PodiumSlot {
   rank: number;
   isPlaceholder: boolean;
+  username: string;
   name: string;
   xpLabel: string;
   avatar: ImageSourcePropType | string;
@@ -64,6 +70,7 @@ interface BoardSlot {
   rank: number;
   isPlaceholder: boolean;
   id: string;
+  username: string;
   name: string;
   role: string;
   xpLabel: string;
@@ -80,6 +87,7 @@ function buildPodiumSlot(
     return {
       rank,
       isPlaceholder: false,
+      username: player.username,
       name: (player.displayName ?? player.username) || emptyName,
       xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
       avatar: player.avatar ?? PROFILE_PLACEHOLDER,
@@ -90,6 +98,7 @@ function buildPodiumSlot(
   return {
     rank,
     isPlaceholder: true,
+    username: '',
     name: emptyName,
     xpLabel: `0 ${xpSuffix}`,
     avatar: PROFILE_PLACEHOLDER,
@@ -109,6 +118,7 @@ function buildBoardSlot(
       rank,
       isPlaceholder: false,
       id: player.id,
+      username: player.username,
       name: (player.displayName ?? player.username) || emptyName,
       role: player.position || emptyHint,
       xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
@@ -119,6 +129,7 @@ function buildBoardSlot(
     rank,
     isPlaceholder: true,
     id: `empty-${rank}`,
+    username: '',
     name: emptyName,
     role: emptyHint,
     xpLabel: `0 ${xpSuffix}`,
@@ -131,40 +142,71 @@ export default function RankScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation();
+  const appLanguage = useLanguageStore((s) => s.language);
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSoonVisible, setIsSoonVisible] = useState(false);
   const [period, setPeriod] = useState<TopPlayersPeriod>('weekly');
+  const [refreshing, setRefreshing] = useState(false);
 
   const { players, isLoading, isError, refetch } = useTopPlayers({
     limit: 11,
     period,
   });
 
+  const realPlayers = useMemo(
+    () => players.filter((p) => p.username && !String(p.id).startsWith('empty-')),
+    [players],
+  );
+
+  const navigateToProfile = useCallback(
+    (username: string) => {
+      const clean = username.replace(/^@/, '').trim();
+      if (!clean) return;
+      router.push(`/user/${clean}` as never);
+    },
+    [router],
+  );
+
   const handleShareApp = useCallback(async () => {
     try {
+      const message = buildAppShareMessage(appLanguage === 'en' ? 'en' : 'ar');
       await Share.share({
-        message: t.rank.shareAppMessage,
+        message,
+        url: getStoreUrl(),
         title: '90Plus',
       });
     } catch {
       // User cancelled
     }
-  }, [t]);
+  }, [appLanguage]);
 
   const handleCompetitionPress = useCallback(
     (id: string) => {
       if (id === '1') {
-        router.push({ pathname: '/matches', params: { filter: 'Predictions' } } as never);
+        router.push({ pathname: '/(tabs)/matches', params: { filter: 'Predictions' } } as never);
       } else if (id === '3') {
-        router.push('/quiz' as never);
+        const quizLang = appLanguage === 'en' ? 'en' : 'ar';
+        void prefetchDailyQuiz(queryClient, getToken, quizLang);
+        router.push('/(tabs)/quiz' as never);
       } else if (id === '4') {
         router.push('/(tabs)/reels' as never);
       } else if (id === '2') {
         void handleShareApp();
       }
     },
-    [router, handleShareApp],
+    [router, handleShareApp, appLanguage, queryClient, getToken],
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   const competitions = useMemo(
     () => [
@@ -251,6 +293,14 @@ export default function RankScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={ACCENT}
+            colors={[ACCENT]}
+          />
+        }
         contentContainerStyle={{
           paddingTop: insets.top + 60,
           paddingBottom: Math.max(insets.bottom, 16) + 88,
@@ -365,6 +415,11 @@ export default function RankScreen() {
                 <Text style={s.retryTxt}>{t.rank.errors.retry}</Text>
               </Pressable>
             </View>
+          ) : realPlayers.length === 0 ? (
+            <View style={s.emptyCard}>
+              <Text style={s.emptyTitle}>{t.rank.emptyLeaderboard}</Text>
+              <Text style={s.emptyHint}>{t.rank.emptyLeaderboardHint}</Text>
+            </View>
           ) : (
             <>
               {/* Podium */}
@@ -373,7 +428,6 @@ export default function RankScreen() {
                   <View
                     key={`pod-${p.rank}`}
                     style={
-                      // Overlap the outer cards behind the centered #1
                       idx === 0
                         ? { marginEnd: -15 }
                         : idx === podiumSlots.length - 1
@@ -389,6 +443,11 @@ export default function RankScreen() {
                       countryFlag={p.countryFlag}
                       position={p.position}
                       isPlaceholder={p.isPlaceholder}
+                      onPress={
+                        p.username
+                          ? () => navigateToProfile(p.username)
+                          : undefined
+                      }
                     />
                   </View>
                 ))}
@@ -401,16 +460,8 @@ export default function RankScreen() {
                   const rowProps = isLiquidGlassSupported
                     ? { effect: 'clear' as const, interactive: true }
                     : { intensity: 15, tint: 'dark' as const };
-                  return (
-                    <RowWrapper
-                      key={row.id}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      {...(rowProps as any)}
-                      style={[
-                        s.boardRowGlass,
-                        i < lowerSlots.length - 1 && { marginBottom: 8 },
-                      ]}
-                    >
+                  const rowInner = (
+                    <>
                       <View style={s.rankBadgeSmall}>
                         <Text style={s.boardRank}>{row.rank}</Text>
                       </View>
@@ -431,6 +482,41 @@ export default function RankScreen() {
                         </Text>
                       </View>
                       <Text style={s.boardXp}>{row.xpLabel}</Text>
+                    </>
+                  );
+
+                  if (!row.isPlaceholder && row.username) {
+                    return (
+                      <Pressable
+                        key={row.id}
+                        onPress={() => navigateToProfile(row.username)}
+                        style={({ pressed }) => [
+                          pressed && { opacity: 0.88 },
+                          i < lowerSlots.length - 1 && { marginBottom: 8 },
+                        ]}
+                      >
+                        <RowWrapper
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          {...(rowProps as any)}
+                          style={s.boardRowGlass}
+                        >
+                          {rowInner}
+                        </RowWrapper>
+                      </Pressable>
+                    );
+                  }
+
+                  return (
+                    <RowWrapper
+                      key={row.id}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      {...(rowProps as any)}
+                      style={[
+                        s.boardRowGlass,
+                        i < lowerSlots.length - 1 && { marginBottom: 8 },
+                      ]}
+                    >
+                      {rowInner}
                     </RowWrapper>
                   );
                 })}
@@ -462,10 +548,12 @@ export default function RankScreen() {
         onClose={() => setIsModalVisible(false)}
         entries={top11Entries}
         topInset={insets.top}
+        onEntryPress={(entry) => {
+          setIsModalVisible(false);
+          navigateToProfile(entry.username);
+        }}
       />
       <SoonModal visible={isSoonVisible} onClose={() => setIsSoonVisible(false)} />
-
-      <BottomNav />
     </View>
   );
 }
@@ -639,6 +727,26 @@ const s = StyleSheet.create({
     borderColor: 'rgba(168,85,247,0.4)',
   },
   retryTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+
+  emptyCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
+    padding: 24,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.2)',
+    alignItems: 'center',
+  },
+  emptyTitle: { color: '#fff', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  emptyHint: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 
   viewAllLeaderboardBtn: {
     marginHorizontal: 16,

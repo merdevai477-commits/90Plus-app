@@ -13,6 +13,7 @@ import { X, Share2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
+import { buildProfileShareUrl } from '../../constants/shareLinks';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -33,7 +34,7 @@ export default function QRCodeModal({
     avatar,
 }: QRCodeModalProps) {
     const { t } = useTranslation();
-    const profileUrl = `https://90plus.app/@${username}`;
+    const profileUrl = buildProfileShareUrl(username);
     
     // Use QR Server API to generate QR code
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(profileUrl)}&bgcolor=ffffff&color=000000`;

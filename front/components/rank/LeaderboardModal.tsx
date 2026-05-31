@@ -43,6 +43,7 @@ interface LeaderboardModalProps {
   onClose: () => void;
   entries: LeaderboardEntry[];
   topInset: number;
+  onEntryPress?: (entry: LeaderboardEntry) => void;
 }
 
 const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -50,6 +51,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onClose,
   entries,
   topInset,
+  onEntryPress,
 }) => {
   const { t } = useTranslation();
   return (
@@ -104,9 +106,15 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   : String(entry.rank);
 
               return (
-                <View
+                <Pressable
                   key={`${entry.rank}-${entry.id}`}
-                  style={s.modalRow}
+                  style={({ pressed }) => [s.modalRow, pressed && !entry.isPlaceholder && { opacity: 0.88 }]}
+                  onPress={() => {
+                    if (!entry.isPlaceholder && entry.username) {
+                      onEntryPress?.(entry);
+                    }
+                  }}
+                  disabled={entry.isPlaceholder || !entry.username}
                 >
                   <View style={s.modalRankBox}>
                     <Text style={s.modalRankTxt}>{rankLabel}</Text>
@@ -128,7 +136,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   <Text style={s.modalXpVal}>
                     {entry.xp} {t.rank.xpSuffix}
                   </Text>
-                </View>
+                </Pressable>
               );
             })}
             <View style={{ height: 40 }} />

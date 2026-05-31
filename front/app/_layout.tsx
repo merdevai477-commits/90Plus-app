@@ -43,6 +43,7 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
+import { parseReelIdFromUrl, parseProfileUsernameFromUrl } from '../constants/shareLinks';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
@@ -480,15 +481,22 @@ function RootLayout() {
         });
       };
 
-      if (url.startsWith('ninetyplus://reel/')) {
-        const reelId = url.replace('ninetyplus://reel/', '').split(/[?#]/)[0];
-        if (reelId) navigateToReel(reelId);
+      const navigateToProfile = (username: string) => {
+        router.push({
+          pathname: '/user/[username]',
+          params: { username },
+        });
+      };
+
+      const profileUsername = parseProfileUsernameFromUrl(url);
+      if (profileUsername) {
+        navigateToProfile(profileUsername);
         return;
       }
 
-      const httpsMatch = url.match(/90plus\.app\/reels\/([a-f0-9-]+)/i);
-      if (httpsMatch?.[1]) {
-        navigateToReel(httpsMatch[1]);
+      const reelId = parseReelIdFromUrl(url);
+      if (reelId) {
+        navigateToReel(reelId);
       }
     };
 

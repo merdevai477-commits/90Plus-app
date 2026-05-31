@@ -6,15 +6,16 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View,
   StyleSheet,
-  ScrollView,
   Text,
   ActivityIndicator,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 
 import { useTranslation } from '../../src/i18n';
 import { useLanguageStore } from '../../src/i18n/store';
@@ -48,6 +49,7 @@ import { QuizFooterActions } from './QuizFooterActions';
 import { QuizLanguagePopup } from './QuizLanguagePopup';
 import { QuizScorePopup } from './QuizScorePopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { prefetchQuizImages, useDailyQuiz } from '../../hooks/useDailyQuiz';
 
 type AnswerPhase = 'idle' | 'submitting' | 'revealed';
 
@@ -78,9 +80,10 @@ function patchDailyStats(
 
 export default function QuizHubScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { t } = useTranslation();
   const appLanguage = useLanguageStore((s) => s.language);
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { refreshCoins, coins, loading: coinsLoading, applyCoinsBalance } = useCoins();
   const { handleXpEvents } = useXp();
 
@@ -90,25 +93,13 @@ export default function QuizHubScreen() {
 
   const queryClient = useQueryClient();
 
-  const { data: dailyData, isLoading: loadingQuestions, error } = useQuery({
-    queryKey: ['dailyQuiz', quizLang],
-    queryFn: async () => {
-      const token = await getToken();
-      if (!token) throw new Error('no token');
-      const data = await QuizApiService.fetchDaily(token, quizLang);
-      if (!data?.questions?.length) throw new Error('empty pack');
-      return data;
-    },
-    enabled: !!quizLang,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: (failureCount, err) => {
-      if (err.message === 'RATE_LIMIT') return false;
-      return failureCount < 2;
-    },
-  });
+  const {
+    data: dailyData,
+    isLoading: loadingQuestions,
+    error,
+    refetch,
+    isFetching,
+  } = useDailyQuiz(quizLang);
 
   const questions = dailyData?.questions ?? [];
   const safeCurrentIndex =
@@ -127,6 +118,7 @@ export default function QuizHubScreen() {
   const [scorePopupVisible, setScorePopupVisible] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   const [finalXp, setFinalXp] = useState(0);
+  const [countdownLabel, setCountdownLabel] = useState('');
 
   const nextIndexRef = useRef<number | null>(null);
   const questionStartedAt = useRef(Date.now());
@@ -174,9 +166,42 @@ export default function QuizHubScreen() {
 
   useEffect(() => () => clearAutoNextTimer(), [clearAutoNextTimer]);
 
-  const handleLanguageSelect = (lang: 'ar' | 'en') => {
+  const handleLanguageSelect = async (lang: 'ar' | 'en') => {
     setQuizLang(lang);
+    try {
+      await AsyncStorage.setItem('quiz_language', lang);
+    } catch {
+      // ignore
+    }
   };
+
+  useEffect(() => {
+    if (!dailyData?.stats?.completed || !dailyData.expiresAt) {
+      setCountdownLabel('');
+      return undefined;
+    }
+    const updateCountdown = () => {
+      const diff = new Date(dailyData.expiresAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setCountdownLabel('00:00:00');
+        return;
+      }
+      const hours = Math.floor(diff / 3_600_000);
+      const minutes = Math.floor((diff % 3_600_000) / 60_000);
+      const seconds = Math.floor((diff % 60_000) / 1000);
+      setCountdownLabel(
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+      );
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [dailyData?.stats?.completed, dailyData?.expiresAt]);
+
+  useEffect(() => {
+    if (!questions.length) return;
+    prefetchQuizImages(questions, currentIndex);
+  }, [currentIndex, questions]);
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length || QUIZ_SESSION_TOTAL;
@@ -357,6 +382,7 @@ export default function QuizHubScreen() {
     } catch {
       setAnswerPhase('idle');
       timeoutCalledRef.current = null;
+      toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
     }
   }, [
     currentQuestion,
@@ -469,6 +495,7 @@ export default function QuizHubScreen() {
       } catch {
         setAnswerPhase('idle');
         setSelected(null);
+        toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
       }
     },
     [
@@ -526,6 +553,8 @@ export default function QuizHubScreen() {
       });
       if (res?.status !== 'SUCCESS') {
         void refreshCoins();
+        void refetch();
+        toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
         return;
       }
 
@@ -555,6 +584,8 @@ export default function QuizHubScreen() {
       }
     } catch {
       void refreshCoins();
+      void refetch();
+      toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
     }
   }, [
     currentQuestion,
@@ -571,6 +602,7 @@ export default function QuizHubScreen() {
     t.quiz,
     showCompletionPopup,
     refreshCoins,
+    refetch,
   ]);
 
   const handleHint = useCallback(async () => {
@@ -595,6 +627,8 @@ export default function QuizHubScreen() {
       });
       if (res?.status !== 'SUCCESS' || !res.data) {
         void refreshCoins();
+        void refetch();
+        toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
         return;
       }
 
@@ -623,7 +657,11 @@ export default function QuizHubScreen() {
         };
       });
     } catch {
+      setHintUsed(false);
+      setHintText(null);
       void refreshCoins();
+      void refetch();
+      toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
     }
   }, [
     currentQuestion,
@@ -637,12 +675,40 @@ export default function QuizHubScreen() {
     queryClient,
     currentIndex,
     refreshCoins,
+    refetch,
     t.quiz,
   ]);
 
+  const applyQuizLanguage = useCallback(
+    async (next: QuizApiLanguage) => {
+      setQuizLang(next);
+      try {
+        await AsyncStorage.setItem('quiz_language', next);
+      } catch {
+        // ignore
+      }
+    },
+    [],
+  );
+
   const toggleQuizLanguage = () => {
     const next: QuizApiLanguage = quizLang === 'ar' ? 'en' : 'ar';
-    setQuizLang(next);
+    const hasProgress =
+      dailyData?.stats?.answered !== undefined && dailyData.stats.answered > 0;
+
+    if (hasProgress && answerPhase !== 'revealed') {
+      Alert.alert(t.quiz.switchLangConfirmTitle, t.quiz.switchLangConfirmMessage, [
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: t.quiz.switchQuizLang,
+          onPress: () => {
+            void applyQuizLanguage(next);
+          },
+        },
+      ]);
+      return;
+    }
+    void applyQuizLanguage(next);
   };
 
   const progress = questionNumber / Math.max(totalQuestions, QUIZ_SESSION_TOTAL);
@@ -661,6 +727,27 @@ export default function QuizHubScreen() {
   );
 
   const HEADER_H = insets.top + 10 + 44 + 12;
+  const errorMessage =
+    error instanceof Error ? error.message : error ? String(error) : '';
+
+  if (isSignedIn === false) {
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <QuizBackground />
+        <QuizHeader topInset={insets.top} />
+        <Ionicons name="lock-closed-outline" size={48} color={ACCENT_SOFT} />
+        <Text style={styles.noQuestionsText}>{t.quiz.signInRequired}</Text>
+        <Text style={styles.loadingText}>{t.quiz.signInRequiredMessage}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => router.push('/auth' as never)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.retryButtonText}>{t.home.signIn}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (loadingQuestions && !dailyData) {
     return (
@@ -673,12 +760,67 @@ export default function QuizHubScreen() {
     );
   }
 
-  if (error?.message === 'RATE_LIMIT') {
+  if (errorMessage === 'RATE_LIMIT') {
     return (
       <View style={[styles.root, styles.centered]}>
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <Text style={styles.noQuestionsText}>{t.quiz.rateLimit}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => void refetch()}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.retryButtonText}>{t.quiz.retryLoad}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (error && !dailyData) {
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <QuizBackground />
+        <QuizHeader topInset={insets.top} />
+        <Text style={styles.noQuestionsText}>
+          {errorMessage === 'EMPTY_PACK' ? t.quiz.noQuestionsAvailable : t.quiz.loadFailed}
+        </Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => void refetch()}
+          disabled={isFetching}
+          activeOpacity={0.85}
+        >
+          {isFetching ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.retryButtonText}>{t.quiz.retryLoad}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (dailyData?.stats?.completed && !scorePopupVisible) {
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <QuizBackground />
+        <QuizHeader topInset={insets.top} />
+        <Ionicons name="checkmark-circle" size={56} color={ACCENT_SOFT} />
+        <Text style={styles.completedTitle}>{t.quiz.dailyCompletedTitle}</Text>
+        <Text style={styles.loadingText}>{t.quiz.dailyCompletedSubtitle}</Text>
+        {countdownLabel ? (
+          <Text style={styles.countdownText}>
+            {t.quiz.newQuizIn} {countdownLabel}
+          </Text>
+        ) : null}
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => router.push('/(tabs)/rank' as never)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.retryButtonText}>{t.quiz.backToRank}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -700,16 +842,15 @@ export default function QuizHubScreen() {
       <QuizBackground />
       <QuizHeader topInset={insets.top} />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingTop: HEADER_H + 4,
-          paddingHorizontal: SCREEN_PADDING_H,
-          paddingBottom: Math.max(insets.bottom, 16) + 20,
-        }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        removeClippedSubviews
+      <View
+        style={[
+          styles.content,
+          {
+            paddingTop: HEADER_H + 4,
+            paddingHorizontal: SCREEN_PADDING_H,
+            paddingBottom: Math.max(insets.bottom, 16) + 20,
+          },
+        ]}
       >
         <QuizProgressCard
           current={questionNumber}
@@ -768,7 +909,7 @@ export default function QuizHubScreen() {
           answerRevealed={answerPhase === 'revealed'}
           isCorrect={isCorrect}
         />
-      </ScrollView>
+      </View>
       <QuizLanguagePopup onSelectLanguage={handleLanguageSelect} />
       <QuizScorePopup
         visible={scorePopupVisible}
@@ -807,6 +948,40 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
     backgroundColor: QUIZ_SCREEN_BG,
+  },
+  content: {
+    flex: 1,
+    backgroundColor: QUIZ_SCREEN_BG,
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: QUIZ_RADIUS_SM,
+    backgroundColor: 'rgba(124,58,237,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.5)',
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  completedTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 16,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  countdownText: {
+    color: '#C084FC',
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 12,
   },
   badgeRow: {
     flexDirection: 'row',

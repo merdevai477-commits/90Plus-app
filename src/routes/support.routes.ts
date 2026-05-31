@@ -600,6 +600,69 @@ router.get('/reels/:reelId', (req: Request, res: Response): void => {
     res.type('html').send(page);
 });
 
+/**
+ * GET /@:username
+ * Profile share landing — opens app if installed, otherwise Google Play
+ */
+router.get('/@:username', (req: Request, res: Response): void => {
+    const raw = ensureString(req.params.username);
+    const username = raw.replace(/^@/, '').trim();
+    if (!/^[a-zA-Z0-9_]{1,64}$/.test(username)) {
+        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Profile not found</p></body></html>');
+        return;
+    }
+
+    const profileUrl = `https://90plus.app/@${username}`;
+    const playStore = encodeURIComponent(PLAY_STORE_URL);
+    const intentUrl = `intent://user/${username}#Intent;scheme=ninetyplus;package=com.mhmdsh1892.ninetyplusapp;S.browser_fallback_url=${playStore};end`;
+
+    const page = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>90Plus — @${username}</title>
+  <meta property="og:title" content="90Plus — @${username}">
+  <meta property="og:description" content="افتح البروفايل في تطبيق 90Plus">
+  <meta property="og:url" content="${profileUrl}">
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; padding: 24px; text-align: center; }
+    .card { max-width: 360px; }
+    h1 { font-size: 1.5rem; margin-bottom: 12px; }
+    p { color: rgba(255,255,255,0.7); line-height: 1.5; margin-bottom: 24px; }
+    a.btn { display: block; margin: 10px 0; padding: 14px 20px; border-radius: 28px; text-decoration: none; font-weight: 700; }
+    .primary { background: #FFD700; color: #000; }
+    .secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+  </style>
+  <script>
+    (function() {
+      var ua = navigator.userAgent || '';
+      var isAndroid = /Android/i.test(ua);
+      var isIOS = /iPhone|iPad|iPod/i.test(ua);
+      if (isAndroid) {
+        window.location.href = ${JSON.stringify(intentUrl)};
+      } else if (isIOS) {
+        window.location.href = ${JSON.stringify(`ninetyplus://user/${username}`)};
+        setTimeout(function() { window.location.href = ${JSON.stringify(PLAY_STORE_URL)}; }, 1500);
+      } else {
+        window.location.href = ${JSON.stringify(PLAY_STORE_URL)};
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div class="card">
+    <h1>90Plus</h1>
+    <p>جاري فتح بروفايل @${username} في التطبيق…</p>
+    <a class="btn primary" href="${intentUrl.replace(/"/g, '&quot;')}">افتح في التطبيق</a>
+    <a class="btn secondary" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
+  </div>
+</body>
+</html>`;
+
+    res.type('html').send(page);
+});
+
 function ensureString(param: string | string[] | undefined): string {
     if (Array.isArray(param)) return param[0];
     return param || '';

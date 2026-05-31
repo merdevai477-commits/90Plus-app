@@ -69,7 +69,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "versionCode": 100,
-      "softwareKeyboardLayoutMode": "resize",
+      "softwareKeyboardLayoutMode": "pan",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -79,6 +79,18 @@
               "scheme": "https",
               "host": "90plus.app",
               "pathPrefix": "/reels"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "90plus.app",
+              "pathPrefix": "/@"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

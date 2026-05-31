@@ -294,8 +294,10 @@ export default function RegisterScreen() {
         statusBarTranslucent
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
           style={styles.modalOverlay}
+          enabled={Platform.OS === 'ios'}
         >
           <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={styles.modalBackdrop}>
@@ -465,6 +467,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
+    minHeight: 420,
     backgroundColor: 'rgba(12,8,20,0.97)',
     borderRadius: 24,
     borderWidth: 1,

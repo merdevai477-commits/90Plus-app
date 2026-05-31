@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
+import { ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import FifaCard from './FifaCard';
 import { useTranslation } from '../../src/i18n';
@@ -29,6 +29,7 @@ export interface PodiumCardProps {
   foot?: string;
   /** When true, render a neutral placeholder card (no fake stats). */
   isPlaceholder?: boolean;
+  onPress?: () => void;
 }
 
 const PodiumCard: React.FC<PodiumCardProps> = ({
@@ -43,6 +44,7 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
   weightKg,
   foot,
   isPlaceholder = false,
+  onPress,
 }) => {
   const isFirst = rank === 1;
   const cardType: 'gold' | 'silver' | 'bronze' =
@@ -53,8 +55,8 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
 
   const { t } = useTranslation();
 
-  return (
-    <View style={[s.podCardWrapper, isFirst && s.podCardFirstWrapper]}>
+  const content = (
+    <>
       <FifaCard
         name={name}
         playerImage={playerImage}
@@ -70,6 +72,28 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
       <Text style={s.podXpLabel} accessibilityLabel={`${t.rank.xpSuffix}: ${xp}`}>
         {xp}
       </Text>
+    </>
+  );
+
+  if (onPress && !isPlaceholder) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          s.podCardWrapper,
+          isFirst && s.podCardFirstWrapper,
+          pressed && { opacity: 0.88 },
+        ]}
+        accessibilityRole="button"
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[s.podCardWrapper, isFirst && s.podCardFirstWrapper]}>
+      {content}
     </View>
   );
 };

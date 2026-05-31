@@ -28,6 +28,61 @@ const DIFFICULTY_COUNTS: Record<QuizDifficulty, number> = {
 
 const OPTION_KEYS: QuizOptionKey[] = ['A', 'B', 'C', 'D'];
 
+/** Target count per question type for a 15-question daily pack */
+const TYPE_TARGETS: Record<QuizQuestionType, number> = {
+  normal: 3,
+  guess_player: 3,
+  logo: 3,
+  stadium: 3,
+  image: 3,
+};
+
+const DAILY_TOPIC_POOL = [
+  'Premier League clubs and players',
+  'La Liga rivalries and stars',
+  'Champions League history',
+  'Serie A tactics and icons',
+  'Bundesliga and German football',
+  'World Cup and international tournaments',
+  'African and Arab league stars',
+  'Transfer market and modern squads',
+  'Stadium architecture and famous venues',
+  'Club badges and identity trivia',
+];
+
+function hashSeed(input: string): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (h * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+function dailyTopicFocus(packDate: string, language: QuizLanguage): string {
+  const idx = hashSeed(`${packDate}:${language}`) % DAILY_TOPIC_POOL.length;
+  return DAILY_TOPIC_POOL[idx];
+}
+
+function countQuestionTypes(questions: StoredQuizQuestion[]): Map<QuizQuestionType, number> {
+  const counts = new Map<QuizQuestionType, number>();
+  for (const q of questions) {
+    counts.set(q.type, (counts.get(q.type) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function validateTypeMix(questions: StoredQuizQuestion[]): boolean {
+  const distinct = new Set(questions.map((q) => q.type));
+  return distinct.size >= 3;
+}
+
+function typeMixSummary(questions: StoredQuizQuestion[]): string {
+  const counts = countQuestionTypes(questions);
+  return Array.from(counts.entries())
+    .map(([type, count]) => `${type}:${count}`)
+    .join(', ');
+}
+
 const GUESS_PLAYER_PROMPT_RULES = `
 CRITICAL — guess_player (photo hidden until answer):
 - The "question" field MUST include a clear factual clue so users can guess WITHOUT seeing the photo.
@@ -409,16 +464,23 @@ ${GUESS_PLAYER_PROMPT_RULES}
 
 - Include at least 3 type "guess_player" questions (each with a written clue in the question text).
 - Use type "logo" for club badges, "stadium" for venues, "normal" for history/legends text trivia.
+- TYPE MIX (exactly ${QUIZ_PACK_SIZE} questions): ${Object.entries(TYPE_TARGETS)
+    .map(([type, count]) => `${count}× "${type}"`)
+    .join(', ')}.
+- Rotate topics away from yesterday — focus today's pack on: {TOPIC_FOCUS}.
 
 Never generate text-input or essay questions. Exactly ${QUIZ_PACK_SIZE} questions.`;
 
-  const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Ensure no duplicates, exactly 4 options per question, and correctKey exists.`;
+  const topicFocus = dailyTopicFocus(packDate, language);
+  const systemWithTopic = system.replace('{TOPIC_FOCUS}', topicFocus);
+
+  const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Topic focus: ${topicFocus}. Ensure no duplicates, exactly 4 options per question, correctKey exists, and the exact type mix above.`;
 
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.85,
     messages: [
-      { role: 'system', content: system },
+      { role: 'system', content: systemWithTopic },
       { role: 'user', content: user },
     ],
     ...QUIZ_COMPLETION_OPTS,
@@ -630,6 +692,26 @@ async function buildPackWithReplacements(
   if (!validateDistribution(questions)) {
     questions = rebalanceDifficulties(questions);
   }
+
+  if (!validateTypeMix(questions)) {
+    logger.warn(
+      `[QuizGen] Type mix too narrow (${typeMixSummary(questions)}) — regenerating slice`,
+    );
+    const replacements = await generateReplacementQuestions(
+      6,
+      language,
+      packDate,
+      questions,
+    );
+    const validReplacements = await enrichAndFilterValid(replacements, packDate);
+    questions = mergeUniqueQuestions(questions, validReplacements).slice(0, QUIZ_PACK_SIZE);
+    if (!validateTypeMix(questions)) {
+      logger.warn(
+        `[QuizGen] Type mix still narrow after regen (${typeMixSummary(questions)})`,
+      );
+    }
+  }
+
   return renumberQuestionIds(questions, language, packDate);
 }
 

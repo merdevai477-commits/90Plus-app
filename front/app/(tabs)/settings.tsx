@@ -16,6 +16,7 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -28,6 +29,7 @@ import {
   FileText,
   LogOut,
   UserX,
+  Share2,
   Ban,
   Mail,
 } from 'lucide-react-native';
@@ -57,6 +59,11 @@ import {
   PURPLE_PRIMARY,
   GOLD_SOFT,
 } from '../../constants/tokens';
+import {
+  buildAppShareMessage,
+  getStoreReviewUrl,
+  getStoreUrl,
+} from '../../constants/shareLinks';
 
 const APP_VERSION = '1.0.0';
 
@@ -183,14 +190,24 @@ export default function SettingsScreen() {
   };
 
   const handleRateApp = () => {
-    const storeUrl = Platform.select({
-      ios: 'https://apps.apple.com/app/90plus/id6744076498',
-      android: 'https://play.google.com/store/apps/details?id=com.ninetyplusapp',
-    });
-    if (storeUrl) {
-      Linking.openURL(storeUrl).catch(() => {
+    const storeUrl = getStoreReviewUrl();
+    Linking.openURL(storeUrl).catch(() => {
+      Linking.openURL(getStoreUrl()).catch(() => {
         toastManager.showInfo(tSettings.rateThanks, tSettings.rateThanksDetail);
       });
+    });
+  };
+
+  const handleShareApp = async () => {
+    try {
+      const message = buildAppShareMessage(language === 'en' ? 'en' : 'ar');
+      await Share.share({
+        message,
+        url: getStoreUrl(),
+        title: '90Plus',
+      });
+    } catch {
+      // User cancelled
     }
   };
 
@@ -425,7 +442,19 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <TouchableOpacity activeOpacity={0.88} style={styles.linkRow} onPress={handleRateApp}>
+      <TouchableOpacity activeOpacity={0.88} style={styles.linkRow} onPress={handleShareApp}>
+        <View style={styles.linkLeft}>
+          <View style={[styles.linkIcon, { backgroundColor: PURPLE_GLOW_SM }]}>
+            <Share2 size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkTitle}>{tSettings.shareApp}</Text>
+            <Text style={styles.linkSub}>{tSettings.shareAppSub}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity activeOpacity={0.88} style={[styles.linkRow, { marginTop: 8 }]} onPress={handleRateApp}>
         <View style={styles.linkLeft}>
           <View style={[styles.linkIcon, { backgroundColor: GOLD_SOFT }]}>
             <Star size={18} color="#fcd34d" strokeWidth={2.2} />

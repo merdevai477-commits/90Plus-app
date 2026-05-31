@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Zap, Flag, Share2 } from 'lucide-react-native';
+import { buildProfileShareUrl } from '../../constants/shareLinks';
 
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
@@ -453,7 +454,7 @@ export default function UserProfileScreen() {
 
   const handleShareProfilePress = async () => {
     if (!user) return;
-    const profileUrl = `https://90plus.app/@${user.username}`;
+    const profileUrl = buildProfileShareUrl(user.username);
     try {
       await Share.share({
         message: `${t.profile.checkMyProfile} @${user.username}\n${profileUrl}`,

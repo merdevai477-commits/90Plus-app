@@ -38,6 +38,7 @@ import { useTranslation } from '../../src/i18n';
 import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
+import { buildProfileShareUrl } from '../../constants/shareLinks';
 import { compressImage } from '@/utils/imageCompressor';
 import { logger } from '../../utils/logger';
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
@@ -1678,8 +1679,10 @@ export default function ProfileScreen() {
           }}
           onSharePress={async () => {
             try {
+              const profileUrl = buildProfileShareUrl(userData?.username || '');
               await Share.share({
-                message: `${t.profile.checkMyProfile} @${userData?.username}\nhttps://90plus.app/@${userData?.username}`,
+                message: `${t.profile.checkMyProfile} @${userData?.username}\n${profileUrl}`,
+                url: profileUrl,
               });
               toastManager.showSuccess(t.profile.shared, t.profile.profileSharedSuccess);
             } catch (error) {
