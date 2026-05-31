@@ -156,6 +156,7 @@ export function useChatProfile(): UseChatProfileResult {
         profile &&
         profile.position &&
         profile.age != null &&
+        profile.height != null &&
         profile.weight != null &&
         profile.preferredFoot &&
         profile.countryFlag
@@ -177,17 +178,18 @@ export function buildProfileSystemPromptSuffix(
     const {
         position,
         age,
+        height,
         weight,
         preferredFoot,
         countryFlag,
     } = profile;
-    if (!position || age == null || weight == null || !preferredFoot || !countryFlag) {
+    if (!position || age == null || height == null || weight == null || !preferredFoot || !countryFlag) {
         return '';
     }
     return [
         '',
         `You are talking to a football player named ${greetingName}.`,
-        `Profile: Position=${position}, Age=${age}, Weight=${weight}kg, Preferred Foot=${preferredFoot}, Country=${countryFlag}.`,
+        `Profile: Position=${position}, Age=${age}, Height=${height}, Weight=${weight}kg, Preferred Foot=${preferredFoot}, Country=${countryFlag}.`,
         'Personalize your responses based on this profile.',
     ].join('\n');
 }

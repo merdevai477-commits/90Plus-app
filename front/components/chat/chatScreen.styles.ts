@@ -137,6 +137,10 @@ export const chatScreenStyles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
+  welcomeChips: {
+    width: '100%',
+    marginTop: 28,
+  },
   messagesList: { flex: 1, minHeight: 0 },
   streamingPlaceholder: {
     minHeight: 4,

@@ -16,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Brain, CheckCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Colors, Radius, FontSize, Spacing, Duration } from '../../constants/theme';
+import { useTranslation } from '../../src/i18n';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,9 +30,9 @@ interface ThinkingIndicatorProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function generateThinkingSteps(message: string): string[] {
+function generateThinkingSteps(message: string, th: Record<string, string>): string[] {
   if (!message) {
-    return ['Reading your question…', 'Drafting a reply…'];
+    return [th.readingQuestion, th.draftingReply];
   }
 
   const clean = message.replace(/[?!.,]/g, '');
@@ -44,24 +45,24 @@ function generateThinkingSteps(message: string): string[] {
 
   if (/\b(how many|count|number of|what'?s the score)\b/.test(lower)) {
     return [
-      'Parsing the numbers…',
-      `Looking up “${keyword}”…`,
-      'Working through the math…',
+      th.parsingNumbers,
+      th.lookingUp.replace('{keyword}', keyword),
+      th.workingThrough,
     ];
   }
 
   if (/\b(how\b|why\b|what\b|explain|steps?|walk me through)\b/.test(lower) || message.includes('?')) {
     return [
-      'Breaking the question down…',
-      `Analyzing “${keyword}”…`,
-      'Drafting a clear answer…',
+      th.breakingDown,
+      th.analyzing.replace('{keyword}', keyword),
+      th.draftingClear,
     ];
   }
 
   return [
-    'Understanding your question…',
-    `Searching for “${keyword}”…`,
-    'Writing the response…',
+    th.understanding,
+    th.searching.replace('{keyword}', keyword),
+    th.writing,
   ];
 }
 
@@ -81,13 +82,15 @@ export function ThinkingIndicator({
   isThinking,
   status = 'thinking',
 }: ThinkingIndicatorProps) {
+  const { t } = useTranslation();
+  const th = t.chat.thinking;
   const [isOpen, setIsOpen] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
   const [duration, setDuration] = useState(0);
 
   const steps = useMemo(
-    () => generateThinkingSteps(lastMessage ?? ''),
-    [lastMessage]
+    () => generateThinkingSteps(lastMessage ?? '', th),
+    [lastMessage, th],
   );
 
   // ─── Animations ────────────────────────────────────────────────────────────
@@ -182,9 +185,9 @@ export function ThinkingIndicator({
     .padStart(2, '0')}`;
 
   const getStatusText = () => {
-    if (status === 'done') return 'Response ready';
-    if (status === 'error') return 'Something went wrong';
-    return `Thinking (${formattedTime})`;
+    if (status === 'done') return th.responseReady;
+    if (status === 'error') return th.somethingWrong;
+    return th.thinkingDuration.replace('{time}', formattedTime);
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────

@@ -231,7 +231,7 @@ export function useChatScreenState({
 
   const handleBackHome = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
-    router.push('/');
+    router.replace('/(tabs)/Home');
   }, [router]);
 
   const scrollToEndAfterConversationChange = useCallback(() => {

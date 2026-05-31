@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurIntensity } from '../../constants/theme';
+import { useTranslation } from '../../src/i18n';
 import { chatColors } from './chatTheme';
 import { chatScreenStyles as styles } from './chatScreen.styles';
 
@@ -18,6 +19,7 @@ export type ChatHeaderProps = {
 
 export function ChatHeader({ onBack, onMenu, backLabel, menuLabel }: ChatHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -66,7 +68,7 @@ export function ChatHeader({ onBack, onMenu, backLabel, menuLabel }: ChatHeaderP
             <View style={styles.plusChipLarge}>
               <Text style={styles.logoPlusLarge}>PLUS</Text>
             </View>
-            <Text style={styles.captainText}>Captain AI</Text>
+            <Text style={styles.captainText}>{t.chat.headerCaptainAi}</Text>
           </View>
         </View>
 

@@ -1796,6 +1796,55 @@ export const ar = {
     suggestionSectionFootball: 'كرة القدم',
     a11yBack: 'العودة للرئيسية',
     a11yMenu: 'فتح سجل المحادثات',
+    a11ySend: 'إرسال رسالة',
+    a11yStop: 'إيقاف التوليد',
+
+    initialWelcome: 'أهلاً! أنا 90Plus AI — اسألني عن كرة القدم أو الأداء. إزاي أقدر أساعدك؟',
+    streamRetry: 'انقطع الاتصال — إعادة المحاولة {current}/{max}...',
+    streamRetryFailed: 'فشل الاتصال بعد عدة محاولات. اضغط إعادة المحاولة.',
+    noActiveConversation: 'لا توجد محادثة نشطة.',
+    headerCaptainAi: 'كابتن AI',
+    poweredBy: 'powered by mr.dev ai',
+    stopGeneration: 'إيقاف',
+
+    suggestionFootballInfoPrompt: 'إيه آخر أخبار وتحديثات كرة القدم؟',
+    suggestionLeagueStatsPrompt: 'ورّيني إحصائيات وترتيب أهم الدوريات',
+    suggestionTrainingPlanPrompt: 'اعملي برنامج تدريب أسبوعي لكرة القدم',
+    suggestionDietPlanPrompt: 'اقترح نظام أكل مناسب للاعب كرة قدم',
+    suggestionRecoveryTipsPrompt: 'إيه نصائح الاستشفاء بعد تمرين مكثف؟',
+
+    contextMenu: {
+      messagePreview: 'الرسالة',
+      conversationPreview: 'المحادثة',
+      copy: 'نسخ',
+      resend: 'إعادة إرسال',
+      edit: 'تعديل',
+      delete: 'حذف',
+      pin: 'تثبيت',
+      unpin: 'إلغاء التثبيت',
+      rename: 'إعادة تسمية',
+      copyConversation: 'نسخ المحادثة',
+    },
+
+    thinking: {
+      readingQuestion: 'بقرأ سؤالك…',
+      draftingReply: 'بجهّز الرد…',
+      parsingNumbers: 'بحلّل الأرقام…',
+      lookingUp: 'ببحث عن "{keyword}"…',
+      workingThrough: 'بكمّل الحسابات…',
+      breakingDown: 'بقسّم السؤال…',
+      analyzing: 'بحلّل "{keyword}"…',
+      draftingClear: 'بكتب رد واضح…',
+      understanding: 'بفهم سؤالك…',
+      searching: 'ببحث عن "{keyword}"…',
+      writing: 'بكتب الرد…',
+      responseReady: 'الرد جاهز',
+      somethingWrong: 'حصل خطأ',
+      thinkingDuration: 'بفكر ({time})',
+    },
+
+    exportUserLabel: 'أنت',
+    exportAiLabel: '90Plus AI',
 
     // لوحة المحادثات الجانبية
     panel: {

@@ -22,19 +22,25 @@ import Svg, { Path } from 'react-native-svg';
 
 import { ChatSpinner } from './ChatSpinner';
 import { ChatGlassSurface } from './ChatGlassSurface';
+import { LimitReachedCountdown } from './LimitReachedCountdown';
 import { Colors, Gradients } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
+import { useTranslation } from '../../src/i18n';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function SendButton({
   active,
   loading,
+  isStop,
   onPress,
+  a11yLabel,
 }: {
   active: boolean;
   loading: boolean;
+  isStop?: boolean;
   onPress: () => void;
+  a11yLabel: string;
 }) {
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({
@@ -44,15 +50,15 @@ function SendButton({
   return (
     <AnimatedPressable
       onPress={onPress}
-      disabled={!active || loading}
+      disabled={isStop ? false : !active || loading}
       style={style}
       onPressIn={() => { scale.value = withSpring(0.9, { stiffness: 300, damping: 18 }); }}
       onPressOut={() => { scale.value = withSpring(1, { stiffness: 300, damping: 18 }); }}
       accessibilityRole="button"
-      accessibilityLabel="Send message"
+      accessibilityLabel={a11yLabel}
     >
-      <View style={[styles.sendButton, active && styles.sendButtonActive]}>
-        {active && (
+      <View style={[styles.sendButton, (active || isStop) && styles.sendButtonActive]}>
+        {active && !isStop && (
           <LinearGradient
             colors={Gradients.purpleCTA}
             start={{ x: 0, y: 0 }}
@@ -60,8 +66,10 @@ function SendButton({
             style={StyleSheet.absoluteFill}
           />
         )}
-        {loading ? (
+        {loading && !isStop ? (
           <ChatSpinner />
+        ) : isStop ? (
+          <View style={styles.stopSquare} />
         ) : (
           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
             <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
@@ -86,9 +94,12 @@ export interface ChatComposerProps {
   messagesRemaining: number | null;
   resetTime: Date | null;
   dailyLimitOverText: string;
+  limitResetsAfterText: string;
+  stopLabel: string;
   /** Safe-area padding when KeyboardStickyView is not active (Expo Go). */
   bottomInset?: number;
   onInputFocus?: () => void;
+  onStop?: () => void;
 }
 
 export function ChatComposer({
@@ -105,16 +116,23 @@ export function ChatComposer({
   messagesRemaining,
   resetTime,
   dailyLimitOverText,
+  limitResetsAfterText,
+  stopLabel,
   bottomInset = 0,
   onInputFocus,
+  onStop,
 }: ChatComposerProps) {
+  const { t } = useTranslation();
   const inputDirection = useMemo(() => getTextDirectionStyles(value), [value]);
+  const isGenerating = isLoading && !!onStop;
 
   return (
     <View style={[styles.dock, bottomInset > 0 && { paddingBottom: bottomInset }]}>
       {messagesRemaining !== null && messagesRemaining <= 0 && resetTime ? (
         <View style={styles.limitBanner}>
           <Text style={styles.limitText}>{dailyLimitOverText}</Text>
+          <Text style={styles.limitSub}>{limitResetsAfterText}</Text>
+          <LimitReachedCountdown resetTime={resetTime} style={styles.limitCountdown} />
         </View>
       ) : (
         <ChatGlassSurface
@@ -165,14 +183,16 @@ export function ChatComposer({
             <SendButton
               active={Boolean(value.trim())}
               loading={isLoading}
-              onPress={onSend}
+              isStop={isGenerating}
+              onPress={isGenerating ? onStop! : onSend}
+              a11yLabel={isGenerating ? t.chat.a11yStop : t.chat.a11ySend}
             />
           </View>
         </ChatGlassSurface>
       )}
 
       <View style={styles.footerInfo}>
-        <Text style={styles.footerText}>powered by mr.dev ai</Text>
+        <Text style={styles.footerText}>{t.chat.poweredBy}</Text>
       </View>
     </View>
   );
@@ -268,7 +288,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   limitBanner: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.04)',
@@ -276,7 +295,22 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
     borderRadius: 24,
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 16,
+    gap: 6,
   },
-  limitText: { color: 'rgba(255,255,255,0.55)', fontSize: 12 },
+  limitText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' },
+  limitSub: { color: 'rgba(255,255,255,0.45)', fontSize: 11 },
+  limitCountdown: {
+    fontSize: 28,
+    fontWeight: '300',
+    color: 'rgba(255,255,255,0.55)',
+    letterSpacing: 2,
+    marginTop: 4,
+  },
+  stopSquare: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
 });

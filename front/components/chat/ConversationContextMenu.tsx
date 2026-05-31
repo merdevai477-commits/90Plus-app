@@ -148,6 +148,8 @@ export const ConversationContextMenu = React.memo(({
   onCopy,
   onClose,
 }: ConversationContextMenuProps) => {
+  const { t } = useTranslation();
+  const cm = t.chat.contextMenu;
   return (
     <Modal
       transparent
@@ -212,7 +214,7 @@ export const ConversationContextMenu = React.memo(({
           <View style={styles.menuContent}>
             {/* Conversation title preview */}
             <View style={styles.previewContainer}>
-              <Text style={styles.previewLabel}>Conversation</Text>
+              <Text style={styles.previewLabel}>{cm.conversationPreview}</Text>
               <Text style={styles.previewText} numberOfLines={1}>
                 {conversationTitle}
               </Text>
@@ -222,13 +224,13 @@ export const ConversationContextMenu = React.memo(({
 
             <MenuItem
               icon={<PinIcon isPinned={isPinned} />}
-              text={isPinned ? 'Unpin' : 'Pin to top'}
+              text={isPinned ? cm.unpin : cm.pin}
               onPress={onPin}
               delay={80}
             />
             <MenuItem
               icon={<RenameIcon />}
-              text="Rename"
+              text={cm.rename}
               onPress={onRename}
               delay={110}
             />
@@ -237,7 +239,7 @@ export const ConversationContextMenu = React.memo(({
 
             <MenuItem
               icon={<CopyIcon />}
-              text="Copy conversation"
+              text={cm.copyConversation}
               onPress={onCopy}
               delay={140}
             />
@@ -246,7 +248,7 @@ export const ConversationContextMenu = React.memo(({
 
             <MenuItem
               icon={<DeleteIcon />}
-              text="Delete"
+              text={cm.delete}
               onPress={onDelete}
               danger
               delay={170}

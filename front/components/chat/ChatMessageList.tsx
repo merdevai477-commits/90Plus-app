@@ -129,6 +129,7 @@ export function ChatMessageList({
         data={displayMessages}
         keyExtractor={keyExtractor}
         renderItem={renderMessage}
+        estimatedItemSize={88}
         {...(useNativeKeyboardScroll
           ? { renderScrollComponent }
           : {})}

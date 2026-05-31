@@ -34,6 +34,7 @@ import {
   Spacing,
   BlurIntensity,
 } from '../../constants/theme';
+import { useTranslation } from '../../src/i18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,6 +194,8 @@ export function MessageContextMenu({
   onCopy,
   onClose,
 }: MessageContextMenuProps) {
+  const { t } = useTranslation();
+  const cm = t.chat.contextMenu;
   return (
     <Modal
       transparent
@@ -265,7 +268,7 @@ export function MessageContextMenu({
           <View style={styles.menuContent}>
             {/* ── Message preview ── */}
             <View style={styles.previewContainer}>
-              <Text style={styles.previewLabel}>Message</Text>
+              <Text style={styles.previewLabel}>{cm.messagePreview}</Text>
               <Text style={styles.previewText} numberOfLines={2}>
                 {messageText}
               </Text>
@@ -274,13 +277,13 @@ export function MessageContextMenu({
             <View style={styles.divider} />
 
             {/* ── Actions ── */}
-            <MenuItem icon={<CopyIcon />}   text="Copy"           onPress={onCopy}   delay={80} />
-            <MenuItem icon={<ResendIcon />} text="Resend"         onPress={onResend} delay={120} />
-            <MenuItem icon={<EditIcon />}   text="Edit"           onPress={onEdit}   delay={160} />
+            <MenuItem icon={<CopyIcon />}   text={cm.copy}   onPress={onCopy}   delay={80} />
+            <MenuItem icon={<ResendIcon />} text={cm.resend} onPress={onResend} delay={120} />
+            <MenuItem icon={<EditIcon />}   text={cm.edit}   onPress={onEdit}   delay={160} />
 
             <View style={styles.divider} />
 
-            <MenuItem icon={<DeleteIcon />} text="Delete"         onPress={onDelete} danger delay={200} />
+            <MenuItem icon={<DeleteIcon />} text={cm.delete} onPress={onDelete} danger delay={200} />
           </View>
         </View>
       </Animated.View>

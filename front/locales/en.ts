@@ -1853,6 +1853,55 @@ export const en = {
     // Accessibility
     a11yBack: 'Back to home',
     a11yMenu: 'Open conversation history',
+    a11ySend: 'Send message',
+    a11yStop: 'Stop generating',
+
+    initialWelcome: "Hey there! I'm 90Plus AI — ask me anything about football or performance. How can I help today?",
+    streamRetry: 'Connection lost — retrying {current}/{max}...',
+    streamRetryFailed: 'Connection failed after several attempts. Tap Retry.',
+    noActiveConversation: 'No active conversation.',
+    headerCaptainAi: 'Captain AI',
+    poweredBy: 'powered by mr.dev ai',
+    stopGeneration: 'Stop',
+
+    suggestionFootballInfoPrompt: 'What are the latest football news and updates?',
+    suggestionLeagueStatsPrompt: 'Show me top league stats and standings',
+    suggestionTrainingPlanPrompt: 'Create a weekly football training plan for me',
+    suggestionDietPlanPrompt: 'Suggest a nutrition plan for a football player',
+    suggestionRecoveryTipsPrompt: 'Give me recovery tips after intense training',
+
+    contextMenu: {
+      messagePreview: 'Message',
+      conversationPreview: 'Conversation',
+      copy: 'Copy',
+      resend: 'Resend',
+      edit: 'Edit',
+      delete: 'Delete',
+      pin: 'Pin to top',
+      unpin: 'Unpin',
+      rename: 'Rename',
+      copyConversation: 'Copy conversation',
+    },
+
+    thinking: {
+      readingQuestion: 'Reading your question…',
+      draftingReply: 'Drafting a reply…',
+      parsingNumbers: 'Parsing the numbers…',
+      lookingUp: 'Looking up "{keyword}"…',
+      workingThrough: 'Working through the math…',
+      breakingDown: 'Breaking the question down…',
+      analyzing: 'Analyzing "{keyword}"…',
+      draftingClear: 'Drafting a clear answer…',
+      understanding: 'Understanding your question…',
+      searching: 'Searching for "{keyword}"…',
+      writing: 'Writing the response…',
+      responseReady: 'Response ready',
+      somethingWrong: 'Something went wrong',
+      thinkingDuration: 'Thinking ({time})',
+    },
+
+    exportUserLabel: 'You',
+    exportAiLabel: '90Plus AI',
 
     // Conversations side panel
     panel: {

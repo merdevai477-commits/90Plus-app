@@ -82,14 +82,34 @@ const TYPING_BACKLOG_HUGE = 200;   // queue length above which we sprint
 const TYPING_DRAIN_TICK_MS = 16;   // post-done, slightly faster ticks
 const CODE_BLOCK_REGEX = /```|\|/;
 
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: '1',
-    role: 'ai',
-    text: "Hey there! I'm 90Plus AI — ask me anything about football or performance. How can I help today?",
-    time: '9:41',
-  },
-];
+export interface ChatLabels {
+  initialWelcome: string;
+  streamRetry: (current: number, max: number) => string;
+  streamRetryFailed: string;
+  noActiveConversation: string;
+  exportUserLabel: string;
+  exportAiLabel: string;
+}
+
+const FALLBACK_LABELS: ChatLabels = {
+  initialWelcome: "Hey there! I'm 90Plus AI — ask me anything about football or performance. How can I help today?",
+  streamRetry: (current, max) => `Connection lost — retrying ${current}/${max}...`,
+  streamRetryFailed: 'Connection failed after several attempts. Tap Retry.',
+  noActiveConversation: 'No active conversation.',
+  exportUserLabel: 'You',
+  exportAiLabel: '90Plus AI',
+};
+
+function buildInitialMessages(welcome: string): Message[] {
+  return [
+    {
+      id: '1',
+      role: 'ai',
+      text: welcome,
+      time: '9:41',
+    },
+  ];
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -208,16 +228,34 @@ export interface UseAIChatOptions {
    * it on top of its own rules). Return null/undefined to skip personalization.
    */
   getSystemPromptSuffix?: () => string | null | undefined;
+  /** Localized strings for welcome message, errors, and export labels. */
+  getChatLabels?: () => ChatLabels;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useAIChatNative(options: UseAIChatOptions = {}) {
-  const { getSystemPromptSuffix } = options;
+  const { getSystemPromptSuffix, getChatLabels } = options;
   const suffixBuilderRef = useRef<UseAIChatOptions['getSystemPromptSuffix']>(getSystemPromptSuffix);
+  const labelsBuilderRef = useRef<UseAIChatOptions['getChatLabels']>(getChatLabels);
   useEffect(() => {
     suffixBuilderRef.current = getSystemPromptSuffix;
   }, [getSystemPromptSuffix]);
+  useEffect(() => {
+    labelsBuilderRef.current = getChatLabels;
+  }, [getChatLabels]);
+
+  const getLabels = useCallback((): ChatLabels => {
+    try {
+      return labelsBuilderRef.current?.() ?? FALLBACK_LABELS;
+    } catch {
+      return FALLBACK_LABELS;
+    }
+  }, []);
+
+  const getInitialMessages = useCallback((): Message[] => {
+    return buildInitialMessages(getLabels().initialWelcome);
+  }, [getLabels]);
 
   const userIdRef = useRef<string>('');
   const xhrRef = useRef<XMLHttpRequest | null>(null);
@@ -242,7 +280,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const pendingDoneCallbackRef = useRef<(() => void) | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
 
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>(() => buildInitialMessages(FALLBACK_LABELS.initialWelcome));
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
@@ -357,7 +395,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       messages: Array<{ id: string; role: 'user' | 'ai'; text: string; createdAt: string }>;
     };
     const loaded: Message[] = [
-      INITIAL_MESSAGES[0],
+      ...getInitialMessages(),
       ...(data.messages ?? []).map(m => ({
         id: m.id,
         role: m.role,
@@ -366,7 +404,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       })),
     ];
     setMessages(loaded);
-  }, [commonHeaders]);
+  }, [commonHeaders, getInitialMessages]);
 
   const bootstrapConversation = useCallback(async () => {
     try {
@@ -388,7 +426,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       const created = await createConversation();
       setCurrentConversationId(created.id);
       setConversations([created]);
-      setMessages(INITIAL_MESSAGES);
+      setMessages(getInitialMessages());
       await Storage.saveLastConversationId(created.id);
     } catch {
       // warn only — don't crash the chat screen on a transient failure
@@ -703,7 +741,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       if (retryCountRef.current < MAX_STREAM_RETRIES) {
         retryCountRef.current++;
         setIsRetrying(true);
-        setError(`انقطع الاتصال — إعادة المحاولة ${retryCountRef.current}/${MAX_STREAM_RETRIES}...`);
+        const labels = getLabels();
+        setError(labels.streamRetry(retryCountRef.current, MAX_STREAM_RETRIES));
 
         // Pause the typing renderer between attempts. The visible queue
         // can keep what's already buffered — when the next chunk arrives
@@ -731,7 +770,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setIsRetrying(false);
         setStreamingMessageId(null);
         setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
-        setError('فشل الاتصال بعد عدة محاولات. اضغط إعادة المحاولة.');
+        setError(getLabels().streamRetryFailed);
         retryCountRef.current = 0;
       }
     };
@@ -745,11 +784,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   // ─── Send Message ─────────────────────────────────────────────────────────
 
-  const sendMessage = useCallback(async (text?: string) => {
+  const sendMessage = useCallback(async (text?: string, historyBase?: Message[]) => {
     const messageText = text ?? inputValue;
     const trimmed = messageText.trim();
     if (!trimmed || isLoading) return;
     if (messagesRemaining !== null && messagesRemaining <= 0) return;
+
+    const base = historyBase ?? messages;
 
     setError(null);
     abortRef.current = false;
@@ -776,9 +817,6 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       text: trimmed,
       time: now(),
     };
-    // Append user message AND an empty assistant placeholder in the same
-    // setMessages call. The placeholder gets filled by flushStreamingBuffer
-    // as tokens arrive — no duplicate assistant rows.
     const assistantPlaceholder: Message = {
       id: aiMessageId,
       role: 'ai',
@@ -786,14 +824,18 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       time: now(),
       isStreaming: true,
     };
-    setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
+    if (historyBase) {
+      setMessages([...historyBase, userMsg, assistantPlaceholder]);
+    } else {
+      setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
+    }
     setInputValue('');
     setIsLoading(true);
     setIsThinking(true);
     setMessagesRemaining(prev => (prev === null ? prev : Math.max(0, prev - 1)));
 
     if (!currentConversationId) {
-      setError('No active conversation.');
+      setError(getLabels().noActiveConversation);
       setIsLoading(false);
       setIsThinking(false);
       setStreamingMessageId(null);
@@ -802,9 +844,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       return;
     }
 
-    const history = toHistoryFormat(
-      messages.filter(m => m.id !== userMsg.id).slice(1),
-    );
+    const history = toHistoryFormat(base.slice(1));
 
     const systemPromptSuffix = (() => {
       try {
@@ -841,12 +881,31 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // ─── Retry ────────────────────────────────────────────────────────────────
 
   const retryLastMessage = useCallback(() => {
-    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
-    if (lastUserMessage) {
-      setError(null);
-      sendMessage(lastUserMessage.text);
+    const lastUserIdx = messages.map((_, i) => i).reverse().find(i => messages[i].role === 'user');
+    if (lastUserIdx === undefined) return;
+    const text = messages[lastUserIdx].text;
+    const base = messages.slice(0, lastUserIdx);
+
+    setError(null);
+    abortRef.current = false;
+    abortXHR();
+    partialTextRef.current = '';
+    retryCountRef.current = 0;
+    rawStreamBufferRef.current = '';
+    visibleTypingQueueRef.current = [];
+    networkDoneRef.current = false;
+    pendingDoneCallbackRef.current = null;
+    if (typingTimerRef.current) {
+      clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
     }
-  }, [messages, sendMessage]);
+    setStreamingMessageId(null);
+    setIsRetrying(false);
+    setIsLoading(false);
+    setIsThinking(false);
+
+    sendMessage(text, base);
+  }, [messages, sendMessage, abortXHR]);
 
   // ─── Edit Message ─────────────────────────────────────────────────────────
 
@@ -892,7 +951,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     abortXHR();
     // Tear down the typing pipeline before resetting messages.
     stopTypingPipeline();
-    setMessages(INITIAL_MESSAGES);
+    setMessages(getInitialMessages());
     setInputValue('');
     setIsLoading(false);
     setIsThinking(false);
@@ -924,7 +983,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const created = await createConversation();
     await fetchConversations();
     setCurrentConversationId(created.id);
-    setMessages(INITIAL_MESSAGES);
+    setMessages(getInitialMessages());
     await Storage.saveLastConversationId(created.id);
   }, [createConversation, fetchConversations]);
 
@@ -967,7 +1026,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         const created = await createConversation();
         setConversations([created]);
         setCurrentConversationId(created.id);
-        setMessages(INITIAL_MESSAGES);
+        setMessages(getInitialMessages());
       }
     }
   }, [
@@ -976,6 +1035,39 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   ]);
 
   const dismissError = useCallback(() => setError(null), []);
+
+  const exportConversationText = useCallback(async (conversationId: string): Promise<string> => {
+    const labels = getLabels();
+    const formatLines = (rows: Array<{ role: 'user' | 'ai'; text: string }>) =>
+      rows
+        .map(m => `${m.role === 'user' ? labels.exportUserLabel : labels.exportAiLabel}: ${m.text}`)
+        .join('\n\n');
+
+    if (conversationId === currentConversationId) {
+      return formatLines(messages.slice(1).map(m => ({ role: m.role, text: m.text })));
+    }
+
+    const res = await fetch(
+      `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
+      { headers: commonHeaders() },
+    );
+    if (!res.ok) throw new Error('Failed to load messages');
+    const data = await res.json() as {
+      messages: Array<{ role: 'user' | 'ai'; text: string }>;
+    };
+    return formatLines(data.messages ?? []);
+  }, [currentConversationId, messages, commonHeaders, getLabels]);
+
+  // Refresh welcome bubble when locale labels change (before user sends).
+  useEffect(() => {
+    const welcome = getLabels().initialWelcome;
+    setMessages(prev => {
+      if (prev.length === 1 && prev[0].id === '1' && prev[0].role === 'ai' && !prev[0].isStreaming) {
+        return buildInitialMessages(welcome);
+      }
+      return prev;
+    });
+  }, [getLabels]);
 
   // ─── Return ───────────────────────────────────────────────────────────────
 
@@ -1010,5 +1102,6 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     togglePinConversation,
     renameConversation,
     deleteConversation,
+    exportConversationText,
   };
 }

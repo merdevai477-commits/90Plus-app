@@ -30,27 +30,32 @@ import { Toast } from './Toast';
 import { ConversationContextMenu } from './ConversationContextMenu';
 import { ConversationSkeleton, UserProfileSkeleton } from './SkeletonLoader';
 import { Colors, Gradients } from '../../constants/theme';
+import { useTranslation } from '../../src/i18n';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Format a conversation's `updatedAt` timestamp as a short Arabic
- * relative-time label for the history sidebar. Handles invalid inputs
- * defensively so a bad timestamp never breaks the list.
- */
-function formatConversationDate(isoString: string): string {
+function formatConversationDate(
+  isoString: string,
+  labels: {
+    dateToday: string;
+    dateYesterday: string;
+    dateDaysAgo: string;
+    dateWeeksAgo: string;
+    dateMonthsAgo: string;
+  },
+): string {
   const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return 'اليوم';
+  if (Number.isNaN(date.getTime())) return labels.dateToday;
 
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays <= 0) return 'اليوم';
-  if (diffDays === 1) return 'أمس';
-  if (diffDays < 7) return `منذ ${diffDays} أيام`;
-  if (diffDays < 30) return `منذ ${Math.floor(diffDays / 7)} أسابيع`;
-  return `منذ ${Math.floor(diffDays / 30)} شهور`;
+  if (diffDays <= 0) return labels.dateToday;
+  if (diffDays === 1) return labels.dateYesterday;
+  if (diffDays < 7) return labels.dateDaysAgo.replace('{n}', String(diffDays));
+  if (diffDays < 30) return labels.dateWeeksAgo.replace('{n}', String(Math.floor(diffDays / 7)));
+  return labels.dateMonthsAgo.replace('{n}', String(Math.floor(diffDays / 30)));
 }
 
 // ─── Online Pulse ─────────────────────────────────────────────────────────────
@@ -81,8 +86,23 @@ interface RenameModalProps {
   initialValue: string;
   onConfirm: (v: string) => void;
   onCancel: () => void;
+  title: string;
+  subtitle: string;
+  placeholder: string;
+  cancelLabel: string;
+  confirmLabel: string;
 }
-export function RenameModal({ visible, initialValue, onConfirm, onCancel }: RenameModalProps) {
+export function RenameModal({
+  visible,
+  initialValue,
+  onConfirm,
+  onCancel,
+  title,
+  subtitle,
+  placeholder,
+  cancelLabel,
+  confirmLabel,
+}: RenameModalProps) {
   const [value, setValue] = useState(initialValue);
   useEffect(() => { if (visible) setValue(initialValue); }, [visible, initialValue]);
   return (
@@ -99,13 +119,13 @@ export function RenameModal({ visible, initialValue, onConfirm, onCancel }: Rena
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
         <View style={[styles.renameCard, { backgroundColor: '#1A1525' }]}>
           <View style={styles.renameContent}>
-            <Text style={styles.renameTitle}>إعادة تسمية</Text>
-            <Text style={styles.renameSubtitle}>أدخل الاسم الجديد للمحادثة</Text>
+            <Text style={styles.renameTitle}>{title}</Text>
+            <Text style={styles.renameSubtitle}>{subtitle}</Text>
             <TextInput
               style={styles.renameInput}
               value={value}
               onChangeText={setValue}
-              placeholder="اسم المحادثة..."
+              placeholder={placeholder}
               placeholderTextColor={Colors.textMuted}
               textAlign="right"
               autoFocus
@@ -113,7 +133,7 @@ export function RenameModal({ visible, initialValue, onConfirm, onCancel }: Rena
             />
             <View style={styles.renameActions}>
               <Pressable onPress={onCancel} style={styles.renameCancelBtn}>
-                <Text style={styles.renameCancelText}>إلغاء</Text>
+                <Text style={styles.renameCancelText}>{cancelLabel}</Text>
               </Pressable>
               <Pressable
                 onPress={() => { if (value.trim()) onConfirm(value.trim()); }}
@@ -124,7 +144,7 @@ export function RenameModal({ visible, initialValue, onConfirm, onCancel }: Rena
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={styles.renameConfirmGradient}
                 >
-                  <Text style={styles.renameConfirmText}>تأكيد</Text>
+                  <Text style={styles.renameConfirmText}>{confirmLabel}</Text>
                 </LinearGradient>
               </Pressable>
             </View>
@@ -174,6 +194,7 @@ export interface ChatHistoryPanelProps {
   onTogglePin: (id: string, isPinned: boolean) => Promise<void>;
   onRenameConversation: (id: string, title: string) => Promise<void>;
   onDeleteConversation: (id: string) => Promise<void>;
+  onCopyConversation: (id: string) => Promise<void>;
   onNewChat: () => Promise<void>;
   isOnline: boolean; isLoading: boolean;
   /** Display name — falls back to "كابتن" when omitted. */
@@ -186,9 +207,13 @@ export function ChatHistoryPanel({
   isOpen, onClose, messagesRemaining, dailyMessageLimit, resetTime,
   conversations, activeConversationId,
   onSelectConversation, onTogglePin, onRenameConversation, onDeleteConversation,
+  onCopyConversation,
   onNewChat, isOnline, isLoading,
   displayName, avatar,
 }: ChatHistoryPanelProps) {
+  const { t } = useTranslation();
+  const p = t.chat.panel;
+  const fallbackName = t.chat.welcomeGreetingFallback;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [contextMenu, setContextMenu] = useState<{ conversation: Conversation } | null>(null);
@@ -284,11 +309,13 @@ export function ChatHistoryPanel({
               <Text style={styles.panelCloseText}>×</Text>
             </Pressable>
             <View>
-              <Text style={styles.panelTitle}>المحادثات</Text>
+              <Text style={styles.panelTitle}>{p.title}</Text>
               <Text style={styles.panelSubtitle}>
                 {conversations.length > 0
-                  ? `${conversations.length} محادثة`
-                  : 'لا توجد محادثات بعد'}
+                  ? (conversations.length === 1
+                    ? p.subtitleCount.replace('{count}', String(conversations.length))
+                    : p.subtitleCountPlural.replace('{count}', String(conversations.length)))
+                  : p.subtitleEmpty}
               </Text>
             </View>
           </View>
@@ -331,7 +358,7 @@ export function ChatHistoryPanel({
                   </View>
                   <View>
                     <Text style={styles.profileName}>
-                      {displayName?.trim() || 'كابتن'}
+                      {displayName?.trim() || fallbackName}
                     </Text>
                     <View style={styles.onlineRow}>
                       {isOnline && <OnlinePulse />}
@@ -339,7 +366,7 @@ export function ChatHistoryPanel({
                         styles.onlineText,
                         !isOnline && { color: '#FCA5A5' },
                       ]}>
-                        {isOnline ? 'نشط الآن' : 'غير متصل'}
+                        {isOnline ? p.online : p.offline}
                       </Text>
                     </View>
                   </View>
@@ -364,7 +391,7 @@ export function ChatHistoryPanel({
                   end={{ x: 1, y: 1 }}
                   style={styles.newChatGradient}
                 >
-                  <Text style={styles.newChatText}>+ محادثة جديدة</Text>
+                  <Text style={styles.newChatText}>{p.newChatButton}</Text>
                 </LinearGradient>
               </Pressable>
 
@@ -374,7 +401,7 @@ export function ChatHistoryPanel({
                   style={styles.searchInput}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholder="ابحث في المحادثات..."
+                  placeholder={p.searchPlaceholder}
                   placeholderTextColor="rgba(255,255,255,0.3)"
                   textAlign="right"
                   returnKeyType="search"
@@ -399,12 +426,12 @@ export function ChatHistoryPanel({
                 {pinned.length > 0 && (
                   <>
                     <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionLabel}>المحادثات المثبتة</Text>
+                      <Text style={styles.sectionLabel}>{p.pinnedSection}</Text>
                     </View>
                     <View style={styles.conversationsGroup}>
                       {pinned.map(c => (
                         <HistoryItem
-                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt)}
+                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt, p)}
                           isActive={c.id === activeConversationId} isPinned={c.isPinned}
                           onPress={() => onSelectConversation(c.id)}
                           onLongPress={() => setContextMenu({ conversation: c })}
@@ -417,12 +444,12 @@ export function ChatHistoryPanel({
                 {unpinned.length > 0 && (
                   <>
                     <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionLabel}>المحادثات السابقة</Text>
+                      <Text style={styles.sectionLabel}>{p.previousSection}</Text>
                     </View>
                     <View style={styles.conversationsGroup}>
                       {unpinned.map(c => (
                         <HistoryItem
-                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt)}
+                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt, p)}
                           isActive={c.id === activeConversationId} isPinned={c.isPinned}
                           onPress={() => onSelectConversation(c.id)}
                           onLongPress={() => setContextMenu({ conversation: c })}
@@ -437,12 +464,12 @@ export function ChatHistoryPanel({
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyEmoji}>{searchQuery.trim() ? '🔍' : '💬'}</Text>
                     <Text style={styles.emptyTitle}>
-                      {searchQuery.trim() ? 'مفيش نتائج' : 'لا توجد محادثات'}
+                      {searchQuery.trim() ? p.emptyTitleNoResults : p.emptyTitleNoConversations}
                     </Text>
                     <Text style={styles.emptySub}>
                       {searchQuery.trim()
-                        ? `مفيش محادثة بعنوان "${searchQuery.trim()}"`
-                        : 'ابدأ محادثة جديدة مع 90Plus AI'}
+                        ? p.emptySubNoResults.replace('{query}', searchQuery.trim())
+                        : p.emptySubStartChat}
                     </Text>
                   </View>
                 )}
@@ -458,19 +485,42 @@ export function ChatHistoryPanel({
           isPinned={contextMenu.conversation.isPinned}
           onPin={async () => {
             await onTogglePin(contextMenu.conversation.id, contextMenu.conversation.isPinned);
-            setToast({ message: contextMenu.conversation.isPinned ? 'تم إلغاء التثبيت ✓' : 'تم التثبيت ✓', type: 'success' });
+            setToast({
+              message: contextMenu.conversation.isPinned ? p.toastUnpinned : p.toastPinned,
+              type: 'success',
+            });
             setContextMenu(null);
           }}
           onRename={() => { setContextMenu(null); setRenameModal({ conversation: contextMenu.conversation }); }}
           onDelete={() => {
             const c = contextMenu.conversation;
             setContextMenu(null);
-            Alert.alert('حذف المحادثة', `هل أنت متأكد من حذف "${c.title}"؟`, [
-              { text: 'إلغاء', style: 'cancel' },
-              { text: 'حذف', style: 'destructive', onPress: async () => { await onDeleteConversation(c.id); setToast({ message: 'تم الحذف بنجاح ✓', type: 'success' }); } },
-            ]);
+            Alert.alert(
+              p.deleteAlertTitle,
+              p.deleteAlertMessage.replace('{title}', c.title),
+              [
+                { text: p.deleteAlertCancel, style: 'cancel' },
+                {
+                  text: p.deleteAlertConfirm,
+                  style: 'destructive',
+                  onPress: async () => {
+                    await onDeleteConversation(c.id);
+                    setToast({ message: p.toastDeleted, type: 'success' });
+                  },
+                },
+              ],
+            );
           }}
-          onCopy={() => { setToast({ message: 'تم نسخ المحادثة ✓', type: 'success' }); setContextMenu(null); }}
+          onCopy={async () => {
+            const c = contextMenu.conversation;
+            try {
+              await onCopyConversation(c.id);
+              setToast({ message: p.toastCopied, type: 'success' });
+            } catch {
+              setToast({ message: t.chat.connectionLost, type: 'error' });
+            }
+            setContextMenu(null);
+          }}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -478,10 +528,15 @@ export function ChatHistoryPanel({
       <RenameModal
         visible={renameModal !== null}
         initialValue={renameModal?.conversation.title ?? ''}
+        title={p.renameTitle}
+        subtitle={p.renameSubtitle}
+        placeholder={p.renamePlaceholder}
+        cancelLabel={p.renameCancel}
+        confirmLabel={p.renameConfirm}
         onConfirm={async (newName) => {
           if (renameModal) {
             await onRenameConversation(renameModal.conversation.id, newName);
-            setToast({ message: 'تم تغيير الاسم بنجاح ✓', type: 'success' });
+            setToast({ message: p.toastRenamed, type: 'success' });
             setRenameModal(null);
           }
         }}
