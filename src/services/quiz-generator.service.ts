@@ -3,7 +3,9 @@
  */
 
 import OpenAI from 'openai';
+import { fromZonedTime } from 'date-fns-tz';
 import { logger } from '../utils/logger';
+import { sanitizeTimezone, todayInTimezone } from '../utils/chat-timezone';
 import type {
   QuizDifficulty,
   QuizLanguage,
@@ -114,16 +116,25 @@ function buildClient(): OpenAI | null {
   });
 }
 
-function todayPackDate(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+/** Start of "today" for quiz pack selection in the user's timezone. */
+export function todayPackDate(timezone?: string): Date {
+  const tz = sanitizeTimezone(timezone);
+  const ymdLocal = todayInTimezone(tz);
+  return fromZonedTime(`${ymdLocal}T00:00:00`, tz);
 }
 
-function packExpiresAt(packDate: Date): Date {
-  const exp = new Date(packDate);
-  exp.setUTCDate(exp.getUTCDate() + 1);
-  return exp;
+export function packExpiresAt(packDate: Date, timezone?: string): Date {
+  const tz = sanitizeTimezone(timezone);
+  const ymdLocal = packDateYmd(packDate, tz);
+  const [y, m, d] = ymdLocal.split('-').map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const nextYmd = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
+  return fromZonedTime(`${nextYmd}T00:00:00`, tz);
+}
+
+export function packDateYmd(packDate: Date, timezone?: string): string {
+  const tz = sanitizeTimezone(timezone);
+  return todayInTimezone(tz, packDate);
 }
 
 function ymd(date: Date): string {
@@ -750,4 +761,3 @@ export async function generateDailyQuizPack(
   };
 }
 
-export { todayPackDate, packExpiresAt, ymd as packDateYmd };

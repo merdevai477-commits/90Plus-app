@@ -215,16 +215,16 @@ async function runReEngagementJob(): Promise<void> {
       const batch = inactiveUsers.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(u =>
-          PushNotificationService.sendNotification({
-            to: u.expoPushToken!,
+          enqueueNotification({
+            userId: u.id,
             title: msg.title,
-            body: msg.message,
+            message: msg.message,
+            type: 'RE_ENGAGEMENT',
             data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/Home' },
-            channelId: 'general',
           })
         )
       );
-      sent += results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+      sent += results.filter(r => r.status === 'fulfilled').length;
     }
 
     logger.info(`[ReEngagement] ✅ Sent ${sent}/${inactiveUsers.length} re-engagement pushes`);

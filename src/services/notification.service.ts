@@ -306,7 +306,7 @@ export class NotificationService {
             pushToken,
             title,
             message,
-            type: NotificationType.MATCH_UPDATE,
+            type: NotificationType.MATCH_GOAL,
             channelId: 'match-updates',
             data: {
                 type: 'MATCH_GOAL',
@@ -363,7 +363,7 @@ export class NotificationService {
             pushToken,
             title,
             message,
-            type: NotificationType.MATCH_UPDATE,
+            type: NotificationType.MATCH_START,
             channelId: 'match-updates',
             data: {
                 type: 'MATCH_START',

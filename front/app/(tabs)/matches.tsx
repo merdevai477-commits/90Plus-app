@@ -634,7 +634,7 @@ export default function MatchesHubScreenV2() {
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
   // Real matches data from backend
-  const { groupedMatches, countryGroups, matches, loading, error, refetch } = useMatchesData(selectedDate);
+  const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(selectedDate);
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -1283,8 +1283,13 @@ export default function MatchesHubScreenV2() {
           <Calendar size={18} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
+      {isDataStale && matches.length > 0 ? (
+        <TouchableOpacity style={styles.staleBanner} onPress={() => void refetch()} activeOpacity={0.85}>
+          <Text style={styles.staleBannerTxt}>{t('matches.screen.staleData') || 'Scores may be outdated — tap to refresh'}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
-  ), [filter, t, handleFilterPress]);
+  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch]);
 
   const listEmptyNode = useMemo(() => {
     if (loading) {
@@ -1527,6 +1532,17 @@ const styles = StyleSheet.create({
   plusChipSmall: { backgroundColor: PURPLE_PRIMARY, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
   logoPlusSmall: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   headerTitleTxt: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  listHeader: { marginBottom: 4 },
+  staleBanner: {
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: 'rgba(245,158,11,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.35)',
+  },
+  staleBannerTxt: { color: '#fcd34d', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   tabsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 24 },
   tabsScroll: { gap: 8, paddingRight: 6 },
   ticketsOuter: { shadowColor: '#000000ff', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.8, shadowRadius: 12, elevation: 8 },
@@ -1548,7 +1564,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)', alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
-  listHeader: { marginBottom: 4 },
   leagueCard: {
     borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(12,10,20,0.85)', overflow: 'hidden',

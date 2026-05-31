@@ -272,9 +272,24 @@ const MatchDetailsScreen = () => {
           }).catch(() => {});
         }
       } else if (fixtureData.status === 'rejected') {
-        // If fixture fetch failed entirely, show error but don't block the screen
-        // The params still provide basic display info (team names, scores)
-        setError(fixtureData.reason?.message || t.matchDetails.loadDetailsFailed);
+        const archived = await matchArchiveService.getArchivedMatch(String(fixtureId));
+        if (archived) {
+          setError(null);
+          // Params still provide header display; archived data enriches offline view
+          if (archived.events?.length) {
+            setEvents(archived.events.map((e) => ({
+              time: { elapsed: e.minute, extra: e.extraMinute },
+              team: { id: e.team === 'home' ? archived.homeTeam.id : archived.awayTeam.id, name: e.team === 'home' ? archived.homeTeam.name : archived.awayTeam.name },
+              player: { id: 0, name: e.player },
+              assist: e.assist ? { id: 0, name: e.assist } : null,
+              type: e.type,
+              detail: e.detail,
+              comments: e.comments,
+            })) as any);
+          }
+        } else {
+          setError(fixtureData.reason?.message || t.matchDetails.loadDetailsFailed);
+        }
       }
 
       setLoading(false);

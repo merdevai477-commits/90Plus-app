@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react-native';
 import { logger } from '../services/logger';
+import { captureException } from '../services/sentry.service';
 
 /**
  * Props for the ErrorBoundary component
@@ -69,10 +70,23 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
    * Requirement 7.3: Log error details for debugging
    */
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log the error details
+    const stack = error.stack || 'No stack trace';
+    const componentStack = errorInfo.componentStack || 'No component stack';
+
+    logger.error('[ErrorBoundary] Uncaught render error:', {
+      name: error.name,
+      message: error.message,
+      stack,
+      componentStack,
+    });
     logger.error('ErrorBoundary caught an error:', error.message);
-    logger.error('Error stack:', error.stack || 'No stack trace');
-    logger.error('Component stack:', errorInfo.componentStack);
+    logger.error('Error stack:', stack);
+    logger.error('Component stack:', componentStack);
+
+    captureException(error, {
+      tags: { source: 'ErrorBoundary' },
+      extra: { componentStack },
+    });
 
     // Update state with error info
     this.setState({ errorInfo });

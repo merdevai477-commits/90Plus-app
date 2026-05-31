@@ -344,7 +344,7 @@ export async function getDailyQuizForUser(
     typeof settings.language === 'string' ? settings.language : undefined;
   const language = normalizeLang(languageInput ?? settingsLang ?? 'ar');
 
-  const packDate = todayPackDate();
+  const packDate = todayPackDate(timezone);
   const pack = await getOrCreateDailyPack(language, packDate);
   const session = await getOrCreateSession(user.id, packDate, language);
   const progress = parseProgress(session.progress);
@@ -355,8 +355,8 @@ export async function getDailyQuizForUser(
 
   return {
     language,
-    packDate: packDateYmd(packDate),
-    expiresAt: packExpiresAt(packDate).toISOString(),
+    packDate: packDateYmd(packDate, timezone),
+    expiresAt: packExpiresAt(packDate, timezone).toISOString(),
     timeLimitSec: QUIZ_TIME_LIMIT_SEC,
     totalQuestions: QUIZ_PACK_SIZE,
     coinCost: QUIZ_COIN_COST,
@@ -387,10 +387,14 @@ export async function submitQuizAnswer(
   languageInput?: string,
 ) {
   const language = normalizeLang(languageInput);
-  const packDate = todayPackDate();
+  const packDate = todayPackDate(timezone);
   const pack = await getOrCreateDailyPack(language, packDate);
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
+
+  if (timeTaken > QUIZ_TIME_LIMIT_SEC) {
+    throw new Error('TIME_LIMIT_EXCEEDED');
+  }
 
   // Verify selectedKey is valid A/B/C/D
   if (!['A', 'B', 'C', 'D'].includes(selectedKey)) {
@@ -605,7 +609,7 @@ export async function skipQuizQuestion(
   languageInput?: string,
 ) {
   const language = normalizeLang(languageInput);
-  const packDate = todayPackDate();
+  const packDate = todayPackDate(timezone);
   const pack = await getOrCreateDailyPack(language, packDate);
   if (!findQuestion(pack, questionId)) throw new Error('QUESTION_NOT_FOUND');
 
@@ -693,7 +697,7 @@ export async function useQuizHint(
   languageInput?: string,
 ) {
   const language = normalizeLang(languageInput);
-  const packDate = todayPackDate();
+  const packDate = todayPackDate(timezone);
   const pack = await getOrCreateDailyPack(language, packDate);
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
@@ -776,7 +780,7 @@ export async function timeoutQuizQuestion(
   languageInput?: string,
 ): Promise<QuizTimeoutResult> {
   const language = normalizeLang(languageInput);
-  const packDate = todayPackDate();
+  const packDate = todayPackDate(timezone);
   const pack = await getOrCreateDailyPack(language, packDate);
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');

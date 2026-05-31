@@ -46,6 +46,7 @@ export interface TopPlayerRow {
 export async function getTopPlayers(
   limit: number,
   period: 'weekly' | 'monthly',
+  offset = 0,
 ): Promise<TopPlayerRow[]> {
   const take = Math.min(limit, 50);
   const startDate = getPeriodStartDate(period);
@@ -129,10 +130,10 @@ export async function getTopPlayers(
       if (b.lifetimeXp !== a.lifetimeXp) return b.lifetimeXp - a.lifetimeXp;
       return a.id.localeCompare(b.id);
     })
-    .slice(0, take)
+    .slice(offset, offset + take)
     .map((player, index) => ({
       ...player,
-      rank: index + 1,
+      rank: offset + index + 1,
       badge:
         index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : null,
     }));

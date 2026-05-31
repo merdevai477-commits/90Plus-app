@@ -1,12 +1,13 @@
 /**
  * useHomeLikes — persisted "liked videos" set for the Home VideoList.
  *
- * Optimistic local state backed by AsyncStorage so hearts survive app
- * restarts. Keyed per-user so switching accounts doesn't leak state.
+ * Optimistic local state backed by AsyncStorage, synced with the reels API.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@clerk/clerk-expo';
+import { ReelsService } from '../src/services/authService';
 import { logger } from '../utils/logger';
 
 const STORAGE_PREFIX = '@home_liked_videos';
@@ -22,20 +23,18 @@ export interface UseHomeLikesResult {
 }
 
 export function useHomeLikes(userId: string | null | undefined): UseHomeLikesResult {
+    const { getToken } = useAuth();
     const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
-    const hydratedRef = useRef(false);
     const activeKeyRef = useRef<string>(storageKey(userId));
 
-    // Hydrate on mount / on user switch.
     useEffect(() => {
         const key = storageKey(userId);
         activeKeyRef.current = key;
-        hydratedRef.current = false;
 
         (async () => {
             try {
                 const raw = await AsyncStorage.getItem(key);
-                if (activeKeyRef.current !== key) return; // user switched mid-flight
+                if (activeKeyRef.current !== key) return;
                 if (raw) {
                     const ids: unknown = JSON.parse(raw);
                     if (Array.isArray(ids)) {
@@ -49,8 +48,6 @@ export function useHomeLikes(userId: string | null | undefined): UseHomeLikesRes
             } catch (err) {
                 logger.warn('useHomeLikes: hydrate failed', err);
                 setLikedIds(new Set());
-            } finally {
-                hydratedRef.current = true;
             }
         })();
     }, [userId]);
@@ -68,16 +65,36 @@ export function useHomeLikes(userId: string | null | undefined): UseHomeLikesRes
 
     const toggleLike = useCallback(
         async (videoId: string) => {
-            // Optimistic update
+            let wasLiked = false;
             setLikedIds((prev) => {
+                wasLiked = prev.has(videoId);
                 const next = new Set(prev);
-                if (next.has(videoId)) next.delete(videoId);
+                if (wasLiked) next.delete(videoId);
                 else next.add(videoId);
                 void persist(next);
                 return next;
             });
+
+            try {
+                const token = await getToken();
+                if (!token) return;
+                if (wasLiked) {
+                    await ReelsService.unlikeReel(token, videoId);
+                } else {
+                    await ReelsService.likeReel(token, videoId);
+                }
+            } catch (err) {
+                logger.warn('useHomeLikes: server sync failed', err);
+                setLikedIds((prev) => {
+                    const next = new Set(prev);
+                    if (wasLiked) next.add(videoId);
+                    else next.delete(videoId);
+                    void persist(next);
+                    return next;
+                });
+            }
         },
-        [persist],
+        [getToken, persist],
     );
 
     const isLiked = useCallback(

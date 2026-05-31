@@ -10,7 +10,7 @@
 import Bull, { Queue, Job } from 'bull';
 import { bullCreateClient } from '../lib/bull-redis';
 import { logger } from '../utils/logger';
-import PushNotificationService from '../services/push-notification.service';
+import NotificationService from '../services/notification.service';
 import prisma from '../lib/prisma';
 
 export interface MatchStartReminderJob {
@@ -75,29 +75,19 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                 return;
             }
 
-            await PushNotificationService.sendLocalizedNotification({
-                pushToken: user.expoPushToken,
+            await NotificationService.createMatchStartNotification(
                 userId,
-                titleKey: 'matchStartTitle',
-                bodyKey: 'matchStartBody',
-                vars: {
-                    home: homeTeam,
-                    away: awayTeam,
-                    minutes: 0,
-                },
-                data: {
-                    type: 'MATCH_START',
-                    fixtureId: String(fixtureId),
-                    matchId: String(fixtureId),
-                    homeTeam,
-                    awayTeam,
+                user.expoPushToken,
+                homeTeam,
+                awayTeam,
+                fixtureId,
+                {
                     homeTeamLogo: subscription.homeTeamLogo || '',
                     awayTeamLogo: subscription.awayTeamLogo || '',
                     leagueName: subscription.leagueName || '',
-                    screen: '/(tabs)/match-details',
+                    matchDate: subscription.matchDate,
                 },
-                channelId: 'match-updates',
-            });
+            );
 
             await prisma.favoriteMatch.update({
                 where: { userId_apiMatchId: { userId, apiMatchId: fixtureId } },

@@ -16,11 +16,12 @@
  *   DELETE /api/conversations/:id/messages/:messageId         remove message + cascade
  *
  * Auth:
- *   - `x-user-id` header (device UUID)
+ *   - Clerk JWT via `Authorization: Bearer` (requireAuth on all routes)
  *   - `x-user-timezone` header (IANA timezone) — used for daily-limit reset
  */
 
 import { Router, Request, Response } from 'express';
+import { requireAuth } from '../middleware/clerk.middleware';
 import multer from 'multer';
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -48,6 +49,8 @@ import {
 
 const router = Router();
 
+router.use(requireAuth);
+
 // Run the one-shot file-store → Prisma migration at module load (non-blocking).
 // Safe to call repeatedly — it short-circuits once the legacy file is archived.
 migrateLegacyFileStore().catch((err) => {
@@ -56,7 +59,11 @@ migrateLegacyFileStore().catch((err) => {
 
 // ─── Helpers: read headers ───────────────────────────────────────────────────
 function getUserId(req: Request): string {
-    return (req.headers['x-user-id'] as string) ?? 'guest';
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+        throw new Error('Unauthorized');
+    }
+    return clerkUserId;
 }
 
 function getTimezone(req: Request): string {

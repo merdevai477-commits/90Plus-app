@@ -60,6 +60,12 @@ import { ReelsFeedErrorBoundary } from '../../components/common/ReelsFeedErrorBo
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+/** iOS AVPlayer crashes with multiple simultaneous HLS instances — one player max. */
+const REEL_PLAYER_MOUNT_DISTANCE = Platform.OS === 'ios' ? 0 : 1;
+const REEL_LIST_WINDOW_SIZE = Platform.OS === 'ios' ? 3 : 5;
+const REEL_INITIAL_RENDER = Platform.OS === 'ios' ? 1 : 2;
+const REEL_MAX_BATCH = Platform.OS === 'ios' ? 1 : 3;
+
 const ANIMATIONS = {
   spring: {
     friction: 4,
@@ -1359,6 +1365,7 @@ const ReelsFeed: React.FC = () => {
     <ReelItem
       reel={item}
       isActive={index === currentIndex}
+      shouldMountPlayer={Math.abs(index - currentIndex) <= REEL_PLAYER_MOUNT_DISTANCE}
       isOwnReel={resolveIsOwnReel(item)}
       onLike={() => handleLike(item.id)}
       onToggleMute={() => handleToggleMute(item.id)}
@@ -1460,10 +1467,10 @@ const ReelsFeed: React.FC = () => {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           getItemLayout={getItemLayout}
-          // Performance optimizations (Medium Priority #10)
-          windowSize={5} // Increased from 3 to 5 for smoother scrolling
-          initialNumToRender={2}
-          maxToRenderPerBatch={3} // Increased from 2 to 3
+          // Performance optimizations — iOS: minimal window to avoid AVPlayer OOM/crash
+          windowSize={REEL_LIST_WINDOW_SIZE}
+          initialNumToRender={REEL_INITIAL_RENDER}
+          maxToRenderPerBatch={REEL_MAX_BATCH}
           updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
           removeClippedSubviews={Platform.OS === 'android'}
           onRefresh={handleRefresh}

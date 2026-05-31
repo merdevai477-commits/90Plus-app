@@ -148,6 +148,14 @@ const tokenCache = {
       return;
     }
   },
+  async clearToken(key: string) {
+    try {
+      return await SecureStore.deleteItemAsync(key);
+    } catch (err) {
+      console.warn('SecureStore clearToken error:', err);
+      return;
+    }
+  },
 };
 
 const STACK_SCREEN_OPTIONS = {

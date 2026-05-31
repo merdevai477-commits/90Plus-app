@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,13 @@ import { ConversationContextMenu } from './ConversationContextMenu';
 import { ConversationSkeleton, UserProfileSkeleton } from './SkeletonLoader';
 import { Colors, Gradients } from '../../constants/theme';
 import { useTranslation } from '../../src/i18n';
+import {
+  handleConversationLongPress,
+  isValidConversation,
+  reportConversationActionError,
+  safeConversationTitle,
+} from './conversationSafety';
+import { logger } from '../../services/logger';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -222,14 +229,59 @@ export function ChatHistoryPanel({
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filtered conversations — local search, no backend call needed
-  const filteredConversations = useMemo(() => {
-    if (!searchQuery.trim()) return conversations;
-    const q = searchQuery.toLowerCase();
-    return conversations.filter(c => c.title.toLowerCase().includes(q));
-  }, [conversations, searchQuery]);
+  const safeConversations = useMemo(
+    () => conversations.filter(isValidConversation),
+    [conversations],
+  );
 
-  const pinned = filteredConversations.filter(c => c.isPinned);
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return safeConversations;
+    const q = searchQuery.toLowerCase();
+    return safeConversations.filter(c =>
+      safeConversationTitle(c).toLowerCase().includes(q),
+    );
+  }, [safeConversations, searchQuery]);
+
+  const pinned = filteredConversations.filter(c => Boolean(c.isPinned));
   const unpinned = filteredConversations.filter(c => !c.isPinned);
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const openContextMenu = useCallback((conversation: Conversation) => {
+    if (!mountedRef.current || !isValidConversation(conversation)) return;
+    setContextMenu({ conversation });
+  }, []);
+
+  const handleLongPressConversation = useCallback(
+    (conversation: Conversation) => {
+      handleConversationLongPress(conversation, openContextMenu);
+    },
+    [openContextMenu],
+  );
+
+  const handleSelectConversation = useCallback(
+    async (id: string | undefined) => {
+      try {
+        if (!id?.trim()) {
+          logger.warn('[AIChat] Select conversation ignored — missing id');
+          return;
+        }
+        await onSelectConversation(id);
+      } catch (error) {
+        reportConversationActionError('SelectConversation', error, { id } as Conversation);
+        if (mountedRef.current) {
+          setToast({ message: t.chat.connectionLost, type: 'error' });
+        }
+      }
+    },
+    [onSelectConversation, t.chat.connectionLost],
+  );
 
   // Mount / unmount control — keeps panel mounted during closing animation
   const [mounted, setMounted] = useState(isOpen);
@@ -312,9 +364,9 @@ export function ChatHistoryPanel({
               <Text style={styles.panelTitle}>{p.title}</Text>
               <Text style={styles.panelSubtitle}>
                 {conversations.length > 0
-                  ? (conversations.length === 1
-                    ? p.subtitleCount.replace('{count}', String(conversations.length))
-                    : p.subtitleCountPlural.replace('{count}', String(conversations.length)))
+                  ? (safeConversations.length === 1
+                    ? p.subtitleCount.replace('{count}', String(safeConversations.length))
+                    : p.subtitleCountPlural.replace('{count}', String(safeConversations.length)))
                   : p.subtitleEmpty}
               </Text>
             </View>
@@ -431,10 +483,14 @@ export function ChatHistoryPanel({
                     <View style={styles.conversationsGroup}>
                       {pinned.map(c => (
                         <HistoryItem
-                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt, p)}
-                          isActive={c.id === activeConversationId} isPinned={c.isPinned}
-                          onPress={() => onSelectConversation(c.id)}
-                          onLongPress={() => setContextMenu({ conversation: c })}
+                          key={c.id}
+                          id={c.id}
+                          title={safeConversationTitle(c)}
+                          date={formatConversationDate(c.updatedAt ?? c.createdAt ?? '', p)}
+                          isActive={c.id === activeConversationId}
+                          isPinned={Boolean(c.isPinned)}
+                          onPress={() => void handleSelectConversation(c.id)}
+                          onLongPress={() => handleLongPressConversation(c)}
                         />
                       ))}
                     </View>
@@ -449,10 +505,14 @@ export function ChatHistoryPanel({
                     <View style={styles.conversationsGroup}>
                       {unpinned.map(c => (
                         <HistoryItem
-                          key={c.id} id={c.id} title={c.title} date={formatConversationDate(c.updatedAt, p)}
-                          isActive={c.id === activeConversationId} isPinned={c.isPinned}
-                          onPress={() => onSelectConversation(c.id)}
-                          onLongPress={() => setContextMenu({ conversation: c })}
+                          key={c.id}
+                          id={c.id}
+                          title={safeConversationTitle(c)}
+                          date={formatConversationDate(c.updatedAt ?? c.createdAt ?? '', p)}
+                          isActive={c.id === activeConversationId}
+                          isPinned={Boolean(c.isPinned)}
+                          onPress={() => void handleSelectConversation(c.id)}
+                          onLongPress={() => handleLongPressConversation(c)}
                         />
                       ))}
                     </View>
@@ -479,33 +539,72 @@ export function ChatHistoryPanel({
         </View>
       </Animated.View>
 
-      {contextMenu && (
+      {contextMenu && isValidConversation(contextMenu.conversation) && (
         <ConversationContextMenu
-          conversationTitle={contextMenu.conversation.title}
-          isPinned={contextMenu.conversation.isPinned}
+          conversationTitle={safeConversationTitle(contextMenu.conversation)}
+          isPinned={Boolean(contextMenu.conversation.isPinned)}
           onPin={async () => {
-            await onTogglePin(contextMenu.conversation.id, contextMenu.conversation.isPinned);
-            setToast({
-              message: contextMenu.conversation.isPinned ? p.toastUnpinned : p.toastPinned,
-              type: 'success',
-            });
-            setContextMenu(null);
+            const c = contextMenu.conversation;
+            if (!isValidConversation(c)) {
+              setContextMenu(null);
+              return;
+            }
+            try {
+              await onTogglePin(c.id, Boolean(c.isPinned));
+              if (mountedRef.current) {
+                setToast({
+                  message: c.isPinned ? p.toastUnpinned : p.toastPinned,
+                  type: 'success',
+                });
+              }
+            } catch (error) {
+              reportConversationActionError('PinConversation', error, c);
+              if (mountedRef.current) {
+                setToast({ message: t.chat.connectionLost, type: 'error' });
+              }
+            } finally {
+              if (mountedRef.current) setContextMenu(null);
+            }
           }}
-          onRename={() => { setContextMenu(null); setRenameModal({ conversation: contextMenu.conversation }); }}
-          onDelete={() => {
+          onRename={() => {
             const c = contextMenu.conversation;
             setContextMenu(null);
+            if (!isValidConversation(c)) {
+              logger.warn('[AIChat] Rename ignored — invalid conversation');
+              return;
+            }
+            setRenameModal({ conversation: c });
+          }}
+          onDelete={() => {
+            const c = contextMenu.conversation;
+            if (!isValidConversation(c)) {
+              setContextMenu(null);
+              return;
+            }
+            setContextMenu(null);
+            const title = safeConversationTitle(c);
             Alert.alert(
               p.deleteAlertTitle,
-              p.deleteAlertMessage.replace('{title}', c.title),
+              p.deleteAlertMessage.replace('{title}', title),
               [
                 { text: p.deleteAlertCancel, style: 'cancel' },
                 {
                   text: p.deleteAlertConfirm,
                   style: 'destructive',
-                  onPress: async () => {
-                    await onDeleteConversation(c.id);
-                    setToast({ message: p.toastDeleted, type: 'success' });
+                  onPress: () => {
+                    void (async () => {
+                      try {
+                        await onDeleteConversation(c.id);
+                        if (mountedRef.current) {
+                          setToast({ message: p.toastDeleted, type: 'success' });
+                        }
+                      } catch (error) {
+                        reportConversationActionError('DeleteConversation', error, c);
+                        if (mountedRef.current) {
+                          setToast({ message: t.chat.connectionLost, type: 'error' });
+                        }
+                      }
+                    })();
                   },
                 },
               ],
@@ -513,31 +612,54 @@ export function ChatHistoryPanel({
           }}
           onCopy={async () => {
             const c = contextMenu.conversation;
+            if (!isValidConversation(c)) {
+              setContextMenu(null);
+              return;
+            }
             try {
               await onCopyConversation(c.id);
-              setToast({ message: p.toastCopied, type: 'success' });
-            } catch {
-              setToast({ message: t.chat.connectionLost, type: 'error' });
+              if (mountedRef.current) {
+                setToast({ message: p.toastCopied, type: 'success' });
+              }
+            } catch (error) {
+              reportConversationActionError('CopyConversation', error, c);
+              if (mountedRef.current) {
+                setToast({ message: t.chat.connectionLost, type: 'error' });
+              }
+            } finally {
+              if (mountedRef.current) setContextMenu(null);
             }
-            setContextMenu(null);
           }}
           onClose={() => setContextMenu(null)}
         />
       )}
 
       <RenameModal
-        visible={renameModal !== null}
-        initialValue={renameModal?.conversation.title ?? ''}
+        visible={renameModal !== null && isValidConversation(renameModal?.conversation)}
+        initialValue={safeConversationTitle(renameModal?.conversation)}
         title={p.renameTitle}
         subtitle={p.renameSubtitle}
         placeholder={p.renamePlaceholder}
         cancelLabel={p.renameCancel}
         confirmLabel={p.renameConfirm}
         onConfirm={async (newName) => {
-          if (renameModal) {
-            await onRenameConversation(renameModal.conversation.id, newName);
-            setToast({ message: p.toastRenamed, type: 'success' });
+          const c = renameModal?.conversation;
+          if (!isValidConversation(c) || !newName.trim()) {
             setRenameModal(null);
+            return;
+          }
+          try {
+            await onRenameConversation(c.id, newName.trim());
+            if (mountedRef.current) {
+              setToast({ message: p.toastRenamed, type: 'success' });
+            }
+          } catch (error) {
+            reportConversationActionError('RenameConversation', error, c);
+            if (mountedRef.current) {
+              setToast({ message: t.chat.connectionLost, type: 'error' });
+            }
+          } finally {
+            if (mountedRef.current) setRenameModal(null);
           }
         }}
         onCancel={() => setRenameModal(null)}

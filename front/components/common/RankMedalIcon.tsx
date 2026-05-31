@@ -1,15 +1,15 @@
 /**
- * RankMedalIcon — PNG medals for ranks 1–3, numeric badge for 4+.
+ * RankMedalIcon — vector medals for ranks 1–3, numeric badge for 4+.
  */
 
 import React from 'react';
-import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
-import { Star, Trophy } from 'lucide-react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Medal, Star, Trophy } from 'lucide-react-native';
 
-const MEDAL_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../../assets/images/1st.png'),
-  2: require('../../assets/images/2st.png'),
-  3: require('../../assets/images/3st.png'),
+const RANK_COLORS: Record<number, string> = {
+  1: '#F5C518',
+  2: '#C0C0C0',
+  3: '#CD7F32',
 };
 
 interface RankMedalIconProps {
@@ -18,15 +18,14 @@ interface RankMedalIconProps {
 }
 
 export function RankMedalIcon({ rank, size = 28 }: RankMedalIconProps) {
-  const medal = MEDAL_IMAGES[rank];
-  if (medal) {
-    return (
-      <Image
-        source={medal}
-        style={{ width: size, height: size }}
-        resizeMode="contain"
-      />
-    );
+  const color = RANK_COLORS[rank];
+
+  if (rank === 1) {
+    return <Trophy color={color} size={size} fill={color} strokeWidth={2} />;
+  }
+
+  if (rank === 2 || rank === 3) {
+    return <Medal color={color} size={size} fill={color} strokeWidth={2} />;
   }
 
   return (
@@ -44,18 +43,18 @@ export function BadgeTypeIcon({
   size?: number;
 }) {
   if (type === 'gold') {
-    return <Image source={MEDAL_IMAGES[1]} style={{ width: size, height: size }} resizeMode="contain" />;
+    return <Trophy color="#F5C518" size={size} fill="#F5C518" strokeWidth={2} />;
   }
   if (type === 'silver') {
-    return <Image source={MEDAL_IMAGES[2]} style={{ width: size, height: size }} resizeMode="contain" />;
+    return <Medal color="#C0C0C0" size={size} fill="#C0C0C0" strokeWidth={2} />;
   }
   if (type === 'bronze') {
-    return <Image source={MEDAL_IMAGES[3]} style={{ width: size, height: size }} resizeMode="contain" />;
+    return <Medal color="#CD7F32" size={size} fill="#CD7F32" strokeWidth={2} />;
   }
   if (type === 'diamond') {
-    return <Star color="#00BFFF" size={size} fill="#00BFFF" />;
+    return <Star color="#00BFFF" size={size} fill="#00BFFF" strokeWidth={2} />;
   }
-  return <Trophy color="#22c55e" size={size} />;
+  return <Trophy color="#22c55e" size={size} strokeWidth={2} />;
 }
 
 const styles = StyleSheet.create({

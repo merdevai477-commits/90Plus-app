@@ -60,6 +60,9 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
   const buttonScaleAnim = useRef(new Animated.Value(1)).current;
   const spinValueRef = useRef(0);
   const spinListenerRef = useRef<string | null>(null);
+  const spinLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const spinSequenceRef = useRef<Animated.CompositeAnimation | null>(null);
+  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   
   const { getToken } = useAuth();
   const { coins: currentCoins, addCoins } = useCoins();
@@ -84,13 +87,22 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     }
   }, [getToken]);
 
+  const stopAllSpinAnimations = useCallback(() => {
+    spinLoopRef.current?.stop();
+    spinLoopRef.current = null;
+    spinSequenceRef.current?.stop();
+    spinSequenceRef.current = null;
+    spinAnim.stopAnimation();
+  }, [spinAnim]);
+
   useEffect(() => {
     if (visible) {
       fetchStatus();
       spinAnim.setValue(0);
-      
-      // Glow animation
-      Animated.loop(
+      spinValueRef.current = 0;
+
+      glowLoopRef.current?.stop();
+      glowLoopRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnim, {
             toValue: 1,
@@ -105,9 +117,19 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      glowLoopRef.current.start();
+    } else {
+      stopAllSpinAnimations();
+      glowLoopRef.current?.stop();
+      glowLoopRef.current = null;
     }
-  }, [visible, fetchStatus]);
+    return () => {
+      stopAllSpinAnimations();
+      glowLoopRef.current?.stop();
+      glowLoopRef.current = null;
+    };
+  }, [visible, fetchStatus, stopAllSpinAnimations, spinAnim, glowAnim]);
 
   // Track current spin value for multi-phase animation
   useEffect(() => {
@@ -126,113 +148,56 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     };
   }, [spinAnim]);
 
-  // لف العجلة - يبدأ فوراً عند الضغط
-  const spinWheel = async () => {
-    if (isSpinning || !canSpin) return;
+  const runDecelerationSequence = (
+    startAngle: number,
+    prizeIndex: number,
+    prize: typeof PRIZES[0],
+  ) => {
+    const segmentAngle = 360 / PRIZES.length;
+    const targetOffset = 360 - (prizeIndex * segmentAngle);
+    const alignment = (targetOffset - (startAngle % 360) + 360) % 360;
+    const totalDelta = 5 * 360 + alignment;
+    const finalRotation = startAngle + totalDelta;
 
-    setIsSpinning(true);
-    setShowResult(false);
-    setWonPrize(null);
+    const phase1End = startAngle + totalDelta * 0.3;
+    const phase2End = startAngle + totalDelta * 0.8;
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-
-    // Button press animation
-    Animated.sequence([
-      Animated.timing(buttonScaleAnim, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Start initial continuous spin
-    spinAnim.setValue(0);
-    spinValueRef.current = 0;
-    
-    // We start an infinite spin while waiting for the API
-    const infiniteSpin = Animated.loop(
+    spinSequenceRef.current = Animated.sequence([
       Animated.timing(spinAnim, {
-        toValue: 360,
-        duration: 600,
+        toValue: phase1End,
+        duration: 1500,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(spinAnim, {
+        toValue: phase2End,
+        duration: 2500,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
-    );
-    infiniteSpin.start();
+      }),
+      Animated.timing(spinAnim, {
+        toValue: finalRotation,
+        duration: 1000,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        useNativeDriver: true,
+      }),
+    ]);
 
-    let finalPrizeIndex = 0;
-    let finalPrize = PRIZES[0];
-
-    try {
-      const token = await getToken();
-      if (token) {
-        const response = await fetch(`${API_URL}/daily-spin/spin`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        const data = await response.json();
-
-        if (data?.status === 'SUCCESS') {
-          const coins = (data.data?.prize?.coins as number | undefined) ?? undefined;
-          let idx = typeof coins === 'number' ? PRIZES.findIndex(p => p.coins === coins) : -1;
-          if (idx === -1) idx = 0;
-          finalPrizeIndex = idx;
-          finalPrize = PRIZES[idx];
-        } else {
-          finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
-          finalPrize = PRIZES[finalPrizeIndex];
-        }
-      }
-    } catch (error) {
-      console.error('Spin API error:', error);
-      finalPrizeIndex = Math.floor(Math.random() * PRIZES.length);
-      finalPrize = PRIZES[finalPrizeIndex];
-    }
-
-    // Capture the current value of the spin to seamlessly transition
-    infiniteSpin.stop();
-    const currentAngle = spinValueRef.current % 360;
-    spinAnim.setValue(currentAngle);
-    
-    // Phase 2: Decelerate to the target angle
-    const segmentAngle = 360 / PRIZES.length;
-    // targetAngle calculates where the prize segment will be at the top pointer (270 degrees usually, but here pointer is Top = 0 degrees)
-    // Actually pointer is Top. Start is -90 + gap. So index * 45. 
-    // To land on index, the wheel needs to rotate such that the segment is on top.
-    const targetAngle = 360 - (finalPrizeIndex * segmentAngle);
-    
-    // Calculate total rotation to add a nice deceleration feeling (5 extra spins)
-    const extraTurns = Math.ceil(currentAngle / 360) + 5;
-    const finalRotation = (360 * extraTurns) + targetAngle;
-
-    Animated.timing(spinAnim, {
-      toValue: finalRotation,
-      duration: 5000, // 5 seconds deceleration
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(async () => {
-      // Ensure the value stays bounded
+    spinSequenceRef.current.start(async ({ finished }) => {
+      if (!finished) return;
       spinAnim.setValue(finalRotation % 360);
-      
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (Platform.OS === 'android') {
         Vibration.vibrate([0, 100, 50, 100, 50, 200]);
       }
 
-      setWonPrize({ coins: finalPrize.coins });
+      setWonPrize({ coins: prize.coins });
       setCanSpin(false);
       setIsSpinning(false);
-      
+
       try {
-        await addCoins(finalPrize.coins);
+        await addCoins(prize.coins);
       } catch (e) {
         console.error('Add coins error:', e);
       }
@@ -247,9 +212,94 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
         }).start();
 
         if (onCoinsWon) {
-          onCoinsWon(finalPrize.coins, currentCoins + finalPrize.coins);
+          onCoinsWon(prize.coins, currentCoins + prize.coins);
         }
       }, 300);
+    });
+  };
+
+  // لف العجلة - يبدأ فوراً عند الضغط
+  const spinWheel = async () => {
+    if (isSpinning || !canSpin) return;
+
+    setIsSpinning(true);
+    setShowResult(false);
+    setWonPrize(null);
+    resultScaleAnim.setValue(0);
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    Animated.sequence([
+      Animated.timing(buttonScaleAnim, {
+        toValue: 0.9,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    stopAllSpinAnimations();
+    spinAnim.setValue(0);
+    spinValueRef.current = 0;
+
+    spinLoopRef.current = Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 360,
+        duration: 1200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    spinLoopRef.current.start();
+
+    let finalPrizeIndex = 0;
+    let finalPrize = PRIZES[0];
+    let apiSucceeded = false;
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+      const response = await fetch(`${API_URL}/daily-spin/spin`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+
+      if (data?.status === 'SUCCESS') {
+        const prizeIndex = data.data?.prize?.prizeIndex;
+        const idx =
+          typeof prizeIndex === 'number' && prizeIndex >= 0 && prizeIndex < PRIZES.length
+            ? prizeIndex
+            : 0;
+        finalPrizeIndex = idx;
+        finalPrize = PRIZES[idx];
+        apiSucceeded = true;
+      }
+    } catch (error) {
+      console.error('Spin API error:', error);
+    }
+
+    spinLoopRef.current?.stop();
+    spinLoopRef.current = null;
+
+    if (!apiSucceeded) {
+      spinAnim.stopAnimation();
+      setIsSpinning(false);
+      return;
+    }
+
+    spinAnim.stopAnimation((currentVal) => {
+      spinAnim.setValue(currentVal);
+      runDecelerationSequence(currentVal, finalPrizeIndex, finalPrize);
     });
   };
 

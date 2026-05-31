@@ -1,5 +1,5 @@
 /**
- * LeaderboardModal — Top-11 sheet with horizontal rows and PNG medals.
+ * LeaderboardModal — Top-11 sheet with horizontal rows and vector medals.
  */
 
 import { BlurView } from 'expo-blur';
@@ -18,6 +18,8 @@ import {
 
 import { RankMedalIcon } from '../common/RankMedalIcon';
 import { useTranslation } from '../../src/i18n';
+import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { glassProps } from '../../constants/ui';
 
 const ACCENT = '#A855F7';
 
@@ -44,7 +46,29 @@ interface LeaderboardModalProps {
   onClose: () => void;
   entries: LeaderboardEntry[];
   topInset: number;
+  currentUserId?: string | null;
   onEntryPress?: (entry: LeaderboardEntry) => void;
+}
+
+function ModalBackdrop() {
+  if (isLiquidGlassSupported) {
+    return (
+      <LiquidGlassView
+        {...glassProps.modal}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+    );
+  }
+
+  return (
+    <BlurView
+      intensity={Platform.OS === 'ios' ? 30 : 100}
+      tint="dark"
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+    />
+  );
 }
 
 const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -52,6 +76,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onClose,
   entries,
   topInset,
+  currentUserId,
   onEntryPress,
 }) => {
   const { t } = useTranslation();
@@ -68,14 +93,9 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           accessibilityRole="button"
           accessibilityLabel={t.common.close}
         />
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 30 : 100}
-          tint="dark"
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+        <ModalBackdrop />
 
-        <View style={[s.modalContent, { paddingTop: topInset + 20 }]}>
+        <View style={[s.modalContent, { paddingTop: Math.max(topInset, 10) + 20 }]}>
           <View style={s.modalHeader}>
             <Text style={s.modalTitle}>{t.rank.leaderboardTitle}</Text>
             <Pressable
@@ -95,6 +115,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 style={({ pressed }) => [
                   s.modalRow,
                   TOP3_ROW_STYLE[entry.rank],
+                  entry.id === currentUserId && s.modalRowCurrentUser,
                   entry.isPlaceholder && s.modalRowPlaceholder,
                   pressed && !entry.isPlaceholder && { opacity: 0.88 },
                 ]}
@@ -105,10 +126,6 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 }}
                 disabled={entry.isPlaceholder || !entry.username}
               >
-                <View style={s.rankCol}>
-                  <RankMedalIcon rank={entry.rank} size={entry.rank <= 3 ? 32 : 28} />
-                </View>
-
                 <Image
                   source={entry.avatar ? { uri: entry.avatar } : LOCAL_PLACEHOLDER}
                   placeholder={LOCAL_PLACEHOLDER}
@@ -122,7 +139,13 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   <Text style={s.modalName} numberOfLines={1}>
                     {entry.displayName}
                   </Text>
-                  <Text style={s.modalXpLabel}>{t.rank.xpThisPeriod}</Text>
+                  <Text style={s.modalXpLabel} numberOfLines={1}>
+                    {entry.username ? `@${entry.username}` : t.rank.xpThisPeriod}
+                  </Text>
+                </View>
+
+                <View style={s.medalCol}>
+                  <RankMedalIcon rank={entry.rank} size={entry.rank <= 3 ? 28 : 26} />
                 </View>
 
                 <View style={s.xpCol}>
@@ -164,7 +187,7 @@ const s = StyleSheet.create({
   modalRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 72,
+    minHeight: 64,
     backgroundColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -174,21 +197,39 @@ const s = StyleSheet.create({
     gap: 12,
   },
   modalRowPlaceholder: { opacity: 0.45 },
-  rankCol: { width: 36, alignItems: 'center', justifyContent: 'center' },
+  modalRowCurrentUser: {
+    borderColor: 'rgba(168,85,247,0.55)',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+  },
   modalAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: 'rgba(255,255,255,0.1)',
+    flexShrink: 0,
   },
-  modalInfo: { flex: 1, minWidth: 0 },
+  modalInfo: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
   modalName: { color: '#fff', fontSize: 15, fontWeight: '700' },
   modalXpLabel: {
     color: 'rgba(255,255,255,0.55)',
     fontSize: 11,
     marginTop: 3,
   },
-  xpCol: { width: 72, alignItems: 'flex-end' },
+  medalCol: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  xpCol: {
+    width: 72,
+    alignItems: 'flex-end',
+    flexShrink: 0,
+  },
   modalXpVal: { color: ACCENT, fontSize: 16, fontWeight: '900' },
   modalXpSuffix: { color: 'rgba(168,85,247,0.7)', fontSize: 10, fontWeight: '700', marginTop: 1 },
 });

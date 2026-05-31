@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ import {
 } from '@/constants/tokens';
 import { useSignIn } from '@clerk/clerk-expo';
 import { useTranslation } from '@/src/i18n';
+import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 const OTP_LENGTH = 6;
 
@@ -54,17 +55,33 @@ export default function LoginScreen() {
   const [secondFactorKind, setSecondFactorKind] = useState<SecondFactorKind>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resendIntervalRef.current) {
+        clearInterval(resendIntervalRef.current);
+        resendIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const { startGoogle, startApple } = useOAuthFlow({
     onError: () => setOauthLoading(null),
   });
 
   const startResendCooldown = () => {
+    if (resendIntervalRef.current) {
+      clearInterval(resendIntervalRef.current);
+    }
     setResendCooldown(60);
-    const interval = setInterval(() => {
+    resendIntervalRef.current = setInterval(() => {
       setResendCooldown((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (resendIntervalRef.current) {
+            clearInterval(resendIntervalRef.current);
+            resendIntervalRef.current = null;
+          }
           return 0;
         }
         return prev - 1;
@@ -73,8 +90,14 @@ export default function LoginScreen() {
   };
 
   const finishSignIn = async (sessionId: string) => {
-    await setActive({ session: sessionId });
-    router.replace('/(tabs)/Home');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await setActive({ session: sessionId });
+      await navigateAfterAuth(router);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const openVerificationStep = async (
@@ -319,10 +342,10 @@ export default function LoginScreen() {
 
       <Modal visible={showVerification} transparent animationType="fade" statusBarTranslucent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
           style={styles.modalOverlay}
-          enabled={Platform.OS === 'ios'}
+          enabled
         >
           <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={styles.modalBackdrop}>

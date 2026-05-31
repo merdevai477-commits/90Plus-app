@@ -167,9 +167,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       p.loop = VIDEO_DEFAULTS.looping;
       p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
       p.audioMixingMode = 'auto';
-      if (isActive && VIDEO_DEFAULTS.autoplay && !invalidSource) {
-        p.play();
-      }
+      // Never call play() here — multiple reels mounting together on iOS
+      // causes native AVPlayer crashes. Playback starts in the isActive effect.
     },
   );
 
@@ -251,7 +250,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   // -------- Playback control (play/pause on isActive change) --------
   useEffect(() => {
     if (!player || invalidSource) return;
-    const shouldPlay = isActive && !isPausedByLimit;
+    const shouldPlay = isActive && !isPausedByLimit && VIDEO_DEFAULTS.autoplay;
     try {
       if (shouldPlay) {
         if (!player.playing) player.play();
@@ -266,9 +265,23 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     }
   }, [player, isActive, isPausedByLimit, reel.id, invalidSource]);
 
-  // Resume when screen regains focus
+  // Pause promptly on unmount so iOS releases audio/video resources before the next reel mounts.
+  useEffect(() => {
+    return () => {
+      try {
+        if (player?.playing) player.pause();
+      } catch {
+        /* player may already be released by useVideoPlayer cleanup */
+      }
+    };
+  }, [player]);
+
+  // Resume when screen regains focus (active reel only — avoid waking stale players).
   useFocusEffect(
     useCallback(() => {
+      if (!isActive) {
+        return () => {};
+      }
       const timer = setTimeout(() => {
         if (!player || !isActive || isPausedByLimit || invalidSource) return;
         try {

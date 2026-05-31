@@ -28,6 +28,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path, Rect, Polyline } from 'react-native-svg';
 import { Colors, Radius, FontSize, Spacing, BlurIntensity } from '../../constants/theme';
+import { useTranslation } from '../../src/i18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ export const ConversationContextMenu = React.memo(({
             <View style={styles.previewContainer}>
               <Text style={styles.previewLabel}>{cm.conversationPreview}</Text>
               <Text style={styles.previewText} numberOfLines={1}>
-                {conversationTitle}
+                {conversationTitle?.trim() || '—'}
               </Text>
             </View>
 

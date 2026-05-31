@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
 } from '@/src/components/auth';
 import { TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED } from '@/constants/tokens';
 import { useSignIn } from '@clerk/clerk-expo';
+import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 const OTP_LENGTH = 6;
 
@@ -35,13 +36,29 @@ export default function ForgotPasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resendIntervalRef.current) {
+        clearInterval(resendIntervalRef.current);
+        resendIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const startResendCooldown = (): void => {
+    if (resendIntervalRef.current) {
+      clearInterval(resendIntervalRef.current);
+    }
     setResendCooldown(60);
-    const interval = setInterval(() => {
+    resendIntervalRef.current = setInterval(() => {
       setResendCooldown((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (resendIntervalRef.current) {
+            clearInterval(resendIntervalRef.current);
+            resendIntervalRef.current = null;
+          }
           return 0;
         }
         return prev - 1;
@@ -112,7 +129,7 @@ export default function ForgotPasswordScreen() {
 
       if (result.status === 'complete' && result.createdSessionId && setActive) {
         await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)/Home');
+        await navigateAfterAuth(router);
       } else {
         Alert.alert(
           'More steps required',

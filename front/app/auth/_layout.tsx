@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 const AUTH_STACK_OPTIONS = {
   headerShown: false,
   contentStyle: { backgroundColor: '#000' },
-  animation: 'fade' as const,
+      animation: 'slide_from_right' as const,
 };
 
 export default function AuthLayout() {

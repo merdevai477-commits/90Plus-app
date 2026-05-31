@@ -4,16 +4,19 @@
  * Fixed floating header for the Profile screen.
  * Leading side: LVL badge only (no 90PLUS text — cleaner look).
  * Trailing side: purple coin badge with Zap icon.
+ * Glass matches Matches / Quiz via glassProps.header.
  */
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Zap } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
+import { BlurView, type BlurTint } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { useCoins } from '../../contexts/CoinsContext';
+import { glassProps } from '../../constants/ui';
 
 const ACCENT = '#A855F7';
+const blurTint: BlurTint = 'dark';
 
 interface ProfileTopBarProps {
   topInset: number;
@@ -21,22 +24,17 @@ interface ProfileTopBarProps {
 }
 
 const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
-  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const { coins, loading } = useCoins();
 
   const display: string = loading ? '—' : String(coins);
 
-  return (
-    <GlassContainer
-      intensity={20}
-      tint="dark"
-      effect="regular"
-      style={[
-        s.container,
-        { paddingTop: topInset + 10 },
-      ]}
-    >
-      {/* Leading: LVL badge */}
+  const shellStyle = [
+    s.container,
+    { paddingTop: Math.max(topInset, 10) + 10 },
+  ];
+
+  const content = (
+    <>
       {level != null ? (
         <View style={s.lvlBadge}>
           <Text style={s.lvlLabel}>LVL</Text>
@@ -46,7 +44,6 @@ const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
         <View style={s.lvlPlaceholder} />
       )}
 
-      {/* Trailing: coin badge */}
       <View
         style={s.coinChip}
         accessibilityRole="text"
@@ -55,7 +52,21 @@ const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={s.coinTxt}>{display}</Text>
       </View>
-    </GlassContainer>
+    </>
+  );
+
+  if (isLiquidGlassSupported) {
+    return (
+      <LiquidGlassView {...glassProps.header} style={shellStyle}>
+        {content}
+      </LiquidGlassView>
+    );
+  }
+
+  return (
+    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
+      {content}
+    </BlurView>
   );
 };
 
@@ -72,13 +83,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(5,1,13,0.0)',
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'transparent',
   },
 
-  /* LVL badge */
   lvlBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -106,7 +116,6 @@ const s = StyleSheet.create({
     width: 52,
   },
 
-  /* Coin badge */
   coinChip: {
     flexDirection: 'row',
     alignItems: 'center',

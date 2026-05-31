@@ -6,8 +6,8 @@ import type { Message } from './useAIChatNative';
 import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
 
 const KEYBOARD_OPEN_GAP = 4;
-/** Android window resize/pan already shifts content — extra marginBottom doubles the gap. */
-const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios';
+/** Manual composer lift on iOS and Android (keyboard-controller handles scroll). */
+const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios' || Platform.OS === 'android';
 
 type UseChatKeyboardParams = {
   listRef: React.RefObject<FlashListRef<Message> | null>;

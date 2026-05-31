@@ -550,7 +550,7 @@ router.get('/search', requireAuth, async (req: Request, res: Response): Promise<
         const searchLimit = Math.min(parseInt(limit as string) || 10, 20);
         const searchOffset = Math.max(parseInt(offset as string) || 0, 0);
 
-        if (!sanitized || sanitized.length < 2) {
+        if (!sanitized || sanitized.length < 2 || sanitized.length > 100) {
             sendError(req, res, ErrorCode.VALIDATION, 'Search query too short');
             return;
         }

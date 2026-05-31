@@ -443,10 +443,19 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
           count: fetchedMatches.length,
           date: dateString,
           isToday,
+          elapsedMs: typeof performance !== 'undefined' && performance.now ? Math.round(performance.now()) : undefined,
         });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';
-        setError(errorMessage);
+        setMatches((prev) => {
+          if (prev.length > 0) {
+            setIsDataStale(true);
+            setError(null);
+            return prev;
+          }
+          setError(errorMessage);
+          return prev;
+        });
         logger.error('Error fetching matches data:', err);
       } finally {
         setLoading(false);
@@ -466,7 +475,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
       for (let i = 1; i <= days; i++) {
         const futureDate = new Date(startDate);
         futureDate.setDate(startDate.getDate() + i);
-        const futureDateStr = futureDate.toISOString().split('T')[0];
+        const futureDateStr = formatLocalDateKey(futureDate);
         
         // Check if already cached
         const cached = memoryCache.get(futureDateStr);

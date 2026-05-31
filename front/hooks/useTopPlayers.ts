@@ -71,8 +71,9 @@ async function fetchTopPlayers(
   limit: number,
   period: TopPlayersPeriod,
   token: string | null,
+  offset = 0,
 ): Promise<TopPlayer[]> {
-  const url = `${getApiUrl()}/reels/rankings/top-players?limit=${limit}&period=${period}`;
+  const url = `${getApiUrl()}/reels/rankings/top-players?limit=${limit}&period=${period}&offset=${offset}`;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 

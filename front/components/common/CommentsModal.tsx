@@ -145,6 +145,7 @@ export default function CommentsModal({
     const [commentLimitReached, setCommentLimitReached] = useState(false);
     const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
     const [commentsWithReplies, setCommentsWithReplies] = useState<CommentWithReplies[]>([]);
+    const [commentDisplayLimit, setCommentDisplayLimit] = useState(MAX_COMMENTS_DISPLAY);
     const [longPressedCommentId, setLongPressedCommentId] = useState<string | null>(null);
 
     // ✅ FIX: Use ref instead of state for loadedComments to prevent re-render loops
@@ -866,8 +867,8 @@ export default function CommentsModal({
     const currentUserName = currentUser?.displayName || currentUser?.username || 'أنت';
 
     const displayedComments = useMemo(() => {
-        return commentsWithReplies.slice(0, MAX_COMMENTS_DISPLAY);
-    }, [commentsWithReplies]);
+        return commentsWithReplies.slice(0, commentDisplayLimit);
+    }, [commentsWithReplies, commentDisplayLimit]);
 
     // Handle send - supports both comments and replies
     // Requirements 15.4: Check limits before sending to backend
@@ -1319,12 +1320,16 @@ export default function CommentsModal({
                             </View>
                         }
                         ListFooterComponent={
-                            comments.length > MAX_COMMENTS_DISPLAY ? (
-                                <View style={styles.moreCommentsContainer}>
+                            commentsWithReplies.length > commentDisplayLimit ? (
+                                <TouchableOpacity
+                                    style={styles.moreCommentsContainer}
+                                    onPress={() => setCommentDisplayLimit((n) => n + MAX_COMMENTS_DISPLAY)}
+                                    activeOpacity={0.85}
+                                >
                                     <Text style={styles.moreCommentsText}>
-                                        +{comments.length - MAX_COMMENTS_DISPLAY} تعليقات أخرى
+                                        Load more ({commentsWithReplies.length - commentDisplayLimit} remaining)
                                     </Text>
-                                </View>
+                                </TouchableOpacity>
                             ) : null
                         }
                     />

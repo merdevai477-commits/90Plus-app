@@ -330,13 +330,13 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
     
   // Debounced search - OPTIMIZED: faster debounce + immediate cache lookup
   useEffect(() => {
-    if (searchQuery.length < 1) {
+    if (searchQuery.length < 2) {
       setSearchResults({ users: [], reels: [], hashtags: [] });
       setIsSearching(false);
       return;
     }
 
-    // Immediate cache lookup (no debounce for cache)
+    setIsSearching(true);
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const cacheKey = `${normalizedQuery}_${activeTab}`;
     const cached = searchCache.get(cacheKey);

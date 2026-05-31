@@ -815,7 +815,7 @@ router.post('/:id/like', requireAuth, writeLimiter, async (req: Request, res: Re
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Like error:', error);
-        res.json({ status: 'SUCCESS', data: { likesCount: 1 } });
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to like reel');
     }
 });
 
@@ -2816,17 +2816,20 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
  */
 router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { limit = '11', period = 'weekly' } = req.query;
+        const { limit = '11', period = 'weekly', offset = '0' } = req.query;
         const take = Math.min(parseInt(limit as string) || 11, 50);
+        const skip = Math.max(parseInt(offset as string) || 0, 0);
         const periodKey = period === 'monthly' ? 'monthly' : 'weekly';
 
-        const topPlayers = await getTopPlayers(take, periodKey);
+        const topPlayers = await getTopPlayers(take, periodKey, skip);
 
         res.json({
             status: 'SUCCESS',
             data: {
                 players: topPlayers,
-                totalCount: topPlayers.length,
+                totalCount: topPlayers.length + skip,
+                hasMore: topPlayers.length === take,
+                offset: skip,
                 period: periodKey,
             }
         });

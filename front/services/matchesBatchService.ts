@@ -9,6 +9,7 @@
 
 import { cacheService, CACHE_TTL, CACHE_KEYS } from './cacheService';
 import { ApiFootballService, Fixture } from './apiFootball';
+import { formatLocalDateKey } from '../components/Matches/leagueApiUtils';
 
 /**
  * Configuration for matches batch fetching
@@ -42,11 +43,9 @@ interface BatchMetadata {
 }
 
 /**
- * Format date to YYYY-MM-DD string
+ * Format date to YYYY-MM-DD string (local timezone)
  */
-const formatDate = (date: Date): string => {
-  return date.toISOString().split('T')[0];
-};
+const formatDate = (date: Date): string => formatLocalDateKey(date);
 
 /**
  * Generate array of date strings between start and end (inclusive)

@@ -426,36 +426,42 @@ export default function HomeScreen() {
                 if (!isMounted || abortController.signal.aborted) return;
                 try {
                     const token = await getTokenRef.current();
-                    if (!token || abortController.signal.aborted) {
+                    if (abortController.signal.aborted) {
                         if (isMounted) isLoadingRef.current = false;
                         return;
                     }
 
-                    // Critical — await these before showing content
+                    // Critical — matches load from cache without auth; rankings need token
                     const criticalPromises = [
-                        fetchHomeDataRef.current(token).catch((err: unknown) => {
+                        fetchHomeDataRef.current(token ?? null).catch((err: unknown) => {
                             logger.error('Error fetching home data:', err);
                             if (isMounted) setMatchesError(String(err));
                             return null;
                         }),
-                        fetchUserProfileRef.current().catch((err: unknown) => {
-                            logger.error('Error fetching user profile:', err);
-                            return null;
-                        }),
                     ];
 
-                    // Secondary — fire and forget
-                    const secondaryPromises = [
-                        fetchRankingsDataRef.current(token).catch((err: unknown) => {
-                            logger.error('Error fetching rankings:', err);
-                            if (isMounted) setRankingsError(String(err));
-                            return null;
-                        }),
-                        fetchSpinWheelStatusRef.current().catch(() => null),
-                        fetchPredictionsDataRef.current(token).catch(() => null),
-                        fetchUserRankRef.current().catch(() => null),
-                        fetchSubscribedIdsRef.current().catch(() => null),
-                    ];
+                    if (token) {
+                        criticalPromises.push(
+                            fetchUserProfileRef.current().catch((err: unknown) => {
+                                logger.error('Error fetching user profile:', err);
+                                return null;
+                            }),
+                        );
+                    }
+
+                    const secondaryPromises = token
+                        ? [
+                            fetchRankingsDataRef.current(token).catch((err: unknown) => {
+                                logger.error('Error fetching rankings:', err);
+                                if (isMounted) setRankingsError(String(err));
+                                return null;
+                            }),
+                            fetchSpinWheelStatusRef.current().catch(() => null),
+                            fetchPredictionsDataRef.current(token).catch(() => null),
+                            fetchUserRankRef.current().catch(() => null),
+                            fetchSubscribedIdsRef.current().catch(() => null),
+                        ]
+                        : [];
 
                     await Promise.all(criticalPromises);
 
@@ -534,7 +540,7 @@ export default function HomeScreen() {
                     awayScore: match.awayScore?.toString() || '',
                     league: match.league,
                     leagueLogo: '',
-                    date: new Date().toISOString().split('T')[0],
+                    date: match.date || new Date().toISOString().split('T')[0],
                     time: match.time,
                     status: match.isLive ? 'live' : 'upcoming',
                 },

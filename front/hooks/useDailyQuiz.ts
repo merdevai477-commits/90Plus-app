@@ -13,8 +13,22 @@ import {
   type QuizDailyPayload,
 } from '../services/quizApi.service';
 
+import * as Localization from 'expo-localization';
+
 function todayDateKey(): string {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getDeviceTimezone(): string {
+  try {
+    return Localization.getCalendars()[0]?.timeZone ?? 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }
 
 function storageKey(lang: QuizApiLanguage): string {
@@ -94,7 +108,7 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
     placeholderData: cachedData,
     retry: (failureCount, err) => {
       if (err instanceof Error && err.message === 'AUTH_REQUIRED') return false;

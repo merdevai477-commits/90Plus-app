@@ -13,8 +13,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
+import { useAuth } from '@clerk/clerk-expo';
 import { API_CONFIG } from '../constants/theme';
 import { Storage } from '../services/chatStorageService';
+import { logger } from '../services/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,7 +62,7 @@ const MAX_STREAM_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
 const DRAFT_KEY_PREFIX = '@chat_draft_v1_';
 /** Fallback when API omits `limit` — must match production CHAT_DAILY_MESSAGE_LIMIT. */
-const DEFAULT_DAILY_MESSAGE_LIMIT = 10;
+const DEFAULT_DAILY_MESSAGE_LIMIT = 20;
 
 /**
  * Typing renderer cadence — independent from network speed.
@@ -236,6 +238,11 @@ export interface UseAIChatOptions {
 
 export function useAIChatNative(options: UseAIChatOptions = {}) {
   const { getSystemPromptSuffix, getChatLabels } = options;
+  const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
   const suffixBuilderRef = useRef<UseAIChatOptions['getSystemPromptSuffix']>(getSystemPromptSuffix);
   const labelsBuilderRef = useRef<UseAIChatOptions['getChatLabels']>(getChatLabels);
   useEffect(() => {
@@ -333,17 +340,23 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   // ─── Common headers ───────────────────────────────────────────────────────
 
-  const commonHeaders = useCallback((): Record<string, string> => ({
-    'x-user-id': userIdRef.current,
-    'x-user-timezone': getTimezone(),
-  }), []);
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const token = await getTokenRef.current();
+    const headers: Record<string, string> = {
+      'x-user-timezone': getTimezone(),
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }, []);
 
   // ─── REST helpers ─────────────────────────────────────────────────────────
 
   const fetchLimit = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/chat/limit`, {
-        headers: commonHeaders(),
+        headers: await getAuthHeaders(),
       });
       if (res.ok) {
         const data = await res.json() as { remaining: number; limit?: number; resetAt?: string };
@@ -361,34 +374,34 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       // Backend not reachable — leave messagesRemaining as `null` so the
       // counter renders a loading state rather than a misleading number.
     }
-  }, [commonHeaders]);
+  }, [getAuthHeaders]);
 
   const fetchConversations = useCallback(async (): Promise<Conversation[]> => {
     const res = await fetch(`${BACKEND_URL}/api/conversations`, {
-      headers: commonHeaders(),
+      headers: await getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to fetch conversations');
     const data = await res.json() as { conversations: Conversation[] };
     const convs = data.conversations ?? [];
     setConversations(convs);
     return convs;
-  }, [commonHeaders]);
+  }, [getAuthHeaders]);
 
   const createConversation = useCallback(async (): Promise<Conversation> => {
     const res = await fetch(`${BACKEND_URL}/api/conversations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...commonHeaders() },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({}),
     });
     if (!res.ok) throw new Error('Failed to create conversation');
     const data = await res.json() as { conversation: Conversation };
     return data.conversation;
-  }, [commonHeaders]);
+  }, [getAuthHeaders]);
 
   const loadConversationMessages = useCallback(async (conversationId: string) => {
     const res = await fetch(
       `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
-      { headers: commonHeaders() },
+      { headers: await getAuthHeaders() },
     );
     if (!res.ok) throw new Error('Failed to load messages');
     const data = await res.json() as {
@@ -404,7 +417,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       })),
     ];
     setMessages(loaded);
-  }, [commonHeaders, getInitialMessages]);
+  }, [getAuthHeaders, getInitialMessages]);
 
   const bootstrapConversation = useCallback(async () => {
     try {
@@ -596,7 +609,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   // ─── Core SSE sender (internal, supports resume) ──────────────────────────
 
-  const _sendSSE = useCallback((
+  const _sendSSE = useCallback(async (
     trimmed: string,
     history: Array<{ role: string; content: string }>,
     conversationId: string,
@@ -620,7 +633,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
     xhr.open('POST', `${BACKEND_URL}/api/chat/stream`, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    const headers = commonHeaders();
+    const headers = await getAuthHeaders();
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
 
     xhr.onreadystatechange = () => {
@@ -759,7 +772,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setTimeout(() => {
           if (abortRef.current) return;
           setError(null);
-          _sendSSE(trimmed, history, conversationId, aiMessageId, systemPromptSuffix, partial.length);
+          void _sendSSE(trimmed, history, conversationId, aiMessageId, systemPromptSuffix, partial.length);
         }, RETRY_DELAY_MS);
       } else {
         // All retries exhausted — finalize whatever's already on screen,
@@ -780,7 +793,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     xhr.timeout = 60_000;
     xhr.send(body);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commonHeaders, fetchConversations, fetchLimit, enqueueStreamChunk, completeStreaming, stopTypingPipeline]);
+  }, [getAuthHeaders, fetchConversations, fetchLimit, enqueueStreamChunk, completeStreaming, stopTypingPipeline]);
 
   // ─── Send Message ─────────────────────────────────────────────────────────
 
@@ -855,7 +868,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       }
     })();
 
-    _sendSSE(trimmed, history, currentConversationId, aiMessageId, systemPromptSuffix, 0);
+    void _sendSSE(trimmed, history, currentConversationId, aiMessageId, systemPromptSuffix, 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     inputValue, isLoading, messagesRemaining, currentConversationId,
@@ -928,7 +941,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/conversations/${currentConversationId}/messages/${messageId}`,
-        { method: 'DELETE', headers: commonHeaders() },
+        { method: 'DELETE', headers: await getAuthHeaders() },
       );
       if (!res.ok) {
         // Rollback: reload messages from server
@@ -942,7 +955,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         // silent — UI already shows the optimistic state
       }
     }
-  }, [currentConversationId, commonHeaders, loadConversationMessages]);
+  }, [currentConversationId, getAuthHeaders, loadConversationMessages]);
 
   // ─── Clear Chat ───────────────────────────────────────────────────────────
 
@@ -965,6 +978,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // ─── Conversation Management ──────────────────────────────────────────────
 
   const selectConversation = useCallback(async (conversationId: string) => {
+    if (!conversationId?.trim()) {
+      logger.warn('[AIChat] selectConversation ignored — missing id');
+      return;
+    }
     // If a stream is currently rendering, stop it before switching context.
     abortRef.current = true;
     abortXHR();
@@ -991,37 +1008,56 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     conversationId: string,
     isPinned: boolean,
   ) => {
+    if (!conversationId?.trim()) {
+      logger.warn('[AIChat] togglePinConversation ignored — missing id');
+      return;
+    }
     await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...commonHeaders() },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ isPinned: !isPinned }),
     });
     await fetchConversations();
-  }, [fetchConversations, commonHeaders]);
+  }, [fetchConversations, getAuthHeaders]);
 
   const renameConversation = useCallback(async (
     conversationId: string,
     title: string,
   ) => {
+    if (!conversationId?.trim() || !title?.trim()) {
+      logger.warn('[AIChat] renameConversation ignored — missing id or title');
+      return;
+    }
     await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...commonHeaders() },
+      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
       body: JSON.stringify({ title }),
     });
     await fetchConversations();
-  }, [fetchConversations, commonHeaders]);
+  }, [fetchConversations, getAuthHeaders]);
 
   const deleteConversation = useCallback(async (conversationId: string) => {
+    if (!conversationId?.trim()) {
+      logger.warn('[AIChat] deleteConversation ignored — missing id');
+      return;
+    }
     await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
       method: 'DELETE',
-      headers: commonHeaders(),
+      headers: await getAuthHeaders(),
     });
     const after = await fetchConversations();
     if (currentConversationId === conversationId) {
       if (after.length > 0) {
-        const next = after[0];
-        setCurrentConversationId(next.id);
-        await loadConversationMessages(next.id);
+        const next = after.find(c => c?.id?.trim());
+        if (next?.id) {
+          setCurrentConversationId(next.id);
+          await loadConversationMessages(next.id);
+        } else {
+          const created = await createConversation();
+          setConversations([created]);
+          setCurrentConversationId(created.id);
+          setMessages(getInitialMessages());
+        }
       } else {
         const created = await createConversation();
         setConversations([created]);
@@ -1031,7 +1067,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     }
   }, [
     currentConversationId, fetchConversations,
-    loadConversationMessages, createConversation, commonHeaders,
+    loadConversationMessages, createConversation, getAuthHeaders,
   ]);
 
   const dismissError = useCallback(() => setError(null), []);
@@ -1049,14 +1085,14 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
     const res = await fetch(
       `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
-      { headers: commonHeaders() },
+      { headers: await getAuthHeaders() },
     );
     if (!res.ok) throw new Error('Failed to load messages');
     const data = await res.json() as {
       messages: Array<{ role: 'user' | 'ai'; text: string }>;
     };
     return formatLines(data.messages ?? []);
-  }, [currentConversationId, messages, commonHeaders, getLabels]);
+  }, [currentConversationId, messages, getAuthHeaders, getLabels]);
 
   // Refresh welcome bubble when locale labels change (before user sends).
   useEffect(() => {

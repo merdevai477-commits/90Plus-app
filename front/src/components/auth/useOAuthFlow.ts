@@ -17,6 +17,7 @@ import { Alert } from 'react-native';
 import { useOAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
+import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 interface OAuthFlowOptions {
   onError?: (message: string) => void;
@@ -43,7 +44,7 @@ export function useOAuthFlow({ onError }: OAuthFlowOptions = {}): OAuthFlowRetur
 
         if (result.createdSessionId && result.setActive) {
           await result.setActive({ session: result.createdSessionId });
-          router.replace('/(tabs)/Home');
+          await navigateAfterAuth(router);
           return;
         }
 

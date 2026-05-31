@@ -3,38 +3,39 @@
  *
  * Floating header for the Rank tab. Displays the 90PLUS brand pill on the
  * leading edge and the live coin balance (from CoinsContext) on the trailing
- * edge. RTL-safe via flex direction flip.
+ * edge. Glass matches Matches / Quiz via glassProps.header.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { BlurView } from 'expo-blur';
+import { BlurView, type BlurTint } from 'expo-blur';
 import { Zap } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
+import { glassProps } from '../../constants/ui';
 
 const ACCENT = '#A855F7';
+const blurTint: BlurTint = 'dark';
 
 interface RankHeaderProps {
   topInset: number;
 }
 
 const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
-  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
 
   const display: string = loading ? '—' : String(coins);
 
-  return (
-    <GlassContainer
-      intensity={20}
-      tint="dark"
-      effect="regular"
-      style={[s.headerContainer, { paddingTop: topInset + 10 }]}
-    >
+  const shellStyle = [
+    s.headerContainer,
+    { paddingTop: Math.max(topInset, 10) + 10 },
+  ];
+
+  const content = (
+    <>
       <View style={s.logoPillSmall}>
         <Text style={s.logo90Small}>90</Text>
         <View style={s.plusChipSmall}>
@@ -50,7 +51,21 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={s.coinTxt}>{display}</Text>
       </View>
-    </GlassContainer>
+    </>
+  );
+
+  if (isLiquidGlassSupported) {
+    return (
+      <LiquidGlassView {...glassProps.header} style={shellStyle}>
+        {content}
+      </LiquidGlassView>
+    );
+  }
+
+  return (
+    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
+      {content}
+    </BlurView>
   );
 };
 
@@ -67,10 +82,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(5,1,13,0.0)',
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'transparent',
   },
   logoPillSmall: {
     flexDirection: 'row',

@@ -3,6 +3,7 @@ import { clerkClient } from '@clerk/express';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { awardDailyLogin } from './xp.service';
+import { sanitizeTimezone } from '../utils/chat-timezone';
 
 // ✅ Cache for Clerk API responses (5 minutes TTL)
 const clerkUserCache = new Map<string, { data: any; timestamp: number }>();
@@ -271,8 +272,15 @@ export class ClerkUserService {
      */
     private static async updateLoginStreak(userId: string): Promise<void> {
         try {
-            // Award daily login XP via the XP service (handles streak logic internally)
-            await awardDailyLogin(userId, 'UTC');
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { settings: true },
+            });
+            const settings = (user?.settings ?? {}) as Record<string, unknown>;
+            const tz = typeof settings.timezone === 'string'
+                ? sanitizeTimezone(settings.timezone)
+                : 'UTC';
+            await awardDailyLogin(userId, tz);
             logger.info(`Updated login streak + XP for user ${userId}`);
         } catch (error) {
             logger.error('Error updating login streak:', error);

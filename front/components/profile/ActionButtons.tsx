@@ -14,6 +14,7 @@ import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { glassProps } from '../../constants/ui';
 
 // Brand purple accent
 const PURPLE = '#A855F7';
@@ -55,8 +56,8 @@ function GlassBtn({
 }) {
   const Wrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const props = isLiquidGlassSupported
-    ? { effect: 'clear' as const, interactive: true }
-    : { intensity: 28, tint: 'dark' as const };
+    ? { ...glassProps.chip, interactive: true }
+    : glassProps.chip;
   return (
     <Wrapper {...(props as any)} style={[styles.btn, style]}>
       {children}

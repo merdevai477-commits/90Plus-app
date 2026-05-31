@@ -140,6 +140,7 @@ export default function SettingsScreen() {
       await cacheService.clearAll();
       await AsyncStorage.removeItem('@username_setup_complete');
       await AsyncStorage.removeItem('@user_profile');
+      await AsyncStorage.removeItem('@90plus_age_verified');
       await signOut();
       router.replace('/auth');
       toastManager.showSuccess(tSettings.logoutSuccess, tSettings.logoutSuccessDetail);

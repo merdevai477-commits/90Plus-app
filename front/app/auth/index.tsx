@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,7 @@ import {
   RADIUS_LG,
 } from '@/constants/tokens';
 import { useSignUp } from '@clerk/clerk-expo';
+import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 const OTP_LENGTH = 6;
 
@@ -80,8 +81,30 @@ export default function RegisterScreen() {
   const [otp, setOtp] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resendIntervalRef.current) {
+        clearInterval(resendIntervalRef.current);
+        resendIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  const completeAuth = async (sessionId: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await setActive({ session: sessionId });
+      await navigateAfterAuth(router);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const submit = async () => {
+    if (isSubmitting || !isLoaded) return;
     if (!terms) {
       Alert.alert('Notice', 'Please accept the Terms & Conditions.');
       return;
@@ -94,7 +117,10 @@ export default function RegisterScreen() {
       );
       return;
     }
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      Alert.alert('Notice', 'Please wait while we connect…');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -106,8 +132,7 @@ export default function RegisterScreen() {
       });
 
       if (result.status === 'complete' && result.createdSessionId) {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/(tabs)/Home');
+        await completeAuth(result.createdSessionId);
       } else {
         // Email verification needed — show glass modal
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
@@ -124,11 +149,17 @@ export default function RegisterScreen() {
   };
 
   const startResendCooldown = () => {
+    if (resendIntervalRef.current) {
+      clearInterval(resendIntervalRef.current);
+    }
     setResendCooldown(60);
-    const interval = setInterval(() => {
+    resendIntervalRef.current = setInterval(() => {
       setResendCooldown((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (resendIntervalRef.current) {
+            clearInterval(resendIntervalRef.current);
+            resendIntervalRef.current = null;
+          }
           return 0;
         }
         return prev - 1;
@@ -148,9 +179,8 @@ export default function RegisterScreen() {
       const result = await signUp!.attemptEmailAddressVerification({ code });
 
       if (result.status === 'complete' && result.createdSessionId) {
-        await setActive({ session: result.createdSessionId });
         setShowVerification(false);
-        router.replace('/(tabs)/Home');
+        await completeAuth(result.createdSessionId);
       } else {
         Alert.alert('Error', 'Verification incomplete. Please try again.');
       }
@@ -294,10 +324,10 @@ export default function RegisterScreen() {
         statusBarTranslucent
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
           style={styles.modalOverlay}
-          enabled={Platform.OS === 'ios'}
+          enabled
         >
           <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={styles.modalBackdrop}>

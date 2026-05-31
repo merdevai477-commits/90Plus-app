@@ -44,6 +44,8 @@ import { buildReelShareUrl } from '../../constants/shareLinks';
 interface ReelItemProps {
     reel: ReelData;
     isActive: boolean;
+    /** When false, show thumbnail only — avoids multiple AVPlayer instances on iOS. */
+    shouldMountPlayer?: boolean;
     onLike: () => void;
     onToggleMute: () => void;
     onComment: () => void;
@@ -84,6 +86,7 @@ const formatCount = (count?: number): string => {
 const ReelItemComponent: React.FC<ReelItemProps> = ({
     reel,
     isActive,
+    shouldMountPlayer = true,
     onLike,
     onToggleMute,
     onComment,
@@ -424,17 +427,29 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 onPressOut={handleLongPressEnd}
                 style={styles.videoWrapper}
             >
-                <UnifiedVideoPlayer
-                    reel={{
-                        id: reel.id,
-                        videoUrl: reel.videoUrl,
-                        thumbnail: reel.thumbnail,
-                        duration: reel.duration,
-                        muted: reel.muted,
-                    }}
-                    isActive={isActive && !isPaused}
-                    onVideoRef={onVideoRef}
-                />
+                {shouldMountPlayer ? (
+                    <UnifiedVideoPlayer
+                        reel={{
+                            id: reel.id,
+                            videoUrl: reel.videoUrl,
+                            thumbnail: reel.thumbnail,
+                            duration: reel.duration,
+                            muted: reel.muted,
+                        }}
+                        isActive={isActive && !isPaused}
+                        onVideoRef={onVideoRef}
+                    />
+                ) : (
+                    <View style={styles.thumbnailFallback}>
+                        {reel.thumbnail ? (
+                            <Image
+                                source={{ uri: reel.thumbnail }}
+                                style={StyleSheet.absoluteFill}
+                                resizeMode="cover"
+                            />
+                        ) : null}
+                    </View>
+                )}
 
                 {/* Play/Pause Overlay */}
                 {isPaused && (
@@ -765,6 +780,10 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
+    },
+    thumbnailFallback: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: COLORS.deepBlack,
     },
     topGradient: {
         position: 'absolute',

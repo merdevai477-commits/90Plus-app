@@ -35,6 +35,7 @@ import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { captureException } from '../services/sentry.service';
 import { verifyAgeWithBackend } from '../hooks/useAgeVerification';
+import { markAgeVerified } from '../src/utils/postAuthNavigation';
 import { LEGAL_URLS } from '../config/legal.config';
 
 export default function AgeGateScreen() {
@@ -106,8 +107,10 @@ export default function AgeGateScreen() {
       logger.info('[AgeGate] Age verified:', result.ageTier);
 
       if (result.ageTier === 'TEEN' && result.requiresParentalConsent) {
+        await markAgeVerified();
         router.replace('/parental-consent');
       } else if (result.ageTier === 'ADULT') {
+        await markAgeVerified();
         router.replace('/(tabs)/Home');
       } else {
         throw new Error('Unexpected age tier');

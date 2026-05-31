@@ -634,7 +634,7 @@ class CacheService {
    * Future dates are cached for 2 hours.
    */
   async cacheMatchesByDate(dateString: string, matches: any[], ttl?: number): Promise<void> {
-    const key = `${CACHE_KEYS.MATCHES_BY_DATE}_${dateString}`;
+    const key = `${CACHE_KEYS.MATCHES}_${dateString}`;
     
     // Use provided TTL, or determine TTL based on date
     let cacheTTL: number;
@@ -642,12 +642,13 @@ class CacheService {
     if (ttl !== undefined) {
       cacheTTL = ttl;
     } else {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       
-      if (dateString < today) {
+      if (dateString < todayKey) {
         // Past dates - permanent cache (matches are finished, never change)
         cacheTTL = Number.MAX_SAFE_INTEGER;
-      } else if (dateString === today) {
+      } else if (dateString === todayKey) {
         // Today - cache for 5 minutes (matches may be live, need frequent updates)
         cacheTTL = 5 * 60 * 1000; // 5 minutes for live data
       } else {
@@ -663,8 +664,11 @@ class CacheService {
    * Get cached matches for a specific date.
    */
   async getMatchesByDate(dateString: string): Promise<any[] | null> {
-    const key = `${CACHE_KEYS.MATCHES_BY_DATE}_${dateString}`;
-    return this.get(key);
+    const unifiedKey = `${CACHE_KEYS.MATCHES}_${dateString}`;
+    const legacyKey = `${CACHE_KEYS.MATCHES_BY_DATE}_${dateString}`;
+    const unified = await this.get<any[]>(unifiedKey);
+    if (unified && unified.length > 0) return unified;
+    return this.get<any[]>(legacyKey);
   }
 
   /**

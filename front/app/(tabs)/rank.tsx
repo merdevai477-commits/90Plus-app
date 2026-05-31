@@ -51,6 +51,7 @@ import { useTranslation } from '../../src/i18n';
 import { useLanguageStore } from '../../src/i18n/store';
 import { useScreenFont } from '../../utils/fontSetup';
 import { useAuth } from '@clerk/clerk-expo';
+import { globalState } from '../../globalState';
 import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#A855F7';
@@ -550,6 +551,7 @@ export default function RankScreen() {
         onClose={() => setIsModalVisible(false)}
         entries={top11Entries}
         topInset={insets.top}
+        currentUserId={globalState.userProfile?.id ?? null}
         onEntryPress={(entry) => {
           setIsModalVisible(false);
           navigateToProfile(entry.username);

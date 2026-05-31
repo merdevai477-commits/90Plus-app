@@ -10,18 +10,20 @@ const router = Router();
 // Spin wheel prizes with probabilities
 // Spin wheel prizes with probabilities (Total exactly 100%)
 const SPIN_PRIZES = [
-  { coins: 5, probability: 35, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 10, probability: 25, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-  { coins: 25, probability: 20, label: '25', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 50, probability: 8.9, label: '50', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-  { coins: 100, probability: 1, label: '100', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 200, probability: 0.1, label: '200', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-  { coins: 5, probability: 6, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
-  { coins: 10, probability: 4, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
-];
+  { index: 0, coins: 5, probability: 35, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { index: 1, coins: 10, probability: 25, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { index: 2, coins: 25, probability: 20, label: '25', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { index: 3, coins: 50, probability: 8.9, label: '50', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { index: 4, coins: 100, probability: 1, label: '100', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { index: 5, coins: 200, probability: 0.1, label: '200', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+  { index: 6, coins: 5, probability: 6, label: '5', colorLight: '#8B5CF6', colorDark: '#6D28D9' },
+  { index: 7, coins: 10, probability: 4, label: '10', colorLight: '#7C3AED', colorDark: '#5B21B6' },
+] as const;
+
+type SpinPrize = (typeof SPIN_PRIZES)[number];
 
 // Helper function to select prize based on probability
-function selectPrize(): typeof SPIN_PRIZES[0] {
+function selectPrize(): SpinPrize {
   const random = Math.random() * 100;
   let cumulative = 0;
   
@@ -220,6 +222,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
       status: 'SUCCESS',
       data: {
         prize: {
+          prizeIndex: prize.index,
           coins: prize.coins,
           label: prize.label,
           colorLight: prize.colorLight,

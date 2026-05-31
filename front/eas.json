@@ -42,7 +42,7 @@
       "prebuildCommand": "prebuild --no-install --clean",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "SENTRY_ALLOW_FAILURE": "true",
+        "SENTRY_ALLOW_FAILURE": "false",
         "npm_config_ignore_scripts": "false",
         "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
