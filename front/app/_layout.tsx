@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { Stack, router } from "expo-router";
+import { Stack, router, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, ErrorInfo } from "react";
 import '../global.css';
@@ -61,7 +61,8 @@ import * as Sentry from '@sentry/react-native';
 import { initSentry, captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
-import { AppSplashScreen } from "../components/splash/AppSplashScreen";
+import { BootSplashScreen } from "../components/splash/BootSplashScreen";
+import { BootReadyProvider, useBootReady } from "../contexts/BootReadyContext";
 import { PushNotificationSetup } from "../src/hooks/usePushNotifications";
 import {
   PushTokenSyncBootstrap,
@@ -149,21 +150,31 @@ const tokenCache = {
   },
 };
 
+const STACK_SCREEN_OPTIONS = {
+  headerBackTitle: "Back" as const,
+  contentStyle: { backgroundColor: '#000' },
+  animation: 'fade' as const,
+};
+
 function HideSplashWhenReady({ fontsReady }: { fontsReady: boolean }) {
+  const { isLoaded: clerkLoaded } = useAuth();
+  const { navigationReady } = useBootReady();
+  const fullyReady = fontsReady && clerkLoaded && navigationReady;
+
   useEffect(() => {
-    if (!fontsReady) return;
-    // Let React paint the JS splash layer before removing the native one.
+    if (!fullyReady) return;
     const id = requestAnimationFrame(() => {
       SplashScreen.hideAsync().catch(() => {});
     });
     return () => cancelAnimationFrame(id);
-  }, [fontsReady]);
+  }, [fullyReady]);
 
-  // Never leave the native splash up indefinitely.
+  // Safety net: hide native splash after fonts load even if nav/clerk lag.
   useEffect(() => {
-    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 8000);
+    if (!fontsReady) return;
+    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 12000);
     return () => clearTimeout(t);
-  }, []);
+  }, [fontsReady]);
 
   return null;
 }
@@ -172,7 +183,7 @@ function ClerkGate({ children }: { children: React.ReactNode }) {
   const { isLoaded } = useAuth();
 
   if (!isLoaded) {
-    return <AppSplashScreen />;
+    return <BootSplashScreen />;
   }
 
   return <>{children}</>;
@@ -181,6 +192,14 @@ function ClerkGate({ children }: { children: React.ReactNode }) {
 function RootLayoutNav() {
   // Track navigation changes for Sentry breadcrumbs
   useNavigationTracking();
+  const navigationState = useRootNavigationState();
+  const { markNavigationReady } = useBootReady();
+
+  useEffect(() => {
+    if (navigationState?.key) {
+      markNavigationReady();
+    }
+  }, [navigationState?.key, markNavigationReady]);
 
   // Drain offline queue when connectivity returns. Must live inside the
   // Clerk + i18n + toast providers, which is true for any screen the Stack
@@ -188,7 +207,7 @@ function RootLayoutNav() {
   useOfflineSync();
 
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack screenOptions={STACK_SCREEN_OPTIONS}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
@@ -434,7 +453,7 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  return <AppSplashScreen />;
+  return <BootSplashScreen />;
 }
 
 function RootLayout() {
@@ -652,6 +671,7 @@ function RootLayout() {
         <ClerkKeyMissingScreen />
       ) : (
       <TamaguiProvider config={config} defaultTheme="dark">
+        <BootReadyProvider>
         <ClerkProvider
           publishableKey={clerkPublishableKey}
           tokenCache={tokenCache}
@@ -701,6 +721,7 @@ function RootLayout() {
             </LanguageInitializer>
           </QueryClientProvider>
         </ClerkProvider>
+        </BootReadyProvider>
       </TamaguiProvider>
       )}
     </ErrorBoundary>

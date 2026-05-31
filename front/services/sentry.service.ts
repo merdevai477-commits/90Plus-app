@@ -41,7 +41,9 @@ function validateDSN(dsn: string): boolean {
  * - 1.9: Include release version and build number
  */
 export function initSentry(): void {
-  const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+  const dsn =
+    process.env.EXPO_PUBLIC_SENTRY_DSN ||
+    (Constants.expoConfig?.extra?.sentryDsn as string | undefined);
   
   // Validate DSN presence
   if (!dsn) {

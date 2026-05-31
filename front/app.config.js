@@ -19,6 +19,7 @@ module.exports = ({ config }) => {
         process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
         config.extra?.clerkPublishableKey,
       apiUrl: process.env.EXPO_PUBLIC_API_URL || config.extra?.apiUrl,
+      sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || config.extra?.sentryDsn,
       quizUseMatchesApi:
         process.env.EXPO_PUBLIC_QUIZ_USE_MATCHES_API === 'true',
       quizUseDirectFootballApi:

@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
 import React, { useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { AppSplashScreen } from '../components/splash/AppSplashScreen';
+import { BootSplashScreen } from '../components/splash/BootSplashScreen';
 import { globalState } from '../globalState';
 import { useHomeStore } from '../src/store/home.store';
 import { logger } from '../services/logger';
@@ -21,7 +21,7 @@ export default function Index() {
   }, [isSignedIn]);
 
   if (!isLoaded) {
-    return <AppSplashScreen />;
+    return <BootSplashScreen />;
   }
 
   if (isSignedIn) {

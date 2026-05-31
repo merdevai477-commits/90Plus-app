@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import type { ExpoPushMessage } from 'expo-server-sdk';
 import { requireAdmin } from '../middleware/admin.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
@@ -662,9 +663,111 @@ router.post('/test-notification', requireAdmin, async (req: Request, res: Respon
 });
 
 /**
+ * GET /api/admin/push-audit
+ * Push token stats (x-internal-key = CLERK_SECRET_KEY)
+ */
+router.get('/push-audit', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const internalKey = req.headers['x-internal-key'] as string;
+        const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+        if (!internalKey || !clerkSecretKey || internalKey !== clerkSecretKey) {
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+            return;
+        }
+
+        const totalUsers = await prisma.user.count({ where: { isDeleted: false } });
+        const withToken = await prisma.user.count({
+            where: { isDeleted: false, expoPushToken: { not: null } },
+        });
+        const withTokenAndConsent = await prisma.user.count({
+            where: {
+                isDeleted: false,
+                expoPushToken: { not: null },
+                pushNotificationsConsent: true,
+            },
+        });
+        const consentNoToken = await prisma.user.count({
+            where: {
+                isDeleted: false,
+                pushNotificationsConsent: true,
+                OR: [{ expoPushToken: null }, { expoPushToken: '' }],
+            },
+        });
+        const tokenNoConsent = await prisma.user.count({
+            where: {
+                isDeleted: false,
+                expoPushToken: { not: null },
+                pushNotificationsConsent: false,
+            },
+        });
+
+        const formatRows = await prisma.$queryRaw<Array<{ fmt: string; cnt: bigint }>>`
+            SELECT
+                CASE
+                    WHEN "expoPushToken" IS NULL OR "expoPushToken" = '' THEN 'empty'
+                    WHEN "expoPushToken" LIKE 'ExponentPushToken[%' THEN 'ExponentPushToken[...]'
+                    WHEN "expoPushToken" LIKE 'ExpoPushToken[%' THEN 'ExpoPushToken[...]'
+                    ELSE 'other_format'
+                END AS fmt,
+                COUNT(*)::bigint AS cnt
+            FROM users
+            WHERE "isDeleted" = false
+            GROUP BY 1
+            ORDER BY cnt DESC
+        `;
+
+        const sample = await prisma.user.findMany({
+            where: { isDeleted: false, expoPushToken: { not: null } },
+            select: {
+                username: true,
+                expoPushToken: true,
+                pushNotificationsConsent: true,
+                clerkUserId: true,
+                updatedAt: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 20,
+        });
+
+        const recentNotifications = await prisma.notification.findMany({
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+            select: { id: true, type: true, createdAt: true },
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                counts: {
+                    totalUsers,
+                    expoPushTokenNotNull: withToken,
+                    tokenAndConsentTrue: withTokenAndConsent,
+                    consentTrueNoToken: consentNoToken,
+                    tokenNoConsent: tokenNoConsent,
+                },
+                tokenFormats: formatRows.map((r) => ({ format: r.fmt, count: Number(r.cnt) })),
+                sampleUsersWithToken: sample,
+                recentNotifications: {
+                    count: recentNotifications.length,
+                    note: 'Inbox rows only — Expo ticket/receipt results are NOT persisted in DB.',
+                    byType: recentNotifications.reduce<Record<string, number>>((acc, n) => {
+                        acc[n.type] = (acc[n.type] || 0) + 1;
+                        return acc;
+                    }, {}),
+                },
+            },
+        });
+    } catch (error: any) {
+        logger.error('Push audit error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
  * POST /api/admin/send-test-push
  * Send a test push notification using Clerk Secret Key as auth (no JWT needed)
- * Used for quick testing from terminal
+ * Used for quick testing from terminal.
+ * Set rawExpo: true in body to return full Expo ticket + receipt JSON (waits ~15s).
  */
 router.post('/send-test-push', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -677,7 +780,7 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
             return;
         }
 
-        const { username, clerkUserId, title, body } = req.body;
+        const { username, clerkUserId, title, body, rawExpo } = req.body;
 
         if (!username && !clerkUserId) {
             sendError(req, res, ErrorCode.VALIDATION, 'username or clerkUserId is required');
@@ -690,17 +793,64 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
         });
 
         if (!user) {
-            sendError(req, res, ErrorCode.NOT_FOUND, `User "${username}" not found`);
+            sendError(req, res, ErrorCode.NOT_FOUND, `User not found`);
             return;
         }
 
         if (!user.expoPushToken) {
-            sendError(req, res, ErrorCode.VALIDATION, `No push token for "${username}". Open the app on a physical device first.`, { data: { username: user.username, hasPushToken: false } });
+            sendError(req, res, ErrorCode.VALIDATION, `No push token for "${user.username}". Open the app on a physical device first.`, { data: { username: user.username, clerkUserId, hasPushToken: false, pushNotificationsConsent: user.pushNotificationsConsent } });
             return;
         }
 
         const notifTitle = title || '🔔 إشعار تجريبي';
         const notifBody = body || 'الإشعارات تعمل بشكل صحيح ✅';
+
+        if (rawExpo) {
+            const { Expo } = await import('expo-server-sdk');
+            const expo = new Expo();
+            const token = user.expoPushToken;
+            const message: ExpoPushMessage = {
+                to: token,
+                sound: 'default',
+                title: notifTitle,
+                body: notifBody,
+                data: { type: 'TEST', source: 'admin/send-test-push', rawExpo: true },
+                priority: 'high',
+                channelId: 'general',
+            };
+            const chunks = expo.chunkPushNotifications([message]);
+            const allTickets: unknown[] = [];
+            const receiptIds: string[] = [];
+            for (const chunk of chunks) {
+                const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+                allTickets.push(...ticketChunk);
+                for (const t of ticketChunk) {
+                    if ((t as { status?: string }).status === 'ok' && (t as { id?: string }).id) {
+                        receiptIds.push((t as { id: string }).id);
+                    }
+                }
+            }
+            let receipts: Record<string, unknown> = {};
+            if (receiptIds.length > 0) {
+                await new Promise((r) => setTimeout(r, 15_000));
+                const receiptChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
+                for (const rc of receiptChunks) {
+                    const part = await expo.getPushNotificationReceiptsAsync(rc);
+                    receipts = { ...receipts, ...part };
+                }
+            }
+            res.json({
+                status: 'SUCCESS',
+                data: {
+                    username: user.username,
+                    pushNotificationsConsent: user.pushNotificationsConsent,
+                    expoPushToken: token,
+                    ticketResponse: allTickets,
+                    receiptResponse: receipts,
+                },
+            });
+            return;
+        }
 
         const notification = await NotificationService.createNotification({
             userId: user.id,

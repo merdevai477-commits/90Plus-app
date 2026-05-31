@@ -5,6 +5,11 @@ import { Animated, BackHandler, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNav from './BottomNav';
 
+const TAB_STACK_OPTIONS = {
+  headerShown: false,
+  contentStyle: { backgroundColor: '#000' },
+} as const;
+
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -50,10 +55,10 @@ export default function TabLayout() {
   }, [pathname, router]);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
       <Tabs
         screenOptions={{
-          headerShown: false,
+          ...TAB_STACK_OPTIONS,
           tabBarStyle: {
             display: 'none',
           },

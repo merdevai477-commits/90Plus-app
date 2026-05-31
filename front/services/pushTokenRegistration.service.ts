@@ -85,8 +85,19 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
     if (!Notifications) return null;
 
     try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status !== 'granted') return null;
+        const perm = await Notifications.getPermissionsAsync();
+        if (perm.status !== 'granted') {
+            if (__DEV__) {
+                const projectId =
+                    Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+                console.log('[PushAudit]', JSON.stringify({
+                    permissions: perm.status,
+                    projectId: projectId ?? null,
+                    expoPushToken: null,
+                }));
+            }
+            return null;
+        }
 
         const projectId =
             Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
@@ -95,6 +106,13 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
 
         await setupAndroidChannels(Notifications);
         logger.debug('📱 Expo push token obtained:', token.substring(0, 25));
+        if (__DEV__) {
+            console.log('[PushAudit]', JSON.stringify({
+                permissions: 'granted',
+                projectId: projectId ?? null,
+                expoPushToken: token.substring(0, 30) + '...',
+            }));
+        }
         return token;
     } catch (error) {
         logger.error('Error getting push token:', error);
