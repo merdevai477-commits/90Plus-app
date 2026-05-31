@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { X, Award, Trophy, Star, Crown, Medal } from 'lucide-react-native';
 import { getUserBadges, UserBadgesResponse, UserBadge } from '../../services/rankingsService';
 import { useTranslation } from '../../src/i18n';
+import { BadgeTypeIcon } from '../common/RankMedalIcon';
 
 interface BadgesDisplayProps {
   userId: string;
@@ -40,7 +41,7 @@ const getBadgeIcon = (badgeType: string, size: number = 20) => {
   }
 };
 
-// Badge emoji based on type
+// Badge emoji based on type (legacy — prefer BadgeTypeIcon in UI)
 const getBadgeEmoji = (badgeType: string): string => {
   switch (badgeType) {
     case 'gold':
@@ -60,6 +61,16 @@ const getBadgeEmoji = (badgeType: string): string => {
       return '🏆';
   }
 };
+
+function renderSummaryMedal(type: 'gold' | 'silver' | 'bronze' | 'diamond' | 'ranked', size = 24) {
+  return <BadgeTypeIcon type={type} size={size} />;
+}
+
+function badgeTypeToMedal(type: string): 'gold' | 'silver' | 'bronze' | 'diamond' | 'ranked' | null {
+  if (type === 'gold' || type === 'silver' || type === 'bronze' || type === 'diamond') return type;
+  if (type.startsWith('rank_')) return 'ranked';
+  return null;
+}
 
 // Category / period labels via i18n
 function categoryLabel(category: string, t: ReturnType<typeof useTranslation>['t']): string {
@@ -91,31 +102,31 @@ const CompactBadges = memo(({ summary, onPress }: { summary: any; onPress: () =>
     <TouchableOpacity style={styles.compactContainer} onPress={onPress} activeOpacity={0.7}>
       {summary.diamond > 0 && (
         <View style={styles.compactBadge}>
-          <Text style={styles.compactEmoji}>💎</Text>
+          {renderSummaryMedal('diamond', 18)}
           <Text style={styles.compactCount}>{summary.diamond}</Text>
         </View>
       )}
       {summary.gold > 0 && (
         <View style={styles.compactBadge}>
-          <Text style={styles.compactEmoji}>🥇</Text>
+          {renderSummaryMedal('gold', 18)}
           <Text style={styles.compactCount}>{summary.gold}</Text>
         </View>
       )}
       {summary.silver > 0 && (
         <View style={styles.compactBadge}>
-          <Text style={styles.compactEmoji}>🥈</Text>
+          {renderSummaryMedal('silver', 18)}
           <Text style={styles.compactCount}>{summary.silver}</Text>
         </View>
       )}
       {summary.bronze > 0 && (
         <View style={styles.compactBadge}>
-          <Text style={styles.compactEmoji}>🥉</Text>
+          {renderSummaryMedal('bronze', 18)}
           <Text style={styles.compactCount}>{summary.bronze}</Text>
         </View>
       )}
       {summary.ranked > 0 && (
         <View style={styles.compactBadge}>
-          <Text style={styles.compactEmoji}>🏆</Text>
+          {renderSummaryMedal('ranked', 18)}
           <Text style={styles.compactCount}>{summary.ranked}</Text>
         </View>
       )}
@@ -165,22 +176,22 @@ const BadgesModal = memo(({
             <View style={styles.summaryContainer}>
               <View style={styles.summaryRow}>
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryEmoji}>💎</Text>
+                  {renderSummaryMedal('diamond', 28)}
                   <Text style={styles.summaryCount}>{summary.diamond}</Text>
                   <Text style={styles.summaryLabel}>{t.profile.badgesDiamond}</Text>
                 </View>
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryEmoji}>🥇</Text>
+                  {renderSummaryMedal('gold', 28)}
                   <Text style={styles.summaryCount}>{summary.gold}</Text>
                   <Text style={styles.summaryLabel}>{t.profile.badgesGold}</Text>
                 </View>
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryEmoji}>🥈</Text>
+                  {renderSummaryMedal('silver', 28)}
                   <Text style={styles.summaryCount}>{summary.silver}</Text>
                   <Text style={styles.summaryLabel}>{t.profile.badgesSilver}</Text>
                 </View>
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryEmoji}>🥉</Text>
+                  {renderSummaryMedal('bronze', 28)}
                   <Text style={styles.summaryCount}>{summary.bronze}</Text>
                   <Text style={styles.summaryLabel}>{t.profile.badgesBronze}</Text>
                 </View>
@@ -213,7 +224,11 @@ const BadgesModal = memo(({
                 badges.map((badge, index) => (
                   <View key={badge.id || index} style={styles.badgeItem}>
                     <View style={styles.badgeIconContainer}>
-                      <Text style={styles.badgeEmoji}>{getBadgeEmoji(badge.badgeType)}</Text>
+                      {badgeTypeToMedal(badge.badgeType) ? (
+                        renderSummaryMedal(badgeTypeToMedal(badge.badgeType)!, 28)
+                      ) : (
+                        getBadgeIcon(badge.badgeType, 24)
+                      )}
                     </View>
                     <View style={styles.badgeInfo}>
                       <Text style={styles.badgeCategory}>{categoryLabel(badge.category, t)}</Text>
@@ -293,25 +308,25 @@ export const BadgesDisplay: React.FC<BadgesDisplayProps> = memo(({ userId, token
       <View style={styles.summaryRow}>
         {badgesData.summary.diamond > 0 && (
           <View style={[styles.summaryCard, styles.diamondCard]}>
-            <Text style={styles.cardEmoji}>💎</Text>
+            {renderSummaryMedal('diamond', 32)}
             <Text style={styles.cardCount}>{badgesData.summary.diamond}</Text>
           </View>
         )}
         {badgesData.summary.gold > 0 && (
           <View style={[styles.summaryCard, styles.goldCard]}>
-            <Text style={styles.cardEmoji}>🥇</Text>
+            {renderSummaryMedal('gold', 32)}
             <Text style={styles.cardCount}>{badgesData.summary.gold}</Text>
           </View>
         )}
         {badgesData.summary.silver > 0 && (
           <View style={[styles.summaryCard, styles.silverCard]}>
-            <Text style={styles.cardEmoji}>🥈</Text>
+            {renderSummaryMedal('silver', 32)}
             <Text style={styles.cardCount}>{badgesData.summary.silver}</Text>
           </View>
         )}
         {badgesData.summary.bronze > 0 && (
           <View style={[styles.summaryCard, styles.bronzeCard]}>
-            <Text style={styles.cardEmoji}>🥉</Text>
+            {renderSummaryMedal('bronze', 32)}
             <Text style={styles.cardCount}>{badgesData.summary.bronze}</Text>
           </View>
         )}

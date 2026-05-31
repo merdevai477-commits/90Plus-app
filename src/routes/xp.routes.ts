@@ -10,7 +10,7 @@ import { responseCacheMiddleware } from '../middleware/responseCache.middleware'
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
-import { xpForLevel, xpForNextLevel, levelFromXp, levelTitle, grantStreakFreeze } from '../services/xp.service';
+import { xpForLevel, xpForNextLevel, levelFromXp, levelTitle, grantStreakFreeze, getAppShareStatus, awardAppShare } from '../services/xp.service';
 import { addSseConnection, removeSseConnection } from '../services/xp-sse.service';
 
 const router = Router();
@@ -211,6 +211,75 @@ router.get('/stream', requireAuth, async (req: Request, res: Response): Promise<
     clearInterval(heartbeat);
     removeSseConnection(user.id, res);
   });
+});
+
+/**
+ * GET /api/xp/app-share/status
+ * Whether the user can claim share-app XP (10 XP / 24h).
+ */
+router.get('/app-share/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
+
+    const user = await prisma.user.findFirst({
+      where: { clerkUserId },
+      select: { id: true },
+    });
+    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
+
+    const status = await getAppShareStatus(user.id);
+    res.json({ status: 'SUCCESS', data: status });
+  } catch (error: unknown) {
+    logger.error('GET /api/xp/app-share/status error:', error);
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+  }
+});
+
+/**
+ * POST /api/xp/app-share/claim
+ * Award 10 XP after the user completes a native share sheet.
+ */
+router.post('/app-share/claim', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
+
+    const user = await prisma.user.findFirst({
+      where: { clerkUserId },
+      select: { id: true },
+    });
+    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
+
+    const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
+    const result = await awardAppShare(user.id, tz);
+    const status = await getAppShareStatus(user.id);
+
+    const xpEvents =
+      result.awarded > 0
+        ? [{
+            action: 'APP_SHARE',
+            amount: result.awarded,
+            leveledUp: result.leveledUp,
+            newLevel: result.newLevel,
+            newTitle: result.leveledUp ? levelTitle(result.newLevel) : undefined,
+          }]
+        : [];
+
+    res.json({
+      status: 'SUCCESS',
+      data: {
+        awarded: result.awarded,
+        reason: result.reason,
+        xpEvents,
+        nextEligibleAt: status.nextEligibleAt,
+        rewardXp: status.rewardXp,
+      },
+    });
+  } catch (error: unknown) {
+    logger.error('POST /api/xp/app-share/claim error:', error);
+    sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+  }
 });
 
 /**

@@ -29,6 +29,7 @@ export interface CompCardProps {
   title: string;
   sub: string;
   actionText?: string;
+  rewardHint?: string;
   onPress?: () => void;
 }
 
@@ -37,6 +38,7 @@ const CompCard: React.FC<CompCardProps> = ({
   title,
   sub,
   actionText,
+  rewardHint,
   onPress,
 }) => {
   const CardWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
@@ -71,6 +73,11 @@ const CompCard: React.FC<CompCardProps> = ({
         <Text style={s.compSub} numberOfLines={2}>
           {sub}
         </Text>
+        {rewardHint ? (
+          <Text style={s.rewardHint} numberOfLines={2}>
+            {rewardHint}
+          </Text>
+        ) : null}
         <View style={s.livePill}>
           <Play size={12} color={ACCENT} fill={ACCENT} />
           <Text style={s.liveTxt}>{cta}</Text>
@@ -126,8 +133,16 @@ const s = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     lineHeight: 16,
-    marginBottom: 18,
+    marginBottom: 8,
     minHeight: 32,
+  },
+  rewardHint: {
+    color: '#C084FC',
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 4,
   },
   livePill: {
     flexDirection: 'row',

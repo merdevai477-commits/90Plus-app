@@ -992,6 +992,13 @@ export const en = {
     emptyLeaderboardHint: 'Start earning XP this week to appear on the board!',
     shareAppMessage:
       'Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!',
+    shareRewardAvailable: '+{amount} XP when you share',
+    shareRewardWait: 'Next reward in {hours}h {minutes}m',
+    shareRewardEarned: '+{amount} XP earned!',
+    shareRewardEarnedDetail: 'Thanks for sharing 90Plus with friends.',
+    shareRewardCooldown: 'Share reward used',
+    shareRewardCooldownDetail: 'You can earn XP again in {hours}h {minutes}m.',
+    shareRewardFailed: 'Could not claim share reward. Try again.',
     leaderboardTitle: 'Top 11 Leaderboard',
 
     // Accessibility
@@ -1320,6 +1327,7 @@ export const en = {
     badgesRanked: 'Ranked',
     badgesEmpty: 'No medals yet',
     badgesEmptyHint: 'Share and engage to earn medals!',
+    streakMaster: 'Streak Master — {count} days in a row',
     badgesStreak: '{count} consecutive months in Team of the Month',
     badgesStreakHint: '{remaining} month(s) left for 💎',
     badgeCategoryViews: 'Views',
@@ -1975,7 +1983,7 @@ export const en = {
     levelUpModal: {
       headline: 'LEVEL UP',
       youAreNow: "You're now Level {{level}}",
-      claim: 'Claim',
+      claim: 'Awesome!',
       dismiss: 'Dismiss',
     },
     toasts: {
@@ -1995,6 +2003,7 @@ export const en = {
       quizCorrect: 'Correct answer',
       quizCompleted: 'Quiz completed',
       dailyLogin: 'Daily login streak {{day}}',
+      appShare: 'Thanks for sharing the app',
     },
     errors: {
       capReached: "You've hit today's cap for that action",

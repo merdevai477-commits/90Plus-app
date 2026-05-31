@@ -1,10 +1,5 @@
 /**
- * LeaderboardModal
- *
- * Full Top-11 leaderboard sheet. Receives the resolved entries from the rank
- * screen (real backend data padded with empty slots when needed) and renders
- * them in a properly-layered modal: a separate dismiss layer behind the
- * content prevents accidental closes when tapping inside the list.
+ * LeaderboardModal — Top-11 sheet with horizontal rows and PNG medals.
  */
 
 import { BlurView } from 'expo-blur';
@@ -21,6 +16,7 @@ import {
   View,
 } from 'react-native';
 
+import { RankMedalIcon } from '../common/RankMedalIcon';
 import { useTranslation } from '../../src/i18n';
 
 const ACCENT = '#A855F7';
@@ -30,13 +26,18 @@ export interface LeaderboardEntry {
   id: string;
   displayName: string;
   username: string;
-  /** Remote URL or null. Null falls back to the local placeholder. */
   avatar: string | null;
   xp: number;
   isPlaceholder?: boolean;
 }
 
 const LOCAL_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.png');
+
+const TOP3_ROW_STYLE: Record<number, object> = {
+  1: { borderColor: 'rgba(245,197,24,0.35)', backgroundColor: 'rgba(245,197,24,0.06)' },
+  2: { borderColor: 'rgba(192,192,192,0.35)', backgroundColor: 'rgba(192,192,192,0.06)' },
+  3: { borderColor: 'rgba(205,127,50,0.35)', backgroundColor: 'rgba(205,127,50,0.06)' },
+};
 
 interface LeaderboardModalProps {
   visible: boolean;
@@ -54,13 +55,9 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onEntryPress,
 }) => {
   const { t } = useTranslation();
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.root}>
         <Pressable
           style={[
@@ -91,54 +88,49 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </Pressable>
           </View>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={s.modalScroll}
-          >
-            {entries.map(entry => {
-              const rankLabel: string =
-                entry.rank === 1
-                  ? '🥇'
-                  : entry.rank === 2
-                  ? '🥈'
-                  : entry.rank === 3
-                  ? '🥉'
-                  : String(entry.rank);
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.modalScroll}>
+            {entries.map((entry) => (
+              <Pressable
+                key={`${entry.rank}-${entry.id}`}
+                style={({ pressed }) => [
+                  s.modalRow,
+                  TOP3_ROW_STYLE[entry.rank],
+                  entry.isPlaceholder && s.modalRowPlaceholder,
+                  pressed && !entry.isPlaceholder && { opacity: 0.88 },
+                ]}
+                onPress={() => {
+                  if (!entry.isPlaceholder && entry.username) {
+                    onEntryPress?.(entry);
+                  }
+                }}
+                disabled={entry.isPlaceholder || !entry.username}
+              >
+                <View style={s.rankCol}>
+                  <RankMedalIcon rank={entry.rank} size={entry.rank <= 3 ? 32 : 28} />
+                </View>
 
-              return (
-                <Pressable
-                  key={`${entry.rank}-${entry.id}`}
-                  style={({ pressed }) => [s.modalRow, pressed && !entry.isPlaceholder && { opacity: 0.88 }]}
-                  onPress={() => {
-                    if (!entry.isPlaceholder && entry.username) {
-                      onEntryPress?.(entry);
-                    }
-                  }}
-                  disabled={entry.isPlaceholder || !entry.username}
-                >
-                  <View style={s.modalRankBox}>
-                    <Text style={s.modalRankTxt}>{rankLabel}</Text>
-                  </View>
-                  <Image
-                    source={entry.avatar ? { uri: entry.avatar } : LOCAL_PLACEHOLDER}
-                    placeholder={LOCAL_PLACEHOLDER}
-                    style={s.modalAvatar}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={150}
-                  />
-                  <View style={s.modalInfo}>
-                    <Text style={s.modalName} numberOfLines={1}>
-                      {entry.displayName}
-                    </Text>
-                    <Text style={s.modalXpLabel}>{t.rank.xpThisPeriod}</Text>
-                  </View>
-                  <Text style={s.modalXpVal}>
-                    {entry.xp} {t.rank.xpSuffix}
+                <Image
+                  source={entry.avatar ? { uri: entry.avatar } : LOCAL_PLACEHOLDER}
+                  placeholder={LOCAL_PLACEHOLDER}
+                  style={s.modalAvatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={150}
+                />
+
+                <View style={s.modalInfo}>
+                  <Text style={s.modalName} numberOfLines={1}>
+                    {entry.displayName}
                   </Text>
-                </Pressable>
-              );
-            })}
+                  <Text style={s.modalXpLabel}>{t.rank.xpThisPeriod}</Text>
+                </View>
+
+                <View style={s.xpCol}>
+                  <Text style={s.modalXpVal}>{entry.xp}</Text>
+                  <Text style={s.modalXpSuffix}>{t.rank.xpSuffix}</Text>
+                </View>
+              </Pressable>
+            ))}
             <View style={{ height: 40 }} />
           </ScrollView>
         </View>
@@ -151,12 +143,12 @@ export default LeaderboardModal;
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { flex: 1, paddingHorizontal: 20 },
+  modalContent: { flex: 1, paddingHorizontal: 16 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 20,
   },
   modalTitle: { color: '#fff', fontSize: 24, fontWeight: '900' },
   modalCloseBtn: {
@@ -168,31 +160,35 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   modalCloseText: { color: '#fff', fontSize: 18, fontWeight: '300' },
-  modalScroll: { gap: 12 },
+  modalScroll: { gap: 10 },
   modalRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 72,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    padding: 16,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     gap: 12,
   },
-  modalRankBox: { width: 30, alignItems: 'center' },
-  modalRankTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  modalRowPlaceholder: { opacity: 0.45 },
+  rankCol: { width: 36, alignItems: 'center', justifyContent: 'center' },
   modalAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  modalInfo: { flex: 1 },
+  modalInfo: { flex: 1, minWidth: 0 },
   modalName: { color: '#fff', fontSize: 15, fontWeight: '700' },
   modalXpLabel: {
     color: 'rgba(255,255,255,0.55)',
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 3,
   },
-  modalXpVal: { color: ACCENT, fontSize: 14, fontWeight: '900' },
+  xpCol: { width: 72, alignItems: 'flex-end' },
+  modalXpVal: { color: ACCENT, fontSize: 16, fontWeight: '900' },
+  modalXpSuffix: { color: 'rgba(168,85,247,0.7)', fontSize: 10, fontWeight: '700', marginTop: 1 },
 });

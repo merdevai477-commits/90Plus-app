@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Flame } from 'lucide-react-native';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
@@ -94,8 +95,9 @@ const UserInfo = memo(function UserInfo({
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.streakBadge}
+              accessibilityLabel={`${consecutiveLoginDays} day streak`}
             >
-              <Text style={styles.streakEmoji}>🔥</Text>
+              <Flame size={14} color="#fff" fill="#fff" strokeWidth={2} />
               <Text style={styles.streakNumber}>{consecutiveLoginDays}</Text>
             </LinearGradient>
           )}
@@ -328,7 +330,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 5,
   },
-  streakEmoji: { fontSize: 14 },
   streakNumber: {
     color: '#fff',
     fontSize: 13,

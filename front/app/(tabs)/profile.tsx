@@ -21,6 +21,9 @@ import { ProfileTheme } from '../../constants/ProfileTheme';
 import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { Flame } from 'lucide-react-native';
+import { useXp } from '../../contexts/XpContext';
+import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import * as ImagePicker from 'expo-image-picker';
 import { usePhotoPermission } from '../../hooks/usePhotoPermission';
 import { useVideos, Comment } from '../../contexts/VideosContext';
@@ -210,6 +213,24 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     paddingHorizontal: 20,
   },
+  streakMasterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    marginHorizontal: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,107,53,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,140,66,0.35)',
+  },
+  streakMasterText: {
+    color: '#FFAB76',
+    fontSize: 13,
+    fontWeight: '800',
+  },
 });
 
 // ── Completion pill styles (outside main StyleSheet for clarity) ─────────────
@@ -282,6 +303,7 @@ const completionStyles = StyleSheet.create({
 
 export default function ProfileScreen() {
   useScreenFont();
+  useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const cardOverlap = getProfileCardOverlapMargin(screenHeight);
@@ -289,6 +311,7 @@ export default function ProfileScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
+  const { streak: loginStreak } = useXp();
   
   // Optimistic Profile Updates
   const { 
@@ -1605,8 +1628,17 @@ export default function ProfileScreen() {
           clubLogo={displayClubLogo}
           onEditPress={handleEditProfile}
           socials={userData?.socials}
-          consecutiveLoginDays={userData?.consecutiveLoginDays || 0}
+          consecutiveLoginDays={Math.max(userData?.consecutiveLoginDays || 0, loginStreak.current)}
         />
+
+        {loginStreak.current >= 10 && (
+          <View style={styles.streakMasterRow}>
+            <Flame size={16} color="#FF8C42" fill="#FF6B35" strokeWidth={2} />
+            <Text style={styles.streakMasterText}>
+              {t.profile.streakMaster.replace('{count}', String(loginStreak.current))}
+            </Text>
+          </View>
+        )}
 
         {/* Profile Completion — compact liquid glass pill */}
         {completionStatus && completionStatus.percentage < 100 && (() => {

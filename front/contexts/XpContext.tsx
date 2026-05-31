@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { AppState, AppStateStatus } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
+import { queueLevelUpCelebration } from '../utils/levelUpCelebration.storage';
 
 export interface XpEvent {
   action: string;
@@ -29,7 +30,7 @@ interface XpContextType {
   streak: { current: number; longest: number };
   loading: boolean;
   refresh: () => Promise<void>;
-  handleXpEvents: (events: XpEvent[]) => void;
+  handleXpEvents: (events: XpEvent[]) => void | Promise<void>;
 }
 
 const XpContext = createContext<XpContextType | undefined>(undefined);
@@ -58,6 +59,11 @@ function emitLevelUp(event: LevelUpEvent) {
   } else {
     levelUpQueue.push(event);
   }
+}
+
+/** Show modal immediately (after profile/rank focus consumed pending). */
+export function emitLevelUpCelebration(event: LevelUpEvent): void {
+  emitLevelUp(event);
 }
 
 export function drainLevelUpQueue(): LevelUpEvent | undefined {
@@ -159,10 +165,9 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         const previous = lastSeenLevelRef.current;
         if (previous != null && newLevel > previous) {
           if (suppressNextAutoLevelUpRef.current) {
-            // Already fired by handleXpEvents — clear the flag.
             suppressNextAutoLevelUpRef.current = false;
-          } else {
-            emitLevelUp({
+          } else if (user?.id) {
+            void queueLevelUpCelebration(user.id, {
               previousLevel: previous,
               newLevel,
               newTitle: newTitleVal || levelTitle(newLevel),
@@ -213,7 +218,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, user?.id]);
 
   // Fetch on mount and user change
   useEffect(() => {
@@ -288,29 +293,26 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isSignedIn, fetchXpData]);
 
-  const handleXpEvents = useCallback((events: XpEvent[]) => {
+  const handleXpEvents = useCallback(async (events: XpEvent[]) => {
     if (!events || events.length === 0) return;
 
     for (const event of events) {
-      // Emit toast
       emitXpToast({ amount: event.amount });
 
-      // Emit level-up
       if (event.leveledUp) {
-        emitLevelUp({
-          previousLevel: event.newLevel - 1,
-          newLevel: event.newLevel,
-          newTitle: event.newTitle || levelTitle(event.newLevel),
-        });
-        // Tell the next fetchXpData() not to re-emit when it observes the
-        // same level transition — otherwise the modal would fire twice.
+        if (user?.id) {
+          await queueLevelUpCelebration(user.id, {
+            previousLevel: event.newLevel - 1,
+            newLevel: event.newLevel,
+            newTitle: event.newTitle || levelTitle(event.newLevel),
+          });
+        }
         suppressNextAutoLevelUpRef.current = true;
       }
     }
 
-    // Refresh data from server
     fetchXpData();
-  }, [fetchXpData]);
+  }, [fetchXpData, user?.id]);
 
   return (
     <XpContext.Provider

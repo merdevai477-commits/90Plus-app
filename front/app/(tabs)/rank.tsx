@@ -18,6 +18,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ChevronRight, Trophy } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -25,7 +26,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -43,8 +43,9 @@ import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkel
 import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
-import { buildAppShareMessage, getStoreUrl } from '../../constants/shareLinks';
 import { prefetchDailyQuiz } from '../../hooks/useDailyQuiz';
+import { useAppShareReward } from '../../hooks/useAppShareReward';
+import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import { useTopPlayers, type TopPlayer, type TopPlayersPeriod } from '../../hooks/useTopPlayers';
 import { useTranslation } from '../../src/i18n';
 import { useLanguageStore } from '../../src/i18n/store';
@@ -139,6 +140,7 @@ function buildBoardSlot(
 
 export default function RankScreen() {
   useScreenFont();
+  useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation();
@@ -169,18 +171,17 @@ export default function RankScreen() {
     [router],
   );
 
+  const { loadShareStatus, shareAppAndClaim, shareRewardHint } = useAppShareReward();
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadShareStatus();
+    }, [loadShareStatus]),
+  );
+
   const handleShareApp = useCallback(async () => {
-    try {
-      const message = buildAppShareMessage(appLanguage === 'en' ? 'en' : 'ar');
-      await Share.share({
-        message,
-        url: getStoreUrl(),
-        title: '90Plus',
-      });
-    } catch {
-      // User cancelled
-    }
-  }, [appLanguage]);
+    await shareAppAndClaim(appLanguage === 'en' ? 'en' : 'ar');
+  }, [shareAppAndClaim, appLanguage]);
 
   const handleCompetitionPress = useCallback(
     (id: string) => {
@@ -236,10 +237,11 @@ export default function RankScreen() {
         title: t.rank.competitionNames.shareAndEarn.title,
         sub: t.rank.competitionNames.shareAndEarn.sub,
         actionText: t.rank.competitionNames.shareAndEarn.action,
+        rewardHint: shareRewardHint(),
         img: require('../../assets/images/share.png') as ImageSourcePropType,
       },
     ],
-    [t],
+    [t, shareRewardHint],
   );
 
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──

@@ -16,7 +16,6 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -60,10 +59,10 @@ import {
   GOLD_SOFT,
 } from '../../constants/tokens';
 import {
-  buildAppShareMessage,
   getStoreReviewUrl,
   getStoreUrl,
 } from '../../constants/shareLinks';
+import { useAppShareReward } from '../../hooks/useAppShareReward';
 
 const APP_VERSION = '1.0.0';
 
@@ -198,17 +197,10 @@ export default function SettingsScreen() {
     });
   };
 
+  const { shareAppAndClaim } = useAppShareReward();
+
   const handleShareApp = async () => {
-    try {
-      const message = buildAppShareMessage(language === 'en' ? 'en' : 'ar');
-      await Share.share({
-        message,
-        url: getStoreUrl(),
-        title: '90Plus',
-      });
-    } catch {
-      // User cancelled
-    }
+    await shareAppAndClaim(language === 'en' ? 'en' : 'ar');
   };
 
   const handleContactUs = () => {

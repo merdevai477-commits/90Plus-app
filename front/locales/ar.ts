@@ -968,6 +968,13 @@ export const ar = {
     emptyLeaderboardHint: 'ابدأ تجمع XP هذا الأسبوع لتظهر في لوحة المتصدرين!',
     shareAppMessage:
       'جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!',
+    shareRewardAvailable: '+{amount} XP عند المشاركة',
+    shareRewardWait: 'المكافأة التالية خلال {hours}س {minutes}د',
+    shareRewardEarned: '+{amount} XP!',
+    shareRewardEarnedDetail: 'شكراً لمشاركة 90Plus مع أصدقائك.',
+    shareRewardCooldown: 'استخدمت مكافأة المشاركة',
+    shareRewardCooldownDetail: 'يمكنك كسب XP مرة أخرى خلال {hours}س {minutes}د.',
+    shareRewardFailed: 'تعذّر منح مكافأة المشاركة. حاول مرة أخرى.',
     leaderboardTitle: 'قائمة الـ 11 الأوائل',
 
     // Accessibility
@@ -1296,6 +1303,7 @@ export const ar = {
     badgesRanked: 'ترتيب',
     badgesEmpty: 'لا توجد ميداليات بعد',
     badgesEmptyHint: 'شارك وتفاعل للحصول على ميداليات!',
+    streakMaster: 'بطل السلسلة — {count} أيام متتالية',
     badgesStreak: '{count} شهر متتالي في تشكيلة الشهر',
     badgesStreakHint: 'باقي {remaining} شهر للحصول على 💎',
     badgeCategoryViews: 'المشاهدات',
@@ -1917,7 +1925,7 @@ export const ar = {
     levelUpModal: {
       headline: 'ترقية!',
       youAreNow: 'أنت الآن المستوى {{level}}',
-      claim: 'استلم',
+      claim: 'رائع!',
       dismiss: 'إغلاق',
     },
     toasts: {
@@ -1937,6 +1945,7 @@ export const ar = {
       quizCorrect: 'إجابة صحيحة',
       quizCompleted: 'تم إكمال الكويز',
       dailyLogin: 'سلسلة دخول يومية {{day}}',
+      appShare: 'شكراً لمشاركة التطبيق',
     },
     errors: {
       capReached: 'وصلت للحد اليومي لهذا الإجراء',

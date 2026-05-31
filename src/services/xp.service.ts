@@ -46,6 +46,7 @@ export const XP_VALUES: Record<XpActionType, number> = {
   QUIZ_ANSWER_CORRECT: 2,
   QUIZ_COMPLETED_HIGH: 20,
   DAILY_LOGIN: 5, // base; actual value comes from LOGIN_STREAK_TABLE
+  APP_SHARE: 10,
   ADMIN_ADJUSTMENT: 0,
   STREAK_FREEZE_USED: 0,
 };
@@ -142,7 +143,8 @@ export interface AwardXpResult {
   newLevel: number;
   leveledUp: boolean;
   previousLevel: number;
-  reason?: 'duplicate' | 'cap_reached' | 'invalid' | 'ok';
+  reason?: 'duplicate' | 'cap_reached' | 'invalid' | 'ok' | 'cooldown';
+  nextEligibleAt?: string;
 }
 
 export interface XpEvent {
@@ -464,6 +466,68 @@ export async function grantStreakFreeze(userId: string, amount: number): Promise
   });
   logger.info('Streak freeze granted', { userId, amount, newTotal: user.streakFreezes });
   return { newTotal: user.streakFreezes };
+}
+
+// ─── App Share Reward (10 XP / 24h) ─────────────────────────────────────────
+
+const APP_SHARE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+export interface AppShareStatus {
+  eligible: boolean;
+  rewardXp: number;
+  nextEligibleAt: string | null;
+}
+
+export async function getAppShareStatus(userId: string): Promise<AppShareStatus> {
+  const last = await prisma.xpTransaction.findFirst({
+    where: { userId, action: 'APP_SHARE' },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+
+  const rewardXp = XP_VALUES.APP_SHARE;
+  if (!last) {
+    return { eligible: true, rewardXp, nextEligibleAt: null };
+  }
+
+  const nextEligible = new Date(last.createdAt.getTime() + APP_SHARE_COOLDOWN_MS);
+  if (Date.now() >= nextEligible.getTime()) {
+    return { eligible: true, rewardXp, nextEligibleAt: null };
+  }
+
+  return {
+    eligible: false,
+    rewardXp,
+    nextEligibleAt: nextEligible.toISOString(),
+  };
+}
+
+export async function awardAppShare(userId: string, timezone: string): Promise<AwardXpResult> {
+  const status = await getAppShareStatus(userId);
+  if (!status.eligible) {
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { xp: true, level: true },
+    });
+    return {
+      awarded: 0,
+      newXp: user.xp,
+      newLevel: user.level,
+      leveledUp: false,
+      previousLevel: user.level,
+      reason: 'cooldown',
+      nextEligibleAt: status.nextEligibleAt ?? undefined,
+    };
+  }
+
+  return awardXp({
+    userId,
+    action: 'APP_SHARE',
+    amount: XP_VALUES.APP_SHARE,
+    timezone,
+    idempotencyKey: `app-share:${userId}:${Date.now()}`,
+    metadata: { source: 'app_share' },
+  });
 }
 
 // ─── Social Link Validation ─────────────────────────────────────────────────
