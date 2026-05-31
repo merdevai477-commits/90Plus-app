@@ -311,6 +311,24 @@ app.use(`${API_PREFIX}/quiz`, quizRoutes);
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
 
+// Android App Links verification (sha256 from env ANDROID_RELEASE_SHA256)
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+    const fingerprint = process.env.ANDROID_RELEASE_SHA256?.trim();
+    const fingerprints = fingerprint
+        ? fingerprint.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+    res.json([
+        {
+            relation: ['delegate_permission/common.handle_all_urls'],
+            target: {
+                namespace: 'android_app',
+                package_name: 'com.mhmdsh1892.ninetyplusapp',
+                sha256_cert_fingerprints: fingerprints,
+            },
+        },
+    ]);
+});
+
 // Serve static files for privacy and terms (Apple compliance)
 // Determine public path based on environment
 // In production (Railway): /app/public (Railway copies Backend/public to /app/public)

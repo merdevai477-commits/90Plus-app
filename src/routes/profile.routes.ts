@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { followCountsFromPrisma } from '../utils/follow-count.utils';
 import { ProfileController } from '../controllers/profile.controller';
 import { moderateBio } from '../middleware/content-moderation.middleware';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
@@ -449,8 +450,7 @@ router.get('/analytics', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 10
 
         const analyticsData = {
             profileViews: user.profileViews,
-            followersCount: user._count.followers,
-            followingCount: user._count.following,
+            ...followCountsFromPrisma(user._count),
             reelsCount: user._count.reels,
             totalLikes: likesCount,
             totalViews: viewsAgg._sum.views || 0,

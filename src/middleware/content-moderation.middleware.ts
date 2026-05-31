@@ -28,6 +28,10 @@ export const moderateComment = async (
         // Moderate text
         const moderation = TextModerationService.moderateText(content, 'comment');
 
+        if (moderation.censoredText && moderation.censoredText !== content) {
+            req.body.content = moderation.censoredText;
+        }
+
         if (!moderation.isClean) {
             // Log moderation action
             await logModerationAction({

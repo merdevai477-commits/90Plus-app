@@ -17,7 +17,7 @@ export interface StrikeThresholds {
 }
 
 const DEFAULT_THRESHOLDS: StrikeThresholds = {
-    contentAutoDelete: 3,
+    contentAutoDelete: 6,
     userSuspension: 10,
 };
 

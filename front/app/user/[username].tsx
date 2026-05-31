@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Zap, Flag, MessageCircle } from 'lucide-react-native';
+import { Zap, Flag, Share2 } from 'lucide-react-native';
 
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
@@ -451,7 +451,7 @@ export default function UserProfileScreen() {
     reportUser(user.id);
   };
 
-  const handleMessagePress = async () => {
+  const handleShareProfilePress = async () => {
     if (!user) return;
     const profileUrl = `https://90plus.app/@${user.username}`;
     try {
@@ -730,7 +730,7 @@ export default function UserProfileScreen() {
           } : undefined}
         />
 
-        {/* Follow + Message + Report + Block */}
+        {/* Follow + Share + Report + Block */}
         <View style={s.actionRow}>
           {/* Follow button */}
           <Animated.View style={[s.followWrap, { transform: [{ scale: scaleAnim }] }]}>
@@ -778,11 +778,11 @@ export default function UserProfileScreen() {
 
           <TouchableOpacity
             style={s.secondaryBtn}
-            onPress={handleMessagePress}
+            onPress={handleShareProfilePress}
             activeOpacity={0.75}
           >
-            <MessageCircle size={18} color="#fff" />
-            <Text style={s.secondaryBtnTxt}>{t.publicProfile.message}</Text>
+            <Share2 size={18} color="#fff" />
+            <Text style={s.secondaryBtnTxt}>{t.publicProfile.share}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

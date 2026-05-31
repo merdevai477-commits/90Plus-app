@@ -1692,6 +1692,12 @@ export const en = {
     noMoreVideos: 'No more videos',
     endOfFeed: "You've seen all videos 🎉",
 
+    feedErrorTitle: 'Could not load videos',
+    feedErrorRepeated: 'Repeated error',
+    feedErrorRepeatedHint: 'If this continues, please restart the app.',
+    feedErrorRetry: 'Try again',
+    feedErrorHint: 'Check your internet connection',
+
     // Swipe Hint
     swipeUp: 'Swipe up for more',
 
@@ -2151,7 +2157,7 @@ export const en = {
     blockSuccess: 'User blocked',
     unblockSuccess: 'User unblocked',
     report: 'Report',
-    message: 'Message',
+    share: 'Share',
     reportSubmitted: 'Report submitted',
     stats: 'Stats',
     saved: 'Saved',

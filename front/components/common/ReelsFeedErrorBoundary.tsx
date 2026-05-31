@@ -3,9 +3,26 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { AlertCircle, RefreshCw } from 'lucide-react-native';
 import { logger } from '../../utils/logger';
 
+export interface ReelsFeedErrorLabels {
+  title: string;
+  repeatedTitle: string;
+  repeatedHint: string;
+  retry: string;
+  hint: string;
+}
+
+const DEFAULT_LABELS: ReelsFeedErrorLabels = {
+  title: 'Could not load videos',
+  repeatedTitle: 'Repeated error',
+  repeatedHint: 'If this continues, please restart the app.',
+  retry: 'Try again',
+  hint: 'Check your internet connection',
+};
+
 interface Props {
   children: ReactNode;
   onRetry?: () => void;
+  labels?: Partial<ReelsFeedErrorLabels>;
 }
 
 interface State {
@@ -17,13 +34,12 @@ interface State {
 /**
  * Error Boundary for Reels Feed
  * Catches errors in reels feed and displays a fallback UI
- * Critical Fix: Prevents entire app crash if one reel fails
  */
 export class ReelsFeedErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { 
-      hasError: false, 
+    this.state = {
+      hasError: false,
       error: null,
       errorCount: 0,
     };
@@ -34,7 +50,6 @@ export class ReelsFeedErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to monitoring service
     logger.error('[ReelsFeedErrorBoundary] Reels feed error caught:', {
       error: error.message,
       stack: error.stack,
@@ -42,12 +57,10 @@ export class ReelsFeedErrorBoundary extends Component<Props, State> {
       errorCount: this.state.errorCount + 1,
     });
 
-    // Increment error count
     this.setState(prev => ({
       errorCount: prev.errorCount + 1,
     }));
 
-    // If too many errors, something is seriously wrong
     if (this.state.errorCount > 5) {
       logger.error('[ReelsFeedErrorBoundary] Too many errors, stopping retries');
     }
@@ -56,28 +69,27 @@ export class ReelsFeedErrorBoundary extends Component<Props, State> {
   handleRetry = () => {
     logger.info('[ReelsFeedErrorBoundary] User requested retry');
     this.setState({ hasError: false, error: null });
-    
-    // Call custom retry handler if provided
     this.props.onRetry?.();
   };
 
   render() {
     if (this.state.hasError) {
+      const labels = { ...DEFAULT_LABELS, ...this.props.labels };
       const tooManyErrors = this.state.errorCount > 5;
 
       return (
         <View style={styles.errorContainer}>
           <View style={styles.errorContent}>
             <AlertCircle size={64} color="#FF3B30" />
-            
+
             <Text style={styles.errorTitle}>
-              {tooManyErrors ? 'خطأ متكرر' : 'حدث خطأ في تحميل الفيديوهات'}
+              {tooManyErrors ? labels.repeatedTitle : labels.title}
             </Text>
-            
+
             <Text style={styles.errorMessage}>
-              {tooManyErrors 
-                ? 'حدثت أخطاء متعددة. يرجى إعادة تشغيل التطبيق.'
-                : this.state.error?.message || 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.'}
+              {tooManyErrors
+                ? labels.repeatedHint
+                : this.state.error?.message || labels.hint}
             </Text>
 
             {!tooManyErrors && (
@@ -87,14 +99,12 @@ export class ReelsFeedErrorBoundary extends Component<Props, State> {
                 activeOpacity={0.8}
               >
                 <RefreshCw size={20} color="#000000" style={{ marginRight: 8 }} />
-                <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+                <Text style={styles.retryButtonText}>{labels.retry}</Text>
               </TouchableOpacity>
             )}
 
             <Text style={styles.errorHint}>
-              {tooManyErrors 
-                ? 'إذا استمرت المشكلة، يرجى التواصل مع الدعم الفني'
-                : 'تأكد من اتصالك بالإنترنت'}
+              {tooManyErrors ? labels.repeatedHint : labels.hint}
             </Text>
           </View>
         </View>

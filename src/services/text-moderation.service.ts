@@ -13,10 +13,33 @@ const ARABIC_BAD_WORDS = [
 ];
 
 const ENGLISH_BAD_WORDS = [
-    'fuck', 'shit', 'bitch', 'ass', 'asshole', 'bastard', 'damn', 'hell',
+    'fuck', 'shit', 'bitch', 'asshole', 'bastard',
     'dick', 'cock', 'pussy', 'cunt', 'whore', 'slut', 'fag', 'nigger',
-    'retard', 'idiot', 'stupid', 'dumb', 'moron', 'piss', 'crap'
+    'retard', 'piss',
 ];
+
+/** Escape regex special chars in a literal phrase */
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Match Arabic/English profanity as whole tokens/phrases (not substrings).
+ * Arabic: split on whitespace/punctuation; multi-word phrases use boundary check.
+ */
+function containsArabicBadWord(text: string, word: string): boolean {
+    const normalized = text.toLowerCase().trim();
+    if (word.includes(' ')) {
+        return normalized.includes(word);
+    }
+    const tokens = normalized.split(/[\s,.!?؛،]+/).filter(Boolean);
+    return tokens.some((t) => t === word);
+}
+
+function containsEnglishBadWord(text: string, word: string): boolean {
+    const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'gi');
+    return regex.test(text);
+}
 
 // Common bypass tricks patterns
 const BYPASS_PATTERNS = [
@@ -56,6 +79,8 @@ interface ModerationResult {
     reason?: string;
     detectedWords?: string[];
     severity: 'low' | 'medium' | 'high';
+    /** Set when mild profanity was censored but content may proceed */
+    censoredText?: string;
 }
 
 /**
@@ -69,18 +94,16 @@ export function moderateText(text: string, context: 'comment' | 'caption' | 'bio
     const lowerText = text.toLowerCase();
     const detectedWords: string[] = [];
 
-    // Check for bad words (Arabic)
+    // Check for bad words (Arabic) — token/phrase match to avoid false positives
     for (const word of ARABIC_BAD_WORDS) {
-        if (lowerText.includes(word)) {
+        if (containsArabicBadWord(lowerText, word)) {
             detectedWords.push(word);
         }
     }
 
-    // Check for bad words (English)
+    // Check for bad words (English) — word boundaries
     for (const word of ENGLISH_BAD_WORDS) {
-        // Use word boundaries to avoid false positives
-        const regex = new RegExp(`\\b${word}\\b`, 'gi');
-        if (regex.test(lowerText)) {
+        if (containsEnglishBadWord(lowerText, word)) {
             detectedWords.push(word);
         }
     }
@@ -123,11 +146,22 @@ export function moderateText(text: string, context: 'comment' | 'caption' | 'bio
     // Return result
     if (detectedWords.length > 0) {
         const severity = detectedWords.length >= 3 ? 'high' : detectedWords.length >= 2 ? 'medium' : 'low';
+        const censoredText = censorText(text);
+        // Mild single-word hits: censor and allow (football banter shouldn't 400)
+        if (severity === 'low') {
+            return {
+                isClean: true,
+                censoredText,
+                detectedWords,
+                severity,
+            };
+        }
         return {
             isClean: false,
             reason: `Inappropriate language detected: ${detectedWords.length} word(s)`,
             detectedWords,
             severity,
+            censoredText,
         };
     }
 

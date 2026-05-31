@@ -6,6 +6,7 @@ import { strictLimiter } from '../middleware/rateLimit.middleware';
 import { ErrorCode, sendError } from '../constants/errors';
 import { notifyUser } from '../services/notify.service';
 import { NotificationType } from '../services/notification.service';
+import { processReport } from '../services/moderation.service';
 
 const router = Router();
 
@@ -40,6 +41,11 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
 
     if (!reel) { sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found'); return; }
 
+    if (reel.userId === user.id) {
+      sendError(req, res, ErrorCode.VALIDATION, 'Cannot report your own reel');
+      return;
+    }
+
     // Map reason to ReportType
     const reasonToType: Record<string, string> = {
       'spam': 'SPAM',
@@ -48,6 +54,7 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
       'violence': 'INAPPROPRIATE',
       'hate': 'HARASSMENT',
       'copyright': 'COPYRIGHT',
+      'misinformation': 'FAKE_INFO',
       'other': 'OTHER',
     };
 
@@ -99,6 +106,40 @@ router.post('/reel/:reelId', requireAuth, strictLimiter, async (req: Request, re
       idempotencyKey: `report-submitted:${createdReport.id}`,
     }).catch((err) => logger.warn('[report/reel] reporter notify failed:', err?.message));
 
+    // Full moderation pipeline: strikes, admin alerts, auto-delete thresholds
+    await processReport(createdReport.id).catch((err) =>
+      logger.warn('[report/reel] processReport failed:', err?.message),
+    );
+
+    const reportCount = await prisma.report.count({
+      where: {
+        reportedReelId: reelIdStr,
+        status: { not: 'REJECTED' },
+      },
+    });
+
+    if (reportCount === 5) {
+      notifyUser({
+        userId: reel.userId,
+        type: NotificationType.SYSTEM,
+        titleKey: 'reelReportWarningTitle',
+        bodyKey: 'reelReportWarningBody',
+        data: {
+          screen: '/(tabs)/reels',
+          reelId: reelIdStr,
+          reportCount,
+        },
+        idempotencyKey: `reel-report-warning:${reelIdStr}`,
+      }).catch((err) => logger.warn('[report/reel] owner warning notify failed:', err?.message));
+    }
+
+    if (reportCount >= 3) {
+      const { AdminNotificationService } = await import('../services/admin-notification.service');
+      AdminNotificationService.alertContentThreshold(reelIdStr, 'reel', reportCount).catch((err) =>
+        logger.warn('[report/reel] admin alert failed:', err?.message),
+      );
+    }
+
     res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {
     logger.error('Report reel error:', error);
@@ -138,6 +179,7 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
       'violence': 'INAPPROPRIATE',
       'hate': 'HARASSMENT',
       'copyright': 'COPYRIGHT',
+      'misinformation': 'FAKE_INFO',
       'other': 'OTHER',
     };
 
@@ -185,6 +227,10 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
       },
       idempotencyKey: `report-submitted:${createdReport.id}`,
     }).catch((err) => logger.warn('[report/comment] reporter notify failed:', err?.message));
+
+    await processReport(createdReport.id).catch((err) =>
+      logger.warn('[report/comment] processReport failed:', err?.message),
+    );
 
     res.json({ status: 'SUCCESS', message: 'Report submitted successfully' });
   } catch (error: any) {

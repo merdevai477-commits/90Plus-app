@@ -3,6 +3,7 @@
  */
 
 import prisma from '../lib/prisma';
+import { followCountsFromPrisma } from '../utils/follow-count.utils';
 
 export type RankPeriod = 'weekly' | 'monthly' | '3_days';
 
@@ -115,7 +116,7 @@ export async function getTopPlayers(
       position: user.position || 'ST',
       countryFlag: user.countryFlag || '🏳️',
       clubLogo: user.clubLogo,
-      followersCount: user._count.followers,
+      ...followCountsFromPrisma(user._count),
       stats: { totalViews, totalLikes, profileViews: user.profileViews || 0 },
       score,
     };

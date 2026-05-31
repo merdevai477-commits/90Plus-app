@@ -161,6 +161,8 @@ export type PushTemplateKey =
     | 'reportCommentSubmittedBody'
     | 'reportResolvedTitle'
     | 'reportResolvedBody'
+    | 'reelReportWarningTitle'
+    | 'reelReportWarningBody'
     // Avatar upload completion
     | 'avatarUploadCompleteTitle'
     | 'avatarUploadCompleteBody'
@@ -325,6 +327,9 @@ const en: TemplateMap = {
     reportCommentSubmittedBody: 'Thanks for reporting the comment. We are looking into it.',
     reportResolvedTitle: '✅ Report resolved',
     reportResolvedBody: 'We reviewed your report and took action where needed.',
+    reelReportWarningTitle: 'Your video may be removed',
+    reelReportWarningBody:
+        'Your reel received 5 reports and is at risk of being deleted. Please review your content.',
     // Avatar upload
     avatarUploadCompleteTitle: '✅ Avatar updated',
     avatarUploadCompleteBody: 'Your new profile picture is live.',
@@ -488,6 +493,9 @@ const ar: TemplateMap = {
     reportCommentSubmittedBody: 'شكراً على إبلاغك عن التعليق. بنراجعه دلوقتي.',
     reportResolvedTitle: '✅ تم حل البلاغ',
     reportResolvedBody: 'راجعنا بلاغك واتخذنا الإجراء المناسب.',
+    reelReportWarningTitle: 'فيديوك مهدد بالحذف',
+    reelReportWarningBody:
+        'فيديوك تلقى 5 بلاغات وهو مهدد بالحذف. راجع المحتوى وتأكد إنه يلتزم بإرشادات المجتمع.',
     // رفع الأفاتار
     avatarUploadCompleteTitle: '✅ تم تحديث الأفاتار',
     avatarUploadCompleteBody: 'صورة بروفايلك الجديدة ظهرت دلوقتي.',

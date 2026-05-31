@@ -1083,16 +1083,27 @@ export interface CooldownsResponse {
     reelDelete?: ReelDeleteInfo;  // Requirements 13.4, 13.5, 13.6, 13.7
 }
 
-function parseReelsCommentApiError(data: Record<string, unknown>, status: number): string {
+function parseReelsCommentApiError(
+    data: Record<string, unknown>,
+    status: number,
+    method: 'GET' | 'POST' = 'POST',
+): string {
+    const code = typeof data?.code === 'string' ? data.code : undefined;
     const message = typeof data?.message === 'string' ? data.message : undefined;
     if (message) return message;
     const details = data?.details as Record<string, unknown> | undefined;
     if (details?.reason && typeof details.reason === 'string') return details.reason;
-    if (status === 404) return 'الريل غير موجود';
+    if (status === 404) return method === 'GET' ? 'تعذر تحميل التعليقات' : 'الريل غير موجود';
     if (status === 401) return 'يرجى تسجيل الدخول مرة أخرى';
-    if (status === 429) return message || 'تم الوصول للحد الأقصى للتعليقات';
-    if (status === 400) return 'محتوى التعليق غير مسموح';
-    return 'فشل الطلب';
+    if (status === 429) {
+        if (code === 'SPAM_DETECTED') return 'تم رفض التعليق — يبدو أنه spam';
+        return message || 'تم الوصول للحد الأقصى للتعليقات';
+    }
+    if (status === 400) {
+        if (code === 'CONTENT_MODERATION_FAILED') return 'محتوى التعليق غير مسموح';
+        return method === 'GET' ? 'تعذر تحميل التعليقات' : 'فشل إرسال التعليق';
+    }
+    return method === 'GET' ? 'تعذر تحميل التعليقات' : 'فشل إرسال التعليق';
 }
 
 export class ReelsService {
@@ -1120,6 +1131,35 @@ export class ReelsService {
             return null;
         } catch (error) {
             console.error('Error getting reels feed:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Fetch a single reel by ID (deep links / share)
+     */
+    static async getReelById(
+        token: string | null,
+        reelId: string,
+    ): Promise<ReelFeedItem | null> {
+        try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+            const response = await fetch(`${API_URL}/reels/${reelId}`, {
+                method: 'GET',
+                headers,
+            });
+            const data = await response.json();
+            if (data.status === 'SUCCESS' && data.data?.reel) {
+                return data.data.reel;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting reel by id:', error);
             return null;
         }
     }
@@ -1312,7 +1352,7 @@ export class ReelsService {
             }
             return {
                 comments: [],
-                error: parseReelsCommentApiError(data, response.status),
+                error: parseReelsCommentApiError(data, response.status, 'GET'),
             };
         } catch (error) {
             console.error('Error getting comments:', error);
@@ -1348,7 +1388,7 @@ export class ReelsService {
             }
             return {
                 success: false,
-                error: parseReelsCommentApiError(data, response.status),
+                error: parseReelsCommentApiError(data, response.status, 'POST'),
                 status: response.status,
             };
         } catch (error: any) {
@@ -1388,7 +1428,7 @@ export class ReelsService {
             }
             return {
                 success: false,
-                error: parseReelsCommentApiError(data, response.status),
+                error: parseReelsCommentApiError(data, response.status, 'POST'),
                 status: response.status,
             };
         } catch (error: any) {

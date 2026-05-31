@@ -11,7 +11,6 @@ import {
     Platform,
     Share as RNShare,
     Linking,
-    Clipboard,
     Alert,
     Modal,
     TextInput,
@@ -19,6 +18,7 @@ import {
     ScrollView,
     ActivityIndicator,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     Heart,
@@ -38,7 +38,8 @@ import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { ReelData } from './types';
 import { COLORS, GRADIENTS, EFFECTS } from './constants';
 import * as Haptics from 'expo-haptics';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from '../../src/i18n';
+import { buildReelShareUrl } from '../../constants/shareLinks';
 
 interface ReelItemProps {
     reel: ReelData;
@@ -114,7 +115,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [editCaption, setEditCaption] = useState('');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-    const { t } = useLanguage();
+    const { t } = useTranslation();
 
     const haptics = {
         lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
@@ -230,10 +231,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         }
     };
 
-    const REEL_BASE_URL = 'https://90plus.app/reels';
-
     const handleShareWhatsApp = useCallback(async () => {
-        const url = `${REEL_BASE_URL}/${reel.id}`;
+        const url = buildReelShareUrl(reel.id);
         const message = (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url);
         const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
         try {
@@ -256,7 +255,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     }, [reel.id, onRecordShare, t.reels.shareReelMessageWhatsApp]);
 
     const handleShareFacebook = useCallback(async () => {
-        const url = `${REEL_BASE_URL}/${reel.id}`;
+        const url = buildReelShareUrl(reel.id);
         const fbUrl = `fb://share?u=${encodeURIComponent(url)}`;
         try {
             const canOpen = await Linking.canOpenURL(fbUrl);
@@ -278,13 +277,9 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     }, [reel.id, onRecordShare]);
 
     const handleCopyLink = useCallback(async () => {
-        const url = `${REEL_BASE_URL}/${reel.id}`;
+        const url = buildReelShareUrl(reel.id);
         try {
-            if ((Clipboard as any).setString) {
-                (Clipboard as any).setString(url);
-            } else {
-                await (Clipboard as any).setStringAsync(url);
-            }
+            await Clipboard.setStringAsync(url);
             onRecordShare('copy_link');
         } catch {
             /* clipboard unavailable — no share recorded */
@@ -311,7 +306,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             );
         } else {
             // Android — use native share sheet
-            const url = `${REEL_BASE_URL}/${reel.id}`;
+            const url = buildReelShareUrl(reel.id);
             RNShare.share({
                 message: (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url),
             }).then((result) => {

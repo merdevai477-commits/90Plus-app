@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/clerk.middleware';
+import { requireAuth, optionalAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
@@ -331,10 +331,28 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
             return;
         }
 
+        const clerkUserId = req.auth?.userId;
+        let currentUser: { id: string } | null = null;
+        if (clerkUserId) {
+            currentUser = await prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true },
+            });
+        }
+        const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
+
         const reelHashtags = await prisma.reelHashtag.findMany({
             take: take + 1,
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
-            where: { hashtagId: hashtag.id },
+            where: {
+                hashtagId: hashtag.id,
+                reel: {
+                    isDeleted: false,
+                    status: 'READY',
+                    videoUrl: { not: '' },
+                    ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+                },
+            },
             orderBy: { createdAt: 'desc' },
             select: {
                 id: true,
@@ -345,9 +363,11 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
                         thumbnail: true,
                         caption: true,
                         views: true,
+                        sharesCount: true,
                         createdAt: true,
                         user: {
                             select: {
+                                id: true,
                                 username: true,
                                 displayName: true,
                                 avatar: true,
@@ -356,7 +376,16 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
                         },
                         _count: {
                             select: { likes: true, comments: true }
-                        }
+                        },
+                        hashtags: {
+                            select: { hashtag: { select: { name: true } } },
+                        },
+                        likes: currentUser
+                            ? { where: { userId: currentUser.id }, select: { id: true } }
+                            : false,
+                        savedBy: currentUser
+                            ? { where: { userId: currentUser.id }, select: { id: true } }
+                            : false,
                     }
                 }
             }
@@ -370,9 +399,19 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
             data: {
                 hashtag: { name: hashtag.name, reelCount: hashtag.reelCount },
                 reels: data.map((rh: any) => ({
-                    ...rh.reel,
+                    id: rh.reel.id,
+                    videoUrl: rh.reel.videoUrl,
+                    thumbnail: rh.reel.thumbnail,
+                    caption: rh.reel.caption,
+                    views: rh.reel.views,
                     likesCount: rh.reel._count.likes,
                     commentsCount: rh.reel._count.comments,
+                    sharesCount: rh.reel.sharesCount || 0,
+                    isLiked: Array.isArray(rh.reel.likes) && rh.reel.likes.length > 0,
+                    isSaved: Array.isArray(rh.reel.savedBy) && rh.reel.savedBy.length > 0,
+                    hashtags: rh.reel.hashtags.map((h: any) => h.hashtag.name),
+                    user: rh.reel.user,
+                    createdAt: rh.reel.createdAt,
                 })),
                 nextCursor: hasMore ? data[data.length - 1]?.id : null,
                 hasMore,
@@ -966,7 +1005,7 @@ import { COMMENT_LIMITS } from '../config/storage.config';
  * Add a comment or reply to a reel
  * Apple UGC Compliance: Content filtering applied
  */
-router.post('/:id/comments', requireAuth, writeLimiter, filterUGCContent, moderateComment, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', requireAuth, writeLimiter, moderateComment, async (req: Request, res: Response): Promise<void> => {
     // Cache invalidation will happen at the end
     try {
         const { id } = req.params;
@@ -3589,6 +3628,112 @@ router.get('/rankings', requireAuth, async (req: Request, res: Response): Promis
         });
     } catch (error: any) {
         logger.error('Get reels rankings error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+// ============================================
+// GET /api/reels/:id — single reel (deep links / share)
+// Registered after static paths (/search, /saved, …) to avoid shadowing.
+// ============================================
+router.get('/:id', optionalAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const idStr = ensureString(req.params.id);
+        if (!idStr || idStr.length < 8) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid reel id');
+            return;
+        }
+
+        const clerkUserId = req.auth?.userId;
+        let currentUser: { id: string } | null = null;
+        if (clerkUserId) {
+            currentUser = await prisma.user.findUnique({
+                where: { clerkUserId },
+                select: { id: true },
+            });
+        }
+
+        const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
+
+        const reel = await prisma.reel.findFirst({
+            where: {
+                id: idStr,
+                isDeleted: false,
+                status: 'READY',
+                videoUrl: { not: '' },
+                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+            },
+            select: {
+                id: true,
+                videoUrl: true,
+                thumbnail: true,
+                caption: true,
+                views: true,
+                sharesCount: true,
+                createdAt: true,
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatar: true,
+                        isVerified: true,
+                    },
+                },
+                _count: { select: { likes: true, comments: true } },
+                hashtags: { select: { hashtag: { select: { name: true } } } },
+                mentions: { select: { mentionedUserId: true } },
+                likes: currentUser
+                    ? { where: { userId: currentUser.id }, select: { id: true } }
+                    : false,
+                savedBy: currentUser
+                    ? { where: { userId: currentUser.id }, select: { id: true } }
+                    : false,
+            },
+        });
+
+        if (!reel) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
+            return;
+        }
+
+        const mentionIds = (reel.mentions ?? []).map((m) => m.mentionedUserId).filter(Boolean);
+        const mentionUsernameMap = new Map<string, string>();
+        if (mentionIds.length > 0) {
+            const mentionedUsers = await prisma.user.findMany({
+                where: { id: { in: mentionIds } },
+                select: { id: true, username: true },
+            });
+            for (const u of mentionedUsers) {
+                if (u.username) mentionUsernameMap.set(u.id, u.username);
+            }
+        }
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                reel: {
+                    id: reel.id,
+                    videoUrl: reel.videoUrl,
+                    thumbnail: reel.thumbnail,
+                    caption: reel.caption,
+                    views: reel.views,
+                    likesCount: reel._count.likes,
+                    commentsCount: reel._count.comments,
+                    sharesCount: reel.sharesCount || 0,
+                    isLiked: Array.isArray(reel.likes) && reel.likes.length > 0,
+                    isSaved: Array.isArray(reel.savedBy) && reel.savedBy.length > 0,
+                    hashtags: reel.hashtags.map((h) => h.hashtag.name),
+                    mentions: (reel.mentions ?? [])
+                        .map((m) => mentionUsernameMap.get(m.mentionedUserId))
+                        .filter(Boolean),
+                    user: reel.user,
+                    createdAt: reel.createdAt,
+                },
+            },
+        });
+    } catch (error: any) {
+        logger.error('Get reel by id error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

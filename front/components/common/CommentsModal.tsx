@@ -86,6 +86,18 @@ function mapBackendComment(c: {
     };
 }
 
+/** Merge locally-added replies with server preview without dropping optimistic rows */
+function mergeReplyLists(existing: Reply[] | undefined, fromServer: Reply[] | undefined): Reply[] {
+    const merged = new Map<string, Reply>();
+    for (const r of fromServer ?? []) {
+        merged.set(r.id, r);
+    }
+    for (const r of existing ?? []) {
+        merged.set(r.id, r);
+    }
+    return Array.from(merged.values());
+}
+
 // Reply interface extending Comment
 interface Reply {
     id: string;
@@ -249,6 +261,17 @@ export default function CommentsModal({
     const commentsWithRepliesRef = useRef<CommentWithReplies[]>([]);
     const isInitializedRef = useRef(false);
 
+    const applyCommentsUpdate = useCallback(
+        (updater: (prev: CommentWithReplies[]) => CommentWithReplies[]) => {
+            setCommentsWithReplies(prev => {
+                const next = updater(prev);
+                commentsWithRepliesRef.current = next;
+                return next;
+            });
+        },
+        [],
+    );
+
     // ✅ Get effective comments - prioritize props, fallback to loaded
     const getEffectiveComments = useCallback((): Comment[] => {
         if (comments && comments.length > 0) {
@@ -274,7 +297,7 @@ export default function CommentsModal({
     const userRepliesCount = useMemo(() => {
         if (!currentUserId) return 0;
         let count = 0;
-        commentsWithRepliesRef.current.forEach(c => {
+        commentsWithReplies.forEach(c => {
             if (c.replies) {
                 count += c.replies.filter(r => r.user.id === currentUserId).length;
             }
@@ -336,7 +359,7 @@ export default function CommentsModal({
                     ...mapBackendComment(c),
                     replies: (c.replies || []).map((r: any) => mapBackendComment(r)),
                     repliesCount: c.repliesCount ?? c.replies?.length ?? 0,
-                    showReplies: false,
+                    showReplies: (c.replies?.length ?? 0) > 0,
                     loadingReplies: false,
                 }));
 
@@ -414,6 +437,13 @@ export default function CommentsModal({
         const transformed: CommentWithReplies[] = effectiveComments.map(c => {
             const commentText = (c as any).content || c.text || '';
             const existing = commentsWithRepliesRef.current.find(ec => ec.id === c.id);
+            const serverReplies = ((c as any).replies || []).map((r: any) => mapBackendComment(r));
+            const mergedReplies = mergeReplyLists(existing?.replies, serverReplies);
+            const repliesCount = Math.max(
+                existing?.repliesCount ?? 0,
+                (c as any).repliesCount ?? 0,
+                mergedReplies.length,
+            );
 
             return {
                 ...c,
@@ -422,15 +452,11 @@ export default function CommentsModal({
                     ...c.user,
                     name: c.user.name || (c.user as any).displayName || (c.user as any).username || 'User'
                 },
-                replies:
-                    existing?.replies?.length
-                        ? existing.replies
-                        : ((c as any).replies || []).map((r: any) => mapBackendComment(r)),
-                repliesCount:
-                    existing?.repliesCount ??
-                    (c as any).repliesCount ??
-                    ((c as any).replies?.length ?? 0),
-                showReplies: existing?.showReplies ?? false,
+                replies: mergedReplies,
+                repliesCount,
+                showReplies:
+                    existing?.showReplies ??
+                    mergedReplies.length > 0,
                 loadingReplies: existing?.loadingReplies ?? false
             };
         });
@@ -795,27 +821,28 @@ export default function CommentsModal({
         const token = await getToken();
         if (!token) return;
 
-        setCommentsWithReplies(prev => prev.map(c =>
+        applyCommentsUpdate(prev => prev.map(c =>
             c.id === commentId ? { ...c, loadingReplies: true } : c
         ));
 
         try {
             const replies = await ReelsService.getReplies(token, commentId);
-            setCommentsWithReplies(prev => prev.map(c =>
+            applyCommentsUpdate(prev => prev.map(c =>
                 c.id === commentId ? {
                     ...c,
                     replies: replies.map((r: any) => mapBackendComment(r)),
+                    repliesCount: Math.max(c.repliesCount ?? 0, replies.length),
                     showReplies: true,
                     loadingReplies: false
                 } : c
             ));
         } catch (error) {
             console.error('Error loading replies:', error);
-            setCommentsWithReplies(prev => prev.map(c =>
+            applyCommentsUpdate(prev => prev.map(c =>
                 c.id === commentId ? { ...c, loadingReplies: false } : c
             ));
         }
-    }, [getToken]);
+    }, [getToken, applyCommentsUpdate]);
 
     // Toggle replies visibility - Requirements 14.4
     const toggleReplies = useCallback((commentId: string) => {
@@ -845,7 +872,8 @@ export default function CommentsModal({
     // Handle send - supports both comments and replies
     // Requirements 15.4: Check limits before sending to backend
     const handleSend = async () => {
-        if (!newComment.trim() || isSubmitting || !onAddComment) return;
+        if (!newComment.trim() || isSubmitting) return;
+        if (!replyingTo && !onAddComment) return;
 
         // Check appropriate limit based on whether it's a comment or reply
         const isReplyMode = !!replyingTo;
@@ -892,15 +920,16 @@ export default function CommentsModal({
                             likes: 0,
                             liked: false
                         };
-                        setCommentsWithReplies(prev => prev.map(c =>
+                        applyCommentsUpdate(prev => prev.map(c =>
                             c.id === replyingTo.commentId ? {
                                 ...c,
                                 replies: [...(c.replies || []), newReply],
-                                repliesCount: (c.repliesCount || 0) + 1,
+                                repliesCount: Math.max((c.repliesCount || 0) + 1, (c.replies?.length ?? 0) + 1),
                                 showReplies: true
                             } : c
                         ));
                         setReplyingTo(null);
+                        setNewComment('');
                     } else if (
                         result.error?.includes('الحد الأقصى') ||
                         result.error?.includes('LIMIT') ||
@@ -957,16 +986,29 @@ export default function CommentsModal({
                         liked: false
                     };
                     onAddComment(comment);
+                    applyCommentsUpdate(prev => [
+                        {
+                            ...comment,
+                            replies: [],
+                            repliesCount: 0,
+                            showReplies: false,
+                            loadingReplies: false,
+                        },
+                        ...prev,
+                    ]);
+                    setNewComment('');
                 }
             }
         } catch (error) {
             console.log('Error sending:', error);
+            toastManager.showError('خطأ', 'فشل إرسال التعليق');
         }
 
-        setNewComment('');
         setShowMentionPicker(false);
         setIsSubmitting(false);
-        Keyboard.dismiss();
+        if (!isReplyMode) {
+            Keyboard.dismiss();
+        }
     };
 
     // Render text with clickable mentions
@@ -1216,8 +1258,8 @@ export default function CommentsModal({
                     </View>
                 </TouchableOpacity>
 
-                {/* Replies Section */}
-                {item.showReplies && item.replies && item.replies.length > 0 && (
+                {/* Replies Section — show whenever replies are loaded */}
+                {item.replies && item.replies.length > 0 && (
                     <View style={styles.repliesContainer}>
                         {item.replies.map(reply => renderReply(reply, item.id))}
                     </View>

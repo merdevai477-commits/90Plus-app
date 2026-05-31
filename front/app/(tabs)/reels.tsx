@@ -56,6 +56,7 @@ import { toastManager } from '../../services/toastManager';
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useReelReport } from '../../hooks/useReportSystem';
 import { useReelEvents } from '../../hooks/useWebSocket';
+import { ReelsFeedErrorBoundary } from '../../components/common/ReelsFeedErrorBoundary';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -316,6 +317,7 @@ const ReelsFeed: React.FC = () => {
   // Abort controller to cancel in-flight retries when component re-focuses
   const retryAbortRef = useRef<AbortController | null>(null);
   const viewedReelsRef = useRef<Set<string>>(new Set());
+  const deepLinkFetchRef = useRef<string | null>(null);
   // In-flight dedupe: prevents a flicker between two adjacent reels from
   // firing two concurrent /view calls for the same reel.
   const pendingViewsRef = useRef<Set<string>>(new Set());
@@ -450,7 +452,8 @@ const ReelsFeed: React.FC = () => {
       ]);
 
       // Check network connectivity (Critical Priority #2)
-      if (!networkState.isConnected || !networkState.isInternetReachable) {
+      // isInternetReachable is null on iOS while connected — treat as online
+      if (!networkState.isConnected || networkState.isInternetReachable === false) {
         setIsOffline(true);
         setNetworkError(true);
         setLoadError(t.reels.offline);
@@ -680,24 +683,25 @@ const ReelsFeed: React.FC = () => {
     return backendReels.map(reel => ({
       ...reel,
       liked: likedReelIdsSet.has(reel.id),
-      comments: reelComments[reel.id]?.length || reel.comments,
     }));
-  }, [backendReels, likedReelIdsSet, reelComments]);
+  }, [backendReels, likedReelIdsSet]);
 
   // Sync merged reels into state (needed so optimistic updates like mute/save/share still work)
   useEffect(() => {
-    if (!mergedBackendReels || mergedBackendReels.length === 0) return;
+    if (!mergedBackendReels || mergedBackendReels.length === 0) {
+      if (backendReels.length === 0 && !isInitialLoading) {
+        setReels([]);
+      }
+      return;
+    }
     setReels(mergedBackendReels);
-  }, [mergedBackendReels]);
+  }, [mergedBackendReels, backendReels.length, isInitialLoading]);
 
   // Handle deep link navigation to specific reel and comment
   useEffect(() => {
-    if (!params.reelId || reels.length === 0) return;
+    if (!params.reelId) return;
 
-    const reelIndex = reels.findIndex(r => r.id === params.reelId);
-
-    if (reelIndex >= 0) {
-      // Reel found - scroll to it
+    const scrollToReel = (reelIndex: number) => {
       setTimeout(() => {
         try {
           flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
@@ -709,8 +713,7 @@ const ReelsFeed: React.FC = () => {
             setShowComments(true);
           }
         } catch {
-          const itemHeight = SCREEN_HEIGHT;
-          flatListRef.current?.scrollToOffset({ offset: reelIndex * itemHeight, animated: true });
+          flatListRef.current?.scrollToOffset({ offset: reelIndex * SCREEN_HEIGHT, animated: true });
           setCurrentIndex(reelIndex);
           setSelectedReelId(params.reelId!);
 
@@ -720,12 +723,48 @@ const ReelsFeed: React.FC = () => {
           }
         }
       }, 500);
-    } else if (reels.length > 0) {
-      // Reel not found in current feed - it may be deleted or not loaded yet
-      // Show toast and stay on reels screen
-      toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
+    };
+
+    const reelIndex = reels.findIndex(r => r.id === params.reelId);
+
+    if (reelIndex >= 0) {
+      scrollToReel(reelIndex);
+      return;
     }
-  }, [params.reelId, params.commentId, params.autoOpenComments, reels]);
+
+    if (isInitialLoading) return;
+
+    if (deepLinkFetchRef.current === params.reelId) return;
+    deepLinkFetchRef.current = params.reelId;
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const item = await ReelsService.getReelById(token, params.reelId!);
+        if (!item) {
+          toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
+          return;
+        }
+        const transformed = transformBackendReel(item);
+        if (!transformed) {
+          toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
+          return;
+        }
+        setBackendReels(prev => {
+          if (prev.some(r => r.id === transformed.id)) return prev;
+          return [transformed, ...prev];
+        });
+        setReels(prev => {
+          if (prev.some(r => r.id === transformed.id)) return prev;
+          return [transformed, ...prev];
+        });
+        scrollToReel(0);
+      } catch (err) {
+        logger.error('[ReelsFeed] Deep link fetch failed:', err);
+        toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
+      }
+    })();
+  }, [params.reelId, params.commentId, params.autoOpenComments, reels, isInitialLoading, getToken, transformBackendReel, t.reels.reelNotFound, t.reels.reelNotFoundDetail]);
 
   // Handle startFrom param: scroll to a specific reel when navigating from Home screen
   useEffect(() => {
@@ -851,15 +890,8 @@ const ReelsFeed: React.FC = () => {
     setIsLoadingMore(false);
   }, [hasMore, isLoadingMore, nextCursor, loadReelsFromBackend]);
 
-  // Filter reels by hashtag
-  const filteredReels = useMemo(() => {
-    if (selectedHashtag) {
-      return reels.filter(reel =>
-        reel.hashtags?.includes(selectedHashtag)
-      );
-    }
-    return reels;
-  }, [selectedHashtag, reels]);
+  // When hashtag filter is active the API already returns matching reels
+  const filteredReels = reels;
 
   const activeReelId = filteredReels[currentIndex]?.id;
 
@@ -960,7 +992,7 @@ const ReelsFeed: React.FC = () => {
 
       try {
         const token = await getToken();
-        if (!token) return;
+        if (!token) throw new Error('No auth token');
         const result = targetLiked
           ? await ReelsService.likeReel(token, reelId)
           : await ReelsService.unlikeReel(token, reelId);
@@ -972,7 +1004,10 @@ const ReelsFeed: React.FC = () => {
         }
       } catch (error) {
         logger.error('Error syncing like, rolling back:', error);
-        applyLikeState(!targetLiked, targetLiked ? Math.max(0, nextLikes - 1) : nextLikes + 1);
+        if (targetLiked !== wasLiked) {
+          toggleReelLike(reelId);
+        }
+        applyLikeState(wasLiked, prevLikes);
       }
     }, 300));
   }, [toggleReelLike, haptic, getToken, reels]);
@@ -1430,7 +1465,7 @@ const ReelsFeed: React.FC = () => {
           initialNumToRender={2}
           maxToRenderPerBatch={3} // Increased from 2 to 3
           updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
-          removeClippedSubviews={true} // Now enabled on both iOS and Android
+          removeClippedSubviews={Platform.OS === 'android'}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}
@@ -2205,4 +2240,26 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ReelsFeed;
+function ReelsTabScreen() {
+  const { t } = useTranslation();
+  const retryKeyRef = useRef(0);
+
+  return (
+    <ReelsFeedErrorBoundary
+      labels={{
+        title: t.reels.feedErrorTitle,
+        repeatedTitle: t.reels.feedErrorRepeated,
+        repeatedHint: t.reels.feedErrorRepeatedHint,
+        retry: t.reels.feedErrorRetry,
+        hint: t.reels.feedErrorHint,
+      }}
+      onRetry={() => {
+        retryKeyRef.current += 1;
+      }}
+    >
+      <ReelsFeed key={retryKeyRef.current} />
+    </ReelsFeedErrorBoundary>
+  );
+}
+
+export default ReelsTabScreen;

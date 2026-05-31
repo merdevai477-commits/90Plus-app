@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { r2MediaStorage } from '../services/r2-media-storage.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { followCountsFromPrisma } from '../utils/follow-count.utils';
 import { ErrorCode, sendError } from '../constants/errors';
 
 export class ProfileController {
@@ -62,8 +63,7 @@ export class ProfileController {
         status: 'SUCCESS',
         data: {
           ...user,
-          followersCount: user._count.followers,
-          followingCount: user._count.following,
+          ...followCountsFromPrisma(user._count),
           videosCount: user._count.reels,
         },
       });
@@ -416,8 +416,7 @@ export class ProfileController {
         status: 'SUCCESS',
         data: {
           ...user,
-          followersCount: user._count.followers,
-          followingCount: user._count.following,
+          ...followCountsFromPrisma(user._count),
           videosCount: user._count.reels,
           isFollowing,
           isFollowingMe,

@@ -6,6 +6,7 @@ import { accountDeletionRateLimiter } from '../middleware/auth-rate-limit.middle
 import { validate } from '../middleware/validation.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { followCountsFromPrisma } from '../utils/follow-count.utils';
 import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
@@ -553,8 +554,7 @@ router.get('/:username', async (req: Request, res: Response): Promise<void> => {
                 user: {
                     ...user,
                     reelsCount: user._count.reels,
-                    followersCount: user._count.followers,
-                    followingCount: user._count.following,
+                    ...followCountsFromPrisma(user._count),
                 }
             }
         });

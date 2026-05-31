@@ -13,6 +13,7 @@ import { getOrSetWithLock } from '../lib/cache-mutex';
 import { ErrorCode, sendError } from '../constants/errors';
 import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 import { getBlockRelation } from '../services/block.service';
+import { followCountsFromPrisma } from '../utils/follow-count.utils';
 
 const router = Router();
 
@@ -748,8 +749,7 @@ router.get('/user/:username', optionalAuth, async (req: Request, res: Response):
                     ...user,
                     socialLinks: (user.socialLinks as any) || [],
                     country: user.country || null,
-                    followersCount: user._count.followers,
-                    followingCount: user._count.following,
+                    ...followCountsFromPrisma(user._count),
                     reelsCount: user._count.reels,
                     isFollowing,
                     isFollowingMe,
@@ -876,8 +876,7 @@ router.post('/follow/:username', requireAuth, async (req: Request, res: Response
             status: 'SUCCESS',
             message: 'Followed successfully',
             data: {
-                followersCount: counts?._count.followers || 0,
-                followingCount: counts?._count.following || 0,
+                ...followCountsFromPrisma(counts?._count ?? { followers: 0, following: 0 }),
             },
         });
     } catch (error: any) {
@@ -966,8 +965,7 @@ router.delete('/follow/:username', requireAuth, async (req: Request, res: Respon
             status: 'SUCCESS',
             message: 'Unfollowed successfully',
             data: {
-                followersCount: counts?._count.followers || 0,
-                followingCount: counts?._count.following || 0,
+                ...followCountsFromPrisma(counts?._count ?? { followers: 0, following: 0 }),
             },
         });
     } catch (error: any) {
@@ -1128,8 +1126,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         res.json({
             status: 'SUCCESS',
             data: {
-                followersCount: user._count.followers,
-                followingCount: user._count.following,
+                ...followCountsFromPrisma(user._count),
                 reelsCount: user._count.reels,
             },
         });
