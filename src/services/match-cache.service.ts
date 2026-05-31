@@ -179,30 +179,28 @@ class MatchCacheService {
     }
 
     /**
-     * Get matches from cache (Redis first, then memory fallback)
+     * Get matches from cache (memory first, then Redis).
      */
     async getFromMemoryCache<T>(key: string): Promise<T | null> {
-        const redisKey = `match:${key}`;
-        
-        // Try Redis first
-        const cached = await redisCacheService.get<CacheEntry<T>>(redisKey);
-        if (cached) {
-            return cached.data;
-        }
-
-        // Fallback to memory cache
         const entry = this.memoryCache.get(key);
-        if (!entry) {
-            return null;
-        }
-
-        // Check if expired
-        if (Date.now() - entry.timestamp > entry.ttl) {
+        if (entry) {
+            if (Date.now() - entry.timestamp <= entry.ttl) {
+                return entry.data;
+            }
             this.memoryCache.delete(key);
-            return null;
         }
 
-        return entry.data;
+        const redisKey = `match:${key}`;
+        try {
+            const cached = await redisCacheService.get<CacheEntry<T>>(redisKey);
+            if (cached) {
+                return cached.data;
+            }
+        } catch {
+            /* fall through */
+        }
+
+        return null;
     }
 
     /**

@@ -52,44 +52,49 @@ class ResponseCache {
     }
 
     /**
-     * Get cached response
+     * Get cached response — memory first (µs), then Redis.
      */
     async get(req: Request, sharedCache = false): Promise<CacheEntry | null> {
         const key = this.getCacheKey(req, sharedCache);
-        
-        // Try Redis first
-        const redisKey = `response:${key}`;
-        const cached = await redisCacheService.get<CacheEntry>(redisKey);
-        if (cached) {
-            return cached;
-        }
 
-        // Fallback to memory cache
-        const entry = this.memoryCache.get(key);
-        if (!entry) {
-            // If another request is already populating this key, wait briefly.
-            const pending = this.pending.get(key);
-            if (pending) {
-                try {
-                    const filled = await Promise.race([
-                        pending,
-                        new Promise<CacheEntry>((_, reject) => setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 2000)),
-                    ]);
-                    return filled;
-                } catch {
-                    return null;
-                }
-            }
-            return null;
+        const memoryEntry = this.memoryCache.get(key);
+        if (memoryEntry && Date.now() - memoryEntry.timestamp <= memoryEntry.ttl) {
+            return memoryEntry;
         }
-
-        // Check if expired
-        if (Date.now() - entry.timestamp > entry.ttl) {
+        if (memoryEntry) {
             this.memoryCache.delete(key);
-            return null;
         }
 
-        return entry;
+        const redisKey = `response:${key}`;
+        try {
+            const cached = await redisCacheService.get<CacheEntry>(redisKey);
+            if (cached) {
+                this.memoryCache.set(key, cached);
+                return cached;
+            }
+        } catch (err) {
+            logger.warn('responseCache Redis get failed; using memory only', {
+                path: req.path,
+                message: err instanceof Error ? err.message : String(err),
+            });
+        }
+
+        const pending = this.pending.get(key);
+        if (pending) {
+            try {
+                const filled = await Promise.race([
+                    pending,
+                    new Promise<CacheEntry>((_, reject) =>
+                        setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 2000),
+                    ),
+                ]);
+                return filled;
+            } catch {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**

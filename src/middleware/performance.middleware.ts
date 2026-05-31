@@ -34,8 +34,8 @@ export function performanceMiddleware() {
             const endMemory = process.memoryUsage().heapUsed;
             const memoryDelta = (endMemory - startMemory) / 1024 / 1024; // MB
 
-            // Log slow requests
-            if (duration > SLOW_REQUEST_THRESHOLD) {
+            // Log slow requests (skip fast 304 cache hits)
+            if (duration > SLOW_REQUEST_THRESHOLD && res.statusCode !== 304) {
                 const metrics: PerformanceMetrics = {
                     method: req.method,
                     path: req.path,

@@ -40,6 +40,9 @@ interface MemoryCacheEntry<T> {
 import { redisCacheService } from './redis-cache.service';
 
 class FootballDataCacheService {
+    /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
+    private matchesByDateLocal = new Map<string, { data: any[]; expiresAt: number }>();
+
     // In-memory caches (fallback)
     private standingsCache = new Map<string, MemoryCacheEntry<any>>();
     private lineupsCache = new Map<number, MemoryCacheEntry<any>>();
@@ -85,7 +88,7 @@ class FootballDataCacheService {
         // don't poison long-lived caches. The next request after this window
         // will re-hit the API.
         EMPTY: 2 * 60 * 1000, // 2 minutes
-        MATCHES_BY_DATE_TODAY: 8 * 1000,       // align with HTTP cache for live scores
+        MATCHES_BY_DATE_TODAY: 45 * 1000,
         MATCHES_BY_DATE_FUTURE: 5 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
         TODAY_API_REFRESH: 60 * 1000,          // re-fetch full day list at most once/min
@@ -120,8 +123,17 @@ class FootballDataCacheService {
                     ? this.TTL.MATCHES_BY_DATE_TODAY
                     : this.TTL.MATCHES_BY_DATE_FUTURE;
 
+            const localHit = this.matchesByDateLocal.get(dateString);
+            if (localHit && localHit.expiresAt > Date.now() && localHit.data.length > 0) {
+                return isToday ? this.mergeLiveFromRedis(localHit.data) : localHit.data;
+            }
+
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
+                this.matchesByDateLocal.set(dateString, {
+                    data: cached,
+                    expiresAt: Date.now() + responseTtl,
+                });
                 logger.debug(`📦 [${dateString}] ${cached.length} matches from shared cache`);
                 return isToday ? this.mergeLiveFromRedis(cached) : cached;
             }
@@ -131,7 +143,11 @@ class FootballDataCacheService {
                 const dbMatches = await matchCacheService.getMatchesFromDbByDateRange(startOfDay, endOfDay);
                 if (dbMatches.length > 0) {
                     const fromDb = dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
-                    await matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
+                    void matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
+                    this.matchesByDateLocal.set(dateString, {
+                        data: fromDb,
+                        expiresAt: Date.now() + responseTtl,
+                    });
                     logger.debug(`📦 [${dateString}] ${fromDb.length} matches from DB (calendar cache)`);
                     return fromDb;
                 }
@@ -142,7 +158,11 @@ class FootballDataCacheService {
                 const dbMatches = await matchCacheService.getMatchesFromDbByDateRange(startOfDay, endOfDay);
                 if (dbMatches.length > 0) {
                     const fromDb = dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
-                    await matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
+                    void matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
+                    this.matchesByDateLocal.set(dateString, {
+                        data: fromDb,
+                        expiresAt: Date.now() + responseTtl,
+                    });
                     const merged = await this.mergeLiveFromRedis(fromDb);
                     if (!(await this.isTodayApiFresh(dateString))) {
                         void this.refreshMatchesByDateFromApi(dateString, cacheKey, responseTtl);
@@ -204,7 +224,11 @@ class FootballDataCacheService {
                 });
             }
 
-            await matchCacheService.setInMemoryCache(cacheKey, apiMatches, responseTtl);
+            void matchCacheService.setInMemoryCache(cacheKey, apiMatches, responseTtl);
+            this.matchesByDateLocal.set(dateString, {
+                data: apiMatches,
+                expiresAt: Date.now() + responseTtl,
+            });
             if (mergeLive) {
                 await this.markTodayApiFetched(dateString);
             }
@@ -235,6 +259,10 @@ class FootballDataCacheService {
                         logger.warn(`[${dateString}] Background refresh upsert failed:`, err);
                     });
                     await matchCacheService.setInMemoryCache(cacheKey, apiMatches, responseTtl);
+                    this.matchesByDateLocal.set(dateString, {
+                        data: apiMatches,
+                        expiresAt: Date.now() + responseTtl,
+                    });
                 }
                 await this.markTodayApiFetched(dateString);
             } catch (err) {
