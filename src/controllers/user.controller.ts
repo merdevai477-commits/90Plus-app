@@ -75,11 +75,11 @@ export class UserController {
                 prefsUpdate.predictionResults = updatedSettings.predictionReminders;
             }
 
-            // Sync main notifications switch with pushNotificationsConsent for backend blocking
-            const userUpdateData: any = { settings: updatedSettings };
-            if (typeof updatedSettings.notificationsEnabled === 'boolean') {
-                userUpdateData.pushNotificationsConsent = updatedSettings.notificationsEnabled;
-            }
+            // Notification preferences sync (match toggles) — push consent is managed
+            // only via POST /matches/push-token and POST /gdpr/consent, not here.
+            const userUpdateData: { settings: Record<string, unknown> } = {
+                settings: updatedSettings,
+            };
 
             // Detect language change so we can invalidate the in-process
             // language cache used by push notifications. Without this, push

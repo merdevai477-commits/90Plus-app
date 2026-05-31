@@ -62,6 +62,8 @@ class FootballDataCacheService {
     private pendingLineupRequests = new Map<number, Promise<any[]>>();
     private pendingStatisticsRequests = new Map<number, Promise<any[]>>();
     private pendingEventsRequests = new Map<number, Promise<any[]>>();
+    private pendingMatchesByDate = new Map<string, Promise<any[]>>();
+    private backgroundRefreshDates = new Set<string>();
 
     // TTL values
     private readonly TTL = {
@@ -83,6 +85,10 @@ class FootballDataCacheService {
         // don't poison long-lived caches. The next request after this window
         // will re-hit the API.
         EMPTY: 2 * 60 * 1000, // 2 minutes
+        MATCHES_BY_DATE_TODAY: 8 * 1000,       // align with HTTP cache for live scores
+        MATCHES_BY_DATE_FUTURE: 5 * 60 * 1000,
+        MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
+        TODAY_API_REFRESH: 60 * 1000,          // re-fetch full day list at most once/min
     };
 
     // ============================================
@@ -101,49 +107,142 @@ class FootballDataCacheService {
                 throw new Error(`Invalid date: ${dateString}`);
             }
 
-            // UTC day bounds — aligns with API-Football date=YYYY-MM-DD queries
             const startOfDay = new Date(`${dateString}T00:00:00.000Z`);
             const endOfDay = new Date(`${dateString}T23:59:59.999Z`);
 
             const todayKey = new Date().toISOString().split('T')[0];
             const isPastDate = dateString < todayKey;
             const isToday = dateString === todayKey;
+            const cacheKey = `by_date_${dateString}`;
+            const responseTtl = isPastDate
+                ? this.TTL.MATCHES_BY_DATE_PAST
+                : isToday
+                    ? this.TTL.MATCHES_BY_DATE_TODAY
+                    : this.TTL.MATCHES_BY_DATE_FUTURE;
 
-            // Calendar past days: serve from DB when we already have fixtures (any status)
+            const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
+            if (cached && cached.length > 0) {
+                logger.debug(`📦 [${dateString}] ${cached.length} matches from shared cache`);
+                return isToday ? this.mergeLiveFromRedis(cached) : cached;
+            }
+
+            // Past days: DB only when populated (no API)
             if (isPastDate) {
-                try {
-                    const dbMatches = await matchCacheService.getMatchesFromDbByDateRange(startOfDay, endOfDay);
-                    if (dbMatches.length > 0) {
-                        logger.debug(`📦 [${dateString}] ${dbMatches.length} matches from DB (calendar cache)`);
-                        return dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
-                    }
-                } catch (dbError) {
-                    logger.warn(`[${dateString}] DB read failed, falling back to API:`, dbError);
+                const dbMatches = await matchCacheService.getMatchesFromDbByDateRange(startOfDay, endOfDay);
+                if (dbMatches.length > 0) {
+                    const fromDb = dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
+                    await matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
+                    logger.debug(`📦 [${dateString}] ${fromDb.length} matches from DB (calendar cache)`);
+                    return fromDb;
                 }
             }
 
-            logger.debug(`📡 [${dateString}] Fetching matches from API...`);
-            const apiMatches = await footballService.getFixtures({ date: dateString });
-
-            if (apiMatches.length > 0) {
-                try {
-                    await matchCacheService.upsertFixtures(apiMatches);
-                    logger.debug(`💾 [${dateString}] Upserted ${apiMatches.length} fixtures to DB`);
-                } catch (archiveError) {
-                    logger.warn(`[${dateString}] Error upserting matches to DB:`, archiveError);
-                }
-            }
-
-            // Today: merge Redis live snapshot over scheduled API rows for fresher scores
+            // Today: serve DB + Redis live immediately; refresh API in background when stale
             if (isToday) {
-                return this.mergeLiveFromRedis(apiMatches);
+                const dbMatches = await matchCacheService.getMatchesFromDbByDateRange(startOfDay, endOfDay);
+                if (dbMatches.length > 0) {
+                    const fromDb = dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
+                    await matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
+                    const merged = await this.mergeLiveFromRedis(fromDb);
+                    if (!(await this.isTodayApiFresh(dateString))) {
+                        void this.refreshMatchesByDateFromApi(dateString, cacheKey, responseTtl);
+                    }
+                    logger.debug(`📦 [${dateString}] ${merged.length} matches from DB + live merge (fast path)`);
+                    return merged;
+                }
             }
 
-            return apiMatches;
+            return this.fetchMatchesByDateFromApi(dateString, cacheKey, responseTtl, isToday);
         } catch (error) {
             logger.error(`[${dateString}] Error in getMatchesByDate:`, error);
             throw error;
         }
+    }
+
+    private async isTodayApiFresh(dateString: string): Promise<boolean> {
+        const redis = getRedisClient();
+        if (!redis) return false;
+        try {
+            const lastFetch = await redis.get(`football:date_api:${dateString}`);
+            if (!lastFetch) return false;
+            return Date.now() - parseInt(lastFetch, 10) < this.TTL.TODAY_API_REFRESH;
+        } catch {
+            return false;
+        }
+    }
+
+    private async markTodayApiFetched(dateString: string): Promise<void> {
+        const redis = getRedisClient();
+        if (!redis) return;
+        try {
+            await redis.setex(`football:date_api:${dateString}`, 120, String(Date.now()));
+        } catch {
+            /* non-fatal */
+        }
+    }
+
+    private async fetchMatchesByDateFromApi(
+        dateString: string,
+        cacheKey: string,
+        responseTtl: number,
+        mergeLive: boolean,
+    ): Promise<any[]> {
+        const pending = this.pendingMatchesByDate.get(dateString);
+        if (pending) {
+            logger.debug(`⏳ [${dateString}] waiting for in-flight API fetch`);
+            const shared = await pending;
+            return mergeLive ? this.mergeLiveFromRedis(shared) : shared;
+        }
+
+        const fetchPromise = (async () => {
+            logger.debug(`📡 [${dateString}] Fetching matches from API...`);
+            const apiMatches = await footballService.getFixtures({ date: dateString });
+
+            if (apiMatches.length > 0) {
+                matchCacheService.upsertFixtures(apiMatches).catch((archiveError) => {
+                    logger.warn(`[${dateString}] Background DB upsert failed:`, archiveError);
+                });
+            }
+
+            await matchCacheService.setInMemoryCache(cacheKey, apiMatches, responseTtl);
+            if (mergeLive) {
+                await this.markTodayApiFetched(dateString);
+            }
+            return apiMatches;
+        })().finally(() => {
+            this.pendingMatchesByDate.delete(dateString);
+        });
+
+        this.pendingMatchesByDate.set(dateString, fetchPromise);
+        const apiMatches = await fetchPromise;
+        return mergeLive ? this.mergeLiveFromRedis(apiMatches) : apiMatches;
+    }
+
+    private refreshMatchesByDateFromApi(
+        dateString: string,
+        cacheKey: string,
+        responseTtl: number,
+    ): void {
+        if (this.backgroundRefreshDates.has(dateString)) return;
+        this.backgroundRefreshDates.add(dateString);
+
+        (async () => {
+            try {
+                logger.debug(`🔄 [${dateString}] Background API refresh for today's fixtures`);
+                const apiMatches = await footballService.getFixtures({ date: dateString });
+                if (apiMatches.length > 0) {
+                    matchCacheService.upsertFixtures(apiMatches).catch((err) => {
+                        logger.warn(`[${dateString}] Background refresh upsert failed:`, err);
+                    });
+                    await matchCacheService.setInMemoryCache(cacheKey, apiMatches, responseTtl);
+                }
+                await this.markTodayApiFetched(dateString);
+            } catch (err) {
+                logger.warn(`[${dateString}] Background API refresh failed:`, err);
+            } finally {
+                this.backgroundRefreshDates.delete(dateString);
+            }
+        })();
     }
 
     /** Overlay live scores from Redis (written by live-fixture-sync) onto today's fixture list. */
@@ -167,7 +266,9 @@ class FootballDataCacheService {
                 const id = live?.fixture?.id;
                 if (id != null) byId.set(id, live);
             }
-            return Array.from(byId.values());
+            return Array.from(byId.values()).sort(
+                (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
+            );
         } catch (err) {
             logger.warn('Redis live merge failed, using API payload:', err);
             return apiMatches;

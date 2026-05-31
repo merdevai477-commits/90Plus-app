@@ -276,24 +276,31 @@ class MatchCacheService {
             options?.fetchDetails === true && process.env.FETCH_MATCH_DETAILS === 'true';
 
         let upserted = 0;
-        for (const fixture of fixtures) {
+        const CHUNK_SIZE = 25;
+        for (let i = 0; i < fixtures.length; i += CHUNK_SIZE) {
+            const chunk = fixtures.slice(i, i + CHUNK_SIZE);
             try {
-                const { create, update } = this.buildFixtureDbPayload(fixture);
-                await prisma.cachedFixture.upsert({
-                    where: { fixtureId: fixture.fixture.id },
-                    create: create as any,
-                    update: update as any,
-                });
-                this.dbFixtureIds.add(fixture.fixture.id);
-                upserted++;
-
-                if (fetchDetails && this.isFinishedStatus(fixture.fixture.status.short)) {
-                    this.fetchAndStoreMatchDetails(fixture.fixture.id).catch((error) => {
-                        logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
-                    });
+                await prisma.$transaction(
+                    chunk.map((fixture) => {
+                        const { create, update } = this.buildFixtureDbPayload(fixture);
+                        return prisma.cachedFixture.upsert({
+                            where: { fixtureId: fixture.fixture.id },
+                            create: create as any,
+                            update: update as any,
+                        });
+                    }),
+                );
+                for (const fixture of chunk) {
+                    this.dbFixtureIds.add(fixture.fixture.id);
+                    upserted++;
+                    if (fetchDetails && this.isFinishedStatus(fixture.fixture.status.short)) {
+                        this.fetchAndStoreMatchDetails(fixture.fixture.id).catch((error) => {
+                            logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
+                        });
+                    }
                 }
             } catch (error) {
-                logger.error(`Failed to upsert fixture ${fixture.fixture.id}:`, error);
+                logger.error(`Failed to upsert fixture chunk (${chunk.length} rows):`, error);
             }
         }
 
@@ -596,7 +603,9 @@ class MatchCacheService {
             try {
                 const apiMatches = await fetchFromApi();
 
-                await this.upsertFixtures(apiMatches);
+                this.upsertFixtures(apiMatches).catch((err) => {
+                    logger.warn('Background fixture upsert failed (non-fatal):', err);
+                });
 
                 const hasLive = apiMatches.some((m) => this.isLiveStatus(m.fixture.status.short));
                 const ttl = hasLive ? CACHE_TTL.LIVE : CACHE_TTL.SCHEDULED;

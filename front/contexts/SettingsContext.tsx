@@ -241,7 +241,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         const granted = status === 'granted';
         setSettings((prev) => ({
           ...prev,
-          notificationsEnabled: granted,
+          notificationsEnabled: granted ? true : prev.notificationsEnabled,
         }));
         if (!granted) {
           logger.debug('Notification permissions not yet granted');
@@ -274,7 +274,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const toggleNotifications = async (enabled: boolean) => {
     const newSettings = { ...settings, notificationsEnabled: enabled };
 
-    // Skip notification operations in Expo Go
     if (!isExpoGo && Notifications) {
       try {
         if (enabled) {
@@ -300,6 +299,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       } catch (error) {
         logger.error('Notification operation failed:', error);
+        throw error;
       }
     }
 

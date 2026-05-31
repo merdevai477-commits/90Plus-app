@@ -16,6 +16,7 @@ import {
     capturePushTokenAfterPermission,
     updatePushNotificationsConsent,
 } from '../../services/pushTokenRegistration.service';
+import { markTrayNotificationPresented } from '../../services/trayNotification.service';
 
 const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
 
@@ -339,6 +340,10 @@ export function usePushNotifications(): PushNotificationState {
 
         notificationListener.current = Notifications.addNotificationReceivedListener((incoming) => {
             const data = incoming.request.content.data as Record<string, any>;
+
+            if (data?.notificationId) {
+                markTrayNotificationPresented(String(data.notificationId));
+            }
 
             if (data?.silent === true || data?.silent === 'true') {
                 logger.debug('🔕 Silent notification received, invalidating cache:', data.type);

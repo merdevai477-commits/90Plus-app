@@ -63,6 +63,10 @@ import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
 import { AppSplashScreen } from "../components/splash/AppSplashScreen";
 import { PushNotificationSetup } from "../src/hooks/usePushNotifications";
+import {
+  PushTokenSyncBootstrap,
+  GlobalNotificationTrayBridge,
+} from "../components/common/PushTokenSyncBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
 
@@ -674,6 +678,8 @@ function RootLayout() {
                                   backgroundColor="#000"
                                 />
                                 <ClerkGate>
+                                  <PushTokenSyncBootstrap />
+                                  <GlobalNotificationTrayBridge />
                                   <WebSocketInitializer>
                                     <PreloadInitializer>
                                       <RootLayoutNav />
