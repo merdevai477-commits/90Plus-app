@@ -57,7 +57,10 @@ export const ProfileVideoGrid: React.FC<Props> = ({
 /**
  * ProfileSavedGrid — lazy-loads and renders the user's saved reels.
  */
-export const ProfileSavedGrid: React.FC<{ getToken: () => Promise<string | null> }> = ({ getToken }) => {
+export const ProfileSavedGrid: React.FC<{
+  getToken: () => Promise<string | null>;
+  onCountChange?: (count: number) => void;
+}> = ({ getToken, onCountChange }) => {
   const [savedVideos, setSavedVideos] = useState<any[]>([]);
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -70,14 +73,17 @@ export const ProfileSavedGrid: React.FC<{ getToken: () => Promise<string | null>
       const token = await getToken();
       if (!token) return;
       const result = await ReelsService.getSavedReels(token);
-      if (result) setSavedVideos(result.savedReels);
+      if (result) {
+        setSavedVideos(result.savedReels);
+        onCountChange?.(result.totalCount ?? result.savedReels.length);
+      }
     } catch (error) {
       logger.error('Error loading saved videos:', error);
       setLoadError('فشل تحميل المحفوظات');
     } finally {
       setIsLoadingSaved(false);
     }
-  }, [getToken]);
+  }, [getToken, onCountChange]);
 
   React.useEffect(() => {
     if (!hasLoadedRef.current) {

@@ -29,7 +29,7 @@ const ensureString = (param: string | string[] | undefined): string => {
 };
 
 // Constants
-const REEL_UPLOAD_COOLDOWN_DAYS = 1; // Reduced from 3 days to 1 day
+const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 const REELS_PER_PAGE = 5;
 const MAX_COMMENTS_PREVIEW = 3;
 
@@ -1982,7 +1982,10 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
         }
 
         const savedReels = await prisma.savedReel.findMany({
-            where: { userId: user.id },
+            where: {
+                userId: user.id,
+                reel: { isDeleted: false, status: 'READY' },
+            },
             take: take + 1,
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
             orderBy: { createdAt: 'desc' },
@@ -2017,6 +2020,13 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
         const hasMore = savedReels.length > take;
         const data = hasMore ? savedReels.slice(0, -1) : savedReels;
 
+        const totalCount = await prisma.savedReel.count({
+            where: {
+                userId: user.id,
+                reel: { isDeleted: false, status: 'READY' },
+            },
+        });
+
         res.json({
             status: 'SUCCESS',
             data: {
@@ -2026,6 +2036,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
                     likesCount: sr.reel._count.likes,
                     commentsCount: sr.reel._count.comments,
                 })),
+                totalCount,
                 nextCursor: hasMore ? data[data.length - 1]?.id : null,
                 hasMore,
             }

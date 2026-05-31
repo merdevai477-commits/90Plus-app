@@ -1113,6 +1113,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
                         followers: true,
                         following: true,
                         reels: true,
+                        savedReels: true,
                     },
                 },
             },
@@ -1128,6 +1129,7 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
             data: {
                 ...followCountsFromPrisma(user._count),
                 reelsCount: user._count.reels,
+                savedReelsCount: user._count.savedReels,
             },
         });
     } catch (error: any) {

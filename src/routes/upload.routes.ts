@@ -261,7 +261,7 @@ async function readAndCleanupTempFile(filePath: string): Promise<Buffer> {
 
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;
 const COVER_CHANGE_COOLDOWN_DAYS = 15;
-const REEL_UPLOAD_COOLDOWN_DAYS = 1; // Reduced from 3 days to 1 day to encourage content
+const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 const REEL_UPLOAD_LOCK_MS = 25 * 60 * 1000;
 
 // ─── Reel upload lock helper ──────────────────────────────────────────────────

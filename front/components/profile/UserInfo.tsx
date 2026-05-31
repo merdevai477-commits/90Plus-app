@@ -16,6 +16,7 @@ import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
 import { logger } from '../../utils/logger';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 
 interface SocialLinks {
   instagram?: string;
@@ -28,6 +29,7 @@ interface UserInfoProps {
   username: string;
   bio?: string;
   location: string;
+  countryFlag?: string;
   team: string;
   isVerified?: boolean;
   isDeveloper?: boolean;
@@ -44,6 +46,7 @@ const UserInfo = memo(function UserInfo({
   username,
   bio,
   location,
+  countryFlag,
   team,
   isVerified = false,
   isDeveloper = false,
@@ -62,6 +65,11 @@ const UserInfo = memo(function UserInfo({
 
   const hasSocials =
     socials && (socials.instagram || socials.twitter || socials.facebook);
+
+  const displayCountry = resolveCountryDisplayName(location, countryFlag);
+  const hasLocation = displayCountry.length > 0;
+  const displayFlag = isMeaningfulCountryFlag(countryFlag) ? countryFlag!.trim() : null;
+  const hasTeam = !!team;
 
   return (
     <View style={styles.container}>
@@ -103,7 +111,7 @@ const UserInfo = memo(function UserInfo({
             </View>
           )}
 
-          {/* Edit pencil */}
+          {onEditPress && (
           <TouchableOpacity
             onPress={onEditPress}
             style={styles.editBtn}
@@ -121,6 +129,7 @@ const UserInfo = memo(function UserInfo({
               );
             })()}
           </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
 
@@ -134,8 +143,6 @@ const UserInfo = memo(function UserInfo({
           const pillGlassProps = isLiquidGlassSupported
             ? { effect: 'clear' as const, interactive: true }
             : { intensity: 22, tint: 'dark' as const };
-          const hasLocation = location && location.trim() !== '';
-          const hasTeam = !!team;
           return (
             <>
               <TouchableOpacity onPress={onEditPress} activeOpacity={0.75} style={styles.pillWrap}>
@@ -150,16 +157,20 @@ const UserInfo = memo(function UserInfo({
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 />
-                <Ionicons
-                  name="location-outline"
-                  size={14}
-                  color={hasLocation ? ProfileTheme.colors.neonGreen : 'rgba(255,255,255,0.4)'}
-                />
+                {displayFlag ? (
+                  <Text style={styles.flagEmoji}>{displayFlag}</Text>
+                ) : (
+                  <Ionicons
+                    name="location-outline"
+                    size={14}
+                    color={hasLocation ? ProfileTheme.colors.neonGreen : 'rgba(255,255,255,0.4)'}
+                  />
+                )}
                 <Text
                   style={[styles.pillText, !hasLocation && styles.pillTextEmpty]}
                   numberOfLines={1}
                 >
-                  {hasLocation ? location : 'اختر بلدك'}
+                  {hasLocation ? displayCountry : 'اختر بلدك'}
                 </Text>
               </TouchableOpacity>
 
@@ -363,6 +374,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   clubLogo: { width: 16, height: 16 },
+  flagEmoji: { fontSize: 14, lineHeight: 16 },
 
   /* Bio */
   bioTouchable: {

@@ -1169,7 +1169,7 @@ export const en = {
     shareQRCode: 'Share QR Code',
     shareProfileLink: 'Share Profile Link',
     uploadVideoAction: 'Upload New Video',
-    cooldownActive: 'You can upload a video every 24 hours',
+    cooldownActive: 'You can upload a video every 3 days',
     cooldownRemaining: '{time} remaining to upload new video',
 
     // Block & Report

@@ -1147,7 +1147,7 @@ export const ar = {
     shareQRCode: 'مشاركة رمز QR',
     shareProfileLink: 'مشاركة رابط البروفايل',
     uploadVideoAction: 'رفع فيديو جديد',
-    cooldownActive: 'يمكنك رفع فيديو كل 24 ساعة',
+    cooldownActive: 'يمكنك رفع فيديو كل 3 أيام',
     cooldownRemaining: 'متبقي {time} لرفع فيديو جديد',
 
     // Block & Report

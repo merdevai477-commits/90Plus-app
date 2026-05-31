@@ -699,6 +699,7 @@ export default function UserProfileScreen() {
           username={user.username}
           bio={showFullProfile ? user.bio || undefined : undefined}
           location={user.country || user.location || ''}
+          countryFlag={user.countryFlag}
           team={showFullProfile ? user.favoriteTeam || '' : ''}
           isVerified={user.isVerified}
           isDeveloper={user.isDeveloper}

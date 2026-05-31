@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 
 // Constants for rate limiting
-const REEL_UPLOAD_COOLDOWN_DAYS = 1; // Reduced from 3 days to 1 day
+const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 // Requirements 13.5, 13.6: Allow up to 2 deletions, block the third
 export const MAX_REEL_DELETES = 2;
 

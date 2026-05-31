@@ -791,6 +791,7 @@ export interface FollowStats {
     followersCount: number;
     followingCount: number;
     reelsCount: number;
+    savedReelsCount?: number;
 }
 
 export interface CardProfile {
@@ -1782,7 +1783,7 @@ export class ReelsService {
     /**
      * Get saved reels
      */
-    static async getSavedReels(token: string, cursor?: string): Promise<{ savedReels: ReelFeedItem[]; hasMore: boolean; nextCursor: string | null } | null> {
+    static async getSavedReels(token: string, cursor?: string): Promise<{ savedReels: ReelFeedItem[]; hasMore: boolean; nextCursor: string | null; totalCount?: number } | null> {
         try {
             const url = cursor
                 ? `${API_URL}/reels/saved?cursor=${cursor}`

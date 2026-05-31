@@ -27,7 +27,7 @@ router.patch('/me', requireAuth, writeLimiter, moderateBio, ProfileController.up
 const AVATAR_CHANGE_COOLDOWN_DAYS = 7;   // Avatar: once every 7 days (Requirement 10)
 const COVER_CHANGE_COOLDOWN_DAYS = 15;   // Cover image: once every 15 days
 const USERNAME_CHANGE_COOLDOWN_DAYS = 15; // Username: once every 15 days
-const REEL_UPLOAD_COOLDOWN_DAYS = 1;      // Reel upload: once per day
+const REEL_UPLOAD_COOLDOWN_DAYS = 3;
 
 /**
  * PUT /api/profile/avatar

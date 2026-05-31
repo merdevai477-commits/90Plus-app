@@ -111,7 +111,7 @@ interface Country {
 }
 
 // Performance: Memoize expensive calculations outside component
-const DEFAULT_FOLLOW_STATS = { followersCount: 0, followingCount: 0, reelsCount: 0 };
+const DEFAULT_FOLLOW_STATS = { followersCount: 0, followingCount: 0, reelsCount: 0, savedReelsCount: 0 };
 // Helper function to get step icons
 const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
   switch (stepId) {
@@ -1595,6 +1595,7 @@ export default function ProfileScreen() {
           username={userData?.username || 'user'}
           bio={userData?.bio}
           location={displayLocation}
+          countryFlag={displayCountryFlag}
           team={userData?.favoriteTeam || ''}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
@@ -1710,7 +1711,7 @@ export default function ProfileScreen() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           videoCount={myVideos.length}
-          savedCount={0}
+          savedCount={followStats.savedReelsCount ?? 0}
           isOwnProfile={true}
         />
 
@@ -1751,7 +1752,12 @@ export default function ProfileScreen() {
         )}
 
         {activeTab === 'saved' && (
-          <ProfileSavedGrid getToken={getToken} />
+          <ProfileSavedGrid
+            getToken={getToken}
+            onCountChange={(count) => {
+              updateCachedFollowStats({ ...followStats, savedReelsCount: count });
+            }}
+          />
         )}
 
         {activeTab === 'analytics' && (
