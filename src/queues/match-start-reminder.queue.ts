@@ -10,7 +10,7 @@
 import Bull, { Queue, Job } from 'bull';
 import { bullCreateClient } from '../lib/bull-redis';
 import { logger } from '../utils/logger';
-import NotificationService from '../services/notification.service';
+import { NotificationService } from '../services/notification.service';
 import prisma from '../lib/prisma';
 
 export interface MatchStartReminderJob {

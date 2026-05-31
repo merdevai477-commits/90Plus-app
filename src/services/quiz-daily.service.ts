@@ -694,6 +694,7 @@ export async function skipQuizQuestion(
 export async function useQuizHint(
   clerkUserId: string,
   questionId: string,
+  timezone: string,
   languageInput?: string,
 ) {
   const language = normalizeLang(languageInput);

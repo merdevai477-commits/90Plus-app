@@ -150,7 +150,12 @@ router.post('/hint', requireAuth, async (req: Request, res: Response): Promise<v
       return;
     }
 
-    const data = await useQuizHint(clerkUserId, String(questionId), language);
+    const data = await useQuizHint(
+      clerkUserId,
+      String(questionId),
+      getTimezone(req),
+      language,
+    );
     res.json({ status: 'SUCCESS', data });
   } catch (err: any) {
     if (err.message === 'INSUFFICIENT_COINS') {
