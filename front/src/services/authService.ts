@@ -130,6 +130,13 @@ export interface AuthResponse {
     data?: {
         user: UserProfile;
     };
+    xpEvents?: Array<{
+        action: string;
+        amount: number;
+        leveledUp: boolean;
+        newLevel: number;
+        newTitle?: string;
+    }>;
     message?: string;
 }
 

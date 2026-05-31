@@ -673,7 +673,6 @@ function RootLayout() {
                                   barStyle="light-content"
                                   backgroundColor="#000"
                                 />
-                                <LevelUpModal />
                                 <ClerkGate>
                                   <WebSocketInitializer>
                                     <PreloadInitializer>
@@ -681,6 +680,7 @@ function RootLayout() {
                                     </PreloadInitializer>
                                   </WebSocketInitializer>
                                 </ClerkGate>
+                                <LevelUpModal />
                               </View>
                               </AppKeyboardProvider>
                             </SafeAreaProvider>

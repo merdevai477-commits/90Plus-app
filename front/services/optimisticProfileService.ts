@@ -8,6 +8,7 @@ import { globalState } from '../globalState';
 import { cacheService, CACHE_KEYS } from './cacheService';
 import * as Haptics from 'expo-haptics';
 import { getApiUrl } from '../config/api.config';
+import { processXpEventsFromApi } from '../utils/xpEventsBridge';
 
 const API_URL = getApiUrl();
 
@@ -88,6 +89,8 @@ class OptimisticProfileService {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
 
+        processXpEventsFromApi(result.xpEvents);
+
         return { success: true };
       } else {
         // Failure: Rollback optimistic changes
@@ -157,6 +160,13 @@ class OptimisticProfileService {
     canRetry?: boolean;
     nextAllowedChange?: Date;
     data?: any;
+    xpEvents?: Array<{
+      action: string;
+      amount: number;
+      leveledUp: boolean;
+      newLevel: number;
+      newTitle?: string;
+    }>;
   }> {
     try {
       // Check username change restrictions first
@@ -177,7 +187,8 @@ class OptimisticProfileService {
       if (response.status === 'SUCCESS') {
         return {
           success: true,
-          data: response.data
+          data: response.data,
+          xpEvents: response.xpEvents,
         };
       } else {
         // Handle specific error messages

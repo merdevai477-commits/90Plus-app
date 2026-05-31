@@ -1925,7 +1925,8 @@ export const ar = {
     levelUpModal: {
       headline: 'ترقية!',
       youAreNow: 'أنت الآن المستوى {{level}}',
-      claim: 'رائع!',
+      claim: 'فهمت!',
+      tapHint: 'اضغط للمتابعة',
       dismiss: 'إغلاق',
     },
     toasts: {

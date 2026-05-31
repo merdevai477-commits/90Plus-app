@@ -3,6 +3,9 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
 import { queueLevelUpCelebration } from '../utils/levelUpCelebration.storage';
+import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUpCelebration';
+import { syncNextPendingCelebration } from '../utils/levelUpCelebration.sync';
+import { setXpEventsHandler } from '../utils/xpEventsBridge';
 
 export interface XpEvent {
   action: string;
@@ -70,6 +73,10 @@ export function drainLevelUpQueue(): LevelUpEvent | undefined {
   return levelUpQueue.shift();
 }
 
+export function enqueueLevelUpEvent(event: LevelUpEvent): void {
+  levelUpQueue.push(event);
+}
+
 // XP toast queue
 interface XpToastEvent {
   amount: number;
@@ -122,7 +129,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
   const [progressPct, setProgressPct] = useState(0);
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, getToken, userId } = useAuth();
   const { user } = useUser();
 
   const getTokenRef = useRef(getToken);
@@ -166,8 +173,8 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         if (previous != null && newLevel > previous) {
           if (suppressNextAutoLevelUpRef.current) {
             suppressNextAutoLevelUpRef.current = false;
-          } else if (user?.id) {
-            void queueLevelUpCelebration(user.id, {
+          } else if (userId) {
+            await queueLevelUpCelebration(userId, {
               previousLevel: previous,
               newLevel,
               newTitle: newTitleVal || levelTitle(newLevel),
@@ -175,6 +182,11 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
           }
         }
         lastSeenLevelRef.current = newLevel;
+
+        if (userId) {
+          await syncNextPendingCelebration(userId, newLevel);
+          await presentPendingLevelUpCelebration(userId);
+        }
 
         // Compute level-relative numbers locally if the backend hasn't
         // started shipping them yet (older deploy / cached response). Once
@@ -218,7 +230,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [isSignedIn, user?.id]);
+  }, [isSignedIn, userId]);
 
   // Fetch on mount and user change
   useEffect(() => {
@@ -300,19 +312,25 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       emitXpToast({ amount: event.amount });
 
       if (event.leveledUp) {
-        if (user?.id) {
-          await queueLevelUpCelebration(user.id, {
+        if (userId) {
+          await queueLevelUpCelebration(userId, {
             previousLevel: event.newLevel - 1,
             newLevel: event.newLevel,
             newTitle: event.newTitle || levelTitle(event.newLevel),
           });
+          await presentPendingLevelUpCelebration(userId);
         }
         suppressNextAutoLevelUpRef.current = true;
       }
     }
 
     fetchXpData();
-  }, [fetchXpData, user?.id]);
+  }, [fetchXpData, userId]);
+
+  useEffect(() => {
+    setXpEventsHandler(handleXpEvents);
+    return () => setXpEventsHandler(null);
+  }, [handleXpEvents]);
 
   return (
     <XpContext.Provider

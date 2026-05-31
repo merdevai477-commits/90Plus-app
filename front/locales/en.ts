@@ -1983,7 +1983,8 @@ export const en = {
     levelUpModal: {
       headline: 'LEVEL UP',
       youAreNow: "You're now Level {{level}}",
-      claim: 'Awesome!',
+      claim: 'Got it!',
+      tapHint: 'Tap to continue',
       dismiss: 'Dismiss',
     },
     toasts: {

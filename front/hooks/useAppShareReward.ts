@@ -12,10 +12,9 @@ import {
   type AppShareStatus,
 } from '../services/appShare.service';
 import { useTranslation } from '../src/i18n';
-import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUpCelebration';
 
 export function useAppShareReward() {
-  const { getToken, userId } = useAuth();
+  const { getToken } = useAuth();
   const { handleXpEvents, refresh } = useXp();
   const { t } = useTranslation();
   const [shareStatus, setShareStatus] = useState<AppShareStatus | null>(null);
@@ -57,9 +56,6 @@ export function useAppShareReward() {
 
         if (claim.awarded > 0 && claim.xpEvents?.length) {
           await handleXpEvents(claim.xpEvents);
-          if (claim.xpEvents.some((e) => e.leveledUp) && userId) {
-            await presentPendingLevelUpCelebration(userId);
-          }
           toastManager.showSuccess(
             t.rank.shareRewardEarned.replace('{amount}', String(claim.awarded)),
             t.rank.shareRewardEarnedDetail,
@@ -81,7 +77,7 @@ export function useAppShareReward() {
         // User cancelled share sheet
       }
     },
-    [getToken, handleXpEvents, loadShareStatus, refresh, t, userId],
+    [getToken, handleXpEvents, loadShareStatus, refresh, t],
   );
 
   const shareRewardHint = useCallback((): string | undefined => {

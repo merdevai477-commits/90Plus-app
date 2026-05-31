@@ -311,7 +311,7 @@ export default function ProfileScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
-  const { streak: loginStreak } = useXp();
+  const { streak: loginStreak, refresh: refreshXp } = useXp();
   
   // Optimistic Profile Updates
   const { 
@@ -1192,6 +1192,7 @@ export default function ProfileScreen() {
         globalState.setLocalAvatar(uploadResult.url);
         await updateCachedUserData({ avatar: uploadResult.url });
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        await refreshXp();
         toastManager.showUploadSuccess('image');
       } else {
         setLocalImage(originalAvatar || null);
