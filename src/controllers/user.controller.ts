@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { AuditService, AuditAction } from '../services/audit.service';
@@ -77,9 +78,6 @@ export class UserController {
 
             // Notification preferences sync (match toggles) — push consent is managed
             // only via POST /matches/push-token and POST /gdpr/consent, not here.
-            const userUpdateData: { settings: Record<string, unknown> } = {
-                settings: updatedSettings,
-            };
 
             // Detect language change so we can invalidate the in-process
             // language cache used by push notifications. Without this, push
@@ -94,7 +92,9 @@ export class UserController {
 
             await prisma.user.update({
                 where: { clerkUserId },
-                data: userUpdateData,
+                data: {
+                    settings: updatedSettings as Prisma.InputJsonValue,
+                },
             });
 
             if (Object.keys(prefsUpdate).length > 0) {
