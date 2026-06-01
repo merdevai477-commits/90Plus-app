@@ -328,7 +328,14 @@ const MatchRow = memo(function MatchRow({
             ) : fixture.live ? <Text style={styles.liveBadge}>{t('matches.status.live')}</Text> : <Text style={styles.ftBadge}>{t('matches.status.finished')}</Text>}
 
             {fixture.status === 'UPCOMING' ? (
-              <Text style={styles.timeTxt}>{fixture.time}</Text>
+              <Text
+                style={styles.timeTxt}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
+                {fixture.time}
+              </Text>
             ) : (
               <Text style={styles.scoreTxt} numberOfLines={1} adjustsFontSizeToFit>
                 {fixture.homeScore}<Text style={styles.scoreDash}>-</Text>{fixture.awayScore}
@@ -1795,7 +1802,7 @@ const styles = StyleSheet.create({
   logoInitialsTxt: { color: '#A78BFA', fontSize: 11, fontWeight: '800' },
   teamLogo: { width: 34, height: 34 },
   teamTxt: { color: 'rgba(255,255,255,0.92)', fontSize: 14, fontWeight: '600', maxWidth: '100%' },
-  scoreCol: { width: '32%', alignItems: 'center' },
+  scoreCol: { width: '32%', minWidth: 88, alignItems: 'center', flexShrink: 0 },
   liveBadge: { color: '#ef4444', fontSize: 11, fontWeight: '900', backgroundColor: 'rgba(239,68,68,0.14)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
   ftBadge: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '800' },
   scoreTxt: {
@@ -1809,7 +1816,18 @@ const styles = StyleSheet.create({
   rowWrapCol: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   upcomingBadge: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700' },
-  timeTxt: { marginTop: 6, color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 0, fontVariant: ['tabular-nums'] },
+  timeTxt: {
+    marginTop: 6,
+    color: '#fff',
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '900',
+    letterSpacing: 0,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+    minWidth: 56,
+    writingDirection: 'ltr',
+  },
   predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },

@@ -132,6 +132,7 @@ const MatchDetailsScreen = () => {
   // Live polling interval refs
   const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleWsMatchUpdate = useCallback((update: MatchUpdatePayload) => {
@@ -323,7 +324,7 @@ const MatchDetailsScreen = () => {
         data = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
       }
       setLineups(data ?? []);
-      if (isLive() && !hasLineupData(data)) {
+      if (!hasLineupData(data)) {
         loadedTabsRef.current.delete('lineups');
       }
     } catch (err: any) {
@@ -356,6 +357,47 @@ const MatchDetailsScreen = () => {
       }
     };
   }, [fixtureId, isLive, loadLineupsIfNeeded]);
+
+  const isFinishedMatch = useCallback(() => {
+    if (params.status === 'finished') return true;
+    const short = fixture?.fixture?.status?.short;
+    return short
+      ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
+      : false;
+  }, [fixture, params.status]);
+
+  // Auto-retry lineups while the tab is open (no manual retry button).
+  useEffect(() => {
+    if (lineupsTabRetryRef.current) {
+      clearInterval(lineupsTabRetryRef.current);
+      lineupsTabRetryRef.current = null;
+    }
+    if (activeTab !== 'lineups' || !fixtureId || lineupsError) return;
+    if (hasLineupData(lineups) || isFinishedMatch()) return;
+
+    const tick = () => {
+      if (!lineupsLoading) {
+        void loadLineupsIfNeeded(true);
+      }
+    };
+    tick();
+    lineupsTabRetryRef.current = setInterval(tick, 8_000);
+
+    return () => {
+      if (lineupsTabRetryRef.current) {
+        clearInterval(lineupsTabRetryRef.current);
+        lineupsTabRetryRef.current = null;
+      }
+    };
+  }, [
+    activeTab,
+    fixtureId,
+    lineups,
+    lineupsError,
+    lineupsLoading,
+    isFinishedMatch,
+    loadLineupsIfNeeded,
+  ]);
 
   const loadStatsIfNeeded = useCallback(async (force = false) => {
     if (!force && loadedTabsRef.current.has('stats')) return;
@@ -682,18 +724,21 @@ const MatchDetailsScreen = () => {
     }
 
     if (!hasLineupData(lineups)) {
+      if (!isFinishedMatch()) {
+        return (
+          <View style={styles.emptyState}>
+            <LineupsSkeleton shimmerX={shimmerX} />
+            <Text style={styles.emptyStateSubtext}>
+              {t.matchDetails.lineupsLoadingRetry}
+            </Text>
+          </View>
+        );
+      }
       return (
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={64} color="#333" />
           <Text style={styles.emptyStateText}>{t.matchDetails.lineups || 'No lineups available'}</Text>
           <Text style={styles.emptyStateSubtext}>{t.matchDetails.lineupsUnavailable}</Text>
-          <TouchableOpacity
-            style={styles.retryInlineBtn}
-            onPress={() => void loadLineupsIfNeeded(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.retryInlineTxt}>{t.matchDetails.retry}</Text>
-          </TouchableOpacity>
         </View>
       );
     }

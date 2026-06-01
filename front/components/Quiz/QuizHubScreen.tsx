@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -134,6 +135,8 @@ export default function QuizHubScreen() {
   const currentIndex =
     !isDailyCompleted && rawCurrentIndex < questions.length ? rawCurrentIndex : -1;
   const [timerRetryEpoch, setTimerRetryEpoch] = useState(0);
+  /** Stops the countdown as soon as the user picks an option (before API returns). */
+  const [answerLocked, setAnswerLocked] = useState(false);
   const [selected, setSelected] = useState<OptionKey | null>(null);
   const [answerPhase, setAnswerPhase] = useState<AnswerPhase>('idle');
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -148,11 +151,21 @@ export default function QuizHubScreen() {
   const [countdownLabel, setCountdownLabel] = useState('');
 
   const nextIndexRef = useRef<number | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const questionStartedAt = useRef(Date.now());
   const timeoutCalledRef = useRef<string | null>(null);
+  const pendingSelectedKeyRef = useRef<OptionKey | null>(null);
+  const submitRetryCountRef = useRef(0);
+  const answerLockedRef = useRef(false);
+  const answerPhaseRef = useRef<AnswerPhase>('idle');
   const autoNextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const goNextQuestionRef = useRef<() => void>(() => {});
   const tokenRef = useRef<string | null>(null);
+
+  const setAnswerPhaseSync = useCallback((phase: AnswerPhase) => {
+    answerPhaseRef.current = phase;
+    setAnswerPhase(phase);
+  }, []);
 
   const applyQuizXp = useCallback(
     (payload: {
@@ -246,20 +259,19 @@ export default function QuizHubScreen() {
     }
   }, [isSignedIn, quizLang, quizDateKey]);
 
-  const resetTimeoutAttempt = useCallback(() => {
+  const unlockQuestionTimer = useCallback(() => {
+    pendingSelectedKeyRef.current = null;
+    submitRetryCountRef.current = 0;
     timeoutCalledRef.current = null;
-    setAnswerPhase('idle');
+    answerLockedRef.current = false;
+    setAnswerLocked(false);
+    setAnswerPhaseSync('idle');
     setTimerRetryEpoch((n) => n + 1);
-  }, []);
+  }, [setAnswerPhaseSync]);
 
-  useEffect(() => {
-    if (answerPhase !== 'submitting') return undefined;
-    const safety = setTimeout(() => {
-      resetTimeoutAttempt();
-      toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
-    }, 15_000);
-    return () => clearTimeout(safety);
-  }, [answerPhase, resetTimeoutAttempt, t.quiz.actionFailed, t.quiz.loadFailed]);
+  const resetTimeoutAttempt = useCallback(() => {
+    unlockQuestionTimer();
+  }, [unlockQuestionTimer]);
 
   const handleLanguageSelect = async (lang: 'ar' | 'en') => {
     setQuizLang(lang);
@@ -309,8 +321,12 @@ export default function QuizHubScreen() {
     if (!currentQuestion) return;
     clearAutoNextTimer();
     timeoutCalledRef.current = null;
+    pendingSelectedKeyRef.current = null;
+    submitRetryCountRef.current = 0;
+    answerLockedRef.current = false;
+    setAnswerLocked(false);
     setSelected(null);
-    setAnswerPhase('idle');
+    setAnswerPhaseSync('idle');
     setIsCorrect(null);
     setCorrectKey(null);
     setRevealedImageUrl(null);
@@ -326,16 +342,31 @@ export default function QuizHubScreen() {
       setIsCorrect(currentQuestion.isCorrect ?? false);
       setCorrectKey((currentQuestion.correctKey as OptionKey) ?? null);
       setRevealedImageUrl(currentQuestion.imageUrl ?? null);
-      setAnswerPhase('revealed');
+      setAnswerPhaseSync('revealed');
+      answerLockedRef.current = true;
+      setAnswerLocked(true);
     } else if (currentQuestion.status === 'timed_out') {
       setIsCorrect(false);
       setCorrectKey((currentQuestion.correctKey as OptionKey) ?? null);
       setRevealedImageUrl(currentQuestion.imageUrl ?? null);
-      setAnswerPhase('revealed');
+      setAnswerPhaseSync('revealed');
+      answerLockedRef.current = true;
+      setAnswerLocked(true);
     } else if (currentQuestion.status === 'skipped') {
-      setAnswerPhase('revealed');
+      setAnswerPhaseSync('revealed');
+      answerLockedRef.current = true;
+      setAnswerLocked(true);
     }
-  }, [currentIndex, currentQuestion?.id, currentQuestion?.status, clearAutoNextTimer]);
+  }, [currentIndex, currentQuestion?.id, currentQuestion?.status, clearAutoNextTimer, setAnswerPhaseSync]);
+
+  // After reveal (especially correct + image), ensure footer buttons stay reachable.
+  useEffect(() => {
+    if (answerPhase !== 'revealed') return;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [answerPhase, currentIndex, isCorrect, revealedImageUrl]);
 
   const showCompletionPopup = useCallback(
     (stats?: QuizDailyPayload['stats']) => {
@@ -397,11 +428,182 @@ export default function QuizHubScreen() {
     );
   }, [clearAutoNextTimer]);
 
+  const submitSelectedAnswer = useCallback(
+    async (key: OptionKey, opts?: { fromRetry?: boolean }) => {
+      if (!currentQuestion) return;
+      if (answerPhaseRef.current === 'revealed') return;
+
+      if (!opts?.fromRetry) {
+        if (answerPhaseRef.current === 'submitting') return;
+        clearAutoNextTimer();
+        pendingSelectedKeyRef.current = key;
+        timeoutCalledRef.current = currentQuestion.id;
+        answerLockedRef.current = true;
+        setAnswerLocked(true);
+        setSelected(key);
+        setAnswerPhaseSync('submitting');
+        submitRetryCountRef.current = 0;
+      } else {
+        submitRetryCountRef.current += 1;
+      }
+
+      try {
+        const token = tokenRef.current ?? (await getToken());
+        if (!token) {
+          unlockQuestionTimer();
+          setSelected(null);
+          return;
+        }
+        tokenRef.current = token;
+        const timeTaken = Math.round(
+          (Date.now() - questionStartedAt.current) / 1000,
+        );
+        const res = await QuizApiService.submitAnswer(token, {
+          questionId: currentQuestion.id,
+          selectedKey: key as QuizApiOptionKey,
+          timeTaken,
+          language: quizLang,
+        });
+        if (res?.status !== 'SUCCESS' || !res.data) {
+          throw new Error('QUIZ_ANSWER_FAILED');
+        }
+        const d = res.data as {
+          isCorrect: boolean;
+          correctKey: QuizApiOptionKey;
+          imageUrl?: string | null;
+          currentIndex: number;
+          stats?: QuizDailyPayload['stats'];
+          completed?: boolean;
+          xpAwarded?: number;
+          xp?: number;
+          level?: number;
+          xpEvents?: Array<{
+            action: string;
+            amount: number;
+            leveledUp: boolean;
+            newLevel: number;
+            newTitle?: string;
+          }>;
+        };
+        nextIndexRef.current = d.currentIndex;
+        pendingSelectedKeyRef.current = null;
+        submitRetryCountRef.current = 0;
+
+        setIsCorrect(d.isCorrect);
+        setCorrectKey(d.correctKey as OptionKey);
+        if (d.imageUrl) {
+          setRevealedImageUrl(d.imageUrl);
+        }
+        setAnswerPhaseSync('revealed');
+        applyQuizXp(d);
+
+        queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
+          if (!oldData) return oldData;
+          const newQuestions = [...oldData.questions];
+          newQuestions[currentIndex] = {
+            ...newQuestions[currentIndex],
+            status: 'answered',
+            isCorrect: d.isCorrect,
+            selectedKey: key,
+            correctKey: d.correctKey,
+            ...(d.imageUrl ? { imageUrl: d.imageUrl } : {}),
+          };
+          return {
+            ...oldData,
+            xp: d.xp ?? oldData.xp,
+            level: d.level ?? oldData.level,
+            questions: newQuestions,
+            stats: patchDailyStats(oldData.stats, d.stats),
+          };
+        });
+
+        if (d.isCorrect) {
+          const xpAmount =
+            d.xpEvents?.reduce((sum, e) => sum + e.amount, 0) ??
+            d.xpAwarded ??
+            2;
+          toastManager.showSuccess(
+            t.quiz.excellent,
+            t.quiz.xpBonus.replace('{amount}', String(xpAmount)),
+            { position: 'bottom', duration: 2800 },
+          );
+        }
+
+        if (d.completed) {
+          clearAutoNextTimer();
+          showCompletionPopup(d.stats);
+        } else {
+          scheduleAutoNext();
+        }
+      } catch {
+        const retries = submitRetryCountRef.current;
+        if (retries < 2 && pendingSelectedKeyRef.current) {
+          setTimeout(() => {
+            void submitSelectedAnswer(pendingSelectedKeyRef.current!, {
+              fromRetry: true,
+            });
+          }, 900);
+          return;
+        }
+        unlockQuestionTimer();
+        setSelected(null);
+        toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
+      }
+    },
+    [
+      currentQuestion,
+      clearAutoNextTimer,
+      getToken,
+      quizLang,
+      applyQuizXp,
+      queryClient,
+      quizQueryKey,
+      currentIndex,
+      t.quiz,
+      showCompletionPopup,
+      scheduleAutoNext,
+      setAnswerPhaseSync,
+      unlockQuestionTimer,
+    ],
+  );
+
+  useEffect(() => {
+    if (answerPhase !== 'submitting') return undefined;
+    const key = pendingSelectedKeyRef.current;
+    const safety = setTimeout(() => {
+      if (key && submitRetryCountRef.current < 3) {
+        void submitSelectedAnswer(key, { fromRetry: true });
+        return;
+      }
+      unlockQuestionTimer();
+      setSelected(null);
+      toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
+    }, 22_000);
+    return () => clearTimeout(safety);
+  }, [
+    answerPhase,
+    submitSelectedAnswer,
+    unlockQuestionTimer,
+    t.quiz.actionFailed,
+    t.quiz.loadFailed,
+  ]);
+
+  const handleSelectOption = useCallback(
+    (key: OptionKey) => {
+      void submitSelectedAnswer(key);
+    },
+    [submitSelectedAnswer],
+  );
+
   const handleTimeout = useCallback(async () => {
-    if (!currentQuestion || answerPhase !== 'idle') return;
+    if (!currentQuestion) return;
+    if (answerLockedRef.current || pendingSelectedKeyRef.current) return;
+    if (answerPhaseRef.current !== 'idle') return;
     if (timeoutCalledRef.current === currentQuestion.id) return;
     timeoutCalledRef.current = currentQuestion.id;
-    setAnswerPhase('submitting');
+    answerLockedRef.current = true;
+    setAnswerLocked(true);
+    setAnswerPhaseSync('submitting');
 
     try {
       const token = tokenRef.current ?? (await getToken());
@@ -431,7 +633,7 @@ export default function QuizHubScreen() {
       if (d.imageUrl) {
         setRevealedImageUrl(d.imageUrl);
       }
-      setAnswerPhase('revealed');
+      setAnswerPhaseSync('revealed');
       scheduleAutoNext();
 
       queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
@@ -484,7 +686,6 @@ export default function QuizHubScreen() {
     }
   }, [
     currentQuestion,
-    answerPhase,
     getToken,
     quizLang,
     queryClient,
@@ -497,122 +698,8 @@ export default function QuizHubScreen() {
     clearAutoNextTimer,
     scheduleAutoNext,
     resetTimeoutAttempt,
+    setAnswerPhaseSync,
   ]);
-
-  const handleSelectOption = useCallback(
-    async (key: OptionKey) => {
-      if (!currentQuestion || answerPhase !== 'idle') return;
-      clearAutoNextTimer();
-      setSelected(key);
-      setAnswerPhase('submitting');
-      try {
-        const token = tokenRef.current ?? (await getToken());
-        if (!token) {
-          setAnswerPhase('idle');
-          setSelected(null);
-          return;
-        }
-        tokenRef.current = token;
-        const timeTaken = Math.round(
-          (Date.now() - questionStartedAt.current) / 1000,
-        );
-        const res = await QuizApiService.submitAnswer(token, {
-          questionId: currentQuestion.id,
-          selectedKey: key as QuizApiOptionKey,
-          timeTaken,
-          language: quizLang,
-        });
-        if (res?.status !== 'SUCCESS' || !res.data) {
-          setAnswerPhase('idle');
-          setSelected(null);
-          return;
-        }
-        const d = res.data as {
-          isCorrect: boolean;
-          correctKey: QuizApiOptionKey;
-          imageUrl?: string | null;
-          currentIndex: number;
-          stats?: QuizDailyPayload['stats'];
-          completed?: boolean;
-          xpAwarded?: number;
-          xp?: number;
-          level?: number;
-          xpEvents?: Array<{
-            action: string;
-            amount: number;
-            leveledUp: boolean;
-            newLevel: number;
-            newTitle?: string;
-          }>;
-        };
-        nextIndexRef.current = d.currentIndex;
-
-        setIsCorrect(d.isCorrect);
-        setCorrectKey(d.correctKey as OptionKey);
-        if (d.imageUrl) {
-          setRevealedImageUrl(d.imageUrl);
-        }
-        setAnswerPhase('revealed');
-        applyQuizXp(d);
-
-        queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
-          if (!oldData) return oldData;
-          const newQuestions = [...oldData.questions];
-          newQuestions[currentIndex] = {
-            ...newQuestions[currentIndex],
-            status: 'answered',
-            isCorrect: d.isCorrect,
-            selectedKey: key,
-            correctKey: d.correctKey,
-            ...(d.imageUrl ? { imageUrl: d.imageUrl } : {}),
-          };
-          return {
-            ...oldData,
-            xp: d.xp ?? oldData.xp,
-            level: d.level ?? oldData.level,
-            questions: newQuestions,
-            stats: patchDailyStats(oldData.stats, d.stats),
-          };
-        });
-
-        if (d.isCorrect) {
-          const xpAmount =
-            d.xpEvents?.reduce((sum, e) => sum + e.amount, 0) ??
-            d.xpAwarded ??
-            2;
-          toastManager.showSuccess(
-            t.quiz.excellent,
-            t.quiz.xpBonus.replace('{amount}', String(xpAmount)),
-          );
-        }
-
-        if (d.completed) {
-          clearAutoNextTimer();
-          showCompletionPopup(d.stats);
-        } else {
-          scheduleAutoNext();
-        }
-      } catch {
-        setAnswerPhase('idle');
-        setSelected(null);
-        toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
-      }
-    },
-    [
-      currentQuestion,
-      answerPhase,
-      clearAutoNextTimer,
-      getToken,
-      quizLang,
-      applyQuizXp,
-      queryClient,
-      quizQueryKey,
-      currentIndex,
-      t.quiz,
-      showCompletionPopup,
-      scheduleAutoNext,
-    ],
-  );
 
   const handleSkip = useCallback(async () => {
     if (!currentQuestion || answerPhase === 'revealed') return;
@@ -1002,15 +1089,20 @@ export default function QuizHubScreen() {
       <QuizBackground />
       <QuizHeader topInset={insets.top} />
 
-      <View
-        style={[
-          styles.content,
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
           {
             paddingTop: HEADER_H + 4,
             paddingHorizontal: SCREEN_PADDING_H,
-            paddingBottom: Math.max(insets.bottom, 16) + 20,
+            paddingBottom: Math.max(insets.bottom, 16) + 28,
           },
         ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
       >
         <QuizProgressCard
           current={questionNumber}
@@ -1019,7 +1111,7 @@ export default function QuizHubScreen() {
           questionLabel={t.quiz.questionNumber}
           timerKey={currentQuestion.id}
           timerRetryEpoch={timerRetryEpoch}
-          timerActive={answerPhase === 'idle'}
+          timerActive={answerPhase === 'idle' && !answerLocked}
           timeLimitSec={QUIZ_TIME_LIMIT_SEC}
           onTimeUp={handleTimeout}
         />
@@ -1055,7 +1147,8 @@ export default function QuizHubScreen() {
           answerRevealed={answerPhase === 'revealed'}
           isCorrect={isCorrect}
           correctKey={correctKey}
-          disableOptions={answerPhase !== 'idle'}
+          disableOptions={answerLocked || answerPhase !== 'idle'}
+          isSubmitting={answerPhase === 'submitting'}
         />
 
         <QuizFooterActions
@@ -1070,7 +1163,7 @@ export default function QuizHubScreen() {
           answerRevealed={answerPhase === 'revealed'}
           isCorrect={isCorrect}
         />
-      </View>
+      </ScrollView>
       <QuizLanguagePopup onSelectLanguage={handleLanguageSelect} />
       <QuizScorePopup
         visible={scorePopupVisible}
@@ -1110,8 +1203,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: QUIZ_SCREEN_BG,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     backgroundColor: QUIZ_SCREEN_BG,
   },
   retryButton: {

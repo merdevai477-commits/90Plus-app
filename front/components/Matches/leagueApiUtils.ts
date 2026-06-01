@@ -78,9 +78,12 @@ export const formatMatchMinute = (fixture: Fixture): string | undefined => {
  */
 export const formatMatchTime = (fixtureDate: string): string => {
   const date = new Date(fixtureDate);
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+  if (Number.isNaN(date.getTime())) return '--:--';
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 };
 
 /**

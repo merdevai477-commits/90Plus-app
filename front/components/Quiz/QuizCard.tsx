@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CircleCheck, Lightbulb, User, Zap } from 'lucide-react-native';
@@ -225,6 +226,7 @@ interface QuizCardProps {
   isCorrect?: boolean | null;
   correctKey?: OptionKey | null;
   disableOptions?: boolean;
+  isSubmitting?: boolean;
 }
 
 function QuizCardInner({
@@ -243,6 +245,7 @@ function QuizCardInner({
   isCorrect = null,
   correctKey = null,
   disableOptions = false,
+  isSubmitting = false,
 }: QuizCardProps) {
   const { t } = useTranslation();
   const textAlign = 'left' as const;
@@ -290,6 +293,12 @@ function QuizCardInner({
       ) : null}
 
       <View style={styles.optionsList}>
+        {isSubmitting ? (
+          <View style={styles.submittingRow}>
+            <ActivityIndicator size="small" color={ACCENT_SOFT} />
+            <Text style={styles.submittingText}>{t.quiz.submittingAnswer}</Text>
+          </View>
+        ) : null}
         {options.map((opt) => (
           <OptionRow
             key={opt.key}
@@ -400,6 +409,18 @@ const styles = StyleSheet.create({
   optionsList: {
     gap: 8,
     marginBottom: 12,
+  },
+  submittingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  submittingText: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 13,
+    fontWeight: '600',
   },
   hintRow: {
     flexDirection: 'row',

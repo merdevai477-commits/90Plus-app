@@ -367,7 +367,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
             setErrorDetails('');
             try {
               player.replace(buildVideoSource(newUrl));
-              if (isActive && mountedRef.current) player.play();
+              if (
+                isActive &&
+                mountedRef.current &&
+                player.status === 'readyToPlay' &&
+                !player.playing
+              ) {
+                player.play();
+              }
             } catch (replaceErr) {
               logger.warn('[UnifiedVideoPlayer] replace failed:', replaceErr);
             }
@@ -408,21 +415,25 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     setActiveVideoUrl(reel.videoUrl);
     try {
       player.replace(buildVideoSource(reel.videoUrl));
-      if (isActive) player.play();
+      if (isActive && status === 'readyToPlay' && !player.playing) {
+        player.play();
+      }
     } catch (e) {
       logger.warn('[UnifiedVideoPlayer] handleRetry replace failed:', e);
     }
-  }, [reel.videoUrl, player, isActive]);
+  }, [reel.videoUrl, player, isActive, status]);
 
   const handleManualReplay = useCallback(() => {
     onManualReplay();
     try {
       player.currentTime = 0;
-      player.play();
+      if (status === 'readyToPlay' && !player.playing) {
+        player.play();
+      }
     } catch (e) {
       logger.warn('[UnifiedVideoPlayer] Error restarting video:', e);
     }
-  }, [onManualReplay, player]);
+  }, [onManualReplay, player, status]);
 
   // -------- Render ---------
   const showErrorUi = (hasError || loadTimedOut || invalidSource) && !isLoading;
