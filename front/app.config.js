@@ -1,10 +1,34 @@
 module.exports = ({ config }) => {
   const projectId = config.extra?.eas?.projectId;
 
+  const defaultShareBaseUrl = 'https://90plus-app-production-1808.up.railway.app';
+  const shareBaseUrl = (
+    process.env.EXPO_PUBLIC_SHARE_BASE_URL || defaultShareBaseUrl
+  ).replace(/\/$/, '');
+  let shareHost = '90plus-app-production-1808.up.railway.app';
+  try {
+    shareHost = new URL(shareBaseUrl).hostname;
+  } catch {
+    // keep default Railway host
+  }
+
+  const intentFilters = (config.android?.intentFilters ?? []).map((filter) => ({
+    ...filter,
+    data: (filter.data ?? []).map((entry) =>
+      entry.scheme === 'https' && entry.host === '90plus.app'
+        ? { ...entry, host: shareHost }
+        : entry,
+    ),
+  }));
+
   // Dev-client autolinking exclusions: see react-native.config.js (EAS_BUILD_PROFILE-aware).
 
   return {
     ...config,
+    android: {
+      ...config.android,
+      intentFilters,
+    },
     ...(projectId
       ? {
           updates: {
@@ -28,6 +52,7 @@ module.exports = ({ config }) => {
       footballApiBase:
         process.env.EXPO_PUBLIC_FOOTBALL_API_BASE ||
         'https://v3.football.api-sports.io',
+      shareBaseUrl,
     },
   };
 };

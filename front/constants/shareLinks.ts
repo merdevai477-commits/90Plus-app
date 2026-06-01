@@ -1,8 +1,24 @@
 import { Platform } from 'react-native';
 
-/** Public HTTPS domain — all in-app shares use this for Android App Links */
-export const SHARE_DOMAIN = '90plus.app';
-export const SHARE_BASE_URL = `https://${SHARE_DOMAIN}`;
+/** Railway production host until a custom domain is configured */
+export const DEFAULT_SHARE_BASE_URL =
+  'https://90plus-app-production-1808.up.railway.app';
+
+function resolveShareBaseUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_SHARE_BASE_URL?.trim().replace(/\/$/, '');
+  return fromEnv || DEFAULT_SHARE_BASE_URL;
+}
+
+/** Public HTTPS base — share landing pages live on the backend root (not /api) */
+export const SHARE_BASE_URL = resolveShareBaseUrl();
+
+export const SHARE_DOMAIN = (() => {
+  try {
+    return new URL(SHARE_BASE_URL).hostname;
+  } catch {
+    return '90plus-app-production-1808.up.railway.app';
+  }
+})();
 
 /** Public HTTPS links for reel sharing (Android App Links + web fallback) */
 export const REEL_SHARE_BASE_URL = `${SHARE_BASE_URL}/reels`;
@@ -70,7 +86,7 @@ export function parseReelIdFromUrl(url: string): string | null {
     const id = trimmed.replace('ninetyplus://reel/', '').split(/[?#]/)[0];
     return id || null;
   }
-  const httpsMatch = trimmed.match(/90plus\.app\/reels\/([a-f0-9-]+)/i);
+  const httpsMatch = trimmed.match(/\/reels\/([a-f0-9-]+)/i);
   if (httpsMatch?.[1]) return httpsMatch[1];
   return null;
 }
@@ -94,7 +110,7 @@ export function parseProfileUsernameFromUrl(url: string): string | null {
     return isValidShareUsername(username) ? username : null;
   }
 
-  const httpsMatch = trimmed.match(/90plus\.app\/@([a-zA-Z0-9_]{1,64})/i);
+  const httpsMatch = trimmed.match(/\/@([a-zA-Z0-9_]{1,64})/i);
   if (httpsMatch?.[1]) {
     const username = normalizeShareUsername(httpsMatch[1]);
     return isValidShareUsername(username) ? username : null;
@@ -119,12 +135,11 @@ export function getStoreReviewUrl(): string {
   return getStoreUrl();
 }
 
-/** Share message with verified App Link + store fallback */
+/** Share message — one smart link; landing page routes to the correct store */
 export function buildAppShareMessage(lang: 'ar' | 'en'): string {
-  const appUrl = buildAppShareUrl();
-  const storeUrl = getStoreUrl();
+  const inviteUrl = buildAppShareUrl();
   if (lang === 'ar') {
-    return `جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!\n${appUrl}\n${storeUrl}`;
+    return `جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!\n${inviteUrl}`;
   }
-  return `Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!\n${appUrl}\n${storeUrl}`;
+  return `Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!\n${inviteUrl}`;
 }

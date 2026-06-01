@@ -1,6 +1,6 @@
 /**
  * Android App Links — release signing certificate fingerprints.
- * Used by /.well-known/assetlinks.json so https://90plus.app/* opens the app.
+ * Used by /.well-known/assetlinks.json so public share URLs open the app.
  *
  * SHA-1  → Google Play Console / Firebase / OAuth (reference only here)
  * SHA-256 → Required in assetlinks.json for verified App Links
