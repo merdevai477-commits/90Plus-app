@@ -1,273 +1,43 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Terms and Conditions | 90Plus</title>
+    <meta name="title-ar" content="الشروط والأحكام | 90Plus" />
+    <meta name="title-en" content="Terms and Conditions | 90Plus" />
+    <title>الشروط والأحكام | 90Plus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <style>
-      :root {
-        --bg-0: #080608;
-        --bg-1: #0d0a14;
-        --ink: rgba(255, 255, 255, 0.92);
-        --muted: rgba(255, 255, 255, 0.55);
-        --accent: #7c3aed;
-        --accent-2: #a78bfa;
-        --card: rgba(13, 10, 20, 0.92);
-        --border: rgba(255, 255, 255, 0.12);
-        --shadow: 0 22px 64px rgba(124, 58, 237, 0.2);
-        --chip: rgba(124, 58, 237, 0.18);
-        --chip-text: rgba(255, 255, 255, 0.85);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        font-family: "Work Sans", sans-serif;
-        color: var(--ink);
-        background: radial-gradient(900px 520px at 10% -10%, rgba(124, 58, 237, 0.25), transparent 60%),
-          radial-gradient(720px 420px at 90% 0%, rgba(76, 29, 149, 0.35), transparent 60%),
-          radial-gradient(700px 500px at 50% 115%, rgba(91, 33, 182, 0.2), transparent 70%),
-          linear-gradient(180deg, var(--bg-0), var(--bg-1));
-        min-height: 100vh;
-      }
-
-      .page {
-        position: relative;
-        overflow: hidden;
-      }
-
-      .grain {
-        position: fixed;
-        inset: 0;
-        opacity: 0.12;
-        background-image: repeating-linear-gradient(
-          120deg,
-          rgba(255, 255, 255, 0.035),
-          rgba(255, 255, 255, 0.035) 1px,
-          transparent 1px,
-          transparent 6px
-        );
-        pointer-events: none;
-      }
-
-      header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 28px 7vw 10px;
-      }
-
-      .brand {
-        font-weight: 700;
-        font-size: 18px;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        color: var(--ink);
-      }
-
-      nav a {
-        text-decoration: none;
-        color: var(--muted);
-        font-weight: 500;
-        margin-left: 18px;
-      }
-
-      nav a.active {
-        color: var(--accent);
-      }
-
-      main {
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 28px 7vw 80px;
-      }
-
-      .hero {
-        display: grid;
-        gap: 18px;
-        margin-bottom: 30px;
-      }
-
-      .eyebrow {
-        font-size: 12px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        color: var(--accent-2);
-        font-weight: 600;
-      }
-
-      h1 {
-        font-family: "Fraunces", serif;
-        font-size: clamp(32px, 4vw, 48px);
-        margin: 0;
-      }
-
-      .lead {
-        font-size: 18px;
-        color: var(--muted);
-        max-width: 620px;
-      }
-
-      .meta {
-        display: flex;
-        gap: 20px;
-        flex-wrap: wrap;
-        font-size: 13px;
-        color: var(--muted);
-      }
-
-      .toc {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 6px;
-      }
-
-      .toc a {
-        font-size: 13px;
-        color: var(--accent-2);
-        text-decoration: none;
-        background: var(--chip);
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(124, 58, 237, 0.35);
-      }
-
-      .card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        padding: 22px 24px;
-        box-shadow: var(--shadow);
-        margin-bottom: 18px;
-      }
-
-      h2 {
-        font-family: "Fraunces", serif;
-        font-size: 22px;
-        margin: 0 0 12px;
-      }
-
-      p {
-        margin: 0 0 12px;
-        line-height: 1.7;
-      }
-
-      ul {
-        margin: 0 0 8px 18px;
-        padding: 0;
-        line-height: 1.7;
-      }
-
-      .grid {
-        display: grid;
-        gap: 14px;
-      }
-
-      .grid.two {
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      }
-
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: var(--chip);
-        color: var(--chip-text);
-        font-weight: 600;
-        font-size: 12px;
-        border: 1px solid rgba(124, 58, 237, 0.35);
-      }
-
-      .callout {
-        margin-top: 14px;
-        padding: 14px 16px;
-        border-radius: 16px;
-        background: rgba(124, 58, 237, 0.16);
-        border: 1px solid rgba(124, 58, 237, 0.35);
-        color: var(--ink);
-      }
-
-      .callout strong {
-        color: var(--accent-2);
-      }
-
-      main a {
-        color: var(--accent-2);
-        text-decoration: underline;
-        text-underline-offset: 3px;
-      }
-
-      nav a,
-      .toc a {
-        text-decoration: none;
-      }
-
-      footer {
-        text-align: center;
-        color: var(--muted);
-        font-size: 12px;
-        padding: 24px 0 40px;
-      }
-
-      .reveal {
-        opacity: 0;
-        transform: translateY(10px);
-        animation: reveal 0.6s ease forwards;
-      }
-
-      .delay-1 { animation-delay: 0.05s; }
-      .delay-2 { animation-delay: 0.12s; }
-      .delay-3 { animation-delay: 0.2s; }
-      .delay-4 { animation-delay: 0.3s; }
-
-      @keyframes reveal {
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      @media (max-width: 720px) {
-        header {
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        nav a {
-          margin-left: 0;
-          margin-right: 12px;
-        }
-
-        .meta {
-          flex-direction: column;
-          gap: 6px;
-        }
-      }
-    </style>
-  </head>
+    <link rel="stylesheet" href="/legal/legal-theme.css" />
+    </head>
   <body>
     <div class="page">
       <div class="grain"></div>
       <header>
         <div class="brand">90Plus</div>
-        <nav>
-          <a class="active" href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
-        </nav>
+        <div class="header-end">
+          <nav class="locale-ar">
+            <a class="active" href="/terms">الشروط</a>
+            <a href="/privacy">الخصوصية</a>
+            <a href="/support">الدعم</a>
+          </nav>
+          <nav class="locale-en" hidden>
+            <a class="active" href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/support">Support</a>
+          </nav>
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" data-lang-btn="ar" class="active">عربي</button>
+            <button type="button" data-lang-btn="en">EN</button>
+          </div>
+        </div>
       </header>
 
+      <div class="locale-en" hidden>
       <main>
         <section class="hero reveal">
           <div class="eyebrow">Legal</div>
@@ -487,10 +257,38 @@
           </p>
         </section>
       </main>
+      </div>
 
-      <footer>
-        90Plus Legal - Please replace bracketed placeholders before publishing.
-      </footer>
+      <div class="locale-ar" hidden>
+      <main>
+        <section class="hero reveal">
+          <div class="eyebrow">قانوني</div>
+          <h1>الشروط والأحكام</h1>
+          <p class="lead">تحكم هذه الشروط وصولك واستخدامك لتطبيق 90Plus والمواقع والخدمات المرتبطة.</p>
+          <div class="meta"><span>آخر تحديث: يناير 2024</span></div>
+        </section>
+        <section id="overview-ar" class="card reveal delay-1">
+          <div class="pill">ملخص</div>
+          <p>باستخدامك للخدمة فإنك توافق على هذه الشروط. يوفر 90Plus رؤى كروية، اختبارات، ودردشة ذكية.</p>
+          <div class="callout"><strong>باختصار:</strong> استخدم التطبيق بمسؤولية وتحقق من مخرجات الذكاء الاصطناعي.</div>
+        </section>
+        <section class="card reveal delay-2"><h2>الحساب والأمان</h2><ul>
+          <li>قدّم معلومات دقيقة ومحدّثة.</li>
+          <li>حافظ على سرية بيانات الدخول.</li>
+          <li>لا تشارك حسابك مع الآخرين.</li>
+        </ul></section>
+        <section class="card reveal delay-2"><h2>الاستخدام المقبول</h2><p>توافق على عدم إساءة استخدام الخدمة أو مضايقة الآخرين أو رفع محتوى مخالف.</p></section>
+        <section class="card reveal delay-3"><h2>محتوى المستخدم</h2><p>تحتفظ بملكية محتواك وتمنحنا ترخيصاً محدوداً لتشغيل الخدمة.</p></section>
+        <section class="card reveal delay-3"><h2>الملكية الفكرية</h2><p>التصميم والعلامة والبرمجيات مملوكة لـ 90Plus أو مرخصيها.</p></section>
+        <section class="card reveal delay-3"><h2>مخرجات الذكاء الاصطناعي</h2><p>قد تكون غير دقيقة ولأغراض معلوماتية فقط — ليست نصيحة مهنية.</p></section>
+        <section class="card reveal delay-4"><h2>إنهاء الخدمة</h2><p>يجوز لنا تعليق الحساب عند مخالفة الشروط. يمكنك التوقف عن الاستخدام في أي وقت.</p></section>
+        <section class="card reveal delay-4"><h2>تواصل</h2><p><a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></p></section>
+      </main>
+      </div>
+
+      <footer class="locale-ar">90Plus — الشروط والأحكام</footer>
+      <footer class="locale-en" hidden>90Plus — Terms and Conditions</footer>
     </div>
+      <script src="/legal/legal-lang.js"></script>
   </body>
 </html>

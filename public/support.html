@@ -1,496 +1,188 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Support Center - 90Plus</title>
-    <meta name="description" content="Get help with 90Plus - comprehensive support for account issues, technical problems, and feature guidance.">
-    <meta name="robots" content="index, follow">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.7;
-            color: #2c3e50;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        .container {
-            background-color: white;
-            padding: 50px;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-            margin: 20px 0;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding-bottom: 30px;
-            border-bottom: 3px solid #4A148C;
-        }
-        .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #4A148C, #7B1FA2);
-            border-radius: 20px;
-            margin: 0 auto 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-        }
-        h1 {
-            color: #1a1a1a;
-            font-size: 36px;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-        h2 {
-            color: #4A148C;
-            font-size: 26px;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            border-bottom: 3px solid #E1BEE7;
-            padding-bottom: 12px;
-            font-weight: 600;
-        }
-        h3 {
-            color: #6A1B9A;
-            font-size: 20px;
-            margin-top: 25px;
-            margin-bottom: 15px;
-            font-weight: 600;
-        }
-        h4 {
-            color: #8E24AA;
-            font-size: 18px;
-            margin-top: 20px;
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
-        p {
-            margin-bottom: 18px;
-            text-align: justify;
-        }
-        ul, ol {
-            margin-bottom: 18px;
-            padding-left: 30px;
-        }
-        li {
-            margin-bottom: 10px;
-            line-height: 1.6;
-        }
-        .support-box {
-            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-            padding: 25px;
-            border-radius: 12px;
-            margin: 20px 0;
-            border-left: 4px solid #4A148C;
-        }
-        .quick-help {
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border-left: 4px solid #17a2b8;
-        }
-        .warning-box {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border-left: 4px solid #f39c12;
-        }
-        .emergency-box {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border-left: 4px solid #dc3545;
-        }
-        .faq-item {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 15px 0;
-            border: 1px solid #e9ecef;
-        }
-        .faq-question {
-            font-weight: 600;
-            color: #4A148C;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-        .faq-answer {
-            color: #555;
-            line-height: 1.6;
-        }
-        .contact-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        .contact-card {
-            background: white;
-            border: 2px solid #4A148C;
-            border-radius: 12px;
-            padding: 25px;
-            text-align: center;
-            transition: transform 0.3s ease;
-        }
-        .contact-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(74, 20, 140, 0.2);
-        }
-        .contact-icon {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #4A148C, #7B1FA2);
-            border-radius: 50%;
-            margin: 0 auto 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        strong {
-            color: #4A148C;
-            font-weight: 600;
-        }
-        a {
-            color: #6A1B9A;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        .response-time {
-            background-color: #d4edda;
-            color: #155724;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-            font-weight: 600;
-            display: inline-block;
-            margin-top: 10px;
-        }
-        @media (max-width: 768px) {
-            .container {
-                padding: 30px 20px;
-            }
-            h1 {
-                font-size: 28px;
-            }
-            h2 {
-                font-size: 22px;
-            }
-            .contact-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="logo">90+</div>
-            <h1>Support Center</h1>
-            <p style="color: #666; font-size: 16px; margin-bottom: 0;">
-                Get help with your 90Plus experience - we're here to assist you 24/7
-            </p>
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="title-ar" content="مركز الدعم | 90Plus" />
+    <meta name="title-en" content="Support Center | 90Plus" />
+    <title>مركز الدعم | 90Plus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/legal/legal-theme.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="grain"></div>
+      <header>
+        <div class="brand">90Plus</div>
+        <div class="header-end">
+          <nav class="locale-ar">
+            <a href="/terms">الشروط</a>
+            <a href="/privacy">الخصوصية</a>
+            <a class="active" href="/support">الدعم</a>
+          </nav>
+          <nav class="locale-en" hidden>
+            <a href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a class="active" href="/support">Support</a>
+          </nav>
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" data-lang-btn="ar" class="active">عربي</button>
+            <button type="button" data-lang-btn="en">EN</button>
+          </div>
         </div>
+      </header>
 
-        <div class="quick-help">
-            <h3 style="margin-top: 0;">🚀 Quick Help</h3>
-            <p><strong>Need immediate assistance?</strong> Try these quick solutions first:</p>
-            <ul>
-                <li><strong>App Issues:</strong> Force close and restart the app</li>
-                <li><strong>Login Problems:</strong> Check your internet connection and try again</li>
-                <li><strong>Video Upload:</strong> Ensure video is under 100MB and 60 seconds</li>
-                <li><strong>Missing Coins:</strong> Check your transaction history in profile settings</li>
-                <li><strong>Notifications:</strong> Verify notification permissions in device settings</li>
-            </ul>
-        </div>
+      <div class="locale-ar">
+        <main>
+          <section class="hero reveal">
+            <div class="eyebrow">الدعم</div>
+            <h1>مركز الدعم والمساعدة</h1>
+            <p class="lead">نحن هنا لمساعدتك في أي وقت — تواصل معنا أو راجع الأسئلة الشائعة.</p>
+          </section>
 
-        <h2>📞 Contact Support</h2>
-
-        <div class="contact-grid">
-            <div class="contact-card">
-                <div class="contact-icon">📧</div>
-                <h4>General Support</h4>
-                <p><strong>Email:</strong> <a href="mailto:support@90plus.app">support@90plus.app</a></p>
-                <p>Account issues, technical problems, feature questions</p>
-                <div class="response-time">Response: 24 hours</div>
+          <section class="card reveal delay-1">
+            <div class="pill">تواصل</div>
+            <h2>تواصل معنا</h2>
+            <p>يمكنك التواصل معنا من خلال الطرق التالية:</p>
+            <div class="contact-grid">
+              <div class="card contact-card">
+                <div class="icon">📧</div>
+                <h3>البريد الإلكتروني</h3>
+                <p><a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></p>
+                <p class="meta" style="margin:0">نرد خلال 24 ساعة</p>
+              </div>
+              <div class="card contact-card">
+                <div class="icon">📞</div>
+                <h3>الهاتف</h3>
+                <p><a href="tel:+2207630953">+220 76 30 953</a></p>
+                <p class="meta" style="margin:0">متاح من 9 صباحاً – 9 مساءً</p>
+              </div>
+              <div class="card contact-card">
+                <div class="icon">💬</div>
+                <h3>الدردشة</h3>
+                <p><a href="mailto:merdevai477@gmail.com">ابدأ المحادثة</a></p>
+                <p class="meta" style="margin:0">9 صباحاً – 9 مساءً</p>
+              </div>
             </div>
+          </section>
 
-            <div class="contact-card">
-                <div class="contact-icon">🔒</div>
-                <h4>Privacy & Data</h4>
-                <p><strong>Email:</strong> <a href="mailto:privacy@90plus.app">privacy@90plus.app</a></p>
-                <p>Privacy concerns, data requests, GDPR inquiries</p>
-                <div class="response-time">Response: 72 hours</div>
+          <section class="card reveal delay-2">
+            <h2>الأسئلة الشائعة</h2>
+            <div class="faq-item">
+              <button type="button" class="faq-q">كيف أعيد تعيين كلمة المرور؟ <span data-faq-icon>+</span></button>
+              <div class="faq-a">من صفحة تسجيل الدخول اضغط «نسيت كلمة المرور» واتبع الرابط المرسل إلى بريدك.</div>
             </div>
-
-            <div class="contact-card">
-                <div class="contact-icon">⚠️</div>
-                <h4>Safety & Abuse</h4>
-                <p><strong>Email:</strong> <a href="mailto:safety@90plus.app">safety@90plus.app</a></p>
-                <p>Report harassment, inappropriate content, safety concerns</p>
-                <div class="response-time">Response: 12 hours</div>
+            <div class="faq-item">
+              <button type="button" class="faq-q">كيف أحصل على نقاط أكثر في الكويز؟ <span data-faq-icon>+</span></button>
+              <div class="faq-a">الإجابة الصحيحة والسرعة، اللعب اليومي، ودعوة الأصدقاء تزيد نقاطك.</div>
             </div>
-
-            <div class="contact-card">
-                <div class="contact-icon">🚨</div>
-                <h4>Emergency</h4>
-                <p><strong>Email:</strong> <a href="mailto:emergency@90plus.app">emergency@90plus.app</a></p>
-                <p>Immediate safety threats, urgent security issues</p>
-                <div class="response-time">Response: Immediate</div>
+            <div class="faq-item">
+              <button type="button" class="faq-q">لماذا لا تظهر المباريات المباشرة؟ <span data-faq-icon>+</span></button>
+              <div class="faq-a">تأكد من الإنترنت وتحديث التطبيق، ثم أعد فتح التطبيق أو تواصل معنا.</div>
             </div>
-        </div>
-
-        <h2>❓ Frequently Asked Questions</h2>
-
-        <div class="faq-item">
-            <div class="faq-question">How do I create an account?</div>
-            <div class="faq-answer">
-                Download the 90Plus app, tap "Sign Up," and choose either email registration or Apple Sign-In. Follow the prompts to complete your profile setup.
+            <div class="faq-item">
+              <button type="button" class="faq-q">كيف أرفع فيديو ريل؟ <span data-faq-icon>+</span></button>
+              <div class="faq-a">من قسم الريلز اضغط «+» واختر فيديو من المعرض أو سجّل فيديو جديد.</div>
             </div>
-        </div>
+          </section>
 
-        <div class="faq-item">
-            <div class="faq-question">Why can't I upload videos?</div>
-            <div class="faq-answer">
-                Check these requirements: Video must be 5-60 seconds long, under 100MB, and in MP4/MOV format. Ensure you've granted camera and photo library permissions in your device settings.
+          <section class="card reveal delay-3">
+            <h2>مشاكل تقنية</h2>
+            <ul>
+              <li>حدّث التطبيق لآخر إصدار</li>
+              <li>أعد تشغيل التطبيق</li>
+              <li>تحقق من اتصال الإنترنت</li>
+              <li>امسح الذاكرة المؤقتة</li>
+            </ul>
+            <p>إن استمرت المشكلة، راسلنا مع وصف تفصيلي.</p>
+          </section>
+
+          <section class="card reveal delay-3">
+            <h2>سياسة الخصوصية</h2>
+            <p><a href="/privacy">اقرأ سياسة الخصوصية الكاملة</a></p>
+          </section>
+        </main>
+        <footer>© 2024 90Plus — الإصدار 1.0.0</footer>
+      </div>
+
+      <div class="locale-en" hidden>
+        <main>
+          <section class="hero reveal">
+            <div class="eyebrow">Support</div>
+            <h1>Support &amp; Help Center</h1>
+            <p class="lead">We are here to help — contact us or browse common questions.</p>
+          </section>
+
+          <section class="card reveal delay-1">
+            <div class="pill">Contact</div>
+            <h2>Contact us</h2>
+            <p>Reach us through any of the following:</p>
+            <div class="contact-grid">
+              <div class="card contact-card">
+                <div class="icon">📧</div>
+                <h3>Email</h3>
+                <p><a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></p>
+                <p class="meta" style="margin:0">We reply within 24 hours</p>
+              </div>
+              <div class="card contact-card">
+                <div class="icon">📞</div>
+                <h3>Phone</h3>
+                <p><a href="tel:+2207630953">+220 76 30 953</a></p>
+                <p class="meta" style="margin:0">9 AM – 9 PM</p>
+              </div>
+              <div class="card contact-card">
+                <div class="icon">💬</div>
+                <h3>Chat</h3>
+                <p><a href="mailto:merdevai477@gmail.com">Start a conversation</a></p>
+                <p class="meta" style="margin:0">9 AM – 9 PM</p>
+              </div>
             </div>
-        </div>
+          </section>
 
-        <div class="faq-item">
-            <div class="faq-question">How do I earn coins?</div>
-            <div class="faq-answer">
-                Earn coins by: Making accurate match predictions, completing daily quizzes, uploading popular videos, engaging with content, and spinning the daily wheel.
+          <section class="card reveal delay-2">
+            <h2>FAQ</h2>
+            <div class="faq-item">
+              <button type="button" class="faq-q">How do I reset my password? <span data-faq-icon>+</span></button>
+              <div class="faq-a">On the sign-in screen tap “Forgot password” and follow the email link.</div>
             </div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-question">How do I block or report someone?</div>
-            <div class="faq-answer">
-                Go to the user's profile, tap the three dots menu, and select "Block User" or "Report User." You can also report individual posts by tapping the flag icon.
+            <div class="faq-item">
+              <button type="button" class="faq-q">How do I earn more quiz points? <span data-faq-icon>+</span></button>
+              <div class="faq-a">Correct fast answers, daily play, and inviting friends increase your score.</div>
             </div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-question">Can I delete my account?</div>
-            <div class="faq-answer">
-                Yes, go to Settings > Account > Delete Account. This action is permanent and will remove all your data, videos, and social connections.
+            <div class="faq-item">
+              <button type="button" class="faq-q">Why are live matches missing? <span data-faq-icon>+</span></button>
+              <div class="faq-a">Check your connection and app update, restart the app, or contact support.</div>
             </div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-question">Why aren't I receiving notifications?</div>
-            <div class="faq-answer">
-                Check: Device notification settings for 90Plus, app notification preferences in Settings, and ensure you have a stable internet connection.
+            <div class="faq-item">
+              <button type="button" class="faq-q">How do I upload a reel? <span data-faq-icon>+</span></button>
+              <div class="faq-a">Open Reels, tap “+”, then pick from gallery or record a new clip.</div>
             </div>
-        </div>
+          </section>
 
-        <div class="faq-item">
-            <div class="faq-question">How do predictions work?</div>
-            <div class="faq-answer">
-                Browse upcoming matches, select your predicted outcome, and optionally add a confidence level. Earn coins based on accuracy and confidence when matches conclude.
-            </div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-question">What languages are supported?</div>
-            <div class="faq-answer">
-                90Plus supports 8 languages: English, Arabic, Spanish, French, German, Italian, Portuguese, and Turkish. Change language in Settings > Language.
-            </div>
-        </div>
-
-        <h2>🛠️ Technical Issues</h2>
-
-        <div class="support-box">
-            <h3>Common Technical Problems</h3>
-            
-            <h4>App Crashes or Freezes</h4>
-            <ol>
-                <li>Force close the app completely</li>
-                <li>Restart your device</li>
-                <li>Update to the latest app version</li>
-                <li>Clear app cache (Android) or reinstall (iOS)</li>
-                <li>Contact support if issues persist</li>
-            </ol>
-
-            <h4>Video Upload Issues</h4>
+          <section class="card reveal delay-3">
+            <h2>Technical issues</h2>
             <ul>
-                <li><strong>Upload Fails:</strong> Check internet connection and file size (max 100MB)</li>
-                <li><strong>Poor Quality:</strong> Record in good lighting with stable connection</li>
-                <li><strong>Processing Stuck:</strong> Wait 5 minutes, then try uploading again</li>
-                <li><strong>Format Error:</strong> Use MP4 or MOV format, avoid screen recordings</li>
+              <li>Update to the latest app version</li>
+              <li>Restart the app</li>
+              <li>Check your internet connection</li>
+              <li>Clear app cache</li>
             </ul>
+            <p>If the issue persists, email us with details.</p>
+          </section>
 
-            <h4>Login Problems</h4>
-            <ul>
-                <li><strong>Forgot Password:</strong> Use "Forgot Password" link on login screen</li>
-                <li><strong>Apple Sign-In Issues:</strong> Check Apple ID settings and two-factor authentication</li>
-                <li><strong>Account Locked:</strong> Contact support for account recovery</li>
-                <li><strong>Email Not Verified:</strong> Check spam folder for verification email</li>
-            </ul>
-        </div>
-
-        <h2>🎯 Feature Guides</h2>
-
-        <div class="support-box">
-            <h3>Getting Started with 90Plus</h3>
-            
-            <h4>Setting Up Your Profile</h4>
-            <ol>
-                <li>Upload a profile picture</li>
-                <li>Write an engaging bio (max 500 characters)</li>
-                <li>Select your favorite teams and leagues</li>
-                <li>Customize your FIFA-style profile card</li>
-                <li>Set your notification preferences</li>
-            </ol>
-
-            <h4>Creating Great Video Content</h4>
-            <ul>
-                <li><strong>Lighting:</strong> Record in good natural or artificial light</li>
-                <li><strong>Audio:</strong> Ensure clear audio, avoid background noise</li>
-                <li><strong>Length:</strong> Keep videos engaging, 15-30 seconds work best</li>
-                <li><strong>Content:</strong> Share football opinions, reactions, or skills</li>
-                <li><strong>Hashtags:</strong> Use relevant hashtags to reach more viewers</li>
-            </ul>
-
-            <h4>Maximizing Your Predictions</h4>
-            <ul>
-                <li>Research team form and head-to-head records</li>
-                <li>Consider injuries and suspensions</li>
-                <li>Start with lower confidence until you build accuracy</li>
-                <li>Focus on leagues you know well</li>
-                <li>Track your prediction history to improve</li>
-            </ul>
-        </div>
-
-        <h2>🔐 Account & Privacy</h2>
-
-        <div class="support-box">
-            <h3>Managing Your Account</h3>
-            
-            <h4>Privacy Settings</h4>
-            <ul>
-                <li><strong>Profile Visibility:</strong> Control who can see your profile</li>
-                <li><strong>Content Privacy:</strong> Set default visibility for posts</li>
-                <li><strong>Message Settings:</strong> Control who can message you</li>
-                <li><strong>Search Visibility:</strong> Hide from search results if desired</li>
-                <li><strong>Activity Status:</strong> Hide online status and last seen</li>
-            </ul>
-
-            <h4>Blocking & Safety</h4>
-            <ul>
-                <li><strong>Block Users:</strong> Prevent specific users from interacting with you</li>
-                <li><strong>Report Content:</strong> Flag inappropriate posts or comments</li>
-                <li><strong>Mute Keywords:</strong> Hide content containing specific words</li>
-                <li><strong>Restricted Mode:</strong> Filter potentially sensitive content</li>
-            </ul>
-
-            <h4>Data Management</h4>
-            <ul>
-                <li><strong>Download Data:</strong> Request a copy of your data</li>
-                <li><strong>Delete Content:</strong> Remove individual posts or videos</li>
-                <li><strong>Account Deletion:</strong> Permanently delete your account</li>
-                <li><strong>Data Portability:</strong> Export your content and data</li>
-            </ul>
-        </div>
-
-        <div class="emergency-box">
-            <h3>🚨 Emergency Situations</h3>
-            <p><strong>If you're experiencing immediate safety concerns:</strong></p>
-            <ul>
-                <li><strong>Harassment or Threats:</strong> Block the user immediately and report to <a href="mailto:safety@90plus.app">safety@90plus.app</a></li>
-                <li><strong>Inappropriate Content:</strong> Report the content and contact <a href="mailto:emergency@90plus.app">emergency@90plus.app</a></li>
-                <li><strong>Account Compromise:</strong> Change your password immediately and contact <a href="mailto:security@90plus.app">security@90plus.app</a></li>
-                <li><strong>Life-Threatening Situations:</strong> Contact local emergency services (911, 112, etc.) first, then notify us</li>
-            </ul>
-        </div>
-
-        <h2>📱 Platform-Specific Help</h2>
-
-        <div class="support-box">
-            <h3>iOS Users</h3>
-            <ul>
-                <li><strong>App Store Issues:</strong> Update iOS to latest version</li>
-                <li><strong>Apple Sign-In:</strong> Ensure two-factor authentication is enabled</li>
-                <li><strong>Notifications:</strong> Check Settings > Notifications > 90Plus</li>
-                <li><strong>Storage:</strong> Free up space if app is slow or crashing</li>
-                <li><strong>Permissions:</strong> Settings > Privacy & Security > Camera/Photos</li>
-            </ul>
-
-            <h3>Android Users</h3>
-            <ul>
-                <li><strong>Google Play Issues:</strong> Clear Google Play Store cache</li>
-                <li><strong>Permissions:</strong> Settings > Apps > 90Plus > Permissions</li>
-                <li><strong>Notifications:</strong> Settings > Apps > 90Plus > Notifications</li>
-                <li><strong>Battery Optimization:</strong> Disable battery optimization for 90Plus</li>
-                <li><strong>Storage:</strong> Clear app cache in Settings > Apps > 90Plus > Storage</li>
-            </ul>
-        </div>
-
-        <h2>💡 Tips for Best Experience</h2>
-
-        <div class="quick-help">
-            <h3>Optimize Your 90Plus Experience</h3>
-            <ul>
-                <li><strong>Stable Internet:</strong> Use Wi-Fi for video uploads and live features</li>
-                <li><strong>Regular Updates:</strong> Keep the app updated for latest features and fixes</li>
-                <li><strong>Engage Actively:</strong> Like, comment, and share to build your community</li>
-                <li><strong>Follow Guidelines:</strong> Respect community rules for the best experience</li>
-                <li><strong>Backup Important Content:</strong> Save your favorite videos to your device</li>
-                <li><strong>Customize Notifications:</strong> Set preferences to avoid notification overload</li>
-                <li><strong>Explore Features:</strong> Try quizzes, predictions, and social features</li>
-                <li><strong>Connect with Friends:</strong> Invite friends to join and follow each other</li>
-            </ul>
-        </div>
-
-        <div class="warning-box">
-            <h3>⚠️ Important Reminders</h3>
-            <ul>
-                <li><strong>Never share your login credentials</strong> with anyone</li>
-                <li><strong>Be respectful</strong> in all interactions with other users</li>
-                <li><strong>Report suspicious activity</strong> immediately</li>
-                <li><strong>Keep your app updated</strong> for security and performance</li>
-                <li><strong>Review privacy settings</strong> regularly</li>
-                <li><strong>Use strong passwords</strong> and enable two-factor authentication</li>
-            </ul>
-        </div>
-
-        <hr style="margin: 40px 0; border: none; border-top: 2px solid #4A148C;">
-
-        <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 12px;">
-            <h3 style="color: #4A148C; margin-bottom: 15px;">Still Need Help?</h3>
-            <p style="color: #666; font-size: 16px; margin-bottom: 20px;">
-                Our support team is here to help you with any questions or issues you may have.
-            </p>
-            <div style="margin-bottom: 20px;">
-                <a href="mailto:support@90plus.app" style="background: linear-gradient(135deg, #4A148C, #7B1FA2); color: white; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: 600; display: inline-block;">
-                    Contact Support Team
-                </a>
-            </div>
-            <p style="color: #666; font-size: 14px;">
-                <strong>Average Response Time:</strong> 24 hours<br>
-                <strong>Emergency Issues:</strong> Immediate response<br>
-                <strong>Available:</strong> 24/7 support coverage
-            </p>
-        </div>
+          <section class="card reveal delay-3">
+            <h2>Privacy policy</h2>
+            <p><a href="/privacy">Read the full privacy policy</a></p>
+          </section>
+        </main>
+        <footer>© 2024 90Plus — Version 1.0.0</footer>
+      </div>
     </div>
-</body>
+    <script src="/legal/legal-lang.js"></script>
+  </body>
 </html>

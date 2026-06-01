@@ -474,9 +474,7 @@ app.get('/terms', (req, res) => {
     res.redirect('/terms-of-service.html');
 });
 
-app.get('/support', (req, res) => {
-    res.redirect('/support.html');
-});
+// /support is served by support.routes.ts (public/support.html)
 
 app.get('/delete-account', (req, res) => {
     res.redirect('/delete-account.html');

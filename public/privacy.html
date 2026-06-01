@@ -3,6 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="title-ar" content="سياسة الخصوصية | 90Plus" />
+    <meta name="title-en" content="Privacy Policy | 90Plus" />
     <title>سياسة الخصوصية | 90Plus</title>
     <meta name="description" content="سياسة الخصوصية لتطبيق 90Plus — كيف نجمع ونحمي بياناتك." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -11,262 +13,32 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <style>
-      :root {
-        --bg-0: #080608;
-        --bg-1: #0d0a14;
-        --ink: rgba(255, 255, 255, 0.92);
-        --muted: rgba(255, 255, 255, 0.55);
-        --accent: #7c3aed;
-        --accent-2: #a78bfa;
-        --card: rgba(13, 10, 20, 0.92);
-        --border: rgba(255, 255, 255, 0.12);
-        --shadow: 0 22px 64px rgba(124, 58, 237, 0.2);
-        --chip: rgba(124, 58, 237, 0.18);
-        --chip-text: rgba(255, 255, 255, 0.85);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        font-family: "Work Sans", sans-serif;
-        color: var(--ink);
-        background: radial-gradient(900px 520px at 10% -10%, rgba(124, 58, 237, 0.25), transparent 60%),
-          radial-gradient(720px 420px at 90% 0%, rgba(76, 29, 149, 0.35), transparent 60%),
-          radial-gradient(700px 500px at 50% 115%, rgba(91, 33, 182, 0.2), transparent 70%),
-          linear-gradient(180deg, var(--bg-0), var(--bg-1));
-        min-height: 100vh;
-      }
-
-      .page {
-        position: relative;
-        overflow: hidden;
-      }
-
-      .grain {
-        position: fixed;
-        inset: 0;
-        opacity: 0.12;
-        background-image: repeating-linear-gradient(
-          120deg,
-          rgba(255, 255, 255, 0.035),
-          rgba(255, 255, 255, 0.035) 1px,
-          transparent 1px,
-          transparent 6px
-        );
-        pointer-events: none;
-      }
-
-      header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 28px 7vw 10px;
-      }
-
-      .brand {
-        font-weight: 700;
-        font-size: 18px;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        color: var(--ink);
-      }
-
-      nav a {
-        text-decoration: none;
-        color: var(--muted);
-        font-weight: 500;
-        margin-inline-start: 18px;
-      }
-
-      nav a.active {
-        color: var(--accent-2);
-      }
-
-      main {
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 28px 7vw 80px;
-      }
-
-      .hero {
-        display: grid;
-        gap: 18px;
-        margin-bottom: 30px;
-      }
-
-      .eyebrow {
-        font-size: 12px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        color: var(--accent-2);
-        font-weight: 600;
-      }
-
-      h1 {
-        font-family: "Fraunces", serif;
-        font-size: clamp(32px, 4vw, 48px);
-        margin: 0;
-      }
-
-      .lead {
-        font-size: 18px;
-        color: var(--muted);
-        max-width: 720px;
-      }
-
-      .meta {
-        display: flex;
-        gap: 20px;
-        flex-wrap: wrap;
-        font-size: 13px;
-        color: var(--muted);
-      }
-
-      .toc {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 6px;
-      }
-
-      .toc a {
-        font-size: 13px;
-        color: var(--accent-2);
-        text-decoration: none;
-        background: var(--chip);
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(124, 58, 237, 0.35);
-      }
-
-      .card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        padding: 22px 24px;
-        box-shadow: var(--shadow);
-        margin-bottom: 18px;
-      }
-
-      h2 {
-        font-family: "Fraunces", serif;
-        font-size: 22px;
-        margin: 0 0 12px;
-      }
-
-      p {
-        margin: 0 0 12px;
-        line-height: 1.7;
-      }
-
-      ul {
-        margin: 0 0 8px 0;
-        padding: 0 22px 0 0;
-        line-height: 1.7;
-      }
-
-      li {
-        margin-bottom: 8px;
-      }
-
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: var(--chip);
-        color: var(--chip-text);
-        font-weight: 600;
-        font-size: 12px;
-        border: 1px solid rgba(124, 58, 237, 0.35);
-        margin-bottom: 12px;
-      }
-
-      .callout {
-        margin-top: 14px;
-        padding: 14px 16px;
-        border-radius: 16px;
-        background: rgba(124, 58, 237, 0.16);
-        border: 1px solid rgba(124, 58, 237, 0.35);
-        color: var(--ink);
-      }
-
-      .callout strong {
-        color: var(--accent-2);
-      }
-
-      main a {
-        color: var(--accent-2);
-        text-decoration: underline;
-        text-underline-offset: 3px;
-      }
-
-      nav a,
-      .toc a {
-        text-decoration: none;
-      }
-
-      footer {
-        text-align: center;
-        color: var(--muted);
-        font-size: 12px;
-        padding: 24px 0 40px;
-      }
-
-      .reveal {
-        opacity: 0;
-        transform: translateY(10px);
-        animation: reveal 0.6s ease forwards;
-      }
-
-      .delay-1 { animation-delay: 0.05s; }
-      .delay-2 { animation-delay: 0.12s; }
-      .delay-3 { animation-delay: 0.2s; }
-      .delay-4 { animation-delay: 0.3s; }
-
-      @keyframes reveal {
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      @media (max-width: 720px) {
-        header {
-          flex-direction: column;
-          gap: 10px;
-          align-items: flex-start;
-        }
-
-        nav a {
-          margin-inline-start: 0;
-          margin-inline-end: 12px;
-        }
-
-        .meta {
-          flex-direction: column;
-          gap: 6px;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="/legal/legal-theme.css" />
   </head>
   <body>
     <div class="page">
       <div class="grain"></div>
       <header>
         <div class="brand">90Plus</div>
-        <nav>
-          <a href="/terms">الشروط</a>
-          <a class="active" href="/privacy">الخصوصية</a>
-          <a href="/support">الدعم</a>
-        </nav>
+        <div class="header-end">
+          <nav class="locale-ar">
+            <a href="/terms">الشروط</a>
+            <a class="active" href="/privacy">الخصوصية</a>
+            <a href="/support">الدعم</a>
+          </nav>
+          <nav class="locale-en" hidden>
+            <a href="/terms">Terms</a>
+            <a class="active" href="/privacy">Privacy</a>
+            <a href="/support">Support</a>
+          </nav>
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" data-lang-btn="ar" class="active">عربي</button>
+            <button type="button" data-lang-btn="en">EN</button>
+          </div>
+        </div>
       </header>
 
+      <div class="locale-ar">
       <main>
         <section class="hero reveal">
           <div class="eyebrow">قانوني</div>
@@ -399,8 +171,55 @@
           </ul>
         </section>
       </main>
+      <footer class="locale-ar">90Plus — سياسة الخصوصية</footer>
+      </div>
 
-      <footer>90Plus — سياسة الخصوصية</footer>
+      <div class="locale-en" hidden>
+      <main>
+        <section class="hero reveal">
+          <div class="eyebrow">Legal</div>
+          <h1>Privacy Policy</h1>
+          <p class="lead">At 90Plus we value your privacy. This policy explains how we collect, use, and protect your data.</p>
+          <div class="meta"><span>Last updated: January 2024</span></div>
+        </section>
+        <section class="card reveal delay-1">
+          <div class="pill">Summary</div>
+          <h2>Introduction</h2>
+          <p>We protect your personal information when you use our app.</p>
+          <div class="callout"><strong>In short:</strong> We do not sell your data; you can delete your account from settings.</div>
+        </section>
+        <section class="card reveal delay-2"><h2>Information we collect</h2><ul>
+          <li><strong>Account:</strong> name, email, username</li>
+          <li><strong>Usage:</strong> activity, points, achievements</li>
+          <li><strong>Content:</strong> videos and images you upload</li>
+          <li><strong>Device:</strong> device type, OS, device ID</li>
+          <li><strong>Location:</strong> optional, for local content</li>
+        </ul></section>
+        <section class="card reveal delay-2"><h2>How we use data</h2><ul>
+          <li>Provide and improve the app</li>
+          <li>Personalize your experience</li>
+          <li>Send important notifications</li>
+          <li>Prevent fraud and ensure security</li>
+          <li>Analytics and support</li>
+        </ul></section>
+        <section class="card reveal delay-3"><h2>Sharing</h2><p>We do not sell your data. We may share with consent, providers, legal compliance, or to protect rights.</p></section>
+        <section class="card reveal delay-3"><h2>Security</h2><ul>
+          <li>Encryption in transit and at rest</li>
+          <li>Secured servers and monitoring</li>
+          <li>Limited staff access</li>
+        </ul></section>
+        <section class="card reveal delay-3"><h2>Your rights</h2><p>Access, correct, delete, restrict, port, or object to processing where applicable.</p></section>
+        <section class="card reveal delay-3"><h2>Cookies</h2><p>We use cookies to improve experience; control via device settings.</p></section>
+        <section class="card reveal delay-3"><h2>Children</h2><p>For users 13+. We do not knowingly collect data from children under 13.</p></section>
+        <section class="card reveal delay-4"><h2>Updates</h2><p>We may update this policy and notify you via the app or email.</p></section>
+        <section class="card reveal delay-4"><h2>Contact</h2><ul>
+          <li><strong>Email:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
+          <li><strong>Phone:</strong> +220 76 30 953</li>
+        </ul></section>
+      </main>
+      <footer class="locale-en">90Plus — Privacy Policy</footer>
+      </div>
     </div>
+    <script src="/legal/legal-lang.js"></script>
   </body>
 </html>
