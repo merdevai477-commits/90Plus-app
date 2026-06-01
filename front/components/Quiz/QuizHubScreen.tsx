@@ -49,11 +49,21 @@ import { QuizFooterActions } from './QuizFooterActions';
 import { QuizLanguagePopup } from './QuizLanguagePopup';
 import { QuizScorePopup } from './QuizScorePopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { prefetchQuizImages, useDailyQuiz } from '../../hooks/useDailyQuiz';
+import { prefetchQuizImages, useDailyQuiz, dailyQuizQueryKey } from '../../hooks/useDailyQuiz';
 
 type AnswerPhase = 'idle' | 'submitting' | 'revealed';
 
 const AUTO_NEXT_MS = 3000;
+
+function scheduleQuestionAutoNext(
+  clearTimer: () => void,
+  timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  advance: () => void,
+  delayMs = AUTO_NEXT_MS,
+) {
+  clearTimer();
+  timerRef.current = setTimeout(advance, delayMs);
+}
 
 function difficultyLocaleKey(
   d: string,
@@ -85,7 +95,7 @@ export default function QuizHubScreen() {
   const appLanguage = useLanguageStore((s) => s.language);
   const { getToken, isSignedIn } = useAuth();
   const { refreshCoins, coins, loading: coinsLoading, applyCoinsBalance } = useCoins();
-  const { handleXpEvents } = useXp();
+  const { handleXpEvents, refresh: refreshXp } = useXp();
 
   const [quizLang, setQuizLang] = useState<QuizApiLanguage>(
     appLanguage === 'en' ? 'en' : 'ar',
@@ -99,7 +109,13 @@ export default function QuizHubScreen() {
     error,
     refetch,
     isFetching,
+    dateKey: quizDateKey,
   } = useDailyQuiz(quizLang);
+
+  const quizQueryKey = useMemo(
+    () => dailyQuizQueryKey(quizLang, quizDateKey),
+    [quizLang, quizDateKey],
+  );
 
   const questions = dailyData?.questions ?? [];
   const safeCurrentIndex =
@@ -124,15 +140,56 @@ export default function QuizHubScreen() {
   const questionStartedAt = useRef(Date.now());
   const timeoutCalledRef = useRef<string | null>(null);
   const autoNextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goNextQuestionRef = useRef<() => void>(() => {});
   const tokenRef = useRef<string | null>(null);
+
+  const applyQuizXp = useCallback(
+    (payload: {
+      xpEvents?: Array<{
+        action: string;
+        amount: number;
+        leveledUp: boolean;
+        newLevel: number;
+        newTitle?: string;
+      }>;
+      xpAwarded?: number;
+      level?: number;
+    }) => {
+      if (payload.xpEvents?.length) {
+        void handleXpEvents(
+          payload.xpEvents.map((e) => ({
+            action: e.action,
+            amount: e.amount,
+            leveledUp: e.leveledUp,
+            newLevel: e.newLevel,
+            newTitle: e.newTitle,
+          })),
+        );
+        return;
+      }
+      if (payload.xpAwarded && payload.xpAwarded > 0) {
+        void handleXpEvents([
+          {
+            action: 'QUIZ_ANSWER_CORRECT',
+            amount: payload.xpAwarded,
+            leveledUp: false,
+            newLevel: payload.level ?? 1,
+          },
+        ]);
+        return;
+      }
+      void refreshXp();
+    },
+    [handleXpEvents, refreshXp],
+  );
 
   const patchCacheCoins = useCallback(
     (nextCoins: number) => {
-      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (old) =>
+      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (old) =>
         old ? { ...old, coins: nextCoins } : old,
       );
     },
-    [queryClient, quizLang],
+    [queryClient, quizQueryKey],
   );
 
   useEffect(() => {
@@ -184,6 +241,7 @@ export default function QuizHubScreen() {
       const diff = new Date(dailyData.expiresAt).getTime() - Date.now();
       if (diff <= 0) {
         setCountdownLabel('00:00:00');
+        void refetch();
         return;
       }
       const hours = Math.floor(diff / 3_600_000);
@@ -220,6 +278,9 @@ export default function QuizHubScreen() {
     setHintUsed(currentQuestion.hintUsed ?? false);
     setHintText(null);
     questionStartedAt.current = Date.now();
+    void getToken().then((t) => {
+      tokenRef.current = t ?? null;
+    });
 
     if (currentQuestion.status === 'answered') {
       setSelected((currentQuestion.selectedKey as OptionKey) ?? null);
@@ -239,7 +300,7 @@ export default function QuizHubScreen() {
 
   const showCompletionPopup = useCallback(
     (stats?: QuizDailyPayload['stats']) => {
-      const cached = queryClient.getQueryData<QuizDailyPayload>(['dailyQuiz', quizLang]);
+      const cached = queryClient.getQueryData<QuizDailyPayload>(quizQueryKey);
       const correctAnswers =
         stats?.correct ??
         cached?.stats?.correct ??
@@ -251,15 +312,15 @@ export default function QuizHubScreen() {
       setFinalScore(correctAnswers);
       setFinalXp(xpEarned);
       setScorePopupVisible(true);
+      void refreshXp();
     },
-    [queryClient, quizLang, questions],
+    [queryClient, quizQueryKey, questions, refreshXp],
   );
 
   const goNextQuestion = useCallback(() => {
     clearAutoNextTimer();
-    if (!canGoNext) return;
 
-    const cached = queryClient.getQueryData<QuizDailyPayload>(['dailyQuiz', quizLang]);
+    const cached = queryClient.getQueryData<QuizDailyPayload>(quizQueryKey);
     const isCompleted =
       cached?.stats?.completed || currentIndex + 1 >= questions.length;
 
@@ -268,7 +329,7 @@ export default function QuizHubScreen() {
       return;
     }
 
-    queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+    queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
       if (!oldData) return oldData;
       return {
         ...oldData,
@@ -276,21 +337,23 @@ export default function QuizHubScreen() {
       };
     });
   }, [
-    canGoNext,
     clearAutoNextTimer,
     currentIndex,
     questions.length,
     queryClient,
-    quizLang,
+    quizQueryKey,
     showCompletionPopup,
   ]);
 
-  const startAutoNext = useCallback(() => {
-    clearAutoNextTimer();
-    autoNextTimerRef.current = setTimeout(() => {
-      goNextQuestion();
-    }, AUTO_NEXT_MS);
-  }, [clearAutoNextTimer, goNextQuestion]);
+  goNextQuestionRef.current = goNextQuestion;
+
+  const scheduleAutoNext = useCallback(() => {
+    scheduleQuestionAutoNext(
+      clearAutoNextTimer,
+      autoNextTimerRef,
+      () => goNextQuestionRef.current(),
+    );
+  }, [clearAutoNextTimer]);
 
   const handleTimeout = useCallback(async () => {
     if (!currentQuestion || answerPhase !== 'idle') return;
@@ -323,13 +386,15 @@ export default function QuizHubScreen() {
       setIsCorrect(false);
       if (d.correctKey) {
         setCorrectKey(d.correctKey as OptionKey);
+        setSelected(d.correctKey as OptionKey);
       }
       if (d.imageUrl) {
         setRevealedImageUrl(d.imageUrl);
       }
       setAnswerPhase('revealed');
+      scheduleAutoNext();
 
-      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
         if (!oldData) return oldData;
         const newQuestions = [...oldData.questions];
         newQuestions[currentIndex] = {
@@ -358,13 +423,9 @@ export default function QuizHubScreen() {
 
       patchCacheCoins(d.coins);
       applyCoinsBalance(d.coins);
-      if (d.penaltyApplied) {
-        toastManager.showInfo(t.quiz.timesUpCoinsDeducted, t.quiz.timesUpCoinsDeducted);
-      } else {
-        toastManager.showInfo(t.quiz.timesUpNoCoinsDeducted, t.quiz.timesUpNoCoinsDeducted);
-      }
 
       if (d.completed) {
+        clearAutoNextTimer();
         showCompletionPopup(
           patchDailyStats(undefined, {
             correct: d.stats.correct,
@@ -376,8 +437,6 @@ export default function QuizHubScreen() {
             completed: true,
           }),
         );
-      } else {
-        startAutoNext();
       }
     } catch {
       setAnswerPhase('idle');
@@ -395,7 +454,9 @@ export default function QuizHubScreen() {
     applyCoinsBalance,
     t.quiz,
     showCompletionPopup,
-    startAutoNext,
+    quizQueryKey,
+    clearAutoNextTimer,
+    scheduleAutoNext,
   ]);
 
   const handleSelectOption = useCallback(
@@ -433,11 +494,15 @@ export default function QuizHubScreen() {
           currentIndex: number;
           stats?: QuizDailyPayload['stats'];
           completed?: boolean;
+          xpAwarded?: number;
+          xp?: number;
+          level?: number;
           xpEvents?: Array<{
             action: string;
             amount: number;
             leveledUp: boolean;
             newLevel: number;
+            newTitle?: string;
           }>;
         };
         nextIndexRef.current = d.currentIndex;
@@ -448,18 +513,9 @@ export default function QuizHubScreen() {
           setRevealedImageUrl(d.imageUrl);
         }
         setAnswerPhase('revealed');
-        if (d.xpEvents?.length) {
-          handleXpEvents(
-            d.xpEvents.map((e) => ({
-              action: e.action,
-              amount: e.amount,
-              leveledUp: e.leveledUp,
-              newLevel: e.newLevel,
-            })),
-          );
-        }
+        applyQuizXp(d);
 
-        queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+        queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
           if (!oldData) return oldData;
           const newQuestions = [...oldData.questions];
           newQuestions[currentIndex] = {
@@ -472,25 +528,29 @@ export default function QuizHubScreen() {
           };
           return {
             ...oldData,
+            xp: d.xp ?? oldData.xp,
+            level: d.level ?? oldData.level,
             questions: newQuestions,
             stats: patchDailyStats(oldData.stats, d.stats),
           };
         });
 
         if (d.isCorrect) {
-          const xpAmount = d.xpEvents?.[0]?.amount ?? 2;
+          const xpAmount =
+            d.xpEvents?.reduce((sum, e) => sum + e.amount, 0) ??
+            d.xpAwarded ??
+            2;
           toastManager.showSuccess(
             t.quiz.excellent,
             t.quiz.xpBonus.replace('{amount}', String(xpAmount)),
           );
-        } else {
-          toastManager.showInfo(t.quiz.wrong, t.quiz.wrong);
         }
 
         if (d.completed) {
+          clearAutoNextTimer();
           showCompletionPopup(d.stats);
         } else {
-          startAutoNext();
+          scheduleAutoNext();
         }
       } catch {
         setAnswerPhase('idle');
@@ -504,12 +564,13 @@ export default function QuizHubScreen() {
       clearAutoNextTimer,
       getToken,
       quizLang,
-      handleXpEvents,
+      applyQuizXp,
       queryClient,
+      quizQueryKey,
       currentIndex,
       t.quiz,
       showCompletionPopup,
-      startAutoNext,
+      scheduleAutoNext,
     ],
   );
 
@@ -525,7 +586,7 @@ export default function QuizHubScreen() {
 
     const optimisticNext = currentIndex + 1;
     const completedNow = optimisticNext >= questions.length;
-    queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+    queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
       if (!oldData) return oldData;
       const newQuestions = [...oldData.questions];
       newQuestions[currentIndex] = {
@@ -570,7 +631,7 @@ export default function QuizHubScreen() {
         applyCoinsBalance(d.coins);
       }
 
-      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
         if (!oldData) return oldData;
         return {
           ...oldData,
@@ -642,7 +703,7 @@ export default function QuizHubScreen() {
         applyCoinsBalance(d.coins);
       }
 
-      queryClient.setQueryData<QuizDailyPayload>(['dailyQuiz', quizLang], (oldData) => {
+      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
         if (!oldData) return oldData;
         const newQuestions = [...oldData.questions];
         newQuestions[currentIndex] = {
@@ -783,7 +844,11 @@ export default function QuizHubScreen() {
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <Text style={styles.noQuestionsText}>
-          {errorMessage === 'EMPTY_PACK' ? t.quiz.noQuestionsAvailable : t.quiz.loadFailed}
+          {errorMessage === 'EMPTY_PACK'
+            ? t.quiz.noQuestionsAvailable
+            : errorMessage === 'AUTH_REQUIRED'
+              ? t.quiz.signInRequired
+              : t.quiz.loadFailed}
         </Text>
         <TouchableOpacity
           style={styles.retryButton}
@@ -826,11 +891,54 @@ export default function QuizHubScreen() {
   }
 
   if (!currentQuestion) {
+    if (loadingQuestions || isFetching) {
+      return (
+        <View style={[styles.root, styles.centered]}>
+          <QuizBackground />
+          <QuizHeader topInset={insets.top} />
+          <ActivityIndicator size="large" color={ACCENT_SOFT} />
+          <Text style={styles.loadingText}>{t.quiz.loadingQuestions}</Text>
+        </View>
+      );
+    }
+
+    const allDone =
+      Boolean(dailyData?.stats?.completed) ||
+      (questions.length > 0 && currentIndex >= questions.length);
+
+    if (allDone) {
+      return (
+        <View style={[styles.root, styles.centered]}>
+          <QuizBackground />
+          <QuizHeader topInset={insets.top} />
+          <Ionicons name="checkmark-circle" size={56} color={ACCENT_SOFT} />
+          <Text style={styles.completedTitle}>{t.quiz.dailyCompletedTitle}</Text>
+          <Text style={styles.loadingText}>{t.quiz.dailyCompletedSubtitle}</Text>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.root, styles.centered]}>
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
-        <Text style={styles.loadingText}>{t.quiz.noQuestionsAvailable}</Text>
+        <Text style={styles.noQuestionsText}>
+          {errorMessage === 'USER_NOT_FOUND'
+            ? t.quiz.loadFailed
+            : t.quiz.noQuestionsAvailable}
+        </Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => void refetch()}
+          disabled={isFetching}
+          activeOpacity={0.85}
+        >
+          {isFetching ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.retryButtonText}>{t.quiz.retryLoad}</Text>
+          )}
+        </TouchableOpacity>
       </View>
     );
   }

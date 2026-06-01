@@ -1220,43 +1220,50 @@ export const ApiFootballService = {
 
   /**
    * Get lineups for a specific fixture
-   * ✅ Uses offline storage first (no token needed)
-   * ✅ Falls back to backend cache
+   * ✅ Uses offline storage first
+   * ✅ Falls back to /fixtures/players when lineups endpoint is empty
    */
-  async getFixtureLineups(fixtureId: number): Promise<Lineup[]> {
-    // ✅ 1. Check offline storage first (permanent, no token needed)
+  async getFixtureLineups(
+    fixtureId: number,
+    options?: { skipCache?: boolean },
+  ): Promise<Lineup[]> {
+    const { convertFixturePlayersToLineups, hasLineupData } = await import(
+      '../utils/matchLineupsFallback'
+    );
+
+    const resolveFromDirect = async (): Promise<Lineup[]> => {
+      let lineups = await fetchFromProxy<Lineup[]>(`/fixtures/${fixtureId}/lineups`);
+      if (hasLineupData(lineups)) return lineups;
+
+      try {
+        const players = await fetchFromProxy<unknown[]>(`/fixtures/${fixtureId}/players`);
+        const fromPlayers = convertFixturePlayersToLineups(players);
+        if (hasLineupData(fromPlayers)) return fromPlayers;
+      } catch {
+        // players endpoint unavailable for this fixture
+      }
+
+      return lineups ?? [];
+    };
+
+    if (options?.skipCache) {
+      return resolveFromDirect();
+    }
+
     const { offlineDataService } = await import('./offlineDataService');
     const offlineMatch = await offlineDataService.getFinishedMatch(fixtureId);
-    if (offlineMatch?.lineups) {
-      console.log(`📦 Lineups ${fixtureId} from offline storage`);
+    if (offlineMatch?.lineups && hasLineupData(offlineMatch.lineups)) {
       return offlineMatch.lineups;
     }
 
     try {
-      // ✅ 2. Use cached endpoint (permanent for finished matches)
       const lineups = await fetchFromProxy<Lineup[]>(`/cached/fixture/${fixtureId}/lineups`);
-      
-      // ✅ Store in offline storage if match is finished
-      const fixture = await this.getFixtureById(fixtureId).catch(() => null);
-      if (fixture && ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short)) {
-        const stats = await this.getFixtureStatistics(fixtureId).catch(() => []);
-        const events = await this.getFixtureEvents(fixtureId).catch(() => []);
-        await offlineDataService.storeFinishedMatch(fixtureId, {
-          fixture: fixture.fixture,
-          lineups,
-          statistics: stats,
-          events,
-          teams: fixture.teams,
-          league: fixture.league,
-          goals: fixture.goals,
-          score: fixture.score,
-        });
+      if (hasLineupData(lineups)) {
+        return lineups;
       }
-      
-      return lineups;
-    } catch (error) {
-      // Fallback to regular endpoint
-      return fetchFromProxy<Lineup[]>(`/fixtures/${fixtureId}/lineups`);
+      return resolveFromDirect();
+    } catch {
+      return resolveFromDirect();
     }
   },
 

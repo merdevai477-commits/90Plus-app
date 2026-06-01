@@ -12,6 +12,7 @@ import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 import { xpForLevel, xpForNextLevel, levelFromXp, levelTitle, grantStreakFreeze, getAppShareStatus, awardAppShare } from '../services/xp.service';
 import { addSseConnection, removeSseConnection } from '../services/xp-sse.service';
+import { ensureBackendUser } from '../utils/ensureBackendUser';
 
 const router = Router();
 
@@ -24,12 +25,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
     const clerkUserId = req.auth?.userId;
     if (!clerkUserId) { sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized'); return; }
 
-    const user = await prisma.user.findFirst({
-      where: { clerkUserId },
-      select: { id: true, xp: true, level: true, streakFreezes: true, lastActiveAt: true },
-    });
-
-    if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
+    const user = await ensureBackendUser(clerkUserId);
 
     const streak = await prisma.loginStreak.findUnique({ where: { userId: user.id } });
 

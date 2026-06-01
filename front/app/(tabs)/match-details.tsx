@@ -40,6 +40,7 @@ import {
   buildFallbackStatisticsFromEvents,
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
+import { hasLineupData } from '../../utils/matchLineupsFallback';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 
 const { width, height } = Dimensions.get('window');
@@ -317,9 +318,12 @@ const MatchDetailsScreen = () => {
     setLineupsLoading(true);
     setLineupsError(null);
     try {
-      const data = await ApiFootballService.getFixtureLineups(fixtureId);
+      let data = await ApiFootballService.getFixtureLineups(fixtureId);
+      if (!hasLineupData(data)) {
+        data = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
+      }
       setLineups(data ?? []);
-      if (isLive() && (!data || data.length === 0)) {
+      if (isLive() && !hasLineupData(data)) {
         loadedTabsRef.current.delete('lineups');
       }
     } catch (err: any) {
@@ -677,12 +681,19 @@ const MatchDetailsScreen = () => {
       );
     }
 
-    if (lineups.length === 0) {
+    if (!hasLineupData(lineups)) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={64} color="#333" />
           <Text style={styles.emptyStateText}>{t.matchDetails.lineups || 'No lineups available'}</Text>
-          <Text style={styles.emptyStateSubtext}>{'Lineups are not available yet'}</Text>
+          <Text style={styles.emptyStateSubtext}>{t.matchDetails.lineupsUnavailable}</Text>
+          <TouchableOpacity
+            style={styles.retryInlineBtn}
+            onPress={() => void loadLineupsIfNeeded(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.retryInlineTxt}>{t.matchDetails.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -1443,6 +1454,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  retryInlineBtn: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.45)',
+    backgroundColor: 'rgba(168,85,247,0.15)',
+  },
+  retryInlineTxt: {
+    color: '#D8B4FE',
+    fontSize: 14,
+    fontWeight: '700',
   },
   teamLineupContainer: {
     backgroundColor: '#1a1a1a',

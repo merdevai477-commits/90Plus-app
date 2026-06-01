@@ -171,6 +171,12 @@ router.get('/fixtures/:id', SHARED_CACHE_8S, FootballController.getFixtureById);
 router.get('/fixtures/:id/lineups', SHARED_CACHE_1H, FootballController.getFixtureLineups);
 
 // ============================================
+// GET /api/football/fixtures/:id/players
+// Player-level match data (lineup fallback)
+// ============================================
+router.get('/fixtures/:id/players', SHARED_CACHE_1H, FootballController.getFixturePlayers);
+
+// ============================================
 // GET /api/football/fixtures/:id/statistics
 // Get statistics for a fixture
 // ============================================

@@ -38,6 +38,7 @@ interface MemoryCacheEntry<T> {
 }
 
 import { redisCacheService } from './redis-cache.service';
+import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
@@ -700,7 +701,7 @@ class FootballDataCacheService {
         logger.debug(`📡 Fetching lineups for fixture ${fixtureId} (request will be shared with concurrent users)`);
         const apiRequestPromise = (async () => {
             try {
-                const lineups = await footballService.getFixtureLineups(fixtureId);
+                const lineups = await footballService.getFixtureLineupsResolved(fixtureId);
 
                 // Cache in Redis and memory.
                 // Empty results get a short TTL so we don't poison the cache
@@ -774,14 +775,32 @@ class FootballDataCacheService {
             return fullData.statistics;
         }
 
-        // Fetch from API
+        // Fetch from API (+ events-derived fallback for lower-tier leagues)
         logger.debug(`📡 Fetching statistics for fixture ${fixtureId}`);
-        const statistics = await footballService.getFixtureStatistics(fixtureId);
+        let statistics = await footballService.getFixtureStatistics(fixtureId);
 
-        // Empty results get a short TTL so we re-hit the API soon. Otherwise
-        // a single transient empty response (e.g. quota cooldown) would lock
-        // the cache for hours.
-        const isEmpty = !Array.isArray(statistics) || statistics.length === 0;
+        let isEmpty = !Array.isArray(statistics) || statistics.length === 0;
+        if (isEmpty && fullData?.teams && fullData?.goals) {
+            let events = fullData.events;
+            if (!Array.isArray(events) || events.length === 0) {
+                try {
+                    events = await footballService.getFixtureEvents(fixtureId);
+                } catch {
+                    events = [];
+                }
+            }
+            if (Array.isArray(events) && events.length > 0) {
+                const derived = buildFallbackStatisticsFromEvents(
+                    { teams: fullData.teams, goals: fullData.goals },
+                    events,
+                );
+                if (hasApiStatistics(derived)) {
+                    statistics = derived;
+                    isEmpty = false;
+                    logger.info(`[Stats] Fixture ${fixtureId}: using events-derived fallback`);
+                }
+            }
+        }
         const isLive = dbMatch && !['FT', 'AET', 'PEN'].includes(dbMatch.status);
         const ttl = isEmpty
             ? (isLive ? 30 * 1000 : this.TTL.EMPTY)

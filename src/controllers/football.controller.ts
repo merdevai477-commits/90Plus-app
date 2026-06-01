@@ -521,7 +521,7 @@ export class FootballController {
         return;
       }
 
-      const lineups = await footballService.getFixtureLineups(fixtureId);
+      const lineups = await footballService.getFixtureLineupsResolved(fixtureId);
 
       res.json({
         status: 'SUCCESS',
@@ -533,6 +533,29 @@ export class FootballController {
     }
   }
 
+
+  /**
+   * GET /api/football/fixtures/:id/players - Player-level match data
+   */
+  static async getFixturePlayers(req: Request, res: Response): Promise<void> {
+    try {
+      if (!footballService.isConfigured()) {
+        res.status(503).json({ status: 'ERROR', message: 'Football API not configured' });
+        return;
+      }
+
+      const fixtureId = parseInt(ensureString(req.params.id));
+      if (isNaN(fixtureId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+
+      const players = await footballService.getFixturePlayers(fixtureId);
+      res.json({ status: 'SUCCESS', results: players.length, response: players });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
 
   /**
    * GET /api/football/fixtures/:id/statistics - Get statistics for a fixture

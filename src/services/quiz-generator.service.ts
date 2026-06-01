@@ -428,6 +428,26 @@ function mergeUniqueQuestions(
   return merged;
 }
 
+function historyQuestionHashes(history: StoredQuizQuestion[]): Set<string> {
+  return new Set(history.map((q) => hashQuestion(q.question)));
+}
+
+function excludeHistoricalQuestions(
+  questions: StoredQuizQuestion[],
+  history: StoredQuizQuestion[],
+): StoredQuizQuestion[] {
+  if (history.length === 0) return questions;
+  const seen = historyQuestionHashes(history);
+  return questions.filter((q) => !seen.has(hashQuestion(q.question)));
+}
+
+function formatAvoidSample(questions: StoredQuizQuestion[], max = 24): string {
+  return questions
+    .slice(0, max)
+    .map((q) => q.question.slice(0, 90))
+    .join(' | ');
+}
+
 async function enrichAndFilterValid(
   questions: StoredQuizQuestion[],
   packDate: string,
@@ -442,7 +462,11 @@ async function enrichAndFilterValid(
   });
 }
 
-async function attemptOpenRouterCall(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
+async function attemptOpenRouterCall(
+  language: QuizLanguage,
+  packDate: string,
+  avoidFromHistory: StoredQuizQuestion[] = [],
+): Promise<StoredQuizQuestion[]> {
   const client = buildClient();
   if (!client) throw new Error('OpenRouter API key not configured');
 
@@ -484,8 +508,11 @@ Never generate text-input or essay questions. Exactly ${QUIZ_PACK_SIZE} question
 
   const topicFocus = dailyTopicFocus(packDate, language);
   const systemWithTopic = system.replace('{TOPIC_FOCUS}', topicFocus);
+  const historyAvoid = avoidFromHistory.length
+    ? ` Do NOT repeat or closely paraphrase any of these recent daily questions: ${formatAvoidSample(avoidFromHistory)}.`
+    : '';
 
-  const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Topic focus: ${topicFocus}. Ensure no duplicates, exactly 4 options per question, correctKey exists, and the exact type mix above.`;
+  const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Topic focus: ${topicFocus}. Ensure no duplicates, exactly 4 options per question, correctKey exists, and the exact type mix above.${historyAvoid}`;
 
   const completion = await client.chat.completions.create({
     model,
@@ -513,16 +540,14 @@ async function generateReplacementQuestions(
   language: QuizLanguage,
   packDate: string,
   existing: StoredQuizQuestion[],
+  avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
   const client = buildClient();
   if (!client) throw new Error('OpenRouter API key not configured');
 
   const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
-  const avoidSample = existing
-    .slice(0, 12)
-    .map((q) => q.question.slice(0, 100))
-    .join(' | ');
+  const avoidSample = formatAvoidSample([...avoidFromHistory, ...existing].slice(0, 24));
 
   const system = `You are a football trivia writer for 90Plus.
 Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW multiple-choice questions.
@@ -555,16 +580,14 @@ async function generateNormalOnlyReplacements(
   language: QuizLanguage,
   packDate: string,
   existing: StoredQuizQuestion[],
+  avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
   const client = buildClient();
   if (!client) throw new Error('OpenRouter API key not configured');
 
   const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
-  const avoidSample = existing
-    .slice(0, 15)
-    .map((q) => q.question.slice(0, 80))
-    .join(' | ');
+  const avoidSample = formatAvoidSample([...avoidFromHistory, ...existing].slice(0, 20));
 
   const system = `You are a football trivia writer for 90Plus.
 Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW text-only multiple-choice questions.
@@ -597,6 +620,7 @@ Language: ${langLabel}. Mix EASY/MEDIUM/HARD. No duplicates.`;
 async function generateInitialQuestionsInBatches(
   language: QuizLanguage,
   packDate: string,
+  avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
   let merged: StoredQuizQuestion[] = [];
   const batchSize = 5;
@@ -610,6 +634,7 @@ async function generateInitialQuestionsInBatches(
       language,
       packDate,
       merged,
+      avoidFromHistory,
     );
     merged = mergeUniqueQuestions(merged, batchQuestions);
     logger.info(
@@ -623,20 +648,27 @@ async function generateInitialQuestionsInBatches(
 async function buildPackWithReplacements(
   language: QuizLanguage,
   packDate: string,
+  avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
-  let questions = await attemptOpenRouterCall(language, packDate);
+  let questions = await attemptOpenRouterCall(language, packDate, avoidFromHistory);
   if (questions.length === 0) {
     logger.warn('[QuizGen] Full-pack AI parse failed — falling back to batched generation');
-    questions = await generateInitialQuestionsInBatches(language, packDate);
+    questions = await generateInitialQuestionsInBatches(language, packDate, avoidFromHistory);
   }
-  questions = await enrichAndFilterValid(questions, packDate);
+  questions = excludeHistoricalQuestions(
+    await enrichAndFilterValid(questions, packDate),
+    avoidFromHistory,
+  );
 
   if (questions.length < Math.ceil(QUIZ_PACK_SIZE * 0.6)) {
     logger.warn(
       `[QuizGen] Low post-enrich yield (${questions.length}/${QUIZ_PACK_SIZE}) — supplementing with batched generation`,
     );
-    const batched = await generateInitialQuestionsInBatches(language, packDate);
-    const batchedValid = await enrichAndFilterValid(batched, packDate);
+    const batched = await generateInitialQuestionsInBatches(language, packDate, avoidFromHistory);
+    const batchedValid = excludeHistoricalQuestions(
+      await enrichAndFilterValid(batched, packDate),
+      avoidFromHistory,
+    );
     questions = mergeUniqueQuestions(questions, batchedValid);
   }
 
@@ -658,8 +690,12 @@ async function buildPackWithReplacements(
       language,
       packDate,
       questions,
+      avoidFromHistory,
     );
-    const validReplacements = await enrichAndFilterValid(replacements, packDate);
+    const validReplacements = excludeHistoricalQuestions(
+      await enrichAndFilterValid(replacements, packDate),
+      avoidFromHistory,
+    );
     questions = mergeUniqueQuestions(questions, validReplacements);
 
     if (questions.length === beforeCount) {
@@ -685,9 +721,13 @@ async function buildPackWithReplacements(
         language,
         packDate,
         questions,
+        avoidFromHistory,
       );
       const before = questions.length;
-      questions = mergeUniqueQuestions(questions, normalFallback);
+      questions = mergeUniqueQuestions(
+        questions,
+        excludeHistoricalQuestions(normalFallback, avoidFromHistory),
+      );
       if (questions.length === before) break;
       stillNeeded = QUIZ_PACK_SIZE - questions.length;
     }
@@ -713,8 +753,12 @@ async function buildPackWithReplacements(
       language,
       packDate,
       questions,
+      avoidFromHistory,
     );
-    const validReplacements = await enrichAndFilterValid(replacements, packDate);
+    const validReplacements = excludeHistoricalQuestions(
+      await enrichAndFilterValid(replacements, packDate),
+      avoidFromHistory,
+    );
     questions = mergeUniqueQuestions(questions, validReplacements).slice(0, QUIZ_PACK_SIZE);
     if (!validateTypeMix(questions)) {
       logger.warn(
@@ -726,7 +770,11 @@ async function buildPackWithReplacements(
   return renumberQuestionIds(questions, language, packDate);
 }
 
-async function callOpenRouter(language: QuizLanguage, packDate: string): Promise<StoredQuizQuestion[]> {
+async function callOpenRouter(
+  language: QuizLanguage,
+  packDate: string,
+  avoidFromHistory: StoredQuizQuestion[] = [],
+): Promise<StoredQuizQuestion[]> {
   let attempts = 0;
   const MAX_ATTEMPTS = 3; // 1 initial + 2 retries
   let lastError: Error | null = null;
@@ -735,7 +783,7 @@ async function callOpenRouter(language: QuizLanguage, packDate: string): Promise
     try {
       attempts++;
       logger.info(`[QuizGen] Calling AI for ${packDate} (${language}) - Attempt ${attempts}`);
-      return await buildPackWithReplacements(language, packDate);
+      return await buildPackWithReplacements(language, packDate, avoidFromHistory);
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       logger.warn(`[QuizGen] Attempt ${attempts} failed: ${lastError.message}`);
@@ -748,15 +796,19 @@ async function callOpenRouter(language: QuizLanguage, packDate: string): Promise
 export async function generateDailyQuizPack(
   language: QuizLanguage,
   packDateInput?: Date,
+  avoidFromHistory: StoredQuizQuestion[] = [],
+  timezone?: string,
 ): Promise<{ packDate: Date; expiresAt: Date; questions: StoredQuizQuestion[] }> {
-  const packDate = packDateInput ?? todayPackDate();
-  const dateStr = ymd(packDate);
-  logger.info(`[QuizGen] Generating pack ${dateStr} (${language})`);
+  const packDate = packDateInput ?? todayPackDate(timezone);
+  const dateStr = packDateYmd(packDate, timezone);
+  logger.info(
+    `[QuizGen] Generating pack ${dateStr} (${language}), avoiding ${avoidFromHistory.length} prior question(s)`,
+  );
 
-  const questions = await callOpenRouter(language, dateStr);
+  const questions = await callOpenRouter(language, dateStr, avoidFromHistory);
   return {
     packDate,
-    expiresAt: packExpiresAt(packDate),
+    expiresAt: packExpiresAt(packDate, timezone),
     questions,
   };
 }

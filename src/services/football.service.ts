@@ -6,6 +6,7 @@
 
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
+import { convertFixturePlayersToLineups, hasLineupData } from '../utils/lineups-fallback';
 
 interface ApiResponse<T> {
   get: string;
@@ -512,6 +513,34 @@ class FootballService {
    */
   async getFixtureLineups(fixtureId: number): Promise<any[]> {
     return this.fetchFromApi<any[]>('/fixtures/lineups', { fixture: fixtureId });
+  }
+
+  /**
+   * Player-level match data — often populated when /fixtures/lineups is empty.
+   */
+  async getFixturePlayers(fixtureId: number): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/fixtures/players', { fixture: fixtureId });
+  }
+
+  /**
+   * Lineups with /fixtures/players fallback for lower-tier leagues.
+   */
+  async getFixtureLineupsResolved(fixtureId: number): Promise<any[]> {
+    const primary = await this.getFixtureLineups(fixtureId);
+    if (hasLineupData(primary)) return primary;
+
+    try {
+      const players = await this.getFixturePlayers(fixtureId);
+      const fromPlayers = convertFixturePlayersToLineups(players);
+      if (hasLineupData(fromPlayers)) {
+        logger.info(`[Lineups] Fixture ${fixtureId}: using /fixtures/players fallback`);
+        return fromPlayers as any[];
+      }
+    } catch (err) {
+      logger.debug(`[Lineups] Fixture ${fixtureId}: players fallback failed`, err);
+    }
+
+    return primary ?? [];
   }
 
   /**

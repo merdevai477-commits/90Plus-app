@@ -5,7 +5,7 @@
 import prisma from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { logger } from '../utils/logger';
-import { awardXp } from './xp.service';
+import { awardXp, levelTitle } from './xp.service';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { redisCacheService } from './redis-cache.service';
 import { generateDailyQuizPack, todayPackDate, packExpiresAt, packDateYmd } from './quiz-generator.service';
@@ -22,6 +22,7 @@ import type {
   StoredQuizQuestion,
 } from '../types/quiz.types';
 import { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
+import { ensureBackendUser } from '../utils/ensureBackendUser';
 
 export { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
 export const QUIZ_COIN_COST = 10;
@@ -118,6 +119,31 @@ async function loadPackFromDb(packDate: Date, language: QuizLanguage) {
   });
 }
 
+const RECENT_PACK_LOOKBACK = 7;
+
+async function loadRecentPackQuestions(
+  beforePackDate: Date,
+  language: QuizLanguage,
+  limit = RECENT_PACK_LOOKBACK,
+): Promise<StoredQuizQuestion[]> {
+  const rows = await prisma.dailyQuizPack.findMany({
+    where: {
+      language,
+      packDate: { lt: beforePackDate },
+    },
+    orderBy: { packDate: 'desc' },
+    take: limit,
+    select: { questions: true },
+  });
+
+  const merged: StoredQuizQuestion[] = [];
+  for (const row of rows) {
+    const qs = row.questions as unknown as StoredQuizQuestion[];
+    if (Array.isArray(qs)) merged.push(...qs);
+  }
+  return merged;
+}
+
 async function savePack(
   packDate: Date,
   language: QuizLanguage,
@@ -190,8 +216,9 @@ async function withRedisLock<T>(
 export async function getOrCreateDailyPack(
   language: QuizLanguage,
   packDate = todayPackDate(),
+  timezone?: string,
 ): Promise<StoredQuizQuestion[]> {
-  const dateStr = packDateYmd(packDate);
+  const dateStr = packDateYmd(packDate, timezone);
   const cacheKey = `quiz:daily:${dateStr}:${language}`;
   const lockKey = `quiz:daily:lock:${dateStr}:${language}`;
   
@@ -216,8 +243,9 @@ export async function getOrCreateDailyPack(
       await redisCacheService.set(cacheKey, q, PACK_CACHE_TTL);
       return q;
     }
-    
-    const generated = await generateDailyQuizPack(language, packDate);
+
+    const avoidFromHistory = await loadRecentPackQuestions(packDate, language);
+    const generated = await generateDailyQuizPack(language, packDate, avoidFromHistory, timezone);
     await savePack(packDate, language, generated.questions, generated.expiresAt);
     return generated.questions;
   });
@@ -333,11 +361,7 @@ export async function getDailyQuizForUser(
   languageInput: string | undefined,
   timezone: string,
 ) {
-  const user = await prisma.user.findUnique({
-    where: { clerkUserId },
-    select: { id: true, coins: true, xp: true, level: true, settings: true },
-  });
-  if (!user) throw new Error('USER_NOT_FOUND');
+  const user = await ensureBackendUser(clerkUserId);
 
   const settings = (user.settings ?? {}) as Record<string, unknown>;
   const settingsLang =
@@ -345,7 +369,7 @@ export async function getDailyQuizForUser(
   const language = normalizeLang(languageInput ?? settingsLang ?? 'ar');
 
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate);
+  const pack = await getOrCreateDailyPack(language, packDate, timezone);
   const session = await getOrCreateSession(user.id, packDate, language);
   const progress = parseProgress(session.progress);
 
@@ -388,7 +412,7 @@ export async function submitQuizAnswer(
 ) {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate);
+  const pack = await getOrCreateDailyPack(language, packDate, timezone);
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
@@ -530,6 +554,13 @@ export async function submitQuizAnswer(
   let xpAwarded = 0;
   let newXp = txResult.xp;
   let newLevel = txResult.level;
+  const xpEvents: Array<{
+    action: string;
+    amount: number;
+    leveledUp: boolean;
+    newLevel: number;
+    newTitle?: string;
+  }> = [];
 
   if (txResult.isCorrect && !txResult.hintOrSkip) {
     const xpResult = await awardXp({
@@ -544,6 +575,14 @@ export async function submitQuizAnswer(
     newLevel = xpResult.newLevel;
 
     if (xpAwarded > 0) {
+      xpEvents.push({
+        action: 'QUIZ_ANSWER_CORRECT',
+        amount: xpAwarded,
+        leveledUp: xpResult.leveledUp,
+        newLevel: xpResult.newLevel,
+        newTitle: xpResult.leveledUp ? levelTitle(xpResult.newLevel) : undefined,
+      });
+
       await prisma.$transaction(async (tx) => {
         const session = await tx.userDailyQuizSession.findUnique({
           where: { id: txResult.sessionId },
@@ -566,15 +605,28 @@ export async function submitQuizAnswer(
     }
   }
 
+  let completionBonusXp = 0;
   if (txResult.completed && txResult.packSize > 0) {
     const accuracy = txResult.stats.correct / txResult.packSize;
     if (accuracy >= 0.8) {
-      await awardXp({
+      const bonusResult = await awardXp({
         userId: txResult.userId,
         action: 'QUIZ_COMPLETED_HIGH',
         idempotencyKey: `quiz.complete.${packDate}.${language}`,
         timezone,
       });
+      completionBonusXp = bonusResult.awarded;
+      newXp = bonusResult.newXp;
+      newLevel = bonusResult.newLevel;
+      if (completionBonusXp > 0) {
+        xpEvents.push({
+          action: 'QUIZ_COMPLETED_HIGH',
+          amount: completionBonusXp,
+          leveledUp: bonusResult.leveledUp,
+          newLevel: bonusResult.newLevel,
+          newTitle: bonusResult.leveledUp ? levelTitle(bonusResult.newLevel) : undefined,
+        });
+      }
     }
   }
 
@@ -592,10 +644,14 @@ export async function submitQuizAnswer(
         ? question.imageUrl
         : undefined,
     xpAwarded,
+    xpEvents,
     coins: txResult.coins,
     xp: newXp,
     level: newLevel,
-    stats: finalStats,
+    stats: {
+      ...finalStats,
+      xpEarned: finalStats.xp + completionBonusXp,
+    },
     completed: txResult.completed,
     currentIndex: txResult.currentIndex,
     progress: txResult.progress,
@@ -610,7 +666,7 @@ export async function skipQuizQuestion(
 ) {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate);
+  const pack = await getOrCreateDailyPack(language, packDate, timezone);
   if (!findQuestion(pack, questionId)) throw new Error('QUESTION_NOT_FOUND');
 
   return prisma.$transaction(async (tx) => {
@@ -699,7 +755,7 @@ export async function useQuizHint(
 ) {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate);
+  const pack = await getOrCreateDailyPack(language, packDate, timezone);
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
@@ -782,7 +838,7 @@ export async function timeoutQuizQuestion(
 ): Promise<QuizTimeoutResult> {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate);
+  const pack = await getOrCreateDailyPack(language, packDate, timezone);
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
@@ -831,25 +887,8 @@ export async function timeoutQuizQuestion(
       return result;
     }
 
-    const canDeduct = user.coins >= QUIZ_COIN_COST;
-    const penaltyApplied = canDeduct;
-    let newCoins = user.coins;
-
-    if (canDeduct) {
-      newCoins = user.coins - QUIZ_COIN_COST;
-      await tx.user.update({
-        where: { id: user.id },
-        data: { coins: newCoins },
-      });
-      await tx.coinTransaction.create({
-        data: {
-          userId: user.id,
-          amount: -QUIZ_COIN_COST,
-          type: 'SPEND',
-          description: `quiz_timeout:${questionId}`,
-        },
-      });
-    }
+    const penaltyApplied = false;
+    const newCoins = user.coins;
 
     progress.byQuestionId[questionId] = {
       status: 'timed_out',
@@ -888,10 +927,6 @@ export async function timeoutQuizQuestion(
       currentIndex: computeCurrentIndex(progress, pack),
       progress: progress.byQuestionId,
     };
-
-    if (!penaltyApplied) {
-      result.errorCode = 'INSUFFICIENT_COINS_FOR_TIMEOUT_PENALTY';
-    }
 
     return result;
   });

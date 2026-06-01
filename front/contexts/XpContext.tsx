@@ -7,6 +7,7 @@ import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUp
 import { syncNextPendingCelebration } from '../utils/levelUpCelebration.sync';
 import { setXpEventsHandler } from '../utils/xpEventsBridge';
 import { getClerkBearerToken, authHeaders } from '../utils/clerkAuthToken';
+import { AuthService } from '../src/services/authService';
 
 export interface XpEvent {
   action: string;
@@ -145,6 +146,70 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
   // level-up — otherwise the user would see the modal twice.
   const suppressNextAutoLevelUpRef = useRef(false);
 
+  const applyXpPayload = useCallback(async (data: {
+    level: number;
+    title: string;
+    xp?: number;
+    xpToNext: number;
+    currentLevelXp?: number;
+    nextLevelXp?: number;
+    xpInLevel?: number;
+    xpForNextLevel?: number;
+    progressPct?: number;
+    streak?: { current: number; longest: number };
+  }) => {
+    const newLevel = data.level;
+    const newTitleVal = data.title;
+    const newXp = data.xp ?? 0;
+
+    const previous = lastSeenLevelRef.current;
+    if (previous != null && newLevel > previous) {
+      if (suppressNextAutoLevelUpRef.current) {
+        suppressNextAutoLevelUpRef.current = false;
+      } else if (userId) {
+        await queueLevelUpCelebration(userId, {
+          previousLevel: previous,
+          newLevel,
+          newTitle: newTitleVal || levelTitle(newLevel),
+        });
+      }
+    }
+    lastSeenLevelRef.current = newLevel;
+
+    if (userId) {
+      await syncNextPendingCelebration(userId, newLevel);
+      await presentPendingLevelUpCelebration(userId);
+    }
+
+    const fallbackCurrent = clientXpForLevel(newLevel);
+    const fallbackNext = clientXpForLevel(newLevel + 1);
+    const apiCurrent =
+      typeof data.currentLevelXp === 'number' ? data.currentLevelXp : fallbackCurrent;
+    const apiNext =
+      typeof data.nextLevelXp === 'number' ? data.nextLevelXp : fallbackNext;
+    const apiXpInLevel =
+      typeof data.xpInLevel === 'number' ? data.xpInLevel : Math.max(0, newXp - apiCurrent);
+    const apiXpForNext =
+      typeof data.xpForNextLevel === 'number' && data.xpForNextLevel > 0
+        ? data.xpForNextLevel
+        : Math.max(1, apiNext - apiCurrent);
+
+    setXp(newXp);
+    setLevel(newLevel);
+    setTitle(newTitleVal);
+    setXpToNext(data.xpToNext);
+    setCurrentLevelXp(apiCurrent);
+    setNextLevelXp(apiNext);
+    setXpInLevel(apiXpInLevel);
+    setXpForNextLevel(apiXpForNext);
+    setProgressPct(
+      typeof data.progressPct === 'number'
+        ? data.progressPct
+        : Math.min(100, Math.round((apiXpInLevel / apiXpForNext) * 100)),
+    );
+    setStreak(data.streak || { current: 0, longest: 0 });
+  }, [userId]);
+
   const fetchXpData = useCallback(async () => {
     if (!isLoaded || !isSignedIn) {
       setLoading(false);
@@ -154,80 +219,28 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return;
 
-      const res = await fetch(`${getApiUrl()}/xp/me`, {
+      await AuthService.syncUserWithBackend(token).catch(() => null);
+
+      let res = await fetch(`${getApiUrl()}/xp/me`, {
         headers: authHeaders(token),
       });
+
+      if (res.status === 404) {
+        await AuthService.syncUserWithBackend(token).catch(() => null);
+        res = await fetch(`${getApiUrl()}/xp/me`, { headers: authHeaders(token) });
+      }
 
       if (!res.ok) return;
       const json = await res.json();
       if (json.status === 'SUCCESS' && json.data) {
-        const newLevel: number = json.data.level;
-        const newTitleVal: string = json.data.title;
-        const newXp: number = json.data.xp ?? 0;
-
-        // Detect a passive level-up: skip the very first payload (seed only).
-        const previous = lastSeenLevelRef.current;
-        if (previous != null && newLevel > previous) {
-          if (suppressNextAutoLevelUpRef.current) {
-            suppressNextAutoLevelUpRef.current = false;
-          } else if (userId) {
-            await queueLevelUpCelebration(userId, {
-              previousLevel: previous,
-              newLevel,
-              newTitle: newTitleVal || levelTitle(newLevel),
-            });
-          }
-        }
-        lastSeenLevelRef.current = newLevel;
-
-        if (userId) {
-          await syncNextPendingCelebration(userId, newLevel);
-          await presentPendingLevelUpCelebration(userId);
-        }
-
-        // Compute level-relative numbers locally if the backend hasn't
-        // started shipping them yet (older deploy / cached response). Once
-        // the new fields are present we just pass them through.
-        const fallbackCurrent = clientXpForLevel(newLevel);
-        const fallbackNext = clientXpForLevel(newLevel + 1);
-        const apiCurrent: number =
-          typeof json.data.currentLevelXp === 'number'
-            ? json.data.currentLevelXp
-            : fallbackCurrent;
-        const apiNext: number =
-          typeof json.data.nextLevelXp === 'number'
-            ? json.data.nextLevelXp
-            : fallbackNext;
-        const apiXpInLevel: number =
-          typeof json.data.xpInLevel === 'number'
-            ? json.data.xpInLevel
-            : Math.max(0, newXp - apiCurrent);
-        const apiXpForNext: number =
-          typeof json.data.xpForNextLevel === 'number' && json.data.xpForNextLevel > 0
-            ? json.data.xpForNextLevel
-            : Math.max(1, apiNext - apiCurrent);
-
-        setXp(newXp);
-        setLevel(newLevel);
-        setTitle(newTitleVal);
-        setXpToNext(json.data.xpToNext);
-        setCurrentLevelXp(apiCurrent);
-        setNextLevelXp(apiNext);
-        setXpInLevel(apiXpInLevel);
-        setXpForNextLevel(apiXpForNext);
-        setProgressPct(
-          typeof json.data.progressPct === 'number'
-            ? json.data.progressPct
-            : Math.min(100, Math.round((apiXpInLevel / apiXpForNext) * 100)),
-        );
-        setStreak(json.data.streak || { current: 0, longest: 0 });
+        await applyXpPayload(json.data);
       }
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, isSignedIn, userId]);
+  }, [isLoaded, isSignedIn, applyXpPayload]);
 
   // Fetch on mount and user change
   useEffect(() => {

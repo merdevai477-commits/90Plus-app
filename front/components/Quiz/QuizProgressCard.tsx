@@ -55,7 +55,7 @@ function QuizProgressCardInner({
 
   useEffect(() => {
     barWidth.value = withTiming(progress, {
-      duration: 500,
+      duration: 220,
       easing: Easing.out(Easing.cubic),
     });
   }, [progress, barWidth]);

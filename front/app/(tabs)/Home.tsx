@@ -49,6 +49,7 @@ import { MatchSubscriptionsService } from '../../services/matchSubscriptions.ser
 import { useScreenFont } from '../../utils/fontSetup';
 import { useTranslation } from '../../src/i18n';
 import { QuizApiService } from '../../services/quizApi.service';
+import { dailyQuizQueryKey, todayQuizDateKey } from '../../utils/quizDateKey';
 
 const API_URL = getApiUrl();
 
@@ -258,14 +259,16 @@ export default function HomeScreen() {
             if (!token || !isSignedIn || quizPreloadDone.current) return;
             quizPreloadDone.current = true;
             
+            const dateKey = todayQuizDateKey();
+
             queryClient.prefetchQuery({
-                queryKey: ['dailyQuiz', 'ar'],
+                queryKey: dailyQuizQueryKey('ar', dateKey),
                 queryFn: () => QuizApiService.fetchDaily(token, 'ar'),
                 staleTime: 5 * 60 * 1000,
             }).catch(() => {});
 
             queryClient.prefetchQuery({
-                queryKey: ['dailyQuiz', 'en'],
+                queryKey: dailyQuizQueryKey('en', dateKey),
                 queryFn: () => QuizApiService.fetchDaily(token, 'en'),
                 staleTime: 5 * 60 * 1000,
             }).catch(() => {});

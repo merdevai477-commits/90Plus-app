@@ -119,16 +119,21 @@ export const QuizApiService = {
   async fetchDaily(
     token: string,
     language: QuizApiLanguage,
-  ): Promise<QuizDailyPayload | null> {
+  ): Promise<QuizDailyPayload> {
     const res = await authFetch(
       `/quiz/daily?language=${language}`,
       token,
     );
+    if (res.status === 401) throw new Error('AUTH_REQUIRED');
+    if (res.status === 404) throw new Error('USER_NOT_FOUND');
+    if (res.status === 429) throw new Error('RATE_LIMIT');
     const json = await safeJsonParse<{ status: string; data: QuizDailyPayload }>(
       res,
       { status: 'ERROR', data: null as unknown as QuizDailyPayload },
     );
-    if (!res.ok || json?.status !== 'SUCCESS' || !json.data) return null;
+    if (!res.ok || json?.status !== 'SUCCESS' || !json.data) {
+      throw new Error(`API_ERROR_${res.status}`);
+    }
     return json.data;
   },
 

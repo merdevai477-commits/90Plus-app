@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { Bell, ChevronDown, Calendar, Ticket, X } from 'lucide-react-native';
+import { Bell, ChevronDown, Calendar, Ticket, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -602,6 +602,7 @@ export default function MatchesHubScreenV2() {
   const initialFilter = (params.filter as typeof FILTERS[number]) || 'All';
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>(initialFilter);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
   const [showTicketsInfo, setShowTicketsInfo] = useState(false);
   // selectedDate is the ground truth; the calendar grid derives everything
   // else from it (month length, highlighted cell, etc.).
@@ -753,13 +754,35 @@ export default function MatchesHubScreenV2() {
   }, []);
 
   const handleCalendarDayPress = useCallback((day: number) => {
-    const next = new Date(selectedDate);
+    const next = new Date(calendarViewDate);
     next.setDate(day);
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
     setFilter(filterForCalendarDay(next));
+  }, [calendarViewDate]);
+
+  const openCalendar = useCallback(() => {
+    setCalendarViewDate(new Date(selectedDate));
+    setShowCalendar(true);
   }, [selectedDate]);
+
+  const shiftCalendarMonth = useCallback((delta: number) => {
+    setCalendarViewDate((prev) => {
+      const next = new Date(prev);
+      next.setDate(1);
+      next.setMonth(next.getMonth() + delta);
+      return next;
+    });
+  }, []);
+
+  const goToTodayInCalendar = useCallback(() => {
+    const today = startOfLocalDay();
+    setCalendarViewDate(today);
+    setSelectedDate(today);
+    setShowCalendar(false);
+    setFilter(filterForCalendarDay(today));
+  }, []);
 
   // Convert groupedMatches from hook to LeagueGroup format for the UI
   const groups = useMemo((): LeagueGroup[] => {
@@ -1173,8 +1196,8 @@ export default function MatchesHubScreenV2() {
   // day number (1..daysInMonth) or `null` for a leading blank so the first
   // day lands under the correct weekday column.
   const calendarGrid = useMemo(() => {
-    const year = selectedDate.getFullYear();
-    const month = selectedDate.getMonth();
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     // Native JS Date.getDay: 0=Sunday..6=Saturday.
     // Arabic calendars traditionally start the week on Saturday; everyone
@@ -1188,7 +1211,7 @@ export default function MatchesHubScreenV2() {
     for (let i = 0; i < offset; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(d);
     return cells;
-  }, [selectedDate, tObj.matches?.screen?.weekStartsOn]);
+  }, [calendarViewDate, tObj.matches?.screen?.weekStartsOn]);
 
   // Week-day labels in the correct order for the current locale.
   const weekDayLabels = useMemo(() => {
@@ -1211,14 +1234,21 @@ export default function MatchesHubScreenV2() {
     return order.map((k) => byKey[k]);
   }, [tObj.matches?.screen?.weekDays, tObj.matches?.screen?.weekStartsOn]);
 
-  const selectedDay = selectedDate.getDate();
-  const selectedMonthLabel = useMemo(() => {
+  const calendarMonthLabel = useMemo(() => {
     try {
-      return selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      return calendarViewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     } catch {
-      return `${selectedDate.getMonth() + 1}/${selectedDate.getFullYear()}`;
+      return `${calendarViewDate.getMonth() + 1}/${calendarViewDate.getFullYear()}`;
     }
-  }, [selectedDate]);
+  }, [calendarViewDate]);
+
+  const isCalendarDaySelected = useCallback(
+    (day: number) =>
+      selectedDate.getDate() === day
+      && selectedDate.getMonth() === calendarViewDate.getMonth()
+      && selectedDate.getFullYear() === calendarViewDate.getFullYear(),
+    [selectedDate, calendarViewDate],
+  );
 
   const headerRight = useMemo(() => {
     const isEmpty = ticketsRemaining <= 0;
@@ -1274,7 +1304,7 @@ export default function MatchesHubScreenV2() {
             );
           })}
         </ScrollView>
-        <TouchableOpacity style={styles.calendarBtn} onPress={() => setShowCalendar(true)} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.calendarBtn} onPress={openCalendar} activeOpacity={0.7}>
           {isLiquidGlassSupported ? (
             <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
           ) : (
@@ -1438,13 +1468,34 @@ export default function MatchesHubScreenV2() {
               )}
               <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0.5)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
               <View style={styles.calHeader}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.calTitle}>{t('matches.screen.selectDate')}</Text>
-                  <Text style={styles.calMonthLabel}>{selectedMonthLabel}</Text>
+                  <View style={styles.calMonthNavRow}>
+                    <TouchableOpacity
+                      style={styles.calNavBtn}
+                      onPress={() => shiftCalendarMonth(-1)}
+                      accessibilityLabel={t('matches.screen.prevMonth')}
+                    >
+                      <ChevronLeft size={22} color="#E9D5FF" />
+                    </TouchableOpacity>
+                    <Text style={styles.calMonthLabel}>{calendarMonthLabel}</Text>
+                    <TouchableOpacity
+                      style={styles.calNavBtn}
+                      onPress={() => shiftCalendarMonth(1)}
+                      accessibilityLabel={t('matches.screen.nextMonth')}
+                    >
+                      <ChevronRight size={22} color="#E9D5FF" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                  <Text style={styles.calClose}>{t('matches.screen.done')}</Text>
-                </TouchableOpacity>
+                <View style={styles.calHeaderActions}>
+                  <TouchableOpacity style={styles.calTodayBtn} onPress={goToTodayInCalendar}>
+                    <Text style={styles.calTodayTxt}>{t('matches.screen.today')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowCalendar(false)}>
+                    <Text style={styles.calClose}>{t('matches.screen.done')}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.calBody}>
                 {weekDayLabels.map((d, i) => (
@@ -1454,7 +1505,7 @@ export default function MatchesHubScreenV2() {
                   if (day === null) {
                     return <View key={`blank-${idx}`} style={styles.calDay} />;
                   }
-                  const isSelected = day === selectedDay;
+                  const isSelected = isCalendarDaySelected(day);
                   return (
                     <TouchableOpacity
                       key={`d-${day}`}
@@ -1691,9 +1742,30 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   calendarModalOuter: { width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
   calendarModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden', padding: 24 },
-  calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, zIndex: 1 },
+  calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, zIndex: 1, gap: 12 },
   calTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  calMonthLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  calMonthNavRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  calNavBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  calMonthLabel: { color: '#E9D5FF', fontSize: 14, fontWeight: '700', minWidth: 130, textAlign: 'center' },
+  calHeaderActions: { alignItems: 'flex-end', gap: 10 },
+  calTodayBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.45)',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+  },
+  calTodayTxt: { color: '#D8B4FE', fontSize: 13, fontWeight: '700' },
   calClose: { color: PURPLE_PRIMARY, fontSize: 16, fontWeight: '700' },
   calBody: { flexDirection: 'row', flexWrap: 'wrap', gap: '2%', zIndex: 1 },
   calDayName: { width: '12%', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700', marginBottom: 12 },
