@@ -8,13 +8,15 @@
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView, type BlurTint } from 'expo-blur';
-import { Zap } from 'lucide-react-native';
+import { Crown, Zap } from 'lucide-react-native';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
 import { glassProps } from '../../constants/ui';
+import { CoinsInfoModal } from '../common/CoinsInfoModal';
+import { FeatureInfoModal } from '../common/FeatureInfoModal';
 
 const ACCENT = '#A855F7';
 const blurTint: BlurTint = 'dark';
@@ -26,6 +28,8 @@ interface RankHeaderProps {
 const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
+  const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
+  const [showRankInfo, setShowRankInfo] = React.useState(false);
 
   const display: string = loading ? '—' : String(coins);
 
@@ -36,21 +40,42 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
 
   const content = (
     <>
-      <View style={s.logoPillSmall}>
+      <Pressable
+        style={s.logoPillSmall}
+        onPress={() => setShowRankInfo(true)}
+        accessibilityRole="button"
+        accessibilityLabel={t.rankInfo.title}
+      >
         <Text style={s.logo90Small}>90</Text>
         <View style={s.plusChipSmall}>
           <Text style={s.logoPlusSmall}>PLUS</Text>
         </View>
-      </View>
+      </Pressable>
 
-      <View
+      <Pressable
         style={s.coinChip}
-        accessibilityRole="text"
+        onPress={() => setShowCoinsInfo(true)}
+        accessibilityRole="button"
         accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
       >
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={s.coinTxt}>{display}</Text>
-      </View>
+      </Pressable>
+
+      <CoinsInfoModal
+        visible={showCoinsInfo}
+        onClose={() => setShowCoinsInfo(false)}
+      />
+
+      <FeatureInfoModal
+        visible={showRankInfo}
+        onClose={() => setShowRankInfo(false)}
+        icon={<Crown size={30} color="#d8b4fe" />}
+        title={t.rankInfo.title}
+        bullets={[t.rankInfo.rule1, t.rankInfo.rule2, t.rankInfo.rule3]}
+        hype={t.rankInfo.hype}
+        gotItLabel={t.rankInfo.gotIt}
+      />
     </>
   );
 

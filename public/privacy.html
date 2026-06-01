@@ -1,249 +1,406 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>سياسة الخصوصية - 90Plus</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>سياسة الخصوصية | 90Plus</title>
+    <meta name="description" content="سياسة الخصوصية لتطبيق 90Plus — كيف نجمع ونحمي بياناتك." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+      :root {
+        --bg-0: #080608;
+        --bg-1: #0d0a14;
+        --ink: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.55);
+        --accent: #7c3aed;
+        --accent-2: #a78bfa;
+        --card: rgba(13, 10, 20, 0.92);
+        --border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 22px 64px rgba(124, 58, 237, 0.2);
+        --chip: rgba(124, 58, 237, 0.18);
+        --chip-text: rgba(255, 255, 255, 0.85);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Work Sans", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(900px 520px at 10% -10%, rgba(124, 58, 237, 0.25), transparent 60%),
+          radial-gradient(720px 420px at 90% 0%, rgba(76, 29, 149, 0.35), transparent 60%),
+          radial-gradient(700px 500px at 50% 115%, rgba(91, 33, 182, 0.2), transparent 70%),
+          linear-gradient(180deg, var(--bg-0), var(--bg-1));
+        min-height: 100vh;
+      }
+
+      .page {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .grain {
+        position: fixed;
+        inset: 0;
+        opacity: 0.12;
+        background-image: repeating-linear-gradient(
+          120deg,
+          rgba(255, 255, 255, 0.035),
+          rgba(255, 255, 255, 0.035) 1px,
+          transparent 1px,
+          transparent 6px
+        );
+        pointer-events: none;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 28px 7vw 10px;
+      }
+
+      .brand {
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+
+      nav a {
+        text-decoration: none;
+        color: var(--muted);
+        font-weight: 500;
+        margin-inline-start: 18px;
+      }
+
+      nav a.active {
+        color: var(--accent-2);
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px 7vw 80px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        margin-bottom: 30px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        font-weight: 600;
+      }
+
+      h1 {
+        font-family: "Fraunces", serif;
+        font-size: clamp(32px, 4vw, 48px);
+        margin: 0;
+      }
+
+      .lead {
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 720px;
+      }
+
+      .meta {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 6px;
+      }
+
+      .toc a {
+        font-size: 13px;
+        color: var(--accent-2);
+        text-decoration: none;
+        background: var(--chip);
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(124, 58, 237, 0.35);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 22px 24px;
+        box-shadow: var(--shadow);
+        margin-bottom: 18px;
+      }
+
+      h2 {
+        font-family: "Fraunces", serif;
+        font-size: 22px;
+        margin: 0 0 12px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        line-height: 1.7;
+      }
+
+      ul {
+        margin: 0 0 8px 0;
+        padding: 0 22px 0 0;
+        line-height: 1.7;
+      }
+
+      li {
+        margin-bottom: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--chip-text);
+        font-weight: 600;
+        font-size: 12px;
+        border: 1px solid rgba(124, 58, 237, 0.35);
+        margin-bottom: 12px;
+      }
+
+      .callout {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(124, 58, 237, 0.16);
+        border: 1px solid rgba(124, 58, 237, 0.35);
+        color: var(--ink);
+      }
+
+      .callout strong {
+        color: var(--accent-2);
+      }
+
+      main a {
+        color: var(--accent-2);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      nav a,
+      .toc a {
+        text-decoration: none;
+      }
+
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 24px 0 40px;
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(10px);
+        animation: reveal 0.6s ease forwards;
+      }
+
+      .delay-1 { animation-delay: 0.05s; }
+      .delay-2 { animation-delay: 0.12s; }
+      .delay-3 { animation-delay: 0.2s; }
+      .delay-4 { animation-delay: 0.3s; }
+
+      @keyframes reveal {
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-            background: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
-            color: #e5e5e5;
-            line-height: 1.8;
-            padding: 20px;
+      }
+
+      @media (max-width: 720px) {
+        header {
+          flex-direction: column;
+          gap: 10px;
+          align-items: flex-start;
         }
-        
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+
+        nav a {
+          margin-inline-start: 0;
+          margin-inline-end: 12px;
         }
-        
-        h1 {
-            color: #22c55e;
-            font-size: 32px;
-            margin-bottom: 10px;
-            text-align: center;
-            text-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+
+        .meta {
+          flex-direction: column;
+          gap: 6px;
         }
-        
-        .subtitle {
-            text-align: center;
-            color: #888;
-            margin-bottom: 40px;
-            font-size: 14px;
-        }
-        
-        h2 {
-            color: #22c55e;
-            font-size: 24px;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid rgba(34, 197, 94, 0.3);
-        }
-        
-        h3 {
-            color: #3b82f6;
-            font-size: 18px;
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }
-        
-        p {
-            margin-bottom: 15px;
-            color: #d1d5db;
-        }
-        
-        ul, ol {
-            margin: 15px 0;
-            padding-right: 30px;
-        }
-        
-        li {
-            margin-bottom: 10px;
-            color: #d1d5db;
-        }
-        
-        .highlight {
-            background: rgba(34, 197, 94, 0.1);
-            padding: 20px;
-            border-radius: 12px;
-            border-right: 4px solid #22c55e;
-            margin: 20px 0;
-        }
-        
-        .warning {
-            background: rgba(239, 68, 68, 0.1);
-            padding: 20px;
-            border-radius: 12px;
-            border-right: 4px solid #ef4444;
-            margin: 20px 0;
-        }
-        
-        .contact {
-            background: rgba(59, 130, 246, 0.1);
-            padding: 25px;
-            border-radius: 12px;
-            margin-top: 40px;
-            text-align: center;
-            border: 1px solid rgba(59, 130, 246, 0.3);
-        }
-        
-        .contact a {
-            color: #3b82f6;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        
-        .footer {
-            text-align: center;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            color: #666;
-            font-size: 14px;
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
-            }
-            
-            h2 {
-                font-size: 20px;
-            }
-        }
+      }
     </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔒 سياسة الخصوصية</h1>
-        <p class="subtitle">آخر تحديث: 5 فبراير 2026</p>
+  </head>
+  <body>
+    <div class="page">
+      <div class="grain"></div>
+      <header>
+        <div class="brand">90Plus</div>
+        <nav>
+          <a href="/terms">الشروط</a>
+          <a class="active" href="/privacy">الخصوصية</a>
+          <a href="/support">الدعم</a>
+        </nav>
+      </header>
 
-        <div class="highlight">
-            <p><strong>مرحباً بك في 90Plus!</strong></p>
-            <p>نحن نحترم خصوصيتك ونلتزم بحماية بياناتك الشخصية. توضح هذه السياسة كيفية جمع واستخدام وحماية معلوماتك.</p>
-        </div>
+      <main>
+        <section class="hero reveal">
+          <div class="eyebrow">قانوني</div>
+          <h1>سياسة الخصوصية</h1>
+          <p class="lead">
+            نحن في 90Plus نقدر خصوصيتك ونلتزم بحماية معلوماتك الشخصية. توضح هذه السياسة كيفية جمع
+            واستخدام وحماية بياناتك عند استخدام تطبيقنا.
+          </p>
+          <div class="meta">
+            <span>آخر تحديث: يناير 2024</span>
+          </div>
+          <div class="toc">
+            <a href="#intro">مقدمة</a>
+            <a href="#collect">المعلومات</a>
+            <a href="#use">الاستخدام</a>
+            <a href="#share">المشاركة</a>
+            <a href="#security">الأمان</a>
+            <a href="#rights">حقوقك</a>
+            <a href="#cookies">الكوكيز</a>
+            <a href="#children">الأطفال</a>
+            <a href="#updates">التحديثات</a>
+            <a href="#contact">تواصل</a>
+          </div>
+        </section>
 
-        <h2>📊 المعلومات التي نجمعها</h2>
-        
-        <h3>1. المعلومات التي تقدمها لنا</h3>
-        <ul>
-            <li><strong>معلومات الحساب:</strong> الاسم، اسم المستخدم، البريد الإلكتروني</li>
-            <li><strong>معلومات الملف الشخصي:</strong> الصورة الشخصية، السيرة الذاتية، الفريق المفضل</li>
-            <li><strong>المحتوى:</strong> الفيديوهات، التعليقات، التوقعات</li>
-            <li><strong>التفاعلات:</strong> الإعجابات، المتابعات، المشاركات</li>
-        </ul>
+        <section id="intro" class="card reveal delay-1">
+          <div class="pill">ملخص</div>
+          <h2>مقدمة</h2>
+          <p>
+            نحن في 90Plus نقدر خصوصيتك ونلتزم بحماية معلوماتك الشخصية. توضح هذه السياسة كيفية جمع
+            واستخدام وحماية بياناتك عند استخدام تطبيقنا.
+          </p>
+          <div class="callout">
+            <strong>باختصار:</strong> لا نبيع بياناتك الشخصية، ويمكنك طلب حذف حسابك في أي وقت من
+            إعدادات التطبيق.
+          </div>
+        </section>
 
-        <h3>2. المعلومات التي نجمعها تلقائياً</h3>
-        <ul>
+        <section id="collect" class="card reveal delay-2">
+          <h2>المعلومات التي نجمعها</h2>
+          <ul>
+            <li><strong>معلومات الحساب:</strong> الاسم، البريد الإلكتروني، اسم المستخدم</li>
+            <li><strong>معلومات الاستخدام:</strong> نشاطك في التطبيق، النقاط، الإنجازات</li>
+            <li><strong>المحتوى:</strong> الفيديوهات والصور التي ترفعها</li>
             <li><strong>معلومات الجهاز:</strong> نوع الجهاز، نظام التشغيل، معرف الجهاز</li>
-            <li><strong>معلومات الاستخدام:</strong> الصفحات المزارة، الوقت المستغرق، التفاعلات</li>
-            <li><strong>معلومات الموقع:</strong> الموقع التقريبي (إذا سمحت بذلك)</li>
-            <li><strong>ملفات تعريف الارتباط:</strong> لتحسين تجربة الاستخدام</li>
-        </ul>
+            <li><strong>معلومات الموقع:</strong> (اختيارية) لتخصيص المحتوى المحلي</li>
+          </ul>
+        </section>
 
-        <h2>🎯 كيف نستخدم معلوماتك</h2>
-        
-        <ol>
-            <li><strong>تقديم الخدمة:</strong> لتشغيل التطبيق وتقديم الميزات</li>
-            <li><strong>التخصيص:</strong> لتخصيص المحتوى والتوصيات</li>
-            <li><strong>التواصل:</strong> لإرسال الإشعارات والتحديثات</li>
-            <li><strong>التحسين:</strong> لتحليل الأداء وتحسين الخدمة</li>
-            <li><strong>الأمان:</strong> لحماية الحسابات ومنع الاحتيال</li>
-            <li><strong>الامتثال:</strong> للامتثال للقوانين واللوائح</li>
-        </ol>
+        <section id="use" class="card reveal delay-2">
+          <h2>كيف نستخدم معلوماتك</h2>
+          <ul>
+            <li>تقديم وتحسين خدمات التطبيق</li>
+            <li>تخصيص تجربتك وعرض محتوى مناسب</li>
+            <li>إرسال إشعارات مهمة حول التطبيق</li>
+            <li>منع الاحتيال وضمان أمان التطبيق</li>
+            <li>تحليل الاستخدام لتحسين الخدمات</li>
+            <li>التواصل معك للدعم الفني</li>
+          </ul>
+        </section>
 
-        <h2>🔐 كيف نحمي معلوماتك</h2>
-        
-        <div class="highlight">
-            <p>نستخدم تدابير أمنية متقدمة لحماية بياناتك:</p>
-            <ul>
-                <li>تشفير البيانات أثناء النقل والتخزين (SSL/TLS)</li>
-                <li>مصادقة ثنائية العامل</li>
-                <li>مراقبة أمنية على مدار الساعة</li>
-                <li>نسخ احتياطي منتظم للبيانات</li>
-                <li>وصول محدود للموظفين المصرح لهم فقط</li>
-            </ul>
-        </div>
+        <section id="share" class="card reveal delay-3">
+          <h2>مشاركة المعلومات</h2>
+          <p>نحن لا نبيع أو نؤجر معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك في الحالات التالية:</p>
+          <ul>
+            <li>مع موافقتك الصريحة</li>
+            <li>لتقديم الخدمات المطلوبة (مثل خدمات الدفع)</li>
+            <li>للامتثال للقوانين أو الأوامر القضائية</li>
+            <li>لحماية حقوقنا أو حقوق المستخدمين الآخرين</li>
+          </ul>
+        </section>
 
-        <h2>🤝 مشاركة المعلومات</h2>
-        
-        <p><strong>نحن لا نبيع بياناتك الشخصية أبداً.</strong> قد نشارك معلوماتك فقط في الحالات التالية:</p>
-        
-        <ul>
-            <li><strong>مع موافقتك:</strong> عندما تمنحنا إذناً صريحاً</li>
-            <li><strong>مقدمو الخدمات:</strong> شركات تساعدنا في تشغيل التطبيق (مثل الاستضافة)</li>
-            <li><strong>الامتثال القانوني:</strong> عند الطلب من السلطات القانونية</li>
-            <li><strong>حماية الحقوق:</strong> لحماية حقوقنا وحقوق المستخدمين</li>
-        </ul>
+        <section id="security" class="card reveal delay-3">
+          <h2>أمان البيانات</h2>
+          <p>نتخذ إجراءات أمنية متقدمة لحماية معلوماتك:</p>
+          <ul>
+            <li>تشفير البيانات أثناء النقل والتخزين</li>
+            <li>خوادم آمنة ومحمية</li>
+            <li>مراقبة مستمرة للأنشطة المشبوهة</li>
+            <li>تحديثات أمنية منتظمة</li>
+            <li>وصول محدود للموظفين المخولين فقط</li>
+          </ul>
+        </section>
 
-        <h2>👤 حقوقك</h2>
-        
-        <p>لديك الحق في:</p>
-        
-        <ul>
-            <li><strong>الوصول:</strong> طلب نسخة من بياناتك الشخصية</li>
-            <li><strong>التصحيح:</strong> تحديث أو تصحيح معلوماتك</li>
-            <li><strong>الحذف:</strong> طلب حذف حسابك وبياناتك</li>
-            <li><strong>التقييد:</strong> تقييد معالجة بياناتك</li>
-            <li><strong>النقل:</strong> الحصول على بياناتك بتنسيق قابل للنقل</li>
-            <li><strong>الاعتراض:</strong> الاعتراض على معالجة بياناتك</li>
-        </ul>
+        <section id="rights" class="card reveal delay-3">
+          <h2>حقوقك</h2>
+          <p>لديك الحق في:</p>
+          <ul>
+            <li>الوصول إلى معلوماتك الشخصية</li>
+            <li>تصحيح أو تحديث معلوماتك</li>
+            <li>حذف حسابك ومعلوماتك</li>
+            <li>تقييد معالجة بياناتك</li>
+            <li>نقل بياناتك إلى خدمة أخرى</li>
+            <li>الاعتراض على معالجة معينة لبياناتك</li>
+          </ul>
+        </section>
 
-        <div class="warning">
-            <h3>⚠️ حذف الحساب</h3>
-            <p>يمكنك حذف حسابك في أي وقت من إعدادات التطبيق. سيتم حذف جميع بياناتك بشكل دائم بعد 30 يوماً من تاريخ الطلب.</p>
-        </div>
+        <section id="cookies" class="card reveal delay-3">
+          <h2>ملفات تعريف الارتباط</h2>
+          <p>
+            نستخدم ملفات تعريف الارتباط وتقنيات مشابهة لتحسين تجربتك، تذكر تفضيلاتك، وتحليل استخدام
+            التطبيق. يمكنك التحكم في هذه الإعدادات من خلال إعدادات جهازك.
+          </p>
+        </section>
 
-        <h2>🍪 ملفات تعريف الارتباط</h2>
-        
-        <p>نستخدم ملفات تعريف الارتباط (Cookies) لـ:</p>
-        <ul>
-            <li>تذكر تفضيلاتك وإعداداتك</li>
-            <li>تحليل استخدام التطبيق</li>
-            <li>تحسين الأداء والأمان</li>
-            <li>تخصيص المحتوى والإعلانات</li>
-        </ul>
+        <section id="children" class="card reveal delay-3">
+          <h2>خصوصية الأطفال</h2>
+          <p>
+            تطبيقنا مخصص للمستخدمين الذين تبلغ أعمارهم 13 عاماً أو أكثر. نحن لا نجمع عمداً معلومات
+            شخصية من الأطفال دون سن 13 عاماً.
+          </p>
+        </section>
 
-        <h2>👶 خصوصية الأطفال</h2>
-        
-        <p>التطبيق مخصص للمستخدمين الذين تبلغ أعمارهم 13 عاماً فما فوق. نحن لا نجمع معلومات من الأطفال دون 13 عاماً عن قصد.</p>
+        <section id="updates" class="card reveal delay-4">
+          <h2>التحديثات</h2>
+          <p>
+            قد نحدث هذه السياسة من وقت لآخر. سنخطرك بأي تغييرات مهمة عبر التطبيق أو البريد
+            الإلكتروني. استمرار استخدامك للتطبيق يعني موافقتك على السياسة المحدثة.
+          </p>
+        </section>
 
-        <h2>🌍 نقل البيانات الدولي</h2>
-        
-        <p>قد يتم نقل بياناتك ومعالجتها في دول أخرى. نضمن حماية بياناتك وفقاً لهذه السياسة بغض النظر عن موقع المعالجة.</p>
+        <section id="contact" class="card reveal delay-4">
+          <h2>تواصل معنا</h2>
+          <p>إذا كان لديك أي أسئلة حول سياسة الخصوصية هذه، يمكنك التواصل معنا:</p>
+          <ul>
+            <li><strong>البريد الإلكتروني:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
+            <li><strong>الهاتف:</strong> +220 76 30 953</li>
+            <li><strong>الدعم:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
+            <li><strong>العنوان:</strong> 90Plus App Support Team</li>
+          </ul>
+        </section>
+      </main>
 
-        <h2>🔄 التغييرات على هذه السياسة</h2>
-        
-        <p>قد نقوم بتحديث هذه السياسة من وقت لآخر. سنخطرك بأي تغييرات جوهرية عبر التطبيق أو البريد الإلكتروني.</p>
-
-        <div class="contact">
-            <h3>📧 تواصل معنا</h3>
-            <p>إذا كان لديك أي أسئلة حول سياسة الخصوصية:</p>
-            <p><strong>البريد الإلكتروني:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></p>
-            <p><strong>الدعم:</strong> <a href="https://90plus-app-production.up.railway.app/support">مركز المساعدة</a></p>
-        </div>
-
-        <div class="footer">
-            <p>© 2026 90Plus. جميع الحقوق محفوظة.</p>
-            <p>صُنع بـ ❤️ لعشاق كرة القدم</p>
-        </div>
+      <footer>90Plus — سياسة الخصوصية</footer>
     </div>
-</body>
+  </body>
 </html>

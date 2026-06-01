@@ -3,7 +3,10 @@
  * صفحات الدعم والمساعدة
  */
 
+import path from 'path';
 import { Router, Request, Response } from 'express';
+
+const PRIVACY_PAGE_PATH = path.join(__dirname, '../../public/privacy.html');
 import {
     buildAppInviteLandingPage,
     buildProfileLandingPage,
@@ -315,234 +318,14 @@ router.get('/support', (_req: Request, res: Response): void => {
 
 /**
  * GET /privacy
- * صفحة سياسة الخصوصية
+ * صفحة سياسة الخصوصية — ثيم قانوني موحّد (public/privacy.html)
  */
 router.get('/privacy', (_req: Request, res: Response): void => {
-    const privacyPage = `
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>90Plus - سياسة الخصوصية</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.8;
-                color: #333;
-                background: linear-gradient(135deg, #4A148C 0%, #7B1FA2 100%);
-                min-height: 100vh;
-            }
-            
-            .container {
-                max-width: 900px;
-                margin: 0 auto;
-                padding: 20px;
-                background: white;
-                margin-top: 30px;
-                margin-bottom: 30px;
-                border-radius: 15px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            }
-            
-            .header {
-                text-align: center;
-                margin-bottom: 40px;
-                padding-bottom: 20px;
-                border-bottom: 2px solid #4A148C;
-            }
-            
-            .logo {
-                width: 60px;
-                height: 60px;
-                margin: 0 auto 15px;
-                background: #4A148C;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-            }
-            
-            h1 {
-                color: #4A148C;
-                margin-bottom: 10px;
-            }
-            
-            h2 {
-                color: #4A148C;
-                margin: 30px 0 15px 0;
-                padding-bottom: 10px;
-                border-bottom: 1px solid #eee;
-            }
-            
-            .section {
-                margin-bottom: 25px;
-            }
-            
-            .last-updated {
-                background: #f8f9fa;
-                padding: 15px;
-                border-radius: 8px;
-                margin-bottom: 30px;
-                text-align: center;
-                color: #666;
-            }
-            
-            ul {
-                margin: 15px 0;
-                padding-right: 25px;
-            }
-            
-            li {
-                margin-bottom: 8px;
-            }
-            
-            .contact-box {
-                background: #f8f9fa;
-                padding: 20px;
-                border-radius: 10px;
-                border-left: 4px solid #4A148C;
-                margin-top: 30px;
-            }
-            
-            .back-link {
-                display: inline-block;
-                margin-bottom: 20px;
-                color: #4A148C;
-                text-decoration: none;
-                font-weight: bold;
-            }
-            
-            .back-link:hover {
-                text-decoration: underline;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <a href="/support" class="back-link">← العودة إلى الدعم</a>
-            
-            <div class="header">
-                <div class="logo">90+</div>
-                <h1>سياسة الخصوصية</h1>
-            </div>
-            
-            <div class="last-updated">
-                آخر تحديث: يناير 2024
-            </div>
-            
-            <div class="section">
-                <h2>مقدمة</h2>
-                <p>
-                    نحن في 90Plus نقدر خصوصيتك ونلتزم بحماية معلوماتك الشخصية. توضح هذه السياسة كيفية جمع واستخدام وحماية بياناتك عند استخدام تطبيقنا.
-                </p>
-            </div>
-            
-            <div class="section">
-                <h2>المعلومات التي نجمعها</h2>
-                <ul>
-                    <li><strong>معلومات الحساب:</strong> الاسم، البريد الإلكتروني، اسم المستخدم</li>
-                    <li><strong>معلومات الاستخدام:</strong> نشاطك في التطبيق، النقاط، الإنجازات</li>
-                    <li><strong>المحتوى:</strong> الفيديوهات والصور التي ترفعها</li>
-                    <li><strong>معلومات الجهاز:</strong> نوع الجهاز، نظام التشغيل، معرف الجهاز</li>
-                    <li><strong>معلومات الموقع:</strong> (اختيارية) لتخصيص المحتوى المحلي</li>
-                </ul>
-            </div>
-            
-            <div class="section">
-                <h2>كيف نستخدم معلوماتك</h2>
-                <ul>
-                    <li>تقديم وتحسين خدمات التطبيق</li>
-                    <li>تخصيص تجربتك وعرض محتوى مناسب</li>
-                    <li>إرسال إشعارات مهمة حول التطبيق</li>
-                    <li>منع الاحتيال وضمان أمان التطبيق</li>
-                    <li>تحليل الاستخدام لتحسين الخدمات</li>
-                    <li>التواصل معك للدعم الفني</li>
-                </ul>
-            </div>
-            
-            <div class="section">
-                <h2>مشاركة المعلومات</h2>
-                <p>نحن لا نبيع أو نؤجر معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك في الحالات التالية:</p>
-                <ul>
-                    <li>مع موافقتك الصريحة</li>
-                    <li>لتقديم الخدمات المطلوبة (مثل خدمات الدفع)</li>
-                    <li>للامتثال للقوانين أو الأوامر القضائية</li>
-                    <li>لحماية حقوقنا أو حقوق المستخدمين الآخرين</li>
-                </ul>
-            </div>
-            
-            <div class="section">
-                <h2>أمان البيانات</h2>
-                <p>نتخذ إجراءات أمنية متقدمة لحماية معلوماتك:</p>
-                <ul>
-                    <li>تشفير البيانات أثناء النقل والتخزين</li>
-                    <li>خوادم آمنة ومحمية</li>
-                    <li>مراقبة مستمرة للأنشطة المشبوهة</li>
-                    <li>تحديثات أمنية منتظمة</li>
-                    <li>وصول محدود للموظفين المخولين فقط</li>
-                </ul>
-            </div>
-            
-            <div class="section">
-                <h2>حقوقك</h2>
-                <p>لديك الحق في:</p>
-                <ul>
-                    <li>الوصول إلى معلوماتك الشخصية</li>
-                    <li>تصحيح أو تحديث معلوماتك</li>
-                    <li>حذف حسابك ومعلوماتك</li>
-                    <li>تقييد معالجة بياناتك</li>
-                    <li>نقل بياناتك إلى خدمة أخرى</li>
-                    <li>الاعتراض على معالجة معينة لبياناتك</li>
-                </ul>
-            </div>
-            
-            <div class="section">
-                <h2>ملفات تعريف الارتباط</h2>
-                <p>
-                    نستخدم ملفات تعريف الارتباط وتقنيات مشابهة لتحسين تجربتك، تذكر تفضيلاتك، وتحليل استخدام التطبيق. يمكنك التحكم في هذه الإعدادات من خلال إعدادات جهازك.
-                </p>
-            </div>
-            
-            <div class="section">
-                <h2>خصوصية الأطفال</h2>
-                <p>
-                    تطبيقنا مخصص للمستخدمين الذين تبلغ أعمارهم 13 عاماً أو أكثر. نحن لا نجمع عمداً معلومات شخصية من الأطفال دون سن 13 عاماً.
-                </p>
-            </div>
-            
-            <div class="section">
-                <h2>التحديثات</h2>
-                <p>
-                    قد نحدث هذه السياسة من وقت لآخر. سنخطرك بأي تغييرات مهمة عبر التطبيق أو البريد الإلكتروني. استمرار استخدامك للتطبيق يعني موافقتك على السياسة المحدثة.
-                </p>
-            </div>
-            
-            <div class="contact-box">
-                <h2>تواصل معنا</h2>
-                <p>إذا كان لديك أي أسئلة حول سياسة الخصوصية هذه، يمكنك التواصل معنا:</p>
-                <ul>
-                    <li><strong>البريد الإلكتروني:</strong> merdevai477@gmail.com</li>
-                    <li><strong>الهاتف:</strong> +220 76 30 953</li>
-                    <li><strong>الدعم:</strong> merdevai477@gmail.com</li>
-                    <li><strong>العنوان:</strong> 90Plus App Support Team</li>
-                </ul>
-            </div>
-        </div>
-    </body>
-    </html>
-    `;
-    
-    res.send(privacyPage);
+    res.sendFile(PRIVACY_PAGE_PATH, (err) => {
+        if (err) {
+            res.status(500).send('تعذّر تحميل صفحة سياسة الخصوصية');
+        }
+    });
 });
 
 /**

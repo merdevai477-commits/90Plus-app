@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Zap } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { XpInfoModal } from './XpInfoModal';
 
 interface XpBadgeProps {
   xp: number;
@@ -11,27 +11,31 @@ interface XpBadgeProps {
 }
 
 export const XpBadge: React.FC<XpBadgeProps> = ({ xp, level, size = 'md', onPress }) => {
-  const router = useRouter();
+  const [visible, setVisible] = React.useState(false);
 
   const handlePress = () => {
     if (onPress) {
       onPress();
     } else {
-      router.push('/(tabs)/rank');
+      setVisible(true);
     }
   };
 
   const sizeStyles = SIZE_MAP[size];
 
   return (
-    <Pressable onPress={handlePress}>
-      <View style={[styles.badge, sizeStyles.container]}>
-        <Zap size={sizeStyles.iconSize} color="#A855F7" fill="#A855F7" />
-        <Text style={[styles.text, sizeStyles.text]}>
-          {xp.toLocaleString()} XP · Lv. {level}
-        </Text>
-      </View>
-    </Pressable>
+    <>
+      <Pressable onPress={handlePress}>
+        <View style={[styles.badge, sizeStyles.container]}>
+          <Zap size={sizeStyles.iconSize} color="#A855F7" fill="#A855F7" />
+          <Text style={[styles.text, sizeStyles.text]}>
+            {xp.toLocaleString()} XP · Lv. {level}
+          </Text>
+        </View>
+      </Pressable>
+
+      <XpInfoModal visible={visible} onClose={() => setVisible(false)} />
+    </>
   );
 };
 

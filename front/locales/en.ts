@@ -684,6 +684,56 @@ export const en = {
     great: 'Awesome!',
   },
 
+  coinsInfo: {
+    title: 'What can I use coins for?',
+    rule1: 'Match predictions: each prediction costs 5 coins. Earn coins back when your prediction is correct.',
+    rule2: 'Daily quiz: skip a question or use a hint (each costs 10 coins).',
+    rule3: 'Earn more coins from rewards like the Lucky Wheel and in-app challenges.',
+    gotIt: 'Got it',
+  },
+
+  xpInfo: {
+    title: 'What is XP used for?',
+    rule1: 'XP increases your level. Higher levels unlock titles and show your progress across the app.',
+    rule2: 'Earn XP by playing the daily quiz, getting correct predictions, and completing in-app activities.',
+    rule3: 'Leaderboards rank players by XP earned in the selected period.',
+    gotIt: 'Got it',
+  },
+
+  levelInfo: {
+    title: 'Your level',
+    youAreLevel: 'You are Level {level}',
+    hype: 'Keep going — every win, quiz, and prediction pushes you closer to the top.',
+    gotIt: 'Got it',
+  },
+
+  rankInfo: {
+    title: 'Rank Arena',
+    rule1: 'Compete in the Top Players leaderboard and climb with XP.',
+    rule2: 'See weekly/monthly podiums, your level progress, and the full Top 11 board.',
+    rule3: 'Every action counts — post, predict, quiz, and keep your streak alive.',
+    hype: 'This is your road to the top. Keep grinding — champions don’t stop.',
+    gotIt: 'Got it',
+  },
+
+  matchesInfo: {
+    title: 'Live Score & Matches',
+    rule1: 'Open match details for lineups, stats, events, and head-to-head.',
+    rule2: 'Explore player profiles with goals, assists, matches, and season stats.',
+    rule3: 'Make predictions on upcoming fixtures and win coins when you’re right.',
+    hype: 'Stay locked in — every match is a chance to prove you know the game.',
+    gotIt: 'Got it',
+  },
+
+  chatInfo: {
+    title: 'Captain AI',
+    rule1: 'Ask for match analysis, tactics breakdowns, and quick football answers.',
+    rule2: 'Get personalized suggestions based on your profile and progress.',
+    rule3: 'Faster, safer replies — with clear errors when the network is unstable.',
+    hype: 'Train your football IQ daily — the next level is one question away.',
+    gotIt: 'Got it',
+  },
+
   // Notifications Screen
   notifications: {
     title: 'Notifications',
@@ -2252,9 +2302,13 @@ export const en = {
     sectionLoadFailedSub: 'Tap to retry',
     accessibilityRetry: 'Retry loading {section}',
     emptyMatchesTitle: 'No matches right now',
-    emptyMatchesSub: "No matches scheduled yet\nPull down to refresh",
+    emptyMatchesSub: 'No matches scheduled yet',
+    emptyMatchesHint: 'Pick another day from the calendar',
+    emptyMatchesBadge: 'Fixtures',
     browseAllMatches: 'Browse all matches',
+    refresh: 'Refresh',
     accessibilityOpenMatches: 'Open matches list',
+    accessibilityRefreshMatches: 'Refresh matches',
   },
 
   // ── Search expansion ─────────────────────────────────────────────────

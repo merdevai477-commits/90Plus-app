@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { Bell, ChevronDown, Calendar, Ticket, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Bell, ChevronDown, Calendar, Ticket, X, ChevronLeft, ChevronRight, CalendarCheck2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -28,6 +28,7 @@ import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
@@ -659,6 +660,7 @@ export default function MatchesHubScreenV2() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
   const [showTicketsInfo, setShowTicketsInfo] = useState(false);
+  const [showMatchesInfo, setShowMatchesInfo] = useState(false);
   // selectedDate is the ground truth; the calendar grid derives everything
   // else from it (month length, highlighted cell, etc.).
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -1070,8 +1072,7 @@ export default function MatchesHubScreenV2() {
       }
 
       // Anything else — roll back the optimistic update and revert cache.
-      const rolledBack: Record<string, 'home' | 'draw' | 'away'> = { ...nextMap };
-      delete rolledBack[fixtureId];
+      const rolledBack: Record<string, UserPredictionEntry> = { ...predictedMatches };
       setPredictedMatches(rolledBack);
       setTicketsRemaining(ticketsRemaining);
       if (PRED_CACHE_KEY && TICKETS_CACHE_KEY) {
@@ -1416,17 +1417,33 @@ export default function MatchesHubScreenV2() {
         style={[styles.floatingHeader, { paddingTop: Math.max(insets.top, 10) + 10 }]}
       >
         <View style={styles.headerLeft}>
-          <View style={styles.logoPillSmall}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setShowMatchesInfo(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('matchesInfo.title')}
+            style={styles.logoPillSmall}
+          >
             <Text style={styles.logo90Small}>90</Text>
             <View style={styles.plusChipSmall}>
               <Text style={styles.logoPlusSmall}>PLUS</Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <Text style={styles.headerTitleTxt}>{t('matches.screen.title')}</Text>
         </View>
         <View style={{ flex: 1 }} />
         {headerRight}
       </FloatingHeader>
+
+      <FeatureInfoModal
+        visible={showMatchesInfo}
+        onClose={() => setShowMatchesInfo(false)}
+        icon={<CalendarCheck2 size={30} color="#d8b4fe" />}
+        title={t('matchesInfo.title')}
+        bullets={[t('matchesInfo.rule1'), t('matchesInfo.rule2'), t('matchesInfo.rule3')]}
+        hype={t('matchesInfo.hype')}
+        gotItLabel={t('matchesInfo.gotIt')}
+      />
       {/* FlashList — virtualized, JS-thread friendly, no nested scroll.
           Three rendering modes:
             - Predictions: legacy LeagueGroup flow (every league + prediction buttons)

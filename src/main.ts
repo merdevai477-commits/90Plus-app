@@ -469,11 +469,7 @@ app.get('/delete-account.html', (req, res) => {
     });
 });
 
-// Legacy routes for backward compatibility
-app.get('/privacy', (req, res) => {
-    res.redirect('/privacy-policy.html');
-});
-
+// Legacy routes for backward compatibility (/privacy is served by support.routes.ts)
 app.get('/terms', (req, res) => {
     res.redirect('/terms-of-service.html');
 });

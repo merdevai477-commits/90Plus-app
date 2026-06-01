@@ -5,10 +5,12 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { Sparkles } from 'lucide-react-native';
 import { BlurIntensity } from '../../constants/theme';
 import { useTranslation } from '../../src/i18n';
 import { chatColors } from './chatTheme';
 import { chatScreenStyles as styles } from './chatScreen.styles';
+import { FeatureInfoModal } from '../common/FeatureInfoModal';
 
 export type ChatHeaderProps = {
   onBack: () => void;
@@ -20,6 +22,7 @@ export type ChatHeaderProps = {
 export function ChatHeader({ onBack, onMenu, backLabel, menuLabel }: ChatHeaderProps) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const [showChatInfo, setShowChatInfo] = React.useState(false);
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -63,13 +66,18 @@ export function ChatHeader({ onBack, onMenu, backLabel, menuLabel }: ChatHeaderP
         </Pressable>
 
         <View style={styles.headerCenter}>
-          <View style={styles.logoPillLarge}>
+          <Pressable
+            style={styles.logoPillLarge}
+            onPress={() => setShowChatInfo(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t.chatInfo.title}
+          >
             <Text style={styles.logo90Large}>90</Text>
             <View style={styles.plusChipLarge}>
               <Text style={styles.logoPlusLarge}>PLUS</Text>
             </View>
             <Text style={styles.captainText}>{t.chat.headerCaptainAi}</Text>
-          </View>
+          </Pressable>
         </View>
 
         <Pressable
@@ -84,6 +92,16 @@ export function ChatHeader({ onBack, onMenu, backLabel, menuLabel }: ChatHeaderP
           </Svg>
         </Pressable>
       </View>
+
+      <FeatureInfoModal
+        visible={showChatInfo}
+        onClose={() => setShowChatInfo(false)}
+        icon={<Sparkles size={30} color="#d8b4fe" />}
+        title={t.chatInfo.title}
+        bullets={[t.chatInfo.rule1, t.chatInfo.rule2, t.chatInfo.rule3]}
+        hype={t.chatInfo.hype}
+        gotItLabel={t.chatInfo.gotIt}
+      />
     </View>
   );
 }

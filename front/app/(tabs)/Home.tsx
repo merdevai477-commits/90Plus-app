@@ -798,6 +798,7 @@ export default function HomeScreen() {
                             onMatchPress={handleMatchPress}
                             onViewAllPress={handleViewAllMatches}
                             onFavoritePress={handleFavoritePress}
+                            onRefreshPress={onRefresh}
                             isLoading={loadingMatches && matches.length === 0}
                         />
                     )}

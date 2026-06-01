@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 /** Railway production host until a custom domain is configured */
 export const DEFAULT_SHARE_BASE_URL =
@@ -38,6 +38,13 @@ export const ANDROID_RELEASE_SHA256 =
 
 export const PLAY_STORE_URL =
   `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
+
+/** Google Play listing with reviews section (HTTPS — works in browser + redirects to app) */
+export const PLAY_STORE_REVIEW_URL = `${PLAY_STORE_URL}&showAllReviews=true`;
+
+/** Google Play app deep link with reviews section */
+export const PLAY_STORE_MARKET_REVIEW_URL =
+  `market://details?id=${ANDROID_PACKAGE}&showAllReviews=true`;
 
 export const APP_STORE_URL = 'https://apps.apple.com/app/90plus/id6744076498';
 
@@ -130,9 +137,37 @@ export function getStoreUrl(): string {
 /** Opens the store review screen on Android; falls back to listing URL elsewhere */
 export function getStoreReviewUrl(): string {
   if (Platform.OS === 'android') {
-    return `market://details?id=${ANDROID_PACKAGE}&showAllReviews=true`;
+    return PLAY_STORE_MARKET_REVIEW_URL;
   }
   return getStoreUrl();
+}
+
+/**
+ * Opens the platform store for rating.
+ * Android: Play Store app (market://) then HTTPS with showAllReviews=true.
+ * iOS: App Store listing.
+ */
+export async function openAppStoreForRating(): Promise<boolean> {
+  if (Platform.OS === 'android') {
+    try {
+      await Linking.openURL(PLAY_STORE_MARKET_REVIEW_URL);
+      return true;
+    } catch {
+      try {
+        await Linking.openURL(PLAY_STORE_REVIEW_URL);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  try {
+    await Linking.openURL(APP_STORE_URL || PLAY_STORE_URL);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Share message — one smart link; landing page routes to the correct store */

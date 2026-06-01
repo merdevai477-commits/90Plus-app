@@ -8,12 +8,15 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Zap } from 'lucide-react-native';
 import { BlurView, type BlurTint } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { useCoins } from '../../contexts/CoinsContext';
 import { glassProps } from '../../constants/ui';
+import { useTranslation } from '../../src/i18n';
+import { CoinsInfoModal } from '../common/CoinsInfoModal';
+import { LevelInfoModal } from '../common/LevelInfoModal';
 
 const ACCENT = '#A855F7';
 const blurTint: BlurTint = 'dark';
@@ -25,6 +28,9 @@ interface ProfileTopBarProps {
 
 const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
   const { coins, loading } = useCoins();
+  const { t } = useTranslation();
+  const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
+  const [showLevelInfo, setShowLevelInfo] = React.useState(false);
 
   const display: string = loading ? '—' : String(coins);
 
@@ -36,22 +42,41 @@ const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
   const content = (
     <>
       {level != null ? (
-        <View style={s.lvlBadge}>
-          <Text style={s.lvlLabel}>LVL</Text>
-          <Text style={s.lvlNumber}>{level}</Text>
-        </View>
+        <>
+          <Pressable
+            style={s.lvlBadge}
+            onPress={() => setShowLevelInfo(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t.levelInfo.youAreLevel.replace('{level}', String(level))}
+          >
+            <Text style={s.lvlLabel}>LVL</Text>
+            <Text style={s.lvlNumber}>{level}</Text>
+          </Pressable>
+
+          <LevelInfoModal
+            visible={showLevelInfo}
+            onClose={() => setShowLevelInfo(false)}
+            level={level}
+          />
+        </>
       ) : (
         <View style={s.lvlPlaceholder} />
       )}
 
-      <View
+      <Pressable
         style={s.coinChip}
-        accessibilityRole="text"
-        accessibilityLabel={`رصيد العملات: ${display}`}
+        onPress={() => setShowCoinsInfo(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
       >
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={s.coinTxt}>{display}</Text>
-      </View>
+      </Pressable>
+
+      <CoinsInfoModal
+        visible={showCoinsInfo}
+        onClose={() => setShowCoinsInfo(false)}
+      />
     </>
   );
 

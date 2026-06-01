@@ -58,10 +58,7 @@ import {
   PURPLE_PRIMARY,
   GOLD_SOFT,
 } from '../../constants/tokens';
-import {
-  getStoreReviewUrl,
-  getStoreUrl,
-} from '../../constants/shareLinks';
+import { openAppStoreForRating } from '../../constants/shareLinks';
 import { useAppShareReward } from '../../hooks/useAppShareReward';
 
 const APP_VERSION = '1.0.0';
@@ -189,13 +186,11 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleRateApp = () => {
-    const storeUrl = getStoreReviewUrl();
-    Linking.openURL(storeUrl).catch(() => {
-      Linking.openURL(getStoreUrl()).catch(() => {
-        toastManager.showInfo(tSettings.rateThanks, tSettings.rateThanksDetail);
-      });
-    });
+  const handleRateApp = async () => {
+    const opened = await openAppStoreForRating();
+    if (!opened) {
+      toastManager.showInfo(tSettings.rateThanks, tSettings.rateThanksDetail);
+    }
   };
 
   const { shareAppAndClaim } = useAppShareReward();

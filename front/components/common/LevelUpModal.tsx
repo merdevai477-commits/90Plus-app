@@ -13,6 +13,7 @@ import {
   Text,
   Vibration,
   View,
+  type ViewStyle,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,6 +29,7 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  type AnimatedStyle,
 } from 'react-native-reanimated';
 import { useAuth } from '@clerk/clerk-expo';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -54,8 +56,6 @@ const ACCENT_DEEP = '#7C3AED';
 const GOLD = '#F5C518';
 const CONFETTI_COUNT = 16;
 const CONFETTI_COLORS = [GOLD, ACCENT, '#fff', '#F472B6', '#34D399', '#60A5FA'];
-
-const GlassCard = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
 function ConfettiBurst({ active }: { active: boolean }): React.ReactElement | null {
   const particles = React.useMemo(
@@ -105,9 +105,9 @@ function ConfettiParticle({
         { translateX: Math.cos(rad) * dist * progress.value },
         { translateY: Math.sin(rad) * dist * progress.value + progress.value * 24 },
         { scale: 1 - progress.value * 0.35 },
-        { rotate: `${progress.value * 220}deg` },
+        { rotateZ: `${progress.value * 220}deg` },
       ],
-    };
+    } as ViewStyle;
   });
 
   return <Animated.View style={[styles.confettiDot, { backgroundColor: color }, style]} />;
@@ -134,8 +134,8 @@ function SparkleRing(): React.ReactElement {
   }, [pulse, rot]);
 
   const style = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rot.value}deg` }, { scale: pulse.value }],
-  }));
+    transform: [{ rotateZ: `${rot.value}deg` }, { scale: pulse.value }],
+  }) as ViewStyle);
 
   return (
     <Animated.View pointerEvents="none" style={[styles.sparkleRing, style]}>
@@ -295,27 +295,27 @@ export const LevelUpModal: React.FC = () => {
       { translateY: cardTranslateY.value },
       { scale: cardScale.value },
     ],
-  }));
+  }) as ViewStyle);
   const animatedBackdrop = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
-  }));
+  }) as ViewStyle);
   const animatedArrow = useAnimatedStyle(() => ({
     transform: [{ translateY: -6 + arrow.value * -10 }],
     opacity: arrow.value,
-  }));
+  }) as ViewStyle);
   const animatedNewLevel = useAnimatedStyle(() => ({
     transform: [{ scale: newLevelScale.value }],
-  }));
+  }) as ViewStyle);
   const animatedPrevLevel = useAnimatedStyle(() => ({
     transform: [{ scale: prevLevelScale.value }],
     opacity: 0.4 + prevLevelScale.value * 0.35,
-  }));
+  }) as ViewStyle);
   const animatedGlow = useAnimatedStyle(() => ({
     opacity: glowFlash.value * 0.5,
-  }));
+  }) as ViewStyle);
   const animatedShimmer = useAnimatedStyle(() => ({
     opacity: 0.08 + shimmer.value * 0.14,
-  }));
+  }) as ViewStyle);
 
   const headline: string = (t as any)?.xp?.levelUpModal?.headline ?? 'LEVEL UP';
   const claimText: string = (t as any)?.xp?.levelUpModal?.claim ?? 'Got it!';
@@ -325,14 +325,6 @@ export const LevelUpModal: React.FC = () => {
   const youAreNow = event
     ? youAreNowTpl.replace('{{level}}', String(event.newLevel))
     : '';
-
-  const glassCardProps = isLiquidGlassSupported
-    ? ({
-        effect: 'clear' as const,
-        interactive: true,
-        tint: 'rgba(12, 6, 28, 0.55)',
-      } as const)
-    : ({ intensity: 55, tint: 'dark' as const });
 
   return (
     <Modal
@@ -356,7 +348,77 @@ export const LevelUpModal: React.FC = () => {
         </Animated.View>
 
         <Animated.View style={[styles.cardShell, animatedCardWrap]}>
-          <GlassCard {...glassCardProps} style={styles.glassCard}>
+          {isLiquidGlassSupported ? (
+            <LiquidGlassView
+              effect="clear"
+              interactive
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              {...({ style: styles.glassCard, tint: 'rgba(12, 6, 28, 0.55)' } as any)}
+            >
+              <LevelUpCardBody
+                event={event}
+                headline={headline}
+                youAreNow={youAreNow}
+                claimText={claimText}
+                tapHint={tapHint}
+                showConfetti={showConfetti}
+                animatedShimmer={animatedShimmer}
+                animatedPrevLevel={animatedPrevLevel}
+                animatedNewLevel={animatedNewLevel}
+                animatedArrow={animatedArrow}
+                onDismiss={dismiss}
+              />
+            </LiquidGlassView>
+          ) : (
+            <BlurView intensity={55} tint="dark" style={styles.glassCard}>
+              <LevelUpCardBody
+                event={event}
+                headline={headline}
+                youAreNow={youAreNow}
+                claimText={claimText}
+                tapHint={tapHint}
+                showConfetti={showConfetti}
+                animatedShimmer={animatedShimmer}
+                animatedPrevLevel={animatedPrevLevel}
+                animatedNewLevel={animatedNewLevel}
+                animatedArrow={animatedArrow}
+                onDismiss={dismiss}
+              />
+            </BlurView>
+          )}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
+
+function LevelUpCardBody({
+  event,
+  headline,
+  youAreNow,
+  claimText,
+  tapHint,
+  showConfetti,
+  animatedShimmer,
+  animatedPrevLevel,
+  animatedNewLevel,
+  animatedArrow,
+  onDismiss,
+}: {
+  event: LevelUpEvent | null;
+  headline: string;
+  youAreNow: string;
+  claimText: string;
+  tapHint: string;
+  showConfetti: boolean;
+  animatedShimmer: AnimatedStyle<ViewStyle>;
+  animatedPrevLevel: AnimatedStyle<ViewStyle>;
+  animatedNewLevel: AnimatedStyle<ViewStyle>;
+  animatedArrow: AnimatedStyle<ViewStyle>;
+  onDismiss: () => void;
+}): React.ReactElement {
+  return (
+    <>
             <Animated.View pointerEvents="none" style={[styles.shimmer, animatedShimmer]}>
               <LinearGradient
                 colors={['transparent', 'rgba(255,255,255,0.22)', 'transparent']}
@@ -394,7 +456,7 @@ export const LevelUpModal: React.FC = () => {
 
             <Pressable
               style={({ pressed }) => [styles.claimButton, pressed && styles.claimButtonPressed]}
-              onPress={dismiss}
+              onPress={onDismiss}
               accessibilityRole="button"
               accessibilityLabel={claimText}
             >
@@ -402,8 +464,8 @@ export const LevelUpModal: React.FC = () => {
                 <LiquidGlassView
                   effect="clear"
                   interactive
-                  tint="rgba(168,85,247,0.35)"
-                  style={styles.claimGlass}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  {...({ style: styles.claimGlass, tint: 'rgba(168,85,247,0.35)' } as any)}
                 >
                   <Text style={styles.claimText}>{claimText}</Text>
                 </LiquidGlassView>
@@ -413,12 +475,9 @@ export const LevelUpModal: React.FC = () => {
                 </View>
               )}
             </Pressable>
-          </GlassCard>
-        </Animated.View>
-      </View>
-    </Modal>
+    </>
   );
-};
+}
 
 const styles = StyleSheet.create({
   root: {

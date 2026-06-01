@@ -21,7 +21,7 @@ import Animated, {
     type SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell, Star, CalendarClock, Sparkles, ChevronRight } from 'lucide-react-native';
+import { Star, CalendarClock, ChevronRight, RotateCw } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from '../../src/i18n';
 import { SectionHeader } from './SectionHeader';
@@ -59,184 +59,135 @@ function useShimmer(): SharedValue<number> {
     const shimmerX = useSharedValue(-SCREEN_WIDTH);
     useEffect(() => {
         shimmerX.value = withRepeat(
-            withTiming(SCREEN_WIDTH, { duration: 1200, easing: Easing.linear }),
+            withTiming(SCREEN_WIDTH, { duration: 1400, easing: Easing.linear }),
             -1,
             false,
         );
-    }, [shimmerX]);
+    }, []);
     return shimmerX;
 }
 
-// ─── Skeleton Card ────────────────────────────────────────────────────────────
 function SkeletonMatchCard({ shimmerX }: { shimmerX: SharedValue<number> }): React.ReactElement {
-    const shimmerStyle = useAnimatedStyle(() => ({
+    const style = useAnimatedStyle(() => ({
         transform: [{ translateX: shimmerX.value }],
     }));
     return (
-        <View style={styles.skeletonCard}>
-            <Animated.View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 16 }]}>
-                <Animated.View style={[styles.shimmerStrip, shimmerStyle]}>
-                    <LinearGradient
-                        colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={{ width: 120, height: '100%' }}
-                    />
-                </Animated.View>
-            </Animated.View>
+        <View style={[styles.skeletonCard, { overflow: 'hidden' }]}>
+            <Animated.View style={[styles.shimmerStrip, { width: 80 }, style]} />
             <View style={styles.skeletonTopRow}>
-                <View style={[styles.skeletonLine, { width: 60, height: 8 }]} />
-                <View style={[styles.skeletonLine, { width: 40, height: 8 }]} />
+                <View style={[styles.skeletonLine, { width: 72, height: 10 }]} />
+                <View style={[styles.skeletonLine, { width: 40, height: 10 }]} />
             </View>
             <View style={styles.skeletonMiddle}>
                 <View style={styles.skeletonCircle} />
                 <View style={styles.skeletonScoreBlock}>
-                    <View style={[styles.skeletonLine, { width: 30, height: 40, borderRadius: 6 }]} />
-                    <View style={[styles.skeletonLine, { width: 20, height: 8 }]} />
-                    <View style={[styles.skeletonLine, { width: 30, height: 40, borderRadius: 6 }]} />
+                    <View style={[styles.skeletonLine, { width: 28, height: 22 }]} />
+                    <View style={[styles.skeletonLine, { width: 8, height: 22 }]} />
                 </View>
                 <View style={styles.skeletonCircle} />
             </View>
-            <View style={[styles.skeletonLine, { width: '60%', height: 8, alignSelf: 'center' }]} />
         </View>
     );
 }
 
-// ─── Pulsing live dot ─────────────────────────────────────────────────────────
-function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
-    const pulse = useSharedValue(1);
-    useEffect(() => {
-        pulse.value = withRepeat(withTiming(0.3, { duration: 800 }), -1, true);
-    }, [pulse]);
-    const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
-    return (
-        <Animated.View
-            style={[{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }, style]}
-        />
-    );
-}
-
-// ─── Team Logo (with initials fallback) ──────────────────────────────────────
-function TeamLogo({ name, uri }: { name: string; uri?: string }): React.ReactElement {
-    if (uri) {
-        return (
-            <Image
-                source={{ uri }}
-                style={styles.teamLogoImg}
-                contentFit="contain"
-                transition={150}
-                cachePolicy="memory-disk"
-                recyclingKey={uri}
-            />
-        );
-    }
-    return (
-        <View style={styles.teamAvatar}>
-            <Text style={styles.teamAvatarText}>{name.slice(0, 2).toUpperCase()}</Text>
-        </View>
-    );
-}
-
-// ─── Match Card ───────────────────────────────────────────────────────────────
-interface MatchCardProps {
-    match: MatchListItem;
-    index: number;
-    onOpenHub: () => void;
-    onFavoritePress?: (id: string) => void;
-}
-
-const MatchCard = React.memo(function MatchCard({
+function MatchCard({
     match,
     index,
     onOpenHub,
     onFavoritePress,
-}: MatchCardProps): React.ReactElement {
-    const { homeTeam, awayTeam, status, minute, stoppageTime, league, kickoff, isPinned, isFavorited } = match;
-    const isLive = status === 'LIVE' || status === '1ST' || status === '2ND' || status === 'HT';
-    const isUpcoming = status === 'UPCOMING';
-    const isStoppage = isLive && !!stoppageTime;
+}: {
+    match: MatchListItem;
+    index: number;
+    onOpenHub: () => void;
+    onFavoritePress?: (matchId: string) => void;
+}): React.ReactElement {
+    const isLive = match.status === 'LIVE' || match.status === '1ST' || match.status === '2ND';
+    const isStoppage = match.status === 'HT' && (match.stoppageTime ?? 0) > 0;
+    const isFinished = match.status === 'FT';
+    const isUpcoming = match.status === 'UPCOMING';
 
-    const handleFav = useCallback(() => {
-        onFavoritePress?.(match.id);
-    }, [match.id, onFavoritePress]);
+    const { homeTeam, awayTeam } = match;
+    const homeLogo = homeTeam.logo;
+    const awayLogo = awayTeam.logo;
+
+    const accentColor = isLive
+        ? LIVE_RED
+        : isStoppage
+          ? '#f59e0b'
+          : isFinished
+            ? 'rgba(255,255,255,0.35)'
+            : BLUE_PRIMARY;
+
+    const [starred, setStarred] = React.useState(match.isFavorited ?? false);
+    const pinned = match.isPinned ?? false;
+
+    const liveMinute = isLive || isStoppage ? match.minute ?? '' : '';
+    const stoppageSuffix =
+        isStoppage && match.stoppageTime ? `+${match.stoppageTime}` : '';
+
+    const handleStar = () => {
+        if (!onFavoritePress) return;
+        const next = !starred;
+        setStarred(next);
+        onFavoritePress(match.id);
+    };
 
     return (
-        <View>
+        <Animated.View
+            entering={FadeInDown.delay(index * 45).duration(280)}
+            style={[styles.card, isLive && styles.cardLive, isStoppage && styles.cardStoppage, pinned && styles.cardPinned]}
+        >
             <TouchableOpacity
                 activeOpacity={0.92}
                 onPress={onOpenHub}
                 accessibilityRole="button"
                 accessibilityLabel={`${homeTeam.shortName} vs ${awayTeam.shortName}`}
-                style={[
-                    styles.card,
-                    isLive && styles.cardLive,
-                    isStoppage && styles.cardStoppage,
-                    isPinned && styles.cardPinned,
-                ]}
+                style={styles.cardPressable}
             >
-                {/* Left accent bar */}
-                {isLive ? (
-                    <LinearGradient
-                        colors={isStoppage ? [LIVE_RED, LIVE_RED] : [PURPLE_PRIMARY, BLUE_PRIMARY]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 0, y: 1 }}
-                        style={styles.accentBar}
-                    />
-                ) : (
-                    <View
-                        style={[
-                            styles.accentBar,
-                            {
-                                backgroundColor: isPinned
-                                    ? '#fbbf24'
-                                    : isUpcoming
-                                    ? 'rgba(124,58,237,0.4)'
-                                    : 'rgba(255,255,255,0.1)',
-                            },
-                        ]}
-                    />
-                )}
+                <LinearGradient
+                    colors={[`${accentColor}33`, 'transparent', `${accentColor}22`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                />
 
-                {/* Top row */}
                 <View style={styles.cardTop}>
                     <View style={styles.cardTopLeft}>
-                        {isPinned && (
-                            <Bell
-                                size={11}
-                                color="#fbbf24"
-                                fill="#fbbf24"
-                                strokeWidth={2}
-                                style={{ marginRight: 4 }}
-                            />
-                        )}
                         <Text style={styles.leagueText} numberOfLines={1}>
-                            {league}
+                            {match.league}
                         </Text>
                     </View>
-                    {isLive ? (
-                        <View style={[styles.liveMinuteContainer, styles.liveMinuteBorder]}>
-                            <Text style={[styles.minuteText, isStoppage && { color: LIVE_RED }]}>
-                                {minute}
-                                {!stoppageTime && "'"}
-                                {stoppageTime ? (
-                                    <Text style={styles.stoppageInline}> +{stoppageTime}</Text>
-                                ) : null}
-                            </Text>
-                            <PulsingDot color={LIVE_RED} />
-                        </View>
-                    ) : status === 'FT' ? (
-                        <View style={styles.ftBadge}>
-                            <Text style={styles.ftText}>FT</Text>
-                        </View>
-                    ) : (
-                        <Text style={styles.kickoffText}>{kickoff}</Text>
-                    )}
+                    <View style={styles.cardTopRight}>
+                        {isLive && (
+                            <View style={styles.liveMinuteContainer}>
+                                <Text style={styles.minuteText}>
+                                    {liveMinute}
+                                    {stoppageSuffix}
+                                </Text>
+                            </View>
+                        )}
+                        {isUpcoming && match.kickoff ? (
+                            <Text style={styles.kickoffText}>{match.kickoff}</Text>
+                        ) : isFinished ? (
+                            <View style={styles.ftBadge}>
+                                <Text style={styles.ftText}>FT</Text>
+                            </View>
+                        ) : null}
+                    </View>
                 </View>
 
-                {/* Teams + score */}
                 <View style={styles.teamsRow}>
                     <View style={styles.teamCol}>
-                        <TeamLogo name={homeTeam.shortName} uri={homeTeam.logo} />
+                        <View style={styles.teamLogoWrap}>
+                            {homeLogo ? (
+                                <Image source={{ uri: homeLogo }} style={styles.teamLogoImg} contentFit="contain" />
+                            ) : (
+                                <View style={styles.teamAvatar}>
+                                    <Text style={styles.teamAvatarText}>{homeTeam.shortName.charAt(0)}</Text>
+                                </View>
+                            )}
+                        </View>
                         <Text style={styles.teamName} numberOfLines={1}>
                             {homeTeam.shortName}
                         </Text>
@@ -246,7 +197,6 @@ const MatchCard = React.memo(function MatchCard({
                         {isUpcoming ? (
                             <View style={styles.vsContainer}>
                                 <Text style={styles.vsText}>VS</Text>
-                                <Text style={styles.kickoffLarge}>{kickoff}</Text>
                             </View>
                         ) : (
                             <View style={styles.scoreRow}>
@@ -255,29 +205,15 @@ const MatchCard = React.memo(function MatchCard({
                                     <Text
                                         style={[
                                             styles.sepMinute,
-                                            {
-                                                color: isLive
-                                                    ? isStoppage
-                                                        ? LIVE_RED
-                                                        : PURPLE_SOFT
-                                                    : 'rgba(255,255,255,0.2)',
-                                            },
+                                            isLive && styles.sepMinuteLive,
+                                            isStoppage && styles.sepMinuteStoppage,
                                         ]}
                                     >
-                                        {isLive ? (stoppageTime ? `+${stoppageTime}` : minute) : '–'}
+                                        {isLive || isStoppage
+                                            ? `${liveMinute}${stoppageSuffix}`
+                                            : '–'}
                                     </Text>
-                                    {isLive && (
-                                        <LinearGradient
-                                            colors={
-                                                isStoppage
-                                                    ? [LIVE_RED, LIVE_RED]
-                                                    : [PURPLE_PRIMARY, BLUE_PRIMARY]
-                                            }
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 0 }}
-                                            style={styles.liveBar}
-                                        />
-                                    )}
+                                    {isLive && <View style={[styles.liveBar, styles.liveBarActive]} />}
                                 </View>
                                 <Text style={styles.scoreNum}>{awayTeam.score}</Text>
                             </View>
@@ -285,44 +221,46 @@ const MatchCard = React.memo(function MatchCard({
                     </View>
 
                     <View style={styles.teamCol}>
-                        <TeamLogo name={awayTeam.shortName} uri={awayTeam.logo} />
+                        <View style={styles.teamLogoWrap}>
+                            {awayLogo ? (
+                                <Image source={{ uri: awayLogo }} style={styles.teamLogoImg} contentFit="contain" />
+                            ) : (
+                                <View style={styles.teamAvatar}>
+                                    <Text style={styles.teamAvatarText}>{awayTeam.shortName.charAt(0)}</Text>
+                                </View>
+                            )}
+                        </View>
                         <Text style={styles.teamName} numberOfLines={1}>
                             {awayTeam.shortName}
                         </Text>
                     </View>
                 </View>
 
-                {/* Bottom row */}
                 <View style={styles.cardBottom}>
                     <TouchableOpacity
-                        onPress={handleFav}
-                        activeOpacity={0.7}
-                        hitSlop={12}
+                        onPress={handleStar}
                         style={styles.watchlistBtn}
-                        accessibilityLabel={isFavorited ? 'Remove from watchlist' : 'Add to watchlist'}
+                        accessibilityRole="button"
+                        accessibilityLabel={starred ? 'Remove from watchlist' : 'Add to watchlist'}
                     >
                         <Star
                             size={17}
-                            color={isFavorited ? GOLD_PRIMARY : 'rgba(255,255,255,0.28)'}
-                            fill={isFavorited ? GOLD_PRIMARY : 'transparent'}
-                            strokeWidth={isFavorited ? 0 : 2}
+                            color={starred ? GOLD_PRIMARY : 'rgba(255,255,255,0.28)'}
+                            fill={starred ? GOLD_PRIMARY : 'transparent'}
+                            strokeWidth={starred ? 0 : 2}
                         />
                     </TouchableOpacity>
                 </View>
             </TouchableOpacity>
-        </View>
+        </Animated.View>
     );
-});
+}
 
-// ─── Empty Section (confirmed empty after fetch) ──────────────────────────────
-// Premium liquid-glass card with animated orbiting rings and a real calendar
-// icon. No emojis, no dashed placeholders. Same pattern as the app's other
-// glass surfaces (HomeHeader, RankHeader, BottomNav, notifications).
 function OrbitingRing({
     size,
     duration,
     borderColor,
-    reverse = false,
+    reverse,
 }: {
     size: number;
     duration: number;
@@ -359,170 +297,123 @@ function OrbitingRing({
     );
 }
 
-function PulsingGlow(): React.ReactElement {
-    const scale = useSharedValue(1);
-    const opacity = useSharedValue(0.45);
-    useEffect(() => {
-        scale.value = withRepeat(
-            withTiming(1.18, { duration: 2600, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            true,
-        );
-        opacity.value = withRepeat(
-            withTiming(0.2, { duration: 2600, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            true,
-        );
-    }, [opacity, scale]);
-    const style = useAnimatedStyle(() => ({
-        opacity: opacity.value,
-        transform: [{ scale: scale.value }] as any,
-    }));
-    return (
-        <Animated.View
-            pointerEvents="none"
-            style={[
-                {
-                    position: 'absolute',
-                    width: 140,
-                    height: 140,
-                    borderRadius: 70,
-                    backgroundColor: 'rgba(124,58,237,0.22)',
-                },
-                style,
-            ]}
-        />
-    );
-}
-
-function EmptySection({ onAction }: { onAction?: () => void }): React.ReactElement {
+function EmptySection({
+    onAction,
+    onRefresh,
+}: {
+    onAction?: () => void;
+    onRefresh?: () => void;
+}): React.ReactElement {
     const { t } = useTranslation();
-    const glassProps: any = isLiquidGlassSupported
-        ? { effect: 'clear', interactive: false, tint: 'rgba(20,15,30,0.58)' }
-        : { intensity: 30, tint: 'dark' };
 
-    const ctaGlassProps: any = isLiquidGlassSupported
-        ? { effect: 'clear', interactive: true, tint: 'rgba(124,58,237,0.32)' }
-        : { intensity: 35, tint: 'dark' };
+    const glassProps: any = isLiquidGlassSupported
+        ? { effect: 'clear', interactive: false, tint: 'rgba(18,12,28,0.72)' }
+        : { intensity: 28, tint: 'dark' };
+
+    const primaryGlass: any = isLiquidGlassSupported
+        ? { effect: 'clear', interactive: true, tint: 'rgba(124,58,237,0.28)' }
+        : { intensity: 32, tint: 'dark' };
+
+    const secondaryGlass: any = isLiquidGlassSupported
+        ? { effect: 'clear', interactive: true, tint: 'rgba(255,255,255,0.06)' }
+        : { intensity: 24, tint: 'dark' };
 
     return (
         <View style={styles.emptyWrap}>
-            {/* Outer glass surface */}
             <View style={styles.emptyCard}>
-                {/* Liquid glass layer */}
                 {isLiquidGlassSupported ? (
-                    <LiquidGlassView
-                        {...glassProps}
-                        style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-                    />
+                    <LiquidGlassView {...glassProps} style={StyleSheet.absoluteFill} />
                 ) : (
-                    <BlurView
-                        {...glassProps}
-                        style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-                    />
+                    <BlurView {...glassProps} style={StyleSheet.absoluteFill} />
                 )}
 
-                {/* Subtle gradient tint on top of the glass */}
                 <LinearGradient
-                    colors={[
-                        'rgba(124,58,237,0.10)',
-                        'rgba(59,130,246,0.05)',
-                        'rgba(10,7,18,0.00)',
-                    ] as const}
+                    colors={['rgba(124,58,237,0.14)', 'rgba(59,130,246,0.06)', 'rgba(8,6,14,0.55)']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
                 />
-
-                {/* Inner hairline */}
                 <View style={styles.emptyInnerBorder} pointerEvents="none" />
 
-                {/* Icon cluster */}
-                <View style={styles.emptyIconStage}>
-                    <PulsingGlow />
-                    <OrbitingRing
-                        size={96}
-                        duration={8000}
-                        borderColor="rgba(167,139,250,0.45)"
-                    />
-                    <OrbitingRing
-                        size={74}
-                        duration={6000}
-                        borderColor="rgba(96,165,250,0.35)"
-                        reverse
-                    />
-                    <View style={styles.emptyIconBox}>
-                        <LinearGradient
-                            colors={[
-                                'rgba(124,58,237,0.55)',
-                                'rgba(59,130,246,0.45)',
-                            ] as const}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                        />
-                        <CalendarClock
-                            size={26}
-                            color="#FFFFFF"
-                            strokeWidth={2.2}
-                        />
-                        {/* Accent sparkle */}
-                        <View style={styles.emptySparkle}>
-                            <Sparkles
-                                size={10}
-                                color={GOLD_PRIMARY}
-                                fill={GOLD_PRIMARY}
-                                strokeWidth={2}
-                            />
-                        </View>
+                {/* Top strip — mirrors match card header rhythm */}
+                <View style={styles.emptyTop}>
+                    <View style={styles.emptyStatusPill}>
+                        <Text style={styles.emptyStatusText}>{t.homeExtra.emptyMatchesBadge}</Text>
                     </View>
                 </View>
 
-                {/* Copy */}
-                <Text style={styles.emptyTitle}>{t.homeExtra.emptyMatchesTitle}</Text>
-                <Text style={styles.emptySubtitle}>
-                    {t.homeExtra.emptyMatchesSub}
-                </Text>
+                {/* Main body */}
+                <View style={styles.emptyBody}>
+                    <View style={styles.emptyIconCol}>
+                        <View style={styles.emptyIconHalo}>
+                            <OrbitingRing size={64} duration={7000} borderColor="rgba(167,139,250,0.35)" />
+                            <View style={styles.emptyIconCore}>
+                                <LinearGradient
+                                    colors={['rgba(124,58,237,0.5)', 'rgba(59,130,246,0.35)']}
+                                    style={StyleSheet.absoluteFill}
+                                />
+                                <CalendarClock size={20} color="#FFFFFF" strokeWidth={2.2} />
+                            </View>
+                        </View>
+                    </View>
 
-                {/* Glass CTA pill */}
-                {onAction ? (
-                    <TouchableOpacity
-                        activeOpacity={0.82}
-                        onPress={onAction}
-                        style={styles.emptyCtaOuter}
-                        accessibilityRole="button"
-                        accessibilityLabel={t.homeExtra.accessibilityOpenMatches}
-                    >
-                        <View style={styles.emptyCta}>
+                    <View style={styles.emptyTextCol}>
+                        <Text style={styles.emptyTitle}>{t.homeExtra.emptyMatchesTitle}</Text>
+                        <Text style={styles.emptySubtitle}>{t.homeExtra.emptyMatchesSub}</Text>
+                        <Text style={styles.emptyHint}>{t.homeExtra.emptyMatchesHint}</Text>
+                    </View>
+                </View>
+
+                {/* Footer actions — same row as match card bottom */}
+                <View style={styles.emptyFooter}>
+                    {onAction ? (
+                        <TouchableOpacity
+                            activeOpacity={0.85}
+                            onPress={onAction}
+                            style={styles.emptyPrimaryBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel={t.homeExtra.accessibilityOpenMatches}
+                        >
                             {isLiquidGlassSupported ? (
-                                <LiquidGlassView
-                                    {...ctaGlassProps}
-                                    style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
-                                />
+                                <LiquidGlassView {...primaryGlass} style={StyleSheet.absoluteFill} />
                             ) : (
-                                <BlurView
-                                    {...ctaGlassProps}
-                                    style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
-                                />
+                                <BlurView {...primaryGlass} style={StyleSheet.absoluteFill} />
                             )}
                             <LinearGradient
-                                colors={[
-                                    'rgba(124,58,237,0.35)',
-                                    'rgba(59,130,246,0.22)',
-                                ] as const}
+                                colors={['rgba(124,58,237,0.45)', 'rgba(59,130,246,0.25)']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
-                                style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
+                                style={StyleSheet.absoluteFill}
                             />
-                            <Text style={styles.emptyCtaText}>{t.homeExtra.browseAllMatches}</Text>
-                            <ChevronRight
-                                size={14}
-                                color={PURPLE_SOFT}
-                                strokeWidth={2.5}
-                            />
-                        </View>
-                    </TouchableOpacity>
-                ) : null}
+                            <View style={styles.emptyPrimaryBtnContent}>
+                                <Text style={styles.emptyPrimaryBtnText} numberOfLines={1}>
+                                    {t.homeExtra.browseAllMatches}
+                                </Text>
+                                <ChevronRight size={14} color="#FFFFFF" strokeWidth={2.5} />
+                            </View>
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.emptyPrimaryBtnPlaceholder} />
+                    )}
+
+                    {onRefresh ? (
+                        <TouchableOpacity
+                            activeOpacity={0.85}
+                            onPress={onRefresh}
+                            style={styles.emptySecondaryBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel={t.homeExtra.accessibilityRefreshMatches}
+                        >
+                            {isLiquidGlassSupported ? (
+                                <LiquidGlassView {...secondaryGlass} style={StyleSheet.absoluteFill} />
+                            ) : (
+                                <BlurView {...secondaryGlass} style={StyleSheet.absoluteFill} />
+                            )}
+                            <RotateCw size={16} color="rgba(255,255,255,0.85)" strokeWidth={2.5} />
+                        </TouchableOpacity>
+                    ) : null}
+                </View>
             </View>
         </View>
     );
@@ -535,6 +426,7 @@ interface MatchListProps {
     onMatchPress?: (matchId: string) => void;
     onViewAllPress?: () => void;
     onFavoritePress?: (matchId: string) => void;
+    onRefreshPress?: () => void;
 }
 
 export function MatchList({
@@ -543,6 +435,7 @@ export function MatchList({
     onMatchPress,
     onViewAllPress,
     onFavoritePress,
+    onRefreshPress,
 }: MatchListProps): React.ReactElement {
     const router = useRouter();
     const data = matchesProp ?? [];
@@ -553,10 +446,6 @@ export function MatchList({
         else router.push('/matches');
     }, [onViewAllPress, router]);
 
-    // Race-condition guard:
-    //   showSkeleton  → loading AND no data yet
-    //   showData      → has data (show even while background-refreshing)
-    //   showEmpty     → confirmed empty after fetch completed
     const showSkeleton = isLoading && data.length === 0;
     const showData = data.length > 0;
     const showEmpty = !isLoading && !showSkeleton && !showData;
@@ -600,18 +489,16 @@ export function MatchList({
                     ))}
                 </ScrollView>
             ) : showEmpty ? (
-                <EmptySection onAction={openMatchesHub} />
+                <EmptySection onAction={openMatchesHub} onRefresh={onRefreshPress} />
             ) : null}
         </View>
     );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
     section: { marginBottom: 0 },
     scrollContent: { paddingHorizontal: SCREEN_PADDING_H, paddingBottom: 4, gap: 12 },
 
-    // Skeleton
     skeletonCard: {
         width: 300,
         height: 160,
@@ -625,7 +512,6 @@ const styles = StyleSheet.create({
         gap: 12,
         justifyContent: 'space-between',
     },
-    shimmerStrip: { position: 'absolute', top: 0, bottom: 0, left: 0 },
     skeletonLine: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 4 },
     skeletonTopRow: {
         flexDirection: 'row',
@@ -646,9 +532,9 @@ const styles = StyleSheet.create({
     },
     skeletonScoreBlock: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
-    // Card
     card: {
         width: 300,
+        height: 160,
         borderRadius: 16,
         backgroundColor: 'rgba(18,12,28,0.98)',
         borderWidth: 0.5,
@@ -685,8 +571,8 @@ const styles = StyleSheet.create({
         elevation: 6,
     },
     accentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+    cardPressable: { flex: 1, justifyContent: 'space-between' },
 
-    // Top row
     cardTop: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -698,6 +584,7 @@ const styles = StyleSheet.create({
         borderBottomColor: 'rgba(255,255,255,0.05)',
     },
     cardTopLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+    cardTopRight: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
     leagueText: {
         color: TEXT_MUTED,
         fontSize: 11,
@@ -705,8 +592,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
         flexShrink: 1,
     },
-    liveMinuteContainer: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    liveMinuteBorder: {
+    liveMinuteContainer: {
         paddingHorizontal: 7,
         paddingVertical: 3,
         borderRadius: 8,
@@ -726,38 +612,42 @@ const styles = StyleSheet.create({
     },
     ftText: { color: TEXT_MUTED, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
     kickoffText: { color: PURPLE_SOFT, fontSize: 11, fontWeight: '600' },
-
-    // Teams row
     teamsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        gap: 8,
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        flex: 1,
     },
-    teamCol: { flex: 1, alignItems: 'center', gap: 8 },
-    teamLogoImg: { width: 44, height: 44 },
-    teamAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(124,58,237,0.2)',
-        borderWidth: 1.5,
-        borderColor: 'rgba(167,139,250,0.25)',
+    teamCol: { flex: 1, alignItems: 'center', gap: 6, minWidth: 0 },
+    teamLogoWrap: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.08)',
     },
-    teamAvatarText: { color: PURPLE_SOFT, fontSize: 12, fontWeight: '800' },
+    teamLogoImg: { width: 28, height: 28 },
+    teamAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(124,58,237,0.15)',
+    },
+    teamAvatarText: { color: TEXT_PRIMARY, fontSize: 14, fontWeight: '800' },
     teamName: {
-        color: 'rgba(255,255,255,0.85)',
-        fontSize: 11.5,
+        color: TEXT_PRIMARY,
+        fontSize: 11,
         fontWeight: '600',
         textAlign: 'center',
-        maxWidth: 90,
+        maxWidth: 88,
     },
-
-    // Score area
-    scoreArea: { alignItems: 'center', justifyContent: 'center', minWidth: 110 },
+    scoreArea: { alignItems: 'center', justifyContent: 'center', minWidth: 96 },
     vsContainer: { alignItems: 'center', gap: 4 },
     vsText: {
         color: 'rgba(255,255,255,0.25)',
@@ -765,7 +655,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         letterSpacing: 2,
     },
-    kickoffLarge: { color: PURPLE_SOFT, fontSize: 13, fontWeight: '600' },
     scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     scoreNum: {
         color: TEXT_PRIMARY,
@@ -778,118 +667,181 @@ const styles = StyleSheet.create({
         textShadowRadius: 8,
     },
     scoreSep: { alignItems: 'center', gap: 4 },
-    sepMinute: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
-    liveBar: { width: 28, height: 2, borderRadius: 1 },
-
-    // Bottom row
+    sepMinute: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.25)' },
+    sepMinuteLive: { color: PURPLE_SOFT },
+    sepMinuteStoppage: { color: LIVE_RED },
+    liveBar: { width: 28, height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
+    liveBarActive: { backgroundColor: LIVE_RED },
     cardBottom: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        paddingHorizontal: 14,
-        paddingTop: 8,
+        paddingHorizontal: 12,
         paddingBottom: 10,
-        borderTopWidth: 0.5,
-        borderTopColor: 'rgba(255,255,255,0.05)',
     },
     watchlistBtn: { padding: 4 },
+    shimmerStrip: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+    },
 
-    // Empty section — premium liquid glass
     emptyWrap: {
         marginHorizontal: SCREEN_PADDING_H,
+        alignItems: 'center',
     },
     emptyCard: {
-        borderRadius: 24,
+        width: 300,
+        height: 160,
+        borderRadius: 16,
         overflow: 'hidden',
-        paddingVertical: 36,
-        paddingHorizontal: 24,
-        alignItems: 'center',
+        justifyContent: 'space-between',
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: 'rgba(167,139,250,0.22)',
-        // Ambient shadow — makes the glass card float off the background
+        backgroundColor: 'rgba(12,10,20,0.55)',
         shadowColor: PURPLE_PRIMARY,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: Platform.OS === 'ios' ? 0.25 : 0.4,
-        shadowRadius: 20,
-        elevation: 10,
-        backgroundColor: 'rgba(10,7,18,0.55)',
-        gap: 10,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: Platform.OS === 'ios' ? 0.22 : 0.32,
+        shadowRadius: 12,
+        elevation: 8,
     },
     emptyInnerBorder: {
         ...StyleSheet.absoluteFillObject,
-        borderRadius: 24,
+        borderRadius: 16,
         borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: 'rgba(255,255,255,0.06)',
     },
-    emptyIconStage: {
-        width: 110,
-        height: 110,
+    emptyTop: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 6,
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+        paddingTop: 10,
+        paddingBottom: 5,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(255,255,255,0.06)',
     },
-    emptyIconBox: {
-        width: 52,
-        height: 52,
-        borderRadius: 18,
-        overflow: 'hidden',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.18)',
-        shadowColor: PURPLE_PRIMARY,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.45,
-        shadowRadius: 10,
-        elevation: 6,
-    },
-    emptySparkle: {
-        position: 'absolute',
-        top: -4,
-        right: -4,
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(10,7,18,0.95)',
-        borderWidth: 1,
-        borderColor: 'rgba(245,197,24,0.55)',
-    },
-    emptyTitle: {
-        color: '#FFFFFF',
-        fontSize: 17,
-        fontWeight: '800',
-        letterSpacing: -0.3,
-        textAlign: 'center',
-        marginTop: 4,
-    },
-    emptySubtitle: {
-        color: 'rgba(255,255,255,0.52)',
-        fontSize: 12.5,
-        fontWeight: '500',
-        lineHeight: 19,
-        textAlign: 'center',
-        letterSpacing: 0.1,
-    },
-    emptyCtaOuter: {
-        marginTop: 6,
-    },
-    emptyCta: {
+    emptyStatusPill: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        paddingHorizontal: 18,
-        paddingVertical: 10,
-        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,255,255,0.06)',
         borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(167,139,250,0.45)',
-        overflow: 'hidden',
+        borderColor: 'rgba(255,255,255,0.1)',
     },
-    emptyCtaText: {
-        color: '#FFFFFF',
-        fontSize: 12.5,
+    emptyStatusText: {
+        color: TEXT_MUTED,
+        fontSize: 10,
         fontWeight: '700',
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+    },
+    emptyBody: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    emptyIconCol: {
+        width: 72,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyIconHalo: {
+        width: 64,
+        height: 64,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyIconCore: {
+        width: 44,
+        height: 44,
+        borderRadius: 14,
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+    },
+    emptyTextCol: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingRight: 4,
+    },
+    emptyTitle: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '800',
+        letterSpacing: -0.2,
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    emptySubtitle: {
+        color: 'rgba(255,255,255,0.58)',
+        fontSize: 12,
+        fontWeight: '500',
+        textAlign: 'center',
+        lineHeight: 16,
+    },
+    emptyHint: {
+        marginTop: 4,
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 11,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    emptyFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 12,
+        paddingTop: 6,
+        paddingBottom: 10,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.08)',
+    },
+    emptyPrimaryBtn: {
+        flex: 1,
+        height: 36,
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(124,58,237,0.35)',
+    },
+    emptyPrimaryBtnContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        paddingHorizontal: 10,
+        zIndex: 1,
+    },
+    emptyPrimaryBtnText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: '800',
         letterSpacing: 0.2,
+    },
+    emptySecondaryBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.14)',
+        backgroundColor: 'rgba(255,255,255,0.04)',
+    },
+    emptyPrimaryBtnPlaceholder: {
+        flex: 1,
+        height: 36,
     },
 });

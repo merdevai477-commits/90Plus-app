@@ -23,6 +23,7 @@ import {
 } from '../../constants/tokens';
 import { useCoins } from '../../contexts/CoinsContext';
 import { NotificationService } from '../../src/services/authService';
+import { CoinsInfoModal } from '../common/CoinsInfoModal';
 
 const ICON_SIZE = 18;
 const CLUSTER_PAD = 4;
@@ -102,10 +103,11 @@ export const HomeHeader = React.memo(function HomeHeader({
         else router.push('/notifications');
     }, [onNotificationPress, router]);
 
+    const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
     const handleCoinsPress = useCallback((): void => {
         void Haptics.selectionAsync();
-        router.push('/(tabs)/profile');
-    }, [router]);
+        setShowCoinsInfo(true);
+    }, []);
 
     // LiquidGlassView / BlurView have very different prop surfaces — we
     // branch at the JSX level instead of casting a shared wrapper.
@@ -127,12 +129,22 @@ export const HomeHeader = React.memo(function HomeHeader({
                     <TouchableOpacity
                         activeOpacity={0.72}
                         onPress={handleCoinsPress}
+                        onLongPress={() => router.push('/(tabs)/profile')}
                         style={styles.coins}
                         accessibilityRole="button"
                     >
                         <Zap size={14} color="#A855F7" fill="#A855F7" strokeWidth={2.5} />
                         <Text style={styles.coinsVal}>{coins.toLocaleString()}</Text>
                     </TouchableOpacity>
+
+                    <CoinsInfoModal
+                        visible={showCoinsInfo}
+                        onClose={() => setShowCoinsInfo(false)}
+                        onPrimaryAction={() => {
+                            setShowCoinsInfo(false);
+                            router.push('/(tabs)/profile');
+                        }}
+                    />
 
                     <View style={styles.toolbar}>
                         <TouchableOpacity

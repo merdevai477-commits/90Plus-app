@@ -5,6 +5,7 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
+  Pressable,
   Text,
   ActivityIndicator,
   RefreshControl,
@@ -21,6 +22,7 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Zap, Flag, Share2 } from 'lucide-react-native';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
+import { XpInfoModal } from '../../components/common/XpInfoModal';
 
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
@@ -81,6 +83,7 @@ function UserTopBar({
 }) {
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const xpDisplay = xp != null ? (xp >= 1000 ? `${(xp / 1000).toFixed(1)}K` : String(xp)) : '—';
+  const [showXpInfo, setShowXpInfo] = useState(false);
 
   return (
     <GlassContainer
@@ -103,10 +106,16 @@ function UserTopBar({
       )}
 
       {/* XP chip */}
-      <View style={tb.xpChip}>
+      <Pressable
+        style={tb.xpChip}
+        onPress={() => setShowXpInfo(true)}
+        accessibilityRole="button"
+      >
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={tb.xpTxt}>{xpDisplay} XP</Text>
-      </View>
+      </Pressable>
+
+      <XpInfoModal visible={showXpInfo} onClose={() => setShowXpInfo(false)} />
     </GlassContainer>
   );
 }
@@ -848,7 +857,10 @@ export default function UserProfileScreen() {
         ) : (
           <VideoGrid
             videos={formattedVideos}
-            onVideoPress={v => handleVideoPress(v as UserReel)}
+            onVideoPress={(v) => {
+              const reel = userVideos.find((uv) => uv.id === v.id);
+              if (reel) handleVideoPress(reel);
+            }}
             onVideoLongPress={() => {}}
             onDeleteVideo={() => {}}
             isDeleteMode={false}
