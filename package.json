@@ -9,7 +9,7 @@
     "build:prod": "NODE_ENV=production tsc && npm run copy:public",
     "build:railway": "npm run build && npx prisma generate && npx prisma db push --accept-data-loss",
     "build:reliability": "npm run reliability:check && npm run build",
-    "copy:public": "node -e \"const fs = require('fs'); const path = require('path'); const src = 'public'; const dest = 'dist/public'; if (fs.existsSync(src)) { fs.mkdirSync(dest, { recursive: true }); fs.readdirSync(src).forEach(file => { fs.copyFileSync(path.join(src, file), path.join(dest, file)); }); console.log('✅ Public folder copied'); } else { console.log('⚠️ Public folder not found'); }\"",
+    "copy:public": "node scripts/copy-public.js",
     "verify:build": "node -e \"const fs = require('fs'); const exists = fs.existsSync('dist/src/main.js'); console.log(exists ? '✅ main.js exists' : '❌ main.js missing'); process.exit(exists ? 0 : 1);\"",
     "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
