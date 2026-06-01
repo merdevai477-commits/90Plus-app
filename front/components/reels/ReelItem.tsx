@@ -112,6 +112,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const lastTapRef = useRef(0);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const heartAnimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Edit modal state
     const [showEditModal, setShowEditModal] = useState(false);
@@ -214,7 +215,11 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             }),
         ]).start();
 
-        setTimeout(() => setShowHeartAnimation(false), 1500);
+        if (heartAnimTimer.current) clearTimeout(heartAnimTimer.current);
+        heartAnimTimer.current = setTimeout(() => {
+            heartAnimTimer.current = null;
+            setShowHeartAnimation(false);
+        }, 1500);
     };
 
     // Long press for share menu (avoid firing while single-tap pause is pending)
@@ -408,6 +413,10 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             if (singleTapTimer.current) {
                 clearTimeout(singleTapTimer.current);
                 singleTapTimer.current = null;
+            }
+            if (heartAnimTimer.current) {
+                clearTimeout(heartAnimTimer.current);
+                heartAnimTimer.current = null;
             }
         };
     }, []);

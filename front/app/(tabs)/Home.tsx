@@ -578,7 +578,7 @@ export default function HomeScreen() {
     const handleVideoPress = useCallback(
         (videoId: string) =>
             router.push({
-                pathname: '/reels',
+                pathname: '/(tabs)/reels',
                 params: { startFrom: videoId },
             }),
         [router],

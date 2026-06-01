@@ -444,8 +444,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       setConversations([created]);
       setMessages(getInitialMessages());
       await Storage.saveLastConversationId(created.id);
-    } catch {
-      // warn only — don't crash the chat screen on a transient failure
+    } catch (err) {
+      logger.warn('[AIChat] bootstrapConversation failed:', err);
+      setError(getLabels().streamRetryFailed);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, createConversation, loadConversationMessages]);
@@ -703,6 +704,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           if ('error' in event && event.error && !('token' in event)) {
             setError(event.error);
             setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
+            stopTypingPipeline();
+            setIsLoading(false);
+            setIsThinking(false);
+            setIsRetrying(false);
+            setStreamingMessageId(null);
           }
         }
       }
@@ -715,7 +721,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           const errData = JSON.parse(xhr.responseText) as { error: string; resetAt?: string };
           setMessagesRemaining(0);
           if (errData.resetAt) setResetTime(new Date(errData.resetAt));
-          setError('Youve reached your daily message limit.');
+          setError(errData.error || 'Youve reached your daily message limit.');
         } catch {
           setError('Youve reached your daily message limit.');
           setMessagesRemaining(0);
@@ -725,6 +731,23 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setIsThinking(false);
         setIsRetrying(false);
         setStreamingMessageId(null);
+        return;
+      }
+      if (xhr.status !== 200) {
+        let errMsg = getLabels().streamRetryFailed;
+        try {
+          const parsed = JSON.parse(xhr.responseText) as { error?: string; message?: string };
+          errMsg = parsed.error || parsed.message || errMsg;
+        } catch {
+          // keep default message
+        }
+        stopTypingPipeline();
+        setIsLoading(false);
+        setIsThinking(false);
+        setIsRetrying(false);
+        setStreamingMessageId(null);
+        setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
+        setError(errMsg);
         return;
       }
       // Drain remaining queue, then clear UI state. If `done` already fired

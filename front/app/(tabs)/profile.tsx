@@ -871,11 +871,21 @@ export default function ProfileScreen() {
     refreshCacheRef.current(false);
   }, [isOffline, isLoading, isRefreshing]);
 
-  // Refresh on focus - use cache hook's refresh
+  // Refresh on focus - use cache hook's refresh + fresh prediction stats
   useFocusEffect(
     useCallback(() => {
       maybeRefreshProfile('focus');
-    }, [maybeRefreshProfile])
+      (async () => {
+        try {
+          const token = await getToken();
+          if (token) {
+            await fetchPredictionStats(token);
+          }
+        } catch (error) {
+          logger.error('Error refreshing prediction stats on focus:', error);
+        }
+      })();
+    }, [maybeRefreshProfile, getToken, fetchPredictionStats])
   );
 
   // Auto-refresh when app returns from background

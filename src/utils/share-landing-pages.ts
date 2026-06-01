@@ -15,11 +15,16 @@ const LANDING_STYLES = `
     a.btn { display: block; margin: 10px 0; padding: 14px 20px; border-radius: 28px; text-decoration: none; font-weight: 700; }
     .primary { background: #FFD700; color: #000; }
     .secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+    .loading p { color: rgba(255,255,255,0.55); font-size: 0.95rem; }
+    .download { display: none; }
+    body.ready .loading { display: none; }
+    body.ready .download { display: block; }
 `;
 
-function buildAndroidIntentUrl(deepPath: string): string {
-  const playStore = encodeURIComponent(PLAY_STORE_URL);
-  return `intent://${deepPath}#Intent;scheme=ninetyplus;package=${ANDROID_PACKAGE};S.browser_fallback_url=${playStore};end`;
+/** Intent opens the app; fallback reloads this landing page (not the store). */
+function buildAndroidIntentUrl(deepPath: string, landingFallbackUrl: string): string {
+  const fallback = encodeURIComponent(landingFallbackUrl);
+  return `intent://${deepPath}#Intent;scheme=ninetyplus;package=${ANDROID_PACKAGE};S.browser_fallback_url=${fallback};end`;
 }
 
 type ContentLandingOptions = {
@@ -27,13 +32,14 @@ type ContentLandingOptions = {
   ogTitle: string;
   ogDescription: string;
   ogUrl: string;
-  subtitle: string;
+  loadingText: string;
+  downloadText: string;
   deepPath: string;
   customSchemeUrl: string;
 };
 
-function buildContentLandingPage(options: ContentLandingOptions): string {
-  const intentUrl = buildAndroidIntentUrl(options.deepPath);
+function buildSmartLandingPage(options: ContentLandingOptions): string {
+  const intentUrl = buildAndroidIntentUrl(options.deepPath, options.ogUrl);
   const intentHref = intentUrl.replace(/"/g, '&quot;');
 
   return `<!DOCTYPE html>
@@ -48,34 +54,72 @@ function buildContentLandingPage(options: ContentLandingOptions): string {
   <style>${LANDING_STYLES}</style>
   <script>
     (function() {
+      var customScheme = ${JSON.stringify(options.customSchemeUrl)};
+      var intentUrl = ${JSON.stringify(intentUrl)};
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
       var isIOS = /iPhone|iPad|iPod/i.test(ua);
-      if (isAndroid) {
-        window.location.href = ${JSON.stringify(intentUrl)};
-      } else if (isIOS) {
-        window.location.href = ${JSON.stringify(options.customSchemeUrl)};
-        setTimeout(function() { window.location.href = ${JSON.stringify(APP_STORE_URL)}; }, 1500);
-      } else {
-        window.location.href = ${JSON.stringify(PLAY_STORE_URL)};
+
+      function showDownloadLanding() {
+        document.body.classList.add('ready');
       }
+
+      function appLikelyOpened() {
+        return document.hidden || document.webkitHidden;
+      }
+
+      function tryOpenApp() {
+        if (isAndroid) {
+          window.location.href = intentUrl;
+          setTimeout(function() {
+            if (!appLikelyOpened()) showDownloadLanding();
+          }, 2200);
+          return;
+        }
+        if (isIOS) {
+          var start = Date.now();
+          window.location.href = customScheme;
+          setTimeout(function() {
+            if (!appLikelyOpened() && Date.now() - start < 3000) {
+              showDownloadLanding();
+            }
+          }, 1600);
+          return;
+        }
+        showDownloadLanding();
+      }
+
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) return;
+      });
+
+      tryOpenApp();
     })();
   </script>
 </head>
 <body>
   <div class="card">
     <h1>90Plus</h1>
-    <p>${options.subtitle}</p>
-    <a class="btn primary" href="${intentHref}">افتح في التطبيق</a>
-    <a class="btn secondary" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
-    <a class="btn secondary" href="${APP_STORE_URL}">حمّل من App Store</a>
+    <div class="loading">
+      <p>${options.loadingText}</p>
+    </div>
+    <div class="download">
+      <p>${options.downloadText}</p>
+      <a class="btn primary" href="${intentHref}">افتح في التطبيق</a>
+      <a class="btn secondary" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
+      <a class="btn secondary" href="${APP_STORE_URL}">حمّل من App Store</a>
+    </div>
   </div>
 </body>
 </html>`;
 }
 
-/** App invite: Android → Play Store, iOS → App Store */
+/** App invite — try open app; if missing, stay on landing page with store links */
 export function buildAppInviteLandingPage(): string {
+  const landingUrl = `${SHARE_BASE_URL}/`;
+  const intentUrl = buildAndroidIntentUrl('open', landingUrl);
+  const intentHref = intentUrl.replace(/"/g, '&quot;');
+
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -84,51 +128,87 @@ export function buildAppInviteLandingPage(): string {
   <title>90Plus — تطبيق كرة القدم</title>
   <meta property="og:title" content="90Plus">
   <meta property="og:description" content="توقعات، اختبارات، وريلز كروية">
-  <meta property="og:url" content="${SHARE_BASE_URL}/">
+  <meta property="og:url" content="${landingUrl}">
   <style>${LANDING_STYLES}</style>
   <script>
     (function() {
+      var intentUrl = ${JSON.stringify(intentUrl)};
+      var customScheme = 'ninetyplus://';
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
       var isIOS = /iPhone|iPad|iPod/i.test(ua);
-      if (isAndroid) {
-        window.location.href = ${JSON.stringify(PLAY_STORE_URL)};
-      } else if (isIOS) {
-        window.location.href = ${JSON.stringify(APP_STORE_URL)};
+
+      function showDownloadLanding() {
+        document.body.classList.add('ready');
       }
+
+      function appLikelyOpened() {
+        return document.hidden || document.webkitHidden;
+      }
+
+      function tryOpenApp() {
+        if (isAndroid) {
+          window.location.href = intentUrl;
+          setTimeout(function() {
+            if (!appLikelyOpened()) showDownloadLanding();
+          }, 2200);
+          return;
+        }
+        if (isIOS) {
+          var start = Date.now();
+          window.location.href = customScheme;
+          setTimeout(function() {
+            if (!appLikelyOpened() && Date.now() - start < 3000) {
+              showDownloadLanding();
+            }
+          }, 1600);
+          return;
+        }
+        showDownloadLanding();
+      }
+
+      tryOpenApp();
     })();
   </script>
 </head>
 <body>
   <div class="card">
     <h1>90Plus</h1>
-    <p>أفضل تطبيق لكرة القدم — توقعات، اختبارات، وريلز</p>
-    <a class="btn primary" href="${PLAY_STORE_URL}">Google Play</a>
-    <a class="btn secondary" href="${APP_STORE_URL}">App Store</a>
+    <div class="loading">
+      <p>جاري فتح التطبيق…</p>
+    </div>
+    <div class="download">
+      <p>أفضل تطبيق لكرة القدم — توقعات، اختبارات، وريلز</p>
+      <a class="btn primary" href="${intentHref}">افتح في التطبيق</a>
+      <a class="btn secondary" href="${PLAY_STORE_URL}">Google Play</a>
+      <a class="btn secondary" href="${APP_STORE_URL}">App Store</a>
+    </div>
   </div>
 </body>
 </html>`;
 }
 
 export function buildReelLandingPage(reelId: string): string {
-  return buildContentLandingPage({
+  return buildSmartLandingPage({
     title: '90Plus — فيديو',
     ogTitle: '90Plus — شاهد هذا الفيديو',
     ogDescription: 'افتح الفيديو في تطبيق 90Plus',
     ogUrl: shareUrl(`/reels/${reelId}`),
-    subtitle: 'جاري فتح الفيديو في التطبيق…',
+    loadingText: 'جاري فتح الفيديو في التطبيق…',
+    downloadText: 'حمّل 90Plus لمشاهدة هذا الفيديو',
     deepPath: `reel/${reelId}`,
     customSchemeUrl: `ninetyplus://reel/${reelId}`,
   });
 }
 
 export function buildProfileLandingPage(username: string): string {
-  return buildContentLandingPage({
+  return buildSmartLandingPage({
     title: `90Plus — @${username}`,
     ogTitle: `90Plus — @${username}`,
     ogDescription: 'افتح البروفايل في تطبيق 90Plus',
     ogUrl: shareUrl(`/@${username}`),
-    subtitle: `جاري فتح بروفايل @${username} في التطبيق…`,
+    loadingText: `جاري فتح بروفايل @${username}…`,
+    downloadText: `حمّل 90Plus لمتابعة @${username}`,
     deepPath: `user/${username}`,
     customSchemeUrl: `ninetyplus://user/${username}`,
   });

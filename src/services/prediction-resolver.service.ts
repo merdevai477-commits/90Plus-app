@@ -12,6 +12,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { NotificationService } from './notification.service';
 import { awardXp } from './xp.service';
+import { clearResponseCache } from '../middleware/responseCache.middleware';
 
 const CORRECT_PREDICTION_REWARD = 10; // coins for correct prediction
 const CORRECT_PREDICTION_XP_ACTION = 'PREDICTION_WINNER'; // XP action key (10 XP per correct prediction)
@@ -28,6 +29,16 @@ export class PredictionResolverService {
         awayScore: number
     ): Promise<void> {
         try {
+            if (
+                homeScore == null ||
+                awayScore == null ||
+                Number.isNaN(homeScore) ||
+                Number.isNaN(awayScore)
+            ) {
+                logger.warn(`⚠️ Skipping prediction resolve for match ${apiMatchId}: invalid scores`);
+                return;
+            }
+
             logger.info(`🎯 Resolving predictions for match ${apiMatchId} (${homeScore}-${awayScore})`);
 
             // Determine the actual result
@@ -59,15 +70,19 @@ export class PredictionResolverService {
             for (const prediction of predictions) {
                 const isCorrect = prediction.predictionType === actualResult;
 
-                // Update prediction with result
-                await (prisma as any).prediction.update({
-                    where: { id: prediction.id },
+                // Only resolve once — parallel watchers may race on the same row
+                const resolved = await (prisma as any).prediction.updateMany({
+                    where: { id: prediction.id, isCorrect: null },
                     data: {
                         isCorrect,
                         coinsWon: isCorrect ? CORRECT_PREDICTION_REWARD : 0,
                         resolvedAt: new Date(),
                     },
                 });
+
+                if (resolved.count === 0) {
+                    continue;
+                }
 
                 // Award coins for correct prediction
                 if (isCorrect) {
@@ -170,6 +185,8 @@ export class PredictionResolverService {
 
             const correctCount = predictions.filter((p: any) => p.predictionType === actualResult).length;
             logger.info(`✅ Resolved ${predictions.length} predictions: ${correctCount} correct, ${predictions.length - correctCount} incorrect`);
+
+            clearResponseCache('/predictions/stats').catch(() => {});
 
         } catch (error) {
             logger.error(`❌ Error resolving predictions for match ${apiMatchId}:`, error);

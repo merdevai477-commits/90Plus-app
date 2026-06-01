@@ -335,6 +335,15 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
             userPredictions: {},
             allPredictions: [],
             matchPredictionCounts: {},
+            stats: {
+                total: 0,
+                correct: 0,
+                incorrect: 0,
+                pending: 0,
+                accuracy: 0,
+                resolved: 0,
+                totalCoinsWon: 0,
+            },
             isLoading: false,
             isSubmitting: false,
         });

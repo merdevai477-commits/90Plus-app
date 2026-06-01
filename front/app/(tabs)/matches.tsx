@@ -29,6 +29,34 @@ import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 
+type UserPredictionEntry = {
+  type: 'home' | 'draw' | 'away';
+  isCorrect?: boolean | null;
+  coinsWon?: number;
+};
+
+function normalizePredictedMap(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, UserPredictionEntry> {
+  if (!raw) return {};
+  const out: Record<string, UserPredictionEntry> = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (value === 'home' || value === 'draw' || value === 'away') {
+      out[id] = { type: value, isCorrect: null };
+    } else if (value && typeof value === 'object' && 'type' in value) {
+      const entry = value as UserPredictionEntry;
+      if (entry.type === 'home' || entry.type === 'draw' || entry.type === 'away') {
+        out[id] = {
+          type: entry.type,
+          isCorrect: entry.isCorrect ?? null,
+          coinsWon: entry.coinsWon,
+        };
+      }
+    }
+  }
+  return out;
+}
+
 // Top 5 European leagues' countries — these accordions start expanded by default.
 const TOP5_COUNTRIES: ReadonlySet<string> = new Set(['England', 'Spain', 'Italy', 'France', 'Germany']);
 
@@ -248,13 +276,14 @@ const MatchRow = memo(function MatchRow({
   showPreds: boolean;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
-  predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+  predictedMatches: Record<string, UserPredictionEntry>;
   isSubscribed: boolean;
   isSubscribing: boolean;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
 }) {
-  const existingPrediction = predictedMatches[fixture.id] ?? null;
+  const predictionEntry = predictedMatches[fixture.id];
+  const existingPrediction = predictionEntry?.type ?? null;
   const isSubmitting = submittingId === fixture.id;
   const { translate: t, language } = useTranslation();
   const homeName = getTeamDisplayName(fixture.home, language);
@@ -378,6 +407,32 @@ const MatchRow = memo(function MatchRow({
           </View>
         </View>
       )}
+
+      {showPreds && fixture.status === 'FT' && predictionEntry && (
+        <View style={styles.predWrap}>
+          <Text style={styles.predTitle}>
+            {t('matches.prediction.yourPrediction')}:{' '}
+            {existingPrediction === 'home'
+              ? homeName
+              : existingPrediction === 'away'
+                ? awayName
+                : t('matches.prediction.drawLabel')}
+          </Text>
+          {predictionEntry.isCorrect === true ? (
+            <Text style={styles.predResultWin}>
+              ✓ {t('predictions.correctPrediction')} (+10 XP)
+            </Text>
+          ) : predictionEntry.isCorrect === false ? (
+            <Text style={styles.predResultLoss}>
+              ✗ {t('predictions.wrongPrediction')}
+            </Text>
+          ) : (
+            <Text style={styles.predResultPending}>
+              {t('profile.pendingPredictions')}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 });
@@ -402,7 +457,7 @@ function LeagueAllMatchesModal({
   filter: string;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
-  predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+  predictedMatches: Record<string, UserPredictionEntry>;
   subscribedFixtures: ReadonlySet<string>;
   subscribingFixtureId: string | null;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
@@ -497,7 +552,7 @@ const LeagueCard = memo(function LeagueCard({
   filter: string;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
-  predictedMatches: Record<string, 'home' | 'draw' | 'away'>;
+  predictedMatches: Record<string, UserPredictionEntry>;
   subscribedFixtures: ReadonlySet<string>;
   subscribingFixtureId: string | null;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
@@ -626,7 +681,7 @@ export default function MatchesHubScreenV2() {
   // Tickets (remaining predictions)
   const [ticketsRemaining, setTicketsRemaining] = useState<number>(10);
   // Map of matchId -> prediction type already submitted
-  const [predictedMatches, setPredictedMatches] = useState<Record<string, 'home' | 'draw' | 'away'>>({});
+  const [predictedMatches, setPredictedMatches] = useState<Record<string, UserPredictionEntry>>({});
   // Which match is currently being submitted
   const [submittingId, setSubmittingId] = useState<string | null>(null);
 
@@ -667,11 +722,11 @@ export default function MatchesHubScreenV2() {
     (async () => {
       try {
         const [cachedMap, cachedTickets] = await Promise.all([
-          cacheService.get<Record<string, 'home' | 'draw' | 'away'>>(PRED_CACHE_KEY),
+          cacheService.get<Record<string, unknown>>(PRED_CACHE_KEY),
           cacheService.get<number>(TICKETS_CACHE_KEY),
         ]);
         if (cancelled) return;
-        if (cachedMap) setPredictedMatches(cachedMap);
+        if (cachedMap) setPredictedMatches(normalizePredictedMap(cachedMap as Record<string, unknown>));
         if (typeof cachedTickets === 'number') setTicketsRemaining(cachedTickets);
       } catch {
         // non-fatal
@@ -695,9 +750,13 @@ export default function MatchesHubScreenV2() {
         ]);
         setTicketsRemaining(remaining.remaining);
         // Build map of matchId -> predictionType from existing predictions
-        const map: Record<string, 'home' | 'draw' | 'away'> = {};
+        const map: Record<string, UserPredictionEntry> = {};
         Object.entries(userPreds.predictionsMap).forEach(([matchId, pred]) => {
-          map[matchId] = pred.prediction.type;
+          map[matchId] = {
+            type: pred.prediction.type,
+            isCorrect: pred.isCorrect ?? null,
+            coinsWon: pred.coinsWon,
+          };
         });
         setPredictedMatches(map);
         // Persist reconciled state — 24h TTL covers a full ticket cycle.
@@ -900,7 +959,10 @@ export default function MatchesHubScreenV2() {
     }
 
     // Build next state (for persistence) and apply optimistic updates.
-    const nextMap: Record<string, 'home' | 'draw' | 'away'> = { ...predictedMatches, [fixtureId]: type };
+    const nextMap: Record<string, UserPredictionEntry> = {
+      ...predictedMatches,
+      [fixtureId]: { type, isCorrect: null },
+    };
     const nextTickets = Math.max(0, ticketsRemaining - 1);
 
     setPredictedMatches(nextMap);
@@ -1735,6 +1797,9 @@ const styles = StyleSheet.create({
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },
   predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
+  predResultWin: { color: '#22c55e', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
+  predResultLoss: { color: '#ef4444', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
+  predResultPending: { color: '#f59e0b', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8 },
   predButtons: { flexDirection: 'row', gap: 10, paddingHorizontal: 4 },
   predBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   predBtnTxt: { color: 'rgba(255,255,255,0.72)', fontSize: 13, fontWeight: '800', textAlign: 'center', zIndex: 1 },

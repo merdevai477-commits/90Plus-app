@@ -324,6 +324,10 @@ const ReelsFeed: React.FC = () => {
   const retryAbortRef = useRef<AbortController | null>(null);
   const viewedReelsRef = useRef<Set<string>>(new Set());
   const deepLinkFetchRef = useRef<string | null>(null);
+  const deepLinkScrollDoneRef = useRef<string | null>(null);
+  const deepLinkScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startFromDoneRef = useRef<string | null>(null);
+  const startFromTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // In-flight dedupe: prevents a flicker between two adjacent reels from
   // firing two concurrent /view calls for the same reel.
   const pendingViewsRef = useRef<Set<string>>(new Set());
@@ -707,46 +711,42 @@ const ReelsFeed: React.FC = () => {
   useEffect(() => {
     if (!params.reelId) return;
 
-    const scrollToReel = (reelIndex: number) => {
-      setTimeout(() => {
-        try {
-          flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
-          setCurrentIndex(reelIndex);
-          setSelectedReelId(params.reelId!);
+    const reelIndex = reels.findIndex(r => r.id === params.reelId);
+    if (reelIndex >= 0) {
+      if (deepLinkScrollDoneRef.current === params.reelId) return;
+      deepLinkScrollDoneRef.current = params.reelId;
 
-          if (params.commentId && params.autoOpenComments === 'true') {
-            setHighlightCommentId(params.commentId);
-            setShowComments(true);
-          }
-        } catch {
-          flatListRef.current?.scrollToOffset({ offset: reelIndex * SCREEN_HEIGHT, animated: true });
-          setCurrentIndex(reelIndex);
-          setSelectedReelId(params.reelId!);
+      if (deepLinkScrollTimerRef.current) clearTimeout(deepLinkScrollTimerRef.current);
+      deepLinkScrollTimerRef.current = setTimeout(() => {
+        flatListRef.current?.scrollToIndex({ index: reelIndex, animated: true });
+        setCurrentIndex(reelIndex);
+        setSelectedReelId(params.reelId!);
 
-          if (params.commentId && params.autoOpenComments === 'true') {
-            setHighlightCommentId(params.commentId);
-            setShowComments(true);
-          }
+        if (params.commentId && params.autoOpenComments === 'true') {
+          setHighlightCommentId(params.commentId);
+          setShowComments(true);
         }
       }, 500);
-    };
 
-    const reelIndex = reels.findIndex(r => r.id === params.reelId);
-
-    if (reelIndex >= 0) {
-      scrollToReel(reelIndex);
-      return;
+      return () => {
+        if (deepLinkScrollTimerRef.current) {
+          clearTimeout(deepLinkScrollTimerRef.current);
+          deepLinkScrollTimerRef.current = null;
+        }
+      };
     }
 
     if (isInitialLoading) return;
-
     if (deepLinkFetchRef.current === params.reelId) return;
     deepLinkFetchRef.current = params.reelId;
 
+    let cancelled = false;
     (async () => {
       try {
         const token = await getToken();
+        if (cancelled) return;
         const item = await ReelsService.getReelById(token, params.reelId!);
+        if (cancelled) return;
         if (!item) {
           toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
           return;
@@ -764,13 +764,27 @@ const ReelsFeed: React.FC = () => {
           if (prev.some(r => r.id === transformed.id)) return prev;
           return [transformed, ...prev];
         });
-        scrollToReel(0);
       } catch (err) {
+        if (cancelled) return;
         logger.error('[ReelsFeed] Deep link fetch failed:', err);
         toastManager.showError(t.reels.reelNotFound, t.reels.reelNotFoundDetail);
       }
     })();
-  }, [params.reelId, params.commentId, params.autoOpenComments, reels, isInitialLoading, getToken, transformBackendReel, t.reels.reelNotFound, t.reels.reelNotFoundDetail]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    params.reelId,
+    params.commentId,
+    params.autoOpenComments,
+    reels,
+    isInitialLoading,
+    getToken,
+    transformBackendReel,
+    t.reels.reelNotFound,
+    t.reels.reelNotFoundDetail,
+  ]);
 
   // Handle startFrom param: scroll to a specific reel when navigating from Home screen
   useEffect(() => {
@@ -778,16 +792,21 @@ const ReelsFeed: React.FC = () => {
 
     const reelIndex = reels.findIndex(r => r.id === params.startFrom);
     if (reelIndex < 0) return;
+    if (startFromDoneRef.current === params.startFrom) return;
+    startFromDoneRef.current = params.startFrom;
 
-    setTimeout(() => {
-      try {
-        flatListRef.current?.scrollToIndex({ index: reelIndex, animated: false });
-        setCurrentIndex(reelIndex);
-      } catch {
-        flatListRef.current?.scrollToOffset({ offset: reelIndex * SCREEN_HEIGHT, animated: false });
-        setCurrentIndex(reelIndex);
-      }
+    if (startFromTimerRef.current) clearTimeout(startFromTimerRef.current);
+    startFromTimerRef.current = setTimeout(() => {
+      flatListRef.current?.scrollToIndex({ index: reelIndex, animated: false });
+      setCurrentIndex(reelIndex);
     }, 300);
+
+    return () => {
+      if (startFromTimerRef.current) {
+        clearTimeout(startFromTimerRef.current);
+        startFromTimerRef.current = null;
+      }
+    };
   }, [params.startFrom, reels]);
 
   // Load viewed reels from AsyncStorage on mount
@@ -947,6 +966,9 @@ const ReelsFeed: React.FC = () => {
     }
   }, []);
 
+  const likeTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingLikeRef = useRef<Map<string, boolean>>(new Map());
+
   // Cleanup videos on unmount - now handled by useReelsAudioManager
   // The hook automatically pauses all videos and clears tracking on unmount
   // This effect is kept for backward compatibility with loadedVideosRef
@@ -956,11 +978,10 @@ const ReelsFeed: React.FC = () => {
       loadedVideosRef.current.clear();
       // Also clear the audio manager's tracking
       clearLoadedVideos();
+      likeTimeoutRef.current.forEach(clearTimeout);
+      likeTimeoutRef.current.clear();
     };
   }, []);
-
-  const likeTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const pendingLikeRef = useRef<Map<string, boolean>>(new Map());
 
   // Optimistic like + debounced API sync (allows rapid taps; one request with final state)
   const handleLike = useCallback((reelId: string) => {
@@ -1148,8 +1169,11 @@ const ReelsFeed: React.FC = () => {
 
       const result = await ReelsService.deleteReel(token, reelId);
       if (result.success) {
-        // Remove from local state immediately
-        setReels(prev => prev.filter(r => r.id !== reelId));
+        setReels(prev => {
+          const next = prev.filter(r => r.id !== reelId);
+          setCurrentIndex(i => Math.min(i, Math.max(0, next.length - 1)));
+          return next;
+        });
         setBackendReels(prev => prev.filter(r => r.id !== reelId));
         toastManager.showSuccess(t.reels.deleteSuccess, result.message || t.reels.deleteSuccessDetail);
       } else {
@@ -1384,6 +1408,14 @@ const ReelsFeed: React.FC = () => {
     />
   ), [currentIndex, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
+  const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+    flatListRef.current?.scrollToOffset({
+      offset: Math.max(0, info.averageItemLength * info.index),
+      animated: true,
+    });
+    setCurrentIndex(info.index);
+  }, []);
+
   const getItemLayout = useCallback((_: any, index: number) => ({
     length: SCREEN_HEIGHT,
     offset: SCREEN_HEIGHT * index,
@@ -1467,12 +1499,13 @@ const ReelsFeed: React.FC = () => {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           getItemLayout={getItemLayout}
+          onScrollToIndexFailed={handleScrollToIndexFailed}
           // Performance optimizations — iOS: minimal window to avoid AVPlayer OOM/crash
           windowSize={REEL_LIST_WINDOW_SIZE}
           initialNumToRender={REEL_INITIAL_RENDER}
           maxToRenderPerBatch={REEL_MAX_BATCH}
           updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
-          removeClippedSubviews={Platform.OS === 'android'}
+          removeClippedSubviews={false}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}

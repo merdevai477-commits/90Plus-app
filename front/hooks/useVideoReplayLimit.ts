@@ -10,7 +10,7 @@
  * - WHEN the user scrolls away and back THEN the Replay count SHALL reset
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const MAX_AUTO_REPLAYS = 2;
 
@@ -46,15 +46,10 @@ export function useVideoReplayLimit(
   const [replayCount, setReplayCount] = useState(0);
   const [isPausedByLimit, setIsPausedByLimit] = useState(false);
   
-  // Track the video ID to reset state when it changes
-  const currentVideoIdRef = useRef(videoId);
-  
-  // Reset state if video ID changes
-  if (currentVideoIdRef.current !== videoId) {
-    currentVideoIdRef.current = videoId;
+  useEffect(() => {
     setReplayCount(0);
     setIsPausedByLimit(false);
-  }
+  }, [videoId]);
 
   /**
    * Called when video finishes playing

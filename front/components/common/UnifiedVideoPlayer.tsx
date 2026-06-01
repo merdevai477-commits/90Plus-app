@@ -132,6 +132,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   style,
 }) => {
   const { t } = useLanguage();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // -------- URL management (signed URL refresh support) --------
   const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
@@ -360,20 +368,20 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       (async () => {
         try {
           const token = await getTokenRef.current();
-          if (!token) return;
+          if (!token || !mountedRef.current) return;
           const res = await fetch(`${getApiUrl()}/reels/${reel.id}/signed-url`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          if (!res.ok) return;
+          if (!res.ok || !mountedRef.current) return;
           const data = await res.json();
           const newUrl: string | undefined = data?.data?.signedUrl;
-          if (newUrl && !isInvalidVideoUrl(newUrl)) {
+          if (newUrl && !isInvalidVideoUrl(newUrl) && mountedRef.current) {
             logger.info(`[UnifiedVideoPlayer] Playback URL refreshed for reel ${reel.id}`);
             setActiveVideoUrl(newUrl);
             setErrorDetails('');
             try {
               player.replace(buildVideoSource(newUrl));
-              if (isActive) player.play();
+              if (isActive && mountedRef.current) player.play();
             } catch (replaceErr) {
               logger.warn('[UnifiedVideoPlayer] replace failed:', replaceErr);
             }
@@ -390,6 +398,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       (async () => {
         try {
           const head = await fetch(activeVideoUrl, { method: 'HEAD' });
+          if (!mountedRef.current) return;
           logger.info(`[UnifiedVideoPlayer] 🔍 Mux HEAD status: ${head.status} ${head.statusText}`);
           if (head.status === 403 || head.status === 404) {
             setErrorDetails(
@@ -397,6 +406,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
             );
           }
         } catch (headErr) {
+          if (!mountedRef.current) return;
           logger.warn('[UnifiedVideoPlayer] 🔍 HEAD request failed (network issue):', headErr);
           setErrorDetails(t.reels?.videoConnectionError || 'Could not reach the video server');
         }
