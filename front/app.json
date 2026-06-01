@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
       "usesAppleSignIn": true,
-      "buildNumber": "102",
+      "buildNumber": "103",
       "requireFullScreen": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [

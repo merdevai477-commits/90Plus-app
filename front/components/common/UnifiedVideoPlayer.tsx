@@ -37,7 +37,6 @@ import {
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
 import { Play } from 'lucide-react-native';
-import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -260,18 +259,20 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     if (!player || invalidSource) return;
     const shouldPlay = isActive && !isPausedByLimit && VIDEO_DEFAULTS.autoplay;
     try {
-      if (shouldPlay) {
-        if (!player.playing) player.play();
-      } else if (player.playing) {
-        player.pause();
+      if (!shouldPlay) {
+        if (player.playing) player.pause();
+        return;
       }
+      // On iOS, play() while status is idle/loading after a tab return can stall forever.
+      if (status !== 'readyToPlay') return;
+      if (!player.playing) player.play();
     } catch (err: any) {
       const msg = err?.message || '';
       if (!msg.includes('released') && !msg.includes('already')) {
         logger.debug(`[UnifiedVideoPlayer] play/pause for ${reel.id}:`, msg);
       }
     }
-  }, [player, isActive, isPausedByLimit, reel.id, invalidSource]);
+  }, [player, isActive, isPausedByLimit, reel.id, invalidSource, status]);
 
   // Pause promptly on unmount so iOS releases audio/video resources before the next reel mounts.
   useEffect(() => {
@@ -284,23 +285,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     };
   }, [player]);
 
-  // Resume when screen regains focus (active reel only — avoid waking stale players).
-  useFocusEffect(
-    useCallback(() => {
-      if (!isActive) {
-        return () => {};
-      }
-      const timer = setTimeout(() => {
-        if (!player || !isActive || isPausedByLimit || invalidSource) return;
-        try {
-          if (!player.playing) player.play();
-        } catch {
-          /* ignore */
-        }
-      }, 200);
-      return () => clearTimeout(timer);
-    }, [player, isActive, isPausedByLimit, invalidSource]),
-  );
+  // Playback resume on tab return is handled by the parent (reels feed unmounts
+  // players on blur and remounts with a fresh generation on focus).
 
   // -------- Loading / error UI state --------
   // If the source is invalid we report "not loading" so the timeout effect

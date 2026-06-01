@@ -4,9 +4,8 @@
  * Manages audio / playback cleanup for the reels page:
  *  - Stops all video audio when leaving the reels page (navigation)
  *  - Pauses playback when the app goes to background
- *  - Resumes automatically when returning to the reels page (via the
- *    UnifiedVideoPlayer's own focus-effect — we just stop; we don't force
- *    play here to avoid AudioFocusNotAcquiredException races)
+ *  - On return, the reels feed remounts players (playerGeneration); we do not
+ *    force play here to avoid AudioFocusNotAcquiredException / stale AVPlayer races
  *
  * SDK 55 migration:
  *  - `videoRefs` now holds `VideoPlayer` instances from `expo-video` instead
@@ -36,6 +35,8 @@ export interface UseReelsAudioManagerOptions {
   /** Map of reelId → expo-video `VideoPlayer` instance, populated by UnifiedVideoPlayer's onVideoRef. */
   videoRefs: React.MutableRefObject<Map<string, any>>;
   currentIndex: number;
+  /** Reel id at `currentIndex` — used to resume the correct player (map is keyed by id, not index). */
+  activeReelIdRef?: React.MutableRefObject<string | null>;
   onPauseAll?: () => void;
   onResumeActive?: (index: number) => void;
 }
@@ -110,6 +111,7 @@ function safePlay(player: any, id: string): void {
 export const useReelsAudioManager = ({
   videoRefs,
   currentIndex,
+  activeReelIdRef,
   onPauseAll,
   onResumeActive,
 }: UseReelsAudioManagerOptions): UseReelsAudioManagerReturn => {
@@ -136,13 +138,13 @@ export const useReelsAudioManager = ({
    */
   const resumeActiveVideo = useCallback((): void => {
     if (!isPageFocused.current || !isAppActive.current) return;
-    const entries = Array.from(videoRefs.current.entries());
-    const active = entries[currentIndex];
-    if (!active) return;
-    const [id, player] = active;
+    const id = activeReelIdRef?.current ?? undefined;
+    if (!id) return;
+    const player = videoRefs.current.get(id);
+    if (!player) return;
     safePlay(player, id);
     onResumeActive?.(currentIndex);
-  }, [videoRefs, currentIndex, onResumeActive]);
+  }, [videoRefs, activeReelIdRef, currentIndex, onResumeActive]);
 
   /**
    * Handle app-state changes (background / foreground).
@@ -199,6 +201,9 @@ export const useReelsAudioManager = ({
         isPageFocused.current = false;
         logger.debug('[AudioManager] Reels page unfocused — pausing all videos');
         pauseAllVideosRef.current();
+        // Drop stale native players so a quick tab return cannot call play() on a released AVPlayer.
+        videoRefs.current.clear();
+        clearLoadedVideos();
       };
     }, []),
   );

@@ -335,7 +335,11 @@ const ReelsFeed: React.FC = () => {
   const MAX_VIEWED_REELS_STORED = 500; // Cap to prevent unbounded AsyncStorage growth
 
   const videoRefs = useRef<Map<string, any>>(new Map());
+  const activeReelIdRef = useRef<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  /** Unmount native players when leaving the reels tab (prevents iOS AVPlayer crash on quick return). */
+  const [isReelsScreenFocused, setIsReelsScreenFocused] = useState(true);
+  const [playerGeneration, setPlayerGeneration] = useState(0);
   const haptic = useHaptic();
   const { t } = useTranslation();
   const { getToken } = useAuth();
@@ -377,6 +381,7 @@ const ReelsFeed: React.FC = () => {
   const { pauseAllVideos, markVideoLoaded, markVideoUnloaded } = useReelsAudioManager({
     videoRefs,
     currentIndex,
+    activeReelIdRef,
     onPauseAll: handlePauseAll,
     onResumeActive: handleResumeActive,
   });
@@ -615,6 +620,18 @@ const ReelsFeed: React.FC = () => {
   const lastFocusRefreshRef = useRef<number>(0);
   const FOCUS_REFRESH_THROTTLE = 10000; // 10 seconds instead of 30
   const isRefreshingRef = useRef(false);
+
+  // Tear down native AVPlayer instances when leaving the reels tab; remount fresh on return.
+  useFocusEffect(
+    useCallback(() => {
+      setIsReelsScreenFocused(true);
+      setPlayerGeneration((g) => g + 1);
+
+      return () => {
+        setIsReelsScreenFocused(false);
+      };
+    }, []),
+  );
 
   // Reload when screen comes into focus (e.g., after uploading a reel)
   useFocusEffect(
@@ -919,6 +936,7 @@ const ReelsFeed: React.FC = () => {
   const filteredReels = reels;
 
   const activeReelId = filteredReels[currentIndex]?.id;
+  activeReelIdRef.current = activeReelId ?? null;
 
   const handleWsLike = useCallback((payload: { reelId: string; likesCount: number }) => {
     setReels((prev) =>
@@ -1389,7 +1407,11 @@ const ReelsFeed: React.FC = () => {
     <ReelItem
       reel={item}
       isActive={index === currentIndex}
-      shouldMountPlayer={Math.abs(index - currentIndex) <= REEL_PLAYER_MOUNT_DISTANCE}
+      shouldMountPlayer={
+        isReelsScreenFocused &&
+        Math.abs(index - currentIndex) <= REEL_PLAYER_MOUNT_DISTANCE
+      }
+      playerGeneration={playerGeneration}
       isOwnReel={resolveIsOwnReel(item)}
       onLike={() => handleLike(item.id)}
       onToggleMute={() => handleToggleMute(item.id)}
@@ -1406,7 +1428,7 @@ const ReelsFeed: React.FC = () => {
       onDeleteReel={handleDeleteReel}
       onEditReel={handleEditReel}
     />
-  ), [currentIndex, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
+  ), [currentIndex, isReelsScreenFocused, playerGeneration, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
     flatListRef.current?.scrollToOffset({

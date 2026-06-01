@@ -15,6 +15,7 @@
       },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
         "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api"
@@ -30,6 +31,7 @@
       },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
         "EXPO_PUBLIC_API_URL": "https://90plus-app-production-1808.up.railway.app/api",
@@ -42,7 +44,8 @@
       "prebuildCommand": "prebuild --no-install --clean",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "SENTRY_ALLOW_FAILURE": "false",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "SENTRY_ALLOW_FAILURE": "true",
         "npm_config_ignore_scripts": "false",
         "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",

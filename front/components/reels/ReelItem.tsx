@@ -46,6 +46,8 @@ interface ReelItemProps {
     isActive: boolean;
     /** When false, show thumbnail only — avoids multiple AVPlayer instances on iOS. */
     shouldMountPlayer?: boolean;
+    /** Bumped when the reels tab regains focus — forces a fresh expo-video player on iOS. */
+    playerGeneration?: number;
     onLike: () => void;
     onToggleMute: () => void;
     onComment: () => void;
@@ -87,6 +89,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     reel,
     isActive,
     shouldMountPlayer = true,
+    playerGeneration = 0,
     onLike,
     onToggleMute,
     onComment,
@@ -438,6 +441,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             >
                 {shouldMountPlayer ? (
                     <UnifiedVideoPlayer
+                        key={`${reel.id}-${playerGeneration}`}
                         reel={{
                             id: reel.id,
                             videoUrl: reel.videoUrl,
