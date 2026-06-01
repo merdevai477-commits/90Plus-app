@@ -31,6 +31,11 @@ export interface TopPlayerRow {
   lifetimeXp: number;
   position: string;
   countryFlag: string;
+  age: number | null;
+  height: number | null;
+  weight: number | null;
+  preferredFoot: string | null;
+  favoriteTeam: string | null;
   clubLogo: string | null;
   followersCount: number;
   stats: { totalViews: number; totalLikes: number; profileViews: number };
@@ -84,6 +89,11 @@ export async function getTopPlayers(
       profileViews: true,
       position: true,
       countryFlag: true,
+      age: true,
+      height: true,
+      weight: true,
+      preferredFoot: true,
+      favoriteTeam: true,
       clubLogo: true,
       reels: {
         where: { createdAt: { gte: startDate } },
@@ -116,6 +126,11 @@ export async function getTopPlayers(
       lifetimeXp: user.xp,
       position: user.position || 'ST',
       countryFlag: user.countryFlag || '🏳️',
+      age: user.age ?? null,
+      height: user.height ?? null,
+      weight: user.weight ?? null,
+      preferredFoot: user.preferredFoot ?? null,
+      favoriteTeam: user.favoriteTeam ?? null,
       clubLogo: user.clubLogo,
       ...followCountsFromPrisma(user._count),
       stats: { totalViews, totalLikes, profileViews: user.profileViews || 0 },

@@ -27,6 +27,11 @@ export interface TopPlayer {
   position: string;
   /** Emoji flag from the backend (e.g. "🇪🇬"). */
   countryFlag: string;
+  age: number | null;
+  height: number | null;
+  weight: number | null;
+  preferredFoot: string | null;
+  favoriteTeam: string | null;
   clubLogo: string | null;
   followersCount: number;
   stats: {

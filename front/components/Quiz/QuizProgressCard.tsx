@@ -31,6 +31,8 @@ interface QuizProgressCardProps {
   questionLabel: string;
   /** Changes when the active question changes — resets the timer. */
   timerKey: string;
+  /** Bumped when a timeout submit fails so the countdown can fire again. */
+  timerRetryEpoch?: number;
   timerActive: boolean;
   timeLimitSec: number;
   onTimeUp: () => void;
@@ -42,6 +44,7 @@ function QuizProgressCardInner({
   progress,
   questionLabel,
   timerKey,
+  timerRetryEpoch = 0,
   timerActive,
   timeLimitSec,
   onTimeUp,
@@ -64,6 +67,10 @@ function QuizProgressCardInner({
     setSeconds(timeLimitSec);
     firedRef.current = false;
   }, [timerKey, timeLimitSec]);
+
+  useEffect(() => {
+    firedRef.current = false;
+  }, [timerRetryEpoch]);
 
   useEffect(() => {
     if (!timerActive) return;

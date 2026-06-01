@@ -27,6 +27,8 @@ export interface PodiumCardProps {
   heightCm?: number | string;
   weightKg?: number | string;
   foot?: string;
+  clubLogo?: string | null;
+  favoriteTeam?: string | null;
   /** When true, render a neutral placeholder card (no fake stats). */
   isPlaceholder?: boolean;
   onPress?: () => void;
@@ -43,6 +45,8 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
   heightCm,
   weightKg,
   foot,
+  clubLogo,
+  favoriteTeam,
   isPlaceholder = false,
   onPress,
 }) => {
@@ -68,6 +72,8 @@ const PodiumCard: React.FC<PodiumCardProps> = ({
         height={isPlaceholder ? '—' : (heightCm ?? '—')}
         weight={isPlaceholder ? '—' : (weightKg ?? '—')}
         foot={isPlaceholder ? '—' : (foot ?? '—')}
+        clubLogo={isPlaceholder ? undefined : (clubLogo ?? undefined)}
+        clubName={isPlaceholder ? undefined : (favoriteTeam ?? undefined)}
       />
       <Text style={s.podXpLabel} accessibilityLabel={`${t.rank.xpSuffix}: ${xp}`}>
         {xp}

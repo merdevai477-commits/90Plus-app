@@ -376,6 +376,14 @@ export async function getDailyQuizForUser(
   const questions = toPublicQuestions(pack, progress);
   const pendingIndex = questions.findIndex((q) => q.status === 'pending');
   const stats = countStats(progress, pack);
+  const allDone = isQuizComplete(progress, pack);
+
+  if (allDone && !session.completedAt) {
+    await prisma.userDailyQuizSession.update({
+      where: { id: session.id },
+      data: { completedAt: new Date() },
+    });
+  }
 
   return {
     language,
@@ -396,7 +404,7 @@ export async function getDailyQuizForUser(
       timedOut: stats.timedOut,
       closed: stats.closed,
       xpEarned: stats.xp,
-      completed: Boolean(session.completedAt),
+      completed: allDone || Boolean(session.completedAt),
     },
     timezone,
   };

@@ -40,7 +40,7 @@ export async function readCachedDailyQuiz(
   }
 }
 
-async function persistDailyQuiz(
+export async function cacheDailyQuiz(
   lang: QuizApiLanguage,
   data: QuizDailyPayload,
 ): Promise<void> {
@@ -92,7 +92,7 @@ async function fetchAndCacheDaily(
   if (data.packDate && data.packDate !== expectedDateKey) {
     throw new Error('STALE_PACK');
   }
-  await persistDailyQuiz(lang, data);
+  await cacheDailyQuiz(lang, data);
   prefetchQuizImages(data.questions, data.currentIndex ?? 0);
   return data;
 }
@@ -135,8 +135,9 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     queryKey: dailyQuizQueryKey(lang, dateKey),
     queryFn: () => fetchAndCacheDaily(getToken, lang, dateKey),
     enabled: Boolean(lang) && isLoaded === true && isSignedIn === true,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
     gcTime: 30 * 60 * 1000,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     placeholderData:

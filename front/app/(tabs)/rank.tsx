@@ -66,6 +66,12 @@ interface PodiumSlot {
   avatar: ImageSourcePropType | string;
   countryFlag: string | null;
   position?: string;
+  age?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  foot?: string | null;
+  clubLogo?: string | null;
+  favoriteTeam?: string | null;
 }
 
 interface BoardSlot {
@@ -79,6 +85,12 @@ interface BoardSlot {
   avatar: string | null;
 }
 
+function playerDisplayName(player: TopPlayer, fallback: string): string {
+  const name = player.displayName?.trim();
+  if (name) return name;
+  return fallback;
+}
+
 function buildPodiumSlot(
   rank: number,
   player: TopPlayer | undefined,
@@ -90,11 +102,17 @@ function buildPodiumSlot(
       rank,
       isPlaceholder: false,
       username: player.username,
-      name: (player.displayName ?? player.username) || emptyName,
+      name: playerDisplayName(player, player.username || emptyName),
       xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
       avatar: player.avatar ?? PROFILE_PLACEHOLDER,
       countryFlag: player.countryFlag ?? null,
       position: player.position,
+      age: player.age ?? null,
+      heightCm: player.height ?? null,
+      weightKg: player.weight ?? null,
+      foot: player.preferredFoot ?? null,
+      clubLogo: player.clubLogo ?? null,
+      favoriteTeam: player.favoriteTeam ?? null,
     };
   }
   return {
@@ -121,7 +139,7 @@ function buildBoardSlot(
       isPlaceholder: false,
       id: player.id,
       username: player.username,
-      name: (player.displayName ?? player.username) || emptyName,
+      name: playerDisplayName(player, player.username || emptyName),
       role: player.position || emptyHint,
       xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
       avatar: player.avatar,
@@ -271,7 +289,7 @@ export default function RankScreen() {
         return {
           rank,
           id: player.id,
-          displayName: (player.displayName ?? player.username) || t.rank.emptySlot,
+          displayName: playerDisplayName(player, player.username || t.rank.emptySlot),
           username: player.username,
           avatar: player.avatar,
           xp: player.xp ?? 0,
@@ -445,6 +463,12 @@ export default function RankScreen() {
                       avatar={p.avatar}
                       countryFlag={p.countryFlag}
                       position={p.position}
+                      age={p.age ?? undefined}
+                      heightCm={p.heightCm ?? undefined}
+                      weightKg={p.weightKg ?? undefined}
+                      foot={p.foot ?? undefined}
+                      clubLogo={p.clubLogo ?? undefined}
+                      favoriteTeam={p.favoriteTeam ?? undefined}
                       isPlaceholder={p.isPlaceholder}
                       onPress={
                         p.username

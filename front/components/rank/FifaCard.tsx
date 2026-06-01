@@ -45,6 +45,7 @@ interface FifaCardProps {
     onStatsPress?: () => void;
     clubLogo?: string;
     onClubPress?: () => void;
+    clubName?: string;
     brandLogo?: string;
     onBrandPress?: () => void;
     name?: string;
@@ -69,6 +70,8 @@ const FifaCard = memo(function FifaCard({
     height,
     weight,
     foot,
+    clubLogo,
+    clubName,
     name,
 }: FifaCardProps) {
 
@@ -292,8 +295,27 @@ const FifaCard = memo(function FifaCard({
                         </View>
                     </View>
                 </View>
+
+                {/* Club badge (optional) */}
+                {clubLogo ? (
+                    <View style={[styles.clubBadgeWrap, { right: 14 * scale, bottom: 14 * scale }]}>
+                        <Image
+                            source={{ uri: clubLogo }}
+                            style={[styles.clubBadgeImg, { width: 34 * scale, height: 34 * scale }]}
+                            contentFit="contain"
+                            cachePolicy="memory-disk"
+                        />
+                    </View>
+                ) : null}
             </View>
-            <Text style={[styles.nameLabel, { fontSize: 18 * scale, marginTop: 10 * scale }]}>{name}</Text>
+            <Text style={[styles.nameLabel, { fontSize: 18 * scale, marginTop: 10 * scale }]} numberOfLines={1}>
+                {name}
+            </Text>
+            {clubName ? (
+                <Text style={[styles.clubNameLabel, { fontSize: 11 * scale, marginTop: 2 * scale }]} numberOfLines={1}>
+                    {clubName}
+                </Text>
+            ) : null}
         </View>
     );
 });
@@ -320,4 +342,17 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 30, elevation: 30, zIndex: -1,
     },
     nameLabel: { color: '#fff', fontWeight: '900', textTransform: 'uppercase' },
+    clubNameLabel: { color: 'rgba(255,255,255,0.65)', fontWeight: '800' },
+    clubBadgeWrap: {
+        position: 'absolute',
+        borderRadius: 999,
+        backgroundColor: 'rgba(0,0,0,0.22)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.14)',
+        padding: 6,
+        zIndex: 6,
+    },
+    clubBadgeImg: {
+        borderRadius: 999,
+    },
 });

@@ -1057,8 +1057,8 @@ export const ar = {
     // Stats
     level: 'المستوى',
     rank: 'الترتيب',
-    followers: 'المتابعون',
-    following: 'المتابَعون',
+    followers: 'متابِعون',
+    following: 'يتابَع',
     totalPredictions: 'إجمالي التوقعات',
     accuracy: 'الدقة',
     quizScore: 'نقاط الاختبار',
@@ -1084,8 +1084,8 @@ export const ar = {
     createContent: 'أنشئ محتوى',
 
     // Social
-    followersCount: 'المتابعون',
-    followingCount: 'المتابَعون',
+    followersCount: 'متابِعون',
+    followingCount: 'يتابَع',
     friendRequests: 'طلبات الصداقة',
     recentActivity: 'النشاط الأخير',
 
@@ -1517,7 +1517,7 @@ export const ar = {
     profileAndSettings: 'الملف الشخصي والإعدادات',
     allVideosAndContent: 'جميع الفيديوهات والمحتوى',
     predictionsPointsAchievements: 'التوقعات والنقاط والإنجازات',
-    followersAndFollowing: 'المتابعون والمتابَعون',
+    followersAndFollowing: 'متابِعون ويتابَع',
     commentsAndInteractions: 'التعليقات والتفاعلات',
     agreeToDelete: 'أوافق على حذف حسابي نهائياً وأدرك أنه لا يمكنني استرداد بياناتي',
     mustAgreeFirst: 'يجب الموافقة على الشروط أولاً',
@@ -1633,7 +1633,7 @@ export const ar = {
     profile: 'الملف الشخصي والإعدادات',
     videos: 'جميع الفيديوهات والمحتوى',
     achievements: 'التوقعات والنقاط والإنجازات',
-    social: 'المتابعون والمتابَعون',
+    social: 'متابِعون ويتابَع',
     interactions: 'التعليقات والتفاعلات',
     gracePeriodTitle: 'فترة سماح 30 يوماً',
     gracePeriodMessage: 'لديك 30 يوماً لإلغاء الحذف. بعد ذلك، سيتم حذف حسابك نهائياً.',

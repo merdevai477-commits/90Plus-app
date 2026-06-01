@@ -116,6 +116,11 @@ export interface RankedPlayer {
   lifetimeXp?: number;
   position: string;
   countryFlag: string;
+  age: number | null;
+  height: number | null;
+  weight: number | null;
+  preferredFoot: string | null;
+  favoriteTeam: string | null;
   clubLogo: string | null;
   followersCount: number;
   stats: {

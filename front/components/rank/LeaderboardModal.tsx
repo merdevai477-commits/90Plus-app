@@ -1,9 +1,10 @@
 /**
- * LeaderboardModal — Top-11 sheet with horizontal rows and vector medals.
+ * LeaderboardModal — Top-11 sheet with liquid-glass cards (matches Rank tab style).
  */
 
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import {
   ImageSourcePropType,
@@ -13,8 +14,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RankMedalIcon } from '../common/RankMedalIcon';
 import { useTranslation } from '../../src/i18n';
@@ -35,10 +38,28 @@ export interface LeaderboardEntry {
 
 const LOCAL_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.png');
 
-const TOP3_ROW_STYLE: Record<number, object> = {
-  1: { borderColor: 'rgba(245,197,24,0.35)', backgroundColor: 'rgba(245,197,24,0.06)' },
-  2: { borderColor: 'rgba(192,192,192,0.35)', backgroundColor: 'rgba(192,192,192,0.06)' },
-  3: { borderColor: 'rgba(205,127,50,0.35)', backgroundColor: 'rgba(205,127,50,0.06)' },
+const TOP3_THEME: Record<
+  number,
+  { glow: string; border: string; fill: string; gradient: [string, string] }
+> = {
+  1: {
+    glow: '#F5C518',
+    border: 'rgba(245,197,24,0.65)',
+    fill: 'rgba(245,197,24,0.14)',
+    gradient: ['rgba(245,197,24,0.35)', 'rgba(245,197,24,0.05)'],
+  },
+  2: {
+    glow: '#C0C0C0',
+    border: 'rgba(192,192,192,0.55)',
+    fill: 'rgba(192,192,192,0.12)',
+    gradient: ['rgba(192,192,192,0.28)', 'rgba(192,192,192,0.04)'],
+  },
+  3: {
+    glow: '#CD7F32',
+    border: 'rgba(205,127,50,0.55)',
+    fill: 'rgba(205,127,50,0.12)',
+    gradient: ['rgba(205,127,50,0.28)', 'rgba(205,127,50,0.04)'],
+  },
 };
 
 interface LeaderboardModalProps {
@@ -50,24 +71,141 @@ interface LeaderboardModalProps {
   onEntryPress?: (entry: LeaderboardEntry) => void;
 }
 
-function ModalBackdrop() {
+function GlassSheet({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: object;
+}) {
   if (isLiquidGlassSupported) {
     return (
-      <LiquidGlassView
-        {...glassProps.modal}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      <LiquidGlassView {...glassProps.modal} style={[s.sheet, style]}>
+        {children}
+      </LiquidGlassView>
     );
   }
 
   return (
-    <BlurView
-      intensity={Platform.OS === 'ios' ? 30 : 100}
-      tint="dark"
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-    />
+    <BlurView intensity={Platform.OS === 'ios' ? 40 : 90} tint="dark" style={[s.sheet, style]}>
+      {children}
+    </BlurView>
+  );
+}
+
+function GlassRow({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: object;
+}) {
+  if (isLiquidGlassSupported) {
+    return (
+      <LiquidGlassView {...glassProps.card} style={[s.rowGlass, style]}>
+        {children}
+      </LiquidGlassView>
+    );
+  }
+
+  return (
+    <BlurView intensity={14} tint="dark" style={[s.rowGlass, style]}>
+      {children}
+    </BlurView>
+  );
+}
+
+function LeaderboardRow({
+  entry,
+  isCurrentUser,
+  onPress,
+  t,
+}: {
+  entry: LeaderboardEntry;
+  isCurrentUser: boolean;
+  onPress?: () => void;
+  t: ReturnType<typeof useTranslation>['t'];
+}) {
+  const top3 = TOP3_THEME[entry.rank];
+  const isTop3 = entry.rank <= 3 && !!top3;
+  const disabled = entry.isPlaceholder || !entry.username;
+
+  const rowContent = (
+    <GlassRow
+      style={[
+        s.rowInner,
+        isTop3 && { backgroundColor: top3.fill, borderColor: top3.border },
+        isCurrentUser && !isTop3 && s.rowCurrentUser,
+        entry.isPlaceholder && s.rowPlaceholder,
+      ]}
+    >
+      {isTop3 ? (
+        <LinearGradient
+          colors={top3.gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
+
+      <View style={[s.avatarWrap, isTop3 && { borderColor: top3.glow }]}>
+        <Image
+          source={entry.avatar ? { uri: entry.avatar } : LOCAL_PLACEHOLDER}
+          placeholder={LOCAL_PLACEHOLDER}
+          style={s.avatar}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={150}
+        />
+      </View>
+
+      <View style={s.nameCol}>
+        <Text style={s.displayName} numberOfLines={2}>
+          {entry.displayName}
+        </Text>
+      </View>
+
+      <View style={[s.xpCol, isTop3 && { borderColor: `${top3.glow}44` }]}>
+        <Text style={[s.xpValue, isTop3 && { color: top3.glow }]}>{entry.xp}</Text>
+        <Text style={s.xpSuffix}>{t.rank.xpSuffix}</Text>
+      </View>
+
+      <View style={s.medalCol}>
+        <RankMedalIcon rank={entry.rank} size={isTop3 ? 30 : 26} />
+      </View>
+    </GlassRow>
+  );
+
+  const wrapped = (
+    <View
+      style={[
+        s.rowShell,
+        isTop3 && {
+          shadowColor: top3.glow,
+          shadowOpacity: 0.45,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 8,
+        },
+      ]}
+    >
+      {rowContent}
+    </View>
+  );
+
+  if (disabled) {
+    return wrapped;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [pressed && { opacity: 0.9 }]}
+      accessibilityRole="button"
+    >
+      {wrapped}
+    </Pressable>
   );
 }
 
@@ -75,88 +213,80 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   visible,
   onClose,
   entries,
-  topInset,
+  topInset: _topInset,
   currentUserId,
   onEntryPress,
 }) => {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetBottomPad = Math.max(insets.bottom, 12);
+  const sheetHeight = Math.round(windowHeight * 0.94);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.root}>
         <Pressable
-          style={[
-            StyleSheet.absoluteFill,
-            Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' },
-          ]}
+          style={s.backdrop}
           onPress={onClose}
           accessibilityRole="button"
           accessibilityLabel={t.common.close}
         />
-        <ModalBackdrop />
 
-        <View style={[s.modalContent, { paddingTop: Math.max(topInset, 10) + 20 }]}>
-          <View style={s.modalHeader}>
-            <Text style={s.modalTitle}>{t.rank.leaderboardTitle}</Text>
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [s.modalCloseBtn, pressed && { opacity: 0.85 }]}
-              accessibilityRole="button"
-              accessibilityLabel={t.common.close}
-            >
-              <Text style={s.modalCloseText}>✕</Text>
-            </Pressable>
+        <GlassSheet style={{ height: sheetHeight, paddingBottom: sheetBottomPad }}>
+          <View style={s.handle} />
+
+          <View style={s.header}>
+            {isLiquidGlassSupported ? (
+              <LiquidGlassView {...glassProps.header} style={s.headerGlass}>
+                <Text style={s.title}>{t.rank.leaderboardTitle}</Text>
+                <Pressable
+                  onPress={onClose}
+                  style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.85 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.common.close}
+                >
+                  <Text style={s.closeTxt}>✕</Text>
+                </Pressable>
+              </LiquidGlassView>
+            ) : (
+              <View style={s.headerPlain}>
+                <Text style={s.title}>{t.rank.leaderboardTitle}</Text>
+                <Pressable
+                  onPress={onClose}
+                  style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.85 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.common.close}
+                >
+                  <Text style={s.closeTxt}>✕</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.modalScroll}>
+          <ScrollView
+            showsVerticalScrollIndicator
+            indicatorStyle="white"
+            nestedScrollEnabled
+            bounces
+            contentContainerStyle={s.listContent}
+            style={s.list}
+          >
             {entries.map((entry) => (
-              <Pressable
+              <LeaderboardRow
                 key={`${entry.rank}-${entry.id}`}
-                style={({ pressed }) => [
-                  s.modalRow,
-                  TOP3_ROW_STYLE[entry.rank],
-                  entry.id === currentUserId && s.modalRowCurrentUser,
-                  entry.isPlaceholder && s.modalRowPlaceholder,
-                  pressed && !entry.isPlaceholder && { opacity: 0.88 },
-                ]}
+                entry={entry}
+                isCurrentUser={entry.id === currentUserId}
+                t={t}
                 onPress={() => {
                   if (!entry.isPlaceholder && entry.username) {
                     onEntryPress?.(entry);
                   }
                 }}
-                disabled={entry.isPlaceholder || !entry.username}
-              >
-                <Image
-                  source={entry.avatar ? { uri: entry.avatar } : LOCAL_PLACEHOLDER}
-                  placeholder={LOCAL_PLACEHOLDER}
-                  style={s.modalAvatar}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  transition={150}
-                />
-
-                <View style={s.modalInfo}>
-                  <Text style={s.modalName} numberOfLines={1}>
-                    {entry.displayName}
-                  </Text>
-                  <Text style={s.modalXpLabel} numberOfLines={1}>
-                    {entry.username ? `@${entry.username}` : t.rank.xpThisPeriod}
-                  </Text>
-                </View>
-
-                <View style={s.medalCol}>
-                  <RankMedalIcon rank={entry.rank} size={entry.rank <= 3 ? 28 : 26} />
-                </View>
-
-                <View style={s.xpCol}>
-                  <Text style={s.modalXpVal}>{entry.xp}</Text>
-                  <Text style={s.modalXpSuffix}>{t.rank.xpSuffix}</Text>
-                </View>
-              </Pressable>
+              />
             ))}
-            <View style={{ height: 40 }} />
           </ScrollView>
-        </View>
+        </GlassSheet>
       </View>
     </Modal>
   );
@@ -165,71 +295,157 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
 export default LeaderboardModal;
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { flex: 1, paddingHorizontal: 16 },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+  root: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  modalTitle: { color: '#fff', fontSize: 24, fontWeight: '900' },
-  modalCloseBtn: {
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+  },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: 'rgba(168,85,247,0.28)',
+    width: '100%',
+    flexDirection: 'column',
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  header: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  headerGlass: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  headerPlain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  title: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+    flex: 1,
+  },
+  closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 12,
   },
-  modalCloseText: { color: '#fff', fontSize: 18, fontWeight: '300' },
-  modalScroll: { gap: 10 },
-  modalRow: {
+  closeTxt: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  list: { flex: 1, minHeight: 0 },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  rowShell: {
+    width: '100%',
+    borderRadius: 20,
+  },
+  rowGlass: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  rowInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
     minHeight: 64,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: 12,
   },
-  modalRowPlaceholder: { opacity: 0.45 },
-  modalRowCurrentUser: {
+  rowCurrentUser: {
     borderColor: 'rgba(168,85,247,0.55)',
     backgroundColor: 'rgba(168,85,247,0.12)',
   },
-  modalAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  rowPlaceholder: { opacity: 0.42 },
+  avatarWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: 'rgba(168,85,247,0.45)',
+    padding: 2,
     flexShrink: 0,
   },
-  modalInfo: {
+  avatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  nameCol: {
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
   },
-  modalName: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  modalXpLabel: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    marginTop: 3,
+  displayName: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  xpCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 56,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.25)',
+    backgroundColor: 'rgba(168,85,247,0.08)',
+    flexShrink: 0,
+  },
+  xpValue: {
+    color: ACCENT,
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 20,
+  },
+  xpSuffix: {
+    color: 'rgba(168,85,247,0.75)',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 1,
+    textTransform: 'uppercase',
   },
   medalCol: {
-    width: 32,
+    width: 36,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  xpCol: {
-    width: 72,
-    alignItems: 'flex-end',
-    flexShrink: 0,
-  },
-  modalXpVal: { color: ACCENT, fontSize: 16, fontWeight: '900' },
-  modalXpSuffix: { color: 'rgba(168,85,247,0.7)', fontSize: 10, fontWeight: '700', marginTop: 1 },
 });
