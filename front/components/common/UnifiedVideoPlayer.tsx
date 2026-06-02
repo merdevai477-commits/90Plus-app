@@ -135,6 +135,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 }) => {
   const { t } = useLanguage();
   const mountedRef = useRef(true);
+  /** Skip player.replace on first mount — useVideoPlayer already loads the source; double-load crashes AVPlayer on iOS. */
+  const loadedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -142,6 +144,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    loadedUrlRef.current = null;
+  }, [reel.id]);
 
   // -------- URL management (signed URL refresh support) --------
   const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
@@ -186,14 +192,23 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     },
   );
 
-  // Swap HLS source on the same player instance (iOS single-player overlay).
+  // Swap HLS only when URL changes after initial mount (signed-URL refresh, etc.).
   useEffect(() => {
-    if (isInvalidVideoUrl(reel.videoUrl)) return;
+    const nextUrl = reel.videoUrl;
+    if (isInvalidVideoUrl(nextUrl)) return;
+
+    if (loadedUrlRef.current === null) {
+      loadedUrlRef.current = nextUrl;
+      return;
+    }
+    if (loadedUrlRef.current === nextUrl) return;
+
+    loadedUrlRef.current = nextUrl;
     try {
       if (player.playing) player.pause();
-      player.replace(buildVideoSource(reel.videoUrl));
+      player.replace(buildVideoSource(nextUrl));
     } catch (e) {
-      logger.warn('[UnifiedVideoPlayer] replace on reel.videoUrl change failed:', e);
+      logger.warn('[UnifiedVideoPlayer] replace on URL change failed:', e);
     }
   }, [reel.videoUrl, reel.id, player]);
 
@@ -387,6 +402,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
           if (newUrl && !isInvalidVideoUrl(newUrl) && mountedRef.current) {
             logger.info(`[UnifiedVideoPlayer] Playback URL refreshed for reel ${reel.id}`);
             setActiveVideoUrl(newUrl);
+            loadedUrlRef.current = newUrl;
             setErrorDetails('');
             try {
               player.replace(buildVideoSource(newUrl));

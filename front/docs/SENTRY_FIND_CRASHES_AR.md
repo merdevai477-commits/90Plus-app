@@ -69,6 +69,30 @@ node scripts/test-sentry-ingest.mjs
 
 ثم افتح Issues وابحث عن: `90Plus Sentry connectivity test`
 
+## Issue مثال (من التطبيق)
+
+إذا ظهر Issue مثل: `124506505` على https://mrdev-pk.sentry.io
+
+افتح الحدث وانسخ لنا:
+
+1. **Title** (أول سطر — مثلاً `EXC_BAD_ACCESS` أو `objc_exception_throw`)
+2. **Stack trace** — أول 15 سطر
+3. **Breadcrumbs** — هل يوجد `reel_active` قبل الكراش؟
+4. **release** و **dist** (هل 107 أم 108؟)
+
+### تفسير شائع لكراش الريلز على iOS
+
+| ما يظهر في Sentry | المعنى |
+|-------------------|--------|
+| `AVPlayer` / `AVFoundation` / `CoreMedia` | كراش native في مشغّل الفيديو (الريلز) |
+| `ExpoVideo` / `expo-video` / `VideoView` | نفس المنطقة عبر Expo |
+| `player.replace` أو `useVideoPlayer` | تغيير مصدر الفيديو بسرعة بين ريلز |
+| `EXC_BAD_ACCESS` / `SIGSEGV` | استخدام مشغّل بعد تحريره (سبب شائع عند السحب السريع) |
+
+تم إصلاح: عدم استدعاء `player.replace()` مباشرة بعد إنشاء المشغّل (تحميل مزدوج لـ HLS).
+
+---
+
 ## ملاحظة عن نافذة Apple
 
 رسالة **"90Plus Crashed — Share"** ترسل التقرير لـ **Apple**، ليس لـ Sentry.
