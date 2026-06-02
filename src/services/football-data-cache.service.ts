@@ -23,6 +23,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { hasLineupData } from '../utils/lineups-fallback';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService } from './football.service';
@@ -706,7 +707,7 @@ class FootballDataCacheService {
                 // Cache in Redis and memory.
                 // Empty results get a short TTL so we don't poison the cache
                 // when the API is rate-limited or hasn't ingested data yet.
-                const isEmpty = !Array.isArray(lineups) || lineups.length === 0;
+                const isEmpty = !hasLineupData(lineups);
                 const ttl = isEmpty
                     ? this.TTL.EMPTY
                     : (isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH);

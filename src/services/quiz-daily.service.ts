@@ -76,7 +76,17 @@ function resolvePublicImageUrl(
   status: string,
   sanitizedUrl: string | null,
 ): string | null {
-  if (q.type === 'guess_player' && status === 'pending') {
+  if (status !== 'pending') {
+    return sanitizedUrl;
+  }
+  // Hide spoiler media until the question is answered.
+  if (q.type === 'guess_player') {
+    return null;
+  }
+  if (q.type === 'logo' || q.type === 'stadium') {
+    return null;
+  }
+  if (q.imageType === 'team' || q.imageType === 'player') {
     return null;
   }
   return sanitizedUrl;
@@ -496,6 +506,27 @@ export async function submitQuizAnswer(
     const stats = countStats(progress, pack);
     const allDone = isQuizComplete(progress, pack);
 
+    let coinsAfter = user.coins;
+    let coinsDeducted = 0;
+    if (!isCorrect) {
+      coinsDeducted = Math.min(user.coins, QUIZ_COIN_COST);
+      if (coinsDeducted > 0) {
+        coinsAfter = user.coins - coinsDeducted;
+        await tx.user.update({
+          where: { id: user.id },
+          data: { coins: coinsAfter },
+        });
+        await tx.coinTransaction.create({
+          data: {
+            userId: user.id,
+            amount: -coinsDeducted,
+            type: 'SPEND',
+            description: `quiz_wrong:${questionId}`,
+          },
+        });
+      }
+    }
+
     await tx.userDailyQuizSession.update({
       where: { id: activeSession.id },
       data: {
@@ -514,7 +545,8 @@ export async function submitQuizAnswer(
       hintOrSkip,
       userId: user.id,
       sessionId: activeSession.id,
-      coins: user.coins,
+      coins: coinsAfter,
+      coinsDeducted,
       xp: user.xp,
       level: user.level,
       stats,
@@ -550,6 +582,7 @@ export async function submitQuizAnswer(
     userId: string;
     sessionId: string;
     coins: number;
+    coinsDeducted: number;
     xp: number;
     level: number;
     stats: QuizSessionStats;
@@ -644,13 +677,19 @@ export async function submitQuizAnswer(
   });
   const finalStats = countStats(parseProgress(sessionAfter!.progress), pack);
 
+  const revealImage =
+    question.imageUrl &&
+    (question.type === 'guess_player' ||
+      question.type === 'logo' ||
+      question.type === 'stadium' ||
+      question.imageType === 'team' ||
+      question.imageType === 'player');
+
   return {
     isCorrect: txResult.isCorrect,
     correctKey: question.correctKey,
-    imageUrl:
-      question.type === 'guess_player' && question.imageUrl
-        ? question.imageUrl
-        : undefined,
+    imageUrl: revealImage ? question.imageUrl : undefined,
+    coinsDeducted: !txResult.isCorrect ? txResult.coinsDeducted : 0,
     xpAwarded,
     xpEvents,
     coins: txResult.coins,

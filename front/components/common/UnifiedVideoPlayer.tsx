@@ -170,10 +170,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const player = useVideoPlayer(
     invalidSource ? null : buildVideoSource(activeVideoUrl),
     (p) => {
-      p.muted = isMuted;
-      p.loop = VIDEO_DEFAULTS.looping;
-      p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
-      p.audioMixingMode = 'auto';
+      try {
+        p.muted = isMuted;
+        p.loop = VIDEO_DEFAULTS.looping;
+        p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
+        p.audioMixingMode = 'auto';
+      } catch (e) {
+        logger.warn('[UnifiedVideoPlayer] Player init failed:', e);
+      }
       // Never call play() here — multiple reels mounting together on iOS
       // causes native AVPlayer crashes. Playback starts in the isActive effect.
     },

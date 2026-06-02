@@ -35,7 +35,12 @@ interface XpContextType {
   streak: { current: number; longest: number };
   loading: boolean;
   refresh: () => Promise<void>;
-  handleXpEvents: (events: XpEvent[]) => void | Promise<void>;
+  /** Apply server-authoritative XP/level immediately (quiz, predictions, etc.). */
+  applyXpSnapshot: (snapshot: { xp: number; level: number; title?: string }) => void;
+  handleXpEvents: (
+    events: XpEvent[],
+    snapshot?: { xp: number; level: number; title?: string },
+  ) => void | Promise<void>;
 }
 
 const XpContext = createContext<XpContextType | undefined>(undefined);
@@ -315,27 +320,72 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isLoaded, isSignedIn, fetchXpData]);
 
-  const handleXpEvents = useCallback(async (events: XpEvent[]) => {
-    if (!events || events.length === 0) return;
+  const applyXpSnapshot = useCallback(
+    (snapshot: { xp: number; level: number; title?: string }) => {
+      const newLevel = Math.max(1, snapshot.level);
+      const newXp = Math.max(0, snapshot.xp);
+      const newTitle = snapshot.title || levelTitle(newLevel);
+      const apiCurrent = clientXpForLevel(newLevel);
+      const apiNext = clientXpForLevel(newLevel + 1);
+      const apiXpInLevel = Math.max(0, newXp - apiCurrent);
+      const apiXpForNext = Math.max(1, apiNext - apiCurrent);
 
-    for (const event of events) {
-      emitXpToast({ amount: event.amount });
+      setXp(newXp);
+      setLevel(newLevel);
+      setTitle(newTitle);
+      setXpToNext(Math.max(0, apiNext - newXp));
+      setCurrentLevelXp(apiCurrent);
+      setNextLevelXp(apiNext);
+      setXpInLevel(apiXpInLevel);
+      setXpForNextLevel(apiXpForNext);
+      setProgressPct(Math.min(100, Math.round((apiXpInLevel / apiXpForNext) * 100)));
+    },
+    [],
+  );
 
-      if (event.leveledUp) {
-        if (userId) {
-          await queueLevelUpCelebration(userId, {
-            previousLevel: event.newLevel - 1,
-            newLevel: event.newLevel,
-            newTitle: event.newTitle || levelTitle(event.newLevel),
+  const handleXpEvents = useCallback(
+    async (events: XpEvent[], snapshot?: { xp: number; level: number; title?: string }) => {
+      if (snapshot) {
+        applyXpSnapshot(snapshot);
+      } else if (events?.length) {
+        const totalGain = events.reduce((sum, e) => sum + e.amount, 0);
+        if (totalGain > 0 && !events.some((e) => e.leveledUp)) {
+          setXp((prev) => prev + totalGain);
+          setXpInLevel((inLevel) => {
+            const span = xpForNextLevel || 290;
+            const nextIn = inLevel + totalGain;
+            setProgressPct(Math.min(100, Math.round((nextIn / span) * 100)));
+            return nextIn;
           });
-          await presentPendingLevelUpCelebration(userId);
+          setXpToNext((prevNext) => Math.max(0, prevNext - totalGain));
         }
-        suppressNextAutoLevelUpRef.current = true;
       }
-    }
 
-    fetchXpData();
-  }, [fetchXpData, userId]);
+      if (!events?.length) {
+        void fetchXpData();
+        return;
+      }
+
+      for (const event of events) {
+        emitXpToast({ amount: event.amount });
+
+        if (event.leveledUp) {
+          if (userId) {
+            await queueLevelUpCelebration(userId, {
+              previousLevel: event.newLevel - 1,
+              newLevel: event.newLevel,
+              newTitle: event.newTitle || levelTitle(event.newLevel),
+            });
+            await presentPendingLevelUpCelebration(userId);
+          }
+          suppressNextAutoLevelUpRef.current = true;
+        }
+      }
+
+      void fetchXpData();
+    },
+    [applyXpSnapshot, fetchXpData, userId, xpForNextLevel],
+  );
 
   useEffect(() => {
     setXpEventsHandler(handleXpEvents);
@@ -357,6 +407,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         streak,
         loading,
         refresh: fetchXpData,
+        applyXpSnapshot,
         handleXpEvents,
       }}
     >

@@ -250,9 +250,11 @@ function QuizCardInner({
   const { t } = useTranslation();
   const textAlign = 'left' as const;
   const isGuessPlayer = questionType === 'guess_player';
+  const hideImageUntilReveal =
+    isGuessPlayer || questionType === 'logo' || questionType === 'stadium';
   const effectiveImageUrl = answerRevealed
     ? (revealImageUrl?.trim() || imageUrl?.trim() || null)
-    : isGuessPlayer
+    : hideImageUntilReveal
       ? null
       : imageUrl?.trim() || null;
   const hasImageUrl = Boolean(effectiveImageUrl);

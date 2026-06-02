@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Share } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 
-import { buildAppShareMessage, buildAppShareUrl } from '../constants/shareLinks';
+import { buildAppSharePayload } from '../constants/shareLinks';
 import { useXp } from '../contexts/XpContext';
 import { toastManager } from '../services/toastManager';
 import {
@@ -33,13 +33,7 @@ export function useAppShareReward() {
   const shareAppAndClaim = useCallback(
     async (lang: 'ar' | 'en') => {
       try {
-        const message = buildAppShareMessage(lang);
-        const appUrl = buildAppShareUrl();
-        const result = await Share.share({
-          message,
-          url: appUrl,
-          title: '90Plus',
-        });
+        const result = await Share.share(buildAppSharePayload(lang));
 
         if (result.action !== Share.sharedAction) {
           return;

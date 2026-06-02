@@ -134,6 +134,8 @@ const MatchDetailsScreen = () => {
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [lineupFetchAttempts, setLineupFetchAttempts] = useState(0);
+  const MAX_LINEUP_AUTO_RETRIES = 4;
 
   const handleWsMatchUpdate = useCallback((update: MatchUpdatePayload) => {
     setFixture((prev) => {
@@ -319,21 +321,34 @@ const MatchDetailsScreen = () => {
     setLineupsLoading(true);
     setLineupsError(null);
     try {
-      let data = await ApiFootballService.getFixtureLineups(fixtureId);
-      if (!hasLineupData(data)) {
+      const preferFresh = isLive();
+      let data = await ApiFootballService.getFixtureLineups(fixtureId, {
+        skipCache: preferFresh,
+      });
+      if (!hasLineupData(data) && !preferFresh) {
         data = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
       }
       setLineups(data ?? []);
-      if (!hasLineupData(data)) {
+      if (hasLineupData(data)) {
+        setLineupFetchAttempts(0);
+      } else {
+        setLineupFetchAttempts((n) => n + 1);
         loadedTabsRef.current.delete('lineups');
       }
     } catch (err: any) {
       setLineupsError(err?.message || t.matchDetails.loadLineupsFailed);
+      setLineupFetchAttempts((n) => n + 1);
       loadedTabsRef.current.delete('lineups');
     } finally {
       setLineupsLoading(false);
     }
   }, [fixtureId, isLive, t.matchDetails.loadLineupsFailed]);
+
+  const retryLineups = useCallback(() => {
+    setLineupFetchAttempts(0);
+    loadedTabsRef.current.delete('lineups');
+    void loadLineupsIfNeeded(true);
+  }, [loadLineupsIfNeeded]);
 
   // Lineups may be published shortly before kickoff — refresh every 60s while live
   useEffect(() => {
@@ -366,7 +381,7 @@ const MatchDetailsScreen = () => {
       : false;
   }, [fixture, params.status]);
 
-  // Auto-retry lineups while the tab is open (no manual retry button).
+  // Auto-retry lineups while the tab is open (capped — then show empty state + manual retry).
   useEffect(() => {
     if (lineupsTabRetryRef.current) {
       clearInterval(lineupsTabRetryRef.current);
@@ -374,9 +389,10 @@ const MatchDetailsScreen = () => {
     }
     if (activeTab !== 'lineups' || !fixtureId || lineupsError) return;
     if (hasLineupData(lineups) || isFinishedMatch()) return;
+    if (lineupFetchAttempts >= MAX_LINEUP_AUTO_RETRIES) return;
 
     const tick = () => {
-      if (!lineupsLoading) {
+      if (!lineupsLoading && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) {
         void loadLineupsIfNeeded(true);
       }
     };
@@ -395,6 +411,7 @@ const MatchDetailsScreen = () => {
     lineups,
     lineupsError,
     lineupsLoading,
+    lineupFetchAttempts,
     isFinishedMatch,
     loadLineupsIfNeeded,
   ]);
@@ -724,10 +741,12 @@ const MatchDetailsScreen = () => {
     }
 
     if (!hasLineupData(lineups)) {
-      if (!isFinishedMatch()) {
+      const stillRetrying =
+        !isFinishedMatch() && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES;
+      if (stillRetrying) {
         return (
           <View style={styles.emptyState}>
-            <LineupsSkeleton shimmerX={shimmerX} />
+            <ActivityIndicator size="large" color="#A855F7" />
             <Text style={styles.emptyStateSubtext}>
               {t.matchDetails.lineupsLoadingRetry}
             </Text>
@@ -737,8 +756,11 @@ const MatchDetailsScreen = () => {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>{t.matchDetails.lineups || 'No lineups available'}</Text>
+          <Text style={styles.emptyStateText}>{t.matchDetails.noLineups}</Text>
           <Text style={styles.emptyStateSubtext}>{t.matchDetails.lineupsUnavailable}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={retryLineups}>
+            <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }

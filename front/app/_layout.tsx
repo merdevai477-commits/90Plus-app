@@ -70,6 +70,24 @@ import {
 } from "../components/common/PushTokenSyncBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
+// ErrorUtils is on `global`, not a reliable named export from react-native in SDK 55+.
+type GlobalErrorUtils = {
+  getGlobalHandler: () => (error: Error, isFatal?: boolean) => void;
+  setGlobalHandler: (handler: (error: Error, isFatal?: boolean) => void) => void;
+};
+const globalErrorUtils = (globalThis as typeof globalThis & { ErrorUtils?: GlobalErrorUtils })
+  .ErrorUtils;
+if (globalErrorUtils?.getGlobalHandler && globalErrorUtils?.setGlobalHandler) {
+  const originalHandler = globalErrorUtils.getGlobalHandler();
+  globalErrorUtils.setGlobalHandler((error, isFatal) => {
+    logger.error('[GlobalErrorHandler] Caught unhandled exception:', {
+      error: error?.message ?? String(error),
+      isFatal,
+    });
+    if (!isFatal) return;
+    originalHandler(error, isFatal);
+  });
+}
 
 // Lazy load websocket client to avoid bundling issues with socket.io-client
 let websocketClient: any = null;

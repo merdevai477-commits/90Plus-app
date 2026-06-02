@@ -241,6 +241,7 @@ import gdprRoutes from './routes/gdpr.routes';
 import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
 import quizRoutes from './routes/quiz.routes';
+import authRoutes from './routes/auth.routes';
 import path from 'path';
 
 // Import services
@@ -351,6 +352,7 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
 
 // Register routes
 app.use(`${API_PREFIX}/users`, userRoutes);
+app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/clerk`, clerkUserRoutes);
 app.use(`${API_PREFIX}/webhooks/clerk`, webhookLimiter, webhookRoutes);
 // IMPORTANT: profileCompletionRoutes MUST be mounted BEFORE profileRoutes

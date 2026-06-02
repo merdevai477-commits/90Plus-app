@@ -106,7 +106,7 @@ export default function QuizHubScreen() {
   const appLanguage = useLanguageStore((s) => s.language);
   const { getToken, isSignedIn } = useAuth();
   const { refreshCoins, coins, loading: coinsLoading, applyCoinsBalance } = useCoins();
-  const { handleXpEvents, refresh: refreshXp } = useXp();
+  const { handleXpEvents, applyXpSnapshot, refresh: refreshXp } = useXp();
 
   const [quizLang, setQuizLang] = useState<QuizApiLanguage>(
     appLanguage === 'en' ? 'en' : 'ar',
@@ -167,8 +167,14 @@ export default function QuizHubScreen() {
     setAnswerPhase(phase);
   }, []);
 
+  const syncRankXpCaches = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['rank'] });
+  }, [queryClient]);
+
   const applyQuizXp = useCallback(
     (payload: {
+      xp?: number;
+      level?: number;
       xpEvents?: Array<{
         action: string;
         amount: number;
@@ -177,8 +183,17 @@ export default function QuizHubScreen() {
         newTitle?: string;
       }>;
       xpAwarded?: number;
-      level?: number;
     }) => {
+      const snapshot =
+        typeof payload.xp === 'number' && typeof payload.level === 'number'
+          ? { xp: payload.xp, level: payload.level }
+          : undefined;
+
+      if (snapshot) {
+        applyXpSnapshot(snapshot);
+        syncRankXpCaches();
+      }
+
       if (payload.xpEvents?.length) {
         void handleXpEvents(
           payload.xpEvents.map((e) => ({
@@ -188,23 +203,27 @@ export default function QuizHubScreen() {
             newLevel: e.newLevel,
             newTitle: e.newTitle,
           })),
+          snapshot,
         );
         return;
       }
       if (payload.xpAwarded && payload.xpAwarded > 0) {
-        void handleXpEvents([
-          {
-            action: 'QUIZ_ANSWER_CORRECT',
-            amount: payload.xpAwarded,
-            leveledUp: false,
-            newLevel: payload.level ?? 1,
-          },
-        ]);
+        void handleXpEvents(
+          [
+            {
+              action: 'QUIZ_ANSWER_CORRECT',
+              amount: payload.xpAwarded,
+              leveledUp: false,
+              newLevel: payload.level ?? 1,
+            },
+          ],
+          snapshot,
+        );
         return;
       }
       void refreshXp();
     },
-    [handleXpEvents, refreshXp],
+    [applyXpSnapshot, handleXpEvents, refreshXp, syncRankXpCaches],
   );
 
   const patchCacheCoins = useCallback(
@@ -477,6 +496,8 @@ export default function QuizHubScreen() {
           xpAwarded?: number;
           xp?: number;
           level?: number;
+          coins?: number;
+          coinsDeducted?: number;
           xpEvents?: Array<{
             action: string;
             amount: number;
@@ -497,6 +518,11 @@ export default function QuizHubScreen() {
         setAnswerPhaseSync('revealed');
         applyQuizXp(d);
 
+        if (typeof d.coins === 'number') {
+          patchCacheCoins(d.coins);
+          applyCoinsBalance(d.coins);
+        }
+
         queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
           if (!oldData) return oldData;
           const newQuestions = [...oldData.questions];
@@ -510,6 +536,7 @@ export default function QuizHubScreen() {
           };
           return {
             ...oldData,
+            coins: d.coins ?? oldData.coins,
             xp: d.xp ?? oldData.xp,
             level: d.level ?? oldData.level,
             questions: newQuestions,
@@ -525,7 +552,14 @@ export default function QuizHubScreen() {
           toastManager.showSuccess(
             t.quiz.excellent,
             t.quiz.xpBonus.replace('{amount}', String(xpAmount)),
-            { position: 'bottom', duration: 2800 },
+            { position: 'top', duration: 2800 },
+          );
+        } else {
+          const deducted = d.coinsDeducted ?? QUIZ_COIN_COST;
+          toastManager.showWarning(
+            t.quiz.wrong,
+            t.quiz.wrongCoinsDeducted.replace('{amount}', String(deducted)),
+            { position: 'top', duration: 2800 },
           );
         }
 

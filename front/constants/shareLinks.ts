@@ -80,8 +80,15 @@ export function buildProfileDeepLink(username: string): string {
   return `ninetyplus://user/${clean}`;
 }
 
-/** HTTPS app invite link — opens app or store landing page */
+/**
+ * Public link included when inviting friends to install 90Plus.
+ * Android → Play Store listing (direct install).
+ * iOS / other → Railway landing (smart fallback to App Store).
+ */
 export function buildAppShareUrl(): string {
+  if (Platform.OS === 'android') {
+    return PLAY_STORE_URL;
+  }
   return APP_SHARE_BASE_URL;
 }
 
@@ -170,11 +177,22 @@ export async function openAppStoreForRating(): Promise<boolean> {
   }
 }
 
-/** Share message — one smart link; landing page routes to the correct store */
+/** Share message for inviting friends — link matches {@link buildAppShareUrl}. */
 export function buildAppShareMessage(lang: 'ar' | 'en'): string {
   const inviteUrl = buildAppShareUrl();
   if (lang === 'ar') {
     return `جرّب 90Plus — أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة!\n${inviteUrl}`;
   }
   return `Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights!\n${inviteUrl}`;
+}
+
+/** Payload for React Native `Share.share` when promoting the app (not reels/profiles). */
+export function buildAppSharePayload(lang: 'ar' | 'en'): {
+  message: string;
+  title: string;
+} {
+  return {
+    message: buildAppShareMessage(lang),
+    title: '90Plus',
+  };
 }

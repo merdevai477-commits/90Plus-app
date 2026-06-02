@@ -52,7 +52,12 @@ export function convertFixturePlayersToLineups(playersPayload: unknown[]): unkno
 
         if (games?.substitute === true) {
           substitutes.push({ player });
-        } else if (games?.minutes != null || games?.number != null || games?.grid) {
+        } else if (
+          games?.minutes != null ||
+          games?.number != null ||
+          games?.grid ||
+          games?.position
+        ) {
           startXI.push({ player });
         }
       }

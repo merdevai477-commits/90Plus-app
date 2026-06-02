@@ -92,7 +92,12 @@ export default function AgeGateScreen() {
         throw new Error('Authentication token not found');
       }
 
-      const ymd = dateOfBirth.toISOString().split('T')[0];
+      // Local calendar date (avoid UTC shift changing the day)
+      const ymd = [
+        dateOfBirth.getFullYear(),
+        String(dateOfBirth.getMonth() + 1).padStart(2, '0'),
+        String(dateOfBirth.getDate()).padStart(2, '0'),
+      ].join('-');
       const result = await verifyAgeWithBackend(token, ymd);
 
       if (result.ok === false) {
@@ -101,7 +106,12 @@ export default function AgeGateScreen() {
           router.replace('/blocked');
           return;
         }
-        throw new Error(result.message || 'Failed to verify age');
+        const msg =
+          result.status === 404
+            ? t('ageGate.serverUnavailable') ||
+              'Age verification service is unavailable. Please update the app or try again later.'
+            : result.message || 'Failed to verify age';
+        throw new Error(msg);
       }
 
       logger.info('[AgeGate] Age verified:', result.ageTier);

@@ -117,10 +117,20 @@ model User {
   privacyPolicyVersion        String?
   privacyPolicyAcceptedAt     DateTime?
 
+  // COPPA age verification
+  dateOfBirth                  DateTime?
+  ageVerifiedAt                DateTime?
+  ageTier                      AgeTier?
+  parentalConsent              Boolean   @default(false)
+  parentEmail                  String?
+  parentalConsentRequestedAt   DateTime?
+  parentalConsentConfirmedAt   DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
+  parentalConsentRequests ParentalConsentRequest[]
   sessions         Session[]
   refreshTokens    RefreshToken[]
   quizAttempts        QuizAttempt[]
@@ -197,9 +207,49 @@ model User {
   @@index([createdAt])
   @@index([isDeleted])
   @@index([scheduledDeletionAt])
+  @@index([ageVerifiedAt])
+  @@index([ageTier])
+  @@index([parentalConsent])
   // Case-insensitive search indexes: idx_users_username_lower, idx_users_displayname_lower
   // Created via migration for LOWER(username) and LOWER(displayName) expressions
   @@map("users")
+}
+
+model ParentalConsentRequest {
+  id          String        @id @default(uuid())
+  userId      String
+  parentEmail String
+  token       String        @unique
+  status      ConsentStatus @default(PENDING)
+  requestedAt DateTime      @default(now())
+  confirmedAt DateTime?
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?       @db.Text
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([parentEmail])
+  @@map("parental_consent_requests")
+}
+
+enum AgeTier {
+  BLOCKED
+  TEEN
+  ADULT
+}
+
+enum ConsentStatus {
+  PENDING
+  CONFIRMED
+  EXPIRED
+  REJECTED
 }
 
 model RefreshToken {

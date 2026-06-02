@@ -49,7 +49,12 @@ export function convertFixturePlayersToLineups(playersPayload: unknown[]): Lineu
 
         if (games?.substitute === true) {
           substitutes.push({ player });
-        } else if (games?.minutes != null || games?.number != null || games?.grid) {
+        } else if (
+          games?.minutes != null ||
+          games?.number != null ||
+          games?.grid ||
+          games?.position
+        ) {
           startXI.push({ player });
         }
       }
