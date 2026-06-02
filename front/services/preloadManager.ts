@@ -18,7 +18,7 @@
  * - 19.4: Continue preloading reels in the background
  */
 
-import { Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 import { cacheService, CACHE_KEYS, CACHE_TTL, getUserCacheKey } from './cacheService';
 import { 
   AuthService, 
@@ -495,7 +495,6 @@ class PreloadManagerClass {
       if (nextIndex < reels.length) {
         const reel = reels[nextIndex];
         if (reel?.thumbnail) {
-          const { Image } = await import('react-native');
           Image.prefetch(reel.thumbnail).catch(() => {});
         }
       }
