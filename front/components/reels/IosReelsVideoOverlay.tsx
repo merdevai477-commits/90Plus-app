@@ -5,6 +5,7 @@
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { UnifiedVideoPlayer } from '../common/UnifiedVideoPlayer';
+import { captureException } from '../../services/sentry.service';
 import type { ReelData } from './types';
 
 type Props = {
@@ -30,6 +31,12 @@ export function IosReelsVideoOverlay({ reel, playerKey, isActive, onVideoRef }: 
         }}
         isActive={isActive}
         onVideoRef={onVideoRef}
+        onNativeError={(error) => {
+          captureException(error, {
+            tags: { area: 'reels', platform: 'ios', component: 'IosReelsVideoOverlay' },
+            extra: { reelId: reel.id, playerKey },
+          });
+        }}
       />
     </View>
   );

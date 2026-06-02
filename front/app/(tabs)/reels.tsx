@@ -51,6 +51,7 @@ import { useReelsAudioManager, markVideoAsLoaded, markVideoAsUnloaded, clearLoad
 // useVideoReplayLimit is handled in UnifiedVideoPlayer component
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
+import { addReelsBreadcrumb } from '../../services/sentry.service';
 import { SkeletonLoader } from '../../components/common/SkeletonLoader';
 import { ErrorDisplay } from '../../components/common/ErrorDisplay';
 import { toastManager } from '../../services/toastManager';
@@ -971,6 +972,14 @@ const ReelsFeed: React.FC = () => {
     safeIndexTimerRef.current = setTimeout(() => {
       setSafePlayerIndex(currentIndex);
       safeIndexTimerRef.current = null;
+      const reel = reelsRef.current[currentIndex];
+      if (reel?.id) {
+        addReelsBreadcrumb('reel_active', {
+          reelId: reel.id,
+          index: currentIndex,
+          player: 'ios-single',
+        });
+      }
     }, IOS_PLAYER_SWAP_MS);
 
     return () => {

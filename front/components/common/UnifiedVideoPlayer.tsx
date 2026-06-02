@@ -44,6 +44,7 @@ import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoRepla
 import { VIDEO_DEFAULTS } from '../../utils/videoConfig';
 import { VideoErrorBoundary } from './VideoErrorBoundary';
 import { logger } from '../../utils/logger';
+import { captureException } from '../../services/sentry.service';
 import { getApiUrl } from '../../config/api.config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -77,6 +78,8 @@ export interface UnifiedVideoPlayerProps {
   muted?: boolean;
   /** Extra style to merge onto the video container. */
   style?: any;
+  /** Called when the error boundary catches a playback/render failure. */
+  onNativeError?: (error: Error) => void;
 }
 
 // ─── Styling tokens ───────────────────────────────────────────────────────────
@@ -350,6 +353,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       logger.warn(
         `[UnifiedVideoPlayer] Video load failed for reel ${reel.id}: ${msg} — url prefix: ${activeVideoUrl.substring(0, 80)}`,
       );
+      captureException(new Error(`Video load failed: ${msg}`), {
+        tags: { area: 'reels', component: 'UnifiedVideoPlayer' },
+        extra: { reelId: reel.id, urlPrefix: activeVideoUrl.substring(0, 80) },
+      });
     }
 
     // Refresh playback URL from API (R2 signed URL or Mux HLS) when load fails.
@@ -636,6 +643,7 @@ export const UnifiedVideoPlayer: React.FC<UnifiedVideoPlayerProps> = (props) => 
           error: error.message,
           componentStack: errorInfo.componentStack,
         });
+        props.onNativeError?.(error);
       }}
     >
       <UnifiedVideoPlayerInternal {...props} />

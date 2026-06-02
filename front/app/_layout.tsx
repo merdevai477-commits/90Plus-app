@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Stack, router, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import '../services/sentry.bootstrap';
 import React, { useEffect, ErrorInfo } from "react";
 import '../global.css';
 import {
@@ -58,7 +59,7 @@ WebBrowser.maybeCompleteAuthSession();
 import { AuthService } from "../src/services/authService";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import * as Sentry from '@sentry/react-native';
-import { initSentry, captureException } from "../services/sentry.service";
+import { captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
 import { BootSplashScreen } from "../components/splash/BootSplashScreen";
@@ -507,17 +508,6 @@ function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) applyGlobalFont();
   }, [fontsLoaded]);
-
-  // Initialize Sentry before app rendering
-  useEffect(() => {
-    try {
-      initSentry();
-      logger.info('[RootLayout] Sentry initialized successfully');
-    } catch (error) {
-      // Handle initialization failures gracefully - log warning but continue startup
-      logger.warn('[RootLayout] Sentry initialization failed (non-critical):', error);
-    }
-  }, []);
 
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {

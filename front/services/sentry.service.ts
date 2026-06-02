@@ -63,26 +63,36 @@ export function initSentry(): void {
   // Configure sample rates based on environment
   const tracesSampleRate = __DEV__ ? 1.0 : 0.2; // 100% in dev, 20% in prod
   
-  // Get release version and build number
-  const release = Constants.expoConfig?.version;
-  const buildNumber = Constants.expoConfig?.ios?.buildNumber || 
-                      Constants.expoConfig?.android?.versionCode?.toString();
-  
+  const version = Constants.expoConfig?.version ?? '0.0.0';
+  const buildNumber =
+    Constants.expoConfig?.ios?.buildNumber ||
+    Constants.expoConfig?.android?.versionCode?.toString() ||
+    '0';
+  const bundleId =
+    Constants.expoConfig?.ios?.bundleIdentifier ||
+    Constants.expoConfig?.android?.package ||
+    'com.mhmdsh1892.ninetyplusapp';
+
+  // Group issues per App Store / TestFlight build (filter dist:107 in Sentry).
+  const release = `${bundleId}@${version}+${buildNumber}`;
+  const dist = buildNumber;
+
   Sentry.init({
     dsn,
     environment,
-    
-    // Performance monitoring
+
     tracesSampleRate,
-    
-    // Session replay (optional feature)
-    replaysSessionSampleRate: 0.1, // 10% of sessions
-    replaysOnErrorSampleRate: 1.0, // 100% of errors
-    
-    // Release tracking
+
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+
     release,
-    dist: buildNumber,
-    
+    dist,
+
+    enableAutoSessionTracking: true,
+    enableNativeCrashHandling: true,
+    attachStacktrace: true,
+
     // Enable in production only (disable in dev to avoid noise)
     enabled: !__DEV__,
     
@@ -151,7 +161,20 @@ export function initSentry(): void {
     environment,
     tracesSampleRate,
     release,
-    dist: buildNumber,
+    dist,
+  });
+}
+
+/** Breadcrumb for reels / video debugging in Sentry Issues. */
+export function addReelsBreadcrumb(
+  message: string,
+  data?: Record<string, string | number | boolean | null | undefined>,
+): void {
+  Sentry.addBreadcrumb({
+    category: 'reels',
+    message,
+    level: 'info',
+    data: data as Record<string, unknown> | undefined,
   });
 }
 
