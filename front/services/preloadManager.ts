@@ -18,6 +18,7 @@
  * - 19.4: Continue preloading reels in the background
  */
 
+import { Platform } from 'react-native';
 import { cacheService, CACHE_KEYS, CACHE_TTL, getUserCacheKey } from './cacheService';
 import { 
   AuthService, 
@@ -438,6 +439,12 @@ class PreloadManagerClass {
       return;
     }
 
+    // iOS: never warm HLS streams in parallel — only one AVPlayer may be active.
+    if (Platform.OS === 'ios') {
+      logger.debug('[PreloadManager] Skipping initial video preload on iOS');
+      return;
+    }
+
     const videosToPreload = reels
       .slice(0, VIDEO_PRELOAD_CONFIG.initialReelsCount)
       .map(reel => reel.videoUrl)
@@ -480,8 +487,25 @@ class PreloadManagerClass {
     reels: Array<{ videoUrl: string; thumbnail?: string }>,
     currentIndex: number
   ): Promise<void> {
-    const videosToPreload: string[] = [];
     const MAX_PRELOAD = 5;
+
+    // Thumbnails only on iOS — no parallel HLS fetch (AVPlayer crash risk).
+    for (let i = 1; i <= MAX_PRELOAD; i++) {
+      const nextIndex = currentIndex + i;
+      if (nextIndex < reels.length) {
+        const reel = reels[nextIndex];
+        if (reel?.thumbnail) {
+          const { Image } = await import('react-native');
+          Image.prefetch(reel.thumbnail).catch(() => {});
+        }
+      }
+    }
+
+    if (Platform.OS === 'ios') {
+      return;
+    }
+
+    const videosToPreload: string[] = [];
 
     // Get next 5 videos that haven't been preloaded yet
     for (let i = 1; i <= MAX_PRELOAD; i++) {
@@ -490,11 +514,6 @@ class PreloadManagerClass {
         const reel = reels[nextIndex];
         if (reel?.videoUrl && !this.preloadedVideos.has(reel.videoUrl)) {
           videosToPreload.push(reel.videoUrl);
-          // Also preload thumbnail
-          if (reel.thumbnail) {
-            const { Image } = await import('react-native');
-            Image.prefetch(reel.thumbnail).catch(() => {});
-          }
         }
       }
     }

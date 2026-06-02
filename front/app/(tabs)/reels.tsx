@@ -31,6 +31,7 @@ import * as Haptics from 'expo-haptics';
 
 // Import new components and constants
 import { ReelItem } from '../../components/reels/ReelItem';
+import { IosReelsVideoOverlay } from '../../components/reels/IosReelsVideoOverlay';
 import { COLORS } from '../../components/reels/constants';
 import { useTranslation } from '../../src/i18n';
 import { ReelData } from '../../components/reels/types';
@@ -60,11 +61,13 @@ import { ReelsFeedErrorBoundary } from '../../components/common/ReelsFeedErrorBo
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-/** iOS AVPlayer crashes with multiple simultaneous HLS instances — one player max. */
-const REEL_PLAYER_MOUNT_DISTANCE = Platform.OS === 'ios' ? 0 : 1;
-const REEL_LIST_WINDOW_SIZE = Platform.OS === 'ios' ? 3 : 5;
-const REEL_INITIAL_RENDER = Platform.OS === 'ios' ? 1 : 2;
-const REEL_MAX_BATCH = Platform.OS === 'ios' ? 1 : 3;
+/** iOS: one AVPlayer via overlay; Android: inline players with small window. */
+const IOS_SINGLE_VIDEO_PLAYER = Platform.OS === 'ios';
+const IOS_PLAYER_SWAP_MS = 280;
+const REEL_PLAYER_MOUNT_DISTANCE = IOS_SINGLE_VIDEO_PLAYER ? 0 : 1;
+const REEL_LIST_WINDOW_SIZE = IOS_SINGLE_VIDEO_PLAYER ? 3 : 5;
+const REEL_INITIAL_RENDER = IOS_SINGLE_VIDEO_PLAYER ? 1 : 2;
+const REEL_MAX_BATCH = IOS_SINGLE_VIDEO_PLAYER ? 1 : 3;
 
 const ANIMATIONS = {
   spring: {
@@ -340,6 +343,7 @@ const ReelsFeed: React.FC = () => {
   /** Unmount native players when leaving the reels tab (prevents iOS AVPlayer crash on quick return). */
   const [isReelsScreenFocused, setIsReelsScreenFocused] = useState(true);
   const [playerGeneration, setPlayerGeneration] = useState(0);
+  const [activeReelPaused, setActiveReelPaused] = useState(false);
   // iOS safety: avoid briefly mounting 2 AVPlayers during fast scroll.
   // We introduce a tiny "gap" where no player is mounted, then mount the next one.
   const [safePlayerIndex, setSafePlayerIndex] = useState(0);
@@ -625,16 +629,21 @@ const ReelsFeed: React.FC = () => {
   const FOCUS_REFRESH_THROTTLE = 10000; // 10 seconds instead of 30
   const isRefreshingRef = useRef(false);
 
-  // Tear down native AVPlayer instances when leaving the reels tab; remount fresh on return.
+  // Tear down the single iOS player when leaving the tab; remount only after blur (not on focus).
   useFocusEffect(
     useCallback(() => {
       setIsReelsScreenFocused(true);
-      setPlayerGeneration((g) => g + 1);
 
       return () => {
         setIsReelsScreenFocused(false);
+        setSafePlayerIndex(-1);
+        setActiveReelPaused(false);
+        pauseAllVideos();
+        videoRefs.current.clear();
+        clearLoadedVideos();
+        setPlayerGeneration((g) => g + 1);
       };
-    }, []),
+    }, [pauseAllVideos]),
   );
 
   // Reload when screen comes into focus (e.g., after uploading a reel)
@@ -950,17 +959,19 @@ const ReelsFeed: React.FC = () => {
       safeIndexTimerRef.current = null;
     }
 
-    if (Platform.OS !== 'ios') {
+    setActiveReelPaused(false);
+
+    if (!IOS_SINGLE_VIDEO_PLAYER) {
       setSafePlayerIndex(currentIndex);
       return;
     }
 
-    // Unmount current player first, then mount the next one shortly after.
+    // Unmount the single iOS player, then mount the next reel after native teardown.
     setSafePlayerIndex(-1);
     safeIndexTimerRef.current = setTimeout(() => {
       setSafePlayerIndex(currentIndex);
       safeIndexTimerRef.current = null;
-    }, 120);
+    }, IOS_PLAYER_SWAP_MS);
 
     return () => {
       if (safeIndexTimerRef.current) {
@@ -969,6 +980,16 @@ const ReelsFeed: React.FC = () => {
       }
     };
   }, [currentIndex]);
+
+  const activePlaybackReel = useMemo(() => {
+    if (!IOS_SINGLE_VIDEO_PLAYER || safePlayerIndex < 0) return null;
+    return filteredReels[safePlayerIndex] ?? null;
+  }, [safePlayerIndex, filteredReels]);
+
+  const iosOverlayPlayerKey = useMemo(() => {
+    if (!activePlaybackReel) return '';
+    return `ios-${playerGeneration}-${activePlaybackReel.id}`;
+  }, [activePlaybackReel, playerGeneration]);
 
   const handleWsLike = useCallback((payload: { reelId: string; likesCount: number }) => {
     setReels((prev) =>
@@ -1435,11 +1456,21 @@ const ReelsFeed: React.FC = () => {
     [ownReelIds, currentUserId, currentUsername],
   );
 
-  const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => (
+  const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => {
+    const isActiveCell = index === safePlayerIndex;
+    return (
     <ReelItem
       reel={item}
-      isActive={index === safePlayerIndex}
+      isActive={isActiveCell}
+      useExternalPlayer={IOS_SINGLE_VIDEO_PLAYER}
+      isPlaybackPaused={IOS_SINGLE_VIDEO_PLAYER && isActiveCell && activeReelPaused}
+      onTogglePlaybackPause={
+        IOS_SINGLE_VIDEO_PLAYER && isActiveCell
+          ? () => setActiveReelPaused((p) => !p)
+          : undefined
+      }
       shouldMountPlayer={
+        !IOS_SINGLE_VIDEO_PLAYER &&
         isReelsScreenFocused &&
         Math.abs(index - safePlayerIndex) <= REEL_PLAYER_MOUNT_DISTANCE
       }
@@ -1460,7 +1491,8 @@ const ReelsFeed: React.FC = () => {
       onDeleteReel={handleDeleteReel}
       onEditReel={handleEditReel}
     />
-  ), [safePlayerIndex, isReelsScreenFocused, playerGeneration, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
+  );
+  }, [safePlayerIndex, activeReelPaused, isReelsScreenFocused, playerGeneration, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
     flatListRef.current?.scrollToOffset({
@@ -1539,6 +1571,19 @@ const ReelsFeed: React.FC = () => {
         </View>
       )}
 
+      {/* iOS: exactly one AVPlayer behind the list (active cell is transparent). */}
+      {IOS_SINGLE_VIDEO_PLAYER &&
+        isReelsScreenFocused &&
+        activePlaybackReel &&
+        iosOverlayPlayerKey && (
+          <IosReelsVideoOverlay
+            reel={activePlaybackReel}
+            playerKey={iosOverlayPlayerKey}
+            isActive={!activeReelPaused}
+            onVideoRef={handleVideoRef}
+          />
+        )}
+
       {/* Reels List */}
       {!isInitialLoading && reels.length > 0 && (
         <FlatList
@@ -1546,6 +1591,7 @@ const ReelsFeed: React.FC = () => {
           data={filteredReels}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          style={IOS_SINGLE_VIDEO_PLAYER ? styles.reelsListAboveVideo : undefined}
           pagingEnabled
           showsVerticalScrollIndicator={false}
           snapToAlignment="start"
@@ -1636,6 +1682,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  reelsListAboveVideo: {
+    flex: 1,
+    zIndex: 1,
+    backgroundColor: 'transparent',
   },
   // Loading & Empty States
   initialLoadingContainer: {

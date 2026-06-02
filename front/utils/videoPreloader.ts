@@ -7,6 +7,7 @@
  *    a lightweight fetch range-request to warm the CDN connection.
  */
 
+import { Platform } from 'react-native';
 import { logger } from '../services/logger';
 
 // Track preloaded video URLs
@@ -32,6 +33,11 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
 
   // Skip invalid URLs
   if (!videoUrl || !videoUrl.startsWith('http')) {
+    return false;
+  }
+
+  // iOS: never open parallel HLS connections — reels use a single AVPlayer.
+  if (Platform.OS === 'ios') {
     return false;
   }
 

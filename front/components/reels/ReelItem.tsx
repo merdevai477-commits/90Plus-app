@@ -46,6 +46,11 @@ interface ReelItemProps {
     isActive: boolean;
     /** When false, show thumbnail only — avoids multiple AVPlayer instances on iOS. */
     shouldMountPlayer?: boolean;
+    /** iOS: video plays in ReelsFeed overlay — never mount inline player. */
+    useExternalPlayer?: boolean;
+    /** Parent-controlled pause when useExternalPlayer (active reel only). */
+    isPlaybackPaused?: boolean;
+    onTogglePlaybackPause?: () => void;
     /** Bumped when the reels tab regains focus — forces a fresh expo-video player on iOS. */
     playerGeneration?: number;
     onLike: () => void;
@@ -89,6 +94,9 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     reel,
     isActive,
     shouldMountPlayer = true,
+    useExternalPlayer = false,
+    isPlaybackPaused = false,
+    onTogglePlaybackPause,
     playerGeneration = 0,
     onLike,
     onToggleMute,
@@ -184,7 +192,11 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         // Single tap - wait to see if it's double
         singleTapTimer.current = setTimeout(() => {
             handleLongPressEnd();
-            setIsPaused(prev => !prev);
+            if (useExternalPlayer && isActive && onTogglePlaybackPause) {
+                onTogglePlaybackPause();
+            } else {
+                setIsPaused((prev) => !prev);
+            }
             singleTapTimer.current = null;
         }, 300);
 
@@ -439,7 +451,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 onPressOut={handleLongPressEnd}
                 style={styles.videoWrapper}
             >
-                {shouldMountPlayer ? (
+                {!useExternalPlayer && shouldMountPlayer ? (
                     <UnifiedVideoPlayer
                         key={`${reel.id}-${playerGeneration}`}
                         reel={{
@@ -453,8 +465,13 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         onVideoRef={onVideoRef}
                     />
                 ) : (
-                    <View style={styles.thumbnailFallback}>
-                        {reel.thumbnail ? (
+                    <View
+                        style={[
+                            styles.thumbnailFallback,
+                            useExternalPlayer && isActive && styles.externalPlayerPlaceholder,
+                        ]}
+                    >
+                        {(!useExternalPlayer || !isActive) && reel.thumbnail ? (
                             <Image
                                 source={{ uri: reel.thumbnail }}
                                 style={StyleSheet.absoluteFill}
@@ -465,7 +482,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 )}
 
                 {/* Play/Pause Overlay */}
-                {isPaused && (
+                {(isPaused || (useExternalPlayer && isActive && isPlaybackPaused)) && (
                     <View style={styles.pauseOverlay}>
                         <View style={styles.pauseIconContainer}>
                             <Play size={40} color="rgba(255, 255, 255, 0.8)" fill="rgba(255, 255, 255, 0.8)" />
@@ -797,6 +814,9 @@ const styles = StyleSheet.create({
     thumbnailFallback: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: COLORS.deepBlack,
+    },
+    externalPlayerPlaceholder: {
+        backgroundColor: 'transparent',
     },
     topGradient: {
         position: 'absolute',

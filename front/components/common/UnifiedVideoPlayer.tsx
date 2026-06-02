@@ -183,6 +183,17 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     },
   );
 
+  // Swap HLS source on the same player instance (iOS single-player overlay).
+  useEffect(() => {
+    if (isInvalidVideoUrl(reel.videoUrl)) return;
+    try {
+      if (player.playing) player.pause();
+      player.replace(buildVideoSource(reel.videoUrl));
+    } catch (e) {
+      logger.warn('[UnifiedVideoPlayer] replace on reel.videoUrl change failed:', e);
+    }
+  }, [reel.videoUrl, reel.id, player]);
+
   // Publish player to parent (imperative control — backward-compat with useReelsAudioManager).
   useEffect(() => {
     onVideoRef(player, reel.id);
@@ -278,16 +289,17 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     }
   }, [player, isActive, isPausedByLimit, reel.id, invalidSource, status]);
 
-  // Pause promptly on unmount so iOS releases audio/video resources before the next reel mounts.
+  // Pause promptly on unmount / swap so iOS releases AVPlayer before the next source mounts.
   useEffect(() => {
     return () => {
       try {
-        if (player?.playing) player.pause();
+        if (player.playing) player.pause();
+        player.currentTime = 0;
       } catch {
         /* player may already be released by useVideoPlayer cleanup */
       }
     };
-  }, [player]);
+  }, [player, reel.id]);
 
   // Playback resume on tab return is handled by the parent (reels feed unmounts
   // players on blur and remounts with a fresh generation on focus).
