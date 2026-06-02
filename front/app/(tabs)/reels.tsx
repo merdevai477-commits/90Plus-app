@@ -340,6 +340,10 @@ const ReelsFeed: React.FC = () => {
   /** Unmount native players when leaving the reels tab (prevents iOS AVPlayer crash on quick return). */
   const [isReelsScreenFocused, setIsReelsScreenFocused] = useState(true);
   const [playerGeneration, setPlayerGeneration] = useState(0);
+  // iOS safety: avoid briefly mounting 2 AVPlayers during fast scroll.
+  // We introduce a tiny "gap" where no player is mounted, then mount the next one.
+  const [safePlayerIndex, setSafePlayerIndex] = useState(0);
+  const safeIndexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const haptic = useHaptic();
   const { t } = useTranslation();
   const { getToken } = useAuth();
@@ -938,6 +942,34 @@ const ReelsFeed: React.FC = () => {
   const activeReelId = filteredReels[currentIndex]?.id;
   activeReelIdRef.current = activeReelId ?? null;
 
+  // Keep a "safe" index used for mounting/playing the native player.
+  // On iOS we briefly unmount on index changes to prevent AVPlayer overlap crashes.
+  useEffect(() => {
+    if (safeIndexTimerRef.current) {
+      clearTimeout(safeIndexTimerRef.current);
+      safeIndexTimerRef.current = null;
+    }
+
+    if (Platform.OS !== 'ios') {
+      setSafePlayerIndex(currentIndex);
+      return;
+    }
+
+    // Unmount current player first, then mount the next one shortly after.
+    setSafePlayerIndex(-1);
+    safeIndexTimerRef.current = setTimeout(() => {
+      setSafePlayerIndex(currentIndex);
+      safeIndexTimerRef.current = null;
+    }, 120);
+
+    return () => {
+      if (safeIndexTimerRef.current) {
+        clearTimeout(safeIndexTimerRef.current);
+        safeIndexTimerRef.current = null;
+      }
+    };
+  }, [currentIndex]);
+
   const handleWsLike = useCallback((payload: { reelId: string; likesCount: number }) => {
     setReels((prev) =>
       prev.map((r) =>
@@ -1406,10 +1438,10 @@ const ReelsFeed: React.FC = () => {
   const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => (
     <ReelItem
       reel={item}
-      isActive={index === currentIndex}
+      isActive={index === safePlayerIndex}
       shouldMountPlayer={
         isReelsScreenFocused &&
-        Math.abs(index - currentIndex) <= REEL_PLAYER_MOUNT_DISTANCE
+        Math.abs(index - safePlayerIndex) <= REEL_PLAYER_MOUNT_DISTANCE
       }
       playerGeneration={playerGeneration}
       isOwnReel={resolveIsOwnReel(item)}
@@ -1428,7 +1460,7 @@ const ReelsFeed: React.FC = () => {
       onDeleteReel={handleDeleteReel}
       onEditReel={handleEditReel}
     />
-  ), [currentIndex, isReelsScreenFocused, playerGeneration, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
+  ), [safePlayerIndex, isReelsScreenFocused, playerGeneration, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
     flatListRef.current?.scrollToOffset({
