@@ -309,14 +309,15 @@ router.get(
   '/confirm-parental-consent/:token',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { token } = req.params;
+      const tokenParam = req.params.token;
+      const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
       if (!token) {
         res.status(400).send('Invalid consent link');
         return;
       }
 
       const request = await prisma.parentalConsentRequest.findUnique({
-        where: { token },
+        where: { token: token },
         include: {
           user: { select: { id: true, email: true, username: true, displayName: true } },
         },
@@ -358,9 +359,10 @@ router.get(
         }),
       ]);
 
+      const child = request.user;
       sendConsentConfirmationEmail(
-        request.user.email,
-        request.user.displayName || request.user.username,
+        child.email,
+        child.displayName || child.username,
       ).catch((err) => logger.warn('[auth/confirm-parental-consent] Child notify email failed:', err));
 
       res.type('html').send(
