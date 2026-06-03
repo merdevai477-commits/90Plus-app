@@ -17,13 +17,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { GlassWrapper, glassProps, ACCENT, ACCENT_DARK, SURFACE_BG, AppGradients } from '../../constants/ui';
+import { detectSocialPlatformFromUrl, SocialPlatformId } from '../../src/utils/socialPlatformDetect';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SocialLink {
-    platform: 'instagram' | 'twitter' | 'facebook' | 'youtube' | 'tiktok' | 'website' | 'linkedin' | 'snapchat';
+    platform: SocialPlatformId;
     url: string;
 }
+
+type SocialLinkRow = SocialLink & { rowId: string };
 
 interface CooldownInfo {
     canChange: boolean;
@@ -74,7 +77,12 @@ const ProfileEditModal = memo(function ProfileEditModal({
     const [name,     setName]     = useState(initialData.name);
     const [bio,      setBio]      = useState(initialData.bio);
     const [username, setUsername] = useState(initialData.username);
-    const [socials,  setSocials]  = useState<SocialLink[]>(initialData.socials || []);
+    const [socials,  setSocials]  = useState<SocialLinkRow[]>(() =>
+        (initialData.socials || []).map((s, i) => ({ ...s, rowId: `social-${i}` }))
+    );
+
+    const wasVisibleRef = useRef(false);
+    const socialRowIdRef = useRef(0);
 
     const [nameError,     setNameError]     = useState('');
     const [usernameError, setUsernameError] = useState('');
@@ -94,17 +102,24 @@ const ProfileEditModal = memo(function ProfileEditModal({
     const daysRemaining  = usernameCooldown?.daysRemaining  ?? 0;
     const hoursRemaining = usernameCooldown?.hoursRemaining ?? 0;
 
+    const toSocialRows = useCallback((links: SocialLink[] = []): SocialLinkRow[] => {
+        socialRowIdRef.current = links.length;
+        return links.map((s, i) => ({ ...s, rowId: `social-open-${i}-${Date.now()}` }));
+    }, []);
+
     useEffect(() => {
-        if (visible) {
+        const justOpened = visible && !wasVisibleRef.current;
+        if (justOpened) {
             setName(initialData.name);
             setBio(initialData.bio);
             setUsername(initialData.username);
-            setSocials(initialData.socials || []);
+            setSocials(toSocialRows(initialData.socials || []));
             setNameError('');
             setUsernameError('');
             setFocusedField(null);
         }
-    }, [visible, initialData]);
+        wasVisibleRef.current = visible;
+    }, [visible, initialData, toSocialRows]);
 
     // Validation
     const validateUsername = useCallback((text: string): string => {
@@ -132,16 +147,42 @@ const ProfileEditModal = memo(function ProfileEditModal({
             name: name.trim(),
             bio: bio.trim(),
             username: username.trim().toLowerCase(),
-            socials: socials.filter(s => s.url.trim() !== ''),
+            socials: socials
+                .filter(s => s.url.trim() !== '')
+                .map(({ platform, url }) => ({ platform, url: url.trim() })),
             lastUsernameChange: username !== initialData.username ? new Date() : initialData.lastUsernameChange,
         });
         onClose();
     }, [name, bio, username, socials, initialData, validateName, validateUsername, onSave, onClose, t.common.error]);
 
-    const handleAddSocial    = useCallback(() => setSocials(p => [...p, { platform: 'instagram', url: '' }]), []);
-    const handleRemoveSocial = useCallback((i: number) => setSocials(p => p.filter((_, idx) => idx !== i)), []);
-    const updateSocial       = useCallback((i: number, field: keyof SocialLink, val: string) =>
-        setSocials(p => p.map((s, idx) => idx === i ? { ...s, [field]: val } : s)), []);
+    const handleAddSocial = useCallback(() => {
+        setSocials(p => {
+            if (p.length >= 5) {
+                Alert.alert(t.common.error, t.profile.maxSocialLinks);
+                return p;
+            }
+            socialRowIdRef.current += 1;
+            return [...p, { rowId: `social-new-${socialRowIdRef.current}`, platform: 'instagram', url: '' }];
+        });
+    }, [t.common.error, t.profile.maxSocialLinks]);
+
+    const handleRemoveSocial = useCallback((rowId: string) =>
+        setSocials(p => p.filter(s => s.rowId !== rowId)), []);
+
+    const updateSocial = useCallback((rowId: string, field: keyof SocialLink, val: string) =>
+        setSocials(p => p.map(s => (s.rowId === rowId ? { ...s, [field]: val } : s))), []);
+
+    const handleSocialUrlChange = useCallback((rowId: string, url: string) => {
+        setSocials(p => p.map(s => {
+            if (s.rowId !== rowId) return s;
+            const detected = detectSocialPlatformFromUrl(url);
+            return {
+                ...s,
+                url,
+                platform: detected ?? s.platform,
+            };
+        }));
+    }, []);
 
     const handleUsernameChange = useCallback((text: string) => {
         setUsername(text);
@@ -303,18 +344,22 @@ const ProfileEditModal = memo(function ProfileEditModal({
                                     </TouchableOpacity>
                                 </View>
 
-                                {socials.map((social, idx) => {
+                                {socials.map((social) => {
                                     const platform = SOCIAL_PLATFORMS.find(p => p.id === social.platform);
                                     const IconComp = platform?.iconLibrary === 'FontAwesome' ? FontAwesome : Ionicons;
                                     return (
-                                        <View key={idx} style={s.socialRow}>
+                                        <View key={social.rowId} style={s.socialRow}>
                                             <View style={s.socialWrap}>
                                                 <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
                                                 <TouchableOpacity
                                                     style={s.platformBtn}
                                                     onPress={() => {
                                                         const ci = SOCIAL_PLATFORMS.findIndex(p => p.id === social.platform);
-                                                        updateSocial(idx, 'platform', SOCIAL_PLATFORMS[(ci + 1) % SOCIAL_PLATFORMS.length].id);
+                                                        updateSocial(
+                                                            social.rowId,
+                                                            'platform',
+                                                            SOCIAL_PLATFORMS[(ci + 1) % SOCIAL_PLATFORMS.length].id,
+                                                        );
                                                     }}
                                                 >
                                                     {platform && (
@@ -324,12 +369,13 @@ const ProfileEditModal = memo(function ProfileEditModal({
                                                 <TextInput
                                                     style={s.socialInput}
                                                     value={social.url}
-                                                    onChangeText={t => updateSocial(idx, 'url', t)}
+                                                    onChangeText={url => handleSocialUrlChange(social.rowId, url)}
                                                     placeholder={t.profile.socialUrlPlaceholder}
                                                     placeholderTextColor="rgba(255,255,255,0.25)"
                                                     autoCapitalize="none"
+                                                    keyboardType="url"
                                                 />
-                                                <TouchableOpacity onPress={() => handleRemoveSocial(idx)} style={s.removeBtn}>
+                                                <TouchableOpacity onPress={() => handleRemoveSocial(social.rowId)} style={s.removeBtn}>
                                                     <Ionicons name="trash-outline" size={16} color="#ef4444" />
                                                 </TouchableOpacity>
                                             </View>

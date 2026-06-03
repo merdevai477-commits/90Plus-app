@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -9,18 +9,18 @@ import {
   Linking,
   Modal,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { CircleUserRound, Mail, Lock, Apple, ShieldCheck, X } from 'lucide-react-native';
+import { CircleUserRound, Mail, Lock, Apple, ShieldCheck, X, Check } from 'lucide-react-native';
 import {
   AuthScreenShell,
   AuthTextField,
   AUTH_ACCENT,
   OtpInput,
+  type OtpInputHandle,
   MIN_PASSWORD_LENGTH,
   normalizeAuthEmail,
 } from '@/src/components/auth';
@@ -48,7 +48,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { signUp, setActive, isLoaded } = useSignUp();
   const { getToken } = useAuth();
-  const { t } = useTranslation();
+  const { t, isRTL } = useTranslation();
   const tCommon = t.common;
   const [terms, setTerms] = useState(false);
   const [name, setName] = useState('');
@@ -61,8 +61,8 @@ export default function RegisterScreen() {
     const token = await getToken();
     if (!token) return;
     const result = await confirmMinimumAgeWithBackend(token);
-    if (!result.ok) {
-      throw new Error(result.message || 'Failed to record age confirmation');
+    if (result.ok === false) {
+      throw new Error(result.message ?? 'Failed to record age confirmation');
     }
   };
 
@@ -101,21 +101,8 @@ export default function RegisterScreen() {
     }
   };
 
-  // Verification modal state
   const [showVerification, setShowVerification] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (resendIntervalRef.current) {
-        clearInterval(resendIntervalRef.current);
-        resendIntervalRef.current = null;
-      }
-    };
-  }, []);
+  const toggleTerms = useCallback(() => setTerms((v) => !v), []);
 
   const completeAuth = async (sessionId: string) => {
     if (isSubmitting) return;
@@ -165,70 +152,13 @@ export default function RegisterScreen() {
       } else {
         // Email verification needed — show glass modal
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        setOtp('');
         setShowVerification(true);
-        startResendCooldown();
       }
     } catch (err: any) {
       const msg = err?.errors?.[0]?.longMessage || err?.message || 'Registration failed';
       Alert.alert('Error', msg);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const startResendCooldown = () => {
-    if (resendIntervalRef.current) {
-      clearInterval(resendIntervalRef.current);
-    }
-    setResendCooldown(60);
-    resendIntervalRef.current = setInterval(() => {
-      setResendCooldown((prev) => {
-        if (prev <= 1) {
-          if (resendIntervalRef.current) {
-            clearInterval(resendIntervalRef.current);
-            resendIntervalRef.current = null;
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleVerify = async () => {
-    const code = otp;
-    if (code.length !== OTP_LENGTH) {
-      Alert.alert('Notice', 'Please enter the full verification code.');
-      return;
-    }
-
-    setIsVerifying(true);
-    try {
-      const result = await signUp!.attemptEmailAddressVerification({ code });
-
-      if (result.status === 'complete' && result.createdSessionId) {
-        setShowVerification(false);
-        await completeAuth(result.createdSessionId);
-      } else {
-        Alert.alert('Error', 'Verification incomplete. Please try again.');
-      }
-    } catch (err: any) {
-      const msg = err?.errors?.[0]?.longMessage || err?.message || 'Invalid code';
-      Alert.alert('Verification Failed', msg);
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const handleResend = async () => {
-    if (resendCooldown > 0) return;
-    try {
-      await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
-      startResendCooldown();
-      Alert.alert('Sent', 'A new verification code has been sent to your email.');
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to resend code. Try again.');
     }
   };
 
@@ -259,38 +189,17 @@ export default function RegisterScreen() {
         secureToggle
         value={password}
         onChangeText={setPassword}
-        containerStyle={styles.gapTop}
+        containerStyle={StyleSheet.flatten([styles.gapTop, styles.passwordField])}
       />
 
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => setTerms((v) => !v)}
-        style={[styles.termsRow, terms && styles.termsRowActive]}
-      >
-        <View style={[styles.termsCircle, terms && styles.termsCircleOn]}>
-          {terms && <Text style={styles.termsCheck}>✓</Text>}
-        </View>
-        <View style={styles.termsCopy}>
-          <Text style={styles.termsTxt}>
-            {tCommon.registerAgreementPrefix}{' '}
-            <Text
-              style={styles.termsLink}
-              onPress={() => Linking.openURL(LEGAL_URLS.terms)}
-            >
-              {tCommon.registerTermsLink}
-            </Text>
-            {' & '}
-            <Text
-              style={styles.termsLink}
-              onPress={() => Linking.openURL(LEGAL_URLS.privacy)}
-            >
-              {tCommon.registerPrivacyLink}
-            </Text>
-            .
-          </Text>
-          <Text style={styles.termsAgeTxt}>{tCommon.registerAgeAcknowledgment}</Text>
-        </View>
-      </TouchableOpacity>
+      {!showVerification && (
+        <RegisterTermsConsent
+          checked={terms}
+          onToggle={toggleTerms}
+          isRTL={isRTL}
+          tCommon={tCommon}
+        />
+      )}
 
       <TouchableOpacity
         style={[styles.primaryWrap, isSubmitting && { opacity: 0.6 }]}
@@ -349,106 +258,16 @@ export default function RegisterScreen() {
         </Text>
       </Pressable>
 
-      {/* ── Email Verification Glass Modal ───────────────────────────────── */}
-      <Modal
+      <RegisterEmailVerificationModal
         visible={showVerification}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-          style={styles.modalOverlay}
-          enabled
-        >
-          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              {/* Glow effect behind card */}
-              <LinearGradient
-                colors={['rgba(124,58,237,0.15)', 'rgba(59,130,246,0.08)', 'transparent']}
-                style={styles.modalGlow}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-              />
-
-              {/* Close button */}
-              <TouchableOpacity
-                style={styles.modalClose}
-                onPress={() => setShowVerification(false)}
-                activeOpacity={0.7}
-              >
-                <X size={20} color={TEXT_MUTED} strokeWidth={2} />
-              </TouchableOpacity>
-
-              {/* Icon */}
-              <View style={styles.modalIconWrap}>
-                <LinearGradient
-                  colors={[PURPLE_PRIMARY, '#5b21b6']}
-                  style={styles.modalIcon}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <ShieldCheck size={28} color="#fff" strokeWidth={2} />
-                </LinearGradient>
-              </View>
-
-              {/* Title */}
-              <Text style={styles.modalTitle}>Verify your email</Text>
-              <Text style={styles.modalSubtitle}>
-                We sent a {OTP_LENGTH}-digit code to{'\n'}
-                <Text style={styles.modalEmail}>{email}</Text>
-              </Text>
-
-              <OtpInput
-                value={otp}
-                onChange={setOtp}
-                autoFocus
-                containerStyle={styles.otpRow}
-              />
-
-              {/* Verify button */}
-              <TouchableOpacity
-                activeOpacity={0.92}
-                onPress={handleVerify}
-                disabled={isVerifying || otp.length !== OTP_LENGTH}
-                style={[
-                  styles.verifyWrap,
-                  otp.length !== OTP_LENGTH && { opacity: 0.5 },
-                ]}
-              >
-                <LinearGradient
-                  colors={[PURPLE_PRIMARY, '#5b21b6']}
-                  style={styles.verifyBtn}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                >
-                  {isVerifying ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.verifyTxt}>Verify & Continue</Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-
-              {/* Resend */}
-              <TouchableOpacity
-                onPress={handleResend}
-                disabled={resendCooldown > 0}
-                activeOpacity={0.7}
-                style={styles.resendRow}
-              >
-                <Text style={styles.resendTxt}>
-                  {resendCooldown > 0
-                    ? `Resend code in ${resendCooldown}s`
-                    : "Didn't receive it? Resend code"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        email={email}
+        signUp={signUp}
+        onClose={() => setShowVerification(false)}
+        onVerified={async (sessionId) => {
+          setShowVerification(false);
+          await completeAuth(sessionId);
+        }}
+      />
     </AuthScreenShell>
   );
 }
@@ -465,51 +284,76 @@ function Divider() {
 
 const styles = StyleSheet.create({
   gapTop: { marginTop: 12 },
-  termsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+  passwordField: { marginBottom: 10 },
+  termsPressable: {
+    width: '100%',
+    marginTop: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.035)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  termsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'flex-start',
     gap: 12,
   },
-  termsRowActive: {
-    backgroundColor: 'rgba(124,58,237,0.08)',
-    borderColor: 'rgba(124,58,237,0.3)',
+  termsRowRtl: {
+    flexDirection: 'row-reverse',
   },
-  termsCircle: {
+  termsRowActive: {
+    backgroundColor: 'rgba(124,58,237,0.1)',
+    borderColor: 'rgba(124,58,237,0.35)',
+  },
+  termsTextWrap: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    paddingLeft: 2,
+  },
+  termsTextWrapRtl: {
+    paddingLeft: 0,
+    paddingRight: 2,
+  },
+  termsCheckBox: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    flexShrink: 0,
+    marginTop: 2,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderColor: 'rgba(255,255,255,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
-  termsCircleOn: {
+  termsCheckBoxOn: {
     borderColor: AUTH_ACCENT,
     backgroundColor: AUTH_ACCENT,
   },
-  termsCheck: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '900',
-    marginTop: -1,
+  termsLine: {
+    fontSize: 13.5,
+    color: 'rgba(255,255,255,0.78)',
+    lineHeight: 21,
+    fontWeight: '400',
+    letterSpacing: 0.15,
   },
-  termsCopy: { flex: 1, gap: 8 },
-  termsTxt: { fontSize: 13, color: TEXT_MUTED, lineHeight: 19 },
-  termsAgeTxt: {
-    fontSize: 13,
-    color: TEXT_PRIMARY,
-    lineHeight: 19,
-    fontWeight: '700',
+  termsLineRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  termsLink: { color: AUTH_ACCENT, fontWeight: '700', textDecorationLine: 'underline' },
+  termsLink: {
+    color: AUTH_ACCENT,
+    fontSize: 13.5,
+    fontWeight: '600',
+    lineHeight: 21,
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(124,58,237,0.5)',
+  },
   primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
   primary: { paddingVertical: 16, alignItems: 'center' },
   primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
@@ -537,7 +381,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    minHeight: 420,
+    height: 420,
     backgroundColor: 'rgba(12,8,20,0.97)',
     borderRadius: 24,
     borderWidth: 1,
@@ -632,11 +476,265 @@ const styles = StyleSheet.create({
 
   // Resend
   resendRow: {
-    paddingVertical: 6,
+    width: '100%',
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
   },
   resendTxt: {
     fontSize: 13,
     color: TEXT_MUTED,
     fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 18,
+    minWidth: 220,
   },
 });
+
+type RegisterTermsCopy = {
+  registerAgreementPrefix: string;
+  registerTermsLink: string;
+  registerPrivacyLink: string;
+  registerAgreementAfterLinks: string;
+};
+
+const RegisterTermsConsent = memo(function RegisterTermsConsent({
+  checked,
+  onToggle,
+  isRTL,
+  tCommon,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  isRTL: boolean;
+  tCommon: RegisterTermsCopy;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={onToggle}
+      style={[styles.termsPressable, checked && styles.termsRowActive]}
+    >
+      <View style={[styles.termsRow, isRTL && styles.termsRowRtl]}>
+        <View style={[styles.termsCheckBox, checked && styles.termsCheckBoxOn]}>
+          {checked ? <Check size={15} color="#fff" strokeWidth={3} /> : null}
+        </View>
+        <View style={[styles.termsTextWrap, isRTL && styles.termsTextWrapRtl]}>
+          <Text style={[styles.termsLine, isRTL && styles.termsLineRtl]}>
+            {tCommon.registerAgreementPrefix}{' '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL(LEGAL_URLS.terms)}
+            >
+              {tCommon.registerTermsLink}
+            </Text>
+            {isRTL ? ' و' : ' & '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL(LEGAL_URLS.privacy)}
+            >
+              {tCommon.registerPrivacyLink}
+            </Text>
+            {tCommon.registerAgreementAfterLinks}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+RegisterTermsConsent.displayName = 'RegisterTermsConsent';
+
+const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationModal({
+  visible,
+  email,
+  signUp,
+  onClose,
+  onVerified,
+}: {
+  visible: boolean;
+  email: string;
+  signUp: ReturnType<typeof useSignUp>['signUp'];
+  onClose: () => void;
+  onVerified: (sessionId: string) => Promise<void>;
+}) {
+  const [otp, setOtp] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const otpInputRef = useRef<OtpInputHandle>(null);
+  const didFocusOtpRef = useRef(false);
+
+  const clearResendInterval = useCallback(() => {
+    if (resendIntervalRef.current) {
+      clearInterval(resendIntervalRef.current);
+      resendIntervalRef.current = null;
+    }
+  }, []);
+
+  const startResendCooldown = useCallback(() => {
+    clearResendInterval();
+    setResendCooldown(60);
+    resendIntervalRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearResendInterval();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [clearResendInterval]);
+
+  useEffect(() => {
+    if (visible) {
+      setOtp('');
+      didFocusOtpRef.current = false;
+      startResendCooldown();
+    } else {
+      clearResendInterval();
+      setResendCooldown(0);
+      didFocusOtpRef.current = false;
+    }
+    return clearResendInterval;
+  }, [visible, startResendCooldown, clearResendInterval]);
+
+  const focusOtpOnce = useCallback(() => {
+    if (didFocusOtpRef.current) return;
+    didFocusOtpRef.current = true;
+    otpInputRef.current?.focus();
+  }, []);
+
+  const handleVerify = async () => {
+    if (otp.length !== OTP_LENGTH) {
+      Alert.alert('Notice', 'Please enter the full verification code.');
+      return;
+    }
+    if (!signUp) return;
+
+    setIsVerifying(true);
+    try {
+      const result = await signUp.attemptEmailAddressVerification({ code: otp });
+      if (result.status === 'complete' && result.createdSessionId) {
+        await onVerified(result.createdSessionId);
+      } else {
+        Alert.alert('Error', 'Verification incomplete. Please try again.');
+      }
+    } catch (err: unknown) {
+      const e = err as { errors?: Array<{ longMessage?: string }>; message?: string };
+      const msg = e?.errors?.[0]?.longMessage || e?.message || 'Invalid code';
+      Alert.alert('Verification Failed', msg);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0 || !signUp) return;
+    try {
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      startResendCooldown();
+      Alert.alert('Sent', 'A new verification code has been sent to your email.');
+    } catch {
+      Alert.alert('Error', 'Failed to resend code. Try again.');
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onShow={() => {
+        setTimeout(focusOtpOnce, Platform.OS === 'android' ? 400 : 200);
+      }}
+    >
+      <View style={styles.modalOverlay}>
+        <BlurView
+          intensity={40}
+          tint="dark"
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <LinearGradient
+              colors={['rgba(124,58,237,0.15)', 'rgba(59,130,246,0.08)', 'transparent']}
+              style={styles.modalGlow}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+            />
+
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
+              <X size={20} color={TEXT_MUTED} strokeWidth={2} />
+            </TouchableOpacity>
+
+            <View style={styles.modalIconWrap}>
+              <LinearGradient
+                colors={[PURPLE_PRIMARY, '#5b21b6']}
+                style={styles.modalIcon}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <ShieldCheck size={28} color="#fff" strokeWidth={2} />
+              </LinearGradient>
+            </View>
+
+            <Text style={styles.modalTitle}>Verify your email</Text>
+            <Text style={styles.modalSubtitle}>
+              We sent a {OTP_LENGTH}-digit code to{'\n'}
+              <Text style={styles.modalEmail}>{email}</Text>
+            </Text>
+
+            <OtpInput
+              ref={otpInputRef}
+              value={otp}
+              onChange={setOtp}
+              containerStyle={styles.otpRow}
+            />
+
+            <TouchableOpacity
+              activeOpacity={0.92}
+              onPress={handleVerify}
+              disabled={isVerifying || otp.length !== OTP_LENGTH}
+              style={[styles.verifyWrap, otp.length !== OTP_LENGTH && { opacity: 0.5 }]}
+            >
+              <LinearGradient
+                colors={[PURPLE_PRIMARY, '#5b21b6']}
+                style={styles.verifyBtn}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {isVerifying ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.verifyTxt}>Verify & Continue</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.resendRow}>
+              <TouchableOpacity
+                onPress={handleResend}
+                disabled={resendCooldown > 0}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resendTxt} numberOfLines={1}>
+                  {resendCooldown > 0
+                    ? `Resend code in ${resendCooldown}s`
+                    : "Didn't receive it? Resend code"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+RegisterEmailVerificationModal.displayName = 'RegisterEmailVerificationModal';

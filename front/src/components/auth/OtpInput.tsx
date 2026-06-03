@@ -1,9 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
   Platform,
   type ViewStyle,
@@ -12,34 +11,39 @@ import { TEXT_PRIMARY } from '../../../constants/tokens';
 
 const DEFAULT_LENGTH = 6;
 
+export type OtpInputHandle = {
+  focus: () => void;
+};
+
 type Props = {
   length?: number;
   value: string;
   onChange: (value: string) => void;
+  /** One delayed focus on mount (inline screens e.g. forgot-password). */
   autoFocus?: boolean;
   containerStyle?: ViewStyle;
 };
 
 /**
- * OTP field with reliable paste + SMS autofill on iOS and Android.
- * A single hidden input receives the full code; cells are display-only.
+ * OTP field — transparent input overlays cells; stable layout (no size change on fill).
  */
-export function OtpInput({
-  length = DEFAULT_LENGTH,
-  value,
-  onChange,
-  autoFocus = false,
-  containerStyle,
-}: Props) {
+const OtpInputBase = forwardRef<OtpInputHandle, Props>(function OtpInput(
+  { length = DEFAULT_LENGTH, value, onChange, autoFocus = false, containerStyle },
+  ref,
+) {
   const inputRef = useRef<TextInput>(null);
-  const digits = value.padEnd(length, ' ').slice(0, length).split('');
+
+  const focusInput = () => {
+    inputRef.current?.focus();
+  };
+
+  useImperativeHandle(ref, () => ({ focus: focusInput }), []);
 
   useEffect(() => {
-    if (autoFocus) {
-      const t = setTimeout(() => inputRef.current?.focus(), 200);
-      return () => clearTimeout(t);
-    }
-    return undefined;
+    if (!autoFocus) return undefined;
+    const delay = Platform.OS === 'android' ? 350 : 150;
+    const t = setTimeout(focusInput, delay);
+    return () => clearTimeout(t);
   }, [autoFocus]);
 
   const applyValue = (raw: string) => {
@@ -47,51 +51,61 @@ export function OtpInput({
     onChange(cleaned);
   };
 
-  const focusInput = () => inputRef.current?.focus();
+  const digits = value.padEnd(length, ' ').slice(0, length).split('');
 
   return (
-    <Pressable style={[styles.row, containerStyle]} onPress={focusInput}>
-      {digits.map((digit, i) => {
-        const filled = Boolean(digit.trim());
-        return (
-        <View
-          key={i}
-          style={[
-            styles.cell,
-            filled ? styles.cellFilled : styles.cellEmpty,
-          ]}
-          pointerEvents="none"
-        >
-          <Text style={styles.cellText} allowFontScaling={false}>
-            {digit.trim()}
-          </Text>
-        </View>
-      );
-      })}
+    <View style={[styles.row, containerStyle]}>
+      <View style={styles.cellsRow} pointerEvents="box-none">
+        {digits.map((digit, i) => {
+          const filled = Boolean(digit.trim());
+          return (
+            <View
+              key={i}
+              style={[styles.cell, filled ? styles.cellFilled : styles.cellEmpty]}
+            >
+              <Text style={styles.cellText} allowFontScaling={false}>
+                {digit.trim()}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
 
       <TextInput
         ref={inputRef}
         value={value}
         onChangeText={applyValue}
-        keyboardType="number-pad"
+        keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'}
+        inputMode="numeric"
         maxLength={length}
         textContentType="oneTimeCode"
         autoComplete={Platform.OS === 'android' ? 'sms-otp' : 'one-time-code'}
         importantForAutofill="yes"
-        autoFocus={autoFocus}
+        showSoftInputOnFocus
         caretHidden
-        style={styles.hiddenInput}
+        style={styles.overlayInput}
         accessibilityLabel="Verification code"
       />
-    </Pressable>
+    </View>
   );
-}
+});
+
+OtpInputBase.displayName = 'OtpInput';
+
+export const OtpInput = OtpInputBase;
 
 const styles = StyleSheet.create({
   row: {
+    width: '100%',
+    height: 54,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cellsRow: {
     flexDirection: 'row',
     gap: 8,
-    position: 'relative',
+    justifyContent: 'center',
   },
   cell: {
     width: 46,
@@ -115,19 +129,15 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '800',
     textAlign: 'center',
-    padding: 0,
+    width: '100%',
     includeFontPadding: false,
     textAlignVertical: 'center',
-    width: '100%',
   },
-  hiddenInput: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 1,
-    height: 1,
-    opacity: 0,
+  overlayInput: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: Platform.OS === 'android' ? 0.02 : 0,
     color: 'transparent',
-    fontSize: 1,
+    fontSize: 24,
+    textAlign: 'center',
   },
 });

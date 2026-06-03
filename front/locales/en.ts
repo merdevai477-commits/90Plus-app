@@ -399,6 +399,11 @@ export const en = {
     loadLineupsFailed: 'Could not load lineups',
     loadStatsFailed: 'Could not load statistics',
     loadStandingsFailed: 'Could not load standings',
+    standingsUnavailable: 'Standings are not available for this competition.',
+    standingsLeagueLimited: 'The provider does not publish a league table for this competition.',
+    standingsSeasonNote: 'Showing season {season}',
+    standingsGroupLabel: 'Group {name}',
+    standingsRetry: 'Check again',
   },
 
   playerProfile: {

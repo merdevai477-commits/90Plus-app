@@ -42,6 +42,8 @@ import {
 } from '../../utils/matchStatsFallback';
 import { hasLineupData } from '../../utils/matchLineupsFallback';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
+import type { StandingsGroup } from '../../utils/standingsHelpers';
+import { teamMatchesStanding } from '../../utils/standingsHelpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -96,7 +98,9 @@ const MatchDetailsScreen = () => {
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
   const [events, setEvents] = useState<FixtureEvent[]>([]);
-  const [standings, setStandings] = useState<any[]>([]);
+  const [standingsGroups, setStandingsGroups] = useState<StandingsGroup[]>([]);
+  const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
+  const [standingsUnavailable, setStandingsUnavailable] = useState(false);
   const [fixture, setFixture] = useState<Fixture | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -487,22 +491,31 @@ const MatchDetailsScreen = () => {
     finally { setFormLoading(false); }
   }, [fixtureId, fixture]);
 
-  const loadStandingsIfNeeded = useCallback(async () => {
-    if (loadedTabsRef.current.has('standings') || !fixture) return;
-    loadedTabsRef.current.add('standings');
+  const loadStandingsIfNeeded = useCallback(async (force = false) => {
+    if (!force && loadedTabsRef.current.has('standings')) return;
+    if (!fixture) return;
+    if (!force) loadedTabsRef.current.add('standings');
     setStandingsLoading(true);
+    setStandingsError(null);
+    setStandingsUnavailable(false);
     try {
-      const data = await ApiFootballService.getStandings(
+      const result = await ApiFootballService.getLeagueStandingsGrouped(
         fixture.league.id,
         fixture.league.season,
       );
-      setStandings(data);
+      setStandingsGroups(result.groups);
+      setStandingsSeasonUsed(result.available ? result.season : null);
+      if (!result.available) {
+        setStandingsUnavailable(true);
+        loadedTabsRef.current.delete('standings');
+      }
     } catch (err: any) {
       setStandingsError(err?.message || t.matchDetails.loadStandingsFailed);
+      loadedTabsRef.current.delete('standings');
     } finally {
       setStandingsLoading(false);
     }
-  }, [fixtureId, fixture]);
+  }, [fixture, t.matchDetails.loadStandingsFailed]);
 
   const loadVenueIfNeeded = useCallback(async () => {
     if (loadedTabsRef.current.has('stadium') || !fixture) return;
@@ -1109,51 +1122,103 @@ const MatchDetailsScreen = () => {
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
           <Text style={styles.emptyStateText}>{standingsError}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              loadedTabsRef.current.delete('standings');
+              void loadStandingsIfNeeded(true);
+            }}
+          >
+            <Text style={styles.retryButtonText}>{t.matchDetails.standingsRetry || t.common.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }
 
-    if (standings.length === 0) {
+    if (standingsUnavailable || standingsGroups.length === 0) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="list-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>{t.matchDetails.standings || 'No standings available'}</Text>
+          <Text style={styles.emptyStateText}>
+            {t.matchDetails.standingsUnavailable || t.matchDetails.standingsLeagueLimited}
+          </Text>
+          <Text style={styles.emptyStateSubtext}>
+            {t.matchDetails.standingsLeagueLimited}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              loadedTabsRef.current.delete('standings');
+              void loadStandingsIfNeeded(true);
+            }}
+          >
+            <Text style={styles.retryButtonText}>{t.matchDetails.standingsRetry || t.common.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }
+
+    const renderStandingsTable = (rows: any[], keyPrefix: string) => (
+      <>
+        <View style={styles.standingsHeader}>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>#</Text>
+          <Text style={[styles.standingsHeaderText, { flex: 1, textAlign: 'left' }]}>{t.matchDetails.team}</Text>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>P</Text>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>GD</Text>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>Pts</Text>
+        </View>
+        {rows.map((team: any, index: number) => {
+          const isHome = teamMatchesStanding(team.team.name, params.homeTeam);
+          const isAway = teamMatchesStanding(team.team.name, params.awayTeam);
+          const isHighlighted = isHome || isAway;
+
+          return (
+            <View
+              key={`${keyPrefix}-${team.team.id ?? index}`}
+              style={[styles.standingsRow, isHighlighted && styles.standingsRowHighlighted]}
+            >
+              <Text style={[styles.standingsText, { width: 30 }]}>{team.rank}</Text>
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Image source={{ uri: team.team.logo }} style={{ width: 20, height: 20 }} />
+                <Text style={[styles.standingsText, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>
+                  {getTeamDisplayName(team.team.name, language)}
+                </Text>
+              </View>
+              <Text style={[styles.standingsText, { width: 30 }]}>{team.all.played}</Text>
+              <Text style={[styles.standingsText, { width: 30 }]}>{team.goalsDiff}</Text>
+              <Text style={[styles.standingsText, { width: 30, fontWeight: 'bold' }]}>{team.points}</Text>
+            </View>
+          );
+        })}
+      </>
+    );
 
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.standingsContainer}>
-          <View style={styles.standingsHeader}>
-            <Text style={[styles.standingsHeaderText, { width: 30 }]}>#</Text>
-            <Text style={[styles.standingsHeaderText, { flex: 1, textAlign: 'left' }]}>{t.matchDetails.team}</Text>
-            <Text style={[styles.standingsHeaderText, { width: 30 }]}>P</Text>
-            <Text style={[styles.standingsHeaderText, { width: 30 }]}>GD</Text>
-            <Text style={[styles.standingsHeaderText, { width: 30 }]}>Pts</Text>
+        {standingsSeasonUsed != null && standingsSeasonUsed !== fixture?.league?.season && (
+          <Text style={styles.standingsSeasonNote}>
+            {(t.matchDetails.standingsSeasonNote || 'Season {season}').replace(
+              '{season}',
+              String(standingsSeasonUsed),
+            )}
+          </Text>
+        )}
+        {standingsGroups.map((groupBlock, groupIndex) => (
+          <View key={`${groupBlock.group}-${groupIndex}`} style={styles.standingsContainer}>
+            {standingsGroups.length > 1 && (
+              <Text style={styles.standingsGroupTitle}>
+                {(t.matchDetails.standingsGroupLabel || 'Group {name}').replace(
+                  '{name}',
+                  groupBlock.group,
+                )}
+              </Text>
+            )}
+            {renderStandingsTable(groupBlock.standings, `${groupBlock.group}-${groupIndex}`)}
           </View>
-          {standings.map((team: any, index: number) => {
-            const isHome = team.team.name.toLowerCase().includes(params.homeTeam.toLowerCase()) || params.homeTeam.toLowerCase().includes(team.team.name.toLowerCase());
-            const isAway = team.team.name.toLowerCase().includes(params.awayTeam.toLowerCase()) || params.awayTeam.toLowerCase().includes(team.team.name.toLowerCase());
-            const isHighlighted = isHome || isAway;
-
-            return (
-              <View key={index} style={[styles.standingsRow, isHighlighted && styles.standingsRowHighlighted]}>
-                <Text style={[styles.standingsText, { width: 30 }]}>{team.rank}</Text>
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Image source={{ uri: team.team.logo }} style={{ width: 20, height: 20 }} />
-                  <Text style={[styles.standingsText, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>{getTeamDisplayName(team.team.name, language)}</Text>
-                </View>
-                <Text style={[styles.standingsText, { width: 30 }]}>{team.all.played}</Text>
-                <Text style={[styles.standingsText, { width: 30 }]}>{team.goalsDiff}</Text>
-                <Text style={[styles.standingsText, { width: 30, fontWeight: 'bold' }]}>{team.points}</Text>
-              </View>
-            );
-          })}
-        </View>
+        ))}
       </ScrollView>
     );
   };
@@ -1861,6 +1926,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
     padding: 15,
+    marginBottom: 12,
+  },
+  standingsSeasonNote: {
+    color: '#888',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  standingsGroupTitle: {
+    color: '#A855F7',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
   },
   standingsHeader: {
     flexDirection: 'row',

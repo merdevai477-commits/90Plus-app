@@ -423,7 +423,7 @@ export const ar = {
       upcoming: 'قادمة',
     },
     screen: {
-      title: 'النتائج المباشرة',
+      title: 'النتائج\u00A0المباشرة',
       loading: 'جاري تحميل المباريات...',
       loadFailed: 'فشل تحميل المباريات',
       retry: 'إعادة المحاولة',
@@ -570,6 +570,11 @@ export const ar = {
     loadLineupsFailed: 'فشل تحميل التشكيلات',
     loadStatsFailed: 'فشل تحميل الإحصائيات',
     loadStandingsFailed: 'فشل تحميل الترتيب',
+    standingsUnavailable: 'جدول الترتيب غير متاح لهذه البطولة.',
+    standingsLeagueLimited: 'مزود البيانات لا ينشر جدول ترتيب لهذه البطولة.',
+    standingsSeasonNote: 'عرض موسم {season}',
+    standingsGroupLabel: 'المجموعة {name}',
+    standingsRetry: 'إعادة المحاولة',
   },
 
   playerProfile: {

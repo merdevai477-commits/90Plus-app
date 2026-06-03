@@ -12,11 +12,17 @@ function applyProjectMetroTweaks(config) {
     Number.isFinite(parsedWorkers) && parsedWorkers > 0
       ? parsedWorkers
       : process.platform === 'win32'
-        ? 2
+        ? 1
         : Math.min(os.cpus().length, 4);
 
   config.maxWorkers = maxWorkers;
-  config.cacheStores = [new FileStore({ root: path.join(__dirname, '.metro-cache') })];
+
+  // Windows: FileStore opens many cache files → EMFILE. Use in-memory cache unless opted in.
+  const useFileCache =
+    process.platform !== 'win32' || process.env.METRO_FILE_CACHE === '1';
+  config.cacheStores = useFileCache
+    ? [new FileStore({ root: path.join(__dirname, '.metro-cache') })]
+    : [];
 
   const originalResolveRequest = config.resolver.resolveRequest;
   config.resolver.resolveRequest = (context, moduleName, platform) => {

@@ -548,36 +548,47 @@ class FootballDataCacheService {
      * Get standings for a league
      */
     async getStandings(leagueId: number, season: number = 2024): Promise<any> {
+        return (await this.getStandingsParsed(leagueId, season)).flat;
+    }
+
+    async getStandingsParsed(
+        leagueId: number,
+        season: number = 2024,
+    ): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
         const cacheKey = `${leagueId}_${season}`;
 
-        // Check memory cache
         const cached = this.standingsCache.get(cacheKey);
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
             logger.debug(`📦 Standings ${cacheKey} from memory cache`);
-            return cached.data;
+            const data = cached.data;
+            if (data?.groups) return data;
+            if (Array.isArray(data)) {
+                return {
+                    flat: data,
+                    groups: data.length ? [{ group: 'Table', standings: data }] : [],
+                };
+            }
+            return { flat: [], groups: [] };
         }
 
-        // Fetch from API
         logger.debug(`📡 Fetching standings for league ${leagueId}`);
-        const standings = await footballService.getStandings(leagueId, season);
+        const parsed = await footballService.getStandingsParsed(leagueId, season);
 
-        // Cache in memory
         this.standingsCache.set(cacheKey, {
-            data: standings,
+            data: parsed,
             timestamp: Date.now(),
             ttl: this.TTL.STANDINGS,
         });
 
-        // Cache teams from standings
-        if (standings?.length) {
-            for (const standing of standings) {
+        if (parsed.flat?.length) {
+            for (const standing of parsed.flat) {
                 if (standing.team) {
                     await this.cacheTeamFromStanding(standing.team);
                 }
             }
         }
 
-        return standings;
+        return parsed;
     }
 
     private async cacheTeamFromStanding(team: any): Promise<void> {

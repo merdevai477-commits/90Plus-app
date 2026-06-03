@@ -1411,35 +1411,90 @@ export const ApiFootballService = {
   },
 
   /**
-   * Get standings for a specific league and season
+   * Get standings for a specific league and season (flat list).
    * Uses backend cache (1 hour TTL)
    */
   async getStandings(leagueId: number, season?: number): Promise<Standing[]> {
-    const currentSeason = season || 2024;
-    
-    // Try local cache first
-    const cached = await footballCacheService.getStandings(leagueId, currentSeason);
-    if (cached) {
-      console.log(`📦 Standings local cache hit for league ${leagueId}`);
-      return cached;
-    }
-    
-    try {
-      // Use cached endpoint
-      const standings = await fetchFromProxy<Standing[]>(`/cached/standings/${leagueId}`, {
-        season: currentSeason,
-      });
-      
-      // Local cache as backup
-      if (standings?.length) {
-        footballCacheService.cacheStandings(leagueId, currentSeason, standings).catch(console.error);
+    const result = await this.getLeagueStandingsGrouped(leagueId, season);
+    return result.groups.flatMap((g) => g.standings);
+  },
+
+  /**
+   * Get standings preserving groups/tiers; tries multiple seasons when empty.
+   */
+  async getLeagueStandingsGrouped(
+    leagueId: number,
+    season?: number,
+  ): Promise<{ groups: import('../utils/standingsHelpers').StandingsGroup[]; season: number; available: boolean }> {
+    const {
+      standingsSeasonCandidates,
+      normalizeStandingsGroups,
+      getCurrentFootballSeason,
+    } = await import('../utils/standingsHelpers');
+
+    for (const trySeason of standingsSeasonCandidates(season)) {
+      const cached = await footballCacheService.getStandings(leagueId, trySeason);
+      if (cached?.length) {
+        return {
+          groups: [{ group: 'Table', standings: cached }],
+          season: trySeason,
+          available: true,
+        };
       }
-      
-      return standings;
-    } catch (error) {
-      console.error('Error fetching standings:', error);
-      return [];
+
+      try {
+        const payload = await this.fetchStandingsCachePayload(leagueId, trySeason);
+        const groups = normalizeStandingsGroups(payload.groups, payload.flat);
+        if (groups.length > 0) {
+          if (payload.flat.length) {
+            footballCacheService
+              .cacheStandings(leagueId, trySeason, payload.flat)
+              .catch(console.error);
+          }
+          return { groups, season: trySeason, available: true };
+        }
+      } catch (error) {
+        console.error(`Error fetching standings for league ${leagueId} season ${trySeason}:`, error);
+      }
     }
+
+    return {
+      groups: [],
+      season: season ?? getCurrentFootballSeason(),
+      available: false,
+    };
+  },
+
+  async fetchStandingsCachePayload(
+    leagueId: number,
+    season: number,
+  ): Promise<{
+    flat: Standing[];
+    groups: import('../utils/standingsHelpers').StandingsGroup[];
+  }> {
+    const baseUrl = getApiUrl();
+    const url = new URL(`${baseUrl}/football/cached/standings/${leagueId}`);
+    url.searchParams.set('season', String(season));
+
+    const response = await withTimeout(
+      fetch(url.toString(), {
+        headers: { Accept: 'application/json' },
+      }),
+    );
+
+    if (!response.ok) {
+      return { flat: [], groups: [] };
+    }
+
+    const data = (await response.json()) as {
+      response?: Standing[];
+      groups?: import('../utils/standingsHelpers').StandingsGroup[];
+    };
+
+    return {
+      flat: data.response ?? [],
+      groups: data.groups ?? [],
+    };
   },
 
   // ============================================

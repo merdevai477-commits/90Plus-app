@@ -15,6 +15,9 @@
 import type { Language } from '../src/i18n/types';
 import { translations } from '../src/i18n/utils';
 import { teamArabicNames } from '../data/teamArabicNames';
+import { LEAGUES } from '../data/leagues';
+import { ALL_COUNTRY_FLAGS } from '../data/localCountryFlags';
+import { COUNTRIES } from '../data/countries';
 
 // ─── Team name localization ───────────────────────────────────────────────────
 
@@ -28,6 +31,33 @@ import { teamArabicNames } from '../data/teamArabicNames';
  *  - Empty / unknown input returns a safe placeholder pulled from the
  *    common translations.
  */
+function lookupArabicLabel(originalName: string): string | null {
+  const candidates = [
+    originalName,
+    originalName.toLowerCase(),
+    originalName.replace(/\s+FC$/i, '').trim(),
+    originalName.replace(/\s+CF$/i, '').trim(),
+    originalName.replace(/\s+SC$/i, '').trim(),
+  ];
+  for (const key of candidates) {
+    const ar = teamArabicNames[key];
+    if (ar && ar.trim().length > 0) return ar;
+  }
+
+  const lower = originalName.toLowerCase();
+  const fromFlags = ALL_COUNTRY_FLAGS.find(
+    (c) => c.name.toLowerCase() === lower || c.nameAr === originalName,
+  );
+  if (fromFlags?.nameAr) return fromFlags.nameAr;
+
+  const fromCountries = COUNTRIES.find(
+    (c) => c.nameEn.toLowerCase() === lower || c.name === originalName,
+  );
+  if (fromCountries?.name) return fromCountries.name;
+
+  return null;
+}
+
 export function getTeamDisplayName(
   originalName: string | null | undefined,
   language: Language,
@@ -40,30 +70,49 @@ export function getTeamDisplayName(
   if (!name) return fallback;
 
   if (language === 'ar') {
-    const candidates = [
-      name,
-      name.toLowerCase(),
-      name.replace(/\s+FC$/i, '').trim(),
-      name.replace(/\s+CF$/i, '').trim(),
-      name.replace(/\s+SC$/i, '').trim(),
-    ];
-    for (const key of candidates) {
-      const ar = teamArabicNames[key];
-      if (ar && ar.trim().length > 0) return ar;
-    }
+    const ar = lookupArabicLabel(name);
+    if (ar) return ar;
   }
   return name;
 }
 
-/**
- * Same as getTeamDisplayName but for league/competition names. Falls
- * through the same Arabic mapping (the data file covers both).
- */
-export function getLeagueDisplayName(
+/** Localized country label (API returns English names like "Morocco", "Argentina"). */
+export function getCountryDisplayName(
   originalName: string | null | undefined,
   language: Language,
 ): string {
   return getTeamDisplayName(originalName, language);
+}
+
+/**
+ * Localized league/competition name. Checks the curated leagues list by id
+ * first, then the shared Arabic name map.
+ */
+export function getLeagueDisplayName(
+  originalName: string | null | undefined,
+  language: Language,
+  leagueId?: number | null,
+): string {
+  const fallback = translations[language]?.common?.unknown
+    ?? translations.en.common.unknown
+    ?? 'Unknown';
+
+  const name = (originalName ?? '').trim();
+  if (!name && !leagueId) return fallback;
+
+  if (language === 'ar') {
+    if (leagueId != null) {
+      const byId = LEAGUES.find((l) => l.id === leagueId);
+      if (byId?.nameAr) return byId.nameAr;
+    }
+    if (name) {
+      const byName = LEAGUES.find((l) => l.name.toLowerCase() === name.toLowerCase());
+      if (byName?.nameAr) return byName.nameAr;
+      const ar = lookupArabicLabel(name);
+      if (ar) return ar;
+    }
+  }
+  return name || fallback;
 }
 
 // ─── Match status localization ────────────────────────────────────────────────

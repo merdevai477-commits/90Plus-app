@@ -1436,7 +1436,14 @@ export default function MatchesHubScreenV2() {
               <Text style={styles.logoPlusSmall}>PLUS</Text>
             </View>
           </TouchableOpacity>
-          <Text style={styles.headerTitleTxt}>{t('matches.screen.title')}</Text>
+          <Text
+            style={styles.headerTitleTxt}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {t('matches.screen.title')}
+          </Text>
         </View>
         <View style={{ flex: 1 }} />
         {headerRight}
@@ -1668,7 +1675,7 @@ const styles = StyleSheet.create({
   logo90Small: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
   plusChipSmall: { backgroundColor: PURPLE_PRIMARY, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
   logoPlusSmall: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
-  headerTitleTxt: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  headerTitleTxt: { flexShrink: 0, color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
   listHeader: { marginBottom: 4 },
   staleBanner: {
     marginBottom: 12,

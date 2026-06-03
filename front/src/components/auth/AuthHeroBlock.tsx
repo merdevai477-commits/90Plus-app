@@ -1,18 +1,15 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { Smartphone, Sparkles, Brain } from 'lucide-react-native';
+import { Radio, Sparkles, Brain } from 'lucide-react-native';
 import { AUTH_ACCENT } from './AuthTokens';
 import { TEXT_PRIMARY, TEXT_SECONDARY } from '../../../constants/tokens';
 
 const FEATS = [
-  // Mobile-first football experience
-  { Icon: Smartphone, label: 'Mobile\nApp' },
-  // AI chat powered football assistant
-  { Icon: Sparkles, label: 'AI\nChat' },
-  // Daily quiz / brain-teaser
-  { Icon: Brain, label: 'Daily\nQuiz' },
-];
+  { id: 'live-score', Icon: Radio, label: 'Live\nScore' },
+  { id: 'ai-chat', Icon: Sparkles, label: 'AI\nChat' },
+  { id: 'daily-quiz', Icon: Brain, label: 'Daily\nQuiz' },
+] as const;
 
 export function AuthHeroBlock({ compact }: { compact?: boolean }) {
   return (
@@ -33,8 +30,8 @@ export function AuthHeroBlock({ compact }: { compact?: boolean }) {
 
       {!compact && (
         <View style={styles.rowFeats}>
-          {FEATS.map(({ Icon, label }) => (
-            <View style={styles.feat} key={label}>
+          {FEATS.map(({ id, Icon, label }) => (
+            <View style={styles.feat} key={id}>
               <View style={styles.featIcon}>
                 <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(124,58,237,0.45)' }]} />

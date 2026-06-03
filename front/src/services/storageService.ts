@@ -189,17 +189,18 @@ export class StorageService {
             // ✅ Show "Preparing..." at the start
             if (onProgress) onProgress(5);
 
+            const { resolveVideoUploadSource } = await import('../utils/videoUpload');
+            const resolved = await resolveVideoUploadSource(videoUri);
+
             const formData = new FormData();
             
             // ✅ Show "Compressing video..."
             if (onProgress) onProgress(10);
             
-            // Add video
-            const videoFilename = videoUri.split('/').pop() || 'reel.mp4';
             formData.append('video', {
-                uri: videoUri,
-                name: videoFilename,
-                type: 'video/mp4',
+                uri: resolved.uri,
+                name: resolved.name,
+                type: resolved.type,
             } as any);
 
             // ✅ Show "Uploading..."

@@ -469,9 +469,45 @@ class FootballService {
   }
 
   /**
-   * Get standings for a specific league and season
+   * Parse API-Football standings payload into flat rows and named groups (e.g. Group A, Group B).
+   */
+  parseStandingsResponse(response: any[]): {
+    flat: any[];
+    groups: Array<{ group: string; standings: any[] }>;
+  } {
+    const groupsRaw = response?.[0]?.league?.standings;
+    if (!Array.isArray(groupsRaw) || groupsRaw.length === 0) {
+      return { flat: [], groups: [] };
+    }
+
+    const groups = groupsRaw
+      .filter((groupArr: unknown) => Array.isArray(groupArr) && groupArr.length > 0)
+      .map((groupArr: any[]) => ({
+        group: groupArr[0]?.group || 'Table',
+        standings: groupArr,
+      }));
+
+    return {
+      flat: groups.flatMap((g) => g.standings),
+      groups,
+    };
+  }
+
+  /**
+   * Get standings for a specific league and season (flat list — backward compatible).
    */
   async getStandings(leagueId: number, season?: number): Promise<any[]> {
+    const { flat } = await this.getStandingsParsed(leagueId, season);
+    return flat;
+  }
+
+  /**
+   * Get standings with group/tier structure preserved.
+   */
+  async getStandingsParsed(
+    leagueId: number,
+    season?: number,
+  ): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
     const currentSeason = season || 2024;
     const params = {
       league: leagueId,
@@ -480,13 +516,10 @@ class FootballService {
 
     try {
       const response = await this.fetchFromApi<any[]>('/standings', params);
-      if (response && response.length > 0 && response[0].league && response[0].league.standings) {
-        return response[0].league.standings.flat();
-      }
-      return [];
+      return this.parseStandingsResponse(response ?? []);
     } catch (error) {
       logger.error('Error fetching standings:', error);
-      return [];
+      return { flat: [], groups: [] };
     }
   }
 

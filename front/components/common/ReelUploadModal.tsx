@@ -10,6 +10,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-na
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { extractDurationFromUrl } from '../../utils/videoDuration';
+import { resolveVideoUploadSource } from '../../src/utils/videoUpload';
 import { toastManager } from '../../services/toastManager';
 import { usePhotoPermission } from '../../hooks/usePhotoPermission';
 import { logger } from '../../utils/logger';
@@ -205,8 +206,16 @@ export default function ReelUploadModal({
                 // Might handle resizing logic here or backend, but for now we accept standard HD
             }
 
-            setVideoAsset(asset);
-            // Thumbnail generation removed — Mux auto-generates from video
+            try {
+                const resolved = await resolveVideoUploadSource(asset.uri, {
+                    mimeType: asset.mimeType,
+                    fileName: asset.fileName,
+                });
+                setVideoAsset({ ...asset, uri: resolved.uri, mimeType: resolved.type, fileName: resolved.name });
+            } catch (copyErr) {
+                logger.warn('[ReelUploadModal] Could not stage video in cache, using picker URI', copyErr);
+                setVideoAsset(asset);
+            }
         }
     };
 
@@ -240,9 +249,22 @@ export default function ReelUploadModal({
             uploadProgress.value = withTiming(30, { duration: 300 });
             setUploadStage('uploading');
 
+            let uploadUri = videoAsset.uri;
+            try {
+                const resolved = await resolveVideoUploadSource(videoAsset.uri, {
+                    mimeType: videoAsset.mimeType,
+                    fileName: videoAsset.fileName,
+                });
+                uploadUri = resolved.uri;
+            } catch (stageErr) {
+                logger.warn('[ReelUploadModal] Publish staging failed, using asset URI', stageErr);
+            }
+
             const newVideo = {
                 id: `temp_${Date.now()}`,
-                uri: videoAsset.uri,
+                uri: uploadUri,
+                mimeType: videoAsset.mimeType,
+                fileName: videoAsset.fileName,
                 caption: caption,
                 likes: 0,
                 views: 0,

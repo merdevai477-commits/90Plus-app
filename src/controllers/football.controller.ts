@@ -439,12 +439,13 @@ export class FootballController {
         return;
       }
 
-      const standings = await footballService.getStandings(leagueId, seasonYear);
+      const parsed = await footballService.getStandingsParsed(leagueId, seasonYear);
 
       res.json({
         status: 'SUCCESS',
-        results: standings.length,
-        response: standings,
+        results: parsed.flat.length,
+        response: parsed.flat,
+        groups: parsed.groups,
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -1813,12 +1814,13 @@ export class FootballController {
         return;
       }
 
-      const standings = await footballDataCacheService.getStandings(leagueId, season);
+      const parsed = await footballDataCacheService.getStandingsParsed(leagueId, season);
 
       res.json({
         status: 'SUCCESS',
-        results: standings?.length || 0,
-        response: standings || [],
+        results: parsed.flat?.length || 0,
+        response: parsed.flat || [],
+        groups: parsed.groups || [],
       });
     } catch (error) {
       FootballController.handleError(res, error);

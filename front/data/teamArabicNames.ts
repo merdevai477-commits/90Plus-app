@@ -199,6 +199,24 @@ export const teamArabicNames: Record<string, string> = {
   'Al-Raed': 'الرائد',
   'Damak': 'ضمك',
 
+  // ── Morocco — Botola Pro ──────────────────────────────────────────────
+  'Raja Casablanca': 'الراجا',
+  'Raja Club Athletic': 'الراجا',
+  'Wydad AC': 'الوداد الرياضي',
+  'Wydad Casablanca': 'الوداد الرياضي',
+  'Wydad': 'الوداد',
+  'RS Berkane': 'نهضة بركان',
+  'Renaissance Berkane': 'نهضة بركان',
+  'Renaissance Sportive de Berkane': 'نهضة بركان',
+  'FAR Rabat': 'الجيش الملكي',
+  'AS FAR': 'الجيش الملكي',
+  'FUS Rabat': 'اتحاد تواركة',
+  'Hassania Agadir': 'الحسنية',
+  'Ittihad Tanger': 'اتحاد طنجة',
+  'Mouloudia Oujda': 'مولودية وجدة',
+  'Olympic Safi': 'أولمبيك آسفي',
+  'Botola Pro': 'الدوري المغربي',
+
   // ── Egypt — Egyptian Premier League ───────────────────────────────────
   'Al Ahly': 'الأهلي',
   'Al-Ahly': 'الأهلي',
@@ -278,6 +296,9 @@ export const teamArabicNames: Record<string, string> = {
   'Scotland': 'اسكتلندا',
   'Republic of Ireland': 'أيرلندا',
   'Northern Ireland': 'أيرلندا الشمالية',
+  'Austria': 'النمسا',
+  'Bosnia': 'البوسنة',
+  'Bosnia and Herzegovina': 'البوسنة',
 
   // ── Major leagues / competitions ──────────────────────────────────────
   'Premier League': 'الدوري الإنجليزي الممتاز',

@@ -24,6 +24,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
 import { useTranslation } from '../../src/i18n';
+import { getCountryDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 // LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
 // Don't even enable it on Android.
@@ -60,7 +61,8 @@ const LeagueSection = memo(function LeagueSection({
     setExpanded(prev => !prev);
   }, []);
 
-  const { translate: t } = useTranslation();
+  const { translate: t, language } = useTranslation();
+  const localizedLeagueName = getLeagueDisplayName(league.leagueName, language, league.leagueId);
   const matchCount = league.matches.length;
   const hasMore = matchCount > MATCHES_PREVIEW_COUNT;
 
@@ -79,7 +81,7 @@ const LeagueSection = memo(function LeagueSection({
         ) : (
           <View style={[styles.leagueLogo, styles.placeholderLogo]} />
         )}
-        <Text style={styles.leagueName} numberOfLines={1}>{league.leagueName}</Text>
+        <Text style={styles.leagueName} numberOfLines={1}>{localizedLeagueName}</Text>
         <Text style={styles.matchCount}>{matchCount}</Text>
         {expanded ? (
           <ChevronUp size={14} color="rgba(255,255,255,0.4)" />
@@ -118,6 +120,8 @@ export const CountryAccordion = memo(function CountryAccordion({
   defaultExpanded = false,
 }: CountryAccordionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const { language } = useTranslation();
+  const localizedCountryName = getCountryDisplayName(countryGroup.country, language);
 
   const toggle = useCallback(() => {
     if (ANIMATE_TOGGLE) {
@@ -145,7 +149,7 @@ export const CountryAccordion = memo(function CountryAccordion({
         ) : (
           <Text style={styles.flagEmoji}>🌍</Text>
         )}
-        <Text style={styles.countryName}>{countryGroup.country}</Text>
+        <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
         <Text style={styles.totalBadge}>{totalMatches}</Text>
         {expanded ? (
           <ChevronUp size={16} color="rgba(255,255,255,0.5)" />
