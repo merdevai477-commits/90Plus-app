@@ -157,7 +157,8 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
                   !hasScrolledToBottom && styles.checkboxTextDisabled,
                 ]}
               >
-                I have read and agree to the Terms of Service
+                I have read and agree to the Terms of Service, and I expressly
+                acknowledge that I am at least 13 years of age.
               </Text>
             </TouchableOpacity>
 

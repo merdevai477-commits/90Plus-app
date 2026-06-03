@@ -239,6 +239,27 @@ li {
   color: var(--accent-2);
 }
 
+.callout-important {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: var(--ink);
+}
+
+.callout-important p {
+  margin: 0 0 10px;
+}
+
+.callout-important p:last-child {
+  margin-bottom: 0;
+}
+
+.callout-important strong {
+  color: #fcd34d;
+}
+
 main a {
   color: var(--accent-2);
   text-decoration: underline;

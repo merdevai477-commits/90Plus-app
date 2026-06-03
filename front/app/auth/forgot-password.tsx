@@ -19,7 +19,7 @@ import {
   normalizeAuthEmail,
 } from '@/src/components/auth';
 import { TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED } from '@/constants/tokens';
-import { useSignIn } from '@clerk/clerk-expo';
+import { useAuth, useSignIn } from '@clerk/clerk-expo';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 const OTP_LENGTH = 6;
@@ -29,6 +29,7 @@ type Step = 'email' | 'reset';
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const { signIn, setActive, isLoaded } = useSignIn();
+  const { getToken } = useAuth();
 
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
@@ -129,7 +130,7 @@ export default function ForgotPasswordScreen() {
 
       if (result.status === 'complete' && result.createdSessionId && setActive) {
         await setActive({ session: result.createdSessionId });
-        await navigateAfterAuth(router);
+        await navigateAfterAuth(router, getToken);
       } else {
         Alert.alert(
           'More steps required',

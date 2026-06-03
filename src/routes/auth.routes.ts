@@ -121,6 +121,23 @@ router.post('/verify-age', requireAuth, async (req: Request, res: Response): Pro
       return;
     }
 
+    if (req.body?.minAgeConfirmed === true) {
+      const user = await getUserForAuth(clerkUserId);
+      const now = new Date();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ageTier: AgeTier.ADULT,
+          ageVerifiedAt: now,
+        },
+      });
+      res.json({
+        ageTier: 'ADULT',
+        requiresParentalConsent: false,
+      });
+      return;
+    }
+
     const dob = parseDateOfBirthYmd(req.body?.dateOfBirth);
     if (!dob) {
       sendError(req, res, ErrorCode.VALIDATION, 'Invalid date of birth (use YYYY-MM-DD)');

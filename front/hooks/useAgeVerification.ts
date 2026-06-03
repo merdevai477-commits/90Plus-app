@@ -1,6 +1,6 @@
 /**
  * Shared age / parental-consent API helpers + optional reactive hook.
- * Screens (age-gate, waiting-consent) should call the async helpers; use the hook only when you need polling/state.
+ * Screens (waiting-consent) should call the async helpers; use the hook only when you need polling/state.
  */
 
 import { getApiEndpoint } from '../config/api.config';
@@ -28,7 +28,48 @@ export interface VerifyAgeFailure {
 }
 
 /**
- * POST /auth/verify-age — used by age-gate
+ * POST /auth/verify-age — attestation at signup (checkbox) or legacy DOB flow
+ */
+export async function confirmMinimumAgeWithBackend(
+  token: string
+): Promise<VerifyAgeSuccess | VerifyAgeFailure> {
+  const response = await fetch(getApiEndpoint('auth/verify-age'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ minAgeConfirmed: true }),
+  });
+
+  let data: any = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      code: data?.code,
+      message: data?.message,
+      ageTier: data?.ageTier,
+      raw: data,
+    };
+  }
+
+  return {
+    ok: true,
+    ageTier: data?.ageTier,
+    requiresParentalConsent: data?.requiresParentalConsent,
+    raw: data,
+  };
+}
+
+/**
+ * POST /auth/verify-age — date-of-birth verification (legacy)
  */
 export async function verifyAgeWithBackend(
   token: string,
@@ -70,10 +111,12 @@ export async function verifyAgeWithBackend(
 }
 
 /**
- * GET /auth/age-status — used by waiting-consent polling
+ * GET /auth/age-status — post-login routing & waiting-consent polling
  */
-export async function fetchParentalConsentStatus(token: string): Promise<{
+export async function fetchAgeStatus(token: string): Promise<{
   ok: boolean;
+  ageVerified?: boolean;
+  ageTier?: AgeVerifyTier;
   parentalConsent?: boolean;
   raw: unknown;
 }> {
@@ -90,8 +133,24 @@ export async function fetchParentalConsentStatus(token: string): Promise<{
 
   return {
     ok: response.ok,
+    ageVerified: data?.ageVerified === true,
+    ageTier: data?.ageTier,
     parentalConsent: data?.parentalConsent === true,
     raw: data,
+  };
+}
+
+/** @deprecated Use fetchAgeStatus */
+export async function fetchParentalConsentStatus(token: string): Promise<{
+  ok: boolean;
+  parentalConsent?: boolean;
+  raw: unknown;
+}> {
+  const status = await fetchAgeStatus(token);
+  return {
+    ok: status.ok,
+    parentalConsent: status.parentalConsent,
+    raw: status.raw,
   };
 }
 

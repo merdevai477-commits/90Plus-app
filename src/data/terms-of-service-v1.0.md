@@ -7,7 +7,11 @@
 
 By creating an account and using the 90Plus mobile application, you agree to be bound by these Terms of Service. If you do not agree to these Terms, you may not use the App.
 
-## 2. Zero Tolerance Policy
+## 2. Age Requirement
+
+By registering for an account, you **expressly acknowledge and confirm that you are at least 13 years of age**. If you are under 13, you may not use the App. Users aged 13–17 must have parental or guardian permission where required by law.
+
+## 3. Zero Tolerance Policy
 
 **90Plus has a ZERO TOLERANCE policy for objectionable content and abusive behavior.**
 
@@ -19,7 +23,7 @@ You agree NOT to post, upload, or share any content that:
 - Contains spam, scams, or fraudulent content
 - Impersonates another person or entity
 
-## 3. Abusive Behavior
+## 4. Abusive Behavior
 
 You agree NOT to:
 - Harass, bully, threaten, or intimidate other users
@@ -27,26 +31,26 @@ You agree NOT to:
 - Create multiple accounts to evade bans
 - Use automated tools or bots without permission
 
-## 4. Consequences of Violations
+## 5. Consequences of Violations
 
 Violations will result in:
 1. **First Violation**: Warning and content removal
 2. **Second Violation**: Temporary suspension (7 days)
 3. **Third Violation**: Permanent account ban
 
-## 5. Content Moderation
+## 6. Content Moderation
 
 Users can report content that violates these Terms. All reports are reviewed within 24 hours.
 
-## 6. Account Deletion
+## 7. Account Deletion
 
 You may delete your account at any time from Settings. Upon deletion, all your data will be permanently deleted within 30 days.
 
-## 7. Privacy
+## 8. Privacy
 
 We collect and process personal data as described in our Privacy Policy.
 
-## 8. Contact
+## 9. Contact
 
 For questions: support@90plus.com
 

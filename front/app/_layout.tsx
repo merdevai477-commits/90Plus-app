@@ -239,13 +239,6 @@ function RootLayoutNav() {
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen 
-        name="age-gate" 
-        options={{ 
-          headerShown: false,
-          gestureEnabled: false, // Prevent swipe back
-        }} 
-      />
-      <Stack.Screen 
         name="blocked" 
         options={{ 
           headerShown: false,

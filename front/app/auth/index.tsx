@@ -37,7 +37,9 @@ import {
   BORDER_ARENA,
   RADIUS_LG,
 } from '@/constants/tokens';
-import { useSignUp } from '@clerk/clerk-expo';
+import { useAuth, useSignUp } from '@clerk/clerk-expo';
+import { useTranslation } from '@/src/i18n';
+import { confirmMinimumAgeWithBackend } from '@/hooks/useAgeVerification';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 const OTP_LENGTH = 6;
@@ -45,6 +47,9 @@ const OTP_LENGTH = 6;
 export default function RegisterScreen() {
   const router = useRouter();
   const { signUp, setActive, isLoaded } = useSignUp();
+  const { getToken } = useAuth();
+  const { t } = useTranslation();
+  const tCommon = t.common;
   const [terms, setTerms] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -52,12 +57,31 @@ export default function RegisterScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
 
+  const recordSignupAgeAttestation = async (): Promise<void> => {
+    const token = await getToken();
+    if (!token) return;
+    const result = await confirmMinimumAgeWithBackend(token);
+    if (!result.ok) {
+      throw new Error(result.message || 'Failed to record age confirmation');
+    }
+  };
+
   const { startGoogle, startApple } = useOAuthFlow({
     onError: () => setOauthLoading(null),
+    beforeNavigate: recordSignupAgeAttestation,
   });
+
+  const requireTermsForOAuth = (): boolean => {
+    if (!terms) {
+      Alert.alert('Notice', tCommon.registerMustAgree);
+      return false;
+    }
+    return true;
+  };
 
   const handleGooglePress = async (): Promise<void> => {
     if (oauthLoading) return;
+    if (!requireTermsForOAuth()) return;
     setOauthLoading('google');
     try {
       await startGoogle();
@@ -68,6 +92,7 @@ export default function RegisterScreen() {
 
   const handleApplePress = async (): Promise<void> => {
     if (oauthLoading) return;
+    if (!requireTermsForOAuth()) return;
     setOauthLoading('apple');
     try {
       await startApple();
@@ -97,7 +122,11 @@ export default function RegisterScreen() {
     setIsSubmitting(true);
     try {
       await setActive({ session: sessionId });
-      await navigateAfterAuth(router);
+      await recordSignupAgeAttestation();
+      await navigateAfterAuth(router, getToken);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not complete sign up';
+      Alert.alert('Error', msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -106,7 +135,7 @@ export default function RegisterScreen() {
   const submit = async () => {
     if (isSubmitting || !isLoaded) return;
     if (!terms) {
-      Alert.alert('Notice', 'Please accept the Terms & Conditions.');
+      Alert.alert('Notice', tCommon.registerMustAgree);
       return;
     }
     const normalizedEmail = normalizeAuthEmail(email);
@@ -241,22 +270,26 @@ export default function RegisterScreen() {
         <View style={[styles.termsCircle, terms && styles.termsCircleOn]}>
           {terms && <Text style={styles.termsCheck}>✓</Text>}
         </View>
-        <Text style={styles.termsTxt}>
-          By signing up, I agree to the{' '}
-          <Text
-            style={styles.termsLink}
-            onPress={() => Linking.openURL(LEGAL_URLS.terms)}
-          >
-            Terms
+        <View style={styles.termsCopy}>
+          <Text style={styles.termsTxt}>
+            {tCommon.registerAgreementPrefix}{' '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL(LEGAL_URLS.terms)}
+            >
+              {tCommon.registerTermsLink}
+            </Text>
+            {' & '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL(LEGAL_URLS.privacy)}
+            >
+              {tCommon.registerPrivacyLink}
+            </Text>
+            .
           </Text>
-          {' & '}
-          <Text
-            style={styles.termsLink}
-            onPress={() => Linking.openURL(LEGAL_URLS.privacy)}
-          >
-            Privacy Policy
-          </Text>
-        </Text>
+          <Text style={styles.termsAgeTxt}>{tCommon.registerAgeAcknowledgment}</Text>
+        </View>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -468,7 +501,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: -1,
   },
-  termsTxt: { flex: 1, fontSize: 13, color: TEXT_MUTED, lineHeight: 19 },
+  termsCopy: { flex: 1, gap: 8 },
+  termsTxt: { fontSize: 13, color: TEXT_MUTED, lineHeight: 19 },
+  termsAgeTxt: {
+    fontSize: 13,
+    color: TEXT_PRIMARY,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
   termsLink: { color: AUTH_ACCENT, fontWeight: '700', textDecorationLine: 'underline' },
   primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
   primary: { paddingVertical: 16, alignItems: 'center' },

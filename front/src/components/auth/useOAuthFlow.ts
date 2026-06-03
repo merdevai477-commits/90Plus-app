@@ -14,13 +14,15 @@
 
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
-import { useOAuth } from '@clerk/clerk-expo';
+import { useAuth, useOAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
 interface OAuthFlowOptions {
   onError?: (message: string) => void;
+  /** Runs after session is active, before post-auth navigation (e.g. age attestation at signup). */
+  beforeNavigate?: () => Promise<void>;
 }
 
 interface OAuthFlowReturn {
@@ -28,8 +30,9 @@ interface OAuthFlowReturn {
   startApple: () => Promise<void>;
 }
 
-export function useOAuthFlow({ onError }: OAuthFlowOptions = {}): OAuthFlowReturn {
+export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {}): OAuthFlowReturn {
   const router = useRouter();
+  const { getToken } = useAuth();
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startAppleFlow } = useOAuth({ strategy: 'oauth_apple' });
 
@@ -44,7 +47,10 @@ export function useOAuthFlow({ onError }: OAuthFlowOptions = {}): OAuthFlowRetur
 
         if (result.createdSessionId && result.setActive) {
           await result.setActive({ session: result.createdSessionId });
-          await navigateAfterAuth(router);
+          if (beforeNavigate) {
+            await beforeNavigate();
+          }
+          await navigateAfterAuth(router, getToken);
           return;
         }
 
@@ -67,7 +73,7 @@ export function useOAuthFlow({ onError }: OAuthFlowOptions = {}): OAuthFlowRetur
         Alert.alert(`${providerLabel} sign-in error`, msg);
       }
     },
-    [router, onError],
+    [router, onError, beforeNavigate, getToken],
   );
 
   const startGoogle = useCallback(() => handle(startGoogleFlow, 'Google'), [handle, startGoogleFlow]);

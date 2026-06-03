@@ -49,6 +49,13 @@ export const en = {
     days: 'days',
     hours: 'hours',
     and: 'and',
+    registerMustAgree:
+      'Please accept the Terms, Privacy Policy, and confirm you are at least 13 years old.',
+    registerAgreementPrefix: 'By signing up, I agree to the',
+    registerTermsLink: 'Terms',
+    registerPrivacyLink: 'Privacy Policy',
+    registerAgeAcknowledgment:
+      'I expressly acknowledge and confirm that I am at least 13 years of age.',
   },
 
   // Professional Toast Messages

@@ -33,7 +33,7 @@ import {
   PURPLE_PRIMARY,
   PURPLE_SOFT,
 } from '@/constants/tokens';
-import { useSignIn } from '@clerk/clerk-expo';
+import { useAuth, useSignIn } from '@clerk/clerk-expo';
 import { useTranslation } from '@/src/i18n';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 
@@ -42,6 +42,7 @@ const OTP_LENGTH = 6;
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn, setActive, isLoaded } = useSignIn();
+  const { getToken } = useAuth();
   const { t } = useTranslation();
   const tCommon = t.common;
 
@@ -94,7 +95,7 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     try {
       await setActive({ session: sessionId });
-      await navigateAfterAuth(router);
+      await navigateAfterAuth(router, getToken);
     } finally {
       setIsSubmitting(false);
     }

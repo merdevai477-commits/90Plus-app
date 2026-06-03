@@ -47,6 +47,13 @@ export const ar = {
     days: 'أيام',
     hours: 'ساعات',
     and: 'و',
+    registerMustAgree:
+      'يرجى الموافقة على الشروط وسياسة الخصوصية والتأكيد أن عمرك 13 عاماً على الأقل.',
+    registerAgreementPrefix: 'بالتسجيل، أوافق على',
+    registerTermsLink: 'الشروط',
+    registerPrivacyLink: 'سياسة الخصوصية',
+    registerAgeAcknowledgment:
+      'أُقرّ وأُؤكّد صراحةً أن عمري 13 عاماً على الأقل.',
   },
 
   // Professional Toast Messages
