@@ -21,8 +21,11 @@ export interface WorldCupTimeLeft {
  * Time remaining until the World Cup 2026 opening kickoff.
  * Returns a zeroed structure once the event has started.
  */
-export function getWorldCupTimeLeft(now: number = Date.now()): WorldCupTimeLeft {
-  const diff = WC_2026_KICKOFF_MS - now;
+export function getWorldCupTimeLeft(
+  now: number = Date.now(),
+  unlockMs: number = WC_2026_KICKOFF_MS,
+): WorldCupTimeLeft {
+  const diff = unlockMs - now;
   if (diff <= 0) return { days: 0, hours: 0, mins: 0, secs: 0 };
   return {
     days: Math.floor(diff / 86_400_000),
@@ -30,6 +33,13 @@ export function getWorldCupTimeLeft(now: number = Date.now()): WorldCupTimeLeft 
     mins: Math.floor((diff % 3_600_000) / 60_000),
     secs: Math.floor((diff % 60_000) / 1_000),
   };
+}
+
+export function isWorldCupCountdownZero(
+  now: number = Date.now(),
+  unlockMs: number = WC_2026_KICKOFF_MS,
+): boolean {
+  return unlockMs - now <= 0;
 }
 
 export const padCountdown = (n: number): string => String(n).padStart(2, '0');

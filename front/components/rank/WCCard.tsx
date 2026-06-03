@@ -28,32 +28,40 @@ import {
 
 import {
   getWorldCupTimeLeft,
+  isWorldCupCountdownZero,
   padCountdown,
   WorldCupTimeLeft,
 } from '../../constants/worldCup';
 import { useTranslation } from '../../src/i18n';
+import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
+import { useRouter } from 'expo-router';
 
 interface WCCardProps {
-  onPressSoon: () => void;
+  onPressLocked?: () => void;
 }
 
-const WCCard: React.FC<WCCardProps> = ({ onPressSoon }) => {
-  const [time, setTime] = useState<WorldCupTimeLeft>(() => getWorldCupTimeLeft());
+const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
+  const router = useRouter();
+  const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
+  const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
+  const [time, setTime] = useState<WorldCupTimeLeft>(() => getWorldCupTimeLeft(Date.now(), unlockAtMs));
   const isFocused = useIsFocused();
   const { t } = useTranslation();
 
+  const isUnlocked = worldCupEnabled || isWorldCupCountdownZero(Date.now(), unlockAtMs);
+
   useEffect(() => {
     if (!isFocused) return;
-    setTime(getWorldCupTimeLeft());
-    const id = setInterval(() => setTime(getWorldCupTimeLeft()), 1_000);
+    setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs));
+    const id = setInterval(() => setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs)), 1_000);
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') setTime(getWorldCupTimeLeft());
+      if (next === 'active') setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs));
     });
     return () => {
       clearInterval(id);
       sub.remove();
     };
-  }, [isFocused]);
+  }, [isFocused, unlockAtMs]);
 
   const countdownItems: ReadonlyArray<{ val: number; lbl: string }> = [
     { val: time.days, lbl: t.rank.worldCup.days },
@@ -95,16 +103,24 @@ const WCCard: React.FC<WCCardProps> = ({ onPressSoon }) => {
           <Text style={s.wcTitle}>{t.rank.worldCup.headline}</Text>
           <Text style={s.wcSub}>{t.rank.worldCup.body}</Text>
           <Pressable
-            onPress={onPressSoon}
+            onPress={() => {
+              if (isUnlocked) {
+                router.push({ pathname: '/(tabs)/matches', params: { filter: 'WorldCup' } });
+                return;
+              }
+              onPressLocked?.();
+            }}
             accessibilityRole="button"
-            accessibilityLabel={t.rank.worldCup.comingSoon}
+            accessibilityLabel={isUnlocked ? t.rank.worldCup.viewMatches : t.rank.worldCup.comingSoon}
             style={({ pressed }) => [
-              s.wcBtnDisabled,
+              isUnlocked ? s.wcBtnActive : s.wcBtnDisabled,
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={s.wcBtnTxt}>{t.rank.worldCup.comingSoon}</Text>
-            <ChevronRight size={14} color="rgba(255,255,255,0.55)" />
+            <Text style={[s.wcBtnTxt, isUnlocked && s.wcBtnTxtActive]}>
+              {isUnlocked ? t.rank.worldCup.viewMatches : t.rank.worldCup.comingSoon}
+            </Text>
+            <ChevronRight size={14} color={isUnlocked ? '#fff' : 'rgba(255,255,255,0.55)'} />
           </Pressable>
         </View>
 
@@ -132,7 +148,9 @@ const s = StyleSheet.create<{
   wcTitle: TextStyle;
   wcSub: TextStyle;
   wcBtnDisabled: ViewStyle;
+  wcBtnActive: ViewStyle;
   wcBtnTxt: TextStyle;
+  wcBtnTxtActive: TextStyle;
   wcRight: ViewStyle;
   cdLabel: TextStyle;
   cdRow: ViewStyle;
@@ -181,7 +199,26 @@ const s = StyleSheet.create<{
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
+  wcBtnActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(168,85,247,0.35)',
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.85)',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   wcBtnTxt: { color: 'rgba(255,255,255,0.55)', fontWeight: '800', fontSize: 13 },
+  wcBtnTxtActive: { color: '#fff' },
   wcRight: {
     position: 'absolute',
     bottom: 0,

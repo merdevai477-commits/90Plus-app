@@ -44,13 +44,10 @@ export default function TeamBadge({
           source={{ uri: logo }}
           style={[styles.logo, { width: size * 0.95, height: size * 0.95 }]}
           contentFit="contain"
-          transition={100} // قللنا وقت الانتقال لظهور أسرع
+          transition={0}
           cachePolicy="memory-disk"
-          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} // يمنع شعور المستخدم بتأخر التحميل
-          onError={() => {
-            console.log('Failed to load logo:', logo);
-            setImageError(true);
-          }}
+          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+          onError={() => setImageError(true)}
         />
       ) : (
         <Text style={[styles.initials, { fontSize: size * 0.3 }]}>

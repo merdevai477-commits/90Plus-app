@@ -15,11 +15,12 @@ import {
 } from '../components/Matches/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
-import { Image } from 'expo-image';
 import { websocketClient, MatchUpdatePayload } from '../services/websocketClient';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
+import { getCountryFlagUri } from '../utils/countryFlagUri';
+import { prefetchMatchAssets } from '../utils/prefetchMatchAssets';
 
 export interface GroupedMatches {
   leagueId: number;
@@ -188,7 +189,7 @@ const groupMatchesByCountry = (matches: Match[]): CountryGroup[] => {
   const result: CountryGroup[] = Array.from(countryMap.entries())
     .map(([country, data]) => ({
       country,
-      countryFlag: data.flag,
+      countryFlag: getCountryFlagUri(country, data.flag),
       leagues: data.leagues,
     }))
     .sort((a, b) => getCountrySortKey(a.country).localeCompare(getCountrySortKey(b.country)));
@@ -345,6 +346,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
             logger.debug(`📦 Memory cache hit for ${dateString}`);
             setMatches(memoryCached.data);
             setLoading(false);
+            prefetchMatchAssets(memoryCached.data);
             
             // For past dates, don't refresh
             if (isPastDate) {
@@ -371,6 +373,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
             memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
             setMatches(cached);
             setLoading(false);
+            prefetchMatchAssets(cached);
             
             // For past dates, don't refresh
             if (isPastDate) {
@@ -419,23 +422,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
         setMatches(fetchedMatches);
         setIsDataStale(false); // fresh data loaded successfully
-
-        // 🚀 Aggressive Prefetching for logos (Instant Performance Phase 1)
-        try {
-          const logosToPrefetch = new Set<string>();
-          fetchedMatches.forEach(m => {
-            if (m.homeTeam?.logo) logosToPrefetch.add(m.homeTeam.logo);
-            if (m.awayTeam?.logo) logosToPrefetch.add(m.awayTeam.logo);
-            if (m.league?.logo) logosToPrefetch.add(m.league.logo);
-            if (m.league?.countryFlag) logosToPrefetch.add(m.league.countryFlag);
-          });
-          const urls = Array.from(logosToPrefetch).slice(0, 100);
-          if (urls.length > 0) {
-            Image.prefetch(urls, 'memory-disk').catch(() => {});
-          }
-        } catch (e) {
-          logger.warn('Failed to prefetch logos', e);
-        }
+        prefetchMatchAssets(fetchedMatches);
 
         // Update caches
         const cacheTTL = isPastDate

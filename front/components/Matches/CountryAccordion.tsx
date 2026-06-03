@@ -17,7 +17,7 @@
  *    the opposite of what we want.
  */
 
-import React, { memo, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
@@ -25,12 +25,41 @@ import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
 import { useTranslation } from '../../src/i18n';
 import { getCountryDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
 
 // LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
 // Don't even enable it on Android.
 const ANIMATE_TOGGLE = Platform.OS === 'ios';
 
 const MATCHES_PREVIEW_COUNT = 2;
+
+const CountryFlagThumb = memo(function CountryFlagThumb({
+  country,
+  apiFlag,
+}: {
+  country: string;
+  apiFlag: string | null;
+}) {
+  const uri = useMemo(() => getCountryFlagUri(country, apiFlag), [country, apiFlag]);
+  const emoji = useMemo(() => getCountryFlagEmoji(country, apiFlag), [country, apiFlag]);
+
+  if (!uri) {
+    return <Text style={styles.flagEmoji}>{emoji}</Text>;
+  }
+
+  return (
+    <View style={styles.flagWrap}>
+      <Text style={styles.flagEmojiPlaceholder}>{emoji}</Text>
+      <Image
+        source={{ uri }}
+        style={styles.countryFlag}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={0}
+      />
+    </View>
+  );
+});
 
 interface CountryAccordionProps {
   countryGroup: CountryGroup;
@@ -76,7 +105,7 @@ const LeagueSection = memo(function LeagueSection({
             style={styles.leagueLogo}
             contentFit="contain"
             cachePolicy="memory-disk"
-            priority="low"
+            transition={0}
           />
         ) : (
           <View style={[styles.leagueLogo, styles.placeholderLogo]} />
@@ -138,17 +167,7 @@ export const CountryAccordion = memo(function CountryAccordion({
     <View style={styles.countryContainer}>
       {/* Country Header */}
       <TouchableOpacity style={styles.countryHeader} onPress={toggle} activeOpacity={0.7}>
-        {countryGroup.countryFlag ? (
-          <Image
-            source={{ uri: countryGroup.countryFlag }}
-            style={styles.countryFlag}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            priority="low"
-          />
-        ) : (
-          <Text style={styles.flagEmoji}>🌍</Text>
-        )}
+        <CountryFlagThumb country={countryGroup.country} apiFlag={countryGroup.countryFlag} />
         <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
         <Text style={styles.totalBadge}>{totalMatches}</Text>
         {expanded ? (
@@ -194,12 +213,27 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   countryFlag: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 2,
+  },
+  flagWrap: {
     width: 24,
     height: 16,
     borderRadius: 2,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   flagEmoji: {
     fontSize: 16,
+    width: 24,
+    textAlign: 'center',
+  },
+  flagEmojiPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 16,
+    opacity: 0.85,
   },
   countryName: {
     flex: 1,

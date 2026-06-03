@@ -48,6 +48,7 @@ import { useAppShareReward } from '../../hooks/useAppShareReward';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import { useTopPlayers, type TopPlayer, type TopPlayersPeriod } from '../../hooks/useTopPlayers';
 import { useTranslation } from '../../src/i18n';
+import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { useLanguageStore } from '../../src/i18n/store';
 import { useScreenFont } from '../../utils/fontSetup';
 import { useAuth } from '@clerk/clerk-expo';
@@ -170,6 +171,7 @@ export default function RankScreen() {
   const [isSoonVisible, setIsSoonVisible] = useState(false);
   const [period, setPeriod] = useState<TopPlayersPeriod>('weekly');
   const [refreshing, setRefreshing] = useState(false);
+  const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
 
   const { players, isLoading, isError, refetch } = useTopPlayers({
     limit: 11,
@@ -195,7 +197,8 @@ export default function RankScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadShareStatus();
-    }, [loadShareStatus]),
+      void hydrateFeatures(true);
+    }, [loadShareStatus, hydrateFeatures]),
   );
 
   const handleShareApp = useCallback(async () => {
@@ -381,7 +384,7 @@ export default function RankScreen() {
         </ScrollView>
 
         {/* ── World Cup banner ── */}
-        <WCCard onPressSoon={() => setIsSoonVisible(true)} />
+        <WCCard onPressLocked={() => setIsSoonVisible(true)} />
 
         {/* ── Top players ── */}
         <View style={s.bottomContentGroup}>

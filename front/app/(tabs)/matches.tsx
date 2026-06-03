@@ -510,7 +510,7 @@ function LeagueAllMatchesModal({
           <View style={styles.allMatchesHeader}>
             <View style={styles.leagueLeft}>
               {group.leagueLogo ? (
-                <Image source={{ uri: group.leagueLogo }} style={styles.allMatchesLeagueLogo} contentFit="contain" />
+                <Image source={{ uri: group.leagueLogo }} style={styles.allMatchesLeagueLogo} contentFit="contain" cachePolicy="memory-disk" transition={0} />
               ) : null}
               <Text style={styles.allMatchesTitle}>{localizedLeagueName}</Text>
             </View>
@@ -594,7 +594,7 @@ const LeagueCard = memo(function LeagueCard({
                   style={styles.leagueLogo}
                   contentFit="contain"
                   cachePolicy="memory-disk"
-                  priority="low"
+                  transition={0}
                 />
               ) : null}
             </View>
@@ -676,6 +676,7 @@ export default function MatchesHubScreenV2() {
   const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
   const worldCupLocked = useAppFeaturesStore((s) => s.worldCupLocked);
   const worldCupLeagueId = useAppFeaturesStore((s) => s.leagueId);
+  const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
   const featuresRevision = useAppFeaturesStore((s) => s.revision);
   const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
   // selectedDate is the ground truth; the calendar grid derives everything
@@ -700,14 +701,14 @@ export default function MatchesHubScreenV2() {
   useEffect(() => {
     void hydrateFeatures(true);
     const id = setInterval(() => {
-      const left = getWorldCupTimeLeft();
+      const left = getWorldCupTimeLeft(Date.now(), unlockAtMs);
       const nearUnlock = left.days === 0 && left.hours === 0 && left.mins < 5;
       if (nearUnlock || (left.days === 0 && left.hours === 0 && left.mins === 0 && left.secs === 0)) {
         void hydrateFeatures(true);
       }
     }, 30_000);
     return () => clearInterval(id);
-  }, [hydrateFeatures]);
+  }, [hydrateFeatures, unlockAtMs]);
 
   // Tickets (remaining predictions)
   const [ticketsRemaining, setTicketsRemaining] = useState<number>(10);
@@ -836,12 +837,16 @@ export default function MatchesHubScreenV2() {
   useEffect(() => {
     if (params.filter && FILTERS.includes(params.filter as any)) {
       const f = params.filter as typeof FILTERS[number];
+      if (f === 'WorldCup' && worldCupLocked && !worldCupEnabled) {
+        setShowWorldCupLocked(true);
+        return;
+      }
       if (f === 'Live') {
         setSelectedDate(startOfLocalDay());
       }
       setFilter(f);
     }
-  }, [params.filter]);
+  }, [params.filter, worldCupEnabled, worldCupLocked]);
 
   // Live tab always shows today's fixtures — snap calendar back when selected.
   const handleFilterPress = useCallback((f: (typeof FILTERS)[number]) => {
@@ -957,29 +962,21 @@ export default function MatchesHubScreenV2() {
       .filter(cg => cg.leagues.length > 0);
   }, [countryGroups, matchPassesFilter]);
 
-  // International competitions, flattened into one list of LeagueGroup so
-  // the dedicated tab can reuse the existing LeagueCard component
-  // (tap a league → expand → see matches), exactly like the user asked for.
-  // Status filtering is intentionally NOT applied here — the International
-  // tab is its own filter, so we show every international match for the
-  // selected date.
-  const internationalLeagueGroups = useMemo<LeagueGroup[]>(() => {
-    const out: LeagueGroup[] = [];
-    for (const cg of countryGroups) {
-      if (!INTL_COUNTRIES.has(cg.country)) continue;
-      for (const league of cg.leagues) {
-        const filtered = league.matches.filter(matchPassesFilter);
-        if (filtered.length === 0) continue;
-        out.push({
-          id: String(league.leagueId),
-          league: league.leagueName,
-          leagueLogo: league.leagueLogo || '',
-          fixtures: filtered.map(matchToFixture),
-        });
-      }
-    }
-    return out;
-  }, [countryGroups, matchPassesFilter]);
+  // International competitions stay in country accordions on other tabs.
+  // World Cup has its own dedicated tab fed by the backend WC endpoint.
+
+  const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
+    if (worldCupMatches.length === 0) return [];
+    const sample = worldCupMatches[0];
+    return [{
+      id: String(sample.league?.id ?? worldCupLeagueId),
+      league: sample.league?.name ?? 'World Cup',
+      leagueLogo: sample.league?.logo ?? '',
+      fixtures: worldCupMatches.map(matchToFixture),
+    }];
+  }, [worldCupMatches, worldCupLeagueId]);
+
+  const wcTabLocked = worldCupLocked && !worldCupEnabled;
 
   // Handle prediction submission
   //
@@ -1405,6 +1402,7 @@ export default function MatchesHubScreenV2() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
           {FILTERS.map((f) => {
             const active = filter === f;
+            const showLock = f === 'WorldCup' && wcTabLocked;
             return (
               <TouchableOpacity key={f} onPress={() => handleFilterPress(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
                 {isLiquidGlassSupported ? (
@@ -1416,6 +1414,7 @@ export default function MatchesHubScreenV2() {
                   <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
                 )}
                 <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{t(FILTER_LABEL_KEYS[f])}</Text>
+                {showLock ? <Lock size={11} color={active ? '#fff' : 'rgba(255,255,255,0.45)'} style={{ marginStart: 4 }} /> : null}
                 {f === 'Live' && !active && <View style={styles.liveDot} />}
               </TouchableOpacity>
             );
@@ -1436,10 +1435,14 @@ export default function MatchesHubScreenV2() {
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch]);
+  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch, wcTabLocked]);
+
+  const listLoading = filter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading;
+  const listError = filter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
+  const listRefetch = filter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
 
   const listEmptyNode = useMemo(() => {
-    if (loading) {
+    if (listLoading) {
       return (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
@@ -1447,11 +1450,11 @@ export default function MatchesHubScreenV2() {
         </View>
       );
     }
-    if (error) {
+    if (listError) {
       return (
         <View style={styles.errorWrap}>
-          <Text style={styles.errorTxt}>⚠️ {error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={refetch} activeOpacity={0.7}>
+          <Text style={styles.errorTxt}>⚠️ {listError}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={listRefetch} activeOpacity={0.7}>
             <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -1462,7 +1465,7 @@ export default function MatchesHubScreenV2() {
         <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
       </View>
     );
-  }, [loading, error, refetch, t]);
+  }, [listLoading, listError, listRefetch, t]);
 
   return (
     <View style={{ flex: 1, backgroundColor: APP_BG }}>
@@ -1530,9 +1533,9 @@ export default function MatchesHubScreenV2() {
           ListHeaderComponent={listHeaderNode}
           ListEmptyComponent={listEmptyNode}
         />
-      ) : filter === 'International' ? (
+      ) : filter === 'WorldCup' ? (
         <FlashList
-          data={internationalLeagueGroups}
+          data={worldCupLeagueGroups}
           keyExtractor={g => g.id}
           renderItem={({ item }) => (
             <LeagueCard
@@ -1593,6 +1596,11 @@ export default function MatchesHubScreenV2() {
         onOpenDetails={handleOpenMatchDetails}
       />
 
+
+      <WorldCupLockedModal
+        visible={showWorldCupLocked}
+        onClose={() => setShowWorldCupLocked(false)}
+      />
 
       {/* Calendar Modal */}
       <Modal visible={showCalendar} transparent animationType="fade">

@@ -22,7 +22,6 @@ import PlayerAvatar from '../components/common/PlayerAvatar';
 import TeamBadge from '../components/common/TeamBadge';
 import { useTranslation } from '../src/i18n';
 import type { Language } from '../src/i18n';
-import { getTeamDisplayName } from '../utils/i18nHelpers';
 import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 import { Image as ExpoImage } from 'expo-image';
 import LeagueIcon from '../components/common/LeagueIcon';
