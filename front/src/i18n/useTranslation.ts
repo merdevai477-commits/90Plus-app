@@ -9,6 +9,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useLanguageStore } from './store';
+import { useFootballTranslationStore } from '../stores/footballTranslationStore';
 import { Language, TextDirection } from './types';
 import { getTranslation, getTranslationsForLanguage, TranslationKeys } from './utils';
 import { syncToBackend } from './syncService';
@@ -98,6 +99,8 @@ export function useTranslation(): UseTranslationReturn {
   const isRTL = useLanguageStore(state => state.isRTL);
   const isLoading = useLanguageStore(state => state.isLoading);
   const storeSetLanguage = useLanguageStore(state => state.setLanguage);
+  // Re-render when auto-translated football names arrive from the API cache.
+  const footballTranslationRevision = useFootballTranslationStore(state => state.revision);
 
   // Layout direction is always LTR; Arabic only changes copy and font.
   const direction = useMemo((): TextDirection => 'ltr', []);
@@ -110,7 +113,10 @@ export function useTranslation(): UseTranslationReturn {
    * Memoized to prevent unnecessary re-renders
    * Requirements: 3.1 - Return translation for current language
    */
-  const t = useMemo(() => getTranslationsForLanguage(language), [language]);
+  const t = useMemo(
+    () => getTranslationsForLanguage(language),
+    [language, footballTranslationRevision],
+  );
 
   /**
    * Set language with backend sync

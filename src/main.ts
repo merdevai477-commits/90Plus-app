@@ -242,6 +242,7 @@ import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
 import quizRoutes from './routes/quiz.routes';
 import authRoutes from './routes/auth.routes';
+import i18nRoutes from './routes/i18n.routes';
 import path from 'path';
 
 // Import services
@@ -369,6 +370,7 @@ app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/matches`, matchesRoutes);
 app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
+app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);

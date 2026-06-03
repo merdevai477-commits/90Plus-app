@@ -24,6 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Star, CalendarClock, ChevronRight, RotateCw } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from '../../src/i18n';
+import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { SectionHeader } from './SectionHeader';
 import {
     PURPLE_PRIMARY,
@@ -101,12 +102,16 @@ function MatchCard({
     onOpenHub: () => void;
     onFavoritePress?: (matchId: string) => void;
 }): React.ReactElement {
+    const { language } = useTranslation();
     const isLive = match.status === 'LIVE' || match.status === '1ST' || match.status === '2ND';
     const isStoppage = match.status === 'HT' && (match.stoppageTime ?? 0) > 0;
     const isFinished = match.status === 'FT';
     const isUpcoming = match.status === 'UPCOMING';
 
     const { homeTeam, awayTeam } = match;
+    const homeLabel = getTeamDisplayName(homeTeam.shortName || homeTeam.name, language);
+    const awayLabel = getTeamDisplayName(awayTeam.shortName || awayTeam.name, language);
+    const leagueLabel = getLeagueDisplayName(match.league, language);
     const homeLogo = homeTeam.logo;
     const awayLogo = awayTeam.logo;
 
@@ -141,7 +146,7 @@ function MatchCard({
                 activeOpacity={0.92}
                 onPress={onOpenHub}
                 accessibilityRole="button"
-                accessibilityLabel={`${homeTeam.shortName} vs ${awayTeam.shortName}`}
+                accessibilityLabel={`${homeLabel} vs ${awayLabel}`}
                 style={styles.cardPressable}
             >
                 <LinearGradient
@@ -155,7 +160,7 @@ function MatchCard({
                 <View style={styles.cardTop}>
                     <View style={styles.cardTopLeft}>
                         <Text style={styles.leagueText} numberOfLines={1}>
-                            {match.league}
+                            {leagueLabel}
                         </Text>
                     </View>
                     <View style={styles.cardTopRight}>
@@ -189,7 +194,7 @@ function MatchCard({
                             )}
                         </View>
                         <Text style={styles.teamName} numberOfLines={1}>
-                            {homeTeam.shortName}
+                            {homeLabel}
                         </Text>
                     </View>
 
@@ -231,7 +236,7 @@ function MatchCard({
                             )}
                         </View>
                         <Text style={styles.teamName} numberOfLines={1}>
-                            {awayTeam.shortName}
+                            {awayLabel}
                         </Text>
                     </View>
                 </View>

@@ -18,6 +18,10 @@ import { teamArabicNames } from '../data/teamArabicNames';
 import { LEAGUES } from '../data/leagues';
 import { ALL_COUNTRY_FLAGS } from '../data/localCountryFlags';
 import { COUNTRIES } from '../data/countries';
+import {
+  getCachedFootballTranslation,
+  queueFootballTranslation,
+} from '../src/stores/footballTranslationStore';
 
 // ─── Team name localization ───────────────────────────────────────────────────
 
@@ -72,6 +76,9 @@ export function getTeamDisplayName(
   if (language === 'ar') {
     const ar = lookupArabicLabel(name);
     if (ar) return ar;
+    const cached = getCachedFootballTranslation(name);
+    if (cached) return cached;
+    queueFootballTranslation(name, language);
   }
   return name;
 }
@@ -110,6 +117,9 @@ export function getLeagueDisplayName(
       if (byName?.nameAr) return byName.nameAr;
       const ar = lookupArabicLabel(name);
       if (ar) return ar;
+      const cached = getCachedFootballTranslation(name);
+      if (cached) return cached;
+      queueFootballTranslation(name, language);
     }
   }
   return name || fallback;

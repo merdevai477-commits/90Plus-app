@@ -17,6 +17,9 @@ import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { Image } from 'expo-image';
 import { websocketClient, MatchUpdatePayload } from '../services/websocketClient';
+import { useLanguageStore } from '../src/i18n/store';
+import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
+import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
 
 export interface GroupedMatches {
   leagueId: number;
@@ -247,6 +250,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
   const [isDataStale, setIsDataStale] = useState<boolean>(false);
   const isFetchingRef = useRef(false);
+  const language = useLanguageStore((s) => s.language);
 
   // Use LOCAL date string (not UTC) so a user in UTC+3 at 00:30 local
   // doesn't accidentally fetch yesterday's matches.
@@ -314,6 +318,11 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
   // Group matches by country → league hierarchy
   const countryGroups = useMemo(() => groupMatchesByCountry(matches), [matches]);
+
+  useEffect(() => {
+    if (matches.length === 0 || language !== 'ar') return;
+    prefetchFootballTranslations(collectNamesFromMatches(matches), language);
+  }, [matches, language]);
 
   // Fix PERF-7: .length is O(1) — no useMemo needed
   const matchesCount = matches.length;

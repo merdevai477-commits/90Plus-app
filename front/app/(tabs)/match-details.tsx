@@ -17,6 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent, Venue } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
+import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { APP_BG } from '../../constants/ui';
@@ -161,6 +163,43 @@ const MatchDetailsScreen = () => {
   }, []);
 
   useMatchUpdateEvents(fixtureId > 0 ? fixtureId : null, handleWsMatchUpdate);
+
+  useEffect(() => {
+    if (language !== 'ar') return;
+    const standingNames = standingsGroups.flatMap((g) =>
+      g.standings.map((row) => row.team.name),
+    );
+    const lineupNames = lineups.flatMap((l) => [l.team?.name, ...(l.startXI?.map((p) => p.player?.name) ?? [])]);
+    const eventNames = events.map((e) => e.team?.name);
+    prefetchFootballTranslations(
+      collectUniqueStrings(
+        params.homeTeam,
+        params.awayTeam,
+        params.league,
+        fixture?.teams?.home?.name,
+        fixture?.teams?.away?.name,
+        fixture?.league?.name,
+        fixture?.league?.country,
+        ...standingNames,
+        ...lineupNames,
+        ...eventNames,
+        ...homeLastFixtures.flatMap((f) => [f.teams?.home?.name, f.teams?.away?.name, f.league?.name]),
+        ...awayLastFixtures.flatMap((f) => [f.teams?.home?.name, f.teams?.away?.name, f.league?.name]),
+      ),
+      language,
+    );
+  }, [
+    language,
+    params.homeTeam,
+    params.awayTeam,
+    params.league,
+    fixture,
+    events,
+    lineups,
+    standingsGroups,
+    homeLastFixtures,
+    awayLastFixtures,
+  ]);
 
   useEffect(() => {
     // Reset state immediately when fixtureId changes to prevent stale data
