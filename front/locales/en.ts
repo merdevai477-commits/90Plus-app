@@ -54,8 +54,8 @@ export const en = {
     registerAgreementPrefix: 'By signing up, I agree to the',
     registerTermsLink: 'Terms',
     registerPrivacyLink: 'Privacy Policy',
-    registerAgeAcknowledgment:
-      'I expressly acknowledge and confirm that I am at least 13 years of age.',
+    registerAgreementAfterLinks:
+      ', and I confirm that I am 13 years of age or older.',
   },
 
   // Professional Toast Messages
@@ -1433,6 +1433,7 @@ export const en = {
     bioLabel: 'Bio',
     bioPlaceholder: 'Write something about yourself...',
     addSocialAction: 'Add',
+    maxSocialLinks: 'You can add up to 5 social links.',
     socialUrlPlaceholder: 'URL...',
     saveChanges: 'Save Changes',
     usernameRequired: 'Username is required',
@@ -1858,6 +1859,19 @@ export const en = {
     editModalCancel: 'Cancel',
     editModalPlaceholder: 'Write a caption... #hashtag @mention',
     editModalHint: '💡 Add hashtags with # and mention users with @',
+
+    commentsModal: {
+      loadMoreRemaining: 'Load more ({count} remaining)',
+      commentLimitReached: 'You reached the comment limit ({max} comments)',
+      replyLimitReached: 'You reached the reply limit ({max} replies)',
+      replyingTo: 'Replying to @{username}',
+      waitForSaveComment: 'Please wait until the comment is saved',
+      waitForSaveReply: 'Please wait until the reply is saved',
+      errorTitle: 'Error',
+      sendCommentFailed: 'Failed to send comment',
+      sendReplyFailed: 'Failed to send reply',
+      justNow: 'Just now',
+    },
 
     // Inline labels
     followersLabel: 'followers',

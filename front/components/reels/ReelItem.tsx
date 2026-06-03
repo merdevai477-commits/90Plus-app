@@ -18,6 +18,7 @@ import {
     ScrollView,
     ActivityIndicator,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -44,15 +45,12 @@ import { buildReelShareUrl } from '../../constants/shareLinks';
 interface ReelItemProps {
     reel: ReelData;
     isActive: boolean;
-    /** When false, show thumbnail only — avoids multiple AVPlayer instances on iOS. */
+    /** When false, show thumbnail only — single active player in the feed. */
     shouldMountPlayer?: boolean;
-    /** iOS: video plays in ReelsFeed overlay — never mount inline player. */
-    useExternalPlayer?: boolean;
-    /** Parent-controlled pause when useExternalPlayer (active reel only). */
-    isPlaybackPaused?: boolean;
-    onTogglePlaybackPause?: () => void;
-    /** Bumped when the reels tab regains focus — forces a fresh expo-video player on iOS. */
+    /** Bumped when the reels tab regains focus — forces a fresh expo-video player. */
     playerGeneration?: number;
+    /** Feed-level mute (persisted by parent). */
+    feedMuted?: boolean;
     onLike: () => void;
     onToggleMute: () => void;
     onComment: () => void;
@@ -94,10 +92,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     reel,
     isActive,
     shouldMountPlayer = true,
-    useExternalPlayer = false,
-    isPlaybackPaused = false,
-    onTogglePlaybackPause,
     playerGeneration = 0,
+    feedMuted = false,
     onLike,
     onToggleMute,
     onComment,
@@ -192,11 +188,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         // Single tap - wait to see if it's double
         singleTapTimer.current = setTimeout(() => {
             handleLongPressEnd();
-            if (useExternalPlayer && isActive && onTogglePlaybackPause) {
-                onTogglePlaybackPause();
-            } else {
-                setIsPaused((prev) => !prev);
-            }
+            setIsPaused((prev) => !prev);
             singleTapTimer.current = null;
         }, 300);
 
@@ -436,12 +428,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         };
     }, []);
 
+    const reelContainerStyle = [
+        styles.reelContainer,
+        fadeAnim && { opacity: fadeAnim },
+    ];
+
     return (
         <RNAnimated.View
-            style={[
-                styles.reelContainer,
-                fadeAnim && { opacity: fadeAnim },
-            ]}
+            style={reelContainerStyle}
         >
             {/* Video */}
             <TouchableOpacity
@@ -451,7 +445,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 onPressOut={handleLongPressEnd}
                 style={styles.videoWrapper}
             >
-                {!useExternalPlayer && shouldMountPlayer ? (
+                {shouldMountPlayer ? (
                     <UnifiedVideoPlayer
                         key={`${reel.id}-${playerGeneration}`}
                         reel={{
@@ -459,30 +453,27 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             videoUrl: reel.videoUrl,
                             thumbnail: reel.thumbnail,
                             duration: reel.duration,
-                            muted: reel.muted,
                         }}
+                        muted={feedMuted}
+                        showProgressBar={false}
                         isActive={isActive && !isPaused}
                         onVideoRef={onVideoRef}
                     />
                 ) : (
-                    <View
-                        style={[
-                            styles.thumbnailFallback,
-                            useExternalPlayer && isActive && styles.externalPlayerPlaceholder,
-                        ]}
-                    >
-                        {(!useExternalPlayer || !isActive) && reel.thumbnail ? (
-                            <Image
+                    <View style={styles.thumbnailFallback}>
+                        {reel.thumbnail ? (
+                            <ExpoImage
                                 source={{ uri: reel.thumbnail }}
                                 style={StyleSheet.absoluteFill}
-                                resizeMode="cover"
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
                             />
                         ) : null}
                     </View>
                 )}
 
                 {/* Play/Pause Overlay */}
-                {(isPaused || (useExternalPlayer && isActive && isPlaybackPaused)) && (
+                {isPaused && (
                     <View style={styles.pauseOverlay}>
                         <View style={styles.pauseIconContainer}>
                             <Play size={40} color="rgba(255, 255, 255, 0.8)" fill="rgba(255, 255, 255, 0.8)" />
@@ -692,7 +683,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={styles.buttonGlass}>
-                        {reel.muted ? (
+                        {feedMuted ? (
                             <VolumeX size={28} color={COLORS.textPrimary} strokeWidth={2} />
                         ) : (
                             <Volume2 size={28} color={COLORS.primary} strokeWidth={2} />
@@ -814,9 +805,6 @@ const styles = StyleSheet.create({
     thumbnailFallback: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: COLORS.deepBlack,
-    },
-    externalPlayerPlaceholder: {
-        backgroundColor: 'transparent',
     },
     topGradient: {
         position: 'absolute',
@@ -1139,5 +1127,24 @@ const editStyles = StyleSheet.create({
     },
 });
 
-// ✅ PERFORMANCE: Memoize to prevent unnecessary re-renders
-export const ReelItem = React.memo(ReelItemComponent);
+function reelItemPropsAreEqual(prev: ReelItemProps, next: ReelItemProps): boolean {
+    if (prev.isActive !== next.isActive) return false;
+    if (prev.shouldMountPlayer !== next.shouldMountPlayer) return false;
+    if (prev.playerGeneration !== next.playerGeneration) return false;
+    if (prev.isOwnReel !== next.isOwnReel) return false;
+    if (prev.feedMuted !== next.feedMuted) return false;
+    if (prev.reel.id !== next.reel.id) return false;
+    if (prev.reel.liked !== next.reel.liked) return false;
+    if (prev.reel.likes !== next.reel.likes) return false;
+    if (prev.reel.comments !== next.reel.comments) return false;
+    if (prev.reel.saved !== next.reel.saved) return false;
+    if (prev.reel.shares !== next.reel.shares) return false;
+    if (prev.reel.views !== next.reel.views) return false;
+    if (prev.reel.videoUrl !== next.reel.videoUrl) return false;
+    if (prev.reel.description !== next.reel.description) return false;
+    if (prev.reel.user.isFollowing !== next.reel.user.isFollowing) return false;
+    if (prev.fadeAnim !== next.fadeAnim) return false;
+    return true;
+}
+
+export const ReelItem = React.memo(ReelItemComponent, reelItemPropsAreEqual);

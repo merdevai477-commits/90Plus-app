@@ -29,6 +29,7 @@ import { toastManager } from '../../services/toastManager';
 import { BlockService } from '../../services/blockService';
 import { ReportSystem } from './ReportSystem';
 import { useCommentReport } from '../../hooks/useReportSystem';
+import { useTranslation } from '../../src/i18n';
 
 const MAX_COMMENTS_DISPLAY = 10;
 // Requirements 15.1, 15.2: Separate limits for comments and replies
@@ -164,6 +165,8 @@ export default function CommentsModal({
     const loadedReelIdRef = useRef<string | null>(null);
     const commentsListRef = useRef<FlatList>(null);
     const haptic = useHaptic();
+    const { t } = useTranslation();
+    const cm = t.reels.commentsModal;
     const { getToken, userId: sessionUserId } = useAuth();
 
     // Clerk's `getToken` returns a NEW function reference on every render,
@@ -352,7 +355,7 @@ export default function CommentsModal({
 
                 const { comments: backendComments, error: loadError } = await ReelsService.getComments(token, reelId, 50);
                 if (loadError) {
-                    toastManager.showError('خطأ', loadError);
+                    toastManager.showError(cm.errorTitle, loadError);
                     loadedReelIdRef.current = null;
                     return;
                 }
@@ -572,13 +575,12 @@ export default function CommentsModal({
         // means the comment hasn't been persisted yet (or stale temp id) —
         // hitting the API would return 404.
         if (!isCommentId(commentId)) {
-            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ التعليق');
+            toastManager.showError(cm.errorTitle, cm.waitForSaveComment);
             return;
         }
         haptic.trigger('light');
 
-        // Find the comment to get current state
-        const comment = commentsWithReplies.find(c => c.id === commentId);
+        const comment = commentsWithRepliesRef.current.find(c => c.id === commentId);
         const wasLiked = comment?.liked ?? false;
         const prevLikes = comment?.likes ?? 0;
 
@@ -611,18 +613,17 @@ export default function CommentsModal({
                     : c
             ));
         }
-    }, [haptic, commentsWithReplies, onToggleLike, getToken]);
+    }, [haptic, onToggleLike, getToken, cm.errorTitle, cm.waitForSaveComment]);
 
     // Handle like on reply
     const handleToggleReplyLike = useCallback(async (replyId: string, parentCommentId: string) => {
         if (!isCommentId(replyId) || !isCommentId(parentCommentId)) {
-            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ الرد');
+            toastManager.showError(cm.errorTitle, cm.waitForSaveReply);
             return;
         }
         haptic.trigger('light');
 
-        // Find the reply to get current state
-        const parentComment = commentsWithReplies.find(c => c.id === parentCommentId);
+        const parentComment = commentsWithRepliesRef.current.find(c => c.id === parentCommentId);
         const reply = parentComment?.replies?.find(r => r.id === replyId);
         const wasLiked = reply?.liked ?? false;
         const prevLikes = reply?.likes ?? 0;
@@ -667,7 +668,7 @@ export default function CommentsModal({
                     : c
             ));
         }
-    }, [haptic, commentsWithReplies, getToken]);
+    }, [haptic, getToken, cm.errorTitle, cm.waitForSaveReply]);
 
     // Handle reply button press - Requirements 14.1, 14.2
     const handleReplyPress = useCallback((commentId: string, username: string) => {
@@ -685,7 +686,7 @@ export default function CommentsModal({
     // Handle delete comment (own comments only)
     const handleDeleteComment = useCallback(async (commentId: string) => {
         if (!isCommentId(commentId)) {
-            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ التعليق');
+            toastManager.showError(cm.errorTitle, cm.waitForSaveComment);
             return;
         }
         haptic.trigger('medium');
@@ -753,7 +754,7 @@ export default function CommentsModal({
         // The report flow ultimately hits `/api/reports/comment/<commentId>`,
         // which requires a real UUID. Short-circuit politely otherwise.
         if (!isCommentId(commentId)) {
-            toastManager.showError('خطأ', 'يرجى الانتظار حتى يتم حفظ التعليق');
+            toastManager.showError(cm.errorTitle, cm.waitForSaveComment);
             return;
         }
         haptic.trigger('medium');
@@ -917,7 +918,7 @@ export default function CommentsModal({
                                 verified: currentUser?.isVerified || false
                             },
                             text: newComment.trim(),
-                            timestamp: 'الآن',
+                            timestamp: cm.justNow,
                             likes: 0,
                             liked: false
                         };
@@ -940,7 +941,7 @@ export default function CommentsModal({
                         setCommentLimitReached(true);
                         setTimeout(() => setCommentLimitReached(false), 3000);
                     } else {
-                        toastManager.showError('خطأ', result.error || 'فشل إرسال الرد');
+                        toastManager.showError(cm.errorTitle, result.error || cm.sendReplyFailed);
                     }
                 } else {
                     // Adding a comment
@@ -959,7 +960,7 @@ export default function CommentsModal({
                             setIsSubmitting(false);
                             return;
                         }
-                        toastManager.showError('خطأ', result.error || 'فشل إرسال التعليق');
+                        toastManager.showError(cm.errorTitle, result.error || cm.sendCommentFailed);
                         setIsSubmitting(false);
                         return;
                     }
@@ -968,7 +969,7 @@ export default function CommentsModal({
                     // Without it, every downstream action (like / report / delete /
                     // expand replies) would 404 against `/reels/comments/<id>/*`.
                     if (!isCommentId(result.comment?.id)) {
-                        toastManager.showError('خطأ', 'فشل إرسال التعليق');
+                        toastManager.showError(cm.errorTitle, cm.sendCommentFailed);
                         setIsSubmitting(false);
                         return;
                     }
@@ -1002,7 +1003,7 @@ export default function CommentsModal({
             }
         } catch (error) {
             console.log('Error sending:', error);
-            toastManager.showError('خطأ', 'فشل إرسال التعليق');
+            toastManager.showError(cm.errorTitle, cm.sendCommentFailed);
         }
 
         setShowMentionPicker(false);
@@ -1327,7 +1328,10 @@ export default function CommentsModal({
                                     activeOpacity={0.85}
                                 >
                                     <Text style={styles.moreCommentsText}>
-                                        Load more ({commentsWithReplies.length - commentDisplayLimit} remaining)
+                                        {cm.loadMoreRemaining.replace(
+                                            '{count}',
+                                            String(commentsWithReplies.length - commentDisplayLimit),
+                                        )}
                                     </Text>
                                 </TouchableOpacity>
                             ) : null
@@ -1339,8 +1343,8 @@ export default function CommentsModal({
                             <AlertCircle size={16} color="#FF6B6B" />
                             <Text style={styles.limitWarningText}>
                                 {replyingTo
-                                    ? `لقد وصلت للحد الأقصى من الردود (${MAX_REPLIES_PER_USER} ردود)`
-                                    : `لقد وصلت للحد الأقصى من التعليقات (${MAX_COMMENTS_PER_USER} تعليقات)`
+                                    ? cm.replyLimitReached.replace('{max}', String(MAX_REPLIES_PER_USER))
+                                    : cm.commentLimitReached.replace('{max}', String(MAX_COMMENTS_PER_USER))
                                 }
                             </Text>
                         </Animated.View>
@@ -1350,7 +1354,7 @@ export default function CommentsModal({
                     {replyingTo && (
                         <View style={styles.replyingToContainer}>
                             <Text style={styles.replyingToText}>
-                                الرد على <Text style={styles.replyingToUsername}>@{replyingTo.username}</Text>
+                                {cm.replyingTo.replace('{username}', replyingTo.username)}
                             </Text>
                             <TouchableOpacity onPress={cancelReply} style={styles.cancelReplyButton}>
                                 <X size={16} color="#888" />

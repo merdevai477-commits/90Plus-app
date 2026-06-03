@@ -29,6 +29,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -47,7 +48,7 @@ import { logger } from '../../utils/logger';
 import { captureException } from '../../services/sentry.service';
 import { getApiUrl } from '../../config/api.config';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -296,8 +297,11 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         if (player.playing) player.pause();
         return;
       }
-      // On iOS, play() while status is idle/loading after a tab return can stall forever.
-      if (status !== 'readyToPlay') return;
+      // iOS can start audio before the VideoView layer is ready — keep paused until ready.
+      if (status !== 'readyToPlay') {
+        if (player.playing) player.pause();
+        return;
+      }
       if (!player.playing) player.play();
     } catch (err: any) {
       const msg = err?.message || '';
@@ -501,10 +505,17 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const duration = player.duration;
   const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
 
+  const containerStyle = [
+    styles.videoContainer,
+    Platform.OS === 'ios' && styles.videoContainerIos,
+    style,
+  ];
+  const videoStyle = Platform.OS === 'ios' ? styles.videoIos : styles.video;
+
   return (
-    <View style={[styles.videoContainer, style]}>
+    <View style={containerStyle}>
       <VideoView
-        style={styles.video}
+        style={videoStyle}
         player={player}
         contentFit={VIDEO_DEFAULTS.contentFit}
         nativeControls={false}
@@ -553,6 +564,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  videoContainerIos: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
   video: {
     position: 'absolute',
     top: 0,
@@ -561,6 +576,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '100%',
     height: '100%',
+    zIndex: 0,
+  },
+  videoIos: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
     zIndex: 0,
   },
   loadingContainer: {

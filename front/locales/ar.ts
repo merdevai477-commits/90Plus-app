@@ -52,8 +52,7 @@ export const ar = {
     registerAgreementPrefix: 'بالتسجيل، أوافق على',
     registerTermsLink: 'الشروط',
     registerPrivacyLink: 'سياسة الخصوصية',
-    registerAgeAcknowledgment:
-      'أُقرّ وأُؤكّد صراحةً أن عمري 13 عاماً على الأقل.',
+    registerAgreementAfterLinks: '، وأؤكد أن عمري 13 عاماً فأكثر.',
   },
 
   // Professional Toast Messages
@@ -1409,6 +1408,7 @@ export const ar = {
     bioLabel: 'البايو (السيرة الذاتية)',
     bioPlaceholder: 'اكتب شيئاً عن نفسك...',
     addSocialAction: 'إضافة',
+    maxSocialLinks: 'يمكنك إضافة 5 روابط كحد أقصى.',
     socialUrlPlaceholder: 'الرابط...',
     saveChanges: 'حفظ التغييرات',
     usernameRequired: 'اسم المستخدم مطلوب',
@@ -1809,6 +1809,19 @@ export const ar = {
     editModalCancel: 'إلغاء',
     editModalPlaceholder: 'اكتب وصفاً للفيديو... #هاشتاج @مستخدم',
     editModalHint: '💡 يمكنك إضافة هاشتاجات بـ # وذكر مستخدمين بـ @',
+
+    commentsModal: {
+      loadMoreRemaining: 'تحميل المزيد ({count} متبقية)',
+      commentLimitReached: 'لقد وصلت للحد الأقصى من التعليقات ({max} تعليقات)',
+      replyLimitReached: 'لقد وصلت للحد الأقصى من الردود ({max} ردود)',
+      replyingTo: 'الرد على @{username}',
+      waitForSaveComment: 'يرجى الانتظار حتى يتم حفظ التعليق',
+      waitForSaveReply: 'يرجى الانتظار حتى يتم حفظ الرد',
+      errorTitle: 'خطأ',
+      sendCommentFailed: 'فشل إرسال التعليق',
+      sendReplyFailed: 'فشل إرسال الرد',
+      justNow: 'الآن',
+    },
 
     followersLabel: 'متابعين',
     viewsLabel: 'مشاهدات',
