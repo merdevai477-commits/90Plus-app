@@ -4,6 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { getAppFeatures } from '../services/app-features.service';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/admin.middleware';
 import { logger } from '../utils/logger';
@@ -90,6 +91,17 @@ router.get('/status', async (req: Request, res: Response): Promise<void> => {
         logger.error('App status check error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
+});
+
+/**
+ * GET /api/app/features
+ * Public feature flags (World Cup tab unlock, etc.)
+ */
+router.get('/features', (_req: Request, res: Response): void => {
+    res.json({
+        status: 'SUCCESS',
+        features: getAppFeatures(),
+    });
 });
 
 /**

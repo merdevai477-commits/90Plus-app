@@ -1548,10 +1548,6 @@ export class FootballController {
   // CACHED DATA ENDPOINTS (Permanent Storage)
   // ============================================
 
-  /**
-   * GET /api/football/cached/matches/:date - Get matches for a specific date
-   * Uses permanent database storage for finished matches
-   */
   static async getCachedMatchesByDate(req: Request, res: Response): Promise<void> {
     const dateString = ensureString(req.params.date);
     try {
@@ -1588,6 +1584,77 @@ export class FootballController {
         degraded: true,
         message: 'Cached matches temporarily unavailable',
       });
+    }
+  }
+
+  /**
+   * GET /api/football/cached/world-cup/:date
+   * World Cup fixtures for a date (league + season from env / feature config).
+   */
+  static async getCachedWorldCupMatches(req: Request, res: Response): Promise<void> {
+    const dateString = ensureString(req.params.date);
+    try {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid date format. Use YYYY-MM-DD' });
+        return;
+      }
+
+      const { getWorldCupTabState } = await import('../services/app-features.service');
+      const wc = getWorldCupTabState();
+      if (!wc.enabled) {
+        res.status(403).json({
+          status: 'ERROR',
+          message: 'World Cup tab is locked',
+          secondsRemaining: wc.secondsRemaining,
+        });
+        return;
+      }
+
+      const matches = await footballDataCacheService.getWorldCupMatchesByDate(
+        dateString,
+        wc.leagueId,
+        wc.season,
+      );
+
+      res.json({
+        status: 'SUCCESS',
+        results: matches.length,
+        response: matches,
+        _meta: { date: dateString, leagueId: wc.leagueId, season: wc.season, cached: true },
+      });
+    } catch (error) {
+      logger.warn(`getCachedWorldCupMatches(${dateString}): error`, error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        _meta: { date: dateString, cached: true },
+        degraded: true,
+      });
+    }
+  }
+
+  /**
+   * GET /api/football/transfers?player=&team=
+   */
+  static async getTransfers(req: Request, res: Response): Promise<void> {
+    try {
+      const player = req.query.player ? parseInt(String(req.query.player), 10) : undefined;
+      const team = req.query.team ? parseInt(String(req.query.team), 10) : undefined;
+
+      if ((!player || Number.isNaN(player)) && (!team || Number.isNaN(team))) {
+        res.status(400).json({ status: 'ERROR', message: 'player or team query param required' });
+        return;
+      }
+
+      const transfers = await footballService.getTransfers({
+        ...(player && !Number.isNaN(player) ? { player } : {}),
+        ...(team && !Number.isNaN(team) ? { team } : {}),
+      });
+
+      res.json({ status: 'SUCCESS', results: transfers.length, response: transfers });
+    } catch (error) {
+      FootballController.handleError(res, error);
     }
   }
 

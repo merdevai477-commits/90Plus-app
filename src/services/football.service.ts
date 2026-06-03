@@ -982,6 +982,17 @@ class FootballService {
     if (!this.isValidSearch(name)) return [];
     return this.fetchFromApi<any[]>('/venues', { search: name });
   }
+
+  /**
+   * Player or team transfer history
+   */
+  async getTransfers(params: {
+    player?: number;
+    team?: number;
+  }): Promise<any[]> {
+    if (!params.player && !params.team) return [];
+    return this.fetchFromApi<any[]>('/transfers', params);
+  }
 }
 
 export const footballService = new FootballService();

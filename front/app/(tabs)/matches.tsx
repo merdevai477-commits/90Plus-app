@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { Bell, ChevronDown, Calendar, Ticket, X, ChevronLeft, ChevronRight, CalendarCheck2 } from 'lucide-react-native';
+import { Bell, ChevronDown, Calendar, Ticket, X, ChevronLeft, ChevronRight, CalendarCheck2, Lock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -29,6 +29,10 @@ import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
+import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
+import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
+import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
+import { getWorldCupTimeLeft } from '../../constants/worldCup';
 
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
@@ -91,7 +95,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
-const FILTERS = ['All', 'Live', 'Upcoming', 'International', 'Finished', 'Predictions'] as const;
+const FILTERS = ['All', 'Live', 'Upcoming', 'WorldCup', 'Finished', 'Predictions'] as const;
 
 /** Local midnight — calendar/filter sync uses device timezone. */
 function startOfLocalDay(d: Date = new Date()): Date {
@@ -115,7 +119,7 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
   All: 'matches.tabs.all',
   Live: 'matches.tabs.live',
   Upcoming: 'matches.tabs.upcoming',
-  International: 'matches.tabs.international',
+  WorldCup: 'matches.tabs.worldCup',
   Finished: 'matches.tabs.finished',
   Predictions: 'matches.tabs.predictions',
 };
@@ -668,6 +672,12 @@ export default function MatchesHubScreenV2() {
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
   const [showTicketsInfo, setShowTicketsInfo] = useState(false);
   const [showMatchesInfo, setShowMatchesInfo] = useState(false);
+  const [showWorldCupLocked, setShowWorldCupLocked] = useState(false);
+  const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
+  const worldCupLocked = useAppFeaturesStore((s) => s.worldCupLocked);
+  const worldCupLeagueId = useAppFeaturesStore((s) => s.leagueId);
+  const featuresRevision = useAppFeaturesStore((s) => s.revision);
+  const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
   // selectedDate is the ground truth; the calendar grid derives everything
   // else from it (month length, highlighted cell, etc.).
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -687,6 +697,18 @@ export default function MatchesHubScreenV2() {
     getTokenRef.current = getToken;
   }, [getToken]);
 
+  useEffect(() => {
+    void hydrateFeatures(true);
+    const id = setInterval(() => {
+      const left = getWorldCupTimeLeft();
+      const nearUnlock = left.days === 0 && left.hours === 0 && left.mins < 5;
+      if (nearUnlock || (left.days === 0 && left.hours === 0 && left.mins === 0 && left.secs === 0)) {
+        void hydrateFeatures(true);
+      }
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [hydrateFeatures]);
+
   // Tickets (remaining predictions)
   const [ticketsRemaining, setTicketsRemaining] = useState<number>(10);
   // Map of matchId -> prediction type already submitted
@@ -700,6 +722,14 @@ export default function MatchesHubScreenV2() {
 
   // Real matches data from backend
   const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(selectedDate);
+
+  const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
+  const {
+    matches: worldCupMatches,
+    loading: worldCupLoading,
+    error: worldCupError,
+    refetch: refetchWorldCup,
+  } = useWorldCupMatches(selectedDate, wcTabActive, worldCupLeagueId);
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -815,11 +845,15 @@ export default function MatchesHubScreenV2() {
 
   // Live tab always shows today's fixtures — snap calendar back when selected.
   const handleFilterPress = useCallback((f: (typeof FILTERS)[number]) => {
+    if (f === 'WorldCup' && worldCupLocked && !worldCupEnabled) {
+      setShowWorldCupLocked(true);
+      return;
+    }
     if (f === 'Live') {
       setSelectedDate(startOfLocalDay());
     }
     setFilter(f);
-  }, []);
+  }, [worldCupEnabled, worldCupLocked]);
 
   const handleCalendarDayPress = useCallback((day: number) => {
     const next = new Date(calendarViewDate);
@@ -865,8 +899,16 @@ export default function MatchesHubScreenV2() {
     if (filter === 'Live') {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.live) })).filter(g => g.fixtures.length > 0);
     }
-    if (filter === 'Upcoming' || filter === 'Predictions') {
+    if (filter === 'Upcoming') {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'UPCOMING') })).filter(g => g.fixtures.length > 0);
+    }
+    if (filter === 'Predictions') {
+      return allGroups.map(g => ({
+        ...g,
+        fixtures: g.fixtures.filter(f =>
+          f.status === 'UPCOMING' || (f.status === 'FT' && predictedMatches[f.id]),
+        ),
+      })).filter(g => g.fixtures.length > 0);
     }
     if (filter === 'Finished') {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'FT') })).filter(g => g.fixtures.length > 0);
@@ -877,21 +919,26 @@ export default function MatchesHubScreenV2() {
         .filter(g => g.fixtures.length > 0);
     }
     return allGroups;
-  }, [groupedMatches, filter]);
+  }, [groupedMatches, filter, predictedMatches]);
 
   // Filter helper applied to a Match list. Mirrors the per-fixture predicates
   // used in the legacy `groups` memo so both views stay perfectly in sync.
   const matchPassesFilter = useCallback(
     (m: Match): boolean => {
       if (filter === 'Live') return m.status === 'live';
-      if (filter === 'Upcoming' || filter === 'Predictions') {
+      if (filter === 'Upcoming') {
         return m.status !== 'live' && m.status !== 'finished';
+      }
+      if (filter === 'Predictions') {
+        if (m.status === 'live') return false;
+        if (m.status === 'finished') return Boolean(predictedMatches[m.id]);
+        return m.status !== 'finished';
       }
       if (filter === 'Finished') return m.status === 'finished';
       if (filter === 'All') return m.status !== 'finished';
       return true;
     },
-    [filter],
+    [filter, predictedMatches],
   );
 
   // Country → League hierarchy after filtering. Drops empty leagues and
@@ -1112,8 +1159,8 @@ export default function MatchesHubScreenV2() {
     async (fixture: Fixture, subscribe: boolean) => {
       if (!userId) {
         toastManager.showWarning(
-          t('offlineQueue.queuedTitle'),
-          t('offlineQueue.queuedMessage'),
+          t('matches.bell.signInRequired'),
+          t('matches.bell.signInRequiredMessage'),
           { position: 'top' },
         );
         return;

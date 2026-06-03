@@ -108,6 +108,22 @@ router.get('/cached/matches/:date', (req, res, next) => {
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedMatchesByDate);
 
+// GET /api/football/cached/world-cup/:date — World Cup fixtures (league + season from env)
+router.get('/cached/world-cup/:date', (req, res, next) => {
+  const dateParam = req.params.date as string;
+  const today = new Date().toISOString().split('T')[0];
+  if (dateParam < today) {
+    return SHARED_CACHE_24H(req, res, next);
+  }
+  if (dateParam === today) {
+    return SHARED_CACHE_30S(req, res, next);
+  }
+  return SHARED_CACHE_5MIN(req, res, next);
+}, FootballController.getCachedWorldCupMatches);
+
+// GET /api/football/transfers — player or team transfer history
+router.get('/transfers', SHARED_CACHE_1H, FootballController.getTransfers);
+
 // GET /api/football/cached/player/:id - Get player (permanent cache)
 router.get('/cached/player/:id', SHARED_CACHE_1H, FootballController.getCachedPlayer);
 

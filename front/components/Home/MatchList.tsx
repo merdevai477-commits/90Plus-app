@@ -43,8 +43,8 @@ export type MatchStatus = 'LIVE' | '1ST' | '2ND' | 'HT' | 'FT' | 'UPCOMING';
 
 export interface MatchListItem {
     id: string;
-    homeTeam: { name: string; shortName: string; score: number; logo?: string };
-    awayTeam: { name: string; shortName: string; score: number; logo?: string };
+    homeTeam?: { name?: string; shortName?: string; score?: number; logo?: string };
+    awayTeam?: { name?: string; shortName?: string; score?: number; logo?: string };
     status: MatchStatus;
     minute?: string;
     stoppageTime?: number;
@@ -91,6 +91,20 @@ function SkeletonMatchCard({ shimmerX }: { shimmerX: SharedValue<number> }): Rea
     );
 }
 
+const DEFAULT_TEAM = { name: '', shortName: '?', score: 0, logo: undefined as string | undefined };
+
+function normalizeTeam(team?: MatchListItem['homeTeam']) {
+    if (!team) return DEFAULT_TEAM;
+    const name = team.name ?? team.shortName ?? '';
+    const shortName = team.shortName ?? team.name ?? '?';
+    return {
+        name,
+        shortName,
+        score: team.score ?? 0,
+        logo: team.logo,
+    };
+}
+
 function MatchCard({
     match,
     index,
@@ -108,12 +122,16 @@ function MatchCard({
     const isFinished = match.status === 'FT';
     const isUpcoming = match.status === 'UPCOMING';
 
-    const { homeTeam, awayTeam } = match;
+    const { homeTeam: rawHome, awayTeam: rawAway } = match;
+    const homeTeam = normalizeTeam(rawHome);
+    const awayTeam = normalizeTeam(rawAway);
     const homeLabel = getTeamDisplayName(homeTeam.shortName || homeTeam.name, language);
     const awayLabel = getTeamDisplayName(awayTeam.shortName || awayTeam.name, language);
     const leagueLabel = getLeagueDisplayName(match.league, language);
     const homeLogo = homeTeam.logo;
     const awayLogo = awayTeam.logo;
+    const homeInitial = (homeLabel || homeTeam.shortName || '?').charAt(0).toUpperCase();
+    const awayInitial = (awayLabel || awayTeam.shortName || '?').charAt(0).toUpperCase();
 
     const accentColor = isLive
         ? LIVE_RED
@@ -189,7 +207,7 @@ function MatchCard({
                                 <Image source={{ uri: homeLogo }} style={styles.teamLogoImg} contentFit="contain" />
                             ) : (
                                 <View style={styles.teamAvatar}>
-                                    <Text style={styles.teamAvatarText}>{homeTeam.shortName.charAt(0)}</Text>
+                                    <Text style={styles.teamAvatarText}>{homeInitial}</Text>
                                 </View>
                             )}
                         </View>
@@ -231,7 +249,7 @@ function MatchCard({
                                 <Image source={{ uri: awayLogo }} style={styles.teamLogoImg} contentFit="contain" />
                             ) : (
                                 <View style={styles.teamAvatar}>
-                                    <Text style={styles.teamAvatarText}>{awayTeam.shortName.charAt(0)}</Text>
+                                    <Text style={styles.teamAvatarText}>{awayInitial}</Text>
                                 </View>
                             )}
                         </View>

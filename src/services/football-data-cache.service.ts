@@ -244,6 +244,42 @@ class FootballDataCacheService {
         }
     }
 
+    /**
+     * World Cup fixtures for a calendar day (league + season scoped).
+     */
+    async getWorldCupMatchesByDate(
+        dateString: string,
+        leagueId: number,
+        season: number,
+    ): Promise<any[]> {
+        const cacheKey = `wc_${leagueId}_${season}_${dateString}`;
+        const todayKey = new Date().toISOString().split('T')[0];
+        const ttl = dateString < todayKey ? this.TTL.MATCHES_BY_DATE_PAST : this.TTL.MATCHES_BY_DATE_TODAY;
+
+        try {
+            const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
+            if (cached) {
+                return cached;
+            }
+
+            const { footballService } = await import('./football.service');
+            const fixtures = await footballService.getFixtures({
+                date: dateString,
+                league: leagueId,
+                season,
+            });
+
+            const list = Array.isArray(fixtures) ? fixtures : [];
+            if (list.length > 0) {
+                await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
+            }
+            return list;
+        } catch (error) {
+            logger.error(`[WC ${dateString}] getWorldCupMatchesByDate failed:`, error);
+            return [];
+        }
+    }
+
     private async loadMatchesFromDbForDate(
         startOfDay: Date,
         endOfDay: Date,

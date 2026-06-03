@@ -232,6 +232,43 @@ const fetchMatchesByDateImpl = async (date: Date, dateString: string): Promise<M
   return matches;
 };
 
+/** World Cup fixtures for a date — backend filters by league/season env. */
+export const fetchWorldCupMatchesByDate = async (date: Date): Promise<Match[]> => {
+  const dateString = formatLocalDateKey(date);
+  const cacheKey = `wc_matches_${dateString}`;
+
+  const cached = await cacheService.get<Match[]>(cacheKey);
+  if (cached && cached.length >= 0) {
+    return cached;
+  }
+
+  try {
+    const apiUrl = getApiUrl();
+    const response = await fetch(`${apiUrl}/football/cached/world-cup/${dateString}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (response.status === 403) {
+      return [];
+    }
+
+    if (response.ok) {
+      const raw = await response.json();
+      const fixtures: Fixture[] = Array.isArray(raw?.response) ? raw.response : [];
+      const matches = mapFixturesToMatches(fixtures);
+      if (matches.length > 0) {
+        await cacheService.set(cacheKey, matches, 2 * 60 * 1000);
+      }
+      return matches;
+    }
+  } catch (error) {
+    logger.warn('World Cup matches fetch failed:', error);
+  }
+
+  return [];
+};
+
 /**
  * Fetches live matches directly from backend API
  * ✅ INTEGRATED: Direct backend API integration

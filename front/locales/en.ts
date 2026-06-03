@@ -437,6 +437,8 @@ export const en = {
     transfers: 'Transfer History',
     loadingPlayer: 'Loading player...',
     playerNotFound: 'Player not found',
+    invalidPlayerId: 'Invalid player ID',
+    loadFailed: 'Failed to load player data',
     goBack: 'Go Back',
     years: 'years',
     yes: 'Yes',
@@ -491,6 +493,7 @@ export const en = {
       nextMonth: 'Next month',
       weekDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
       weekStartsOn: 'sunday' as 'sunday' | 'monday' | 'saturday',
+      staleData: 'Showing cached data — tap to refresh',
     },
     prediction: {
       title: 'Make Your Prediction',
@@ -520,6 +523,8 @@ export const en = {
       unsubscribedMessage: 'You will no longer get a push for this match.',
       errorTitle: 'Could not update reminder',
       errorMessage: 'Please try again in a moment.',
+      signInRequired: 'Sign in required',
+      signInRequiredMessage: 'Log in to get match kickoff reminders.',
     },
     time: {
       today: 'Today',

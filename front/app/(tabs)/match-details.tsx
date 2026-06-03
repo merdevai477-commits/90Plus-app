@@ -105,7 +105,8 @@ const MatchDetailsScreen = () => {
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
   const [fixture, setFixture] = useState<Fixture | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hasRouteShell);
+  const [detailsFetching, setDetailsFetching] = useState(false);
   const [lineupsLoading, setLineupsLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -125,6 +126,7 @@ const MatchDetailsScreen = () => {
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   const fixtureId = parseInt(params.fixtureId || '0');
+  const hasRouteShell = Boolean(params.fixtureId && params.homeTeam && params.awayTeam);
 
   // Determine if the match is live based on fixture status or params
   const isLive = useCallback(() => {
@@ -209,8 +211,19 @@ const MatchDetailsScreen = () => {
     setFixture(null);
     setHomeLastFixtures([]);
     setAwayLastFixtures([]);
-    setStandings([]);
-    setLoading(true);
+    setStandingsGroups([]);
+    setStandingsSeasonUsed(null);
+    setStandingsUnavailable(false);
+    setVenue(null);
+    setStatsFromEvents(false);
+    setLineupFetchAttempts(0);
+    setLineupsError(null);
+    setStatsError(null);
+    setStandingsError(null);
+    setFormError(null);
+    setDetailsFetching(false);
+    if (!hasRouteShell) setLoading(true);
+    else setLoading(false);
     setError(null);
     setLineupsLoading(false);
     setStatsLoading(false);
@@ -292,7 +305,8 @@ const MatchDetailsScreen = () => {
     }
 
     try {
-      setLoading(true);
+      setDetailsFetching(true);
+      if (!hasRouteShell) setLoading(true);
       setError(null);
 
       // ── FAST PATH: Only load events + fixture details on open ──────────────
@@ -351,9 +365,11 @@ const MatchDetailsScreen = () => {
       }
 
       setLoading(false);
+      setDetailsFetching(false);
     } catch (err: any) {
       setError(err?.message || t.matchDetails.loadDetailsFailed);
       setLoading(false);
+      setDetailsFetching(false);
     }
   };
 
@@ -393,13 +409,13 @@ const MatchDetailsScreen = () => {
     void loadLineupsIfNeeded(true);
   }, [loadLineupsIfNeeded]);
 
-  // Lineups may be published shortly before kickoff — refresh every 60s while live
+  // Lineups may be published shortly before kickoff — refresh every 60s while live + tab open
   useEffect(() => {
     if (lineupsPollingRef.current) {
       clearInterval(lineupsPollingRef.current);
       lineupsPollingRef.current = null;
     }
-    if (!isLive() || !fixtureId) return;
+    if (!isLive() || !fixtureId || activeTab !== 'lineups') return;
 
     lineupsPollingRef.current = setInterval(async () => {
       try {
@@ -414,7 +430,7 @@ const MatchDetailsScreen = () => {
         lineupsPollingRef.current = null;
       }
     };
-  }, [fixtureId, isLive, loadLineupsIfNeeded]);
+  }, [fixtureId, isLive, activeTab, loadLineupsIfNeeded]);
 
   const isFinishedMatch = useCallback(() => {
     if (params.status === 'finished') return true;
@@ -496,7 +512,7 @@ const MatchDetailsScreen = () => {
       clearInterval(statsPollingRef.current);
       statsPollingRef.current = null;
     }
-    if (!isLive() || !fixtureId) return;
+    if (!isLive() || !fixtureId || activeTab !== 'stats') return;
 
     statsPollingRef.current = setInterval(() => {
       loadedTabsRef.current.delete('stats');
@@ -509,7 +525,7 @@ const MatchDetailsScreen = () => {
         statsPollingRef.current = null;
       }
     };
-  }, [fixtureId, isLive, loadStatsIfNeeded]);
+  }, [fixtureId, isLive, activeTab, loadStatsIfNeeded]);
 
   const loadFormIfNeeded = useCallback(async () => {
     if (loadedTabsRef.current.has('form') || !fixture) return;
@@ -723,6 +739,9 @@ const MatchDetailsScreen = () => {
 
   // Render Events Tab
   const renderEvents = () => {
+    if (detailsFetching && events.length === 0) {
+      return <EventsSkeleton shimmerX={shimmerX} />;
+    }
     if (events.length === 0) {
       return (
         <View style={styles.emptyState}>
@@ -740,8 +759,11 @@ const MatchDetailsScreen = () => {
         <View style={styles.eventsContainer}>
           <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
           {events.map((event, index) => {
-            const isHomeTeam = event.team.name.toLowerCase().includes(params.homeTeam.toLowerCase()) ||
-              params.homeTeam.toLowerCase().includes(event.team.name.toLowerCase());
+            const homeTeamId = fixture?.teams?.home?.id;
+            const isHomeTeam = homeTeamId != null
+              ? event.team.id === homeTeamId
+              : event.team.name.toLowerCase().includes(params.homeTeam.toLowerCase()) ||
+                params.homeTeam.toLowerCase().includes(event.team.name.toLowerCase());
 
             return (
               <View key={index} style={[styles.eventCard, isHomeTeam ? styles.eventHome : styles.eventAway]}>
@@ -1262,7 +1284,7 @@ const MatchDetailsScreen = () => {
     );
   };
 
-  if (loading) {
+  if (loading && !hasRouteShell) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" />

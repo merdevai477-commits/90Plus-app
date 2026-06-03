@@ -635,14 +635,14 @@ export default function HomeScreen() {
             displayMatches.map((m) => ({
                 id: m.id,
                 homeTeam: {
-                    name: m.homeTeam,
-                    shortName: m.homeTeam,
+                    name: m.homeTeam ?? '',
+                    shortName: m.homeTeam ?? '?',
                     score: m.homeScore ?? 0,
                     logo: m.homeLogo,
                 },
                 awayTeam: {
-                    name: m.awayTeam,
-                    shortName: m.awayTeam,
+                    name: m.awayTeam ?? '',
+                    shortName: m.awayTeam ?? '?',
                     score: m.awayScore ?? 0,
                     logo: m.awayLogo,
                 },

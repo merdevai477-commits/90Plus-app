@@ -20,9 +20,9 @@ import { ProfileTheme } from '../constants/ProfileTheme';
 import { logger } from '../utils/logger';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 import TeamBadge from '../components/common/TeamBadge';
-import { getAPIConfig } from '../config/api.config';
 import { useTranslation } from '../src/i18n';
 import type { Language } from '../src/i18n';
+import { getTeamDisplayName } from '../utils/i18nHelpers';
 import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 import { Image as ExpoImage } from 'expo-image';
 import LeagueIcon from '../components/common/LeagueIcon';
@@ -38,7 +38,58 @@ import {
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
+const TRANSFER_CACHE_PREFIX = 'player_transfers_';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const BACKGROUND_REFRESH_MS = 30 * 60 * 1000; // skip network if cache is fresher than 30m
+
+const EMPTY_STAT_ROW: PlayerData['statistics'][0] = {
+    team: { id: 0, name: '', logo: '' },
+    league: { id: 0, name: '', country: '', logo: '', season: 0 },
+    games: { appearences: null, lineups: null, minutes: null, position: null, rating: null, captain: null },
+    goals: { total: null, assists: null, saves: null, conceded: null },
+    cards: { yellow: null, red: null },
+    passes: { total: null, key: null, accuracy: null },
+    shots: { total: null, on: null },
+    tackles: { total: null, blocks: null, interceptions: null },
+    dribbles: { attempts: null, success: null },
+};
+
+function buildShellFromParams(params: PlayerParams, playerId: number, teamId?: number): PlayerData | null {
+    if (!playerId || !params.name?.trim()) return null;
+    const season = params.season ? parseInt(params.season, 10) : getFootballSeasonYear();
+    const statRow = params.teamName
+        ? {
+            ...EMPTY_STAT_ROW,
+            team: {
+                id: teamId ?? 0,
+                name: params.teamName,
+                logo: params.teamLogo || '',
+            },
+            league: { ...EMPTY_STAT_ROW.league, season },
+        }
+        : null;
+    return {
+        player: {
+            id: playerId,
+            name: params.name,
+            firstname: null,
+            lastname: null,
+            age: null,
+            birth: { date: null, place: null, country: null },
+            nationality: null,
+            height: null,
+            weight: null,
+            injured: false,
+            photo: params.photo || null,
+            foot: null,
+        },
+        statistics: statRow ? [statRow] : [],
+    };
+}
+
+function playerCacheKey(id: number, season: number): string {
+    return `${PLAYER_CACHE_PREFIX}${id}_${season}`;
+}
 
 interface PlayerParams {
     id: string;
@@ -450,9 +501,18 @@ export default function PlayerProfileScreen() {
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
 
-    const [player, setPlayer] = useState<PlayerData | null>(null);
+    const playerId = parseInt(params.id || '0');
+    const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
+    const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
+    const seasonYear = contextSeason ?? getFootballSeasonYear();
+    const routeShell = useMemo(
+        () => buildShellFromParams(params, playerId, contextTeamId),
+        [params, playerId, contextTeamId],
+    );
+
+    const [player, setPlayer] = useState<PlayerData | null>(routeShell);
     const [transfers, setTransfers] = useState<Transfer[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!routeShell);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loadingTransfers, setLoadingTransfers] = useState(false);
@@ -460,9 +520,12 @@ export default function PlayerProfileScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
 
-    const playerId = parseInt(params.id || '0');
-    const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
-    const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
+    useEffect(() => {
+        setPlayer(routeShell);
+        setLoading(!routeShell);
+        setError(null);
+        setTransfers([]);
+    }, [playerId, routeShell]);
 
     useEffect(() => {
         loadPlayerData();
@@ -482,94 +545,95 @@ export default function PlayerProfileScreen() {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, [playerId, contextSeason, contextTeamId]);
+    }, [playerId, contextSeason, contextTeamId, seasonYear]);
 
     const loadPlayerData = async (forceRefresh = false) => {
         if (!playerId) {
-            setError('Invalid player ID');
+            setError(t.playerProfile.invalidPlayerId ?? 'Invalid player ID');
             setLoading(false);
             return;
         }
 
         try {
-            if (!forceRefresh) {
+            if (!forceRefresh && !player) {
                 setLoading(true);
             }
             setError(null);
 
-            // ✅ 1. Check local cache first (unless force refresh)
             if (!forceRefresh) {
-                const cached = await getCachedPlayer(playerId);
+                const cached = await getCachedPlayer(playerId, seasonYear);
                 if (cached) {
-                    logger.debug('📦 Player from cache:', playerId);
-                    // ✅ Validate cache is recent (less than 1 hour old for team info)
-                    const cacheAge = Date.now() - (await getCachedTimestamp(playerId) || 0);
-                    if (cacheAge < 60 * 60 * 1000) { // 1 hour
-                        setPlayer(cached);
-                        setLoading(false);
-                        await addToRecentlyViewed(cached.player);
-                        // ✅ Background refresh to ensure data is up-to-date
-                        loadPlayerData(true).catch(err => {
-                            logger.warn('Background refresh failed:', err);
-                        });
+                    setPlayer(cached);
+                    setLoading(false);
+                    await addToRecentlyViewed(cached.player);
+                    const cacheAge = Date.now() - (await getCachedTimestamp(playerId, seasonYear) || 0);
+                    if (cacheAge < BACKGROUND_REFRESH_MS) {
                         return;
                     }
+                    loadPlayerData(true).catch((err) => {
+                        logger.warn('Background refresh failed:', err);
+                    });
+                    return;
                 }
             }
 
-            // ✅ 2. Fetch from API with current season (real-time data)
-            const seasonToFetch = contextSeason ?? getFootballSeasonYear();
+            const seasonToFetch = seasonYear;
             logger.debug(`📡 Fetching player from API (season ${seasonToFetch}):`, playerId);
             const data = await ApiFootballService.getPlayerById(playerId, seasonToFetch);
 
             if (data && data.length > 0) {
-                const playerData = data[0];
-                
-                // ✅ Ensure we have valid statistics
+                let playerData = data[0];
+
                 if (!playerData.statistics || playerData.statistics.length === 0) {
                     logger.warn('⚠️ Player data has no statistics, trying previous season');
-                    // Try previous season as fallback
                     const previousSeasonData = await ApiFootballService.getPlayerById(
                         playerId,
                         seasonToFetch - 1,
                     );
                     if (previousSeasonData && previousSeasonData.length > 0) {
-                        setPlayer(previousSeasonData[0]);
-                        await cachePlayer(playerId, previousSeasonData[0]);
-                        await addToRecentlyViewed(previousSeasonData[0].player);
-                        return;
+                        playerData = previousSeasonData[0];
                     }
                 }
-                
-                setPlayer(playerData);
 
-                // ✅ Cache locally with timestamp
-                await cachePlayer(playerId, playerData);
+                setPlayer(playerData);
+                await cachePlayer(playerId, seasonYear, playerData);
                 await addToRecentlyViewed(playerData.player);
-            } else {
+            } else if (!player) {
                 setError(t.playerProfile.playerNotFound);
             }
         } catch (err: any) {
             logger.error('Failed to load player:', err);
-            setError(err?.message || 'Failed to load player data');
+            if (!player) {
+                setError(err?.message || t.playerProfile.loadFailed);
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     };
 
-    const loadPlayerTransfers = async () => {
+    const loadPlayerTransfers = async (force = false) => {
         if (!playerId) return;
 
         try {
-            setLoadingTransfers(true);
-            const { baseUrl } = getAPIConfig();
-            const response = await fetch(`${baseUrl}/football/transfers?player=${playerId}`);
-            const data = await response.json();
-
-            if (data.status === 'SUCCESS' && data.response) {
-                setTransfers(data.response);
+            if (!force) {
+                const cachedRaw = await AsyncStorage.getItem(`${TRANSFER_CACHE_PREFIX}${playerId}`);
+                if (cachedRaw) {
+                    const { data, timestamp } = JSON.parse(cachedRaw) as { data: Transfer[]; timestamp: number };
+                    if (Date.now() - timestamp < CACHE_TTL) {
+                        setTransfers(data);
+                        return;
+                    }
+                }
             }
+
+            setLoadingTransfers(true);
+            const data = await ApiFootballService.getTransfers({ player: playerId });
+            setTransfers(data);
+            await AsyncStorage.setItem(
+                `${TRANSFER_CACHE_PREFIX}${playerId}`,
+                JSON.stringify({ data, timestamp: Date.now() }),
+            );
         } catch (err: any) {
             logger.warn('Failed to load transfers:', err);
         } finally {
@@ -608,11 +672,19 @@ export default function PlayerProfileScreen() {
         }
     };
 
-    const getCachedPlayer = async (id: number): Promise<PlayerData | null> => {
+    const getCachedPlayer = async (id: number, season: number): Promise<PlayerData | null> => {
         try {
-            const cached = await AsyncStorage.getItem(`${PLAYER_CACHE_PREFIX}${id}`);
+            const cached = await AsyncStorage.getItem(playerCacheKey(id, season));
             if (cached) {
                 const { data, timestamp } = JSON.parse(cached);
+                if (Date.now() - timestamp < CACHE_TTL) {
+                    return data;
+                }
+            }
+            // Legacy key without season — migrate once
+            const legacy = await AsyncStorage.getItem(`${PLAYER_CACHE_PREFIX}${id}`);
+            if (legacy) {
+                const { data, timestamp } = JSON.parse(legacy);
                 if (Date.now() - timestamp < CACHE_TTL) {
                     return data;
                 }
@@ -623,9 +695,9 @@ export default function PlayerProfileScreen() {
         return null;
     };
 
-    const getCachedTimestamp = async (id: number): Promise<number | null> => {
+    const getCachedTimestamp = async (id: number, season: number): Promise<number | null> => {
         try {
-            const cached = await AsyncStorage.getItem(`${PLAYER_CACHE_PREFIX}${id}`);
+            const cached = await AsyncStorage.getItem(playerCacheKey(id, season));
             if (cached) {
                 const { timestamp } = JSON.parse(cached);
                 return timestamp;
@@ -636,47 +708,45 @@ export default function PlayerProfileScreen() {
         return null;
     };
 
-    const cachePlayer = async (id: number, data: PlayerData): Promise<void> => {
+    const cachePlayer = async (id: number, season: number, data: PlayerData): Promise<void> => {
         try {
-            // ✅ Also store in offlineDataService for permanent access
             const { offlineDataService } = await import('../services/offlineDataService');
             await offlineDataService.storePlayerData(id, data);
-            
-            // ✅ Store in local cache with timestamp
+
             await AsyncStorage.setItem(
-                `${PLAYER_CACHE_PREFIX}${id}`,
-                JSON.stringify({ data, timestamp: Date.now() })
+                playerCacheKey(id, season),
+                JSON.stringify({ data, timestamp: Date.now() }),
             );
-            logger.debug('✅ Cached player:', id);
+            logger.debug('✅ Cached player:', id, season);
         } catch (err) {
             logger.warn('Cache write error:', err);
         }
     };
 
-    const seasonYear = contextSeason ?? getFootballSeasonYear();
+    const displayPlayer = player ?? routeShell;
     const leagueStats = useMemo(
         () =>
-            player
-                ? getPlayerLeagueStats(player.statistics as PlayerStatRow[], {
+            displayPlayer
+                ? getPlayerLeagueStats(displayPlayer.statistics as PlayerStatRow[], {
                       season: seasonYear,
                       teamId: contextTeamId,
                   })
                 : [],
-        [player, seasonYear, contextTeamId],
+        [displayPlayer, seasonYear, contextTeamId],
     );
     const seasonTotals = useMemo(() => sumSeasonTotals(leagueStats), [leagueStats]);
     const primaryPosition = leagueStats[0]?.games?.position ?? null;
-    const primaryTeam = leagueStats[0]?.team ?? (params.teamName ? { id: 0, name: params.teamName, logo: params.teamLogo || '' } : null);
+    const primaryTeam = leagueStats[0]?.team ?? (params.teamName ? { id: contextTeamId ?? 0, name: params.teamName, logo: params.teamLogo || '' } : null);
     const teamColors = useMemo(
         () => getTeamColors(primaryTeam?.name || params.teamName || ''),
         [primaryTeam?.name, params.teamName],
     );
-    const preferredFoot = player
-        ? formatPreferredFoot(player.statistics, t.playerProfile, player.player.foot)
+    const preferredFoot = displayPlayer
+        ? formatPreferredFoot(displayPlayer.statistics, t.playerProfile, displayPlayer.player.foot)
         : null;
     const pp = t.playerProfile;
 
-    if (loading && !player) {
+    if (loading && !displayPlayer) {
         return (
             <View style={styles.loadingContainer}>
                 <StatusBar barStyle="light-content" />
@@ -686,7 +756,7 @@ export default function PlayerProfileScreen() {
         );
     }
 
-    if (error || (!player && !loading)) {
+    if (error && !displayPlayer && !loading) {
         return (
             <View style={styles.errorContainer}>
                 <StatusBar barStyle="light-content" />
@@ -699,7 +769,9 @@ export default function PlayerProfileScreen() {
         );
     }
 
-    if (!player) return null;
+    if (!displayPlayer) return null;
+
+    const heroPlayer = displayPlayer.player;
 
     return (
         <View style={styles.container}>
@@ -739,28 +811,28 @@ export default function PlayerProfileScreen() {
                             <PlayerHeroPhoto
                                 key={playerId}
                                 playerId={playerId}
-                                photo={player.player.photo ?? params.photo}
-                                name={player.player.name}
+                                photo={heroPlayer.photo ?? params.photo}
+                                name={heroPlayer.name}
                                 position={primaryPosition}
                                 colors={teamColors}
                             />
 
                             <View style={styles.heroInfo}>
-                                <Text style={styles.playerName} numberOfLines={2}>{player.player.name}</Text>
-                                {player.player.injured && (
+                                <Text style={styles.playerName} numberOfLines={2}>{heroPlayer.name}</Text>
+                                {heroPlayer.injured && (
                                     <View style={styles.injuredBadge}>
                                         <Ionicons name="medkit-outline" size={12} color="#fca5a5" />
                                         <Text style={styles.injuredText}>{pp.injured}</Text>
                                     </View>
                                 )}
                                 <View style={styles.playerSubInfo}>
-                                    {player.player.nationality && (
-                                        <Text style={styles.playerMeta}>{player.player.nationality}</Text>
+                                    {heroPlayer.nationality && (
+                                        <Text style={styles.playerMeta}>{heroPlayer.nationality}</Text>
                                     )}
-                                    {player.player.age != null && player.player.age > 0 && (
+                                    {heroPlayer.age != null && heroPlayer.age > 0 && (
                                         <>
                                             <Text style={styles.separator}>•</Text>
-                                            <Text style={styles.playerMeta}>{player.player.age} {pp.years}</Text>
+                                            <Text style={styles.playerMeta}>{heroPlayer.age} {pp.years}</Text>
                                         </>
                                     )}
                                     {primaryPosition && (
@@ -839,14 +911,14 @@ export default function PlayerProfileScreen() {
                                     <Ionicons name="calendar-outline" size={18} color={ProfileTheme.colors.textSecondary} />
                                     <Text style={styles.infoLabel}>{pp.dateOfBirth}</Text>
                                     <Text style={styles.infoValue}>
-                                        {player.player.birth?.date ? formatDate(player.player.birth.date, language) : 'N/A'}
+                                        {heroPlayer.birth?.date ? formatDate(heroPlayer.birth.date, language) : 'N/A'}
                                     </Text>
                                 </View>
                                 <View style={styles.infoGridDivider} />
                                 <View style={styles.infoGridItem}>
                                     <Ionicons name="location-outline" size={18} color={ProfileTheme.colors.textSecondary} />
                                     <Text style={styles.infoLabel}>{pp.birthPlace}</Text>
-                                    <Text style={styles.infoValue}>{player.player.birth?.place || 'N/A'}</Text>
+                                    <Text style={styles.infoValue}>{heroPlayer.birth?.place || 'N/A'}</Text>
                                 </View>
                             </View>
                             <View style={styles.infoGridDividerHorizontal} />
@@ -854,13 +926,13 @@ export default function PlayerProfileScreen() {
                                 <View style={styles.infoGridItem}>
                                     <Ionicons name="resize-outline" size={18} color={ProfileTheme.colors.textSecondary} />
                                     <Text style={styles.infoLabel}>{pp.height}</Text>
-                                    <Text style={styles.infoValue}>{player.player.height || 'N/A'}</Text>
+                                    <Text style={styles.infoValue}>{heroPlayer.height || 'N/A'}</Text>
                                 </View>
                                 <View style={styles.infoGridDivider} />
                                 <View style={styles.infoGridItem}>
                                     <Ionicons name="barbell-outline" size={18} color={ProfileTheme.colors.textSecondary} />
                                     <Text style={styles.infoLabel}>{pp.weight}</Text>
-                                    <Text style={styles.infoValue}>{player.player.weight || 'N/A'}</Text>
+                                    <Text style={styles.infoValue}>{heroPlayer.weight || 'N/A'}</Text>
                                 </View>
                             </View>
                             {(preferredFoot || leagueStats.some((s) => s.games.captain)) && (
@@ -922,7 +994,7 @@ export default function PlayerProfileScreen() {
                                                                     logo={teamLogoUrl(tr.teams.out.id, tr.teams.out.logo)}
                                                                 />
                                                                 <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                                    {tr.teams.out.name}
+                                                                    {getTeamDisplayName(tr.teams.out.name, language)}
                                                                 </Text>
                                                             </View>
                                                         )}
@@ -936,7 +1008,7 @@ export default function PlayerProfileScreen() {
                                                                     logo={teamLogoUrl(tr.teams.in.id, tr.teams.in.logo)}
                                                                 />
                                                                 <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                                    {tr.teams.in.name}
+                                                                    {getTeamDisplayName(tr.teams.in.name, language)}
                                                                 </Text>
                                                             </View>
                                                         )}

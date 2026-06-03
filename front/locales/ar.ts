@@ -436,6 +436,7 @@ export const ar = {
       nextMonth: 'الشهر التالي',
       weekDays: ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'],
       weekStartsOn: 'saturday',
+      staleData: 'بيانات محفوظة — اضغط للتحديث',
     },
     prediction: {
       title: 'سجّل توقعك',
@@ -465,6 +466,8 @@ export const ar = {
       unsubscribedMessage: 'لن تستلم إشعاراً عن هذه المباراة.',
       errorTitle: 'تعذّر تحديث التذكير',
       errorMessage: 'حاول مرة أخرى بعد قليل.',
+      signInRequired: 'يلزم تسجيل الدخول',
+      signInRequiredMessage: 'سجّل دخولك عشان تستلم تذكير بداية المباراة.',
     },
     time: {
       today: 'اليوم',
@@ -608,6 +611,8 @@ export const ar = {
     transfers: 'الانتقالات',
     loadingPlayer: 'جاري تحميل اللاعب...',
     playerNotFound: 'اللاعب غير موجود',
+    invalidPlayerId: 'معرّف اللاعب غير صالح',
+    loadFailed: 'تعذّر تحميل بيانات اللاعب',
     goBack: 'رجوع',
     years: 'سنة',
     yes: 'نعم',
