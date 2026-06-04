@@ -937,7 +937,7 @@ export default function MatchesHubScreenV2() {
       if (filter === 'Predictions') {
         if (m.status === 'live') return false;
         if (m.status === 'finished') return Boolean(predictedMatches[m.id]);
-        return m.status !== 'finished';
+        return true;
       }
       if (filter === 'Finished') return m.status === 'finished';
       if (filter === 'All') return m.status !== 'finished';

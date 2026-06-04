@@ -105,6 +105,9 @@ const MatchDetailsScreen = () => {
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
   const [fixture, setFixture] = useState<Fixture | null>(null);
 
+  const fixtureId = parseInt(params.fixtureId || '0');
+  const hasRouteShell = Boolean(params.fixtureId && params.homeTeam && params.awayTeam);
+
   const [loading, setLoading] = useState(!hasRouteShell);
   const [detailsFetching, setDetailsFetching] = useState(false);
   const [lineupsLoading, setLineupsLoading] = useState(false);
@@ -125,9 +128,6 @@ const MatchDetailsScreen = () => {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
-
-  const fixtureId = parseInt(params.fixtureId || '0');
-  const hasRouteShell = Boolean(params.fixtureId && params.homeTeam && params.awayTeam);
 
   // Determine if the match is live based on fixture status or params
   const isLive = useCallback(() => {

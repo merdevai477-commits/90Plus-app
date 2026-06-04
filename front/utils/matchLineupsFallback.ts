@@ -47,7 +47,7 @@ export function convertFixturePlayersToLineups(playersPayload: unknown[]): Lineu
           photo: entry.player.photo ?? null,
         };
 
-        const isSubstitute = games?.substitute === true || games?.substitute === 1;
+        const isSubstitute = games?.substitute === true;
         const minutes = games?.minutes ?? 0;
 
         if (isSubstitute) {
