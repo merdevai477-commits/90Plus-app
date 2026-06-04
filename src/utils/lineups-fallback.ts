@@ -50,7 +50,7 @@ export function convertFixturePlayersToLineups(playersPayload: unknown[]): unkno
           photo: entry.player.photo ?? null,
         };
 
-        const isSubstitute = games?.substitute === true || games?.substitute === 1;
+        const isSubstitute = games?.substitute === true;
         const minutes = games?.minutes ?? 0;
 
         if (isSubstitute) {
@@ -93,8 +93,8 @@ export function buildFallbackLineupsFromEvents(
 
   const byTeam = new Map<number, Map<number, { id: number; name: string }>>();
 
-  const addPlayer = (teamId: number, player: { id?: number; name?: string | null }) => {
-    if (!player.id || !player.name?.trim()) return;
+  const addPlayer = (teamId: number, player: { id?: number | null; name?: string | null }) => {
+    if (player.id == null || !player.name?.trim()) return;
     if (!byTeam.has(teamId)) byTeam.set(teamId, new Map());
     byTeam.get(teamId)!.set(player.id, { id: player.id, name: player.name.trim() });
   };
