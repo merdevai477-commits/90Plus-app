@@ -1277,6 +1277,16 @@ export const ar = {
     uploadVideoAction: 'رفع فيديو جديد',
     cooldownActive: 'يمكنك رفع فيديو كل 3 أيام',
     cooldownRemaining: 'متبقي {time} لرفع فيديو جديد',
+    videoCooldownDaysHours: 'يمكنك رفع فيديو جديد بعد {days} يوم و {hours} ساعة',
+    videoCooldownHoursOnly: 'يمكنك رفع فيديو جديد بعد {hours} ساعة',
+    reelUploadInProgressBody: 'يتم رفع الفيديو ({percent}%). انتظر حتى يكتمل.',
+    reelUploadInProgressBodyIndeterminate: 'يتم رفع الفيديو حالياً. انتظر حتى يكتمل.',
+    uploadingProgressLabel: 'جاري الرفع {percent}%',
+    uploadingLabel: 'جاري الرفع…',
+    stepRequired: 'مطلوب',
+    noFollowersYet: 'لا يوجد متابعين بعد',
+    noFollowingYet: 'لا يتابع أحد بعد',
+    offlineShowingCached: 'لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.',
 
     // Block & Report
     blockUser: 'حظر المستخدم',

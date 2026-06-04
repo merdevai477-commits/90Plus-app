@@ -70,37 +70,55 @@ export default function FollowersListModal({
     useEffect(() => {
         if (visible) {
             setActiveTab(initialTab);
-            // Reset pagination state
             setFollowers([]);
             setFollowing([]);
             setFollowersPage(0);
             setFollowingPage(0);
             setHasMoreFollowers(true);
             setHasMoreFollowing(true);
-            loadData();
+            loadData(initialTab);
         }
     }, [visible, initialTab]);
 
-    const loadData = async () => {
+    const loadFollowers = async () => {
+        const token = await getToken();
+        if (!token) return;
+        const followersData = await FollowService.getFollowers(token, userId, PAGE_SIZE, 0);
+        setFollowers(followersData || []);
+        setFollowersPage(1);
+        setHasMoreFollowers((followersData || []).length >= PAGE_SIZE);
+    };
+
+    const loadFollowing = async () => {
+        const token = await getToken();
+        if (!token) return;
+        const followingData = await FollowService.getFollowing(token, userId, PAGE_SIZE, 0);
+        setFollowing(followingData || []);
+        setFollowingPage(1);
+        setHasMoreFollowing((followingData || []).length >= PAGE_SIZE);
+    };
+
+    const loadData = async (tab: 'followers' | 'following' = initialTab) => {
         setIsLoading(true);
         try {
-            const token = await getToken();
-            if (token) {
-                const [followersData, followingData] = await Promise.all([
-                    FollowService.getFollowers(token, userId, PAGE_SIZE, 0),
-                    FollowService.getFollowing(token, userId, PAGE_SIZE, 0),
-                ]);
-                setFollowers(followersData || []);
-                setFollowing(followingData || []);
-                setFollowersPage(1);
-                setFollowingPage(1);
-                setHasMoreFollowers((followersData || []).length >= PAGE_SIZE);
-                setHasMoreFollowing((followingData || []).length >= PAGE_SIZE);
+            if (tab === 'followers') {
+                await loadFollowers();
+            } else {
+                await loadFollowing();
             }
         } catch (error) {
-            console.error('Error loading follow data:', error);
+            logger.error('Error loading follow data:', error);
         }
         setIsLoading(false);
+    };
+
+    const handleTabChange = (tab: 'followers' | 'following') => {
+        setActiveTab(tab);
+        if (tab === 'followers' && followers.length === 0) {
+            void loadFollowers();
+        } else if (tab === 'following' && following.length === 0) {
+            void loadFollowing();
+        }
     };
 
     const loadMoreFollowers = useCallback(async () => {
@@ -260,7 +278,7 @@ export default function FollowersListModal({
                     <View style={styles.tabs}>
                         <TouchableOpacity
                             style={[styles.tab, activeTab === 'followers' && styles.activeTab]}
-                            onPress={() => setActiveTab('followers')}
+                            onPress={() => handleTabChange('followers')}
                         >
                             <Text style={[styles.tabText, activeTab === 'followers' && styles.activeTabText]}>
                                 {t.profile.followers} ({followers.length})
@@ -268,7 +286,7 @@ export default function FollowersListModal({
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.tab, activeTab === 'following' && styles.activeTab]}
-                            onPress={() => setActiveTab('following')}
+                            onPress={() => handleTabChange('following')}
                         >
                             <Text style={[styles.tabText, activeTab === 'following' && styles.activeTabText]}>
                                 {t.profile.following} ({following.length})
@@ -313,9 +331,9 @@ export default function FollowersListModal({
                             ListEmptyComponent={
                                 <View style={styles.emptyContainer}>
                                     <Text style={styles.emptyText}>
-                                        {activeTab === 'followers' 
-                                            ? 'لا يوجد متابعين بعد' 
-                                            : 'لا يتابع أحد بعد'}
+                                        {activeTab === 'followers'
+                                            ? t.profile.noFollowersYet
+                                            : t.profile.noFollowingYet}
                                     </Text>
                                 </View>
                             }

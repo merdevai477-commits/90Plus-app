@@ -1300,6 +1300,16 @@ export const en = {
     uploadVideoAction: 'Upload New Video',
     cooldownActive: 'You can upload a video every 3 days',
     cooldownRemaining: '{time} remaining to upload new video',
+    videoCooldownDaysHours: 'You can upload a new video in {days} days and {hours} hours',
+    videoCooldownHoursOnly: 'You can upload a new video in {hours} hours',
+    reelUploadInProgressBody: 'Your video is uploading ({percent}%). Please wait until it finishes.',
+    reelUploadInProgressBodyIndeterminate: 'Your video is uploading. Please wait until it finishes.',
+    uploadingProgressLabel: 'Uploading {percent}%',
+    uploadingLabel: 'Uploading…',
+    stepRequired: 'Required',
+    noFollowersYet: 'No followers yet',
+    noFollowingYet: 'Not following anyone yet',
+    offlineShowingCached: 'Could not reach the server. Showing saved data.',
 
     // Block & Report
     blockUser: 'Block User',

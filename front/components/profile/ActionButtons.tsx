@@ -15,6 +15,7 @@ import { useTranslation } from '../../src/i18n';
 import * as Haptics from 'expo-haptics';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { glassProps } from '../../constants/ui';
+import { formatVideoUploadCooldown } from '../../utils/profileErrorHelpers';
 
 // Brand purple accent
 const PURPLE = '#A855F7';
@@ -38,12 +39,6 @@ interface ActionButtonsProps {
 function formatCooldown(c: CooldownInfo): string {
   if (c.daysRemaining > 0) return `${c.daysRemaining}d ${c.hoursRemaining}h`;
   return `${c.hoursRemaining}h`;
-}
-
-function cooldownMessage(c: CooldownInfo): string {
-  if (c.daysRemaining > 0)
-    return `يمكنك رفع فيديو جديد بعد ${c.daysRemaining} يوم و ${c.hoursRemaining} ساعة`;
-  return `يمكنك رفع فيديو جديد بعد ${c.hoursRemaining} ساعة`;
 }
 
 // Reusable glass button wrapper
@@ -76,23 +71,26 @@ export default function ActionButtons({
   const { t } = useTranslation();
   const isOnCooldown = uploadCooldown && !uploadCooldown.canChange;
 
+  const cooldownAlertMessage = (c: CooldownInfo) =>
+    formatVideoUploadCooldown(t, c.daysRemaining, c.hoursRemaining);
+
   const handleUploadPress = () => {
     if (reelUploadActive) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       const pct = Math.round(reelUploadProgress);
       Alert.alert(
-        'جاري رفع الريلز',
+        t.pushTemplates.reelUploadingTitle,
         pct > 0
-          ? `يتم رفع الفيديو (${pct}٪). انتظر حتى يكتمل.`
-          : 'يتم رفع الفيديو حالياً. انتظر حتى يكتمل.',
-        [{ text: 'حسناً' }]
+          ? t.profile.reelUploadInProgressBody.replace('{percent}', String(pct))
+          : t.profile.reelUploadInProgressBodyIndeterminate,
+        [{ text: t.profile.okay }],
       );
       return;
     }
     if (isOnCooldown && uploadCooldown) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Alert.alert('⏳ انتظر قليلاً', cooldownMessage(uploadCooldown), [
-        { text: 'حسناً' },
+      Alert.alert(t.profile.waitABit, cooldownAlertMessage(uploadCooldown), [
+        { text: t.profile.okay },
       ]);
     } else {
       onEditPress();
@@ -120,8 +118,11 @@ export default function ActionButtons({
             <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
             <Text style={[styles.btnText, { color: ProfileTheme.colors.neonGreen }]} numberOfLines={1}>
               {reelUploadProgress > 0
-                ? `جاري الرفع ${Math.round(reelUploadProgress)}٪`
-                : 'جاري الرفع…'}
+                ? t.profile.uploadingProgressLabel.replace(
+                    '{percent}',
+                    String(Math.round(reelUploadProgress)),
+                  )
+                : t.profile.uploadingLabel}
             </Text>
           </GlassBtn>
         ) : isOnCooldown && uploadCooldown ? (

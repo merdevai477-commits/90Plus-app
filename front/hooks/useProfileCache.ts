@@ -30,7 +30,7 @@ import { logger } from '../services/logger';
 // AsyncStorage is still used as the durable layer, but this avoids the
 // async deserialization cost on every tab focus.
 const profileMemoryCache = new Map<string, { data: ProfileCacheData; timestamp: number }>();
-const MEMORY_CACHE_TTL = 2 * 60 * 1000; // 2 minutes — same as PROFILE_UI_REFRESH_INTERVAL_MS
+const MEMORY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — fewer refetches on tab focus
 
 function getFromMemoryCache(key: string): ProfileCacheData | null {
   const entry = profileMemoryCache.get(key);
@@ -234,10 +234,17 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   const isLoadingRef = useRef(false);
   const onCacheHitRef = useRef(onCacheHit);
   const onFreshDataLoadedRef = useRef(onFreshDataLoaded);
+  const cachedUsernameRef = useRef<string | null>(initialMemData?.userData?.username ?? null);
   
   // Update refs when callbacks change
   onCacheHitRef.current = onCacheHit;
   onFreshDataLoadedRef.current = onFreshDataLoaded;
+
+  useEffect(() => {
+    if (userData?.username) {
+      cachedUsernameRef.current = userData.username;
+    }
+  }, [userData?.username]);
 
   /**
    * Load cached data immediately (Requirement 2.1)
@@ -420,6 +427,12 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
 
       logger.debug('[useProfileCache] Token obtained, fetching data');
 
+      const usernameHint = cachedUsernameRef.current;
+      const earlyReelsPromise =
+        usernameHint && token
+          ? AuthService.getUserReels(token, usernameHint).catch(() => null)
+          : null;
+
       // CRITICAL PATH: Only fetch what's needed to show the profile immediately.
       // analytics + cooldowns are deferred to background — they don't block the UI.
       const [userResult, statsResult] = await Promise.all([
@@ -481,10 +494,13 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
             logger.warn('[useProfileCache] ⚠️ Error fetching cooldowns (bg):', err);
             return null;
           }),
-          AuthService.getUserReels(bgToken, userResult.username).catch(err => {
-            logger.warn('[useProfileCache] ⚠️ Error loading videos (bg):', err);
-            return [] as any[];
-          }),
+          (async () => {
+            if (usernameHint === userResult.username && earlyReelsPromise) {
+              const early = await earlyReelsPromise;
+              if (early) return early;
+            }
+            return AuthService.getUserReels(bgToken, userResult.username).catch(() => [] as UserReel[]);
+          })(),
         ]).then(([analyticsResult, cooldownsResult, reels]) => {
           if (analyticsResult) setAnalytics(analyticsResult);
           if (cooldownsResult) setCooldowns(cooldownsResult);
@@ -616,20 +632,21 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     }
 
     try {
-      // Step 1: Try to load from cache first (Requirement 2.1)
-      // Skip if we already have data from synchronous memory cache init
+      // Step 1 + 2 in parallel on cold start — cache read does not block network
       if (!forceRefresh && !hasLoadedRef.current) {
-        const hasCachedData = await loadFromCache();
-        
-        if (hasCachedData) {
-          // Show cached data immediately, then fetch fresh in background
-          setIsLoading(false);
-          hasLoadedRef.current = true; // Mark as loaded so we don't show loading again
-        }
-      }
+        const cachePromise = loadFromCache();
+        const fetchPromise = fetchFreshData(false);
+        const hasCachedData = await cachePromise;
 
-      // Step 2: Fetch fresh data in background (Requirement 2.2)
-      await fetchFreshData(forceRefresh);
+        if (hasCachedData) {
+          setIsLoading(false);
+          hasLoadedRef.current = true;
+        }
+
+        await fetchPromise;
+      } else {
+        await fetchFreshData(forceRefresh);
+      }
     } catch (err: any) {
       console.error('[useProfileCache] ❌ Refresh error:', err);
       
@@ -645,7 +662,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
             setAnalytics(cachedData.analytics);
             setCooldowns(cachedData.cooldowns);
             hasLoadedRef.current = true;
-            setError('لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.');
+            setError(null);
           } else if (clerkFallback?.clerkUserId) {
             const fd = buildClerkFallbackUserData(clerkFallback, clerkUserImageUrl);
             setUserData(fd);

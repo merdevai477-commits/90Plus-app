@@ -18,11 +18,9 @@ interface ContentTabsProps {
 const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCount, savedCount = 0, isOwnProfile = true }: ContentTabsProps) {
     const { t } = useTranslation();
     const tabs = [
-        { id: 'videos', label: t.profile.videos || 'الفيديوهات', icon: 'grid-outline', count: videoCount },
-        // تاب المحفوظات يظهر فقط لصاحب البروفايل
-        ...(isOwnProfile ? [{ id: 'saved', label: t.profile.saved || 'المحفوظات', icon: 'bookmark-outline', count: savedCount }] : []),
-        // تاب التحليلات يظهر فقط لصاحب البروفايل
-        ...(isOwnProfile ? [{ id: 'analytics', label: t.profile.analytics || 'التحليلات', icon: 'analytics-outline' }] : []),
+        { id: 'videos', label: t.profile.videos, icon: 'grid-outline', count: videoCount },
+        ...(isOwnProfile ? [{ id: 'saved', label: t.profile.saved, icon: 'bookmark-outline', count: savedCount }] : []),
+        ...(isOwnProfile ? [{ id: 'analytics', label: t.profile.analytics, icon: 'analytics-outline' }] : []),
     ];
 
     const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;

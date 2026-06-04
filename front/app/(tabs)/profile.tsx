@@ -40,6 +40,11 @@ import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCac
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
 import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
+import {
+  isCooldownApiError,
+  isGatewayOrServerError,
+  isReelUploadConflictError,
+} from '../../utils/profileErrorHelpers';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
@@ -1036,7 +1041,7 @@ export default function ProfileScreen() {
     if (!userData) return;
     const originalCover = userData.coverImage;
     setCoverImage(finalUri);
-    setImageUploadMessage(t.profile.uploading || 'جاري رفع الصورة...');
+    setImageUploadMessage(t.profile.uploading);
     setIsCoverUploading(true);
     try {
       const token = await getToken();
@@ -1060,7 +1065,7 @@ export default function ProfileScreen() {
       } else {
         setCoverImage(originalCover || null);
         const errorMessage = uploadResult.error || t.profile.coverUploadFailed;
-        if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
+        if (isCooldownApiError(uploadResult.data)) {
           toastManager.showWarning(t.profile.waitABit, errorMessage);
         } else {
           toastManager.showUploadError('image');
@@ -1187,7 +1192,7 @@ export default function ProfileScreen() {
     if (!userData) return;
     const originalAvatar = userData.avatar;
     setLocalImage(finalUri);
-    setImageUploadMessage(t.profile.uploading || 'جاري رفع الصورة...');
+    setImageUploadMessage(t.profile.uploading);
     setIsAvatarUploading(true);
     setAvatarUploadProgress(5);
     try {
@@ -1208,7 +1213,7 @@ export default function ProfileScreen() {
       } else {
         setLocalImage(originalAvatar || null);
         const errorMessage = uploadResult.error || t.profile.avatarUploadFailed;
-        if (errorMessage.includes('يمكنك تغيير') || errorMessage.includes('يوم') || errorMessage.includes('ساعة')) {
+        if (isCooldownApiError(uploadResult.data)) {
           toastManager.showWarning(t.profile.waitABit, errorMessage);
         } else {
           toastManager.showUploadError('image');
@@ -1382,10 +1387,8 @@ export default function ProfileScreen() {
         await reelUploadNotification.failure(
           errMsg || t.profile.videoUploadFailedMessage
         );
-        if (errMsg.includes('يتم رفع فيديو') || errMsg.includes('بالفعل')) {
-          toastManager.showWarning(t.profile.waitABit, errMsg);
-        } else if (errMsg.includes('يمكنك رفع فيديو جديد بعد')) {
-          toastManager.showWarning(t.profile.waitABit, errMsg);
+        if (isReelUploadConflictError(errMsg) || isCooldownApiError((uploadResult as { data?: unknown }).data)) {
+          toastManager.showWarning(t.profile.waitABit, errMsg || t.profile.cooldownActive);
         } else {
           toastManager.showError(t.profile.uploadFailedTitle, errMsg || t.profile.videoUploadFailedMessage);
         }
@@ -1500,7 +1503,7 @@ export default function ProfileScreen() {
           {t.profile.profileLoadFailed}
         </Text>
         <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
-          {cacheError?.includes('المحفوظة') ? t.profile.serverDown : t.profile.checkConnection}
+          {isGatewayOrServerError(cacheError) ? t.profile.serverDown : t.profile.checkConnection}
         </Text>
         {isAutoRetrying && (
           <Text style={[styles.loadingText, { fontSize: 13, marginTop: 12, textAlign: 'center', color: ProfileTheme.colors.neonGreen }]}>
@@ -1914,41 +1917,48 @@ export default function ProfileScreen() {
         visible={isClubModalVisible}
         onClose={() => setIsClubModalVisible(false)}
         onSelect={async (selectedClub) => {
-          logger.debug('[ClubPicker] Selected club:', selectedClub.nameAr);
-          
+          const clubDisplayName =
+            language === 'ar'
+              ? selectedClub.nameAr || selectedClub.name
+              : selectedClub.name || selectedClub.nameAr;
+          logger.debug('[ClubPicker] Selected club:', clubDisplayName);
+
           await localProfileStorage.saveProfileData({
             clubLogo: selectedClub.logo,
-            favoriteTeam: selectedClub.nameAr
+            favoriteTeam: clubDisplayName,
           });
 
           updateCachedUserData({
             clubLogo: selectedClub.logo,
-            favoriteTeam: selectedClub.nameAr
+            favoriteTeam: clubDisplayName,
           });
-          
-          // Update global state for immediate UI refresh
+
           if (globalState.userProfile) {
             globalState.setUserProfile({
               ...globalState.userProfile,
               clubLogo: selectedClub.logo,
-              favoriteTeam: selectedClub.nameAr
+              favoriteTeam: clubDisplayName,
             });
           }
-          
+
           setIsClubModalVisible(false);
-          
-          toastManager.showInfo(t.profile.updating, t.profile.updatingClub.replace('{club}', selectedClub.nameAr));
-          
-          // Send to backend with optimistic updates
-          const result = await updateFavorites({ 
-            favoriteClub: selectedClub.nameAr,
-            favoriteTeam: selectedClub.nameAr,
-            clubLogo: selectedClub.logo
+
+          toastManager.showInfo(
+            t.profile.updating,
+            t.profile.updatingClub.replace('{club}', clubDisplayName),
+          );
+
+          const result = await updateFavorites({
+            favoriteClub: clubDisplayName,
+            favoriteTeam: clubDisplayName,
+            clubLogo: selectedClub.logo,
           });
-          
+
           if (result.success) {
-            toastManager.showSuccess(t.profile.updated, t.profile.clubUpdatedSuccess.replace('{club}', selectedClub.nameAr));
-            // Mark club step as completed
+            toastManager.showSuccess(
+              t.profile.updated,
+              t.profile.clubUpdatedSuccess.replace('{club}', clubDisplayName),
+            );
             await markStepCompleted('club');
           }
         }}
@@ -2350,7 +2360,7 @@ export default function ProfileScreen() {
                             borderWidth: 1,
                             borderColor: 'rgba(168,85,247,0.3)',
                           }}>
-                            <Text style={{ color: '#A855F7', fontSize: 10, fontWeight: '700' }}>مطلوب</Text>
+                            <Text style={{ color: '#A855F7', fontSize: 10, fontWeight: '700' }}>{t.profile.stepRequired}</Text>
                           </View>
                         )}
                       </View>

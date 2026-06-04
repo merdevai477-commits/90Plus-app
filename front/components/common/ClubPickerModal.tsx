@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { ApiFootballService } from '../../services/apiFootball';
 import { logger } from '../../utils/logger';
+import { useTranslation } from '../../src/i18n';
 
 export interface TopClub {
     id: number;
@@ -84,6 +85,9 @@ const DEFAULT_COUNTRY_ORDER = [
 ];
 
 export default function ClubPickerModal({ visible, onClose, onSelect, selectedClubId }: ClubPickerModalProps) {
+    const { language } = useTranslation();
+    const clubLabel = (club: TopClub) =>
+        language === 'ar' ? club.nameAr || club.name : club.name || club.nameAr;
     const [search, setSearch] = useState('');
     const [selectedCountry, setSelectedCountry] = useState<string>('england');
     const [clubsByCountry, setClubsByCountry] = useState<Record<string, TopClub[]>>({});
@@ -167,7 +171,7 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                         <Text style={styles.logoFallbackText}>{item.name.charAt(0)}</Text>
                     </View>
                 )}
-                <Text style={styles.itemName} numberOfLines={2}>{item.nameAr}</Text>
+                <Text style={styles.itemName} numberOfLines={2}>{clubLabel(item)}</Text>
                 <Text style={styles.leagueName} numberOfLines={1}>{item.league}</Text>
                 {isSelected && (
                     <View style={styles.checkmark}>
