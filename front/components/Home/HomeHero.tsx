@@ -23,30 +23,30 @@ import {
   TEXT_PRIMARY,
   TEXT_MUTED,
 } from '../../constants/tokens';
+import { useTranslation } from '../../src/i18n';
 
 const AUTOPLAY_MS = 4800;
 
 type Banner = {
   id: string;
   image: ImageSourcePropType;
-  kicker: string;
-  title: string;
-  subtitle: string;
-  cta: string;
+  kickerKey: 'heroLiveKicker' | 'heroQuizKicker' | 'heroRankKicker';
+  titleKey: 'heroLiveTitle' | 'heroQuizTitle' | 'heroRankTitle';
+  subtitleKey: 'heroLiveSubtitle' | 'heroQuizSubtitle' | 'heroRankSubtitle';
+  ctaKey: 'heroLiveCta' | 'heroQuizCta' | 'heroRankCta';
   route: '/matches' | '/quiz' | '/rank' | '/reels' | '/chat';
-  /** Bottom tint — keeps copy readable on any photo */
   colors: readonly [string, string];
   accent?: string;
 };
 
-const BANNERS: Banner[] = [
+const BANNER_DEFS: Banner[] = [
   {
     id: 'live',
     image: require('../../assets/images/auth-hero.png'),
-    kicker: 'Tonight',
-    title: 'Premier League buildup',
-    subtitle: 'Lineups, odds, and AI takes before kickoff.',
-    cta: 'View matches',
+    kickerKey: 'heroLiveKicker',
+    titleKey: 'heroLiveTitle',
+    subtitleKey: 'heroLiveSubtitle',
+    ctaKey: 'heroLiveCta',
     route: '/matches',
     colors: ['rgba(239,68,68,0.55)', 'rgba(4,3,12,0.92)'] as const,
     accent: '#fecaca',
@@ -56,10 +56,10 @@ const BANNERS: Banner[] = [
     image: {
       uri: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1200&q=75',
     },
-    kicker: 'Daily',
-    title: 'Quiz streak bonus',
-    subtitle: 'Answer 5 right and stack extra coins this week.',
-    cta: 'Open quiz',
+    kickerKey: 'heroQuizKicker',
+    titleKey: 'heroQuizTitle',
+    subtitleKey: 'heroQuizSubtitle',
+    ctaKey: 'heroQuizCta',
     route: '/quiz',
     colors: ['rgba(59,130,246,0.45)', 'rgba(4,3,12,0.92)'] as const,
     accent: '#bfdbfe',
@@ -69,10 +69,10 @@ const BANNERS: Banner[] = [
     image: {
       uri: 'https://images.unsplash.com/photo-1489944440615-453fc2b6a9a9?auto=format&fit=crop&w=1200&q=75',
     },
-    kicker: 'Leaderboard',
-    title: 'Climb the rankings',
-    subtitle: 'Predictions and highlights move you up the board.',
-    cta: 'See rank',
+    kickerKey: 'heroRankKicker',
+    titleKey: 'heroRankTitle',
+    subtitleKey: 'heroRankSubtitle',
+    ctaKey: 'heroRankCta',
     route: '/rank',
     colors: ['rgba(236,72,153,0.4)', 'rgba(4,3,12,0.93)'] as const,
     accent: '#fbcfe8',
@@ -81,6 +81,7 @@ const BANNERS: Banner[] = [
 
 export function HomeHero() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const carouselW = useMemo(
     () => Math.max(280, windowWidth - SCREEN_PADDING_H * 2),
@@ -95,7 +96,7 @@ export function HomeHero() {
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x;
       const next = Math.round(x / carouselW);
-      setBannerIndex(Math.min(Math.max(0, next), BANNERS.length - 1));
+      setBannerIndex(Math.min(Math.max(0, next), BANNER_DEFS.length - 1));
     },
     [carouselW],
   );
@@ -106,11 +107,11 @@ export function HomeHero() {
   }, [carouselW]);
 
   useEffect(() => {
-    if (BANNERS.length <= 1) return;
+    if (BANNER_DEFS.length <= 1) return;
     const timer = setInterval(() => {
       if (pausedByTouchRef.current) return;
       setBannerIndex((prev) => {
-        const next = (prev + 1) % BANNERS.length;
+        const next = (prev + 1) % BANNER_DEFS.length;
         scrollRef.current?.scrollTo({ x: next * carouselW, animated: true });
         return next;
       });
@@ -122,8 +123,8 @@ export function HomeHero() {
     <View style={styles.wrapper}>
       <View style={styles.bannerBlock}>
         <View style={styles.bannerHeaderRow}>
-          <Text style={styles.bannerSectionTitle}>Spotlight</Text>
-          <Text style={styles.bannerSectionHint}>Auto · Swipe</Text>
+          <Text style={styles.bannerSectionTitle}>{t.home.heroSpotlight}</Text>
+          <Text style={styles.bannerSectionHint}>{t.home.heroAutoSwipe}</Text>
         </View>
 
         <ScrollView
@@ -142,47 +143,52 @@ export function HomeHero() {
             onBannerScrollEnd(e);
           }}
         >
-          {BANNERS.map((b) => (
-            <Pressable
-              key={b.id}
-              style={[styles.bannerPage, { width: carouselW }]}
-              onPress={() => router.push(b.route)}
-            >
-              <ImageBackground
-                source={b.image}
-                style={styles.bannerImageBg}
-                imageStyle={styles.bannerImage}
-                resizeMode="cover"
+          {BANNER_DEFS.map((b) => {
+            const title = t.home[b.titleKey];
+            return (
+              <Pressable
+                key={b.id}
+                style={[styles.bannerPage, { width: carouselW }]}
+                onPress={() => router.push(b.route)}
               >
-                <LinearGradient
-                  colors={['transparent', 'rgba(4,3,12,0.25)', ...b.colors]}
-                  locations={[0, 0.35, 0.72, 1]}
-                  start={{ x: 0.5, y: 0 }}
-                  end={{ x: 0.5, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.bannerInner}>
-                  <Text style={[styles.bannerKicker, { color: b.accent ?? PURPLE_SOFT }]}>
-                    {b.kicker}
-                  </Text>
-                  <Text style={styles.bannerTitle}>{b.title}</Text>
-                  <Text style={styles.bannerSubtitle}>{b.subtitle}</Text>
-                  <View style={styles.bannerCtaRow}>
-                    <Text style={styles.bannerCta}>{b.cta}</Text>
-                    <Text style={styles.bannerCtaArrow}>→</Text>
+                <ImageBackground
+                  source={b.image}
+                  style={styles.bannerImageBg}
+                  imageStyle={styles.bannerImage}
+                  resizeMode="cover"
+                >
+                  <LinearGradient
+                    colors={['transparent', 'rgba(4,3,12,0.25)', ...b.colors]}
+                    locations={[0, 0.35, 0.72, 1]}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.bannerInner}>
+                    <Text style={[styles.bannerKicker, { color: b.accent ?? PURPLE_SOFT }]}>
+                      {t.home[b.kickerKey]}
+                    </Text>
+                    <Text style={styles.bannerTitle}>{title}</Text>
+                    <Text style={styles.bannerSubtitle}>{t.home[b.subtitleKey]}</Text>
+                    <View style={styles.bannerCtaRow}>
+                      <Text style={styles.bannerCta}>{t.home[b.ctaKey]}</Text>
+                      <Text style={styles.bannerCtaArrow}>→</Text>
+                    </View>
                   </View>
-                </View>
-              </ImageBackground>
-            </Pressable>
-          ))}
+                </ImageBackground>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
         <View style={styles.dots}>
-          {BANNERS.map((b, i) => (
+          {BANNER_DEFS.map((b, i) => (
             <TouchableOpacity
               key={b.id}
               hitSlop={10}
-              accessibilityLabel={`Banner ${i + 1}: ${b.title}`}
+              accessibilityLabel={t.home.heroBannerA11y
+                .replace('{index}', String(i + 1))
+                .replace('{title}', t.home[b.titleKey])}
               onPress={() => goBanner(i)}
               activeOpacity={0.8}
               style={[styles.dot, i === bannerIndex && styles.dotActive]}
@@ -195,9 +201,7 @@ export function HomeHero() {
         <View style={styles.metaIcon}>
           <Zap size={13} color="rgba(245,197,24,0.5)" strokeWidth={2.5} />
         </View>
-        <Text style={styles.metaTxt}>
-          Rewards and boosts show up once you unlock the wallet.
-        </Text>
+        <Text style={styles.metaTxt}>{t.home.heroWalletHint}</Text>
       </View>
     </View>
   );

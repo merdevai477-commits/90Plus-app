@@ -24,7 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Star, CalendarClock, ChevronRight, RotateCw } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from '../../src/i18n';
-import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { SectionHeader } from './SectionHeader';
 import {
     PURPLE_PRIMARY,
@@ -49,6 +49,7 @@ export interface MatchListItem {
     minute?: string;
     stoppageTime?: number;
     league: string;
+    leagueId?: number;
     kickoff?: string;
     /** True when the user has subscribed (bell) to this match. */
     isPinned?: boolean;
@@ -116,7 +117,7 @@ function MatchCard({
     onOpenHub: () => void;
     onFavoritePress?: (matchId: string) => void;
 }): React.ReactElement {
-    const { language } = useTranslation();
+    const { language, t } = useTranslation();
     const isLive = match.status === 'LIVE' || match.status === '1ST' || match.status === '2ND';
     const isStoppage = match.status === 'HT' && (match.stoppageTime ?? 0) > 0;
     const isFinished = match.status === 'FT';
@@ -127,7 +128,7 @@ function MatchCard({
     const awayTeam = normalizeTeam(rawAway);
     const homeLabel = getTeamDisplayName(homeTeam.shortName || homeTeam.name, language);
     const awayLabel = getTeamDisplayName(awayTeam.shortName || awayTeam.name, language);
-    const leagueLabel = getLeagueDisplayName(match.league, language);
+    const leagueLabel = getLeagueDisplayName(match.league, language, match.leagueId);
     const homeLogo = homeTeam.logo;
     const awayLogo = awayTeam.logo;
     const homeInitial = (homeLabel || homeTeam.shortName || '?').charAt(0).toUpperCase();
@@ -143,6 +144,8 @@ function MatchCard({
 
     const [starred, setStarred] = React.useState(match.isFavorited ?? false);
     const pinned = match.isPinned ?? false;
+
+    const ftLabel = getLocalizedMatchStatus('FT', language);
 
     const liveMinute = isLive || isStoppage ? match.minute ?? '' : '';
     const stoppageSuffix =
@@ -194,7 +197,7 @@ function MatchCard({
                             <Text style={styles.kickoffText}>{match.kickoff}</Text>
                         ) : isFinished ? (
                             <View style={styles.ftBadge}>
-                                <Text style={styles.ftText}>FT</Text>
+                                <Text style={styles.ftText}>{ftLabel}</Text>
                             </View>
                         ) : null}
                     </View>
@@ -219,7 +222,7 @@ function MatchCard({
                     <View style={styles.scoreArea}>
                         {isUpcoming ? (
                             <View style={styles.vsContainer}>
-                                <Text style={styles.vsText}>VS</Text>
+                                <Text style={styles.vsText}>{t.home.vs}</Text>
                             </View>
                         ) : (
                             <View style={styles.scoreRow}>
@@ -264,7 +267,7 @@ function MatchCard({
                         onPress={handleStar}
                         style={styles.watchlistBtn}
                         accessibilityRole="button"
-                        accessibilityLabel={starred ? 'Remove from watchlist' : 'Add to watchlist'}
+                        accessibilityLabel={starred ? t.home.watchlistRemove : t.home.watchlistAdd}
                     >
                         <Star
                             size={17}
@@ -461,6 +464,7 @@ export function MatchList({
     onRefreshPress,
 }: MatchListProps): React.ReactElement {
     const router = useRouter();
+    const { t } = useTranslation();
     const data = matchesProp ?? [];
     const shimmerX = useShimmer();
 
@@ -476,9 +480,9 @@ export function MatchList({
     return (
         <View style={styles.section}>
             <SectionHeader
-                subtitle="Live & fixtures"
-                title="Important matches"
-                action="View all"
+                subtitle={t.home.sectionMatchesSub}
+                title={t.home.importantMatches}
+                action={t.home.viewAll}
                 onAction={openMatchesHub}
             />
             {showSkeleton ? (

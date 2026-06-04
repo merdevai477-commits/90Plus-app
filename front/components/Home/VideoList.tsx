@@ -29,7 +29,7 @@ import {
     PURPLE_SOFT,
     SCREEN_PADDING_H,
 } from '../../constants/tokens';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslation } from '../../src/i18n';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -96,7 +96,7 @@ function VideoCard({
     onOpen,
     onToggleLike,
 }: VideoCardProps): React.ReactElement {
-    const { t } = useLanguage();
+    const { t } = useTranslation();
     const scale = useSharedValue(1);
     const animStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
@@ -278,7 +278,7 @@ function EmptyReelsCard({
 }
 
 function EmptySection({ onUpload }: { onUpload: () => void }): React.ReactElement {
-    const { t } = useLanguage();
+    const { t } = useTranslation();
 
     const cards: EmptyReelsCardSpec[] = [
         {
@@ -360,6 +360,7 @@ export function VideoList({
     onViewAllPress,
 }: VideoListProps): React.ReactElement {
     const router = useRouter();
+    const { t } = useTranslation();
     const data = videos ?? [];
     const hasVideos = data.length > 0;
     const shimmerX = useShimmer();
@@ -378,9 +379,9 @@ export function VideoList({
     return (
         <View style={styles.section}>
             <SectionHeader
-                subtitle="Curated clips"
-                title="Trending reels"
-                action="View all"
+                subtitle={t.home.sectionReelsSub}
+                title={t.home.trendingReels}
+                action={t.home.viewAll}
                 onAction={openReelsHub}
             />
             {showSkeleton ? (

@@ -23,7 +23,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { hasLineupData } from '../utils/lineups-fallback';
+import { hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService } from './football.service';
@@ -706,19 +706,27 @@ class FootballDataCacheService {
      * ✅ Finished matches: permanently stored in DB, shared for all users, no API call
      */
     async getMatchLineups(fixtureId: number): Promise<any[]> {
-        // 1. Check Redis cache first, then memory cache
+        const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+
+        // 1. Check Redis cache first, then memory cache (never serve empty — re-fetch)
         const redisKey = `lineups:${fixtureId}`;
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
-        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+        if (
+            redisCached &&
+            Date.now() - redisCached.timestamp < redisCached.ttl &&
+            hasLineupData(redisCached.data)
+        ) {
             logger.debug(`📦 Lineups ${fixtureId} from Redis cache (shared for all users)`);
-            // Update memory cache
             this.lineupsCache.set(fixtureId, redisCached);
             return redisCached.data;
         }
 
-        // Check memory cache
         const cached = this.lineupsCache.get(fixtureId);
-        if (cached && Date.now() - cached.timestamp < cached.ttl) {
+        if (
+            cached &&
+            Date.now() - cached.timestamp < cached.ttl &&
+            hasLineupData(cached.data)
+        ) {
             logger.debug(`📦 Lineups ${fixtureId} from memory cache (shared for all users)`);
             return cached.data;
         }
@@ -726,14 +734,23 @@ class FootballDataCacheService {
         // 2. Check if match is finished (permanent cache in DB, shared for all users)
         const dbMatch = await prisma.cachedFixture.findUnique({
             where: { fixtureId },
-            select: { status: true, fullData: true },
+            select: {
+                status: true,
+                fullData: true,
+                homeTeamId: true,
+                homeTeamName: true,
+                homeTeamLogo: true,
+                awayTeamId: true,
+                awayTeamName: true,
+                awayTeamLogo: true,
+            },
         });
 
         const isFinished = dbMatch && ['FT', 'AET', 'PEN'].includes(dbMatch.status);
+        const isLive = dbMatch && LIVE_STATUSES.includes(dbMatch.status);
         const fullData = dbMatch?.fullData as any;
 
-        // ✅ If finished and we have lineups in fullData, use them (no API call, shared for all users)
-        if (isFinished && fullData?.lineups) {
+        if (isFinished && hasLineupData(fullData?.lineups)) {
             logger.debug(`📦 Lineups ${fixtureId} from DB fullData (shared for all users, no API call)`);
             return fullData.lineups;
         }
@@ -749,15 +766,43 @@ class FootballDataCacheService {
         logger.debug(`📡 Fetching lineups for fixture ${fixtureId} (request will be shared with concurrent users)`);
         const apiRequestPromise = (async () => {
             try {
-                const lineups = await footballService.getFixtureLineupsResolved(fixtureId);
+                let lineups = await footballService.getFixtureLineupsResolved(fixtureId);
 
-                // Cache in Redis and memory.
-                // Empty results get a short TTL so we don't poison the cache
-                // when the API is rate-limited or hasn't ingested data yet.
+                if (!hasLineupData(lineups)) {
+                    try {
+                        const events = await footballService.getFixtureEvents(fixtureId);
+                        const teams =
+                            fullData?.teams ??
+                            (dbMatch
+                                ? {
+                                      home: {
+                                          id: dbMatch.homeTeamId,
+                                          name: dbMatch.homeTeamName,
+                                          logo: dbMatch.homeTeamLogo ?? '',
+                                      },
+                                      away: {
+                                          id: dbMatch.awayTeamId,
+                                          name: dbMatch.awayTeamName,
+                                          logo: dbMatch.awayTeamLogo ?? '',
+                                      },
+                                  }
+                                : null);
+                        if (teams && Array.isArray(events) && events.length > 0) {
+                            const fromEvents = buildFallbackLineupsFromEvents(teams, events);
+                            if (hasLineupData(fromEvents)) {
+                                logger.info(`[Lineups] Fixture ${fixtureId}: using events fallback`);
+                                lineups = fromEvents as any[];
+                            }
+                        }
+                    } catch {
+                        // events fallback optional
+                    }
+                }
+
                 const isEmpty = !hasLineupData(lineups);
                 const ttl = isEmpty
-                    ? this.TTL.EMPTY
-                    : (isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH);
+                    ? (isLive ? 30 * 1000 : this.TTL.EMPTY)
+                    : (isFinished ? this.TTL.FINISHED : (isLive ? this.TTL.LIVE_MATCH : this.TTL.UPCOMING_MATCH));
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: lineups,
                     timestamp: Date.now(),

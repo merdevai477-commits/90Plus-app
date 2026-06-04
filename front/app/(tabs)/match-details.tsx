@@ -42,7 +42,7 @@ import {
   buildFallbackStatisticsFromEvents,
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
-import { hasLineupData } from '../../utils/matchLineupsFallback';
+import { hasLineupData, buildFallbackLineupsFromEvents } from '../../utils/matchLineupsFallback';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import type { StandingsGroup } from '../../utils/standingsHelpers';
 import { teamMatchesStanding } from '../../utils/standingsHelpers';
@@ -121,6 +121,7 @@ const MatchDetailsScreen = () => {
 
   // Track which tabs have already loaded their data (lazy loading)
   const loadedTabsRef = useRef<Set<string>>(new Set());
+  const lineupsPreloadedForRef = useRef<number | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -230,6 +231,7 @@ const MatchDetailsScreen = () => {
     setFormLoading(false);
     setStandingsLoading(false);
     loadedTabsRef.current = new Set(); // reset lazy-load tracking
+    lineupsPreloadedForRef.current = null;
 
     loadMatchDetails();
 
@@ -384,8 +386,18 @@ const MatchDetailsScreen = () => {
       let data = await ApiFootballService.getFixtureLineups(fixtureId, {
         skipCache: preferFresh,
       });
-      if (!hasLineupData(data) && !preferFresh) {
+      if (!hasLineupData(data)) {
         data = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
+      }
+      if (!hasLineupData(data) && fixture?.teams) {
+        const ev =
+          events.length > 0
+            ? events
+            : await ApiFootballService.getFixtureEvents(fixtureId).catch(() => []);
+        const fromEvents = buildFallbackLineupsFromEvents(fixture, ev);
+        if (hasLineupData(fromEvents)) {
+          data = fromEvents;
+        }
       }
       setLineups(data ?? []);
       if (hasLineupData(data)) {
@@ -401,7 +413,7 @@ const MatchDetailsScreen = () => {
     } finally {
       setLineupsLoading(false);
     }
-  }, [fixtureId, isLive, t.matchDetails.loadLineupsFailed]);
+  }, [fixtureId, fixture, events, isLive, t.matchDetails.loadLineupsFailed]);
 
   const retryLineups = useCallback(() => {
     setLineupFetchAttempts(0);
@@ -422,7 +434,7 @@ const MatchDetailsScreen = () => {
         loadedTabsRef.current.delete('lineups');
         await loadLineupsIfNeeded(true);
       } catch { /* silent */ }
-    }, 60_000);
+    }, 30_000);
 
     return () => {
       if (lineupsPollingRef.current) {
@@ -447,8 +459,9 @@ const MatchDetailsScreen = () => {
       lineupsTabRetryRef.current = null;
     }
     if (activeTab !== 'lineups' || !fixtureId || lineupsError) return;
-    if (hasLineupData(lineups) || isFinishedMatch()) return;
-    if (lineupFetchAttempts >= MAX_LINEUP_AUTO_RETRIES) return;
+    if (hasLineupData(lineups)) return;
+    if (!isLive() && isFinishedMatch()) return;
+    if (!isLive() && lineupFetchAttempts >= MAX_LINEUP_AUTO_RETRIES) return;
 
     const tick = () => {
       if (!lineupsLoading && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) {
@@ -622,6 +635,14 @@ const MatchDetailsScreen = () => {
       }
     }
   }, [fixture?.fixture?.status?.short, activeTab, loadStatsIfNeeded]);
+
+  // Preload lineups for live matches so the tab is ready when opened
+  useEffect(() => {
+    if (!fixtureId || !fixture || !isLive()) return;
+    if (lineupsPreloadedForRef.current === fixtureId) return;
+    lineupsPreloadedForRef.current = fixtureId;
+    void loadLineupsIfNeeded(true);
+  }, [fixtureId, fixture?.fixture?.id, isLive, loadLineupsIfNeeded]);
 
   // ── Tab change handler — triggers lazy load ───────────────────────────────
   const handleTabChange = useCallback((tab: string) => {
@@ -816,7 +837,7 @@ const MatchDetailsScreen = () => {
 
     if (!hasLineupData(lineups)) {
       const stillRetrying =
-        !isFinishedMatch() && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES;
+        isLive() || lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES;
       if (stillRetrying) {
         return (
           <View style={styles.emptyState}>

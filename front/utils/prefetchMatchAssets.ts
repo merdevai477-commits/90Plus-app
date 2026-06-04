@@ -2,6 +2,29 @@ import { Match } from '../components/Matches/matchCardUtils';
 import { Image } from 'expo-image';
 import { getCountryFlagUri } from './countryFlagUri';
 
+/** Prefetch team logos on the Home screen match carousel. */
+export function prefetchHomeMatchLogos(
+  matches: ReadonlyArray<{ homeLogo?: string; awayLogo?: string }>,
+): void {
+  if (matches.length === 0) return;
+  const urls = new Set<string>();
+  for (const m of matches) {
+    if (m.homeLogo) urls.add(m.homeLogo);
+    if (m.awayLogo) urls.add(m.awayLogo);
+  }
+  const list = Array.from(urls).slice(0, 40);
+  if (list.length > 0) {
+    Image.prefetch(list, 'memory-disk').catch(() => {});
+  }
+}
+
+export function prefetchVideoThumbnails(thumbnails: string[]): void {
+  const list = thumbnails.filter(Boolean).slice(0, 12);
+  if (list.length > 0) {
+    Image.prefetch(list, 'memory-disk').catch(() => {});
+  }
+}
+
 /** Prefetch team/league logos + fast country flags after matches load. */
 export function prefetchMatchAssets(matches: Match[]): void {
   if (matches.length === 0) return;

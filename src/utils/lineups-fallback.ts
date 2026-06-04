@@ -50,15 +50,15 @@ export function convertFixturePlayersToLineups(playersPayload: unknown[]): unkno
           photo: entry.player.photo ?? null,
         };
 
-        if (games?.substitute === true) {
+        const isSubstitute = games?.substitute === true || games?.substitute === 1;
+        const minutes = games?.minutes ?? 0;
+
+        if (isSubstitute) {
           substitutes.push({ player });
-        } else if (
-          games?.minutes != null ||
-          games?.number != null ||
-          games?.grid ||
-          games?.position
-        ) {
+        } else if (minutes > 0 || games?.grid || games?.position || games?.number != null) {
           startXI.push({ player });
+        } else if (entry.statistics?.length) {
+          substitutes.push({ player });
         }
       }
 
@@ -73,4 +73,81 @@ export function convertFixturePlayersToLineups(playersPayload: unknown[]): unkno
       };
     })
     .filter(Boolean);
+}
+
+type EventTeamBlock = {
+  id: number;
+  name: string;
+  logo?: string | null;
+};
+
+/**
+ * Last-resort lineup when /lineups and /players are empty but events list players
+ * (common for Copa Sul-Sudeste, USL, and other lower-tier leagues).
+ */
+export function buildFallbackLineupsFromEvents(
+  teams: { home: EventTeamBlock; away: EventTeamBlock },
+  events: unknown[],
+): unknown[] {
+  if (!Array.isArray(events) || events.length === 0) return [];
+
+  const byTeam = new Map<number, Map<number, { id: number; name: string }>>();
+
+  const addPlayer = (teamId: number, player: { id?: number; name?: string | null }) => {
+    if (!player.id || !player.name?.trim()) return;
+    if (!byTeam.has(teamId)) byTeam.set(teamId, new Map());
+    byTeam.get(teamId)!.set(player.id, { id: player.id, name: player.name.trim() });
+  };
+
+  for (const raw of events) {
+    const e = raw as {
+      team?: { id?: number };
+      player?: { id?: number; name?: string | null };
+      assist?: { id?: number | null; name?: string | null };
+      type?: string;
+    };
+    const teamId = e.team?.id;
+    if (!teamId) continue;
+    addPlayer(teamId, e.player ?? {});
+    if (e.type === 'subst') {
+      addPlayer(teamId, e.assist ?? {});
+    } else if (e.assist?.id && e.assist.name) {
+      addPlayer(teamId, e.assist);
+    }
+  }
+
+  const mkLineup = (team: EventTeamBlock): unknown | null => {
+    const players = [...(byTeam.get(team.id)?.values() ?? [])];
+    if (players.length === 0) return null;
+
+    const startXI = players.slice(0, 11).map((p, idx) => ({
+      player: {
+        id: p.id,
+        name: p.name,
+        number: idx + 1,
+        pos: null,
+        grid: null,
+        photo: null,
+      },
+    }));
+    const subs = players.slice(11).map((p) => ({
+      player: {
+        id: p.id,
+        name: p.name,
+        number: null,
+        pos: null,
+        photo: null,
+      },
+    }));
+
+    return {
+      team: { id: team.id, name: team.name, logo: team.logo ?? '' },
+      coach: { id: null, name: null, photo: null },
+      formation: null,
+      startXI,
+      substitutes: subs,
+    };
+  };
+
+  return [mkLineup(teams.home), mkLineup(teams.away)].filter(Boolean);
 }

@@ -678,14 +678,19 @@ export default function HomeScreen() {
 
     const designVideos = useMemo(
         () =>
-            videos.map((v) => ({
-                id: v.id,
-                title: v.title,
-                views: v.views,
-                likes: v.likes,
-                thumbnail: v.thumbnail,
-            })),
-        [videos],
+            videos.map((v) => {
+                const raw = v.title?.trim();
+                const title =
+                    !raw || raw === 'فيديو رائع' ? t.home.defaultVideoTitle : raw;
+                return {
+                    id: v.id,
+                    title,
+                    views: v.views,
+                    likes: v.likes,
+                    thumbnail: v.thumbnail,
+                };
+            }),
+        [videos, t.home.defaultVideoTitle],
     );
 
     const designPlayers = useMemo(

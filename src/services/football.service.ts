@@ -6,7 +6,7 @@
 
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
-import { convertFixturePlayersToLineups, hasLineupData } from '../utils/lineups-fallback';
+import { convertFixturePlayersToLineups, hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 
 interface ApiResponse<T> {
   get: string;
@@ -571,6 +571,30 @@ class FootballService {
       }
     } catch (err) {
       logger.debug(`[Lineups] Fixture ${fixtureId}: players fallback failed`, err);
+    }
+
+    try {
+      const events = await this.getFixtureEvents(fixtureId);
+      if (Array.isArray(events) && events.length > 0) {
+        const fixtures = await this.fetchFromApi<any[]>('/fixtures', { id: fixtureId });
+        const fx = fixtures?.[0];
+        const teams = fx?.teams;
+        if (teams?.home?.id && teams?.away?.id) {
+          const fromEvents = buildFallbackLineupsFromEvents(
+            {
+              home: { id: teams.home.id, name: teams.home.name, logo: teams.home.logo ?? '' },
+              away: { id: teams.away.id, name: teams.away.name, logo: teams.away.logo ?? '' },
+            },
+            events,
+          );
+          if (hasLineupData(fromEvents)) {
+            logger.info(`[Lineups] Fixture ${fixtureId}: using events fallback`);
+            return fromEvents as any[];
+          }
+        }
+      }
+    } catch (err) {
+      logger.debug(`[Lineups] Fixture ${fixtureId}: events fallback failed`, err);
     }
 
     return primary ?? [];

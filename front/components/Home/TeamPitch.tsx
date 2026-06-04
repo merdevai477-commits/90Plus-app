@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
+import { useTranslation } from '../../src/i18n';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     PURPLE_PRIMARY,
@@ -377,6 +378,7 @@ export function TeamPitch({
     onDetailsPress,
 }: TeamPitchProps) {
     const router = useRouter();
+    const { t } = useTranslation();
     const { width: screenW } = useWindowDimensions();
 
     const [pitchSize, setPitchSize] = useState({ w: 0, h: 0 });
@@ -410,10 +412,10 @@ export function TeamPitch({
         <View style={styles.container}>
             <View style={styles.sectionHeaderWrap}>
                 <SectionHeader
-                    subtitle="Formation"
-                    title="Team of the month"
+                    subtitle={t.home.sectionTeamSub}
+                    title={t.home.teamOfMonth}
                     badge={formation ?? '---'}
-                    action="Details"
+                    action={t.home.details}
                     onAction={() => (onDetailsPress ? onDetailsPress() : router.push('/rank'))}
                 />
             </View>

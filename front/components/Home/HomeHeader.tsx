@@ -24,6 +24,7 @@ import {
 import { useCoins } from '../../contexts/CoinsContext';
 import { NotificationService } from '../../src/services/authService';
 import { CoinsInfoModal } from '../common/CoinsInfoModal';
+import { useTranslation } from '../../src/i18n';
 
 const ICON_SIZE = 18;
 const CLUSTER_PAD = 4;
@@ -45,6 +46,7 @@ export const HomeHeader = React.memo(function HomeHeader({
     isOffline = false,
 }: HomeHeaderProps) {
     const router = useRouter();
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { getToken } = useAuth();
     const { coins } = useCoins();
@@ -120,7 +122,7 @@ export const HomeHeader = React.memo(function HomeHeader({
                     <Text style={styles.brand}>90PLUS</Text>
                     {userName ? (
                         <Text style={styles.greeting} numberOfLines={1}>
-                            Hi, {userName}
+                            {t.home.greetingHi.replace('{name}', userName)}
                         </Text>
                     ) : null}
                 </View>
@@ -153,7 +155,7 @@ export const HomeHeader = React.memo(function HomeHeader({
                             style={styles.toolBtn}
                             onPress={handleSettings}
                             accessibilityRole="button"
-                            accessibilityLabel="Settings"
+                            accessibilityLabel={t.home.headerSettings}
                         >
                             <Settings color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
                         </TouchableOpacity>
@@ -164,7 +166,7 @@ export const HomeHeader = React.memo(function HomeHeader({
                             style={styles.toolBtn}
                             onPress={handleSearch}
                             accessibilityRole="button"
-                            accessibilityLabel="Search"
+                            accessibilityLabel={t.home.headerSearch}
                         >
                             <Search color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
                         </TouchableOpacity>
@@ -176,7 +178,7 @@ export const HomeHeader = React.memo(function HomeHeader({
                                 style={styles.toolBtn}
                                 onPress={handleNotifications}
                                 accessibilityRole="button"
-                                accessibilityLabel="Notifications"
+                                accessibilityLabel={t.home.headerNotifications}
                             >
                                 <Bell color={TEXT_PRIMARY} size={ICON_SIZE} strokeWidth={2} />
                             </TouchableOpacity>
@@ -188,7 +190,7 @@ export const HomeHeader = React.memo(function HomeHeader({
                                 </View>
                             )}
                             {isOffline && notificationCount === 0 && (
-                                <View style={styles.offlineDot} accessibilityLabel="Offline" />
+                                <View style={styles.offlineDot} accessibilityLabel={t.home.headerOffline} />
                             )}
                         </View>
                     </View>

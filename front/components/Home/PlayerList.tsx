@@ -20,6 +20,7 @@ import Svg, { Polygon } from 'react-native-svg';
 import { User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
+import { useTranslation } from '../../src/i18n';
 import {
   GOLD_PRIMARY,
   SCREEN_PADDING_H,
@@ -164,6 +165,7 @@ function SkeletonPlayerCard({ shimmerX }: { shimmerX: ReturnType<typeof useShare
 // ─── Player Card ──────────────────────────────────────────────────────────────
 function PlayerCard({ player, onOpenRank }: { player: PlayerRow; onOpenRank: () => void }) {
   const [photoFailed, setPhotoFailed] = useState(false);
+  const { t } = useTranslation();
 
   const onImageError = (_e: NativeSyntheticEvent<ImageErrorEventData>) => {
     setPhotoFailed(true);
@@ -179,12 +181,12 @@ function PlayerCard({ player, onOpenRank }: { player: PlayerRow; onOpenRank: () 
     >
       <View style={[styles.statsBar, { borderColor: `${player.borderColor}33` }]}>
         <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Week</Text>
+          <Text style={styles.statLabel}>{t.home.week}</Text>
           <Text style={[styles.statValue, { color: player.borderColor }]}>{player.weeklyRating}</Text>
         </View>
         <View style={[styles.statDivider, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
         <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Season</Text>
+          <Text style={styles.statLabel}>{t.home.season}</Text>
           <Text style={[styles.statValue, { color: GOLD_PRIMARY }]}>{player.overallRating}</Text>
         </View>
       </View>
@@ -239,16 +241,17 @@ function PlayerCard({ player, onOpenRank }: { player: PlayerRow; onOpenRank: () 
 
 // ─── Empty Player Card — premium (3 shown when no data) ──────────────────────
 function EmptyPlayerCard() {
+  const { t } = useTranslation();
   return (
     <View style={styles.emptyCard}>
       <View style={styles.statsBarMuted}>
         <View style={[styles.statCell, { opacity: 0.45 }]}>
-          <Text style={styles.statLabel}>Week</Text>
+          <Text style={styles.statLabel}>{t.home.week}</Text>
           <Text style={[styles.statValue, { color: TEXT_MUTED }]}>—</Text>
         </View>
         <View style={[styles.statDivider, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
         <View style={[styles.statCell, { opacity: 0.45 }]}>
-          <Text style={styles.statLabel}>Season</Text>
+          <Text style={styles.statLabel}>{t.home.season}</Text>
           <Text style={[styles.statValue, { color: TEXT_MUTED }]}>—</Text>
         </View>
       </View>
@@ -257,7 +260,7 @@ function EmptyPlayerCard() {
       </View>
       <View style={styles.cardFooter}>
         <Text style={styles.emptyCardName}>—</Text>
-        <Text style={styles.emptyCardTeam} numberOfLines={1}>Slot open</Text>
+        <Text style={styles.emptyCardTeam} numberOfLines={1}>{t.home.slotOpen}</Text>
         <View style={styles.emptyPositionBadge}>
           <Text style={styles.emptyPositionText}>?</Text>
         </View>
@@ -425,6 +428,7 @@ interface PlayerListProps {
 
 export function PlayerList({ isLoading = false, players: playersProp, onPlayerPress, onViewAllPress }: PlayerListProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   // Never fall back to hardcoded mock data — use empty array so the
   // race-condition guard below works correctly.
   const data = playersProp ?? [];
@@ -442,9 +446,9 @@ export function PlayerList({ isLoading = false, players: playersProp, onPlayerPr
   return (
     <View style={styles.section}>
       <SectionHeader
-        subtitle="Ratings hub"
-        title="Player of the week"
-        action="View all"
+        subtitle={t.home.sectionPlayersSub}
+        title={t.home.playerOfWeek}
+        action={t.home.viewAll}
         onAction={openRankHub}
       />
       {showSkeleton ? (
@@ -484,8 +488,8 @@ export function PlayerList({ isLoading = false, players: playersProp, onPlayerPr
                 }
                 accessibilityLabel={
                   player
-                    ? `Rank ${rank}: ${player.name}`
-                    : `Rank ${rank} slot — waiting`
+                    ? `${(t.home as Record<string, string>)[`podiumLabel${rank}`] ?? rank}: ${player.name}`
+                    : `${(t.home as Record<string, string>)[`podiumLabel${rank}`] ?? rank} — ${t.home.podiumWaiting}`
                 }
               />
             );
