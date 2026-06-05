@@ -70,6 +70,7 @@ import {
   GlobalNotificationTrayBridge,
 } from "../components/common/PushTokenSyncBootstrap";
 import { PushRegistrationReportBootstrap } from "../components/common/PushRegistrationReportBootstrap";
+import { OtaUpdateBootstrap } from "../components/common/OtaUpdateBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
 // ErrorUtils is on `global`, not a reliable named export from react-native in SDK 55+.
@@ -690,6 +691,7 @@ function RootLayout() {
           <HideSplashWhenReady fontsReady={fontsReady} />
           <SentryUserTracker />
           <QueryClientProvider client={queryClient}>
+            <OtaUpdateBootstrap />
             <PushNotificationSetup />
             <PushRegistrationReportBootstrap />
             <LanguageInitializer>

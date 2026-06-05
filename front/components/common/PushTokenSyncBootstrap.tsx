@@ -1,26 +1,72 @@
 /**
  * Keeps Expo push token + backend consent in sync after login and on every foreground.
+ * On Android, also triggers the OS notification permission dialog when needed.
  */
 import { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@clerk/clerk-expo';
 import {
     syncExpoPushTokenIfGranted,
     flushPendingPushToken,
+    ensureAndroidNotificationChannels,
+    shouldPromptForNotificationPermission,
+    requestOsNotificationPermission,
+    capturePushTokenAfterPermission,
+    loadNotifications,
+    isPushRegistrationAvailable,
+    NOTIFICATION_PERMISSION_REQUESTED_KEY,
 } from '../../services/pushTokenRegistration.service';
 import { logPushRegistrationReport } from '../../services/pushRegistrationReport.service';
 import { logger } from '../../services/logger';
+
+async function ensureAndroidNotificationPermission(
+    getToken: () => Promise<string | null>,
+): Promise<void> {
+    if (Platform.OS !== 'android' || !isPushRegistrationAvailable()) return;
+
+    const Notifications = loadNotifications();
+    if (!Notifications) return;
+
+    await ensureAndroidNotificationChannels();
+    const { status } = await Notifications.getPermissionsAsync();
+
+    if (status === 'granted') return;
+    if (!shouldPromptForNotificationPermission(status)) return;
+
+    const alreadyAsked = await AsyncStorage.getItem(NOTIFICATION_PERMISSION_REQUESTED_KEY);
+    if (alreadyAsked) return;
+
+    // Brief delay so home screen finishes mounting before the system dialog.
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const newStatus = await requestOsNotificationPermission();
+    await AsyncStorage.setItem(NOTIFICATION_PERMISSION_REQUESTED_KEY, 'true');
+
+    if (newStatus === 'granted') {
+        await capturePushTokenAfterPermission(getToken);
+    } else {
+        logger.info('[Push] Android notification permission not granted:', newStatus);
+    }
+}
 
 export function PushTokenSyncBootstrap() {
     const { isSignedIn, isLoaded, getToken } = useAuth();
     const getTokenRef = useRef(getToken);
     getTokenRef.current = getToken;
+    const permissionPromptStarted = useRef(false);
 
     useEffect(() => {
         if (!isLoaded || !isSignedIn) return;
 
         const sync = async () => {
             await logPushRegistrationReport('signed-in-sync-start');
+
+            if (!permissionPromptStarted.current) {
+                permissionPromptStarted.current = true;
+                await ensureAndroidNotificationPermission(() => getTokenRef.current());
+            }
+
             await flushPendingPushToken(() => getTokenRef.current());
             await syncExpoPushTokenIfGranted(() => getTokenRef.current());
             await logPushRegistrationReport('signed-in-sync-end');

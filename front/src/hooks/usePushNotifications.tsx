@@ -18,10 +18,11 @@ import {
     shouldPromptForNotificationPermission,
     requestOsNotificationPermission,
     ensureAndroidNotificationChannels,
+    NOTIFICATION_PERMISSION_REQUESTED_KEY,
 } from '../../services/pushTokenRegistration.service';
 import { markTrayNotificationPresented } from '../../services/trayNotification.service';
 
-const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v2';
+const PERMISSION_REQUESTED_KEY = NOTIFICATION_PERMISSION_REQUESTED_KEY;
 
 export interface PushNotificationState {
     expoPushToken: string | null;

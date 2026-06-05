@@ -25,6 +25,7 @@ let inFlightPushSync: Promise<boolean> | null = null;
 let lastSyncedPushToken: string | null = null;
 
 export const PENDING_PUSH_TOKEN_KEY = '@90plus/pendingExpoPushToken';
+export const NOTIFICATION_PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v3';
 
 /** Wait for Clerk JWT — avoids race where token is generated before auth is ready. */
 async function resolveAuthToken(
