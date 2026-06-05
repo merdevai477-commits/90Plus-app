@@ -111,7 +111,7 @@ model User {
 
   // GDPR Consent fields
   analyticsConsent            Boolean   @default(true)
-  pushNotificationsConsent    Boolean   @default(true)
+  pushNotificationsConsent    Boolean   @default(false)
   emailCommunicationsConsent  Boolean   @default(true)
   dataSharingConsent          Boolean   @default(false)
   privacyPolicyVersion        String?

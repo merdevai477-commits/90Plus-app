@@ -15,10 +15,13 @@ import {
     flushPendingPushToken,
     capturePushTokenAfterPermission,
     updatePushNotificationsConsent,
+    shouldPromptForNotificationPermission,
+    requestOsNotificationPermission,
+    ensureAndroidNotificationChannels,
 } from '../../services/pushTokenRegistration.service';
 import { markTrayNotificationPresented } from '../../services/trayNotification.service';
 
-const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v1';
+const PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v2';
 
 export interface PushNotificationState {
     expoPushToken: string | null;
@@ -289,11 +292,11 @@ export function usePushNotifications(): PushNotificationState {
                     if (isSignedIn) {
                         await flushPendingPushToken(getTokenRef.current);
                     }
-                } else if (status === 'undetermined') {
+                } else if (shouldPromptForNotificationPermission(status)) {
                     const alreadyAsked = await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY);
-                    if (!alreadyAsked && isMounted) {
+                    if (!alreadyAsked && isMounted && isSignedIn) {
                         setTimeout(() => {
-                            if (isMounted) setShowPermissionModal(true);
+                            if (isMounted && isSignedInRef.current) setShowPermissionModal(true);
                         }, 2500);
                     }
                 }
@@ -369,6 +372,30 @@ export function usePushNotifications(): PushNotificationState {
         };
     }, [isLoaded, isSignedIn]);
 
+    // Show permission modal after sign-in if OS permission still undetermined
+    useEffect(() => {
+        if (!isLoaded || !isSignedIn || !loadNotifications()) return;
+
+        let cancelled = false;
+
+        (async () => {
+            const Notifications = loadNotifications();
+            if (!Notifications) return;
+            await ensureAndroidNotificationChannels();
+            const { status } = await Notifications.getPermissionsAsync();
+            if (!shouldPromptForNotificationPermission(status) || cancelled) return;
+            const alreadyAsked = await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY);
+            if (alreadyAsked || cancelled) return;
+            setTimeout(() => {
+                if (!cancelled && isSignedInRef.current) setShowPermissionModal(true);
+            }, 1500);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoaded, isSignedIn]);
+
     return {
         expoPushToken,
         notification,
@@ -389,12 +416,14 @@ export {
 export function PushNotificationSetup() {
     const { showPermissionModal, setShowPermissionModal } = usePushNotifications();
     const { isSignedIn, getToken } = useAuth();
+    const getTokenRef = useRef(getToken);
+    getTokenRef.current = getToken;
 
     if (!loadNotifications()) return null;
 
     return (
         <NotificationPermissionModal
-            visible={showPermissionModal}
+            visible={showPermissionModal && isSignedIn}
             onClose={() => setShowPermissionModal(false)}
             onConfirm={async () => {
                 try {
@@ -404,13 +433,13 @@ export function PushNotificationSetup() {
                         setShowPermissionModal(false);
                         return;
                     }
-                    const { status } = await Notifications.requestPermissionsAsync();
+                    const status = await requestOsNotificationPermission();
                     await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
 
                     if (status === 'granted') {
-                        await capturePushTokenAfterPermission(
-                            isSignedIn ? getToken : undefined,
-                        );
+                        await capturePushTokenAfterPermission(() => getTokenRef.current());
+                        await flushPendingPushToken(() => getTokenRef.current());
+                        await syncExpoPushTokenIfGranted(() => getTokenRef.current());
                     }
                 } catch (err) {
                     logger.error('Permission request error:', err);

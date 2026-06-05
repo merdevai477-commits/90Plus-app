@@ -319,19 +319,21 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
                 gotPrefix: verify?.expoPushToken?.substring(0, 25) ?? null,
                 consent: verify?.pushNotificationsConsent,
             });
+            sendError(req, res, ErrorCode.INTERNAL, 'Push token saved but verification failed');
+            return;
         }
 
         logger.info('[Push] token registered', {
             clerkUserId,
             platform: resolvedPlatform,
             tokenPrefix: token.substring(0, 25),
-            dbVerified: dbOk,
+            dbVerified: true,
         });
 
         res.json({
             status: 'SUCCESS',
             message: 'Push token registered',
-            data: { dbVerified: dbOk },
+            data: { dbVerified: true },
         });
     } catch (error: any) {
         pushApiTrace(`[PUSH API] EXIT → reason: exception — ${error?.message ?? error}`);

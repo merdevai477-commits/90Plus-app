@@ -2472,7 +2472,7 @@ export class MatchesService {
     static async registerPushToken(
         token: string,
         pushToken: string,
-    ): Promise<{ success: boolean; rateLimited?: boolean }> {
+    ): Promise<{ success: boolean; rateLimited?: boolean; unauthorized?: boolean; dbVerified?: boolean }> {
         try {
             const response = await fetch(`${API_URL}/matches/push-token`, {
                 method: 'POST',
@@ -2490,8 +2490,26 @@ export class MatchesService {
                 return { success: false, rateLimited: true };
             }
 
-            const data = await response.json();
-            return { success: data.status === 'SUCCESS' };
+            if (response.status === 401) {
+                return { success: false, unauthorized: true };
+            }
+
+            let data: { status?: string; data?: { dbVerified?: boolean } } = {};
+            try {
+                data = await response.json();
+            } catch {
+                return { success: false };
+            }
+
+            if (!response.ok || data.status !== 'SUCCESS') {
+                return { success: false };
+            }
+
+            const dbVerified = data.data?.dbVerified;
+            return {
+                success: dbVerified !== false,
+                dbVerified: dbVerified !== false,
+            };
         } catch (error) {
             console.error('Register push token error:', error);
             return { success: false };

@@ -98,6 +98,9 @@ async function ensurePermission(
             void capturePushTokenAfterPermission(getAuthToken);
             return true;
         }
+        if (Platform.OS === 'android') {
+            await ensureChannels();
+        }
         const { status } = await Notifications.requestPermissionsAsync();
         if (status === 'granted') {
             void capturePushTokenAfterPermission(getAuthToken);

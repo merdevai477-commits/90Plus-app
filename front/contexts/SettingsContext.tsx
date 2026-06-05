@@ -22,6 +22,8 @@ import { ensureNotificationForegroundHandler } from '../services/notificationFor
 import {
   syncExpoPushToken,
   updatePushNotificationsConsent,
+  ensureAndroidNotificationChannels,
+  requestOsNotificationPermission,
 } from '../services/pushTokenRegistration.service';
 
 // Conditionally import notifications only if not in Expo Go
@@ -277,7 +279,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (!isExpoGo && Notifications) {
       try {
         if (enabled) {
-          const { status } = await Notifications.requestPermissionsAsync();
+          await ensureAndroidNotificationChannels();
+          const status = await requestOsNotificationPermission();
           if (status !== 'granted') {
             throw new Error('Notification permissions not granted');
           }

@@ -26,6 +26,21 @@ let lastSyncedPushToken: string | null = null;
 
 export const PENDING_PUSH_TOKEN_KEY = '@90plus/pendingExpoPushToken';
 
+/** Wait for Clerk JWT — avoids race where token is generated before auth is ready. */
+async function resolveAuthToken(
+    getAuthToken: () => Promise<string | null>,
+    maxAttempts = 5,
+): Promise<string | null> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const authToken = await getAuthToken();
+        if (authToken) return authToken;
+        if (attempt < maxAttempts - 1) {
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        }
+    }
+    return null;
+}
+
 function ownershipLabel(): string {
     const o = Constants.appOwnership;
     if (o === 'expo' || o === 'standalone' || o === 'guest') return o;
@@ -48,6 +63,8 @@ function loadNotifications(): NotificationsModule | null {
 export function isPushRegistrationAvailable(): boolean {
     return !!loadNotifications() && Device.isDevice;
 }
+
+let channelsReady = false;
 
 async function setupAndroidChannels(Notifications: NotificationsModule): Promise<void> {
     if (Platform.OS !== 'android') return;
@@ -83,6 +100,39 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         lightColor: '#32cd32',
         sound: 'default',
     });
+}
+
+/**
+ * Android 13+ requires at least one notification channel before the OS shows
+ * the POST_NOTIFICATIONS prompt. Safe to call multiple times.
+ */
+export async function ensureAndroidNotificationChannels(): Promise<void> {
+    const Notifications = loadNotifications();
+    if (!Notifications || Platform.OS !== 'android') return;
+    if (channelsReady) return;
+    await setupAndroidChannels(Notifications);
+    channelsReady = true;
+}
+
+/**
+ * Whether we should show the in-app permission modal / call requestPermissionsAsync.
+ * Android reports `denied` on fresh install (not `undetermined`) — must still prompt.
+ */
+export function shouldPromptForNotificationPermission(status: string): boolean {
+    if (status === 'granted') return false;
+    if (Platform.OS === 'android') {
+        return status === 'undetermined' || status === 'denied';
+    }
+    return status === 'undetermined';
+}
+
+/** Request OS notification permission (creates Android channels first). */
+export async function requestOsNotificationPermission(): Promise<string> {
+    const Notifications = loadNotifications();
+    if (!Notifications) return 'denied';
+    await ensureAndroidNotificationChannels();
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status;
 }
 
 /** Read Expo push token when OS permission is already granted. */
@@ -130,6 +180,8 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
             return null;
         }
 
+        await ensureAndroidNotificationChannels();
+
         pushTrace(`[PUSH TRACE] projectId=${projectId ?? 'undefined'}`);
         pushTrace('[PUSH TRACE] before getExpoPushTokenAsync');
 
@@ -158,7 +210,7 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
         }
 
         const token = pushTokenData.data;
-        await setupAndroidChannels(Notifications);
+        await ensureAndroidNotificationChannels();
         logger.debug('📱 Expo push token obtained:', token.substring(0, 25));
         return token;
     } catch (error) {
@@ -234,6 +286,11 @@ async function registerTokenWithBackend(
             logger.warn('Push token sync rate-limited; will retry on next foreground');
             return false;
         }
+        if (result.unauthorized) {
+            pushTrace('[PUSH TRACE] registerPushToken response=401 — will persist pending');
+            await persistPendingPushToken(pushToken);
+            return false;
+        }
         pushTrace('[PUSH TRACE] registerPushToken response=failed (non-SUCCESS body)');
         throw new Error('Backend rejected token sync');
     } catch (err: unknown) {
@@ -276,7 +333,7 @@ export async function syncExpoPushToken(
             return false;
         }
 
-        const authToken = await getAuthToken();
+        const authToken = await resolveAuthToken(getAuthToken);
         if (!authToken) {
             pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no auth token, persisted pending');
             await persistPendingPushToken(pushToken);
@@ -317,9 +374,9 @@ export async function flushPendingPushToken(
             return false;
         }
 
-        const authToken = await getAuthToken();
+        const authToken = await resolveAuthToken(getAuthToken);
         if (!authToken) {
-            pushTrace('[PUSH TRACE] EXIT → reason: flushPendingPushToken — no auth token');
+            pushTrace('[PUSH TRACE] EXIT → reason: flushPendingPushToken — no auth token (pending kept)');
             return false;
         }
 
@@ -347,12 +404,12 @@ export async function capturePushTokenAfterPermission(
     }
 
     if (getAuthToken) {
-        const authToken = await getAuthToken();
+        const authToken = await resolveAuthToken(getAuthToken);
         if (authToken) {
             await updatePushNotificationsConsent(authToken, true);
             await registerTokenWithBackend(authToken, pushToken);
         } else {
-            pushTrace('[PUSH TRACE] EXIT → reason: capturePushTokenAfterPermission — pending (no auth)');
+            pushTrace('[PUSH TRACE] EXIT → reason: capturePushTokenAfterPermission — pending (no auth after retries)');
             await persistPendingPushToken(pushToken);
         }
     } else {
