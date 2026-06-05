@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import type { ExpoPushMessage } from 'expo-server-sdk';
+import { Expo, type ExpoPushMessage } from 'expo-server-sdk';
 import { requireAdmin } from '../middleware/admin.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
@@ -599,6 +599,174 @@ router.get('/notifications/stats', requireAdmin, async (req: Request, res: Respo
         });
     } catch (error: any) {
         logger.error('Notification stats error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
+ * POST /api/admin/push-debug
+ * Forensic push test: DB state + optional send + Expo ticket (admin / isDeveloper only).
+ *
+ * Body: { clerkUserId?: string, username?: string, title?, body?, send?: boolean }
+ */
+router.post('/push-debug', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const {
+            clerkUserId,
+            username,
+            title = '90Plus Debug',
+            body = 'Testing push notification',
+            send = true,
+        } = req.body as {
+            clerkUserId?: string;
+            username?: string;
+            title?: string;
+            body?: string;
+            send?: boolean;
+        };
+
+        if (!clerkUserId && !username) {
+            sendError(req, res, ErrorCode.VALIDATION, 'clerkUserId or username is required');
+            return;
+        }
+
+        const user = await prisma.user.findFirst({
+            where: clerkUserId ? { clerkUserId } : { username },
+            select: {
+                id: true,
+                username: true,
+                clerkUserId: true,
+                expoPushToken: true,
+                pushNotificationsConsent: true,
+                updatedAt: true,
+            },
+        });
+
+        if (!user) {
+            logger.info('[push-debug] User not found', { clerkUserId, username });
+            res.json({
+                success: false,
+                userFound: false,
+                user: clerkUserId ?? username,
+                hasToken: false,
+                consent: null,
+                token: null,
+                message: 'User not found',
+            });
+            return;
+        }
+
+        const token = user.expoPushToken?.trim() || null;
+        const hasToken = !!(token && token.length > 0);
+
+        logger.info('[push-debug] User found', {
+            username: user.username,
+            clerkUserId: user.clerkUserId,
+            hasToken,
+            consent: user.pushNotificationsConsent,
+            tokenPrefix: token ? `${token.substring(0, 30)}...` : null,
+        });
+
+        const baseReport = {
+            success: false,
+            userFound: true,
+            user: user.clerkUserId,
+            username: user.username,
+            hasToken,
+            consent: user.pushNotificationsConsent,
+            token: token,
+            tokenPrefix: token ? `${token.substring(0, 35)}...` : null,
+            updatedAt: user.updatedAt.toISOString(),
+            pushAttempted: false,
+            ticketStatus: null as string | null,
+            ticketId: null as string | null,
+            ticketError: null as string | null,
+            tickets: null as unknown[] | null,
+        };
+
+        if (!hasToken || !token) {
+            res.json({
+                ...baseReport,
+                message: 'No expoPushToken — open app on device, grant notifications, stay signed in',
+            });
+            return;
+        }
+
+        if (!send) {
+            res.json({
+                ...baseReport,
+                success: true,
+                message: 'User has token; send=false (dry run)',
+            });
+            return;
+        }
+
+        const payload = {
+            to: token,
+            title,
+            body,
+            sound: 'default' as const,
+            data: { type: 'DEBUG_TEST', source: 'admin/push-debug' },
+            channelId: 'general',
+        };
+
+        logger.info('[push-debug] Sending push', {
+            clerkUserId: user.clerkUserId,
+            title,
+            body,
+            tokenPrefix: `${token.substring(0, 30)}...`,
+        });
+
+        const expo = new Expo();
+        const message: ExpoPushMessage = {
+            to: payload.to,
+            sound: payload.sound,
+            title: payload.title,
+            body: payload.body,
+            data: payload.data,
+            priority: 'high',
+            channelId: payload.channelId,
+        };
+
+        const chunks = expo.chunkPushNotifications([message]);
+        const allTickets: unknown[] = [];
+        let ticketStatus: string | null = null;
+        let ticketId: string | null = null;
+        let ticketError: string | null = null;
+
+        for (const chunk of chunks) {
+            const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+            allTickets.push(...ticketChunk);
+            for (const t of ticketChunk) {
+                const st = (t as { status?: string }).status;
+                if (st === 'ok') {
+                    ticketStatus = 'ok';
+                    ticketId = (t as { id?: string }).id ?? null;
+                } else if (st === 'error') {
+                    ticketStatus = 'error';
+                    ticketError = (t as { message?: string }).message ?? 'Expo ticket error';
+                    const errCode = (t as { details?: { error?: string } }).details?.error;
+                    if (errCode) ticketError = `${ticketError} (${errCode})`;
+                }
+            }
+        }
+
+        res.json({
+            ...baseReport,
+            success: ticketStatus === 'ok',
+            pushAttempted: true,
+            ticketStatus,
+            ticketId,
+            ticketError,
+            tickets: allTickets,
+            outboundMessage: message,
+            message:
+                ticketStatus === 'ok'
+                    ? 'Push ticket ok — check device'
+                    : ticketError ?? 'Push failed',
+        });
+    } catch (error: any) {
+        logger.error('Push debug error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

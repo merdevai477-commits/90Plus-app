@@ -69,6 +69,7 @@ import {
   PushTokenSyncBootstrap,
   GlobalNotificationTrayBridge,
 } from "../components/common/PushTokenSyncBootstrap";
+import { PushRegistrationReportBootstrap } from "../components/common/PushRegistrationReportBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
 // ErrorUtils is on `global`, not a reliable named export from react-native in SDK 55+.
@@ -690,6 +691,7 @@ function RootLayout() {
           <SentryUserTracker />
           <QueryClientProvider client={queryClient}>
             <PushNotificationSetup />
+            <PushRegistrationReportBootstrap />
             <LanguageInitializer>
               <LanguageProvider>
                 <SettingsProvider>

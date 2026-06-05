@@ -64,10 +64,19 @@ export async function checkPushReceipts(receiptIds: string[]): Promise<void> {
             try {
                 const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
 
+                logger.info('EXPO RECEIPTS', JSON.stringify(receipts, null, 2));
+
                 for (const [receiptId, receipt] of Object.entries(receipts)) {
+                    if (receipt.status === 'ok') {
+                        logger.info(`Receipt ok [${receiptId}]`);
+                        continue;
+                    }
+
                     if (receipt.status === 'error') {
                         const errCode = (receipt as any).details?.error;
-                        logger.warn(`Receipt error [${receiptId}]: ${receipt.message} (${errCode})`);
+                        logger.warn(
+                            `Receipt error [${receiptId}]: ${receipt.message} (${errCode ?? 'unknown'})`,
+                        );
 
                         if (errCode === 'DeviceNotRegistered') {
                             // Retrieve the push token stored with this receipt ID
@@ -230,6 +239,18 @@ export class PushNotificationService {
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
                     ...(payload.channelId ? { channelId: payload.channelId } : {}),
                 };
+            }
+
+            if (process.env.PUSH_DEBUG_PAYLOAD === 'true' || process.env.NODE_ENV !== 'production') {
+                logger.info('EXPO PUSH OUTBOUND', JSON.stringify({
+                    to: `${payload.to.substring(0, 28)}...`,
+                    sound: message.sound,
+                    title: message.title,
+                    body: message.body,
+                    hasData: !!(message.data && Object.keys(message.data).length > 0),
+                    dataKeys: message.data ? Object.keys(message.data) : [],
+                    silent: !!payload.silent,
+                }));
             }
 
             const chunks = expo.chunkPushNotifications([message]);

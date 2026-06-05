@@ -8,6 +8,7 @@ import {
     syncExpoPushTokenIfGranted,
     flushPendingPushToken,
 } from '../../services/pushTokenRegistration.service';
+import { logPushRegistrationReport } from '../../services/pushRegistrationReport.service';
 import { logger } from '../../services/logger';
 
 export function PushTokenSyncBootstrap() {
@@ -19,8 +20,10 @@ export function PushTokenSyncBootstrap() {
         if (!isLoaded || !isSignedIn) return;
 
         const sync = async () => {
+            await logPushRegistrationReport('signed-in-sync-start');
             await flushPendingPushToken(() => getTokenRef.current());
             await syncExpoPushTokenIfGranted(() => getTokenRef.current());
+            await logPushRegistrationReport('signed-in-sync-end');
         };
 
         sync();

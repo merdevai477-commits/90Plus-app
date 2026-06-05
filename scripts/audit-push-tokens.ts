@@ -3,6 +3,7 @@
  * Usage:
  *   npx tsx --project tsconfig.scripts.json scripts/audit-push-tokens.ts
  *   npx tsx --project tsconfig.scripts.json scripts/audit-push-tokens.ts --send-test --clerk-user-id user_xxx
+ *   npx tsx --project tsconfig.scripts.json scripts/audit-push-tokens.ts --send-all
  */
 
 import 'dotenv/config';
@@ -167,15 +168,21 @@ async function sendTestWithFullExpoResponse(clerkUserId?: string, username?: str
         return;
     }
 
+    const title = arg('--title') ?? '90Plus Test';
+    const body = arg('--body') ?? 'If you see this, remote push works';
+
     const message: ExpoPushMessage = {
         to: token,
         sound: 'default',
-        title: '🔔 Push Audit Test',
-        body: `Audit test at ${new Date().toISOString()}`,
+        title,
+        body,
         data: { type: 'TEST', source: 'audit-push-tokens.ts' },
         priority: 'high',
         channelId: 'general',
     };
+
+    console.log('\n--- Outbound ExpoPushMessage ---');
+    console.log(JSON.stringify(message, null, 2));
 
     const chunks = expo.chunkPushNotifications([message]);
     let allTickets: unknown[] = [];
@@ -235,19 +242,96 @@ async function sendTestWithFullExpoResponse(clerkUserId?: string, username?: str
     }
 }
 
+async function sendTestToAllUsersWithToken() {
+    console.log('\n========== 9. BULK TEST PUSH (all users with expoPushToken) ==========\n');
+
+    const users = await prisma.user.findMany({
+        where: {
+            isDeleted: false,
+            expoPushToken: { not: null },
+            NOT: { expoPushToken: '' },
+        },
+        select: {
+            username: true,
+            clerkUserId: true,
+            expoPushToken: true,
+            pushNotificationsConsent: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+    });
+
+    const title = arg('--title') ?? '90Plus Test';
+    const body = arg('--body') ?? 'If you see this, remote push works';
+
+    console.log(`Found ${users.length} user(s) with a stored token.\n`);
+
+    let sent = 0;
+    let skipped = 0;
+    let ticketOk = 0;
+    let ticketErr = 0;
+
+    for (const user of users) {
+        const token = user.expoPushToken!;
+        console.log(`--- ${user.username} (${user.clerkUserId}) ---`);
+
+        if (!Expo.isExpoPushToken(token)) {
+            console.log('  SKIP: invalid token format');
+            skipped++;
+            continue;
+        }
+
+        const message: ExpoPushMessage = {
+            to: token,
+            sound: 'default',
+            title,
+            body,
+            data: { type: 'TEST', source: 'audit-push-tokens.ts', clerkUserId: user.clerkUserId },
+            priority: 'high',
+            channelId: 'general',
+        };
+
+        try {
+            const chunks = expo.chunkPushNotifications([message]);
+            for (const chunk of chunks) {
+                const tickets = await expo.sendPushNotificationsAsync(chunk);
+                console.log('  Tickets:', JSON.stringify(tickets));
+                for (const t of tickets) {
+                    if ((t as { status?: string }).status === 'ok') ticketOk++;
+                    else ticketErr++;
+                }
+            }
+            sent++;
+        } catch (e) {
+            console.log('  ERROR:', e instanceof Error ? e.message : String(e));
+            ticketErr++;
+        }
+    }
+
+    console.log('\nBulk summary:');
+    console.log(`  Users with token: ${users.length}`);
+    console.log(`  Attempted sends:  ${sent}`);
+    console.log(`  Skipped:          ${skipped}`);
+    console.log(`  Ticket ok:        ${ticketOk}`);
+    console.log(`  Ticket error:     ${ticketErr}`);
+    console.log('(Receipt check omitted in bulk — use --send-test for one user + receipts)\n');
+}
+
 async function main() {
     try {
         await auditUsers();
         await auditRecentNotifications();
 
         const sendTest = process.argv.includes('--send-test');
+        const sendAll = process.argv.includes('--send-all');
         const clerkUserId = arg('--clerk-user-id') || process.env.TEST_CLERK_USER_ID;
         const username = arg('--username');
 
-        if (sendTest) {
+        if (sendAll) {
+            await sendTestToAllUsersWithToken();
+        } else if (sendTest) {
             await sendTestWithFullExpoResponse(clerkUserId, username);
         } else {
-            console.log('\n(Run with --send-test --clerk-user-id <id> for live Expo ticket/receipt output)\n');
+            console.log('\n(Run with --send-test --clerk-user-id <id> or --send-all)\n');
         }
     } finally {
         await prisma.$disconnect();

@@ -111,32 +111,53 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
     }
 
     try {
-        const perm = await Notifications.getPermissionsAsync();
-        pushTrace(`[PUSH TRACE] permissions=${perm.status}`);
-
-        if (perm.status !== 'granted') {
-            pushTrace('[PUSH TRACE] EXIT → reason: permission denied');
-            return null;
-        }
+        const permission = await Notifications.getPermissionsAsync();
+        pushTrace(`[PUSH TRACE] permissions=${permission.status}`);
 
         const projectId =
             Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+
+        if (permission.status !== 'granted') {
+            console.log('[PUSH REPORT]', {
+                platform: Platform.OS,
+                isDevice: Device.isDevice,
+                appOwnership: Constants.appOwnership,
+                projectId: projectId ?? null,
+                permission: permission.status,
+                token: null,
+            });
+            pushTrace('[PUSH TRACE] EXIT → reason: permission not granted');
+            return null;
+        }
+
         pushTrace(`[PUSH TRACE] projectId=${projectId ?? 'undefined'}`);
         pushTrace('[PUSH TRACE] before getExpoPushTokenAsync');
 
-        let token: string;
+        let pushTokenData: { data: string } | null = null;
         try {
-            const pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-            token = pushTokenData.data;
-            pushTrace(`[PUSH TRACE] token=${token}`);
+            pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+            pushTrace(`[PUSH TRACE] token=${pushTokenData.data}`);
         } catch (tokenErr: unknown) {
             const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
             pushTrace(`[PUSH TRACE] token=error:${msg}`);
             pushTrace('[PUSH TRACE] EXIT → reason: getExpoPushTokenAsync failed');
             logger.error('Error getting push token:', tokenErr);
+        }
+
+        console.log('[PUSH REPORT]', {
+            platform: Platform.OS,
+            isDevice: Device.isDevice,
+            appOwnership: Constants.appOwnership,
+            projectId: projectId ?? null,
+            permission: permission.status,
+            token: pushTokenData?.data ?? null,
+        });
+
+        if (!pushTokenData?.data) {
             return null;
         }
 
+        const token = pushTokenData.data;
         await setupAndroidChannels(Notifications);
         logger.debug('📱 Expo push token obtained:', token.substring(0, 25));
         return token;

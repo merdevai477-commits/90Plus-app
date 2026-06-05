@@ -341,6 +341,51 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
 });
 
 // ============================================
+// GET /api/matches/push-token/status
+// Compare device-registered token with DB (debug / sync check)
+// ============================================
+router.get('/push-token/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: {
+                username: true,
+                expoPushToken: true,
+                pushNotificationsConsent: true,
+            },
+        });
+
+        if (!user) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+            return;
+        }
+
+        const token = user.expoPushToken?.trim() || null;
+        const hasToken = !!(token && token.length > 0);
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                username: user.username,
+                hasToken,
+                tokenPrefix: hasToken ? `${token!.substring(0, 35)}...` : null,
+                consent: user.pushNotificationsConsent,
+                pushNotificationsConsent: user.pushNotificationsConsent,
+            },
+        });
+    } catch (error: any) {
+        logger.error('Get push token status error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to get push token status');
+    }
+});
+
+// ============================================
 // GET /api/matches/live
 // Get live matches from Football API
 // ============================================
