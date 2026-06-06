@@ -3,7 +3,7 @@ import { SHARE_BASE_URL, shareUrl } from '../config/shareLinks';
 export const PLAY_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp';
 
-export const APP_STORE_URL = 'https://apps.apple.com/app/90plus/id6744076498';
+export const APP_STORE_URL = 'https://apps.apple.com/us/app/90plus/id6758296989';
 
 const ANDROID_PACKAGE = 'com.mhmdsh1892.ninetyplusapp';
 

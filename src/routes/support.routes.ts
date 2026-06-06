@@ -6,7 +6,6 @@
 import path from 'path';
 import { Router, Request, Response } from 'express';
 import {
-    buildAppInviteLandingPage,
     buildProfileLandingPage,
     buildReelLandingPage,
 } from '../utils/share-landing-pages';
@@ -38,14 +37,6 @@ router.get('/privacy', (_req: Request, res: Response): void => {
             res.status(500).send('تعذّر تحميل صفحة سياسة الخصوصية');
         }
     });
-});
-
-/**
- * GET /
- * App invite — Android → Google Play, iOS → App Store
- */
-router.get('/', (_req: Request, res: Response): void => {
-    res.type('html').send(buildAppInviteLandingPage());
 });
 
 /**
