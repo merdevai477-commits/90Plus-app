@@ -70,6 +70,7 @@ export default function LoginScreen() {
 
   const { startGoogle, startApple } = useOAuthFlow({
     onError: () => setOauthLoading(null),
+    legalAccepted: true,
   });
 
   const startResendCooldown = () => {

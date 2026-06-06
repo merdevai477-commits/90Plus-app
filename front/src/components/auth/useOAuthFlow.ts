@@ -17,11 +17,16 @@ import {
   isOAuthUserCancelled,
   resolveOAuthRedirectUrl,
 } from '@/src/utils/authSession';
+import { completeOAuthMissingRequirements } from '@/src/utils/oauthSignUpCompletion';
 
 interface OAuthFlowOptions {
   onError?: (message: string) => void;
   /** Runs after session is active, before post-auth navigation (e.g. age attestation at signup). */
   beforeNavigate?: () => Promise<void>;
+  /** User accepted Terms & Privacy (required for OAuth sign-up in production). */
+  legalAccepted?: boolean;
+  /** Called when OAuth sign-up still needs email OTP after legal consent. */
+  onEmailVerificationNeeded?: () => void;
 }
 
 interface OAuthFlowReturn {
@@ -42,7 +47,12 @@ function resolveSessionId(result: {
   );
 }
 
-export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {}): OAuthFlowReturn {
+export function useOAuthFlow({
+  onError,
+  beforeNavigate,
+  legalAccepted = false,
+  onEmailVerificationNeeded,
+}: OAuthFlowOptions = {}): OAuthFlowReturn {
   const router = useRouter();
   const { getToken } = useAuth();
   const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
@@ -70,12 +80,47 @@ export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {})
         const signInStatus = result.signIn?.status;
         const signUpStatus = result.signUp?.status;
 
-        if (
-          signInStatus === 'needs_first_factor' ||
-          signUpStatus === 'missing_requirements'
-        ) {
+        if (signUpStatus === 'missing_requirements' && result.signUp) {
+          const completion = await completeOAuthMissingRequirements(result.signUp, {
+            legalAccepted,
+          });
+
+          if (completion.kind === 'session' && result.setActive) {
+            await result.setActive({ session: completion.sessionId });
+            if (beforeNavigate) {
+              await beforeNavigate();
+            }
+            await navigateAfterAuth(router, getToken);
+            return;
+          }
+
+          if (completion.kind === 'email_verification') {
+            onEmailVerificationNeeded?.();
+            Alert.alert(
+              'Verify your email',
+              'We sent a verification code to your email. Enter it to finish signing up.',
+            );
+            return;
+          }
+
+          if (!legalAccepted) {
+            Alert.alert(
+              'Terms required',
+              'Please accept the Terms & Privacy Policy before continuing with Google or Apple.',
+            );
+            return;
+          }
+
           Alert.alert(
-            'Almost there',
+            'Sign-up incomplete',
+            'We could not finish your account setup. Try email sign-up or contact support.',
+          );
+          return;
+        }
+
+        if (signInStatus === 'needs_first_factor') {
+          Alert.alert(
+            'Verification required',
             'Please finish the verification step in your email or phone to continue.',
           );
           return;
@@ -99,7 +144,7 @@ export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {})
         Alert.alert(`${providerLabel} sign-in error`, msg);
       }
     },
-    [router, onError, beforeNavigate, getToken],
+    [router, onError, beforeNavigate, getToken, legalAccepted, onEmailVerificationNeeded],
   );
 
   const startGoogle = useCallback(() => handle(startGoogleFlow, 'Google'), [handle, startGoogleFlow]);

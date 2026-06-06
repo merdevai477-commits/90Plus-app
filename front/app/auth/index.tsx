@@ -73,6 +73,13 @@ export default function RegisterScreen() {
   const { startGoogle, startApple } = useOAuthFlow({
     onError: () => setOauthLoading(null),
     beforeNavigate: recordSignupAgeAttestation,
+    legalAccepted: terms,
+    onEmailVerificationNeeded: () => {
+      if (signUp?.emailAddress) {
+        setEmail(signUp.emailAddress);
+      }
+      setShowVerification(true);
+    },
   });
 
   const requireTermsForOAuth = (): boolean => {

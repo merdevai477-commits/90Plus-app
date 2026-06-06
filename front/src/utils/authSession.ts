@@ -5,9 +5,12 @@ export const OAUTH_REDIRECT_URL = 'ninetyplus://auth-callback';
 
 /**
  * OAuth redirect for Google/Apple. Normalizes accidental `scheme:///path` (triple slash).
- * Dev builds may return an Expo URL — register that URL in Clerk if it differs.
+ * Release builds always use the custom scheme; dev client uses Expo Linking URL.
  */
 export function resolveOAuthRedirectUrl(): string {
+  if (!__DEV__) {
+    return OAUTH_REDIRECT_URL;
+  }
   const url = Linking.createURL('auth-callback');
   return url.replace(':///', '://');
 }
