@@ -23,7 +23,7 @@ export const TOP_5_LEAGUES_FLAGS: CountryFlag[] = [
         name: 'England',
         nameAr: 'إنجلترا',
         code: 'GB-ENG',
-        flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+        flag: '🇬🇧',
         flagUrl: 'https://flagcdn.com/w320/gb-eng.png',
         league: 'Premier League'
     },
@@ -309,11 +309,59 @@ export const POPULAR_COUNTRIES_FLAGS: CountryFlag[] = [
     },
 ];
 
-// ============ COMBINED EXPORT ============
-export const ALL_COUNTRY_FLAGS: CountryFlag[] = [
-    ...TOP_5_LEAGUES_FLAGS,
-    ...POPULAR_COUNTRIES_FLAGS,
+// ============ 22 ARAB LEAGUE COUNTRIES ============
+const ARAB_COUNTRY_ENTRIES: CountryFlag[] = [
+    { id: 'algeria', name: 'Algeria', nameAr: 'الجزائر', code: 'DZ', flag: '🇩🇿', flagUrl: 'https://flagcdn.com/w320/dz.png' },
+    { id: 'bahrain', name: 'Bahrain', nameAr: 'البحرين', code: 'BH', flag: '🇧🇭', flagUrl: 'https://flagcdn.com/w320/bh.png' },
+    { id: 'comoros', name: 'Comoros', nameAr: 'جزر القمر', code: 'KM', flag: '🇰🇲', flagUrl: 'https://flagcdn.com/w320/km.png' },
+    { id: 'djibouti', name: 'Djibouti', nameAr: 'جيبوتي', code: 'DJ', flag: '🇩🇯', flagUrl: 'https://flagcdn.com/w320/dj.png' },
+    { id: 'egypt', name: 'Egypt', nameAr: 'مصر', code: 'EG', flag: '🇪🇬', flagUrl: 'https://flagcdn.com/w320/eg.png' },
+    { id: 'iraq', name: 'Iraq', nameAr: 'العراق', code: 'IQ', flag: '🇮🇶', flagUrl: 'https://flagcdn.com/w320/iq.png' },
+    { id: 'jordan', name: 'Jordan', nameAr: 'الأردن', code: 'JO', flag: '🇯🇴', flagUrl: 'https://flagcdn.com/w320/jo.png' },
+    { id: 'kuwait', name: 'Kuwait', nameAr: 'الكويت', code: 'KW', flag: '🇰🇼', flagUrl: 'https://flagcdn.com/w320/kw.png' },
+    { id: 'lebanon', name: 'Lebanon', nameAr: 'لبنان', code: 'LB', flag: '🇱🇧', flagUrl: 'https://flagcdn.com/w320/lb.png' },
+    { id: 'libya', name: 'Libya', nameAr: 'ليبيا', code: 'LY', flag: '🇱🇾', flagUrl: 'https://flagcdn.com/w320/ly.png' },
+    { id: 'mauritania', name: 'Mauritania', nameAr: 'موريتانيا', code: 'MR', flag: '🇲🇷', flagUrl: 'https://flagcdn.com/w320/mr.png' },
+    { id: 'morocco', name: 'Morocco', nameAr: 'المغرب', code: 'MA', flag: '🇲🇦', flagUrl: 'https://flagcdn.com/w320/ma.png' },
+    { id: 'oman', name: 'Oman', nameAr: 'عُمان', code: 'OM', flag: '🇴🇲', flagUrl: 'https://flagcdn.com/w320/om.png' },
+    { id: 'palestine', name: 'Palestine', nameAr: 'فلسطين', code: 'PS', flag: '🇵🇸', flagUrl: 'https://flagcdn.com/w320/ps.png' },
+    { id: 'qatar', name: 'Qatar', nameAr: 'قطر', code: 'QA', flag: '🇶🇦', flagUrl: 'https://flagcdn.com/w320/qa.png' },
+    { id: 'saudi-arabia', name: 'Saudi Arabia', nameAr: 'السعودية', code: 'SA', flag: '🇸🇦', flagUrl: 'https://flagcdn.com/w320/sa.png' },
+    { id: 'somalia', name: 'Somalia', nameAr: 'الصومال', code: 'SO', flag: '🇸🇴', flagUrl: 'https://flagcdn.com/w320/so.png' },
+    { id: 'sudan', name: 'Sudan', nameAr: 'السودان', code: 'SD', flag: '🇸🇩', flagUrl: 'https://flagcdn.com/w320/sd.png' },
+    { id: 'syria', name: 'Syria', nameAr: 'سوريا', code: 'SY', flag: '🇸🇾', flagUrl: 'https://flagcdn.com/w320/sy.png' },
+    { id: 'tunisia', name: 'Tunisia', nameAr: 'تونس', code: 'TN', flag: '🇹🇳', flagUrl: 'https://flagcdn.com/w320/tn.png' },
+    { id: 'uae', name: 'UAE', nameAr: 'الإمارات', code: 'AE', flag: '🇦🇪', flagUrl: 'https://flagcdn.com/w320/ae.png' },
+    { id: 'yemen', name: 'Yemen', nameAr: 'اليمن', code: 'YE', flag: '🇾🇪', flagUrl: 'https://flagcdn.com/w320/ye.png' },
 ];
+
+export const ARAB_COUNTRIES_FLAGS: CountryFlag[] = ARAB_COUNTRY_ENTRIES;
+
+const ARAB_IDS = new Set(ARAB_COUNTRY_ENTRIES.map((c) => c.id));
+
+function mergeUniqueCountries(...groups: CountryFlag[][]): CountryFlag[] {
+    const seen = new Set<string>();
+    const out: CountryFlag[] = [];
+    for (const group of groups) {
+        for (const c of group) {
+            if (seen.has(c.id)) continue;
+            seen.add(c.id);
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+// ============ COMBINED EXPORT ============
+export const ALL_COUNTRY_FLAGS: CountryFlag[] = mergeUniqueCountries(
+    ARAB_COUNTRY_ENTRIES,
+    TOP_5_LEAGUES_FLAGS,
+    POPULAR_COUNTRIES_FLAGS,
+);
+
+export const OTHER_COUNTRY_FLAGS: CountryFlag[] = ALL_COUNTRY_FLAGS.filter(
+    (c) => !ARAB_IDS.has(c.id),
+);
 
 // Helper functions
 export const getFlagByCountryCode = (code: string): CountryFlag | undefined => {
@@ -344,3 +392,16 @@ export const searchCountries = (query: string): CountryFlag[] => {
             country.code.toLowerCase().includes(lowerQuery)
     );
 };
+
+export function isCountrySelected(
+    selected: string | undefined,
+    country: CountryFlag,
+): boolean {
+    if (!selected?.trim()) return false;
+    return (
+        selected === country.flag ||
+        selected === country.id ||
+        selected === country.code ||
+        selected === country.nameAr
+    );
+}

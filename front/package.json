@@ -3,8 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.1",
   "scripts": {
-    "start": "expo start --lan",
-    "start:clear": "node ./scripts/clear-metro-cache.js && expo start --clear --lan",
+    "start": "node --max-old-space-size=8192 ./node_modules/expo/bin/cli start --lan",
+    "start:clear": "node ./scripts/clear-metro-cache.js && node --max-old-space-size=8192 ./node_modules/expo/bin/cli start --clear --lan",
     "clear:metro": "node ./scripts/clear-metro-cache.js",
     "start:offline": "expo start --offline",
     "start:online": "expo start --lan",

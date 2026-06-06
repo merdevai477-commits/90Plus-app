@@ -18,6 +18,7 @@ export interface ProfileUpdateData {
   bio?: string;
   position?: string;
   countryFlag?: string;
+  country?: string;
   age?: number;
   height?: number;
   weight?: number;

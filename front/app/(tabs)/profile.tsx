@@ -753,7 +753,13 @@ export default function ProfileScreen() {
   const cooldowns = cachedCooldowns;
 
   // Predictions store for prediction stats
-  const { stats: predictionStats, fetchPredictionStats } = usePredictionsStore();
+  const {
+    stats: predictionStats,
+    allPredictions,
+    fetchPredictionStats,
+    fetchUserPredictions,
+  } = usePredictionsStore();
+  const [predictionsLoading, setPredictionsLoading] = useState(false);
 
   // Optimization: Fetch prediction stats when authenticated (with cleanup)
   useEffect(() => {
@@ -771,6 +777,29 @@ export default function ProfileScreen() {
     loadPredictionStats();
     return () => { isMounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'analytics') return;
+
+    let isMounted = true;
+    const loadPredictions = async () => {
+      setPredictionsLoading(true);
+      try {
+        const token = await getToken();
+        if (isMounted && token) {
+          await fetchUserPredictions(token);
+        }
+      } catch (error) {
+        logger.error('Error loading prediction history:', error);
+      } finally {
+        if (isMounted) setPredictionsLoading(false);
+      }
+    };
+
+    loadPredictions();
+    return () => { isMounted = false; };
+  }, [activeTab, getToken, fetchUserPredictions]);
+
   const lastMergedServerSigRef = useRef<string>('');
   const lastClerkIdForMergeRef = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -1815,6 +1844,8 @@ export default function ProfileScreen() {
           <ProfileAnalyticsTab
             analytics={analytics}
             predictionStats={predictionStats}
+            predictions={allPredictions}
+            predictionsLoading={predictionsLoading}
           />
         )}
 
@@ -1862,30 +1893,41 @@ export default function ProfileScreen() {
         visible={isCountryModalVisible}
         onClose={() => setIsCountryModalVisible(false)}
         onSelect={async (country) => {
-          await localProfileStorage.saveProfileData({
-            countryFlag: country.flag,
-            country: country.nameAr
-          });
-
-          updateCachedUserData({
-            countryFlag: country.flag,
-            country: country.nameAr,
-            location: country.nameAr,
-          });
-          
           setIsCountryModalVisible(false);
-          
-          toastManager.showInfo(t.profile.updating, t.profile.updatingCountry.replace('{country}', country.nameAr));
-          
-          // Send to backend with optimistic updates
-          const result = await updateFIFACard({ 
-            countryFlag: country.flag
-          });
-          
-          if (result.success) {
-            toastManager.showSuccess(t.profile.updated, t.profile.countryUpdatedSuccess.replace('{country}', country.nameAr));
-            // Mark country step as completed
-            await markStepCompleted('country');
+          try {
+            await localProfileStorage.saveProfileData({
+              countryFlag: country.flag,
+              country: country.nameAr,
+            });
+
+            updateCachedUserData({
+              countryFlag: country.flag,
+              country: country.nameAr,
+              location: country.nameAr,
+            });
+
+            toastManager.showInfo(
+              t.profile.updating,
+              t.profile.updatingCountry.replace('{country}', country.nameAr),
+            );
+
+            const result = await updateFIFACard({
+              countryFlag: country.flag,
+              country: country.nameAr,
+            });
+
+            if (result.success) {
+              toastManager.showSuccess(
+                t.profile.updated,
+                t.profile.countryUpdatedSuccess.replace('{country}', country.nameAr),
+              );
+              await markStepCompleted('country');
+            }
+          } catch {
+            toastManager.showError(
+              t.common.error,
+              'تعذر تحديث العلم. حاول مرة أخرى.',
+            );
           }
         }}
         selectedCountryId={displayCountryFlag}

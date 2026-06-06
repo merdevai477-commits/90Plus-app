@@ -8,6 +8,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { optimisticProfileService, ProfileUpdateData, OptimisticUpdateResult } from '../services/optimisticProfileService';
 import { useToast } from '../contexts/ToastContext';
 import { ToastHelper } from '../utils/professionalToastHelpers';
+import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
 export interface UseOptimisticProfileReturn {
   updateProfile: (updates: ProfileUpdateData) => Promise<OptimisticUpdateResult>;
@@ -26,11 +27,12 @@ export const useOptimisticProfile = (): UseOptimisticProfileReturn => {
     setIsUpdating(true);
     
     try {
-      const token = await getToken();
+      const token = await getClerkBearerToken(getToken);
       if (!token) {
         return {
           success: false,
-          error: 'لم يتم العثور على رمز المصادقة'
+          error: 'لم يتم العثور على رمز المصادقة. حاول تسجيل الدخول مرة أخرى.',
+          canRetry: true,
         };
       }
 
@@ -122,6 +124,7 @@ export const useProfileFieldUpdate = () => {
   const updateFIFACard = useCallback(async (cardData: {
     position?: string;
     countryFlag?: string;
+    country?: string;
     age?: number;
     height?: number;
     weight?: number;
