@@ -203,21 +203,6 @@ app.use(`${API_PREFIX}/upload`, (req: Request, res: Response, next: NextFunction
 // ============================================
 // ROUTES
 // ============================================
-app.get('/', (_req: Request, res: Response) => {
-    res.json({
-        name: '90Plus API',
-        version: '1.0.0',
-        description: 'Backend API for 90Plus App using Express, Prisma, and PostgreSQL',
-        message: 'Welcome to 90Plus API! Visit /api for more information.',
-        endpoints: {
-            api: `${API_PREFIX}`,
-            health: `${API_PREFIX}/health`,
-            users: `${API_PREFIX}/users`,
-            clerk: `${API_PREFIX}/clerk`,
-            webhooks: `${API_PREFIX}/webhooks/clerk`,
-        },
-    });
-});
 
 // Import routes
 import userRoutes from './routes/user.routes';
@@ -408,6 +393,15 @@ const publicPath = isProduction
 logger.info(`📁 Public path: ${publicPath}`);
 logger.info(`📁 Current directory: ${__dirname}`);
 logger.info(`📁 Production mode: ${isProduction}`);
+
+app.get('/', (_req: Request, res: Response) => {
+    res.sendFile(path.join(publicPath, 'index.html'), (err) => {
+        if (err) {
+            logger.error('Failed to send index.html:', err);
+            res.status(500).send('90Plus');
+        }
+    });
+});
 
 // Serve static files from public directory
 app.use(express.static(publicPath));
