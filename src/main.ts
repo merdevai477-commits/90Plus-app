@@ -233,6 +233,11 @@ import quizRoutes from './routes/quiz.routes';
 import authRoutes from './routes/auth.routes';
 import i18nRoutes from './routes/i18n.routes';
 import path from 'path';
+import {
+    CLERK_SIGN_IN_URL,
+    CLERK_SIGN_UP_URL,
+    CLERK_USER_PROFILE_URL,
+} from './config/clerkUrls';
 
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
@@ -402,6 +407,13 @@ app.get('/', (_req: Request, res: Response) => {
         }
     });
 });
+
+// Clerk Account Portal (accounts.90plus.pro) — short paths on main domain
+app.get('/sign-in', (_req, res) => res.redirect(302, CLERK_SIGN_IN_URL));
+app.get('/sign-up', (_req, res) => res.redirect(302, CLERK_SIGN_UP_URL));
+app.get('/login', (_req, res) => res.redirect(302, CLERK_SIGN_IN_URL));
+app.get('/account', (_req, res) => res.redirect(302, CLERK_USER_PROFILE_URL));
+app.get('/user', (_req, res) => res.redirect(302, CLERK_USER_PROFILE_URL));
 
 // Serve static files from public directory
 app.use(express.static(publicPath));

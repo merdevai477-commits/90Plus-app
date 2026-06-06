@@ -91,10 +91,17 @@
       /* Header */
       header {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
         padding: 4px 0 28px;
+      }
+
+      .header-links {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
       }
 
       @media (max-width: 599px) {
@@ -103,6 +110,14 @@
           align-items: stretch;
           gap: 14px;
           padding-bottom: 22px;
+        }
+
+        .header-links {
+          align-items: stretch;
+        }
+
+        header nav {
+          justify-content: center;
         }
       }
 
@@ -167,6 +182,86 @@
           border-color: var(--glass-border);
           background: var(--glass);
         }
+      }
+
+      nav.auth-nav a.nav-primary {
+        color: var(--ink);
+        background: rgba(124, 58, 237, 0.2);
+        border-color: rgba(167, 139, 250, 0.35);
+        font-weight: 600;
+      }
+
+      .auth-row {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        margin-bottom: 20px;
+      }
+
+      @media (min-width: 520px) {
+        .auth-row {
+          flex-direction: row;
+          flex-wrap: wrap;
+        }
+      }
+
+      .auth-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 14px 20px;
+        border-radius: 16px;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 1rem;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      @media (min-width: 520px) {
+        .auth-btn { width: auto; min-width: 180px; }
+      }
+
+      .auth-btn.sign-in {
+        color: #fff;
+        background: linear-gradient(135deg, #7c3aed, #5b21b6);
+        border: 1px solid rgba(167, 139, 250, 0.4);
+        box-shadow: 0 10px 32px rgba(124, 58, 237, 0.35);
+      }
+
+      .auth-btn.sign-up {
+        color: var(--ink);
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+      }
+
+      .auth-btn.account {
+        color: var(--purple-soft);
+        background: transparent;
+        border: 1px solid rgba(167, 139, 250, 0.25);
+        font-weight: 600;
+        font-size: 0.9375rem;
+        padding: 12px 18px;
+      }
+
+      .section-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 8px 0 20px;
+        color: var(--muted);
+        font-size: 0.8125rem;
+        font-weight: 500;
+      }
+
+      .section-divider::before,
+      .section-divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
       }
 
       /* Hero */
@@ -651,11 +746,18 @@
           <img src="/90Plus.png" width="44" height="44" alt="" />
           <span>90Plus</span>
         </a>
+        <div class="header-links">
+        <nav aria-label="تسجيل الدخول والحساب">
+          <a href="https://accounts.90plus.pro/sign-in">تسجيل الدخول</a>
+          <a href="https://accounts.90plus.pro/sign-up" class="nav-primary">إنشاء حساب</a>
+          <a href="https://accounts.90plus.pro/user">حسابي</a>
+        </nav>
         <nav aria-label="روابط قانونية">
           <a href="/support">الدعم</a>
           <a href="/privacy">الخصوصية</a>
           <a href="/terms">الشروط</a>
         </nav>
+        </div>
       </header>
 
       <section class="hero">
@@ -672,6 +774,21 @@
             90Plus — منصة كروية متكاملة: نتائج مباشرة، كويزات يومية، تنبؤات، ريلز،
             ذكاء اصطناعي، ومجتمع مشجعين. كل ما تحتاجه كمشجع حقيقي في تطبيق واحد.
           </p>
+
+          <div class="auth-row">
+            <a class="auth-btn sign-in" href="https://accounts.90plus.pro/sign-in">
+              تسجيل الدخول
+            </a>
+            <a class="auth-btn sign-up" href="https://accounts.90plus.pro/sign-up">
+              إنشاء حساب جديد
+            </a>
+            <a class="auth-btn account" href="https://accounts.90plus.pro/user">
+              إدارة الحساب
+            </a>
+          </div>
+
+          <p class="section-divider">أو حمّل التطبيق</p>
+
           <div class="store-row">
             <a
               class="store-badge gold"
@@ -815,6 +932,8 @@
 
       <footer>
         <nav aria-label="روابط">
+          <a href="https://accounts.90plus.pro/sign-in">تسجيل الدخول</a>
+          <a href="https://accounts.90plus.pro/user">حسابي</a>
           <a href="/support">الدعم</a>
           <a href="/privacy">الخصوصية</a>
           <a href="/terms">الشروط</a>
