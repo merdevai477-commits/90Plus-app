@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions, Animated, Platform } from 'react-native';
 import { Home, User, BarChart3, Video, Sparkles } from 'lucide-react-native';
 import Svg, { Rect, Line, Circle } from 'react-native-svg';
@@ -66,6 +66,17 @@ const TABS: { name: TabName; icon: typeof Home | null; customIcon?: boolean; aiI
   { name: 'Rank', icon: BarChart3, route: '/(tabs)/rank' },
 ];
 
+const BAR_GLASS_PROPS = isLiquidGlassSupported
+  ? {
+      effect: 'clear' as const,
+      interactive: false,
+      tintColor: 'rgba(255,255,255,0.08)',
+      colorScheme: 'dark' as const,
+    }
+  : { intensity: Platform.OS === 'android' ? 85 : 28, tint: 'dark' as const };
+
+const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+
 const BottomNav = () => {
   const router = useRouter();
   const pathname = usePathname();
@@ -101,21 +112,6 @@ const BottomNav = () => {
 
   const activeIndex = Math.max(0, TABS.findIndex((t) => t.name === activeTab));
 
-  const barGlassProps = useMemo(
-    () =>
-      isLiquidGlassSupported
-        ? {
-            effect: 'clear' as const,
-            interactive: false,
-            tintColor: 'rgba(255,255,255,0.08)',
-            colorScheme: 'dark' as const,
-          }
-        : { intensity: Platform.OS === 'android' ? 85 : 28, tint: 'dark' as const },
-    [],
-  );
-
-  const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-
   const handlePressIn = (tab: (typeof TABS)[number]) => {
     prefetchRoute(tab.route).catch(() => {});
     const currentIndex = TABS.findIndex((t) => t.route === tab.route);
@@ -143,7 +139,7 @@ const BottomNav = () => {
   return (
     <View style={[styles.container, { bottom: Math.max(insets.bottom, 16) }]}>
       <View style={styles.navWrapper}>
-        <GlassWrapper {...(barGlassProps as any)} style={StyleSheet.absoluteFill} />
+        <GlassWrapper {...(BAR_GLASS_PROPS as any)} style={StyleSheet.absoluteFill} />
 
         {!isLiquidGlassSupported && Platform.OS === 'android' ? (
           <View style={styles.androidBarTint} pointerEvents="none" />
