@@ -41,7 +41,7 @@
     "variable": [
       {
         "key": "base_url",
-        "value": "https://90plus-app-production-1808.up.railway.app/api",
+        "value": "https://90plus.pro/api",
         "type": "string"
       },
       {
@@ -1810,7 +1810,7 @@
     "values": [
       {
         "key": "base_url",
-        "value": "https://90plus-app-production-1808.up.railway.app/api",
+        "value": "https://90plus.pro/api",
         "enabled": true
       },
       {

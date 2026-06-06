@@ -127,9 +127,13 @@ export class WebSocketService {
         const isProduction = process.env.NODE_ENV === 'production';
         const corsOrigins = isProduction
             ? [
-                  process.env.CORS_ORIGIN || 'https://api.90plus.app',
+                  process.env.CORS_ORIGIN || 'https://90plus.pro',
+                  'https://90plus.pro',
                   'https://90plus.app',
                   /^https:\/\/.*\.90plus\.app$/,
+                  /^https:\/\/.*\.90plus\.pro$/,
+                  /^https:\/\/.*\.railway\.app$/,
+                  /^https:\/\/.*\.up\.railway\.app$/,
               ]
             : [
                   process.env.CORS_ORIGIN || 'http://localhost:8081',

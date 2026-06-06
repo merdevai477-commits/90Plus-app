@@ -3,7 +3,7 @@
  * Served by this backend at the root — not under /api.
  */
 export const DEFAULT_SHARE_BASE_URL =
-  'https://90plus-app-production-1808.up.railway.app';
+  'https://90plus.pro';
 
 export function resolveShareBaseUrl(envValue?: string): string {
   const raw = (envValue ?? DEFAULT_SHARE_BASE_URL).trim().replace(/\/$/, '');

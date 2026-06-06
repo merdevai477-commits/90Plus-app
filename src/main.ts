@@ -69,10 +69,14 @@ app.use(
 // CORS configuration - stricter in production
 const corsOrigins = isProduction
     ? [
-          process.env.CORS_ORIGIN || 'https://api.90plus.app',
+          process.env.CORS_ORIGIN || 'https://90plus.pro',
+          'https://90plus.pro',
           'https://90plus.app',
-          /^https:\/\/.*\.90plus\.app$/, // Production domains
-          /^footballproapp:\/\//, // Mobile app deep links
+          /^https:\/\/.*\.90plus\.app$/,
+          /^https:\/\/.*\.90plus\.pro$/,
+          /^https:\/\/.*\.railway\.app$/,
+          /^https:\/\/.*\.up\.railway\.app$/,
+          /^footballproapp:\/\//,
       ]
     : [
           process.env.CORS_ORIGIN || 'http://localhost:8081',

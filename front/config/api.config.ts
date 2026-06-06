@@ -46,8 +46,8 @@ const CONFIG: Record<Environment, APIConfig> = {
     retryAttempts: 3,
   },
   production: {
-    baseUrl: 'https://90plus-app-production-1808.up.railway.app/api',
-    wsUrl: 'wss://90plus-app-production-1808.up.railway.app',
+    baseUrl: 'https://90plus.pro/api',
+    wsUrl: 'wss://90plus.pro',
     timeout: 30000, // ✅ CRITICAL: Increased to 30s
     uploadTimeout: 15 * 60 * 1000, // 15 min — videos up to 50MB on flaky mobile
     retryAttempts: 3,
@@ -60,6 +60,7 @@ const CONFIG: Record<Environment, APIConfig> = {
 function isProductionDomain(url: string): boolean {
   return url.includes('railway.app') || 
          url.includes('90plus.app') || 
+         url.includes('90plus.pro') ||
          url.includes('.up.railway.app') ||
          url.includes('railway.railway.app') ||
          url.includes('fly.dev');

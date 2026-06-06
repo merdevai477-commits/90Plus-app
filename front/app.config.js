@@ -1,11 +1,11 @@
 module.exports = ({ config }) => {
   const projectId = config.extra?.eas?.projectId;
 
-  const defaultShareBaseUrl = 'https://90plus-app-production-1808.up.railway.app';
+  const defaultShareBaseUrl = 'https://90plus.pro';
   const shareBaseUrl = (
     process.env.EXPO_PUBLIC_SHARE_BASE_URL || defaultShareBaseUrl
   ).replace(/\/$/, '');
-  let shareHost = '90plus-app-production-1808.up.railway.app';
+  let shareHost = '90plus.pro';
   try {
     shareHost = new URL(shareBaseUrl).hostname;
   } catch {
@@ -15,7 +15,7 @@ module.exports = ({ config }) => {
   const intentFilters = (config.android?.intentFilters ?? []).map((filter) => ({
     ...filter,
     data: (filter.data ?? []).map((entry) =>
-      entry.scheme === 'https' && entry.host === '90plus.app'
+      entry.scheme === 'https' && entry.host === '90plus.pro'
         ? { ...entry, host: shareHost }
         : entry,
     ),

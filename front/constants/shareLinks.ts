@@ -1,8 +1,8 @@
 import { Linking, Platform } from 'react-native';
 
-/** Railway production host until a custom domain is configured */
+/** Custom production domain (Railway) */
 export const DEFAULT_SHARE_BASE_URL =
-  'https://90plus-app-production-1808.up.railway.app';
+  'https://90plus.pro';
 
 function resolveShareBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_SHARE_BASE_URL?.trim().replace(/\/$/, '');
@@ -16,7 +16,7 @@ export const SHARE_DOMAIN = (() => {
   try {
     return new URL(SHARE_BASE_URL).hostname;
   } catch {
-    return '90plus-app-production-1808.up.railway.app';
+    return '90plus.pro';
   }
 })();
 
