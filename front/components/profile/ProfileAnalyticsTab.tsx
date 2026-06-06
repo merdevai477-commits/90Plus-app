@@ -99,6 +99,21 @@ function StatCard({ icon, value, label, accent, gradient }: StatCardProps) {
   );
 }
 
+function WideStatCard({ icon, value, label, accent, gradient }: StatCardProps) {
+  return (
+    <View style={[styles.wideCard, { borderColor: `${accent}44`, shadowColor: accent }]}>
+      <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
+      <View style={[styles.wideIconCircle, { backgroundColor: `${accent}22`, borderColor: `${accent}55` }]}>
+        <Ionicons name={icon} size={24} color={accent} />
+      </View>
+      <View style={styles.wideCardText}>
+        <Text style={styles.wideCardLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.wideCardValue, { color: accent }]}>{value}</Text>
+    </View>
+  );
+}
+
 function TeamLogo({ uri }: { uri: string | null }) {
   if (!uri) {
     return (
@@ -279,36 +294,13 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 
       <SectionHeader icon="stats-chart-outline" title={t.profile.predictionStats} />
 
-      <View style={styles.grid}>
-        <StatCard
-          icon="checkmark-circle"
-          value={displayStats?.correct ?? 0}
-          label={t.profile.correctPredictions}
-          accent="#22c55e"
-          gradient={['rgba(34,197,94,0.14)', 'rgba(34,197,94,0.05)']}
-        />
-        <StatCard
-          icon="close-circle"
-          value={displayStats?.incorrect ?? 0}
-          label={t.profile.wrongPredictions}
-          accent="#ef4444"
-          gradient={['rgba(239,68,68,0.14)', 'rgba(239,68,68,0.05)']}
-        />
-        <StatCard
-          icon="time"
-          value={displayStats?.pending ?? 0}
-          label={t.profile.pendingPredictions}
-          accent={ProfileTheme.colors.gold}
-          gradient={['rgba(245,197,24,0.14)', 'rgba(245,197,24,0.05)']}
-        />
-        <StatCard
-          icon="analytics"
-          value={`${displayStats?.accuracy ?? 0}%`}
-          label={t.profile.successRate}
-          accent={PURPLE_PRIMARY}
-          gradient={['rgba(124,58,237,0.16)', 'rgba(91,33,182,0.06)']}
-        />
-      </View>
+      <WideStatCard
+        icon="analytics"
+        value={`${displayStats?.accuracy ?? 0}%`}
+        label={t.profile.successRate}
+        accent={PURPLE_PRIMARY}
+        gradient={['rgba(124,58,237,0.16)', 'rgba(91,33,182,0.06)']}
+      />
 
       <SectionHeader icon="list-outline" title={t.profile.predictionHistory} />
 
@@ -423,6 +415,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 15,
+  },
+  wideCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    overflow: 'hidden',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    backgroundColor: BG_BASE,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5,
+    marginBottom: 8,
+    gap: 14,
+  },
+  wideIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  wideCardText: {
+    flex: 1,
+  },
+  wideCardLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+  },
+  wideCardValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   filterRow: {
     flexDirection: 'row',
