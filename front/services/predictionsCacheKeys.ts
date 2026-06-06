@@ -9,9 +9,11 @@
 
 const PRED_MAP_BASE = 'predictions_map_v1';
 const PRED_TICKETS_BASE = 'predictions_tickets_v1';
+const PRED_LIST_BASE = 'profile_predictions_list_v1';
+const PRED_STATS_BASE = 'profile_predictions_stats_v1';
 
 /** Prefix used to discover every prediction-related key at logout time. */
-export const PREDICTION_CACHE_KEY_PREFIXES = [PRED_MAP_BASE, PRED_TICKETS_BASE] as const;
+export const PREDICTION_CACHE_KEY_PREFIXES = [PRED_MAP_BASE, PRED_TICKETS_BASE, PRED_LIST_BASE, PRED_STATS_BASE] as const;
 
 export function predictionsMapKey(userId: string): string {
     return `${PRED_MAP_BASE}_${userId}`;
@@ -19,4 +21,12 @@ export function predictionsMapKey(userId: string): string {
 
 export function predictionsTicketsKey(userId: string): string {
     return `${PRED_TICKETS_BASE}_${userId}`;
+}
+
+export function profilePredictionsListKey(userId: string): string {
+    return `${PRED_LIST_BASE}_${userId}`;
+}
+
+export function profilePredictionStatsKey(userId: string): string {
+    return `${PRED_STATS_BASE}_${userId}`;
 }

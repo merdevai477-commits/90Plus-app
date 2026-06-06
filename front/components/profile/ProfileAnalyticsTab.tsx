@@ -4,9 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -17,6 +16,7 @@ import {
   PURPLE_DARK,
   PURPLE_GLOW_SM,
   PURPLE_SOFT,
+  BLUE_PRIMARY,
   TEXT_MUTED,
   TEXT_PRIMARY,
 } from '../../constants/tokens';
@@ -58,7 +58,6 @@ interface Props {
   analytics: ProfileAnalytics | null;
   predictionStats: PredictionStats | null;
   predictions?: UserPredictionItem[];
-  predictionsLoading?: boolean;
 }
 
 interface StatCardProps {
@@ -114,88 +113,124 @@ function WideStatCard({ icon, value, label, accent, gradient }: StatCardProps) {
   );
 }
 
-function TeamLogo({ uri }: { uri: string | null }) {
-  if (!uri) {
-    return (
-      <View style={styles.teamLogoFallback}>
-        <Ionicons name="football-outline" size={14} color={TEXT_MUTED} />
-      </View>
-    );
-  }
-  return <Image source={{ uri }} style={styles.teamLogo} />;
-}
-
-function StatusBadge({ isCorrect }: { isCorrect: boolean | null }) {
-  const { t } = useTranslation();
-
-  if (isCorrect === true) {
-    return (
-      <View style={[styles.statusBadge, styles.statusCorrect]}>
-        <Ionicons name="checkmark-circle" size={12} color="#22c55e" />
-        <Text style={[styles.statusText, { color: '#22c55e' }]}>{t.predictions.correctPrediction.replace('!', '')}</Text>
-      </View>
-    );
-  }
-  if (isCorrect === false) {
-    return (
-      <View style={[styles.statusBadge, styles.statusWrong]}>
-        <Ionicons name="close-circle" size={12} color="#ef4444" />
-        <Text style={[styles.statusText, { color: '#ef4444' }]}>{t.predictions.wrongPrediction}</Text>
-      </View>
-    );
-  }
+function TeamBadge({
+  name,
+  logo,
+}: {
+  name: string;
+  logo: string | null;
+}) {
+  const initial = (name || '?').charAt(0).toUpperCase();
   return (
-    <View style={[styles.statusBadge, styles.statusPending]}>
-      <Ionicons name="time" size={12} color={ProfileTheme.colors.gold} />
-      <Text style={[styles.statusText, { color: ProfileTheme.colors.gold }]}>{t.profile.pendingPredictions}</Text>
+    <View style={matchStyles.teamCol}>
+      <View style={matchStyles.teamLogoWrap}>
+        {logo ? (
+          <Image source={{ uri: logo }} style={matchStyles.teamLogoImg} contentFit="contain" />
+        ) : (
+          <View style={matchStyles.teamAvatar}>
+            <Text style={matchStyles.teamAvatarText}>{initial}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={matchStyles.teamName} numberOfLines={1}>
+        {name || '—'}
+      </Text>
     </View>
   );
 }
 
-function PredictionRow({ item }: { item: UserPredictionItem }) {
+function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
   const { t, formatDate } = useTranslation();
 
+  const homeName = item.homeTeam || '—';
+  const awayName = item.awayTeam || '—';
+
   const pickLabel = useMemo(() => {
-    if (item.predictionType === 'home') return item.homeTeam || t.predictions.homeWin;
-    if (item.predictionType === 'away') return item.awayTeam || t.predictions.awayWin;
+    if (item.predictionType === 'home') return homeName;
+    if (item.predictionType === 'away') return awayName;
     return t.predictions.draw;
-  }, [item, t]);
+  }, [item.predictionType, homeName, awayName, t]);
+
+  const isPending = item.isCorrect === null;
+  const isCorrect = item.isCorrect === true;
+
+  const accentColor = isPending
+    ? BLUE_PRIMARY
+    : isCorrect
+      ? '#22c55e'
+      : '#ef4444';
+
+  const statusLabel = isPending
+    ? t.profile.pendingPredictions
+    : isCorrect
+      ? t.predictions.correctPrediction.replace('!', '')
+      : t.predictions.wrongPrediction;
 
   const dateLabel = item.matchDate
-    ? formatDate(new Date(item.matchDate), { day: 'numeric', month: 'short' })
+    ? formatDate(new Date(item.matchDate), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : formatDate(new Date(item.createdAt), { day: 'numeric', month: 'short' });
 
   return (
-    <View style={styles.predRow}>
-      <View style={styles.predTeamsRow}>
-        <View style={styles.predTeamSide}>
-          <TeamLogo uri={item.homeTeamLogo} />
-          <Text style={styles.predTeamName} numberOfLines={1}>
-            {item.homeTeam || '—'}
-          </Text>
-        </View>
-        <Text style={styles.predVs}>vs</Text>
-        <View style={styles.predTeamSide}>
-          <TeamLogo uri={item.awayTeamLogo} />
-          <Text style={styles.predTeamName} numberOfLines={1}>
-            {item.awayTeam || '—'}
+    <View
+      style={[
+        matchStyles.card,
+        !isPending && isCorrect && matchStyles.cardWin,
+        !isPending && !isCorrect && matchStyles.cardLoss,
+        isPending && matchStyles.cardPending,
+      ]}
+    >
+      <LinearGradient
+        colors={[`${accentColor}33`, 'transparent', `${accentColor}22`]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      <View style={matchStyles.cardTop}>
+        <Text style={matchStyles.leagueText} numberOfLines={1}>
+          {item.leagueName || t.profile.predictionHistory}
+        </Text>
+        <View
+          style={[
+            matchStyles.statusBadge,
+            isPending && matchStyles.statusPending,
+            isCorrect && matchStyles.statusCorrect,
+            !isPending && !isCorrect && matchStyles.statusWrong,
+          ]}
+        >
+          <Text
+            style={[
+              matchStyles.statusText,
+              { color: accentColor },
+            ]}
+          >
+            {statusLabel}
           </Text>
         </View>
       </View>
 
-      <View style={styles.predMetaRow}>
-        <View style={styles.predMetaLeft}>
-          {item.leagueName ? (
-            <Text style={styles.predLeague} numberOfLines={1}>{item.leagueName}</Text>
-          ) : null}
-          <Text style={styles.predPick}>
-            {t.profile.yourPick}: <Text style={styles.predPickValue}>{pickLabel}</Text>
-          </Text>
+      <View style={matchStyles.teamsRow}>
+        <TeamBadge name={homeName} logo={item.homeTeamLogo} />
+
+        <View style={matchStyles.pickArea}>
+          <Text style={matchStyles.vsText}>{t.home.vs}</Text>
+          <View style={[matchStyles.pickPill, { borderColor: `${accentColor}55`, backgroundColor: `${accentColor}18` }]}>
+            <Text style={[matchStyles.pickPillText, { color: accentColor }]} numberOfLines={1}>
+              {pickLabel}
+            </Text>
+          </View>
         </View>
-        <Text style={styles.predDate}>{dateLabel}</Text>
+
+        <TeamBadge name={awayName} logo={item.awayTeamLogo} />
       </View>
 
-      <StatusBadge isCorrect={item.isCorrect} />
+      <View style={matchStyles.cardBottom}>
+        <Text style={matchStyles.pickHint}>
+          {t.profile.yourPick}: <Text style={matchStyles.pickHintValue}>{pickLabel}</Text>
+        </Text>
+        <Text style={matchStyles.dateText}>{dateLabel}</Text>
+      </View>
     </View>
   );
 }
@@ -211,7 +246,6 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
   analytics,
   predictionStats,
   predictions = [],
-  predictionsLoading = false,
 }) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<PredictionFilter>('all');
@@ -322,11 +356,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
         })}
       </View>
 
-      {predictionsLoading && predictions.length === 0 ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="small" color={PURPLE_PRIMARY} />
-        </View>
-      ) : filteredPredictions.length === 0 ? (
+      {filteredPredictions.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="football-outline" size={28} color={TEXT_MUTED} />
           <Text style={styles.emptyText}>{t.profile.noPredictionsYet}</Text>
@@ -334,13 +364,193 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
       ) : (
         <View style={styles.predList}>
           {filteredPredictions.map((item) => (
-            <PredictionRow key={item.id} item={item} />
+            <PredictionMatchCard key={item.id} item={item} />
           ))}
         </View>
       )}
     </View>
   );
 };
+
+const matchStyles = StyleSheet.create({
+  card: {
+    width: '100%',
+    minHeight: 156,
+    borderRadius: 16,
+    backgroundColor: 'rgba(18,12,28,0.98)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.07)',
+    overflow: 'hidden',
+    shadowColor: '#fff',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 0,
+    elevation: 2,
+  },
+  cardPending: {
+    borderColor: 'rgba(59,130,246,0.22)',
+    shadowColor: BLUE_PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cardWin: {
+    borderColor: 'rgba(34,197,94,0.25)',
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cardLoss: {
+    borderColor: 'rgba(239,68,68,0.25)',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    gap: 8,
+  },
+  leagueText: {
+    flex: 1,
+    color: TEXT_MUTED,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 0.5,
+  },
+  statusPending: {
+    borderColor: 'rgba(59,130,246,0.35)',
+    backgroundColor: 'rgba(59,130,246,0.1)',
+  },
+  statusCorrect: {
+    borderColor: 'rgba(34,197,94,0.35)',
+    backgroundColor: 'rgba(34,197,94,0.1)',
+  },
+  statusWrong: {
+    borderColor: 'rgba(239,68,68,0.35)',
+    backgroundColor: 'rgba(239,68,68,0.1)',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  teamsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flex: 1,
+  },
+  teamCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  teamLogoWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  teamLogoImg: {
+    width: 28,
+    height: 28,
+  },
+  teamAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(124,58,237,0.15)',
+  },
+  teamAvatarText: {
+    color: TEXT_PRIMARY,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  teamName: {
+    color: TEXT_PRIMARY,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    maxWidth: 88,
+  },
+  pickArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 88,
+    gap: 6,
+  },
+  vsText: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  pickPill: {
+    maxWidth: 96,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 0.5,
+  },
+  pickPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  cardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    paddingTop: 4,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+    gap: 8,
+  },
+  pickHint: {
+    flex: 1,
+    fontSize: 11,
+    color: TEXT_MUTED,
+    fontWeight: '500',
+  },
+  pickHintValue: {
+    color: TEXT_PRIMARY,
+    fontWeight: '700',
+  },
+  dateText: {
+    fontSize: 10,
+    color: PURPLE_SOFT,
+    fontWeight: '600',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -480,10 +690,6 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: TEXT_PRIMARY,
   },
-  loadingWrap: {
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
   emptyWrap: {
     paddingVertical: 28,
     alignItems: 'center',
@@ -495,99 +701,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   predList: {
-    gap: 10,
-  },
-  predRow: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: PURPLE_GLOW_SM,
-    backgroundColor: 'rgba(124,58,237,0.06)',
-    padding: 12,
-    gap: 8,
-  },
-  predTeamsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  predTeamSide: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  teamLogo: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-  },
-  teamLogoFallback: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  predTeamName: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: TEXT_PRIMARY,
-  },
-  predVs: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: TEXT_MUTED,
-  },
-  predMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  predMetaLeft: {
-    flex: 1,
-    gap: 2,
-  },
-  predLeague: {
-    fontSize: 10,
-    color: PURPLE_SOFT,
-    fontWeight: '600',
-  },
-  predPick: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  predPickValue: {
-    color: TEXT_PRIMARY,
-    fontWeight: '700',
-  },
-  predDate: {
-    fontSize: 10,
-    color: TEXT_MUTED,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusCorrect: {
-    backgroundColor: 'rgba(34,197,94,0.12)',
-  },
-  statusWrong: {
-    backgroundColor: 'rgba(239,68,68,0.12)',
-  },
-  statusPending: {
-    backgroundColor: 'rgba(245,197,24,0.12)',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '700',
+    gap: 12,
   },
 });

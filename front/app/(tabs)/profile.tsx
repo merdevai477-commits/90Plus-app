@@ -146,6 +146,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 20,
   },
+  hiddenTab: {
+    display: 'none',
+  },
   profileCardContainer: {
     alignItems: 'center',
     marginBottom: 20,
@@ -752,59 +755,41 @@ export default function ProfileScreen() {
   const analytics = cachedAnalytics;
   const cooldowns = cachedCooldowns;
 
-  // Predictions store for prediction stats
+  // Predictions store — hydrate from cache on mount for instant analytics
   const {
     stats: predictionStats,
     allPredictions,
+    hydrateFromCache: hydratePredictionsCache,
     fetchPredictionStats,
     fetchUserPredictions,
   } = usePredictionsStore();
-  const [predictionsLoading, setPredictionsLoading] = useState(false);
-
-  // Optimization: Fetch prediction stats when authenticated (with cleanup)
-  useEffect(() => {
-    let isMounted = true;
-    const loadPredictionStats = async () => {
-      try {
-        const token = await getToken();
-        if (isMounted && token) {
-          await fetchPredictionStats(token);
-        }
-      } catch (error) {
-        logger.error('Error loading prediction stats:', error);
-      }
-    };
-    loadPredictionStats();
-    return () => { isMounted = false; };
-  }, []);
 
   useEffect(() => {
-    if (activeTab !== 'analytics') return;
+    if (!clerkUser?.id) return;
+    void hydratePredictionsCache(clerkUser.id);
+  }, [clerkUser?.id, hydratePredictionsCache]);
 
+  useEffect(() => {
+    if (!clerkUser?.id) return;
     let cancelled = false;
-    if (allPredictions.length === 0) {
-      setPredictionsLoading(true);
-    }
 
     (async () => {
       try {
         const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
         const token = await getClerkBearerToken(getToken);
         if (cancelled || !token) return;
-        await fetchUserPredictions(token);
+        void Promise.all([
+          fetchPredictionStats(token, clerkUser.id),
+          fetchUserPredictions(token, clerkUser.id),
+        ]);
       } catch (error) {
-        logger.error('Error loading prediction history:', error);
-      } finally {
-        if (!cancelled) setPredictionsLoading(false);
+        logger.error('Error prefetching profile predictions:', error);
       }
     })();
 
-    return () => {
-      cancelled = true;
-      setPredictionsLoading(false);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reload when analytics tab opens
-  }, [activeTab]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when user session is ready
+  }, [clerkUser?.id]);
 
   const lastMergedServerSigRef = useRef<string>('');
   const lastClerkIdForMergeRef = useRef<string | undefined>(undefined);
@@ -918,14 +903,17 @@ export default function ProfileScreen() {
       (async () => {
         try {
           const token = await getToken();
-          if (token) {
-            await fetchPredictionStats(token);
+          if (token && clerkUser?.id) {
+            void Promise.all([
+              fetchPredictionStats(token, clerkUser.id),
+              fetchUserPredictions(token, clerkUser.id),
+            ]);
           }
         } catch (error) {
           logger.error('Error refreshing prediction stats on focus:', error);
         }
       })();
-    }, [maybeRefreshProfile, getToken, fetchPredictionStats])
+    }, [maybeRefreshProfile, getToken, fetchPredictionStats, fetchUserPredictions, clerkUser?.id])
   );
 
   // Auto-refresh when app returns from background
@@ -1450,8 +1438,11 @@ export default function ProfileScreen() {
       
       await refreshCache(true);
       const token = await getToken();
-      if (token) {
-        fetchPredictionStats(token);
+      if (token && clerkUser?.id) {
+        void Promise.all([
+          fetchPredictionStats(token, clerkUser.id),
+          fetchUserPredictions(token, clerkUser.id),
+        ]);
       }
       
       toastManager.showSuccess(t.profile.updated, t.profile.profileDataRefreshed);
@@ -1846,14 +1837,13 @@ export default function ProfileScreen() {
           />
         )}
 
-        {activeTab === 'analytics' && (
+        <View style={activeTab === 'analytics' ? undefined : styles.hiddenTab}>
           <ProfileAnalyticsTab
             analytics={analytics}
             predictionStats={predictionStats}
             predictions={allPredictions}
-            predictionsLoading={predictionsLoading}
           />
-        )}
+        </View>
 
         <View style={{ height: 100 }} />
       </ScrollView>

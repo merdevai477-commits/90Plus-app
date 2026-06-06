@@ -4,12 +4,31 @@
  */
 
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '../../config/api.config';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import {
+    profilePredictionsListKey,
+    profilePredictionStatsKey,
+} from '../../services/predictionsCacheKeys';
 
 /** Coalesce parallel remaining-count fetches (multiple screens mount at once). */
 let fetchUserDataInFlight: Promise<void> | null = null;
 let fetchUserPredictionsInFlight: Promise<void> | null = null;
+
+async function persistProfilePredictionsCache(
+    userId: string,
+    data: { allPredictions: PredictionsState['allPredictions']; stats: PredictionStats },
+): Promise<void> {
+    try {
+        await Promise.all([
+            AsyncStorage.setItem(profilePredictionsListKey(userId), JSON.stringify(data.allPredictions)),
+            AsyncStorage.setItem(profilePredictionStatsKey(userId), JSON.stringify(data.stats)),
+        ]);
+    } catch {
+        // cache write is best-effort
+    }
+}
 
 interface PredictionData {
     type: 'home' | 'draw' | 'away';
@@ -73,9 +92,11 @@ interface PredictionsState {
     isSubmitting: boolean;
 
     // Actions
+    hydrateFromCache: (userId: string) => Promise<void>;
     fetchUserData: (token: string | null) => Promise<void>;
-    fetchUserPredictions: (token: string | null) => Promise<void>;
-    fetchPredictionStats: (token: string | null) => Promise<void>;
+    fetchUserPredictions: (token: string | null, userId?: string) => Promise<void>;
+    fetchPredictionStats: (token: string | null, userId?: string) => Promise<void>;
+    preloadProfilePredictions: (token: string, userId: string) => Promise<void>;
     submitPrediction: (
         token: string | null,
         matchId: number,
@@ -111,6 +132,35 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     },
     isLoading: false,
     isSubmitting: false,
+
+    hydrateFromCache: async (userId: string) => {
+        try {
+            const [listRaw, statsRaw] = await Promise.all([
+                AsyncStorage.getItem(profilePredictionsListKey(userId)),
+                AsyncStorage.getItem(profilePredictionStatsKey(userId)),
+            ]);
+            const patch: Partial<PredictionsState> = {};
+            if (listRaw) {
+                const list = JSON.parse(listRaw);
+                if (Array.isArray(list)) patch.allPredictions = list;
+            }
+            if (statsRaw) {
+                const stats = JSON.parse(statsRaw);
+                if (stats && typeof stats === 'object') patch.stats = stats;
+            }
+            if (Object.keys(patch).length) set(patch);
+        } catch {
+            // ignore corrupt cache
+        }
+    },
+
+    preloadProfilePredictions: async (token: string, userId: string) => {
+        const { fetchUserPredictions, fetchPredictionStats } = get();
+        await Promise.all([
+            fetchUserPredictions(token, userId),
+            fetchPredictionStats(token, userId),
+        ]);
+    },
 
     fetchUserData: async (token: string | null) => {
         if (!token) return;
@@ -154,7 +204,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         return fetchUserDataInFlight;
     },
 
-    fetchUserPredictions: async (token: string | null) => {
+    fetchUserPredictions: async (token: string | null, userId?: string) => {
         if (!token) return;
 
         if (fetchUserPredictionsInFlight) {
@@ -176,10 +226,17 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success) {
+                        const allPredictions = data.data.predictions || [];
                         set({
                             userPredictions: data.data.predictionsMap || {},
-                            allPredictions: data.data.predictions || [],
+                            allPredictions,
                         });
+                        if (userId) {
+                            await persistProfilePredictionsCache(userId, {
+                                allPredictions,
+                                stats: get().stats,
+                            });
+                        }
                     }
                 }
             } catch (error) {
@@ -192,12 +249,12 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
         return fetchUserPredictionsInFlight;
     },
 
-    fetchPredictionStats: async (token: string | null) => {
+    fetchPredictionStats: async (token: string | null, userId?: string) => {
         if (!token) return;
 
         try {
             const response = await fetchWithTimeout(`${getApiUrl()}/predictions/stats`, {
-                timeout: 30000, // 30s to tolerate Railway cold-starts
+                timeout: 30000,
                 retries: 1,
                 retryDelay: 1500,
                 headers: {
@@ -209,7 +266,14 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
             if (response.ok) {
                 const data = await response.json();
                 if (data.success) {
-                    set({ stats: data.data });
+                    const stats = data.data;
+                    set({ stats });
+                    if (userId) {
+                        await persistProfilePredictionsCache(userId, {
+                            allPredictions: get().allPredictions,
+                            stats,
+                        });
+                    }
                 }
             }
         } catch (error) {

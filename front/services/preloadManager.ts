@@ -310,6 +310,14 @@ class PreloadManagerClass {
       if (userResult) {
         // Also fetch user's videos
         const reels = await AuthService.getUserReels(token, userResult.username);
+
+        // Preload predictions for instant analytics tab
+        try {
+          const { usePredictionsStore } = await import('../src/store/usePredictionsStore');
+          void usePredictionsStore.getState().preloadProfilePredictions(token, userResult.clerkUserId);
+        } catch {
+          // non-blocking
+        }
         
         const profileData = {
           userData: {
