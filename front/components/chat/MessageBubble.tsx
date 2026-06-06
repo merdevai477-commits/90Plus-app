@@ -42,7 +42,10 @@ interface MessageBubbleProps {
 
 // ─── Markdown helpers ─────────────────────────────────────────────────────────
 
-function isTableLine(line: string) { return line.includes('|'); }
+function isTableLine(line: string) {
+  const trimmed = line.trim();
+  return trimmed.includes('|') && (trimmed.match(/\|/g)?.length ?? 0) >= 2;
+}
 function isSeparator(line: string) {
   const t = line.trim().replace(/\|/g, '').trim();
   return /^:?-{3,}:?(\s+:?-{3,}:?)*$/.test(t);
@@ -123,6 +126,8 @@ function MarkdownTable({
       <ScrollView
         horizontal
         nestedScrollEnabled
+        directionalLockEnabled
+        decelerationRate="fast"
         showsHorizontalScrollIndicator
         bounces={false}
         style={[s.tableScroll, { width: scrollViewportWidth, maxWidth: scrollViewportWidth }]}
@@ -325,7 +330,7 @@ export const TypingIndicator = React.memo(() => {
 
   return (
     <Animated.View entering={FadeIn.duration(300)} style={s.aiRow}>
-      <View style={[s.aiBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-start' }]}>
+      <View style={[s.aiBubbleWrap, { width: maxWidth, maxWidth, alignSelf: 'flex-start' }]}>
         <View style={s.aiBubble}>
           <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={s.typingDots}>
@@ -403,7 +408,7 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
         .springify().stiffness(180).damping(14).delay(index * 40)}
       style={s.aiRow}
     >
-      <View style={[s.aiBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-start' }]}>
+      <View style={[s.aiBubbleWrap, { width: maxWidth, maxWidth, alignSelf: 'flex-start' }]}>
         <Pressable onPress={onPress} accessibilityRole="text">
           <View style={s.aiBubble}>
             <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
@@ -628,6 +633,8 @@ const s = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.88)',
     lineHeight: 21,
+    alignSelf: 'stretch',
+    width: '100%',
   },
   boldTitle: {
     fontSize: 14,
@@ -695,17 +702,22 @@ const s = StyleSheet.create({
     alignSelf: 'stretch',
     width: '100%',
     maxWidth: '100%',
+    marginVertical: 8,
   },
   tableHint: {
     fontSize: 11,
-    color: 'rgba(167,139,250,0.75)',
-    marginBottom: 4,
+    color: 'rgba(167,139,250,0.85)',
+    marginBottom: 6,
     paddingHorizontal: 2,
+    textAlign: 'center',
     flexShrink: 1,
   },
   tableScroll: {
-    marginVertical: 8,
-    alignSelf: 'flex-start',
+    marginVertical: 4,
+    alignSelf: 'stretch',
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: 'rgba(167,139,250,0.25)',
   },
   tableScrollContent: {
     flexGrow: 0,

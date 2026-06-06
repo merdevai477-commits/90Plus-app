@@ -16,7 +16,6 @@
 
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { todayInTimezone, nextMidnightInTimezone } from '../utils/chat-timezone';
 
 export type StoredRole = 'user' | 'assistant';
 export type ApiRole = 'user' | 'ai';
@@ -46,7 +45,32 @@ export interface ConversationWithLast {
     lastMessage: string | null;
 }
 
-const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 20);
+const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 10);
+const ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export function getDailyMessageLimit(): number {
+  return DAILY_LIMIT;
+}
+
+function parseWindowStart(dateStr: string): Date | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return null;
+  }
+  const parsed = new Date(dateStr);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isRollingWindowExpired(dateStr: string): boolean {
+  const start = parseWindowStart(dateStr);
+  if (!start) return true;
+  return Date.now() - start.getTime() >= ROLLING_WINDOW_MS;
+}
+
+function rollingResetAt(dateStr: string): Date {
+  const start = parseWindowStart(dateStr);
+  if (!start) return new Date(Date.now() + ROLLING_WINDOW_MS);
+  return new Date(start.getTime() + ROLLING_WINDOW_MS);
+}
 
 // ─── Conversation list ───────────────────────────────────────────────────────
 
@@ -244,42 +268,52 @@ export async function countMessages(conversationId: string): Promise<number> {
 
 // ─── Daily limit (timezone-aware) ────────────────────────────────────────────
 
-export async function getRemaining(userId: string, timezone: string): Promise<number> {
-    const today = todayInTimezone(timezone);
-    const row = await prisma.chatLimit.findUnique({ where: { userId } });
-    if (!row || row.date !== today) return DAILY_LIMIT;
-    return Math.max(0, DAILY_LIMIT - row.count);
+export async function getRemaining(userId: string, _timezone: string): Promise<number> {
+  const row = await prisma.chatLimit.findUnique({ where: { userId } });
+  if (!row || isRollingWindowExpired(row.date)) return DAILY_LIMIT;
+  return Math.max(0, DAILY_LIMIT - row.count);
 }
 
-/** Atomic increment. Handles day-rollover by resetting the row when stale. */
-export async function incrementLimit(userId: string, timezone: string): Promise<void> {
-    const today = todayInTimezone(timezone);
+/** Atomic increment. Resets the rolling 24h window when expired. */
+export async function incrementLimit(userId: string, _timezone: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const row = await prisma.chatLimit.findUnique({ where: { userId } });
 
-    // Try a conditional update first (fast path — the row exists and the date
-    // is current). Fall through to upsert if no rows were touched.
-    const updated = await prisma.chatLimit.updateMany({
-        where: { userId, date: today },
-        data: { count: { increment: 1 } },
-    });
-    if (updated.count > 0) return;
-
+  if (!row || isRollingWindowExpired(row.date)) {
     await prisma.chatLimit.upsert({
-        where: { userId },
-        update: { count: 1, date: today },
-        create: { userId, count: 1, date: today },
+      where: { userId },
+      update: { count: 1, date: nowIso },
+      create: { userId, count: 1, date: nowIso },
     });
+    return;
+  }
+
+  await prisma.chatLimit.update({
+    where: { userId },
+    data: { count: { increment: 1 } },
+  });
 }
 
-export async function decrementLimit(userId: string, timezone: string): Promise<void> {
-    const today = todayInTimezone(timezone);
-    await prisma.chatLimit.updateMany({
-        where: { userId, date: today, count: { gt: 0 } },
-        data: { count: { decrement: 1 } },
-    });
+export async function decrementLimit(userId: string, _timezone: string): Promise<void> {
+  const row = await prisma.chatLimit.findUnique({ where: { userId } });
+  if (!row || isRollingWindowExpired(row.date) || row.count <= 0) return;
+  await prisma.chatLimit.update({
+    where: { userId },
+    data: { count: { decrement: 1 } },
+  });
 }
 
-export function getResetTime(timezone: string): Date {
-    return nextMidnightInTimezone(timezone);
+export async function getResetTimeForUser(userId: string): Promise<Date> {
+  const row = await prisma.chatLimit.findUnique({ where: { userId } });
+  if (!row || isRollingWindowExpired(row.date)) {
+    return new Date(Date.now() + ROLLING_WINDOW_MS);
+  }
+  return rollingResetAt(row.date);
+}
+
+/** @deprecated Use getResetTimeForUser for rolling 24h windows. */
+export function getResetTime(_timezone: string): Date {
+  return new Date(Date.now() + ROLLING_WINDOW_MS);
 }
 
 // ─── Serialization ───────────────────────────────────────────────────────────

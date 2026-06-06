@@ -63,7 +63,7 @@ const MAX_STREAM_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
 const DRAFT_KEY_PREFIX = '@chat_draft_v1_';
 /** Fallback when API omits `limit` — must match production CHAT_DAILY_MESSAGE_LIMIT. */
-const DEFAULT_DAILY_MESSAGE_LIMIT = 20;
+const DEFAULT_DAILY_MESSAGE_LIMIT = 10;
 
 /**
  * Typing renderer cadence — independent from network speed.
@@ -446,7 +446,16 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       await Storage.saveLastConversationId(created.id);
     } catch (err) {
       logger.warn('[AIChat] bootstrapConversation failed:', err);
-      setError(getLabels().streamRetryFailed);
+      try {
+        const created = await createConversation();
+        setCurrentConversationId(created.id);
+        setConversations([created]);
+        setMessages(getInitialMessages());
+        await Storage.saveLastConversationId(created.id);
+        setError(null);
+      } catch {
+        setError(getLabels().streamRetryFailed);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, createConversation, loadConversationMessages]);
@@ -873,14 +882,25 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     setIsThinking(true);
     setMessagesRemaining(prev => (prev === null ? prev : Math.max(0, prev - 1)));
 
-    if (!currentConversationId) {
-      setError(getLabels().noActiveConversation);
-      setIsLoading(false);
-      setIsThinking(false);
-      setStreamingMessageId(null);
-      activeAssistantMessageIdRef.current = null;
-      setMessagesRemaining(prev => (prev === null ? prev : prev + 1));
-      return;
+    let convId = currentConversationId;
+    if (!convId) {
+      try {
+        const created = await createConversation();
+        convId = created.id;
+        setCurrentConversationId(created.id);
+        setConversations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+        await Storage.saveLastConversationId(created.id);
+      } catch (err) {
+        logger.warn('[AIChat] auto-create conversation failed:', err);
+        setError(getLabels().noActiveConversation);
+        setIsLoading(false);
+        setIsThinking(false);
+        setStreamingMessageId(null);
+        activeAssistantMessageIdRef.current = null;
+        setMessagesRemaining((prev) => (prev === null ? prev : prev + 1));
+        setMessages((prev) => prev.filter((m) => m.id !== aiMessageId && m.id !== userMsg.id));
+        return;
+      }
     }
 
     const history = toHistoryFormat(base.slice(1));
@@ -894,11 +914,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       }
     })();
 
-    void _sendSSE(trimmed, history, currentConversationId, aiMessageId, systemPromptSuffix, 0);
+    void _sendSSE(trimmed, history, convId, aiMessageId, systemPromptSuffix, 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     inputValue, isLoading, messagesRemaining, currentConversationId,
-    messages, abortXHR, _sendSSE,
+    messages, abortXHR, _sendSSE, createConversation,
   ]);
 
   // ─── Stop Generation ──────────────────────────────────────────────────────

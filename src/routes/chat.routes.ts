@@ -42,10 +42,15 @@ import {
     getRemaining,
     incrementLimit,
     decrementLimit,
-    getResetTime,
+    getResetTimeForUser,
+    getDailyMessageLimit,
     toConversationDTO,
     migrateLegacyFileStore,
 } from '../services/chat.service';
+import {
+    buildFootballChatContext,
+    shouldUsePrimaryModel,
+} from '../services/chat-football-tools.service';
 
 const router = Router();
 
@@ -131,17 +136,54 @@ const FALLBACK: ProviderConfig | null = (() => {
     };
 })();
 
+const SIMPLE: ProviderConfig | null = (() => {
+    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
+    if (!apiKey) return null;
+    const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
+    const model =
+        process.env.OPENROUTER_CHAT_SIMPLE_MODEL ??
+        process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
+        'google/gemini-3-flash-preview';
+    return {
+        name: 'simple',
+        apiKey,
+        baseURL,
+        model,
+        client: buildClient(apiKey, baseURL),
+    };
+})();
+
 const PROVIDERS: ProviderConfig[] = [PRIMARY, FALLBACK].filter(
     (p): p is ProviderConfig => p !== null,
 );
 
-const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 20);
+const DAILY_LIMIT = getDailyMessageLimit();
 
 if (PROVIDERS.length === 0) {
     logger.warn('[chat] ⚠️ no AI provider configured — /api/chat/stream will return 503');
 } else {
     const summary = PROVIDERS.map((p) => `${p.name}=${p.model}`).join(' → ');
-    logger.info(`[chat] 🤖 providers: ${summary}`);
+    const simpleNote = SIMPLE ? ` | simple=${SIMPLE.model}` : '';
+    logger.info(`[chat] 🤖 providers: ${summary}${simpleNote}`);
+}
+
+function providersForRequest(usePrimary: boolean): ProviderConfig[] {
+    const chain: ProviderConfig[] = [];
+    const seen = new Set<string>();
+
+    const push = (p: ProviderConfig | null) => {
+        if (!p || seen.has(p.model)) return;
+        seen.add(p.model);
+        chain.push(p);
+    };
+
+    if (!usePrimary && SIMPLE) {
+        push(SIMPLE);
+    }
+    push(PRIMARY);
+    push(FALLBACK);
+
+    return chain.length > 0 ? chain : PROVIDERS;
 }
 
 // ─── Domain helpers ──────────────────────────────────────────────────────────
@@ -240,6 +282,11 @@ const CORE_BEHAVIOR_PROMPT = `
 - لا تقدم أخبار رياضية أو انتقالات — اعتذر واقترح مصادر موثوقة.
 - لو السؤال خارج النطاق، اعتذر باختصار.
 
+بيانات كرة القدم الحية:
+- عندما يُرفق بلوك "LIVE FOOTBALL API DATA" في رسالة النظام، استخدمه كمصدر وحيد للأرقام والإحصائيات.
+- لا تخترع أهدافاً أو بطولات أو أندية — إذا لم تتوفر البيانات، قل ذلك بوضوح.
+- للاعبين والترتيب: استخدم الجداول Markdown عند عرض أكثر من 3 حقول.
+
 السلامة:
 - إذا احتوت الرسالة سبابًا، ارفض المتابعة باحترام.
 `.trim();
@@ -324,7 +371,7 @@ router.get('/chat/limit', async (req: Request, res: Response): Promise<void> => 
             remaining,
             used: DAILY_LIMIT - remaining,
             limit: DAILY_LIMIT,
-            resetAt: getResetTime(tz),
+            resetAt: await getResetTimeForUser(userId),
             timezone: tz,
         });
     } catch (err: any) {
@@ -433,7 +480,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             sendDone({
                 remaining,
                 limit: DAILY_LIMIT,
-                resetAt: getResetTime(tz),
+                resetAt: await getResetTimeForUser(userId),
                 ...(conversationTitle ? { conversationTitle } : {}),
             });
         };
@@ -482,6 +529,12 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         const lengthMode = detectLengthMode(trimmedMessage);
         const baseSystemPrompt = buildSystemPrompt(category, lengthMode);
 
+        const footballCtx = !isResume
+            ? await buildFootballChatContext(trimmedMessage)
+            : null;
+        const usePrimaryModel = shouldUsePrimaryModel(lengthMode, !!footballCtx?.usedApi);
+        const activeProviders = providersForRequest(usePrimaryModel);
+
         const sanitizedSuffix =
             typeof systemPromptSuffix === 'string' && systemPromptSuffix.trim().length > 0
                 ? systemPromptSuffix.trim().slice(0, 1500)
@@ -489,6 +542,10 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         let systemPrompt = sanitizedSuffix
             ? `${baseSystemPrompt}\n\n${sanitizedSuffix}`
             : baseSystemPrompt;
+
+        if (footballCtx?.block) {
+            systemPrompt += `\n\n${footballCtx.block}`;
+        }
 
         if (isResume && resumeFromToken) {
             systemPrompt += `\n\nملاحظة نظام: الرد السابق انقطع بعد ${resumeFromToken} حرف. أكمل من حيث توقفت بدون تكرار ما سبق.`;
@@ -500,7 +557,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         const maxTokens = computeMaxTokens(lengthMode, trimmedMessage.length);
 
         // ─── Stream with automatic provider fallback ─────────────────────────
-        if (PROVIDERS.length === 0) {
+        if (activeProviders.length === 0) {
             logger.error('[chat] no AI provider configured — check AI_API_KEY / OPENROUTER_API_KEY');
             if (!isResume) await decrementLimit(userId, tz);
             sendError('AI service not configured');
@@ -525,7 +582,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         let firstTokenSent = false;
         const providerErrors: string[] = [];
 
-        for (const provider of PROVIDERS) {
+        for (const provider of activeProviders) {
             if (firstTokenSent || clientClosed) break;
 
             try {
@@ -608,7 +665,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             sendDone({
                 remaining: await getRemaining(userId, tz),
                 limit: DAILY_LIMIT,
-                resetAt: getResetTime(tz),
+                resetAt: await getResetTimeForUser(userId),
                 usedModel: usedProvider.model,
                 usedProvider: usedProvider.name,
                 ...(conversationTitle ? { conversationTitle } : {}),
@@ -618,7 +675,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             sendDone({
                 remaining: await getRemaining(userId, tz).catch(() => 0),
                 limit: DAILY_LIMIT,
-                resetAt: getResetTime(tz),
+                resetAt: await getResetTimeForUser(userId),
                 usedModel: usedProvider.model,
             });
         }

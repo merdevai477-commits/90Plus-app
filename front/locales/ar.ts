@@ -1946,7 +1946,7 @@ export const ar = {
     dailyLimitOver: 'انتهت رسائلك اليومية',
     inputPlaceholder: 'اكتب رسالتك...',
     inputPlaceholderEdit: 'عدّل...',
-    tableScrollHint: 'اسحب لليسار لعرض كل الأعمدة',
+    tableScrollHint: 'اسحب يميناً أو يساراً لعرض الجدول كاملاً',
     editingMessage: 'تعديل الرسالة',
     cancelEdit: 'إلغاء',
     sendButton: 'إرسال',
