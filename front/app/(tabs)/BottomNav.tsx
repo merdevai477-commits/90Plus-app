@@ -1,21 +1,20 @@
-import React, { useRef, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet, Dimensions, Animated } from 'react-native';
-import { Home, Brain, User, BarChart3, Video, Sparkles } from 'lucide-react-native';
+import React, { useRef, useEffect, useMemo } from 'react';
+import { View, TouchableOpacity, StyleSheet, Dimensions, Animated, Platform } from 'react-native';
+import { Home, User, BarChart3, Video, Sparkles } from 'lucide-react-native';
 import Svg, { Rect, Line, Circle } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { prefetchRoute, prefetchRoutes } from '../../utils/routePrefetcher';
 import { TAB_COLORS } from '../../constants/tokens';
 import { isLiquidGlassSupported, LiquidGlassView } from '@/utils/liquidGlassSafe';
+import { SlidingLiquidBubble } from '../../components/navigation/SlidingLiquidBubble';
 
 const { width } = Dimensions.get('window');
 
 type TabName = keyof typeof TAB_COLORS;
 
-// ─── Custom pitch icon ────────────────────────────────────────────────────────
 const PitchIcon = ({ color, size }: { color: string; size: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24">
     <Rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke={color} strokeWidth="1.5" />
@@ -26,128 +25,117 @@ const PitchIcon = ({ color, size }: { color: string; size: number }) => (
   </Svg>
 );
 
-// ─── AI Chat icon — uses lucide Sparkles ─────────────────────────────────────
 const AIIcon = ({ color, size }: { color: string; size: number }) => (
   <Sparkles color={color} size={size} strokeWidth={2} />
 );
 
-const ICON_COLOR = 'rgba(255,255,255,0.55)';
+const ICON_COLOR = 'rgba(255,255,255,0.5)';
+const ICON_ACTIVE = '#FFFFFF';
 
-// ─── Nav Item ─────────────────────────────────────────────────────────────────
 interface NavItemProps {
   icon: React.ElementType;
   isActive: boolean;
   onPress: () => void;
   onPressIn?: () => void;
   scaleAnim: Animated.Value;
-  activeColor: string;
 }
 
-const NavItem = ({ icon: Icon, isActive, onPress, onPressIn, scaleAnim, activeColor }: NavItemProps) => (
+const NavItem = ({ icon: Icon, isActive, onPress, onPressIn, scaleAnim }: NavItemProps) => (
   <TouchableOpacity onPress={onPress} onPressIn={onPressIn} style={styles.navItem} activeOpacity={0.7}>
-    {/* Outer glow — larger, more diffuse */}
-    {isActive && (
-      <View style={[styles.glowOuter, { backgroundColor: activeColor, shadowColor: activeColor }]} />
-    )}
-    <Animated.View
-      style={[
-        styles.iconContainer,
-        isActive && [styles.activeIconContainer, { borderColor: activeColor }],
-        { transform: [{ scale: scaleAnim }] },
-      ]}
-    >
-      <Icon color={isActive ? activeColor : ICON_COLOR} size={22} strokeWidth={isActive ? 2.5 : 2} />
+    <Animated.View style={[styles.iconContainer, { transform: [{ scale: scaleAnim }] }]}>
+      <Icon color={isActive ? ICON_ACTIVE : ICON_COLOR} size={22} strokeWidth={isActive ? 2.5 : 2} />
     </Animated.View>
   </TouchableOpacity>
 );
 
-// ─── Bottom Nav ───────────────────────────────────────────────────────────────
-type AppRoute = '/(tabs)/Home' | '/(tabs)/matches' | '/(tabs)/quiz' | '/(tabs)/chat' | '/(tabs)/profile' | '/(tabs)/reels' | '/(tabs)/rank';
+type AppRoute =
+  | '/(tabs)/Home'
+  | '/(tabs)/matches'
+  | '/(tabs)/quiz'
+  | '/(tabs)/chat'
+  | '/(tabs)/profile'
+  | '/(tabs)/reels'
+  | '/(tabs)/rank';
+
+const TABS: { name: TabName; icon: typeof Home | null; customIcon?: boolean; aiIcon?: boolean; route: AppRoute }[] = [
+  { name: 'Home', icon: Home, route: '/(tabs)/Home' },
+  { name: 'Leagues', icon: null, customIcon: true, route: '/(tabs)/matches' },
+  { name: 'AI', icon: null, aiIcon: true, route: '/(tabs)/chat' },
+  { name: 'Profile', icon: User, route: '/(tabs)/profile' },
+  { name: 'Highlights', icon: Video, route: '/(tabs)/reels' },
+  { name: 'Rank', icon: BarChart3, route: '/(tabs)/rank' },
+];
 
 const BottomNav = () => {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
-  const scaleAnims = useRef(
-    Array(7).fill(0).map(() => new Animated.Value(1))
-  ).current;
-
-  const tabs: { name: TabName; icon: typeof Home | null; customIcon?: boolean; aiIcon?: boolean; route: AppRoute }[] = [
-    { name: 'Home',       icon: Home,      route: '/(tabs)/Home' },
-    { name: 'Leagues',    icon: null,      customIcon: true, route: '/(tabs)/matches' },
-    { name: 'AI',         icon: null,      aiIcon: true, route: '/(tabs)/chat' },
-    { name: 'Profile',    icon: User,      route: '/(tabs)/profile' },
-    { name: 'Highlights', icon: Video,     route: '/(tabs)/reels' },
-    { name: 'Rank',       icon: BarChart3, route: '/(tabs)/rank' },
-  ];
+  const scaleAnims = useRef(Array(TABS.length).fill(0).map(() => new Animated.Value(1))).current;
 
   const isMatchDetails = pathname?.includes('match-details');
   const isMatches = pathname?.includes('matches');
   const isChat = pathname?.includes('chat');
   const isQuiz = pathname?.includes('quiz');
   const isProfileStack =
-    pathname?.includes('/notifications') ||
-    pathname?.includes('/settings');
+    pathname?.includes('/notifications') || pathname?.includes('/settings');
 
   useEffect(() => {
-    const allRoutes = tabs.map(tab => tab.route);
-    prefetchRoutes(allRoutes).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    prefetchRoutes(TABS.map((tab) => tab.route)).catch(() => {});
   }, []);
 
-  // Chat has its own floating header + input bar; the bottom nav would
-  // overlap the composer and break the keyboard-aware layout.
-  // Hide on Quiz screen as well to avoid overlapping footer actions.
   if (isChat || isQuiz) return null;
 
   const activeTab: TabName = (() => {
     if (isMatchDetails || isMatches) return 'Leagues';
     if (isChat) return 'AI';
     if (isProfileStack) return 'Profile';
-    // Match by route path segment (case-insensitive) so `/Home`, `/profile`,
-    // `/reels`, `/rank` all map to the right tab regardless of group prefix.
     const p = (pathname ?? '').toLowerCase();
-    const found = tabs.find(tab => {
+    const found = TABS.find((tab) => {
       const r = tab.route.toLowerCase();
-      // Strip expo-router group prefix so `/(tabs)/home` → `/home`
       const stripped = r.replace(/\/\([^)]+\)/g, '');
       return p === r || p === stripped || p.endsWith(stripped);
     });
     return found?.name ?? 'Home';
   })();
 
-  const glassProps = isLiquidGlassSupported
-    ? { effect: "clear" as const, interactive: true }
-    : { intensity: 20, tint: "dark" as const };
+  const activeIndex = Math.max(0, TABS.findIndex((t) => t.name === activeTab));
+
+  const barGlassProps = useMemo(
+    () =>
+      isLiquidGlassSupported
+        ? {
+            effect: 'clear' as const,
+            interactive: false,
+            tintColor: 'rgba(255,255,255,0.08)',
+            colorScheme: 'dark' as const,
+          }
+        : { intensity: Platform.OS === 'android' ? 85 : 28, tint: 'dark' as const },
+    [],
+  );
 
   const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
-  const handlePressIn = (tab: typeof tabs[number]) => {
+  const handlePressIn = (tab: (typeof TABS)[number]) => {
     prefetchRoute(tab.route).catch(() => {});
-    const currentIndex = tabs.findIndex(t => t.route === tab.route);
-    const adjacentRoutes = [
-      tabs[currentIndex - 1]?.route,
-      tabs[currentIndex + 1]?.route,
-    ].filter(Boolean) as string[];
+    const currentIndex = TABS.findIndex((t) => t.route === tab.route);
+    const adjacentRoutes = [TABS[currentIndex - 1]?.route, TABS[currentIndex + 1]?.route].filter(
+      Boolean,
+    ) as string[];
     if (adjacentRoutes.length > 0) prefetchRoutes(adjacentRoutes).catch(() => {});
   };
 
-  const handlePress = (tab: typeof tabs[number], index: number) => {
+  const handlePress = (tab: (typeof TABS)[number], index: number) => {
     Haptics.selectionAsync();
     Animated.sequence([
-      Animated.timing(scaleAnims[index], { toValue: 0.85, duration: 100, useNativeDriver: true }),
-      Animated.spring(scaleAnims[index], { toValue: 1, friction: 4, useNativeDriver: true }),
+      Animated.timing(scaleAnims[index], { toValue: 0.88, duration: 90, useNativeDriver: true }),
+      Animated.spring(scaleAnims[index], { toValue: 1, friction: 5, useNativeDriver: true }),
     ]).start();
-    // Guard against double-tapping the same tab (no-op, avoids flicker).
     const p = (pathname ?? '').toLowerCase();
     const targetStripped = tab.route.toLowerCase().replace(/\/\([^)]+\)/g, '');
     if (p === tab.route.toLowerCase() || p === targetStripped || p.endsWith(targetStripped)) {
       return;
     }
-    // Use replace (not push) so tabs don't stack and each tap isn't a full
-    // remount of the (tabs) group — which used to briefly show the splash
-    // while Clerk re-initialised on the new stack entry.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     router.replace(tab.route as any);
   };
@@ -155,23 +143,25 @@ const BottomNav = () => {
   return (
     <View style={[styles.container, { bottom: Math.max(insets.bottom, 16) }]}>
       <View style={styles.navWrapper}>
-        <GlassWrapper {...(glassProps as any)} style={StyleSheet.absoluteFill} />
+        <GlassWrapper {...(barGlassProps as any)} style={StyleSheet.absoluteFill} />
 
-        {/* Top gradient border — blue→purple */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.topBorder}
+        {!isLiquidGlassSupported && Platform.OS === 'android' ? (
+          <View style={styles.androidBarTint} pointerEvents="none" />
+        ) : null}
+
+        <View style={styles.barRim} pointerEvents="none" />
+
+        <SlidingLiquidBubble
+          activeIndex={activeIndex}
+          tabCount={TABS.length}
+          navWidth={NAV_WIDTH}
+          navHeight={NAV_HEIGHT}
         />
 
-        {/* Navigation items */}
         <View style={styles.navItemsContainer}>
-          {tabs.map((tab, index) => {
+          {TABS.map((tab, index) => {
             const isActive = activeTab === tab.name;
-            const activeColor = TAB_COLORS[tab.name];
 
-            // ── AI tab — special treatment ──────────────────────────────────
             if (tab.aiIcon) {
               return (
                 <TouchableOpacity
@@ -181,33 +171,15 @@ const BottomNav = () => {
                   style={styles.navItem}
                   activeOpacity={0.7}
                 >
-                  {/* Extra-strong glow for AI tab */}
-                  {isActive && (
-                    <View style={[styles.glowOuter, styles.aiGlowOuter, { backgroundColor: activeColor, shadowColor: activeColor }]} />
-                  )}
                   <Animated.View
-                    style={[
-                      styles.iconContainer,
-                      isActive && [styles.activeIconContainer, styles.aiActiveContainer, { borderColor: activeColor }],
-                      { transform: [{ scale: scaleAnims[index] }] },
-                    ]}
+                    style={[styles.iconContainer, { transform: [{ scale: scaleAnims[index] }] }]}
                   >
-                    {/* Gradient background when active */}
-                    {isActive && (
-                      <LinearGradient
-                        colors={['rgba(124,58,237,0.35)', 'rgba(76,29,149,0.2)']}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                      />
-                    )}
-                    <AIIcon color={isActive ? activeColor : ICON_COLOR} size={22} />
+                    <AIIcon color={isActive ? TAB_COLORS.AI : ICON_COLOR} size={22} />
                   </Animated.View>
                 </TouchableOpacity>
               );
             }
 
-            // ── Pitch (Leagues) custom icon ─────────────────────────────────
             if (tab.customIcon) {
               return (
                 <TouchableOpacity
@@ -217,23 +189,15 @@ const BottomNav = () => {
                   style={styles.navItem}
                   activeOpacity={0.7}
                 >
-                  {isActive && (
-                    <View style={[styles.glowOuter, { backgroundColor: activeColor, shadowColor: activeColor }]} />
-                  )}
                   <Animated.View
-                    style={[
-                      styles.iconContainer,
-                      isActive && [styles.activeIconContainer, { borderColor: activeColor }],
-                      { transform: [{ scale: scaleAnims[index] }] },
-                    ]}
+                    style={[styles.iconContainer, { transform: [{ scale: scaleAnims[index] }] }]}
                   >
-                    <PitchIcon color={isActive ? activeColor : ICON_COLOR} size={22} />
+                    <PitchIcon color={isActive ? TAB_COLORS.Leagues : ICON_COLOR} size={22} />
                   </Animated.View>
                 </TouchableOpacity>
               );
             }
 
-            // ── Standard icon tab ───────────────────────────────────────────
             return (
               <NavItem
                 key={tab.name}
@@ -242,7 +206,6 @@ const BottomNav = () => {
                 onPress={() => handlePress(tab, index)}
                 onPressIn={() => handlePressIn(tab)}
                 scaleAnim={scaleAnims[index]}
-                activeColor={activeColor}
               />
             );
           })}
@@ -252,79 +215,67 @@ const BottomNav = () => {
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const NAV_HEIGHT = 56;
+const NAV_HEIGHT = 58;
 const NAV_WIDTH = width - 48;
 
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 24, right: 24,
+    left: 24,
+    right: 24,
     alignItems: 'center',
-    zIndex: 9999, elevation: 100,
+    zIndex: 9999,
+    elevation: 100,
   },
   navWrapper: {
-    width: NAV_WIDTH, height: NAV_HEIGHT,
+    width: NAV_WIDTH,
+    height: NAV_HEIGHT,
     borderRadius: NAV_HEIGHT / 2,
     overflow: 'hidden',
-    backgroundColor: 'rgba(20, 18, 28, 0.00)', // Semi-transparent glass base
-    borderWidth: 1,
-    borderColor: 'rgba(75, 0, 105, 0.47)', // Subtle glass border
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 16, elevation: 20,
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.35,
+        shadowRadius: 20,
+      },
+      android: { elevation: 16 },
+    }),
   },
-  topBorder: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 1.5,
-    zIndex: 10,
-    opacity: 0.6,
+  androidBarTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  barRim: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: NAV_HEIGHT / 2,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    zIndex: 2,
   },
   navItemsContainer: {
-    flex: 1, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'space-around',
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
     paddingHorizontal: 8,
     zIndex: 20,
   },
   navItem: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
   },
-
-  // Layered glow — outer (larger, more diffuse)
-  glowOuter: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    opacity: 0.1,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 5,
-  },
-
   iconContainer: {
-    width: 44, height: 44, borderRadius: 22,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 0,
-  },
-  activeIconContainer: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderWidth: 1.5,
-  },
-  // AI tab — stronger glow + gradient container
-  aiGlowOuter: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    opacity: 0.14,
-    shadowOpacity: 0.65,
-    shadowRadius: 20,
-  },
-  aiActiveContainer: {
-    overflow: 'hidden',
-    borderWidth: 1.5,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

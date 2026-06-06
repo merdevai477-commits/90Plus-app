@@ -16,24 +16,29 @@ import { View } from 'react-native';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LiquidGlassViewProps extends ViewProps {
-  effect?: 'clear' | 'regular' | 'prominent';
+  effect?: 'clear' | 'regular' | 'prominent' | 'none';
   tint?: string;
   tintColor?: string;
   interactive?: boolean;
+  colorScheme?: 'light' | 'dark' | 'system';
+  animated?: boolean;
 }
 
 // ─── Safe import ──────────────────────────────────────────────────────────────
 
 let _LiquidGlassView: ComponentType<LiquidGlassViewProps> = View;
+let _LiquidGlassContainerView: ComponentType<ViewProps & { spacing?: number }> = View;
 let _isLiquidGlassSupported = false;
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const pkg = require('@callstack/liquid-glass') as {
     LiquidGlassView: ComponentType<LiquidGlassViewProps>;
+    LiquidGlassContainerView?: ComponentType<ViewProps & { spacing?: number }>;
     isLiquidGlassSupported: boolean;
   };
   _LiquidGlassView = pkg.LiquidGlassView ?? View;
+  _LiquidGlassContainerView = pkg.LiquidGlassContainerView ?? View;
   _isLiquidGlassSupported = pkg.isLiquidGlassSupported ?? false;
 } catch {
   // Native module not available — silently fall back to View / BlurView
@@ -41,4 +46,6 @@ try {
 }
 
 export const LiquidGlassView: ComponentType<LiquidGlassViewProps> = _LiquidGlassView;
+export const LiquidGlassContainerView: ComponentType<ViewProps & { spacing?: number }> =
+  _LiquidGlassContainerView;
 export const isLiquidGlassSupported: boolean = _isLiquidGlassSupported;
