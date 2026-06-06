@@ -280,6 +280,37 @@ class FootballDataCacheService {
         }
     }
 
+    /**
+     * Fixtures for a single league on a calendar day (includes lower-tier leagues).
+     */
+    async getLeagueMatchesByDate(leagueId: number, dateString: string): Promise<any[]> {
+        const season = new Date(`${dateString}T12:00:00.000Z`).getUTCFullYear();
+        const cacheKey = `league_${leagueId}_${season}_${dateString}`;
+        const todayKey = new Date().toISOString().split('T')[0];
+        const ttl = dateString < todayKey ? this.TTL.MATCHES_BY_DATE_PAST : this.TTL.MATCHES_BY_DATE_FUTURE;
+
+        try {
+            const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
+            if (cached) {
+                return cached;
+            }
+
+            const { footballService } = await import('./football.service');
+            const fixtures = await footballService.getFixtures({
+                date: dateString,
+                league: leagueId,
+                season,
+            });
+
+            const list = Array.isArray(fixtures) ? fixtures : [];
+            await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
+            return list;
+        } catch (error) {
+            logger.warn(`[League ${leagueId} ${dateString}] getLeagueMatchesByDate failed:`, error);
+            return [];
+        }
+    }
+
     private async loadMatchesFromDbForDate(
         startOfDay: Date,
         endOfDay: Date,

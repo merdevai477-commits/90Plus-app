@@ -487,6 +487,7 @@ export const en = {
       retry: 'Retry',
       noMatchesFound: 'No matches found',
       viewAll: 'View All ({{count}}) ›',
+      leagueDataUnavailable: 'League data is not available',
       selectDate: 'Select Date',
       done: 'Done',
       today: 'Today',

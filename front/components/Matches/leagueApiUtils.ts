@@ -232,6 +232,28 @@ const fetchMatchesByDateImpl = async (date: Date, dateString: string): Promise<M
   return matches;
 };
 
+/** Fetch fixtures for one league on a specific date (lower-tier leagues). */
+export const fetchLeagueMatchesByDate = async (
+  leagueId: number,
+  date: Date,
+): Promise<Match[]> => {
+  const dateString = formatLocalDateKey(date);
+  try {
+    const apiUrl = getApiUrl();
+    const response = await fetch(
+      `${apiUrl}/football/cached/league/${leagueId}/matches/${dateString}`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!response.ok) return [];
+    const raw = await response.json();
+    const fixtures: Fixture[] = Array.isArray(raw?.response) ? raw.response : [];
+    return mapFixturesToMatches(fixtures);
+  } catch (error) {
+    logger.warn(`fetchLeagueMatchesByDate(${leagueId}, ${dateString}) failed:`, error);
+    return [];
+  }
+};
+
 /** World Cup fixtures for a date — backend filters by league/season env. */
 export const fetchWorldCupMatchesByDate = async (date: Date): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);

@@ -28,6 +28,7 @@ import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtils';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
@@ -454,6 +455,7 @@ function LeagueAllMatchesModal({
   group,
   visible,
   onClose,
+  selectedDate,
   filter,
   onPredict,
   submittingId,
@@ -466,6 +468,7 @@ function LeagueAllMatchesModal({
   group: LeagueGroup | null;
   visible: boolean;
   onClose: () => void;
+  selectedDate: Date;
   filter: string;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
@@ -475,9 +478,44 @@ function LeagueAllMatchesModal({
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
 }) {
-  const { language } = useTranslation();
+  const { language, t } = useTranslation();
+  const [extraFixtures, setExtraFixtures] = useState<Fixture[]>([]);
+  const [leagueLoading, setLeagueLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !group) {
+      setExtraFixtures([]);
+      setLeagueLoading(false);
+      return;
+    }
+    if (group.fixtures.length > 0) {
+      setExtraFixtures([]);
+      setLeagueLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const leagueId = parseInt(group.id, 10);
+    if (Number.isNaN(leagueId)) return;
+
+    (async () => {
+      setLeagueLoading(true);
+      try {
+        const matches = await fetchLeagueMatchesByDate(leagueId, selectedDate);
+        if (!cancelled) {
+          setExtraFixtures(matches.map(matchToFixture));
+        }
+      } finally {
+        if (!cancelled) setLeagueLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [visible, group?.id, group?.fixtures.length, selectedDate]);
+
   if (!group) return null;
-  const localizedLeagueName = getLeagueDisplayName(group.league, language);
+  const localizedLeagueName = getLeagueDisplayName(group.league, language, parseInt(group.id, 10) || undefined);
+  const fixtures = group.fixtures.length > 0 ? group.fixtures : extraFixtures;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       {/* Full-screen iOS-style blur backdrop */}
@@ -520,8 +558,17 @@ function LeagueAllMatchesModal({
           </View>
           {/* All fixtures */}
           <View style={styles.allMatchesListWrap}>
+            {leagueLoading ? (
+              <View style={styles.leagueModalEmpty}>
+                <ActivityIndicator size="small" color={PURPLE_PRIMARY} />
+              </View>
+            ) : fixtures.length === 0 ? (
+              <View style={styles.leagueModalEmpty}>
+                <Text style={styles.leagueModalEmptyText}>{t('matches.screen.leagueDataUnavailable')}</Text>
+              </View>
+            ) : (
             <FlashList
-              data={group.fixtures}
+              data={fixtures}
               keyExtractor={f => f.id}
               renderItem={({ item }) => (
                 <MatchRow
@@ -539,6 +586,7 @@ function LeagueAllMatchesModal({
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
             />
+            )}
           </View>
         </View>
       </View>
@@ -552,6 +600,7 @@ const PREVIEW_COUNT = 2; // max fixtures shown before "View All"
 const LeagueCard = memo(function LeagueCard({
   group,
   filter,
+  selectedDate,
   onPredict,
   submittingId,
   predictedMatches,
@@ -562,6 +611,7 @@ const LeagueCard = memo(function LeagueCard({
 }: {
   group: LeagueGroup;
   filter: string;
+  selectedDate: Date;
   onPredict: (fixtureId: string, type: 'home' | 'draw' | 'away') => void;
   submittingId: string | null;
   predictedMatches: Record<string, UserPredictionEntry>;
@@ -649,6 +699,7 @@ const LeagueCard = memo(function LeagueCard({
         group={showAll ? group : null}
         visible={showAll}
         onClose={() => setShowAll(false)}
+        selectedDate={selectedDate}
         filter={filter}
         onPredict={onPredict}
         submittingId={submittingId}
@@ -1541,6 +1592,7 @@ export default function MatchesHubScreenV2() {
             <LeagueCard
               group={item}
               filter={filter}
+              selectedDate={selectedDate}
               onPredict={handlePredict}
               submittingId={submittingId}
               predictedMatches={predictedMatches}
@@ -1586,6 +1638,7 @@ export default function MatchesHubScreenV2() {
         group={viewAllLeagueGroup}
         visible={!!viewAllLeagueGroup}
         onClose={() => setViewAllLeagueId(null)}
+        selectedDate={selectedDate}
         filter={filter}
         onPredict={handlePredict}
         submittingId={submittingId}
@@ -1793,6 +1846,19 @@ const styles = StyleSheet.create({
   // Wrapper that gives the FlashList a concrete flex:1 container. Without
   // this the list renders 0px tall and the sheet looks empty.
   allMatchesListWrap: { flex: 1, zIndex: 1 },
+  leagueModalEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 48,
+  },
+  leagueModalEmptyText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   sheetHandle: {
     width: 36, height: 4, borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.25)',

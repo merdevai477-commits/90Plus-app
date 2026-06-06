@@ -123,6 +123,12 @@ const LeagueSection = memo(function LeagueSection({
           Slicing a small array is cheaper than mounting cards we won't show. */}
       {expanded && (
         <View style={styles.matchesContainer}>
+          {matchCount === 0 ? (
+            <View style={styles.leagueEmptyWrap}>
+              <Text style={styles.leagueEmptyText}>{t('matches.screen.leagueDataUnavailable')}</Text>
+            </View>
+          ) : (
+            <>
           {league.matches.slice(0, MATCHES_PREVIEW_COUNT).map((match, i) => (
             // Fallback to index if the API ever returns a match without
             // a stable id — keeps React's reconciler happy either way.
@@ -134,6 +140,8 @@ const LeagueSection = memo(function LeagueSection({
                 {t('matches.screen.viewAll').replace('{{count}}', String(matchCount))}
               </Text>
             </TouchableOpacity>
+          )}
+            </>
           )}
         </View>
       )}
@@ -306,6 +314,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#A78BFA',
+  },
+  leagueEmptyWrap: {
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  leagueEmptyText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
 

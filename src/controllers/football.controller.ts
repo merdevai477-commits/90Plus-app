@@ -1588,6 +1588,43 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/league/:leagueId/matches/:date
+   * League-scoped fixtures for a day (covers lower-tier leagues).
+   */
+  static async getCachedLeagueMatchesByDate(req: Request, res: Response): Promise<void> {
+    const dateString = ensureString(req.params.date);
+    const leagueId = parseInt(ensureString(req.params.leagueId), 10);
+    try {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid date format. Use YYYY-MM-DD' });
+        return;
+      }
+      if (Number.isNaN(leagueId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid league ID' });
+        return;
+      }
+
+      const matches = await footballDataCacheService.getLeagueMatchesByDate(leagueId, dateString);
+
+      res.json({
+        status: 'SUCCESS',
+        results: matches.length,
+        response: matches,
+        _meta: { date: dateString, leagueId, cached: true, available: matches.length > 0 },
+      });
+    } catch (error) {
+      logger.warn(`getCachedLeagueMatchesByDate(${leagueId}, ${dateString}): error`, error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        _meta: { date: dateString, leagueId, cached: true, available: false },
+        degraded: true,
+      });
+    }
+  }
+
+  /**
    * GET /api/football/cached/world-cup/:date
    * World Cup fixtures for a date (league + season from env / feature config).
    */

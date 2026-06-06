@@ -463,6 +463,7 @@ export const ar = {
       retry: 'إعادة المحاولة',
       noMatchesFound: 'لا توجد مباريات',
       viewAll: 'عرض الكل ({{count}}) ›',
+      leagueDataUnavailable: 'بيانات الدوري غير متاحة',
       selectDate: 'اختر التاريخ',
       done: 'تم',
       today: 'اليوم',
