@@ -7,8 +7,10 @@ import React, {
   useEffect, useRef, useState, useMemo, useCallback,
 } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet, Platform, TextStyle, useWindowDimensions,
+  View, Text, Pressable, StyleSheet, Platform, TextStyle, useWindowDimensions,
+  type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
   useSharedValue,
@@ -21,6 +23,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useTranslation } from '../../src/i18n';
 
 import { Colors } from '../../constants/theme';
@@ -79,14 +83,34 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
-const TABLE_MIN_COL_WIDTH = 72;
-const TABLE_MAX_COL_WIDTH = 160;
+const TABLE_MIN_COL_WIDTH = 88;
+const TABLE_CATEGORY_MAX = 148;
+const TABLE_DETAIL_MAX = 340;
+const TABLE_SCROLL_STEP = 120;
 
-function colMinWidth(text: string, isHeader: boolean): number {
-  const len = text.length;
-  const base = isHeader ? 88 : 72;
-  const computed = Math.max(base, len * 7 + 28);
-  return Math.min(computed, TABLE_MAX_COL_WIDTH);
+function colMinWidth(text: string, isHeader: boolean, colIndex: number, colCount: number): number {
+  const stripped = text.replace(/\*\*/g, '').trim();
+  const len = stripped.length;
+  const base = isHeader ? 96 : 84;
+  const computed = Math.max(base, len * 6.5 + 36);
+  if (colCount > 1 && colIndex === 0) {
+    return Math.min(computed, TABLE_CATEGORY_MAX);
+  }
+  return Math.min(computed, TABLE_DETAIL_MAX);
+}
+
+function TableCellText({
+  text,
+  style,
+}: {
+  text: string;
+  style: TextStyle | TextStyle[];
+}) {
+  return (
+    <Text style={[style, getTextDirectionStyles(text)]}>
+      {renderInline(text)}
+    </Text>
+  );
 }
 
 function MarkdownTable({
@@ -100,100 +124,176 @@ function MarkdownTable({
   scrollHint?: string;
   bubbleMaxWidth: number;
 }) {
+  const scrollRef = useRef<ScrollView>(null);
   const colCount = headers.length;
-  const scrollViewportWidth = Math.max(200, bubbleMaxWidth - 16);
+  const scrollViewportWidth = Math.max(220, bubbleMaxWidth - 28);
+
+  const [scrollX, setScrollX] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
 
   const colWidths = useMemo(() => {
     const widths = headers.map((h, i) => {
-      let max = colMinWidth(h, true);
+      let max = colMinWidth(h, true, i, colCount);
       for (const row of rows) {
         const cell = row[i] ?? '';
-        max = Math.max(max, colMinWidth(cell, false));
+        max = Math.max(max, colMinWidth(cell, false, i, colCount));
       }
       return Math.max(max, TABLE_MIN_COL_WIDTH);
     });
     return widths;
-  }, [headers, rows]);
+  }, [headers, rows, colCount]);
 
   const tableIntrinsicWidth = colWidths.reduce((a, b) => a + b, 0);
-  const showHint = tableIntrinsicWidth > scrollViewportWidth - 8;
+  const isOverflow = tableIntrinsicWidth > scrollViewportWidth + 4;
+  const maxScrollX = Math.max(0, contentWidth - scrollViewportWidth);
+  const canScrollLeft = isOverflow && scrollX > 8;
+  const canScrollRight = isOverflow && scrollX < maxScrollX - 8;
+
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setScrollX(e.nativeEvent.contentOffset.x);
+  }, []);
+
+  const onContentSizeChange = useCallback((w: number) => {
+    setContentWidth(w);
+  }, []);
+
+  const scrollBy = useCallback(
+    (delta: number) => {
+      Haptics.selectionAsync();
+      const next = Math.max(0, Math.min(maxScrollX, scrollX + delta));
+      scrollRef.current?.scrollTo({ x: next, animated: true });
+      setScrollX(next);
+    },
+    [maxScrollX, scrollX],
+  );
 
   return (
     <View style={s.tableBlock}>
-      {showHint && scrollHint ? (
-        <Text style={s.tableHint}>{scrollHint}</Text>
+      {isOverflow && scrollHint ? (
+        <View style={s.tableHintRow}>
+          <ChevronLeft size={14} color="rgba(167,139,250,0.9)" strokeWidth={2.5} />
+          <Text style={s.tableHint}>{scrollHint}</Text>
+          <ChevronRight size={14} color="rgba(167,139,250,0.9)" strokeWidth={2.5} />
+        </View>
       ) : null}
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        directionalLockEnabled
-        decelerationRate="fast"
-        showsHorizontalScrollIndicator
-        bounces={false}
-        style={[s.tableScroll, { width: scrollViewportWidth, maxWidth: scrollViewportWidth }]}
-        contentContainerStyle={[
-          s.tableScrollContent,
-          { minWidth: tableIntrinsicWidth, width: tableIntrinsicWidth },
-        ]}
-      >
-        <View style={s.table}>
+
+      <View style={[s.tableScrollShell, { width: scrollViewportWidth }]}>
+        {canScrollLeft ? (
           <LinearGradient
-            colors={['rgba(124,58,237,0.55)', 'rgba(76,29,149,0.45)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={s.tableHead}
+            colors={['rgba(12,6,22,0.95)', 'rgba(12,6,22,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={s.tableFadeLeft}
+            pointerEvents="none"
+          />
+        ) : null}
+        {canScrollRight ? (
+          <LinearGradient
+            colors={['rgba(12,6,22,0)', 'rgba(12,6,22,0.95)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={s.tableFadeRight}
+            pointerEvents="none"
+          />
+        ) : null}
+
+        {canScrollLeft ? (
+          <Pressable
+            style={s.tableArrowLeft}
+            onPress={() => scrollBy(-TABLE_SCROLL_STEP)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Scroll table left"
           >
-            {headers.map((h, hi) => (
+            <View style={s.tableArrowBtn}>
+              <ChevronLeft size={18} color="#fff" strokeWidth={2.5} />
+            </View>
+          </Pressable>
+        ) : null}
+        {canScrollRight ? (
+          <Pressable
+            style={s.tableArrowRight}
+            onPress={() => scrollBy(TABLE_SCROLL_STEP)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Scroll table right"
+          >
+            <View style={s.tableArrowBtn}>
+              <ChevronRight size={18} color="#fff" strokeWidth={2.5} />
+            </View>
+          </Pressable>
+        ) : null}
+
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          nestedScrollEnabled
+          directionalLockEnabled
+          decelerationRate="normal"
+          showsHorizontalScrollIndicator
+          persistentScrollbar={Platform.OS === 'android'}
+          overScrollMode="always"
+          bounces
+          scrollEventThrottle={16}
+          onScroll={onScroll}
+          onContentSizeChange={onContentSizeChange}
+          style={s.tableScroll}
+          contentContainerStyle={[
+            s.tableScrollContent,
+            { minWidth: tableIntrinsicWidth, paddingRight: 12 },
+          ]}
+        >
+          <View style={[s.table, { width: tableIntrinsicWidth }]}>
+            <LinearGradient
+              colors={['rgba(124,58,237,0.55)', 'rgba(76,29,149,0.45)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={s.tableHead}
+            >
+              {headers.map((h, hi) => (
+                <View
+                  key={hi}
+                  style={[
+                    s.tableCell,
+                    { width: colWidths[hi], minWidth: colWidths[hi] },
+                    hi === 0 && s.tableCellFirst,
+                    hi === colCount - 1 && s.tableCellLast,
+                  ]}
+                >
+                  <TableCellText text={h} style={s.tableHeadText} />
+                </View>
+              ))}
+            </LinearGradient>
+            {rows.map((row, ri) => (
               <View
-                key={hi}
+                key={ri}
                 style={[
-                  s.tableCell,
-                  { minWidth: colWidths[hi] },
-                  hi === 0 && s.tableCellFirst,
-                  hi === colCount - 1 && s.tableCellLast,
+                  s.tableRow,
+                  ri % 2 === 1 && s.tableRowAlt,
+                  ri === rows.length - 1 && s.tableRowLast,
                 ]}
               >
-                    <Text
-                      style={[s.tableHeadText, getTextDirectionStyles(h)]}
+                {headers.map((_, ci) => {
+                  const cell = row[ci] ?? '—';
+                  return (
+                    <View
+                      key={ci}
+                      style={[
+                        s.tableCell,
+                        { width: colWidths[ci], minWidth: colWidths[ci] },
+                        ci === 0 && s.tableCellFirst,
+                        ci === colCount - 1 && s.tableCellLast,
+                      ]}
                     >
-                      {h}
-                    </Text>
+                      <TableCellText text={cell} style={s.tableCellText} />
+                    </View>
+                  );
+                })}
               </View>
             ))}
-          </LinearGradient>
-          {rows.map((row, ri) => (
-            <View
-              key={ri}
-              style={[
-                s.tableRow,
-                ri % 2 === 1 && s.tableRowAlt,
-                ri === rows.length - 1 && s.tableRowLast,
-              ]}
-            >
-              {headers.map((_, ci) => {
-                const cell = row[ci] ?? '—';
-                return (
-                  <View
-                    key={ci}
-                    style={[
-                      s.tableCell,
-                      { minWidth: colWidths[ci] },
-                      ci === 0 && s.tableCellFirst,
-                      ci === colCount - 1 && s.tableCellLast,
-                    ]}
-                  >
-                    <Text
-                      style={[s.tableCellText, getTextDirectionStyles(cell)]}
-                    >
-                      {cell}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -704,20 +804,86 @@ const s = StyleSheet.create({
     maxWidth: '100%',
     marginVertical: 8,
   },
+  tableHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   tableHint: {
     fontSize: 11,
-    color: 'rgba(167,139,250,0.85)',
-    marginBottom: 6,
-    paddingHorizontal: 2,
+    fontWeight: '600',
+    color: 'rgba(196,181,253,0.95)',
     textAlign: 'center',
     flexShrink: 1,
   },
-  tableScroll: {
-    marginVertical: 4,
+  tableScrollShell: {
+    position: 'relative',
     alignSelf: 'stretch',
+    minHeight: 52,
+  },
+  tableFadeLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    zIndex: 3,
+    borderTopLeftRadius: 10,
+    borderBottomLeftRadius: 10,
+  },
+  tableFadeRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    zIndex: 3,
+    borderTopRightRadius: 10,
+    borderBottomRightRadius: 10,
+  },
+  tableArrowLeft: {
+    position: 'absolute',
+    left: 2,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  tableArrowRight: {
+    position: 'absolute',
+    right: 2,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  tableArrowBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(124,58,237,0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.45,
+        shadowRadius: 6,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  tableScroll: {
+    flexGrow: 0,
     borderRadius: 10,
     borderWidth: 0.5,
-    borderColor: 'rgba(167,139,250,0.25)',
+    borderColor: 'rgba(167,139,250,0.3)',
   },
   tableScrollContent: {
     flexGrow: 0,

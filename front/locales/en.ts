@@ -2003,7 +2003,7 @@ export const en = {
     // Input
     inputPlaceholder: 'Type your message...',
     inputPlaceholderEdit: 'Edit...',
-    tableScrollHint: 'Swipe left or right to see the full table',
+    tableScrollHint: 'Swipe or tap arrows to see the full table',
     editingMessage: 'Edit message',
     cancelEdit: 'Cancel',
     sendButton: 'Send',
