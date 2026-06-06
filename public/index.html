@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="90Plus — نتائج مباشرة، كويزات، تنبؤات، ريلز، ومجتمع كروي في تطبيق واحد. حمّل الآن مجاناً." />
-    <meta name="theme-color" content="#0A0612" />
+    <meta name="theme-color" content="#030208" />
     <meta property="og:title" content="90Plus — عالمك الكروي في جيبك" />
     <meta property="og:description" content="نتائج مباشرة، كويزات يومية، تنبؤات، ريلز، وذكاء اصطناعي كروي — كل ما يحتاجه المشجع الحقيقي." />
     <meta property="og:url" content="https://90plus.pro/" />
@@ -17,18 +17,19 @@
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --bg-0: #0a0612;
-        --bg-1: #0a051a;
+        --bg-0: #030208;
+        --bg-1: #05010d;
+        --bg-2: #080612;
         --purple: #7c3aed;
         --purple-soft: #a78bfa;
         --blue: #3b82f6;
         --gold: #f5c518;
         --gold-dark: #d4a017;
         --ink: rgba(255, 255, 255, 0.94);
-        --muted: rgba(255, 255, 255, 0.62);
-        --glass: rgba(255, 255, 255, 0.06);
-        --glass-border: rgba(255, 255, 255, 0.12);
-        --shadow: 0 24px 80px rgba(124, 58, 237, 0.22);
+        --muted: rgba(255, 255, 255, 0.58);
+        --glass: rgba(255, 255, 255, 0.04);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
       }
 
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,10 +40,9 @@
         font-family: "Work Sans", system-ui, sans-serif;
         color: var(--ink);
         background:
-          radial-gradient(900px 520px at 8% -8%, rgba(124, 58, 237, 0.28), transparent 58%),
-          radial-gradient(720px 420px at 92% 2%, rgba(59, 130, 246, 0.18), transparent 55%),
-          radial-gradient(680px 480px at 50% 108%, rgba(91, 33, 182, 0.22), transparent 68%),
-          linear-gradient(180deg, var(--bg-0), var(--bg-1));
+          radial-gradient(700px 400px at 12% -5%, rgba(124, 58, 237, 0.1), transparent 55%),
+          radial-gradient(560px 320px at 88% 0%, rgba(59, 130, 246, 0.06), transparent 52%),
+          linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
         min-height: 100vh;
         overflow-x: hidden;
       }
@@ -50,38 +50,16 @@
       .grain {
         position: fixed;
         inset: 0;
-        opacity: 0.1;
+        opacity: 0.05;
         background-image: repeating-linear-gradient(
           120deg,
-          rgba(255, 255, 255, 0.03),
-          rgba(255, 255, 255, 0.03) 1px,
+          rgba(255, 255, 255, 0.02),
+          rgba(255, 255, 255, 0.02) 1px,
           transparent 1px,
           transparent 6px
         );
         pointer-events: none;
         z-index: 0;
-      }
-
-      .orb {
-        position: fixed;
-        border-radius: 50%;
-        filter: blur(80px);
-        pointer-events: none;
-        z-index: 0;
-        animation: float 12s ease-in-out infinite;
-      }
-      .orb-1 { width: 320px; height: 320px; top: -80px; right: -60px; background: rgba(124, 58, 237, 0.35); }
-      .orb-2 { width: 260px; height: 260px; bottom: 10%; left: -80px; background: rgba(59, 130, 246, 0.2); animation-delay: -4s; }
-      .orb-3 { width: 200px; height: 200px; top: 40%; left: 55%; background: rgba(245, 197, 24, 0.12); animation-delay: -8s; }
-
-      @keyframes float {
-        0%, 100% { transform: translateY(0) scale(1); }
-        50% { transform: translateY(-18px) scale(1.04); }
-      }
-
-      @keyframes fadeUp {
-        from { opacity: 0; transform: translateY(24px); }
-        to { opacity: 1; transform: translateY(0); }
       }
 
       .page {
@@ -99,7 +77,6 @@
         justify-content: space-between;
         gap: 16px;
         padding: 8px 0 32px;
-        animation: fadeUp 0.7s ease both;
       }
 
       .brand {
@@ -163,18 +140,14 @@
         }
       }
 
-      .hero-copy {
-        animation: fadeUp 0.8s ease 0.1s both;
-      }
-
       .eyebrow {
         display: inline-flex;
         align-items: center;
         gap: 8px;
         padding: 6px 14px;
         border-radius: 999px;
-        background: rgba(124, 58, 237, 0.18);
-        border: 1px solid rgba(167, 139, 250, 0.35);
+        background: rgba(124, 58, 237, 0.12);
+        border: 1px solid rgba(167, 139, 250, 0.22);
         color: var(--purple-soft);
         font-size: 0.8rem;
         font-weight: 600;
@@ -186,13 +159,7 @@
         height: 8px;
         border-radius: 50%;
         background: #ef4444;
-        box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
-        animation: pulse 1.8s ease infinite;
-      }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.6; transform: scale(0.85); }
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
       }
 
       h1 {
@@ -238,18 +205,13 @@
         text-decoration: none;
         color: #fff;
         border: 1px solid var(--glass-border);
-        background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         min-width: 200px;
       }
 
       .store-badge:hover {
-        transform: translateY(-3px);
-        border-color: rgba(245, 197, 24, 0.45);
-        box-shadow: 0 16px 40px rgba(124, 58, 237, 0.3);
+        border-color: rgba(245, 197, 24, 0.35);
       }
 
       .store-badge svg { width: 28px; height: 28px; flex-shrink: 0; }
@@ -273,8 +235,8 @@
       }
 
       .store-badge.gold {
-        background: linear-gradient(135deg, rgba(245,197,24,0.22), rgba(124,58,237,0.15));
-        border-color: rgba(245, 197, 24, 0.35);
+        background: linear-gradient(135deg, rgba(245,197,24,0.14), rgba(0,0,0,0.2));
+        border-color: rgba(245, 197, 24, 0.22);
       }
 
       /* Phone mockup */
@@ -282,7 +244,6 @@
         position: relative;
         display: flex;
         justify-content: center;
-        animation: fadeUp 0.9s ease 0.25s both;
       }
 
       .phone-frame {
@@ -291,17 +252,17 @@
         aspect-ratio: 9 / 18.5;
         border-radius: 36px;
         padding: 12px;
-        background: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04));
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.15);
+        background: linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.08);
       }
 
       .phone-screen {
         height: 100%;
         border-radius: 28px;
         background:
-          radial-gradient(circle at 50% 20%, rgba(124,58,237,0.45), transparent 55%),
-          linear-gradient(180deg, #1a0035 0%, #0a0612 100%);
+          radial-gradient(circle at 50% 20%, rgba(124,58,237,0.22), transparent 55%),
+          linear-gradient(180deg, #0d0018 0%, #030208 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -315,7 +276,7 @@
         content: "";
         position: absolute;
         inset: 0;
-        background: radial-gradient(circle at 50% 30%, rgba(123,47,190,0.35), transparent 60%);
+        background: radial-gradient(circle at 50% 30%, rgba(123,47,190,0.18), transparent 60%);
       }
 
       .phone-screen img {
@@ -363,7 +324,7 @@
         height: 60%;
         bottom: -20%;
         left: -20%;
-        background: radial-gradient(ellipse, rgba(124,58,237,0.35), transparent 70%);
+        background: radial-gradient(ellipse, rgba(124,58,237,0.12), transparent 70%);
         pointer-events: none;
       }
 
@@ -373,7 +334,6 @@
         grid-template-columns: repeat(2, 1fr);
         gap: 12px;
         margin-bottom: 56px;
-        animation: fadeUp 0.9s ease 0.35s both;
       }
 
       @media (min-width: 640px) {
@@ -407,7 +367,6 @@
       .section-head {
         text-align: center;
         margin-bottom: 32px;
-        animation: fadeUp 0.9s ease 0.4s both;
       }
 
       .section-head h2 {
@@ -444,23 +403,10 @@
         border-radius: 20px;
         background: var(--glass);
         border: 1px solid var(--glass-border);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
-        animation: fadeUp 0.8s ease both;
       }
 
-      .feature:nth-child(1) { animation-delay: 0.45s; }
-      .feature:nth-child(2) { animation-delay: 0.52s; }
-      .feature:nth-child(3) { animation-delay: 0.59s; }
-      .feature:nth-child(4) { animation-delay: 0.66s; }
-      .feature:nth-child(5) { animation-delay: 0.73s; }
-      .feature:nth-child(6) { animation-delay: 0.8s; }
-
       .feature:hover {
-        transform: translateY(-4px);
-        border-color: rgba(167, 139, 250, 0.35);
-        box-shadow: 0 16px 48px rgba(124, 58, 237, 0.15);
+        border-color: rgba(167, 139, 250, 0.22);
       }
 
       .feature-icon {
@@ -472,8 +418,8 @@
         justify-content: center;
         font-size: 1.4rem;
         margin-bottom: 16px;
-        background: rgba(124, 58, 237, 0.2);
-        border: 1px solid rgba(167, 139, 250, 0.25);
+        background: rgba(124, 58, 237, 0.12);
+        border: 1px solid rgba(167, 139, 250, 0.18);
       }
 
       .feature h3 {
@@ -494,12 +440,11 @@
         padding: 40px 28px;
         border-radius: 28px;
         background:
-          linear-gradient(135deg, rgba(124,58,237,0.25), rgba(59,130,246,0.12)),
+          linear-gradient(135deg, rgba(124,58,237,0.12), rgba(0,0,0,0.35)),
           var(--glass);
-        border: 1px solid rgba(167, 139, 250, 0.3);
+        border: 1px solid rgba(167, 139, 250, 0.18);
         box-shadow: var(--shadow);
         margin-bottom: 40px;
-        animation: fadeUp 0.9s ease 0.85s both;
       }
 
       .cta h2 {
@@ -537,9 +482,6 @@
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>
-    <div class="orb orb-1" aria-hidden="true"></div>
-    <div class="orb orb-2" aria-hidden="true"></div>
-    <div class="orb orb-3" aria-hidden="true"></div>
 
     <div class="page">
       <header>
