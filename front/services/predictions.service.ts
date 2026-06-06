@@ -14,6 +14,20 @@ const API_URL = getApiUrl(); // Already includes /api
 // concurrent requests to the same endpoint which burns rate-limit quota.
 let _inFlightRemaining: Promise<PredictionRemaining> | null = null;
 let _inFlightUserPreds: Promise<any> | null = null;
+let _inFlightPublicPreds = new Map<string, Promise<PublicUserPredictionsPayload>>();
+
+export interface PublicUserPredictionsPayload {
+  stats: {
+    total: number;
+    correct: number;
+    incorrect: number;
+    pending: number;
+    accuracy: number;
+    resolved: number;
+    totalCoinsWon: number;
+  };
+  predictions: Prediction[];
+}
 
 export interface PredictionType {
   type: 'home' | 'draw' | 'away';
@@ -25,7 +39,7 @@ export interface Prediction {
   predictionType: 'home' | 'draw' | 'away';
   coinsSpent: number;
   coinsWon?: number;
-  isCorrect?: boolean;
+  coinsSpent?: number;
   createdAt: string;
   homeTeam?: string;
   awayTeam?: string;
@@ -201,6 +215,58 @@ export const PredictionsService = {
     })();
 
     return _inFlightUserPreds;
+  },
+
+  /**
+   * Public prediction analytics for another user's profile
+   */
+  getPublicUserPredictions: async (
+    username: string,
+    token?: string | null,
+  ): Promise<PublicUserPredictionsPayload> => {
+    const key = username.trim().toLowerCase();
+    const inflight = _inFlightPublicPreds.get(key);
+    if (inflight) return inflight;
+
+    const flight = (async () => {
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const response = await fetch(`${API_URL}/predictions/public/${encodeURIComponent(key)}`, {
+          headers,
+        });
+
+        if (!response.ok) {
+          throw await PredictionsService._parseError(response);
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) {
+          return {
+            stats: result.data.stats ?? {
+              total: 0,
+              correct: 0,
+              incorrect: 0,
+              pending: 0,
+              accuracy: 0,
+              resolved: 0,
+              totalCoinsWon: 0,
+            },
+            predictions: result.data.predictions ?? [],
+          };
+        }
+        return { stats: { total: 0, correct: 0, incorrect: 0, pending: 0, accuracy: 0, resolved: 0, totalCoinsWon: 0 }, predictions: [] };
+      } catch (error) {
+        logger.error('Error getting public user predictions:', error);
+        throw error;
+      } finally {
+        _inFlightPublicPreds.delete(key);
+      }
+    })();
+
+    _inFlightPublicPreds.set(key, flight);
+    return flight;
   },
 
   /**

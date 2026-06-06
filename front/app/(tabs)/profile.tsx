@@ -902,7 +902,8 @@ export default function ProfileScreen() {
       maybeRefreshProfile('focus');
       (async () => {
         try {
-          const token = await getToken();
+          const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
+          const token = await getClerkBearerToken(getToken);
           if (token && clerkUser?.id) {
             void Promise.all([
               fetchPredictionStats(token, clerkUser.id),

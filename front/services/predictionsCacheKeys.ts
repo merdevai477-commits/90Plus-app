@@ -30,3 +30,7 @@ export function profilePredictionsListKey(userId: string): string {
 export function profilePredictionStatsKey(userId: string): string {
     return `${PRED_STATS_BASE}_${userId}`;
 }
+
+export function publicUserPredictionsKey(username: string): string {
+    return `public_predictions_v1_${username.toLowerCase()}`;
+}

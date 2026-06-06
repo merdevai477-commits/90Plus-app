@@ -6,9 +6,10 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import type { Prediction, User } from '@prisma/client';
-import { requireAuth } from '../middleware/clerk.middleware';
+import { requireAuth, optionalAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
 import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
+import { getBlockRelation } from '../services/block.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 
@@ -460,6 +461,126 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
         });
     } catch (error) {
         logger.error('Error getting prediction stats:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+async function buildPredictionStatsForUser(userId: string) {
+    const [grouped, coinsAgg] = await Promise.all([
+        prisma.prediction.groupBy({
+            by: ['isCorrect'],
+            where: { userId },
+            _count: { _all: true },
+        }),
+        prisma.prediction.aggregate({
+            where: { userId, isCorrect: true },
+            _sum: { coinsWon: true },
+        }),
+    ]);
+
+    let correct = 0;
+    let incorrect = 0;
+    let pending = 0;
+    for (const row of grouped) {
+        const c = row._count._all || 0;
+        if (row.isCorrect === true) correct = c;
+        else if (row.isCorrect === false) incorrect = c;
+        else pending = c;
+    }
+
+    const total = correct + incorrect + pending;
+    const resolved = correct + incorrect;
+    const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
+    const totalCoinsWon = coinsAgg._sum.coinsWon || 0;
+
+    return { total, correct, incorrect, pending, accuracy, resolved, totalCoinsWon };
+}
+
+const EMPTY_PUBLIC_PREDICTIONS = {
+    stats: {
+        total: 0,
+        correct: 0,
+        incorrect: 0,
+        pending: 0,
+        accuracy: 0,
+        resolved: 0,
+        totalCoinsWon: 0,
+    },
+    predictions: [] as Prediction[],
+};
+
+/**
+ * GET /api/predictions/public/:username
+ * Public prediction stats + recent history for another user's profile
+ */
+router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
+    try {
+        const usernameParam = (Array.isArray(req.params.username) ? req.params.username[0] : req.params.username)?.trim() || '';
+        if (!usernameParam) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Username is required');
+            return;
+        }
+
+        const targetUser = await prisma.user.findFirst({
+            where: {
+                username: { equals: usernameParam, mode: 'insensitive' },
+            },
+            select: { id: true, username: true },
+        });
+
+        if (!targetUser) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+            return;
+        }
+
+        const requestingClerkUserId = req.auth?.userId;
+        if (requestingClerkUserId) {
+            const viewer = await prisma.user.findUnique({
+                where: { clerkUserId: requestingClerkUserId },
+                select: { id: true },
+            });
+            if (viewer) {
+                const blockStatus = await getBlockRelation(viewer.id, targetUser.id);
+                if (blockStatus.blockedByMe || blockStatus.blockedMe) {
+                    res.json({ success: true, data: EMPTY_PUBLIC_PREDICTIONS });
+                    return;
+                }
+            }
+        }
+
+        const [stats, predictions] = await Promise.all([
+            buildPredictionStatsForUser(targetUser.id),
+            prisma.prediction.findMany({
+                where: { userId: targetUser.id },
+                orderBy: { createdAt: 'desc' },
+                take: 50,
+                select: {
+                    id: true,
+                    apiMatchId: true,
+                    predictionType: true,
+                    homeTeam: true,
+                    awayTeam: true,
+                    homeTeamLogo: true,
+                    awayTeamLogo: true,
+                    matchDate: true,
+                    leagueName: true,
+                    isCorrect: true,
+                    coinsWon: true,
+                    coinsSpent: true,
+                    createdAt: true,
+                },
+            }),
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                stats,
+                predictions,
+            },
+        });
+    } catch (error) {
+        logger.error('Error getting public user predictions:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

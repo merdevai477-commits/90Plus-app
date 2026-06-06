@@ -12,15 +12,29 @@ interface ContentTabsProps {
     onTabChange: (tab: string) => void;
     videoCount: number;
     savedCount?: number;
-    isOwnProfile?: boolean; // هل هذا بروفايل المستخدم الحالي؟
+    isOwnProfile?: boolean;
+    showPublicAnalytics?: boolean;
 }
 
-const ContentTabs = memo(function ContentTabs({ activeTab, onTabChange, videoCount, savedCount = 0, isOwnProfile = true }: ContentTabsProps) {
+const ContentTabs = memo(function ContentTabs({
+    activeTab,
+    onTabChange,
+    videoCount,
+    savedCount = 0,
+    isOwnProfile = true,
+    showPublicAnalytics = false,
+}: ContentTabsProps) {
     const { t } = useTranslation();
     const tabs = [
         { id: 'videos', label: t.profile.videos, icon: 'grid-outline', count: videoCount },
         ...(isOwnProfile ? [{ id: 'saved', label: t.profile.saved, icon: 'bookmark-outline', count: savedCount }] : []),
-        ...(isOwnProfile ? [{ id: 'analytics', label: t.profile.analytics, icon: 'analytics-outline' }] : []),
+        ...(isOwnProfile || showPublicAnalytics
+            ? [{
+                id: 'analytics',
+                label: isOwnProfile ? t.profile.analytics : t.publicProfile.predictionAnalytics,
+                icon: 'analytics-outline' as const,
+            }]
+            : []),
     ];
 
     const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;

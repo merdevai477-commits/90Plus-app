@@ -2321,6 +2321,7 @@ export const en = {
     reportSubmitted: 'Report submitted',
     stats: 'Stats',
     saved: 'Saved',
+    predictionAnalytics: 'Predictions',
   },
 
   // ── Onboarding (interest selection) ──────────────────────────────────

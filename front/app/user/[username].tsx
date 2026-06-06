@@ -53,6 +53,9 @@ import { useTranslation } from '../../src/i18n';
 import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useUserReport } from '../../hooks/useReportSystem';
+import ContentTabs from '../../components/profile/ContentTabs';
+import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
+import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
 
 // Cache keys for the public-profile screen
 const USER_PROFILE_CACHE = 'user_profile';
@@ -232,11 +235,19 @@ export default function UserProfileScreen() {
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('videos');
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const hasRecordedViewRef = useRef(false);
 
   const { follow, unfollow } = useFollowStore();
+
+  const canViewPredictions = !!user && !blockedMe && !isBlocked;
+  const {
+    stats: publicPredictionStats,
+    predictions: publicPredictions,
+    refresh: refreshPublicPredictions,
+  } = usePublicUserPredictions(username, getToken, canViewPredictions);
 
   // ── Data loading (cache-first for instant render) ──────────────────────────
   const loadUserProfile = useCallback(async (skipCache = false) => {
@@ -381,7 +392,10 @@ export default function UserProfileScreen() {
     setHasMoreVideos(true);
     await loadUserProfile(true);
     if (!blockedMe && !isBlocked) {
-      await loadUserVideos(true, 0);
+      await Promise.all([
+        loadUserVideos(true, 0),
+        refreshPublicPredictions(true),
+      ]);
     }
     setRefreshing(false);
   };
@@ -836,15 +850,16 @@ export default function UserProfileScreen() {
 
         {showFullProfile && (
           <>
-        <View style={s.sectionHeader}>
-          <Text style={s.sectionTitle}>{t.publicProfile.videosTitle}</Text>
-          {userVideos.length > 0 && (
-            <View style={s.countBadge}>
-              <Text style={s.countTxt}>{userVideos.length}</Text>
-            </View>
-          )}
-        </View>
+        <ContentTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          videoCount={userVideos.length}
+          isOwnProfile={false}
+          showPublicAnalytics
+        />
 
+        {activeTab === 'videos' && (
+          <>
         {isLoadingVideos ? (
           <View style={s.loadingVideos}>
             <ActivityIndicator size="small" color={ACCENT} />
@@ -883,6 +898,17 @@ export default function UserProfileScreen() {
         )}
           </>
         )}
+
+        <View style={activeTab === 'analytics' ? undefined : s.hiddenTab}>
+          <ProfileAnalyticsTab
+            analytics={null}
+            predictionStats={publicPredictionStats}
+            predictions={publicPredictions}
+            variant="predictionsOnly"
+          />
+        </View>
+          </>
+        )}
           </>
         )}
 
@@ -908,6 +934,7 @@ const s = StyleSheet.create({
   },
   center: { justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingBottom: 20 },
+  hiddenTab: { display: 'none' },
 
   loadingTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 15, marginTop: 14 },
   errorTxt: { color: '#888', fontSize: 17, marginTop: 16, marginBottom: 24 },

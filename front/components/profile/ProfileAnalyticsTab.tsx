@@ -58,6 +58,7 @@ interface Props {
   analytics: ProfileAnalytics | null;
   predictionStats: PredictionStats | null;
   predictions?: UserPredictionItem[];
+  variant?: 'full' | 'predictionsOnly';
 }
 
 interface StatCardProps {
@@ -246,9 +247,11 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
   analytics,
   predictionStats,
   predictions = [],
+  variant = 'full',
 }) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<PredictionFilter>('all');
+  const predictionsOnly = variant === 'predictionsOnly';
 
   const derivedStats = useMemo(() => {
     if (!predictions.length) return null;
@@ -293,38 +296,42 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <SectionHeader icon="videocam-outline" title={t.profile.videoAnalytics} />
+      {!predictionsOnly && (
+        <>
+          <SectionHeader icon="videocam-outline" title={t.profile.videoAnalytics} />
 
-      <View style={styles.grid}>
-        <StatCard
-          icon="eye-outline"
-          value={fmt(analytics?.totalViews)}
-          label={t.profile.views}
-          accent={ProfileTheme.colors.neonBlue}
-          gradient={['rgba(0,217,255,0.14)', 'rgba(0,217,255,0.04)']}
-        />
-        <StatCard
-          icon="heart-outline"
-          value={fmt(analytics?.totalLikes)}
-          label={t.profile.likes}
-          accent="#FF6B6B"
-          gradient={['rgba(255,107,107,0.14)', 'rgba(255,107,107,0.04)']}
-        />
-        <StatCard
-          icon="chatbubble-outline"
-          value={fmt(analytics?.totalComments)}
-          label={t.profile.comments}
-          accent={ProfileTheme.colors.neonGreen}
-          gradient={['rgba(50,205,50,0.14)', 'rgba(50,205,50,0.04)']}
-        />
-        <StatCard
-          icon="person-add-outline"
-          value={fmt(analytics?.recentFollowers)}
-          label={t.profile.newFollowers}
-          accent={PURPLE_SOFT}
-          gradient={['rgba(167,139,250,0.16)', 'rgba(124,58,237,0.06)']}
-        />
-      </View>
+          <View style={styles.grid}>
+            <StatCard
+              icon="eye-outline"
+              value={fmt(analytics?.totalViews)}
+              label={t.profile.views}
+              accent={ProfileTheme.colors.neonBlue}
+              gradient={['rgba(0,217,255,0.14)', 'rgba(0,217,255,0.04)']}
+            />
+            <StatCard
+              icon="heart-outline"
+              value={fmt(analytics?.totalLikes)}
+              label={t.profile.likes}
+              accent="#FF6B6B"
+              gradient={['rgba(255,107,107,0.14)', 'rgba(255,107,107,0.04)']}
+            />
+            <StatCard
+              icon="chatbubble-outline"
+              value={fmt(analytics?.totalComments)}
+              label={t.profile.comments}
+              accent={ProfileTheme.colors.neonGreen}
+              gradient={['rgba(50,205,50,0.14)', 'rgba(50,205,50,0.04)']}
+            />
+            <StatCard
+              icon="person-add-outline"
+              value={fmt(analytics?.recentFollowers)}
+              label={t.profile.newFollowers}
+              accent={PURPLE_SOFT}
+              gradient={['rgba(167,139,250,0.16)', 'rgba(124,58,237,0.06)']}
+            />
+          </View>
+        </>
+      )}
 
       <SectionHeader icon="stats-chart-outline" title={t.profile.predictionStats} />
 
