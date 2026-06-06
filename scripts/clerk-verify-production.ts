@@ -25,6 +25,7 @@ async function main() {
     display_config?: {
       application_name?: string;
       sign_in_url?: string;
+      logo_image_url?: string;
       instance_environment_type?: string;
     };
     auth_config?: { test_mode?: boolean };
@@ -69,13 +70,18 @@ async function main() {
   ok.forEach((line) => console.log('✅', line));
   issues.forEach((line) => console.log('❌', line));
 
-  console.log('\n=== Google OAuth "Clerk" name fix (manual) ===');
-  console.log('Google shows "Clerk" until YOU add custom OAuth credentials:');
-  console.log('1. Google Cloud Console → OAuth consent screen → App name: 90Plus');
-  console.log('2. Create OAuth Client (Web application)');
-  console.log('3. Authorized redirect URI: https://clerk.90plus.pro/v1/oauth_callback');
-  console.log('4. Clerk Dashboard → SSO → Google → Use custom credentials');
-  console.log('5. Publish OAuth app to Production + submit for verification');
+  const logoUrl = env.display_config?.logo_image_url;
+  if (logoUrl) {
+    ok.push(`Clerk branding logo configured (${logoUrl.slice(0, 60)}…)`);
+  }
+
+  console.log('\n=== Google OAuth: اسم + لوجو "Clerk" (يدوي) ===');
+  console.log('شاشة Google (accounts.google.com) تعرض لوجo Clerk حتى تضيف credentials خاصة:');
+  console.log('1. Google Cloud → OAuth consent screen → App name: 90Plus + logo: public/90Plus.png');
+  console.log('2. OAuth Client (Web) → redirect: https://clerk.90plus.pro/v1/oauth_callback');
+  console.log('3. Clerk Dashboard → SSO → Google → Use custom credentials');
+  console.log('4. Publish OAuth app + Google verification للوجo');
+  console.log('5. Clerk Dashboard → Branding → logo 90Plus (لصفحات accounts.90plus.pro)');
   console.log('\nSee: scripts/CLERK_GOOGLE_OAUTH.md\n');
 
   process.exit(issues.length ? 1 : 0);

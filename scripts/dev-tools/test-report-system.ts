@@ -4,8 +4,9 @@
  */
 
 import axios from 'axios';
+import { getScriptApiBase } from './urls';
 
-const API_URL = process.env.API_URL || 'https://90plus-app-production-26e9.up.railway.app';
+const API_URL = getScriptApiBase();
 const TEST_USER_TOKEN = process.env.TEST_USER_TOKEN || '';
 
 // Colors for console output

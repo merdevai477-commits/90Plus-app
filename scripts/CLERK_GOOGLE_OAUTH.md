@@ -1,12 +1,21 @@
-# إزالة اسم "Clerk" من Google Sign-In — 90Plus
+# إزالة اسم وصورة "Clerk" من Google Sign-In — 90Plus
 
-عندما يظهر **"تسجيل الدخول إلى Clerk"** في Google، السبب أن Clerk Production لسه يستخدم **OAuth credentials مشتركة** أو مشروع Google باسم Clerk.
+عندما تظهر شاشة Google فيها:
+- **"تسجيل الدخول إلى Clerk"**
+- **أيقونة رمادية / حرف C** (لوجو Clerk الافتراضي)
 
-**الحل الوحيد 100%:** OAuth credentials **خاصة بك** باسم **90Plus** في Google Cloud.
+السبب: Clerk Production لسه يستخدم **OAuth credentials مشتركة** من Clerk — Google يعرض **اسم ولوجو مشروع Clerk**، مش إعدادات Branding في Dashboard.
+
+> **مهم:** رفع اللوجو في Clerk Dashboard → Branding يغيّر صفحات `accounts.90plus.pro` فقط.  
+> **شاشة Google** (الصورة اللي أرسلتها) تتغيّر **فقط** من Google Cloud OAuth consent screen + custom credentials.
+
+**الحل الوحيد 100%:** OAuth credentials **خاصة بك** باسم **90Plus** + لوجو التطبيق في Google Cloud.
+
+**ملف اللوجو الجاهز:** `public/90Plus.png` (1024×1024) — متاح أيضاً على `https://90plus.pro/90Plus.png`
 
 ---
 
-## 1) Google Cloud Console
+## 1) Google Cloud Console — الاسم + اللوجو
 
 1. افتح [Google Cloud Console](https://console.cloud.google.com/)
 2. أنشئ مشروع جديد (أو استخدم موجود) — اسم المشروع: **90Plus**
@@ -14,13 +23,17 @@
    - User Type: **External**
    - App name: **90Plus**
    - User support email: `merdevai477@gmail.com`
-   - App logo: ارفع `90Plus.png`
+   - **App logo:** ارفع `public/90Plus.png` من المشروع
+     - مربّع، 120×120 على الأقل (الملف الحالي 1024×1024 ✅)
+     - بعد الرفع قد يستغرق Google ساعات حتى يظهر اللوجو على شاشة تسجيل الدخول
    - App domain: `https://90plus.pro`
    - Privacy policy: `https://90plus.pro/privacy`
    - Terms of service: `https://90plus.pro/terms`
    - Authorized domains: `90plus.pro`
 4. **Scopes:** `email`, `profile`, `openid` (افتراضي)
-5. **Publish app** → Production (قد تحتاج verification من Google)
+5. **Publish app** → Production  
+   - Google قد يطلب **verification** قبل عرض اللوجو والاسم النهائي للجميع
+   - بدون verification قد يظهر "unverified app" لكن الاسم واللوجو يتحسّنوا بعد الربط
 
 ---
 
@@ -71,12 +84,21 @@ https://clerk.90plus.pro/v1/oauth_callback
 
 ---
 
-## 5) Clerk Branding
+## 5) Clerk Branding (صفحات accounts.90plus.pro)
 
-Dashboard → **Customization → Branding**:
-- Application name: **90Plus**
-- Logo: `90Plus.png`
-- Home URL: `https://90plus.pro`
+[Clerk Dashboard → Production → Customization → Branding](https://dashboard.clerk.com/last-active?path=customization):
+
+| الحقل | القيمة |
+|--------|--------|
+| Application name | **90Plus** (بدون emoji) |
+| Logo | ارفع `public/90Plus.png` |
+| Favicon | نفس الملف أو نسخة 32×32 |
+| Home URL | `https://90plus.pro` |
+
+> لا يمكن رفع اللوجo عبر Clerk Backend API (endpoint `/v1/instance/logo` غير متاح).  
+> الرفع **يدوياً** من Dashboard فقط.
+
+**Clerk MCP في `mcp.json`:** السيرفر `https://mcp.clerk.com/mcp` للتوثيق والأمثلة فقط — **لا يغيّر** Branding أو Google OAuth.
 
 ---
 

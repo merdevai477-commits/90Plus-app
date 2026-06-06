@@ -146,7 +146,7 @@ These Terms are governed by the laws of [Your Jurisdiction]. Any disputes will b
 
 For questions about these Terms, contact us at:
 - Email: support@90plus.com
-- Website: https://90plus-app-production.up.railway.app/support
+- Website: https://90plus.pro/support
 
 ## 13. Acknowledgment
 

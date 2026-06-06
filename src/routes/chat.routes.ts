@@ -94,7 +94,7 @@ function buildClient(apiKey: string, baseURL: string): OpenAI {
         defaultHeaders: {
             // OpenRouter uses these for analytics / attribution. Gemini's
             // OpenAI-compatible endpoint ignores unknown headers safely.
-            'HTTP-Referer': 'https://90plus.app',
+            'HTTP-Referer': 'https://90plus.pro',
             'X-Title': '90Plus AI Chat',
         },
     });

@@ -1,11 +1,12 @@
 import fetch from 'node-fetch';
+import { PUBLIC_SITE_URL, RAILWAY_INTERNAL_ORIGIN } from './urls';
 
+/** Public domain first; Railway URLs are legacy/internal fallbacks */
 const POSSIBLE_URLS = [
+  PUBLIC_SITE_URL,
+  RAILWAY_INTERNAL_ORIGIN,
   'https://90plus-app-production.up.railway.app',
   'https://90plus-app-production-26e9.up.railway.app',
-  'https://backend-production-26e9.up.railway.app',
-  'https://football-app-backend.up.railway.app',
-  'https://90plus-backend.up.railway.app'
 ];
 
 const DEMO_EMAIL = 'aibuilder80@gmail.com';

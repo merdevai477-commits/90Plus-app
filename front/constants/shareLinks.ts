@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native';
 
-/** Custom production domain (Railway) */
+/** Custom production domain */
 export const DEFAULT_SHARE_BASE_URL =
   'https://90plus.pro';
 
@@ -83,7 +83,7 @@ export function buildProfileDeepLink(username: string): string {
 /**
  * Public link included when inviting friends to install 90Plus.
  * Android → Play Store listing (direct install).
- * iOS / other → Railway landing (smart fallback to App Store).
+ * iOS / other → 90plus.pro landing (smart fallback to App Store).
  */
 export function buildAppShareUrl(): string {
   if (Platform.OS === 'android') {

@@ -3,7 +3,9 @@
  * Tests all new security implementations
  */
 
-const API_URL = 'https://90plus-app-production-26e9.up.railway.app/api';
+import { getScriptApiUrl } from './urls';
+
+const API_URL = getScriptApiUrl();
 
 interface TestResult {
   name: string;

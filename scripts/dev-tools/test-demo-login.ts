@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
+import { getScriptApiBase, RAILWAY_INTERNAL_ORIGIN } from './urls';
 
-const SERVER_URL = 'https://90plus-app-production.up.railway.app';
+const SERVER_URL = process.env.INTERNAL_API_URL?.replace(/\/api\/?$/, '') || RAILWAY_INTERNAL_ORIGIN;
 const DEMO_EMAIL = 'aibuilder80@gmail.com';
 const DEMO_PASSWORD = '1872004ME';
 

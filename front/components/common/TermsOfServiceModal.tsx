@@ -20,7 +20,7 @@ import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../reels/constants';
-import { getApiUrl } from '../../config/api.config';
+import { LEGAL_URLS } from '../../config/legal.config';
 import { logger } from '../../utils/logger';
 
 const { width, height } = Dimensions.get('window');
@@ -51,8 +51,7 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({
   const fetchTerms = async () => {
     try {
       setLoading(true);
-      // Use /terms directly (not /api/terms)
-      const termsUrl = `${getApiUrl()}/terms`;
+      const termsUrl = LEGAL_URLS.terms;
       setTermsContent(termsUrl);
       setLoading(false);
     } catch (error) {

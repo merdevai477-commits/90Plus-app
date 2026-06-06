@@ -110,7 +110,7 @@ function buildClient(): OpenAI | null {
     apiKey,
     baseURL,
     defaultHeaders: {
-      'HTTP-Referer': 'https://90plus.app',
+      'HTTP-Referer': 'https://90plus.pro',
       'X-Title': '90Plus Daily Quiz',
     },
   });

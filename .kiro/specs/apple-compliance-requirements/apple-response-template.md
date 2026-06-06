@@ -153,7 +153,7 @@ We have now implemented comprehensive content moderation features that meet all 
 
 ### Privacy Policy
 Our privacy policy is available at:
-https://90plus-app-production.up.railway.app/privacy
+https://90plus.pro/privacy
 
 ### Support Contact
 Users can contact us at:

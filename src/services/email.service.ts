@@ -7,6 +7,7 @@
  * @date 2026-03-30
  */
 
+import { PUBLIC_SITE_URL } from '../config/siteUrls';
 import { logger } from '../utils/logger';
 
 // ============================================================================
@@ -30,7 +31,10 @@ export async function sendParentalConsentEmail(data: ParentalConsentEmailData): 
     const { parentEmail, childUsername, childEmail, token, expiresAt } = data;
 
     // Generate confirmation URL
-    const baseUrl = process.env.API_URL || 'http://localhost:3000';
+    const baseUrl =
+      process.env.SHARE_BASE_URL?.replace(/\/$/, '') ||
+      PUBLIC_SITE_URL ||
+      'http://localhost:3000';
     const confirmUrl = `${baseUrl}/api/auth/confirm-parental-consent/${token}`;
 
     // Calculate expiration time

@@ -58,11 +58,9 @@ const CONFIG: Record<Environment, APIConfig> = {
  * Check if URL is a production domain
  */
 function isProductionDomain(url: string): boolean {
-  return url.includes('railway.app') || 
-         url.includes('90plus.app') || 
+  // User-facing production domains only (Railway URL is internal — not listed here)
+  return url.includes('90plus.app') ||
          url.includes('90plus.pro') ||
-         url.includes('.up.railway.app') ||
-         url.includes('railway.railway.app') ||
          url.includes('fly.dev');
 }
 

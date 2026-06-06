@@ -3,7 +3,9 @@
 ## Base URL
 
 ```
-Production: https://90plus-app-production.up.railway.app/api
+Production: https://90plus.pro/api
+
+Internal (team only): `https://90plus-app-production-1808.up.railway.app/api` — set `INTERNAL_API_URL` in dev scripts.
 Development: http://localhost:3000/api
 ```
 

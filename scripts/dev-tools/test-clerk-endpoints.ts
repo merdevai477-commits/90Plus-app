@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
+import { getScriptApiBase } from './urls';
 
-const SERVER_URL = 'https://90plus-app-production-26e9.up.railway.app';
+const SERVER_URL = getScriptApiBase();
 const DEMO_EMAIL = 'aibuilder80@gmail.com';
 
 async function testClerkEndpoints() {
