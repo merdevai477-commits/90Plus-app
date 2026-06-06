@@ -781,24 +781,30 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (activeTab !== 'analytics') return;
 
-    let isMounted = true;
-    const loadPredictions = async () => {
+    let cancelled = false;
+    if (allPredictions.length === 0) {
       setPredictionsLoading(true);
+    }
+
+    (async () => {
       try {
-        const token = await getToken();
-        if (isMounted && token) {
-          await fetchUserPredictions(token);
-        }
+        const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
+        const token = await getClerkBearerToken(getToken);
+        if (cancelled || !token) return;
+        await fetchUserPredictions(token);
       } catch (error) {
         logger.error('Error loading prediction history:', error);
       } finally {
-        if (isMounted) setPredictionsLoading(false);
+        if (!cancelled) setPredictionsLoading(false);
       }
-    };
+    })();
 
-    loadPredictions();
-    return () => { isMounted = false; };
-  }, [activeTab, getToken, fetchUserPredictions]);
+    return () => {
+      cancelled = true;
+      setPredictionsLoading(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reload when analytics tab opens
+  }, [activeTab]);
 
   const lastMergedServerSigRef = useRef<string>('');
   const lastClerkIdForMergeRef = useRef<string | undefined>(undefined);

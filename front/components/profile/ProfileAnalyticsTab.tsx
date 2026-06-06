@@ -330,7 +330,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
         })}
       </View>
 
-      {predictionsLoading ? (
+      {predictionsLoading && predictions.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="small" color={PURPLE_PRIMARY} />
         </View>

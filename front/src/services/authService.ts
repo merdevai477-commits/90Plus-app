@@ -10,7 +10,7 @@ const API_URL = getApiUrl();
 
 // Custom error classes for sync operations
 export class SyncTimeoutError extends Error {
-    constructor(message: string = 'Sync operation timeout after 15 seconds') {
+    constructor(message: string = 'Sync operation timeout') {
         super(message);
         this.name = 'SyncTimeoutError';
     }
@@ -40,8 +40,8 @@ export class SyncValidationError extends Error {
 // ✅ OPTIMIZED: Balanced timeout for Railway cold starts
 const API_TIMEOUT = 15000; // 15 seconds per request
 
-// Overall sync operation timeout
-const SYNC_OPERATION_TIMEOUT = 12000; // 12 seconds total
+// Overall sync operation timeout — must exceed per-request timeout × retries (Railway cold starts)
+const SYNC_OPERATION_TIMEOUT = 45000;
 
 // Retry configuration
 const MAX_RETRY_ATTEMPTS = 4; // Clerk/me + cold DB: extra retries for transient 5xx
@@ -245,7 +245,7 @@ export class AuthService {
         // Create timeout promise that rejects after 15 seconds FROM NOW
         const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(() => {
-                reject(new SyncTimeoutError('Sync operation timeout after 15 seconds'));
+                reject(new SyncTimeoutError(`Sync operation timeout after ${SYNC_OPERATION_TIMEOUT / 1000} seconds`));
             }, SYNC_OPERATION_TIMEOUT);
         });
 
