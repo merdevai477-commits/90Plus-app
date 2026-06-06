@@ -3,132 +3,720 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="90Plus — نتائج مباشرة، كويزات، تنبؤات، وريلز كروية في تطبيق واحد." />
-    <title>90Plus — حمّل التطبيق</title>
+    <meta name="description" content="90Plus — نتائج مباشرة، كويزات، تنبؤات، ريلز، ومجتمع كروي في تطبيق واحد. حمّل الآن مجاناً." />
+    <meta name="theme-color" content="#0A0612" />
+    <meta property="og:title" content="90Plus — عالمك الكروي في جيبك" />
+    <meta property="og:description" content="نتائج مباشرة، كويزات يومية، تنبؤات، ريلز، وذكاء اصطناعي كروي — كل ما يحتاجه المشجع الحقيقي." />
+    <meta property="og:url" content="https://90plus.pro/" />
+    <meta property="og:image" content="https://90plus.pro/90Plus.png" />
+    <meta property="og:type" content="website" />
+    <title>90Plus — عالمك الكروي في جيبك</title>
+    <link rel="icon" href="/90Plus.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root {
+        --bg-0: #0a0612;
+        --bg-1: #0a051a;
+        --purple: #7c3aed;
+        --purple-soft: #a78bfa;
+        --blue: #3b82f6;
+        --gold: #f5c518;
+        --gold-dark: #d4a017;
+        --ink: rgba(255, 255, 255, 0.94);
+        --muted: rgba(255, 255, 255, 0.62);
+        --glass: rgba(255, 255, 255, 0.06);
+        --glass-border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 24px 80px rgba(124, 58, 237, 0.22);
+      }
+
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html { scroll-behavior: smooth; }
+
       body {
+        font-family: "Work Sans", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(900px 520px at 8% -8%, rgba(124, 58, 237, 0.28), transparent 58%),
+          radial-gradient(720px 420px at 92% 2%, rgba(59, 130, 246, 0.18), transparent 55%),
+          radial-gradient(680px 480px at 50% 108%, rgba(91, 33, 182, 0.22), transparent 68%),
+          linear-gradient(180deg, var(--bg-0), var(--bg-1));
         min-height: 100vh;
-        font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
-        background: linear-gradient(135deg, #1a0035 0%, #2d0060 50%, #1a0035 100%);
-        color: #f4f7f5;
+        overflow-x: hidden;
+      }
+
+      .grain {
+        position: fixed;
+        inset: 0;
+        opacity: 0.1;
+        background-image: repeating-linear-gradient(
+          120deg,
+          rgba(255, 255, 255, 0.03),
+          rgba(255, 255, 255, 0.03) 1px,
+          transparent 1px,
+          transparent 6px
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .orb {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(80px);
+        pointer-events: none;
+        z-index: 0;
+        animation: float 12s ease-in-out infinite;
+      }
+      .orb-1 { width: 320px; height: 320px; top: -80px; right: -60px; background: rgba(124, 58, 237, 0.35); }
+      .orb-2 { width: 260px; height: 260px; bottom: 10%; left: -80px; background: rgba(59, 130, 246, 0.2); animation-delay: -4s; }
+      .orb-3 { width: 200px; height: 200px; top: 40%; left: 55%; background: rgba(245, 197, 24, 0.12); animation-delay: -8s; }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-18px) scale(1.04); }
+      }
+
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(24px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 24px 20px 48px;
+      }
+
+      /* Header */
+      header {
         display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 24px;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px 0 32px;
+        animation: fadeUp 0.7s ease both;
       }
-      .card {
-        max-width: 420px;
-        width: 100%;
-        text-align: center;
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: inherit;
       }
-      .logo {
-        width: 120px;
-        height: 120px;
-        margin: 0 auto 20px;
-        display: block;
+
+      .brand img {
+        width: 44px;
+        height: 44px;
         object-fit: contain;
       }
+
+      .brand span {
+        font-family: "Fraunces", serif;
+        font-weight: 700;
+        font-size: 1.25rem;
+        letter-spacing: -0.02em;
+      }
+
+      nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      nav a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        transition: color 0.2s, border-color 0.2s, background 0.2s;
+      }
+
+      nav a:hover {
+        color: var(--ink);
+        border-color: var(--glass-border);
+        background: var(--glass);
+      }
+
+      /* Hero */
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 40px;
+        align-items: center;
+        padding: 24px 0 56px;
+      }
+
+      @media (min-width: 900px) {
+        .hero {
+          grid-template-columns: 1.1fr 0.9fr;
+          gap: 48px;
+          padding: 40px 0 72px;
+        }
+      }
+
+      .hero-copy {
+        animation: fadeUp 0.8s ease 0.1s both;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: rgba(124, 58, 237, 0.18);
+        border: 1px solid rgba(167, 139, 250, 0.35);
+        color: var(--purple-soft);
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 20px;
+      }
+
+      .eyebrow .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ef4444;
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+        animation: pulse 1.8s ease infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.85); }
+      }
+
       h1 {
-        font-size: 2rem;
-        font-weight: 800;
-        margin-bottom: 8px;
+        font-family: "Fraunces", serif;
+        font-size: clamp(2.2rem, 5vw, 3.4rem);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+        margin-bottom: 18px;
       }
-      .tagline {
-        color: rgba(255, 255, 255, 0.72);
-        line-height: 1.6;
+
+      h1 .gold {
+        background: linear-gradient(135deg, var(--gold), #fff3a0);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .lead {
+        font-size: clamp(1rem, 2.2vw, 1.15rem);
+        line-height: 1.75;
+        color: var(--muted);
+        max-width: 34rem;
         margin-bottom: 32px;
-        font-size: 1rem;
       }
-      .stores {
+
+      .store-row {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
       }
-      .store-btn {
+
+      @media (min-width: 520px) {
+        .store-row { flex-direction: row; flex-wrap: wrap; }
+      }
+
+      .store-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 20px;
+        border-radius: 16px;
+        text-decoration: none;
+        color: #fff;
+        border: 1px solid var(--glass-border);
+        background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        min-width: 200px;
+      }
+
+      .store-badge:hover {
+        transform: translateY(-3px);
+        border-color: rgba(245, 197, 24, 0.45);
+        box-shadow: 0 16px 40px rgba(124, 58, 237, 0.3);
+      }
+
+      .store-badge svg { width: 28px; height: 28px; flex-shrink: 0; }
+
+      .store-badge .label {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        line-height: 1.2;
+      }
+
+      .store-badge .small {
+        font-size: 0.68rem;
+        opacity: 0.75;
+        font-weight: 500;
+      }
+
+      .store-badge .big {
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .store-badge.gold {
+        background: linear-gradient(135deg, rgba(245,197,24,0.22), rgba(124,58,237,0.15));
+        border-color: rgba(245, 197, 24, 0.35);
+      }
+
+      /* Phone mockup */
+      .hero-visual {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        animation: fadeUp 0.9s ease 0.25s both;
+      }
+
+      .phone-frame {
+        position: relative;
+        width: min(100%, 320px);
+        aspect-ratio: 9 / 18.5;
+        border-radius: 36px;
+        padding: 12px;
+        background: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04));
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.15);
+      }
+
+      .phone-screen {
+        height: 100%;
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at 50% 20%, rgba(124,58,237,0.45), transparent 55%),
+          linear-gradient(180deg, #1a0035 0%, #0a0612 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .phone-screen::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 50% 30%, rgba(123,47,190,0.35), transparent 60%);
+      }
+
+      .phone-screen img {
+        width: 88px;
+        height: 88px;
+        object-fit: contain;
+        position: relative;
+        z-index: 1;
+        filter: drop-shadow(0 8px 24px rgba(124, 58, 237, 0.5));
+      }
+
+      .phone-tagline {
+        position: relative;
+        z-index: 1;
+        font-size: 0.75rem;
+        color: rgba(255,255,255,0.45);
+        letter-spacing: 0.12em;
+        font-weight: 500;
+      }
+
+      .phone-chips {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        padding: 0 16px;
+        margin-top: 8px;
+      }
+
+      .chip {
+        font-size: 0.68rem;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(124, 58, 237, 0.25);
+        border: 1px solid rgba(167, 139, 250, 0.3);
+        color: rgba(255,255,255,0.85);
+        font-weight: 600;
+      }
+
+      .phone-glow {
+        position: absolute;
+        width: 140%;
+        height: 60%;
+        bottom: -20%;
+        left: -20%;
+        background: radial-gradient(ellipse, rgba(124,58,237,0.35), transparent 70%);
+        pointer-events: none;
+      }
+
+      /* Stats */
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 56px;
+        animation: fadeUp 0.9s ease 0.35s both;
+      }
+
+      @media (min-width: 640px) {
+        .stats { grid-template-columns: repeat(4, 1fr); }
+      }
+
+      .stat {
+        padding: 18px 16px;
+        border-radius: 18px;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        text-align: center;
+      }
+
+      .stat strong {
+        display: block;
+        font-family: "Fraunces", serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--gold);
+        margin-bottom: 4px;
+      }
+
+      .stat span {
+        font-size: 0.78rem;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      /* Features */
+      .section-head {
+        text-align: center;
+        margin-bottom: 32px;
+        animation: fadeUp 0.9s ease 0.4s both;
+      }
+
+      .section-head h2 {
+        font-family: "Fraunces", serif;
+        font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .section-head p {
+        color: var(--muted);
+        max-width: 32rem;
+        margin: 0 auto;
+        line-height: 1.65;
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+        margin-bottom: 56px;
+      }
+
+      @media (min-width: 640px) {
+        .features { grid-template-columns: repeat(2, 1fr); }
+      }
+
+      @media (min-width: 960px) {
+        .features { grid-template-columns: repeat(3, 1fr); }
+      }
+
+      .feature {
+        padding: 24px 22px;
+        border-radius: 20px;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+        animation: fadeUp 0.8s ease both;
+      }
+
+      .feature:nth-child(1) { animation-delay: 0.45s; }
+      .feature:nth-child(2) { animation-delay: 0.52s; }
+      .feature:nth-child(3) { animation-delay: 0.59s; }
+      .feature:nth-child(4) { animation-delay: 0.66s; }
+      .feature:nth-child(5) { animation-delay: 0.73s; }
+      .feature:nth-child(6) { animation-delay: 0.8s; }
+
+      .feature:hover {
+        transform: translateY(-4px);
+        border-color: rgba(167, 139, 250, 0.35);
+        box-shadow: 0 16px 48px rgba(124, 58, 237, 0.15);
+      }
+
+      .feature-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        padding: 14px 20px;
-        border-radius: 14px;
-        text-decoration: none;
-        color: #fff;
-        font-weight: 600;
-        font-size: 1rem;
-        transition: transform 0.15s, opacity 0.15s;
+        font-size: 1.4rem;
+        margin-bottom: 16px;
+        background: rgba(124, 58, 237, 0.2);
+        border: 1px solid rgba(167, 139, 250, 0.25);
       }
-      .store-btn:hover {
-        transform: translateY(-2px);
-        opacity: 0.95;
+
+      .feature h3 {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 8px;
       }
-      .store-btn:active { transform: translateY(0); }
-      .store-btn svg {
-        width: 28px;
-        height: 28px;
-        flex-shrink: 0;
+
+      .feature p {
+        font-size: 0.9rem;
+        line-height: 1.65;
+        color: var(--muted);
       }
-      .apple {
-        background: #111;
-        border: 1px solid #333;
+
+      /* CTA */
+      .cta {
+        text-align: center;
+        padding: 40px 28px;
+        border-radius: 28px;
+        background:
+          linear-gradient(135deg, rgba(124,58,237,0.25), rgba(59,130,246,0.12)),
+          var(--glass);
+        border: 1px solid rgba(167, 139, 250, 0.3);
+        box-shadow: var(--shadow);
+        margin-bottom: 40px;
+        animation: fadeUp 0.9s ease 0.85s both;
       }
-      .android {
-        background: #1a472a;
-        border: 1px solid #2d6a4f;
+
+      .cta h2 {
+        font-family: "Fraunces", serif;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        margin-bottom: 12px;
       }
-      .footer {
-        margin-top: 36px;
-        font-size: 0.85rem;
-        color: #6b7c72;
+
+      .cta p {
+        color: var(--muted);
+        margin-bottom: 28px;
+        line-height: 1.65;
       }
-      .footer a {
-        color: #b794f6;
-        text-decoration: none;
+
+      .cta .store-row {
+        justify-content: center;
       }
-      .footer a:hover { text-decoration: underline; }
+
+      /* Footer */
+      footer {
+        text-align: center;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        color: rgba(255,255,255,0.38);
+        font-size: 0.82rem;
+      }
+
+      footer nav {
+        justify-content: center;
+        margin-bottom: 12px;
+      }
+
+      footer a { color: var(--purple-soft); }
     </style>
   </head>
   <body>
-    <main class="card">
-      <img class="logo" src="/90Plus.png" width="120" height="120" alt="90Plus" />
-      <h1>90Plus</h1>
-      <p class="tagline">
-        نتائج مباشرة، كويزات يومية، تنبؤات، ريلز، ومكافآت — كل ما يحتاجه مشجع الكرة في تطبيق واحد.
-      </p>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="orb orb-1" aria-hidden="true"></div>
+    <div class="orb orb-2" aria-hidden="true"></div>
+    <div class="orb orb-3" aria-hidden="true"></div>
 
-      <div class="stores">
-        <a
-          class="store-btn apple"
-          href="https://apps.apple.com/us/app/90plus/id6758296989"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-          </svg>
-          <span>حمّل من App Store</span>
+    <div class="page">
+      <header>
+        <a class="brand" href="/">
+          <img src="/90Plus.png" width="44" height="44" alt="" />
+          <span>90Plus</span>
         </a>
+        <nav aria-label="روابط قانونية">
+          <a href="/support">الدعم</a>
+          <a href="/privacy">الخصوصية</a>
+          <a href="/terms">الشروط</a>
+        </nav>
+      </header>
 
-        <a
-          class="store-btn android"
-          href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
-          </svg>
-          <span>حمّل من Google Play</span>
-        </a>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">
+            <span class="dot" aria-hidden="true"></span>
+            متاح الآن على iOS و Android
+          </div>
+          <h1>
+            عالمك الكروي<br />
+            <span class="gold">في جيبك</span>
+          </h1>
+          <p class="lead">
+            90Plus — منصة كروية متكاملة: نتائج مباشرة، كويزات يومية، تنبؤات، ريلز،
+            ذكاء اصطناعي، ومجتمع مشجعين. كل ما تحتاجه كمشجع حقيقي في تطبيق واحد.
+          </p>
+          <div class="store-row">
+            <a
+              class="store-badge gold"
+              href="https://apps.apple.com/us/app/90plus/id6758296989"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+              </svg>
+              <span class="label">
+                <span class="small">حمّل من</span>
+                <span class="big">App Store</span>
+              </span>
+            </a>
+            <a
+              class="store-badge"
+              href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
+              </svg>
+              <span class="label">
+                <span class="small">حمّل من</span>
+                <span class="big">Google Play</span>
+              </span>
+            </a>
+          </div>
+        </div>
+
+        <div class="hero-visual">
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <img src="/90Plus.png" width="88" height="88" alt="90Plus" />
+              <p class="phone-tagline">YOUR FOOTBALL WORLD</p>
+              <div class="phone-chips">
+                <span class="chip">⚽ LIVE</span>
+                <span class="chip">🧠 Quiz</span>
+                <span class="chip">🎯 Predict</span>
+                <span class="chip">🎬 Reels</span>
+              </div>
+            </div>
+          </div>
+          <div class="phone-glow" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section class="stats" aria-label="مميزات سريعة">
+        <div class="stat">
+          <strong>LIVE</strong>
+          <span>نتائج مباشرة</span>
+        </div>
+        <div class="stat">
+          <strong>AI</strong>
+          <span>مساعد كروي ذكي</span>
+        </div>
+        <div class="stat">
+          <strong>AR/EN</strong>
+          <span>عربي وإنجليزي</span>
+        </div>
+        <div class="stat">
+          <strong>FREE</strong>
+          <span>مجاني للتحميل</span>
+        </div>
+      </section>
+
+      <div class="section-head">
+        <h2>كل ما يحتاجه المشجع</h2>
+        <p>من أول صافرة البداية لحد آخر دقيقة — تابع، العب، توقّع، وشارك مع مجتمع 90Plus.</p>
       </div>
 
-      <p class="footer">
-        <a href="/support">الدعم</a>
-        ·
-        <a href="/privacy">الخصوصية</a>
-        ·
-        <a href="/terms">الشروط</a>
-      </p>
-    </main>
+      <section class="features">
+        <article class="feature">
+          <div class="feature-icon">⚽</div>
+          <h3>نتائج وإحصائيات مباشرة</h3>
+          <p>تابع المباريات لحظة بلحظة — أهداف، تشكيلات، أحداث، وإحصائيات تفصيلية.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">🧠</div>
+          <h3>كويزات يومية</h3>
+          <p>اختبر معلوماتك الكروية بأسئلة يومية، مستويات صعوبة، وترتيب عالمي.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">🎯</div>
+          <h3>تنبؤات ومكافآت</h3>
+          <p>توقّع نتائج المباريات، اجمع نقاط، وتنافس على قمة الليدربورد.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">🎬</div>
+          <h3>ريلز ومجتمع</h3>
+          <p>شاهد وشارك لحظات كروية، تفاعل مع المبدعين، وتابع مشجعين آخرين.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">🤖</div>
+          <h3>90Plus AI</h3>
+          <p>مساعدك الرياضي الذكي — اسأل عن كرة القدم، التدريب، والتغذية الرياضية.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">🔔</div>
+          <h3>تنبيهات ذكية</h3>
+          <p>تذكيرات مباريات، تحديثات نتائج، مواعيد الكويز، ونشاط اجتماعي — في الوقت المناسب.</p>
+        </article>
+      </section>
+
+      <section class="cta">
+        <h2>جاهز تدخل عالم 90Plus؟</h2>
+        <p>حمّل التطبيق مجاناً وابدأ رحلتك الكروية — توقعات، كويزات، ريلز، ومجتمع في مكان واحد.</p>
+        <div class="store-row">
+          <a
+            class="store-badge gold"
+            href="https://apps.apple.com/us/app/90plus/id6758296989"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            <span class="label">
+              <span class="small">حمّل من</span>
+              <span class="big">App Store</span>
+            </span>
+          </a>
+          <a
+            class="store-badge"
+            href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
+            </svg>
+            <span class="label">
+              <span class="small">حمّل من</span>
+              <span class="big">Google Play</span>
+            </span>
+          </a>
+        </div>
+      </section>
+
+      <footer>
+        <nav aria-label="روابط">
+          <a href="/support">الدعم</a>
+          <a href="/privacy">الخصوصية</a>
+          <a href="/terms">الشروط</a>
+        </nav>
+        <p>© 2026 90Plus. جميع الحقوق محفوظة.</p>
+      </footer>
+    </div>
   </body>
 </html>
