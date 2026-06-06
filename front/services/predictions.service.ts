@@ -39,7 +39,7 @@ export interface Prediction {
   predictionType: 'home' | 'draw' | 'away';
   coinsSpent: number;
   coinsWon?: number;
-  coinsSpent?: number;
+  isCorrect?: boolean | null;
   createdAt: string;
   homeTeam?: string;
   awayTeam?: string;
