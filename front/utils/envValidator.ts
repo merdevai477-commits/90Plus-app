@@ -75,6 +75,16 @@ export function validateEnvironment(): ValidationResult {
         envVar.errorMessage || `Invalid value for ${envVar.name}: ${value}`
       );
     }
+
+    if (
+      envVar.name === 'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY' &&
+      value.startsWith('pk_test_') &&
+      (process.env.EXPO_PUBLIC_ENV === 'production' || !__DEV__)
+    ) {
+      warnings.push(
+        'Clerk is using pk_test in a production/release build — set pk_live via EAS production env',
+      );
+    }
   }
 
   const valid = errors.length === 0;

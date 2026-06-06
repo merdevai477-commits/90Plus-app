@@ -210,7 +210,6 @@
     },
     "extra": {
       "apiUrl": "https://90plus.pro/api",
-      "clerkPublishableKey": "pk_test_Z2xvd2luZy10aHJ1c2gtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA",
       "sentryDsn": "https://831af4046cdbdb59624730ca3b7d158d@o4511496375566336.ingest.de.sentry.io/4511496395096144",
       "router": {
         "origin": false
