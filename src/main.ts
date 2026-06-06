@@ -170,7 +170,15 @@ app.use(metricsMiddleware);
 // is populated as a function on every request.
 // ============================================
 import { clerkMiddleware } from '@clerk/express';
-app.use(clerkMiddleware());
+app.use(
+    clerkMiddleware({
+        authorizedParties: [
+            'https://90plus.pro',
+            'https://accounts.90plus.pro',
+            'https://clerk.90plus.pro',
+        ],
+    }),
+);
 
 // App version check middleware (before routes)
 import { checkAppVersion } from './middleware/app-version.middleware';

@@ -11,6 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
+      "associatedDomains": [
+        "applinks:90plus.pro",
+        "webcredentials:clerk.90plus.pro",
+        "applinks:clerk.90plus.pro"
+      ],
       "usesAppleSignIn": true,
       "buildNumber": "109",
       "requireFullScreen": false,
