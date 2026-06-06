@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 import type { Router } from 'expo-router';
 import { fetchAgeStatus } from '../../hooks/useAgeVerification';
+import { AuthService } from '@/src/services/authService';
+import { waitForClerkToken } from './authSession';
 
 export const AGE_VERIFIED_KEY = '@90plus_age_verified';
 
@@ -17,10 +20,7 @@ async function routeFromAgeStatus(
 
   await markAgeVerified();
 
-  if (
-    status.ageTier === 'TEEN' &&
-    status.parentalConsent !== true
-  ) {
+  if (status.ageTier === 'TEEN' && status.parentalConsent !== true) {
     router.replace('/parental-consent');
     return;
   }
@@ -28,21 +28,30 @@ async function routeFromAgeStatus(
   router.replace('/(tabs)/Home');
 }
 
-/** Route to Home (or parental consent if still pending for legacy teen accounts). */
+/** Route to Home after sign-in — waits for JWT + backend user sync when possible. */
 export async function navigateAfterAuth(
   router: Router,
   getToken?: GetToken,
 ): Promise<void> {
   if (getToken) {
-    try {
-      const token = await getToken();
-      if (token) {
+    const token = await waitForClerkToken(getToken);
+    if (token) {
+      try {
+        await AuthService.syncUserWithBackend(token);
+      } catch {
+        Alert.alert(
+          'Connection issue',
+          'Signed in, but we could not sync your profile. Pull to refresh or try again.',
+        );
+      }
+
+      try {
         const status = await fetchAgeStatus(token);
         await routeFromAgeStatus(router, status);
         return;
+      } catch {
+        // fall through to local age flag
       }
-    } catch {
-      // fall through
     }
   }
 

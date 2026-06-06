@@ -57,6 +57,7 @@ export default function LoginScreen() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completingAuthRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -91,12 +92,17 @@ export default function LoginScreen() {
   };
 
   const finishSignIn = async (sessionId: string) => {
-    if (isSubmitting) return;
+    if (completingAuthRef.current || isSubmitting) return;
+    completingAuthRef.current = true;
     setIsSubmitting(true);
     try {
       await setActive({ session: sessionId });
       await navigateAfterAuth(router, getToken);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : tCommon.loginCouldNotComplete;
+      Alert.alert(tCommon.loginError, msg);
     } finally {
+      completingAuthRef.current = false;
       setIsSubmitting(false);
     }
   };

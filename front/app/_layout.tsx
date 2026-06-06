@@ -57,6 +57,7 @@ import { cacheService, CACHE_KEYS } from "../services/cacheService";
 // JS thread. Must be called once at module scope before any OAuth flow runs.
 WebBrowser.maybeCompleteAuthSession();
 import { AuthService } from "../src/services/authService";
+import { getClerkBearerToken } from "../utils/clerkAuthToken";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import * as Sentry from '@sentry/react-native';
 import { captureException } from "../services/sentry.service";
@@ -343,6 +344,21 @@ function WebSocketInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function ClerkTokenWarmup() {
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const getTokenRef = React.useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    getClerkBearerToken(getTokenRef.current, { retries: 10, baseDelayMs: 250 }).catch(() => {});
+  }, [isLoaded, isSignedIn]);
+
+  return null;
+}
+
 function PreloadInitializer({ children }: { children: React.ReactNode }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();
 
@@ -391,7 +407,7 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
       // Prime /clerk/me memory cache before tabs mount — faster profile tab
       if (isSignedIn) {
         try {
-          const token = await getTokenRef.current();
+          const token = await getClerkBearerToken(getTokenRef.current);
           if (token && !cancelled) {
             await AuthService.syncUserWithBackend(token).catch((e) =>
               logger.warn('[PreloadInitializer] Early profile sync failed (non-critical):', e)
@@ -508,6 +524,10 @@ function RootLayout() {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
       logger.debug('[DeepLink] Received:', url);
+
+      if (/auth-callback/i.test(url)) {
+        return;
+      }
 
       const navigateToReel = (reelId: string) => {
         router.push({
@@ -712,6 +732,7 @@ function RootLayout() {
                                   backgroundColor="#000"
                                 />
                                 <ClerkGate>
+                                  <ClerkTokenWarmup />
                                   <PushTokenSyncBootstrap />
                                   <GlobalNotificationTrayBridge />
                                   <WebSocketInitializer>

@@ -13,15 +13,17 @@ export async function ensureBackendUser(clerkUserId: string) {
   });
   if (existing) return existing;
 
-  logger.info('[ensureBackendUser] User missing in DB — syncing from Clerk', { clerkUserId });
-  await ClerkUserService.syncUserFromClerk(clerkUserId);
-
-  const synced = await prisma.user.findUnique({
-    where: { clerkUserId },
-    select: { id: true, coins: true, xp: true, level: true, settings: true, streakFreezes: true, lastActiveAt: true },
-  });
-  if (!synced) throw new Error('USER_NOT_FOUND');
-  return synced;
+  logger.info('[ensureBackendUser] User missing in DB — findOrCreateUser', { clerkUserId });
+  const user = await ClerkUserService.findOrCreateUser(clerkUserId);
+  return {
+    id: user.id,
+    coins: user.coins,
+    xp: user.xp,
+    level: user.level,
+    settings: user.settings,
+    streakFreezes: user.streakFreezes,
+    lastActiveAt: user.lastActiveAt,
+  };
 }
 
 /** Lighter lookup — id only */

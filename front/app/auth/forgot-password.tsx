@@ -96,10 +96,11 @@ export default function ForgotPasswordScreen() {
 
   const resendCode = async (): Promise<void> => {
     if (resendCooldown > 0 || !isLoaded || !signIn) return;
+    const normalizedEmail = normalizeAuthEmail(email);
     try {
       await signIn.create({
         strategy: 'reset_password_email_code',
-        identifier: email.trim(),
+        identifier: normalizedEmail,
       });
       startResendCooldown();
       Alert.alert('Sent', 'A new code has been sent to your email.');

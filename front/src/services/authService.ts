@@ -301,10 +301,14 @@ export class AuthService {
                 } catch (error: any) {
                     lastError = error;
                     
-                    // Determine if error is retryable
-                    const isRetryable = 
+                    // Retry 401 briefly after fresh sign-in (JWT / azp propagation)
+                    const isRetryable =
                         error.name === 'SyncNetworkError' ||
-                        (error.name === 'SyncServerError' && error.statusCode && (error.statusCode >= 500 || error.statusCode === 502)) ||
+                        (error.name === 'SyncServerError' &&
+                            error.statusCode &&
+                            (error.statusCode >= 500 ||
+                                error.statusCode === 502 ||
+                                (error.statusCode === 401 && attempt <= 2))) ||
                         error.message?.includes('timeout') ||
                         error.message?.includes('network') ||
                         error.message?.includes('fetch') ||

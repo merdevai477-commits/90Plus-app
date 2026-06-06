@@ -9,8 +9,8 @@ export async function getClerkBearerToken(
   getToken: GetTokenFn,
   options?: { retries?: number; baseDelayMs?: number },
 ): Promise<string | null> {
-  const retries = options?.retries ?? 4;
-  const baseDelayMs = options?.baseDelayMs ?? 150;
+  const retries = options?.retries ?? 8;
+  const baseDelayMs = options?.baseDelayMs ?? 200;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     const token = await getToken(

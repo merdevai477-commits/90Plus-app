@@ -170,15 +170,10 @@ app.use(metricsMiddleware);
 // is populated as a function on every request.
 // ============================================
 import { clerkMiddleware } from '@clerk/express';
-app.use(
-    clerkMiddleware({
-        authorizedParties: [
-            'https://90plus.pro',
-            'https://accounts.90plus.pro',
-            'https://clerk.90plus.pro',
-        ],
-    }),
-);
+// Native iOS/Android session JWTs use varying `azp` (bundle id, scheme, clerk domain).
+// Strict authorizedParties breaks App Store / Play builds → mass 401 on /clerk/me.
+// Bearer tokens are still verified via CLERK_SECRET_KEY signature.
+app.use(clerkMiddleware());
 
 // App version check middleware (before routes)
 import { checkAppVersion } from './middleware/app-version.middleware';

@@ -41,6 +41,7 @@ import { useAuth, useSignUp } from '@clerk/clerk-expo';
 import { useTranslation } from '@/src/i18n';
 import { confirmMinimumAgeWithBackend } from '@/hooks/useAgeVerification';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
+import { waitForClerkToken } from '@/src/utils/authSession';
 
 const OTP_LENGTH = 6;
 
@@ -56,10 +57,13 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
+  const completingAuthRef = useRef(false);
 
   const recordSignupAgeAttestation = async (): Promise<void> => {
-    const token = await getToken();
-    if (!token) return;
+    const token = await waitForClerkToken(getToken);
+    if (!token) {
+      throw new Error('Session not ready. Please try again.');
+    }
     const result = await confirmMinimumAgeWithBackend(token);
     if (result.ok === false) {
       throw new Error(result.message ?? 'Failed to record age confirmation');
@@ -105,7 +109,8 @@ export default function RegisterScreen() {
   const toggleTerms = useCallback(() => setTerms((v) => !v), []);
 
   const completeAuth = async (sessionId: string) => {
-    if (isSubmitting) return;
+    if (completingAuthRef.current || isSubmitting) return;
+    completingAuthRef.current = true;
     setIsSubmitting(true);
     try {
       await setActive({ session: sessionId });
@@ -115,6 +120,7 @@ export default function RegisterScreen() {
       const msg = err instanceof Error ? err.message : 'Could not complete sign up';
       Alert.alert('Error', msg);
     } finally {
+      completingAuthRef.current = false;
       setIsSubmitting(false);
     }
   };

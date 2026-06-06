@@ -6,18 +6,17 @@
  * that drives the in-app browser, sets the active session on success, and
  * navigates to the home tab. Errors are surfaced via Alert and the optional
  * `onError` callback so the caller can also reset its `isSubmitting` state.
- *
- * Usage:
- *   const { startGoogle, startApple } = useOAuthFlow({ onError });
- *   <Button onPress={startGoogle} />
  */
 
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useAuth, useOAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
+import {
+  isOAuthUserCancelled,
+  resolveOAuthRedirectUrl,
+} from '@/src/utils/authSession';
 
 interface OAuthFlowOptions {
   onError?: (message: string) => void;
@@ -28,6 +27,19 @@ interface OAuthFlowOptions {
 interface OAuthFlowReturn {
   startGoogle: () => Promise<void>;
   startApple: () => Promise<void>;
+}
+
+function resolveSessionId(result: {
+  createdSessionId?: string | null;
+  signIn?: { createdSessionId?: string | null; status?: string | null };
+  signUp?: { createdSessionId?: string | null; status?: string | null };
+}): string | null {
+  return (
+    result.createdSessionId ??
+    result.signIn?.createdSessionId ??
+    result.signUp?.createdSessionId ??
+    null
+  );
 }
 
 export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {}): OAuthFlowReturn {
@@ -42,11 +54,12 @@ export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {})
       providerLabel: string,
     ): Promise<void> => {
       try {
-        const redirectUrl = Linking.createURL('/auth-callback');
+        const redirectUrl = resolveOAuthRedirectUrl();
         const result = await flow({ redirectUrl });
 
-        if (result.createdSessionId && result.setActive) {
-          await result.setActive({ session: result.createdSessionId });
+        const sessionId = resolveSessionId(result);
+        if (sessionId && result.setActive) {
+          await result.setActive({ session: sessionId });
           if (beforeNavigate) {
             await beforeNavigate();
           }
@@ -54,16 +67,29 @@ export function useOAuthFlow({ onError, beforeNavigate }: OAuthFlowOptions = {})
           return;
         }
 
-        // User cancelled, or further sign-up steps needed (rare for OAuth).
-        if (result.signIn?.status === 'needs_first_factor' || result.signUp?.status === 'missing_requirements') {
-          // Clerk will surface a verification step in the dashboard config.
+        const signInStatus = result.signIn?.status;
+        const signUpStatus = result.signUp?.status;
+
+        if (
+          signInStatus === 'needs_first_factor' ||
+          signUpStatus === 'missing_requirements'
+        ) {
           Alert.alert(
             'Almost there',
             'Please finish the verification step in your email or phone to continue.',
           );
           return;
         }
+
+        if (signInStatus === 'complete' || signUpStatus === 'complete') {
+          Alert.alert(
+            'Sign-in incomplete',
+            'Your account needs an extra step. Try email sign-in or contact support.',
+          );
+        }
       } catch (err: unknown) {
+        if (isOAuthUserCancelled(err)) return;
+
         const error = err as { errors?: Array<{ longMessage?: string }>; message?: string };
         const msg =
           error?.errors?.[0]?.longMessage ||

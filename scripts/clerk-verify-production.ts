@@ -4,11 +4,26 @@
  * Run: npx tsx scripts/clerk-verify-production.ts
  */
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 dotenv.config();
 
 const CLERK_SECRET = process.env.CLERK_SECRET_KEY;
 const PK_LIVE_PREFIX = 'pk_live_';
+
+async function checkNativeApiEnabled(publishableKey: string): Promise<boolean> {
+  const url = new URL('https://clerk.90plus.pro/v1/environment');
+  url.searchParams.set('_is_native', '1');
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${publishableKey}`,
+      'x-mobile': '1',
+    },
+  });
+  if (res.ok) return true;
+  const body = (await res.json()) as { errors?: Array<{ code?: string }> };
+  return !body.errors?.some((e) => e.code === 'native_api_disabled');
+}
 
 async function main() {
   const issues: string[] = [];
@@ -56,15 +71,34 @@ async function main() {
     }).then((r) => r.json())) as Array<{ url: string }>;
 
     const required = ['ninetyplus://auth-callback', 'ninetyplus://'];
+    const badRedirects = ['ninetyplus:///auth-callback'];
     for (const url of required) {
       if (redirects.some((r) => r.url === url)) ok.push(`Redirect URL registered: ${url}`);
       else issues.push(`Missing Clerk redirect URL: ${url}`);
+    }
+    for (const url of badRedirects) {
+      if (redirects.some((r) => r.url === url)) {
+        issues.push(`Remove invalid redirect URL from Clerk: ${url} (use ninetyplus://auth-callback)`);
+      }
     }
   }
 
   const webhook = await fetch('https://90plus.pro/api/webhooks/clerk/health').then((r) => r.json());
   if (webhook.webhookSecretConfigured) ok.push('Railway CLERK_WEBHOOK_SECRET configured');
   else issues.push('CLERK_WEBHOOK_SECRET missing on Railway');
+
+  const pk =
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    fs.readFileSync('front/.env', 'utf8').match(/^EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=(.+)$/m)?.[1]?.trim();
+  if (pk?.startsWith(PK_LIVE_PREFIX)) {
+    const nativeOk = await checkNativeApiEnabled(pk);
+    if (nativeOk) ok.push('Clerk Native API enabled (Expo/Android/iOS)');
+    else {
+      issues.push(
+        'Clerk Native API is DISABLED — enable at Dashboard → Configure → Native applications',
+      );
+    }
+  }
 
   console.log('\n=== 90Plus Clerk Production Check ===\n');
   ok.forEach((line) => console.log('✅', line));

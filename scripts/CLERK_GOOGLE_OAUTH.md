@@ -11,7 +11,8 @@
 
 **الحل الوحيد 100%:** OAuth credentials **خاصة بك** باسم **90Plus** + لوجو التطبيق في Google Cloud.
 
-**ملف اللوجو الجاهز:** `public/90Plus.png` (1024×1024) — متاح أيضاً على `https://90plus.pro/90Plus.png`
+**ملف اللوجو للموقع:** `public/90Plus.png` (1024×1024)  
+**لـ Google OAuth (حد 1MB):** `public/90Plus-oauth-512.png` (~440KB)
 
 ---
 
@@ -23,7 +24,7 @@
    - User Type: **External**
    - App name: **90Plus**
    - User support email: `merdevai477@gmail.com`
-   - **App logo:** ارفع `public/90Plus.png` من المشروع
+   - **App logo:** ارفع `public/90Plus-oauth-512.png` (Google max 1MB — الملف الأصلي 90Plus.png أكبر من 1MB)
      - مربّع، 120×120 على الأقل (الملف الحالي 1024×1024 ✅)
      - بعد الرفع قد يستغرق Google ساعات حتى يظهر اللوجو على شاشة تسجيل الدخول
    - App domain: `https://90plus.pro`

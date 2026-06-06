@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
+import { getAuth } from '@clerk/express';
 import prisma from '../lib/prisma';
 import { AgeTier, ConsentStatus } from '@prisma/client';
 import { requireAuth } from '../middleware/clerk.middleware';
@@ -12,6 +13,34 @@ import {
 } from '../services/email.service';
 
 const router = Router();
+
+/**
+ * GET /api/auth/session-check
+ * Support/diagnostics — is the Bearer JWT accepted by Clerk middleware?
+ */
+router.get('/session-check', (req: Request, res: Response): void => {
+  const authHeader = req.headers.authorization ?? '';
+  const hasBearer = authHeader.startsWith('Bearer ') && authHeader.length > 20;
+  try {
+    const auth = getAuth(req);
+    const claims = (auth as { sessionClaims?: Record<string, unknown> }).sessionClaims;
+    res.json({
+      status: 'OK',
+      hasBearer,
+      authenticated: Boolean(auth.userId),
+      userId: auth.userId ?? null,
+      sessionId: auth.sessionId ?? null,
+      azp: typeof claims?.azp === 'string' ? claims.azp : null,
+    });
+  } catch {
+    res.status(401).json({
+      status: 'ERROR',
+      hasBearer,
+      authenticated: false,
+      message: 'Clerk rejected the session token (wrong instance, expired, or pk/sk mismatch)',
+    });
+  }
+});
 
 const CONSENT_EXPIRY_HOURS = 48;
 const MAX_CONSENT_REQUESTS_PER_DAY = 3;

@@ -156,6 +156,13 @@ export const requireAuth = async (
         const sessionClaims = (auth as any).sessionClaims;
 
         if (!userId) {
+            const hasBearer =
+                typeof req.headers.authorization === 'string' &&
+                req.headers.authorization.startsWith('Bearer ');
+            logger.warn('[requireAuth] No userId on protected route', {
+                path: req.path,
+                hasBearer,
+            });
             res.status(401).json({
                 status: 'ERROR',
                 message: 'Unauthorized - Invalid token',

@@ -11,6 +11,7 @@
     "build:reliability": "npm run reliability:check && npm run build",
     "copy:public": "node scripts/copy-public.js",
     "verify:build": "node -e \"const fs = require('fs'); const exists = fs.existsSync('dist/src/main.js'); console.log(exists ? '✅ main.js exists' : '❌ main.js missing'); process.exit(exists ? 0 : 1);\"",
+    "verify:auth": "tsx scripts/verify-emulator-auth.ts",
     "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
     "postbuild": "prisma generate",
