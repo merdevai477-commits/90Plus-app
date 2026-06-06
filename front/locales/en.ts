@@ -1109,7 +1109,7 @@ export const en = {
     shareRewardCooldown: 'Share reward used',
     shareRewardCooldownDetail: 'You can earn XP again in {hours}h {minutes}m.',
     shareRewardFailed: 'Could not claim share reward. Try again.',
-    leaderboardTitle: 'Top 11 Leaderboard',
+    leaderboardTitle: 'Top 11 Players',
 
     // Accessibility
     a11yProfileCard: 'Open my profile',

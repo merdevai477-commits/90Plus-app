@@ -57,6 +57,8 @@ export {
   translations,
 } from './utils';
 
+export { formatXpLabel, arabicPointWord } from './formatXp';
+
 // ============================================================================
 // Language Store (Zustand)
 // ============================================================================

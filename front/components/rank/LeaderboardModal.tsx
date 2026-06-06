@@ -21,6 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RankMedalIcon } from '../common/RankMedalIcon';
 import { useTranslation } from '../../src/i18n';
+import { arabicPointWord } from '../../src/i18n/formatXp';
+import { useLanguageStore } from '../../src/i18n/store';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { glassProps } from '../../constants/ui';
 
@@ -125,6 +127,7 @@ function LeaderboardRow({
   isCurrentUser: boolean;
   onPress?: () => void;
   t: ReturnType<typeof useTranslation>['t'];
+  language: ReturnType<typeof useLanguageStore.getState>['language'];
 }) {
   const top3 = TOP3_THEME[entry.rank];
   const isTop3 = entry.rank <= 3 && !!top3;
@@ -167,8 +170,18 @@ function LeaderboardRow({
       </View>
 
       <View style={[s.xpCol, isTop3 && { borderColor: `${top3.glow}44` }]}>
-        <Text style={[s.xpValue, isTop3 && { color: top3.glow }]}>{entry.xp}</Text>
-        <Text style={s.xpSuffix}>{t.rank.xpSuffix}</Text>
+        <Text
+          style={[
+            s.xpValue,
+            isTop3 && entry.rank === 1 && { color: top3.glow },
+            isTop3 && entry.rank !== 1 && s.xpValueTop3Contrast,
+          ]}
+        >
+          {entry.xp}
+        </Text>
+        <Text style={s.xpSuffix}>
+          {language === 'ar' ? arabicPointWord(entry.xp) : t.rank.xpSuffix}
+        </Text>
       </View>
 
       <View style={s.medalCol}>
@@ -218,6 +231,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onEntryPress,
 }) => {
   const { t } = useTranslation();
+  const language = useLanguageStore((s) => s.language);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const sheetBottomPad = Math.max(insets.bottom, 12);
@@ -278,6 +292,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 entry={entry}
                 isCurrentUser={entry.id === currentUserId}
                 t={t}
+                language={language}
                 onPress={() => {
                   if (!entry.isPlaceholder && entry.username) {
                     onEntryPress?.(entry);
@@ -434,6 +449,9 @@ const s = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
     lineHeight: 20,
+  },
+  xpValueTop3Contrast: {
+    color: '#FFFFFF',
   },
   xpSuffix: {
     color: 'rgba(168,85,247,0.75)',

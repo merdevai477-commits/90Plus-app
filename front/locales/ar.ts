@@ -1084,7 +1084,7 @@ export const ar = {
     shareRewardCooldown: 'استخدمت مكافأة المشاركة',
     shareRewardCooldownDetail: 'يمكنك كسب XP مرة أخرى خلال {hours}س {minutes}د.',
     shareRewardFailed: 'تعذّر منح مكافأة المشاركة. حاول مرة أخرى.',
-    leaderboardTitle: 'قائمة الـ 11 الأوائل',
+    leaderboardTitle: 'أفضل 11 لاعباً',
 
     // Accessibility
     a11yProfileCard: 'افتح ملفي الشخصي',

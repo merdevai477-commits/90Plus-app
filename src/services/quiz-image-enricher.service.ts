@@ -6,10 +6,12 @@ import {
   isRetiredLegendPlayerName,
   hasGuessPlayerClue,
 } from './quiz-image-legends';
-
-function normalizeName(name: string): string {
-  return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-}
+import {
+  normalizeName,
+  getSimilarity,
+  scorePlayerMatch,
+  scoreEntityNameMatch,
+} from './quiz-name-match.util';
 
 function getAliases(name: string): string[] {
   const aliases = new Set<string>();
@@ -62,44 +64,6 @@ function getPlayerSearchAliases(name: string): string[] {
   return Array.from(aliases).filter((a) => a.trim().length >= 2);
 }
 
-function editDistance(s1: string, s2: string): number {
-  s1 = s1.toLowerCase();
-  s2 = s2.toLowerCase();
-
-  const costs = new Array();
-  for (let i = 0; i <= s1.length; i++) {
-    let lastValue = i;
-    for (let j = 0; j <= s2.length; j++) {
-      if (i == 0) costs[j] = j;
-      else {
-        if (j > 0) {
-          let newValue = costs[j - 1];
-          if (s1.charAt(i - 1) != s2.charAt(j - 1))
-            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-          costs[j - 1] = lastValue;
-          lastValue = newValue;
-        }
-      }
-    }
-    if (i > 0) costs[s2.length] = lastValue;
-  }
-  return costs[s2.length];
-}
-
-function getSimilarity(s1: string, s2: string): number {
-  let longer = s1;
-  let shorter = s2;
-  if (s1.length < s2.length) {
-    longer = s2;
-    shorter = s1;
-  }
-  const longerLength = longer.length;
-  if (longerLength === 0) {
-    return 1.0;
-  }
-  return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength.toString());
-}
-
 function getVenueSearchAliases(name: string): string[] {
   const aliases = new Set(getAliases(name));
   const ascii = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -121,49 +85,21 @@ function getVenueSearchAliases(name: string): string[] {
   return Array.from(aliases).filter((a) => a.trim().length >= 3);
 }
 
-function scorePlayerMatch(
-  entityName: string,
-  targetNames: string[],
-  player: { name?: string; firstname?: string; lastname?: string; photo?: string | null },
-): number {
-  const candidates = new Set<string>();
-  if (player.name) candidates.add(player.name);
-  if (player.firstname && player.lastname) {
-    candidates.add(`${player.firstname} ${player.lastname}`);
-    candidates.add(player.lastname);
+function dedupeSearchResults(results: any[], kind: string): any[] {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const item of results) {
+    let id: string | number | undefined;
+    if (kind === 'player' && item.player?.id) id = item.player.id;
+    else if (kind === 'team' && item.team?.id) id = item.team.id;
+    else if (kind === 'league' && item.league?.id) id = item.league.id;
+    else if (kind === 'venue' && item.id) id = item.id;
+    const key = id != null ? String(id) : JSON.stringify(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
   }
-
-  let maxScore = 0;
-  for (const candidate of candidates) {
-    const normalizedCandidate = normalizeName(candidate);
-    for (const tName of targetNames) {
-      if (normalizedCandidate === tName) return 1;
-      maxScore = Math.max(maxScore, getSimilarity(tName, normalizedCandidate));
-    }
-  }
-
-  const entityTokens = entityName
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .split(/\s+/)
-    .filter(Boolean);
-  const entityLast = normalizeName(entityTokens[entityTokens.length - 1] ?? '');
-  if (entityLast.length >= 4) {
-    if (player.lastname && normalizeName(player.lastname) === entityLast) {
-      maxScore = Math.max(maxScore, 0.96);
-    }
-    for (const candidate of candidates) {
-      const normalizedCandidate = normalizeName(candidate);
-      if (
-        normalizedCandidate.endsWith(entityLast) ||
-        normalizedCandidate.includes(entityLast)
-      ) {
-        maxScore = Math.max(maxScore, 0.92);
-      }
-    }
-  }
-
-  return maxScore;
+  return out;
 }
 
 function scoreVenueMatch(entityName: string, venueName: string, targetNames: string[]): number {
@@ -191,7 +127,7 @@ function scoreVenueMatch(entityName: string, venueName: string, targetNames: str
 }
 
 function resolveMatchThreshold(kind: StoredQuizQuestion['type'], bindingKind: string): number {
-  if (bindingKind === 'player') return 0.8;
+  if (bindingKind === 'player') return 0.88;
   if (bindingKind === 'venue') return 0.68;
   if (bindingKind === 'team' && kind === 'logo') return 0.8;
   return 0.85;
@@ -342,9 +278,12 @@ export async function enrichQuizImages(
     const matchNames =
       binding.kind === 'venue' ? getVenueSearchAliases(binding.entityName) : aliases;
     const targetNames = matchNames.map(normalizeName);
+    const correctAnswerText =
+      q.options.find((o) => o.key === q.correctKey)?.text?.trim() ?? '';
     
     let bestMatchUrl: string | null = null;
     let bestMatchId: number | undefined;
+    let bestMatchPlayerName: string | null = null;
     let maxScore = 0;
 
     let results: any[] = [];
@@ -411,6 +350,8 @@ export async function enrichQuizImages(
       logger.warn(`[QuizImages] API search wrapper failed for ${binding.kind} "${binding.entityName}"`, e);
     }
 
+    results = dedupeSearchResults(results, binding.kind);
+
     for (const item of results) {
       let name = '';
       let url = null;
@@ -420,11 +361,20 @@ export async function enrichQuizImages(
         name = item.player.name;
         url = item.player.photo;
         id = item.player.id;
-        const playerScore = scorePlayerMatch(binding.entityName, targetNames, item.player);
+        let playerScore = scorePlayerMatch(binding.entityName, targetNames, item.player);
+        if (correctAnswerText) {
+          const answerScore = scoreEntityNameMatch(correctAnswerText, name);
+          if (answerScore < 0.78) {
+            playerScore *= 0.55;
+          } else {
+            playerScore = Math.max(playerScore, answerScore);
+          }
+        }
         if (playerScore > maxScore && url) {
           maxScore = playerScore;
           bestMatchUrl = url;
           bestMatchId = id;
+          bestMatchPlayerName = name;
         }
         if (maxScore >= 1) break;
         continue;
@@ -478,6 +428,17 @@ export async function enrichQuizImages(
         if (!bestMatchUrl.trim()) {
           out.push(handleUnresolvedImageQuestion(q, binding, maxScore));
           continue;
+        }
+        if (correctAnswerText && bestMatchPlayerName) {
+          const answerMatch = scoreEntityNameMatch(correctAnswerText, bestMatchPlayerName);
+          if (answerMatch < 0.82) {
+            logger.warn(
+              `[QuizImage] Rejected ${q.id}: photo is "${bestMatchPlayerName}" but answer is "${correctAnswerText}" (${answerMatch.toFixed(2)})`,
+            );
+            out.push(handleUnresolvedImageQuestion(q, binding, maxScore));
+            continue;
+          }
+          q.imageBinding.entityName = bestMatchPlayerName;
         }
       }
       q.imageUrl = bestMatchUrl;

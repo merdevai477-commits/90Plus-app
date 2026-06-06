@@ -48,6 +48,8 @@ import { useAppShareReward } from '../../hooks/useAppShareReward';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import { useTopPlayers, type TopPlayer, type TopPlayersPeriod } from '../../hooks/useTopPlayers';
 import { useTranslation } from '../../src/i18n';
+import { formatXpLabel } from '../../src/i18n/formatXp';
+import type { Language } from '../../src/i18n/types';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { useLanguageStore } from '../../src/i18n/store';
 import { useScreenFont } from '../../utils/fontSetup';
@@ -96,7 +98,7 @@ function buildPodiumSlot(
   rank: number,
   player: TopPlayer | undefined,
   emptyName: string,
-  xpSuffix: string,
+  language: Language,
 ): PodiumSlot {
   if (player) {
     return {
@@ -104,7 +106,7 @@ function buildPodiumSlot(
       isPlaceholder: false,
       username: player.username,
       name: playerDisplayName(player, player.username || emptyName),
-      xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
+      xpLabel: formatXpLabel(player.xp ?? 0, language),
       avatar: player.avatar ?? PROFILE_PLACEHOLDER,
       countryFlag: player.countryFlag ?? null,
       position: player.position,
@@ -121,7 +123,7 @@ function buildPodiumSlot(
     isPlaceholder: true,
     username: '',
     name: emptyName,
-    xpLabel: `0 ${xpSuffix}`,
+    xpLabel: formatXpLabel(0, language),
     avatar: PROFILE_PLACEHOLDER,
     countryFlag: null,
   };
@@ -132,7 +134,7 @@ function buildBoardSlot(
   player: TopPlayer | undefined,
   emptyName: string,
   emptyHint: string,
-  xpSuffix: string,
+  language: Language,
 ): BoardSlot {
   if (player) {
     return {
@@ -142,7 +144,7 @@ function buildBoardSlot(
       username: player.username,
       name: playerDisplayName(player, player.username || emptyName),
       role: player.position || emptyHint,
-      xpLabel: `${player.xp ?? 0} ${xpSuffix}`,
+      xpLabel: formatXpLabel(player.xp ?? 0, language),
       avatar: player.avatar,
     };
   }
@@ -153,7 +155,7 @@ function buildBoardSlot(
     username: '',
     name: emptyName,
     role: emptyHint,
-    xpLabel: `0 ${xpSuffix}`,
+    xpLabel: formatXpLabel(0, language),
     avatar: null,
   };
 }
@@ -269,19 +271,19 @@ export default function RankScreen() {
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
   const podiumSlots = useMemo<readonly PodiumSlot[]>(() => {
     const find = (rank: number) => players.find(p => p.rank === rank);
-    const slot1 = buildPodiumSlot(1, find(1), t.rank.beTheFirst, t.rank.xpSuffix);
-    const slot2 = buildPodiumSlot(2, find(2), t.rank.startNow, t.rank.xpSuffix);
-    const slot3 = buildPodiumSlot(3, find(3), t.rank.createGlory, t.rank.xpSuffix);
+    const slot1 = buildPodiumSlot(1, find(1), t.rank.beTheFirst, appLanguage);
+    const slot2 = buildPodiumSlot(2, find(2), t.rank.startNow, appLanguage);
+    const slot3 = buildPodiumSlot(3, find(3), t.rank.createGlory, appLanguage);
     return [slot2, slot1, slot3] as const;
-  }, [players, t]);
+  }, [players, t, appLanguage]);
 
   // ── Lower leaderboard (ranks 4, 5) ──
   const lowerSlots = useMemo<readonly BoardSlot[]>(() => {
     return [4, 5].map(rank => {
       const player = players.find(p => p.rank === rank);
-      return buildBoardSlot(rank, player, t.rank.emptySlot, t.rank.emptySlotHint, t.rank.xpSuffix);
+      return buildBoardSlot(rank, player, t.rank.emptySlot, t.rank.emptySlotHint, appLanguage);
     });
-  }, [players, t]);
+  }, [players, t, appLanguage]);
 
   // ── Full Top 11 (padded to 11 entries for the modal) ──
   const top11Entries = useMemo<LeaderboardEntry[]>(() => {

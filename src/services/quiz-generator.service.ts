@@ -16,6 +16,10 @@ import type {
 } from '../types/quiz.types';
 import { enrichQuizImages } from './quiz-image-enricher.service';
 import {
+  alignCorrectKeyWithBinding,
+  verifyQuestionConsistency,
+} from './quiz-answer-validator.service';
+import {
   isImageDependentQuestionText,
   isRetiredLegendPlayerName,
   hasGuessPlayerClue,
@@ -375,7 +379,8 @@ function parseQuestionsFromAi(
       hint: typeof item.hint === 'string' ? item.hint : null,
     });
   }
-  return out;
+
+  return out.map((q) => alignCorrectKeyWithBinding(q)).filter((q): q is StoredQuizQuestion => q !== null);
 }
 
 function validateDistribution(questions: StoredQuizQuestion[]): boolean {
@@ -453,13 +458,16 @@ async function enrichAndFilterValid(
   packDate: string,
 ): Promise<StoredQuizQuestion[]> {
   const enriched = await enrichQuizImages(questions, packDate);
-  return enriched.filter((q): q is StoredQuizQuestion => {
-    if (q === null) return false;
-    if (q.type === 'guess_player' && !q.imageUrl?.trim()) {
-      return false;
-    }
-    return true;
-  });
+  return enriched
+    .filter((q): q is StoredQuizQuestion => q !== null)
+    .map((q) => verifyQuestionConsistency(q))
+    .filter((q): q is StoredQuizQuestion => {
+      if (q === null) return false;
+      if (q.type === 'guess_player' && !q.imageUrl?.trim()) {
+        return false;
+      }
+      return true;
+    });
 }
 
 async function attemptOpenRouterCall(
@@ -482,6 +490,7 @@ Each question object:
 - type (string, strictly one of: "normal", "image", "guess_player", "logo", "stadium")
 - options: array of EXACTLY 4 objects {key:"A"|"B"|"C"|"D", text:string}
 - correctKey: "A"|"B"|"C"|"D" (must match one of the options)
+- CRITICAL: correctKey MUST point to the option whose text matches imageBinding.entityName (same player/team/venue). Double-check before returning JSON.
 - difficulty: "EASY"|"MEDIUM"|"HARD"
 - imageBinding: required IF type is not "normal". Object with:
   - kind: "player" | "team" | "league" | "venue"
