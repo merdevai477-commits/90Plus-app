@@ -355,6 +355,7 @@ export const en = {
     formation: 'Formation',
     noLineups: 'Lineups not available',
     lineupsUnavailable: 'Lineups are not available for this match yet. Tap Retry to check again.',
+    lineupsNoData: 'Lineups are not available for this match due to missing data from the provider.',
     lineupsLoadingRetry: 'Checking for lineups…',
     retry: 'Retry',
     noStats: 'Statistics not available',
@@ -2285,7 +2286,7 @@ export const en = {
     languageChangeFailed: 'Could not change language. Please try again.',
     rateThanks: 'Thanks for the support!',
     rateThanksDetail: 'You can rate the app from your store anytime.',
-    shareMessage: '🏆 Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights! https://apps.apple.com/app/90plus/id6744076498',
+    shareMessage: '🏆 Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights! https://apps.apple.com/app/90plus/id6758296989',
   },
 
   // ── Public user profile ──────────────────────────────────────────────

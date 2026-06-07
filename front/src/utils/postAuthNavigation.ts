@@ -36,13 +36,22 @@ export async function navigateAfterAuth(
   if (getToken) {
     const token = await waitForClerkToken(getToken);
     if (token) {
+      // Sync the backend user, retrying once on a flaky network before warning.
+      // The Clerk webhook also provisions the user server-side, so even a total
+      // client-sync failure self-heals on the next Home focus — we only alert to
+      // explain a transient hiccup, never block entry.
       try {
         await AuthService.syncUserWithBackend(token);
       } catch {
-        Alert.alert(
-          'Connection issue',
-          'Signed in, but we could not sync your profile. Pull to refresh or try again.',
-        );
+        try {
+          await new Promise((r) => setTimeout(r, 1200));
+          await AuthService.syncUserWithBackend(token);
+        } catch {
+          Alert.alert(
+            'Connection issue',
+            'Signed in, but we could not sync your profile. Pull to refresh or try again.',
+          );
+        }
       }
 
       try {

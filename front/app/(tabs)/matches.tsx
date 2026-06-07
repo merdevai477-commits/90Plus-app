@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
+import BottomNav from './BottomNav';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
@@ -750,14 +751,32 @@ export default function MatchesHubScreenV2() {
 
   useEffect(() => {
     void hydrateFeatures(true);
-    const id = setInterval(() => {
+    // Poll for the server unlock flag. Far from kickoff we check every 30s; in
+    // the final 2 minutes we tighten to 5s so the World Cup tab opens right on
+    // time (server flag stays the single source of truth — no client/tab desync).
+    let id: ReturnType<typeof setInterval> | null = null;
+    const schedule = () => {
       const left = getWorldCupTimeLeft(Date.now(), unlockAtMs);
-      const nearUnlock = left.days === 0 && left.hours === 0 && left.mins < 5;
-      if (nearUnlock || (left.days === 0 && left.hours === 0 && left.mins === 0 && left.secs === 0)) {
-        void hydrateFeatures(true);
-      }
-    }, 30_000);
-    return () => clearInterval(id);
+      const secondsLeft = left.days * 86400 + left.hours * 3600 + left.mins * 60 + left.secs;
+      const tight = secondsLeft <= 120;
+      const period = tight ? 5_000 : 30_000;
+      if (id) clearInterval(id);
+      id = setInterval(() => {
+        const now = Date.now();
+        const remaining = getWorldCupTimeLeft(now, unlockAtMs);
+        const remSecs =
+          remaining.days * 86400 + remaining.hours * 3600 + remaining.mins * 60 + remaining.secs;
+        if (remSecs <= 120 || now >= unlockAtMs) {
+          void hydrateFeatures(true);
+        }
+        // Re-arm at the tighter cadence once we enter the final 2 minutes.
+        if (!tight && remSecs <= 120) schedule();
+      }, period);
+    };
+    schedule();
+    return () => {
+      if (id) clearInterval(id);
+    };
   }, [hydrateFeatures, unlockAtMs]);
 
   // Tickets (remaining predictions)
@@ -838,7 +857,12 @@ export default function MatchesHubScreenV2() {
           PredictionsService.getRemainingPredictions(token),
           PredictionsService.getUserPredictions(token),
         ]);
-        setTicketsRemaining(remaining.remaining);
+        // Only trust a real server value — never overwrite cached tickets with
+        // a fabricated fallback (remaining.ok === false means the fetch failed).
+        if (remaining.ok !== false) {
+          setTicketsRemaining(remaining.remaining);
+          cacheService.set(TICKETS_CACHE_KEY, remaining.remaining, 24 * 60 * 60 * 1000).catch(() => {});
+        }
         // Build map of matchId -> predictionType from existing predictions
         const map: Record<string, UserPredictionEntry> = {};
         Object.entries(userPreds.predictionsMap).forEach(([matchId, pred]) => {
@@ -851,7 +875,6 @@ export default function MatchesHubScreenV2() {
         setPredictedMatches(map);
         // Persist reconciled state — 24h TTL covers a full ticket cycle.
         cacheService.set(PRED_CACHE_KEY, map, 24 * 60 * 60 * 1000).catch(() => {});
-        cacheService.set(TICKETS_CACHE_KEY, remaining.remaining, 24 * 60 * 60 * 1000).catch(() => {});
       } catch {
         // silently fail — cached values stay visible
       }
@@ -1172,14 +1195,24 @@ export default function MatchesHubScreenV2() {
         return;
       }
 
-      // Anything else — roll back the optimistic update and revert cache.
-      const rolledBack: Record<string, UserPredictionEntry> = { ...predictedMatches };
-      setPredictedMatches(rolledBack);
-      setTicketsRemaining(ticketsRemaining);
-      if (PRED_CACHE_KEY && TICKETS_CACHE_KEY) {
-        cacheService.set(PRED_CACHE_KEY, rolledBack, 24 * 60 * 60 * 1000).catch(() => {});
-        cacheService.set(TICKETS_CACHE_KEY, ticketsRemaining, 24 * 60 * 60 * 1000).catch(() => {});
-      }
+      // Anything else — roll back ONLY this optimistic entry using functional
+      // updates, so a second in-flight prediction isn't clobbered by a stale
+      // closure of `predictedMatches` / `ticketsRemaining`.
+      setPredictedMatches((prev) => {
+        const next = { ...prev };
+        delete next[fixtureId];
+        if (PRED_CACHE_KEY) {
+          cacheService.set(PRED_CACHE_KEY, next, 24 * 60 * 60 * 1000).catch(() => {});
+        }
+        return next;
+      });
+      setTicketsRemaining((prev) => {
+        const restored = prev + 1;
+        if (TICKETS_CACHE_KEY) {
+          cacheService.set(TICKETS_CACHE_KEY, restored, 24 * 60 * 60 * 1000).catch(() => {});
+        }
+        return restored;
+      });
 
       // E006 = rate limit (daily prediction limit reached)
       if (code === 'E006') {
@@ -1760,6 +1793,8 @@ export default function MatchesHubScreenV2() {
           </View>
         </View>
       </Modal>
+
+      <BottomNav />
     </View>
   );
 }

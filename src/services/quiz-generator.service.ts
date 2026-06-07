@@ -79,7 +79,10 @@ function countQuestionTypes(questions: StoredQuizQuestion[]): Map<QuizQuestionTy
 
 function validateTypeMix(questions: StoredQuizQuestion[]): boolean {
   const distinct = new Set(questions.map((q) => q.type));
-  return distinct.size >= 3;
+  // Require genuine variety: at least 3 distinct types AND at least 2
+  // non-normal (image/guess) questions so a pack is never almost-all text.
+  const nonNormal = questions.filter((q) => q.type !== 'normal').length;
+  return distinct.size >= 3 && nonNormal >= 2;
 }
 
 function typeMixSummary(questions: StoredQuizQuestion[]): string {
@@ -313,13 +316,12 @@ function parseQuestionsFromAi(
     // Only accept exactly 4 options. If not 4, this question is invalid.
     if (options.length !== 4) continue;
 
-    let correctKey = String(item.correctKey ?? item.correct ?? '').toUpperCase() as QuizOptionKey;
-    if (!OPTION_KEYS.includes(correctKey)) correctKey = 'A';
-    
-    // Ensure correctKey actually exists in options
-    if (!options.some(o => o.key === correctKey)) {
-      correctKey = options[0].key;
-    }
+    const correctKey = String(item.correctKey ?? item.correct ?? '').toUpperCase() as QuizOptionKey;
+    // Reject — never guess. Defaulting an unknown/mismatched correctKey to 'A'
+    // (or the first option) silently ships a wrong answer. Drop the question
+    // instead and let regeneration backfill it.
+    if (!OPTION_KEYS.includes(correctKey)) continue;
+    if (!options.some((o) => o.key === correctKey)) continue;
 
     const difficulty = normalizeDifficulty(String(item.difficulty ?? 'EASY'));
     let type = normalizeType(String(item.type ?? 'normal'));

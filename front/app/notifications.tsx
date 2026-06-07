@@ -38,6 +38,7 @@ import {
     Award,
     Video,
 } from 'lucide-react-native';
+import BottomNav from './(tabs)/BottomNav';
 import {
     TEXT_PRIMARY,
     TEXT_MUTED,
@@ -927,6 +928,8 @@ export default function NotificationsScreen() {
                     </>
                 )}
             </ScrollView>
+
+            <BottomNav />
 
             <LuckyWheelModal
                 visible={showLuckyWheel}

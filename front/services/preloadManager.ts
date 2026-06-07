@@ -29,6 +29,7 @@ import {
   NotificationService,
 } from '../src/services/authService';
 import { ApiFootballService } from './apiFootball';
+import rankingsService from './rankingsService';
 import { logger } from './logger';
 import { preloadVideo, preloadVideos, isVideoPreloaded, clearPreloadedVideos } from '../utils/videoPreloader';
 import { setProfileMemoryCache } from '../hooks/useProfileCache';
@@ -292,7 +293,7 @@ class PreloadManagerClass {
         error: error.message || 'Unknown error',
       });
       
-      logger.error(`[PreloadManager] Failed to preload ${screen}:`, error);
+      logger.warn(`[PreloadManager] Failed to preload ${screen}:`, error);
     }
   }
 
@@ -495,10 +496,14 @@ class PreloadManagerClass {
     reels: Array<{ videoUrl: string; thumbnail?: string }>,
     currentIndex: number
   ): Promise<void> {
-    const MAX_PRELOAD = 5;
+    // Thumbnails are cheap (prefetch a few ahead); video CDN-warming on Android
+    // is heavier, so keep its look-ahead smaller to avoid bandwidth contention
+    // that causes the active reel to stutter on lower-end devices.
+    const THUMB_LOOKAHEAD = 4;
+    const VIDEO_LOOKAHEAD = Platform.OS === 'android' ? 3 : 0;
 
     // Thumbnails only on iOS — no parallel HLS fetch (AVPlayer crash risk).
-    for (let i = 1; i <= MAX_PRELOAD; i++) {
+    for (let i = 1; i <= THUMB_LOOKAHEAD; i++) {
       const nextIndex = currentIndex + i;
       if (nextIndex < reels.length) {
         const reel = reels[nextIndex];
@@ -514,8 +519,8 @@ class PreloadManagerClass {
 
     const videosToPreload: string[] = [];
 
-    // Get next 5 videos that haven't been preloaded yet
-    for (let i = 1; i <= MAX_PRELOAD; i++) {
+    // Get the next few videos that haven't been preloaded yet
+    for (let i = 1; i <= VIDEO_LOOKAHEAD; i++) {
       const nextIndex = currentIndex + i;
       if (nextIndex < reels.length) {
         const reel = reels[nextIndex];
@@ -551,7 +556,9 @@ class PreloadManagerClass {
     }
 
     this.isPreloading = true;
-    const batch = this.preloadQueue.splice(0, 3);
+    // Warm at most 2 URLs concurrently so preloading never starves the
+    // currently-playing reel's bandwidth.
+    const batch = this.preloadQueue.splice(0, 2);
 
     await Promise.allSettled(
       batch.map(async (url) => {
@@ -633,24 +640,19 @@ class PreloadManagerClass {
    */
   private async preloadRankings(token: string): Promise<void> {
     try {
-      const rankingsService = (await import('../services/rankingsService')).default;
-      
-      // Preload all rankings in parallel
       const [allRankings, topPlayersWeekly, topPlayersMonthly] = await Promise.all([
         rankingsService.getAllRankings(token, 10),
         rankingsService.getTopPlayers(token, 11, 'weekly'),
         rankingsService.getTopPlayers(token, 11, 'monthly'),
       ]);
 
-      // Cache rankings data
       await cacheService.set('rankings_all', allRankings, 5 * 60 * 1000);
       await cacheService.set('rankings_players_weekly', topPlayersWeekly, 5 * 60 * 1000);
       await cacheService.set('rankings_players_monthly', topPlayersMonthly, 5 * 60 * 1000);
-      
+
       logger.debug('[PreloadManager] Rankings preloaded successfully');
-    } catch (error: any) {
-      logger.error('[PreloadManager] Failed to preload rankings:', error);
-      throw error;
+    } catch (error) {
+      logger.warn('[PreloadManager] Failed to preload rankings:', error);
     }
   }
 
@@ -662,17 +664,15 @@ class PreloadManagerClass {
     try {
       const { useHomeStore } = await import('../src/store/home.store');
       const homeStore = useHomeStore.getState();
-      
-      // Preload all home data in parallel
+
       await Promise.all([
-        homeStore.fetchHomeData(token),      // Matches
-        homeStore.fetchRankingsData(token),  // Videos, Players, Team of Month
+        homeStore.fetchHomeData(token),
+        homeStore.fetchRankingsData(token),
       ]);
-      
+
       logger.debug('[PreloadManager] Home data preloaded successfully');
-    } catch (error: any) {
-      logger.error('[PreloadManager] Failed to preload home data:', error);
-      throw error;
+    } catch (error) {
+      logger.warn('[PreloadManager] Failed to preload home data:', error);
     }
   }
 

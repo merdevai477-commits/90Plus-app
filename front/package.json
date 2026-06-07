@@ -1,7 +1,7 @@
 {
   "name": "90plus",
   "main": "expo-router/entry",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "scripts": {
     "start": "node --max-old-space-size=8192 ./node_modules/expo/bin/cli start --lan",
     "start:clear": "node ./scripts/clear-metro-cache.js && node --max-old-space-size=8192 ./node_modules/expo/bin/cli start --clear --lan",

@@ -15,15 +15,16 @@ const router = Router();
 // Current app version configuration
 // يمكن تحديثها من خلال admin endpoint
 let appVersionConfig = {
-    currentVersion: process.env.APP_CURRENT_VERSION || '1.0.0',
+    currentVersion: process.env.APP_CURRENT_VERSION || '1.0.2',
     minimumVersion: process.env.APP_MINIMUM_VERSION || '1.0.0',
     forceUpdate: process.env.APP_FORCE_UPDATE === 'true',
     maintenanceMode: process.env.APP_MAINTENANCE_MODE === 'true',
     maintenanceMessage: process.env.APP_MAINTENANCE_MESSAGE || 'التطبيق تحت الصيانة. يرجى المحاولة لاحقاً.',
     updateMessage: process.env.APP_UPDATE_MESSAGE || 'يجب تحديث التطبيق لاستمرار الاستخدام.',
     updateUrl: {
-        android: process.env.APP_UPDATE_URL_ANDROID || 'https://play.google.com/store/apps/details?id=com.mrdev187.ninetyplusapp',
-        ios: process.env.APP_UPDATE_URL_IOS || 'https://apps.apple.com/app/id123456789',
+        // Must match app.json package + eas.json ascAppId (see front/constants/shareLinks.ts).
+        android: process.env.APP_UPDATE_URL_ANDROID || 'https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp',
+        ios: process.env.APP_UPDATE_URL_IOS || 'https://apps.apple.com/app/90plus/id6758296989',
     },
 };
 

@@ -48,6 +48,9 @@ export interface QuestionProgress {
 
 export interface SessionProgress {
   byQuestionId: Record<string, QuestionProgress>;
+  /** Session-level completion bonus XP (e.g. QUIZ_COMPLETED_HIGH), persisted so
+   *  total xpEarned survives a reload — not tied to any single question. */
+  completionBonusXp?: number;
 }
 
 export interface QuizSessionStats {

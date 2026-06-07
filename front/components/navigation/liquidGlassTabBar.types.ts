@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { Href } from 'expo-router';
 
-export type LiquidTabId = 'home' | 'matches' | 'ai' | 'rankings' | 'profile';
+export type LiquidTabId = 'home' | 'matches' | 'rank' | 'reels' | 'ai' | 'profile';
 
-export type LiquidTabIconKind = 'home' | 'matches' | 'ai' | 'rankings' | 'profile';
+export type LiquidTabIconKind = 'home' | 'matches' | 'rank' | 'reels' | 'ai' | 'profile';
 
 export interface LiquidTabItem {
   id: LiquidTabId;
@@ -29,6 +29,8 @@ export interface LiquidGlassTabBarProps {
 
 export interface LiquidGlassBlobProps {
   tint?: string;
+  /** Accent used for the bubble border glow. */
+  glowColor?: string;
   elevated?: boolean;
   animatedStyle?: StyleProp<ViewStyle>;
   children?: ReactNode;

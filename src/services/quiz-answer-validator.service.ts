@@ -2,7 +2,10 @@ import { logger } from '../utils/logger';
 import type { StoredQuizQuestion } from '../types/quiz.types';
 import { scoreEntityNameMatch } from './quiz-name-match.util';
 
-const MIN_OPTION_MATCH = 0.72;
+// Raised from 0.72 → 0.80 so a loosely-similar option can't be auto-marked
+// correct (cuts homonym / near-name false alignments). Mirrors the 0.82 photo
+// cross-check in the image enricher.
+const MIN_OPTION_MATCH = 0.8;
 
 function bestMatchingOptionKey(
   q: StoredQuizQuestion,

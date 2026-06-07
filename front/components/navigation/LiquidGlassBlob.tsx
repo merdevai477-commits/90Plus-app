@@ -1,9 +1,8 @@
 /**
- * Reusable liquid-glass droplet for the tab bar.
- * Supports variable width (pill) via parent animatedStyle.
+ * Ultra-transparent liquid-glass pill capsule for the active tab.
  */
 
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
@@ -22,22 +21,55 @@ import type { ViewStyle } from 'react-native';
 
 export const LiquidGlassBlob = memo(function LiquidGlassBlob({
   tint = BUBBLE_GLASS_TINT,
+  glowColor = '#FFFFFF',
   elevated = false,
   animatedStyle,
   children,
 }: LiquidGlassBlobProps) {
+  const pillRadius = TAB_BUBBLE_HEIGHT / 2;
+
+  const glowStyle = useMemo(
+    () =>
+      Platform.select({
+        ios: {
+          shadowColor: glowColor,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.55,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: elevated ? 10 : 6,
+        },
+        default: {},
+      }),
+    [elevated, glowColor],
+  );
+
   return (
     <Animated.View
-      style={[s.shell, elevated && s.elevated, animatedStyle]}
+      style={[s.shell, elevated && s.elevated, glowStyle, animatedStyle]}
       pointerEvents="none"
     >
-      <View style={s.chromaWrap}>
-        <View style={[s.chromaRing, s.chromaCyan]} />
-        <View style={[s.chromaRing, s.chromaMagenta]} />
-        <View style={[s.chromaRing, s.chromaGold]} />
-      </View>
+      <View
+        style={[
+          s.chromaRing,
+          s.chromaCyan,
+          { borderRadius: pillRadius + 3, borderColor: `${glowColor}44` },
+        ]}
+      />
+      <View
+        style={[
+          s.chromaRing,
+          s.chromaMagenta,
+          { borderRadius: pillRadius + 3 },
+        ]}
+      />
 
-      <View style={s.bubbleClip}>
+      <View style={[s.bubbleClip, { borderRadius: pillRadius }]}>
+        <View
+          style={[s.borderGlow, { borderRadius: pillRadius, borderColor: `${glowColor}55` }]}
+          pointerEvents="none"
+        />
         {isLiquidGlassSupported ? (
           <LiquidGlassView
             effect="clear"
@@ -49,29 +81,32 @@ export const LiquidGlassBlob = memo(function LiquidGlassBlob({
         ) : (
           <>
             <BlurView
-              intensity={Platform.OS === 'android' ? 72 : 48}
+              intensity={Platform.OS === 'android' ? 36 : 24}
               tint="light"
               style={StyleSheet.absoluteFill}
             />
             <LinearGradient
               colors={[
-                'rgba(255,255,255,0.18)',
-                'rgba(255,255,255,0.06)',
+                'rgba(255,255,255,0.10)',
                 'rgba(255,255,255,0.02)',
+                'rgba(255,255,255,0)',
               ]}
-              start={{ x: 0.2, y: 0 }}
-              end={{ x: 0.8, y: 1 }}
+              start={{ x: 0.15, y: 0 }}
+              end={{ x: 0.85, y: 1 }}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
-            <View style={s.fallbackDistort} pointerEvents="none" />
           </>
         )}
-        <View style={s.glassFill} pointerEvents="none" />
-        <View style={s.bubbleSpecular} pointerEvents="none" />
-        <View style={s.bubbleRim} pointerEvents="none" />
-        <View style={s.refractionHighlight} pointerEvents="none" />
-        {children ? <View style={s.contentRow}>{children}</View> : null}
+        {children ? <View style={s.content}>{children}</View> : null}
+        <View style={[s.bubbleSpecular, { borderRadius: pillRadius }]} pointerEvents="none" />
+        <View
+          style={[
+            s.bubbleRim,
+            { borderRadius: pillRadius, borderColor: `${glowColor}33` },
+          ]}
+          pointerEvents="none"
+        />
       </View>
     </Animated.View>
   );
@@ -88,34 +123,20 @@ const s = StyleSheet.create({
   elevated: Platform.select({
     ios: {
       zIndex: 30,
-      shadowColor: '#FFFFFF',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.35,
-      shadowRadius: 16,
     },
-    android: { zIndex: 30, elevation: 12 },
+    android: { zIndex: 30 },
     default: { zIndex: 30 },
   }),
-  chromaWrap: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: TAB_BUBBLE_HEIGHT / 2,
-  },
   chromaRing: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: TAB_BUBBLE_HEIGHT / 2 + 4,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   chromaCyan: {
-    borderColor: 'rgba(96, 220, 255, 0.42)',
-    transform: [{ translateX: -1.5 }, { translateY: 0.5 }],
+    transform: [{ translateX: -0.75 }, { translateY: 0.25 }],
   },
   chromaMagenta: {
-    borderColor: 'rgba(255, 96, 180, 0.38)',
-    transform: [{ translateX: 1.5 }, { translateY: -0.5 }],
-  },
-  chromaGold: {
-    borderColor: 'rgba(255, 220, 120, 0.32)',
-    transform: [{ translateX: 0 }, { translateY: 1 }],
+    borderColor: 'rgba(255, 96, 180, 0.28)',
+    transform: [{ translateX: 0.75 }, { translateY: -0.25 }],
   },
   bubbleClip: Platform.select({
     ios: {
@@ -123,64 +144,48 @@ const s = StyleSheet.create({
       overflow: 'hidden',
       borderWidth: BUBBLE_BORDER_WIDTH,
       borderColor: BUBBLE_BORDER_COLOR,
-      shadowColor: '#FFFFFF',
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.2,
-      shadowRadius: 10,
+      backgroundColor: 'transparent',
     },
     android: {
       flex: 1,
       overflow: 'hidden',
       borderWidth: BUBBLE_BORDER_WIDTH,
       borderColor: BUBBLE_BORDER_COLOR,
-      elevation: 6,
+      backgroundColor: 'transparent',
     },
     default: {
       flex: 1,
       overflow: 'hidden',
       borderWidth: BUBBLE_BORDER_WIDTH,
       borderColor: BUBBLE_BORDER_COLOR,
+      backgroundColor: 'transparent',
     },
   }),
-  glassFill: {
+  borderGlow: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: BUBBLE_GLASS_TINT,
+    borderWidth: 1,
+    zIndex: 1,
   },
-  fallbackDistort: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    transform: [{ scaleX: 1.04 }, { scaleY: 0.96 }],
+  content: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 5,
+    zIndex: 2,
   },
   bubbleSpecular: {
     position: 'absolute',
     top: 4,
     left: 10,
     right: 10,
-    height: 14,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.20)',
-  },
-  refractionHighlight: {
-    position: 'absolute',
-    bottom: 7,
-    right: 12,
-    width: 10,
     height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   bubbleRim: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: TAB_BUBBLE_HEIGHT / 2,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.12)',
-  },
-  contentRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    zIndex: 2,
   },
 }) as Record<string, ViewStyle>;

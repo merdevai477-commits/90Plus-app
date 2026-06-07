@@ -40,7 +40,10 @@ function emptyProgress(): SessionProgress {
 function parseProgress(raw: unknown): SessionProgress {
   if (!raw || typeof raw !== 'object') return emptyProgress();
   const p = raw as SessionProgress;
-  return { byQuestionId: p.byQuestionId ?? {} };
+  return {
+    byQuestionId: p.byQuestionId ?? {},
+    completionBonusXp: typeof p.completionBonusXp === 'number' ? p.completionBonusXp : 0,
+  };
 }
 
 function isTerminalStatus(status?: QuizQuestionStatus): boolean {
@@ -202,16 +205,21 @@ async function withRedisLock<T>(
   }
 
   if (isRedisConnected() && redis && !acquired) {
-    // If we failed to acquire, wait for it to be released or expire, polling gently
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      const exists = await redis.exists(lockKey);
-      if (!exists) {
-        break; // Lock released or expired, we can try proceeding
+    // We failed to acquire — another worker is generating. Wait long enough to
+    // outlast the lock TTL so we don't fall through and regenerate while the
+    // holder is still working (the previous 10s cap was shorter than the 30s
+    // generation, causing duplicate generation). The caller re-checks cache/DB.
+    const pollMs = 500;
+    const maxIters = Math.ceil((ttlMs + 2000) / pollMs);
+    for (let i = 0; i < maxIters; i++) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      try {
+        const exists = await redis.exists(lockKey);
+        if (!exists) break; // Lock released or expired — holder finished.
+      } catch {
+        break; // Redis hiccup — stop waiting and let the caller re-check.
       }
     }
-    // We don't re-acquire here, we assume the initial lock holder finished and cached the result.
-    // The caller function will check the cache again.
   }
 
   try {
@@ -325,7 +333,9 @@ function countStats(progress: SessionProgress, pack: StoredQuizQuestion[]): Quiz
   let answered = 0;
   let skipped = 0;
   let timedOut = 0;
-  let xp = 0;
+  // Seed with the persisted session-level completion bonus so it's included in
+  // xpEarned after a reload (per-question xp is added below).
+  let xp = progress.completionBonusXp ?? 0;
   for (const q of pack) {
     const p = progress.byQuestionId[q.id];
     if (!p) continue;
@@ -666,6 +676,25 @@ export async function submitQuizAnswer(
           leveledUp: bonusResult.leveledUp,
           newLevel: bonusResult.newLevel,
           newTitle: bonusResult.leveledUp ? levelTitle(bonusResult.newLevel) : undefined,
+        });
+
+        // Persist the bonus into the session so stats.xpEarned reflects it after
+        // a reload (it isn't attached to any single question's xpAwarded).
+        await prisma.$transaction(async (tx) => {
+          const session = await tx.userDailyQuizSession.findUnique({
+            where: { id: txResult.sessionId },
+          });
+          if (!session) return;
+          const progress = parseProgress(session.progress);
+          progress.completionBonusXp = (progress.completionBonusXp ?? 0) + completionBonusXp;
+          const stats = countStats(progress, pack);
+          await tx.userDailyQuizSession.update({
+            where: { id: txResult.sessionId },
+            data: {
+              progress: progress as unknown as Prisma.InputJsonValue,
+              xpEarned: stats.xp,
+            },
+          });
         });
       }
     }

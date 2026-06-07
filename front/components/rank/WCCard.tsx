@@ -28,7 +28,6 @@ import {
 
 import {
   getWorldCupTimeLeft,
-  isWorldCupCountdownZero,
   padCountdown,
   WorldCupTimeLeft,
 } from '../../constants/worldCup';
@@ -43,25 +42,42 @@ interface WCCardProps {
 const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
   const router = useRouter();
   const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
+  const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
   const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
   const [time, setTime] = useState<WorldCupTimeLeft>(() => getWorldCupTimeLeft(Date.now(), unlockAtMs));
   const isFocused = useIsFocused();
   const { t } = useTranslation();
 
-  const isUnlocked = worldCupEnabled || isWorldCupCountdownZero(Date.now(), unlockAtMs);
+  // Single source of truth for the unlock GATE is the server flag, so this card
+  // and the Matches tab never disagree. The local countdown only drives the
+  // visual timer; when it crosses zero we re-hydrate to flip the server flag.
+  const isUnlocked = worldCupEnabled;
 
   useEffect(() => {
     if (!isFocused) return;
     setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs));
-    const id = setInterval(() => setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs)), 1_000);
+    const id = setInterval(() => {
+      const next = getWorldCupTimeLeft(Date.now(), unlockAtMs);
+      setTime(next);
+      // The moment the local countdown reaches zero, ask the server to confirm
+      // the unlock so the gate flips without waiting for the next manual sync.
+      if (!worldCupEnabled && Date.now() >= unlockAtMs) {
+        void hydrateFeatures(true);
+      }
+    }, 1_000);
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs));
+      if (next === 'active') {
+        setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs));
+        if (!worldCupEnabled && Date.now() >= unlockAtMs) {
+          void hydrateFeatures(true);
+        }
+      }
     });
     return () => {
       clearInterval(id);
       sub.remove();
     };
-  }, [isFocused, unlockAtMs]);
+  }, [isFocused, unlockAtMs, worldCupEnabled, hydrateFeatures]);
 
   const countdownItems: ReadonlyArray<{ val: number; lbl: string }> = [
     { val: time.days, lbl: t.rank.worldCup.days },

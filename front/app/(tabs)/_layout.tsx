@@ -1,87 +1,210 @@
-import React, { useEffect } from 'react';
-import { BackHandler, DynamicColorIOS, Platform } from 'react-native';
-import { usePathname, useRouter } from 'expo-router';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { Tabs, useRouter, usePathname } from "expo-router";
+import { Home, User, Video, Brain, BarChart2 } from "lucide-react-native";
+import React, { useEffect } from "react";
+import { Animated, BackHandler, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomNav from './BottomNav';
 
-import { NativeTabTriggers } from '@/components/navigation/NativeTabTriggers';
-import { TabBarProvider, useTabBarContext } from '@/contexts/TabBarContext';
+const TAB_STACK_OPTIONS = {
+  headerShown: false,
+  contentStyle: { backgroundColor: '#000' },
+} as const;
 
-const ANDROID_TAB_BG = 'rgba(28,28,30,0.94)';
-const ANDROID_INDICATOR = 'rgba(255,255,255,0.12)';
-
-function TabLayoutInner() {
+export default function TabLayout() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
-  const { isTabBarHidden } = useTabBarContext();
 
   useEffect(() => {
     let backPressCount = 0;
     let backPressTimer: ReturnType<typeof setTimeout>;
 
     const backAction = () => {
-      if (pathname === '/Home' || pathname === '/(tabs)/Home') {
-        backPressCount += 1;
-        if (backPressCount === 2) return false;
+      if (pathname === "/Home") {
+        backPressCount++;
+
+        if (backPressCount === 2) {
+          // If pressed twice quickly, let the app close
+          return false;
+        }
+
+        // Reset the counter after 2 seconds
         backPressTimer = setTimeout(() => {
           backPressCount = 0;
         }, 2000);
+
+        return true;
+      } else {
+        // If not on home, navigate to home
+        router.replace("/Home");
         return true;
       }
-      router.replace('/Home');
-      return true;
     };
 
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
     return () => {
       backHandler.remove();
-      if (backPressTimer) clearTimeout(backPressTimer);
+      if (backPressTimer) {
+        clearTimeout(backPressTimer);
+      }
     };
   }, [pathname, router]);
 
-  const iconColorDefault =
-    Platform.OS === 'ios'
-      ? DynamicColorIOS({ dark: 'rgba(255,255,255,0.5)', light: 'rgba(0,0,0,0.45)' })
-      : 'rgba(255,255,255,0.5)';
-
-  const iconColorSelected =
-    Platform.OS === 'ios'
-      ? DynamicColorIOS({ dark: '#FFFFFF', light: '#000000' })
-      : '#FFFFFF';
-
   return (
-    <NativeTabs
-      hidden={isTabBarHidden}
-      disableTransparentOnScrollEdge
-      backgroundColor={Platform.OS === 'android' ? ANDROID_TAB_BG : undefined}
-      indicatorColor={Platform.OS === 'android' ? ANDROID_INDICATOR : undefined}
-      blurEffect={Platform.OS === 'ios' ? 'systemChromeMaterialDark' : undefined}
-      iconColor={{
-        default: iconColorDefault,
-        selected: iconColorSelected,
-      }}
-      tintColor={iconColorSelected}
-      labelStyle={{
-        default: {
-          color: iconColorDefault,
-          fontSize: 11,
-          fontWeight: '500',
-        },
-        selected: {
-          color: iconColorSelected,
-          fontSize: 11,
-          fontWeight: '600',
-        },
-      }}
-    >
-      <NativeTabTriggers />
-    </NativeTabs>
-  );
-}
-
-export default function TabLayout() {
-  return (
-    <TabBarProvider>
-      <TabLayoutInner />
-    </TabBarProvider>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <Tabs
+        screenOptions={{
+          ...TAB_STACK_OPTIONS,
+          tabBarStyle: {
+            display: 'none',
+          },
+        }}
+      >
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <User color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="Home"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.15 : 1 },
+                    { translateY: focused ? -3 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <Home color={color} size={26} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="rank"
+          options={{
+            title: "Rankings",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <BarChart2 color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="quiz"
+          options={{
+            title: "Quiz",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <Brain color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="matches"
+          options={{
+            title: "Highlights",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <Video color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="reels"
+          options={{
+            title: "Highlights",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <Video color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="chat"
+          options={{
+            // No tab icon — navigation handled by BottomNav's AI button.
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="aboutUs"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="BottomNav"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="match-details"
+          options={{
+            href: null,
+          }}
+        />
+      </Tabs>
+      <BottomNav />
+    </View>
   );
 }

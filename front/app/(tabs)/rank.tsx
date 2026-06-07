@@ -52,7 +52,7 @@ import { formatXpLabel } from '../../src/i18n/formatXp';
 import type { Language } from '../../src/i18n/types';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { useLanguageStore } from '../../src/i18n/store';
-import { useScreenFont } from '../../utils/fontSetup';
+import { useScreenFont, useAppFont } from '../../utils/fontSetup';
 import { useAuth } from '@clerk/clerk-expo';
 import { globalState } from '../../globalState';
 import { useQueryClient } from '@tanstack/react-query';
@@ -167,6 +167,11 @@ export default function RankScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const appLanguage = useLanguageStore((s) => s.language);
+  // Real weighted font families (Cairo for Arabic, Inter otherwise). `fontWeight`
+  // alone doesn't produce true bold for custom fonts on Android — set the
+  // explicit weighted family so headings/names render properly bold.
+  const fontBold = useAppFont(700);
+  const fontExtraBold = useAppFont(800);
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -358,7 +363,7 @@ export default function RankScreen() {
               <View style={s.trophyIconBox}>
                 <Trophy size={20} color="#fff" />
               </View>
-              <Text style={s.pageTitle}>{t.rank.competitions.title}</Text>
+              <Text style={[s.pageTitle, { fontFamily: fontExtraBold }]}>{t.rank.competitions.title}</Text>
             </View>
             <Text style={s.pageSub1}>{t.rank.competitions.tagline}</Text>
             <Text style={s.pageSub2}>{t.rank.competitions.subtitle}</Text>
@@ -369,7 +374,7 @@ export default function RankScreen() {
 
         {/* ── Competitions carousel ── */}
         <View style={s.secHead}>
-          <Text style={s.secTitle}>{t.rank.allCompetitions}</Text>
+          <Text style={[s.secTitle, { fontFamily: fontExtraBold }]}>{t.rank.allCompetitions}</Text>
         </View>
         <ScrollView
           horizontal
@@ -404,7 +409,7 @@ export default function RankScreen() {
           </View>
 
           <View style={s.secHead}>
-            <Text style={s.secTitle}>{t.rank.topPlayers}</Text>
+            <Text style={[s.secTitle, { fontFamily: fontExtraBold }]}>{t.rank.topPlayers}</Text>
             <View style={s.periodToggle}>
               {(['weekly', 'monthly'] as const).map(p => (
                 <Pressable
@@ -506,14 +511,14 @@ export default function RankScreen() {
                         transition={150}
                       />
                       <View style={{ flex: 1 }}>
-                        <Text style={s.boardName} numberOfLines={1}>
+                        <Text style={[s.boardName, { fontFamily: fontBold }]} numberOfLines={1}>
                           {row.name}
                         </Text>
                         <Text style={s.boardRole} numberOfLines={1}>
                           {row.role}
                         </Text>
                       </View>
-                      <Text style={s.boardXp}>{row.xpLabel}</Text>
+                      <Text style={[s.boardXp, { fontFamily: fontExtraBold }]}>{row.xpLabel}</Text>
                     </>
                   );
 
@@ -556,22 +561,24 @@ export default function RankScreen() {
             </>
           )}
 
-          <Pressable
-            style={({ pressed }) => [s.viewAllLeaderboardBtn, pressed && { opacity: 0.85 }]}
-            onPress={() => setIsModalVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t.rank.viewAll}
-          >
-            <LinearGradient
-              colors={['rgba(168,85,247,0.2)', 'rgba(124,58,237,0.1)']}
-              style={s.viewAllLeaderboardGrad}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+          {!isLoading && !isError && realPlayers.length > 0 && (
+            <Pressable
+              style={({ pressed }) => [s.viewAllLeaderboardBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => setIsModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t.rank.viewAll}
             >
-              <Text style={s.viewAllLeaderboardTxt}>{t.rank.viewAll}</Text>
-              <ChevronRight size={16} color={ACCENT} />
-            </LinearGradient>
-          </Pressable>
+              <LinearGradient
+                colors={['rgba(168,85,247,0.2)', 'rgba(124,58,237,0.1)']}
+                style={s.viewAllLeaderboardGrad}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={[s.viewAllLeaderboardTxt, { fontFamily: fontExtraBold }]}>{t.rank.viewAll}</Text>
+                <ChevronRight size={16} color={ACCENT} />
+              </LinearGradient>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
 

@@ -68,6 +68,7 @@ import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTa
 import { ProfileSavedGrid } from '../../components/profile/ProfileVideoGrid';
 import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from '../../components/common/ImagePreviewModal';
 import { CooldownBlockModal } from '../../components/common/CooldownBlockModal';
+import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
 import { useReelStatusPoller } from '../../hooks/useReelStatusPoller';
 import { useWebSocketEvent } from '../../hooks/useWebSocket';
 import type { AvatarProgressPayload } from '../../types/websocket';
@@ -310,7 +311,7 @@ const completionStyles = StyleSheet.create({
   },
 });
 
-export default function ProfileScreen() {
+function ProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
@@ -1891,6 +1892,28 @@ export default function ProfileScreen() {
         onClose={() => setIsCountryModalVisible(false)}
         onSelect={async (country) => {
           setIsCountryModalVisible(false);
+
+          // Snapshot the current values so we can fully roll back (UI + cache +
+          // local storage) if the server rejects or the request throws.
+          const prevFlag = userData?.countryFlag ?? null;
+          const prevCountry = userData?.country ?? null;
+          const prevLocation = userData?.location ?? null;
+
+          const rollback = async () => {
+            updateCachedUserData({
+              countryFlag: prevFlag,
+              country: prevCountry,
+              location: prevLocation,
+            });
+            await localProfileStorage
+              .saveProfileData({
+                countryFlag: prevFlag ?? undefined,
+                country: prevCountry ?? undefined,
+              })
+              .catch(() => {});
+          };
+
+          setIsCountryUpdating(true);
           try {
             await localProfileStorage.saveProfileData({
               countryFlag: country.flag,
@@ -1913,18 +1936,28 @@ export default function ProfileScreen() {
               country: country.nameAr,
             });
 
-            if (result.success) {
+            if (result?.success) {
               toastManager.showSuccess(
                 t.profile.updated,
                 t.profile.countryUpdatedSuccess.replace('{country}', country.nameAr),
               );
               await markStepCompleted('country');
+            } else {
+              // Server did not confirm — revert so UI never shows an unsaved flag.
+              await rollback();
+              toastManager.showError(
+                t.common.error,
+                'تعذر تحديث العلم. حاول مرة أخرى.',
+              );
             }
           } catch {
+            await rollback();
             toastManager.showError(
               t.common.error,
               'تعذر تحديث العلم. حاول مرة أخرى.',
             );
+          } finally {
+            setIsCountryUpdating(false);
           }
         }}
         selectedCountryId={displayCountryFlag}
@@ -2424,5 +2457,16 @@ export default function ProfileScreen() {
         );
       })()}
     </View>
+  );
+}
+
+// Wrap the profile screen in its dedicated error boundary so a render failure
+// (e.g. while editing the flag/avatar) shows a recoverable fallback instead of
+// a white screen, and trips the infinite-loop guard if a bad state recurs.
+export default function ProfileScreenWithBoundary() {
+  return (
+    <ProfileErrorBoundary>
+      <ProfileScreen />
+    </ProfileErrorBoundary>
   );
 }

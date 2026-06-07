@@ -46,7 +46,8 @@ export const PLAY_STORE_REVIEW_URL = `${PLAY_STORE_URL}&showAllReviews=true`;
 export const PLAY_STORE_MARKET_REVIEW_URL =
   `market://details?id=${ANDROID_PACKAGE}&showAllReviews=true`;
 
-export const APP_STORE_URL = 'https://apps.apple.com/app/90plus/id6744076498';
+// App Store ID must match `ascAppId` in eas.json (App Store Connect app id).
+export const APP_STORE_URL = 'https://apps.apple.com/app/90plus/id6758296989';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{1,64}$/;
 
@@ -83,11 +84,15 @@ export function buildProfileDeepLink(username: string): string {
 /**
  * Public link included when inviting friends to install 90Plus.
  * Android → Play Store listing (direct install).
- * iOS / other → 90plus.pro landing (smart fallback to App Store).
+ * iOS → App Store listing (direct install).
+ * Other (web) → 90plus.pro landing (smart fallback to either store).
  */
 export function buildAppShareUrl(): string {
   if (Platform.OS === 'android') {
     return PLAY_STORE_URL;
+  }
+  if (Platform.OS === 'ios') {
+    return APP_STORE_URL;
   }
   return APP_SHARE_BASE_URL;
 }

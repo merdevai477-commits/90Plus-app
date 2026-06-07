@@ -56,11 +56,14 @@ export interface UseTopPlayersOptions {
 export interface UseTopPlayersResult {
   players: TopPlayer[];
   isLoading: boolean;
+  /** True during background refetches (e.g. pull-to-refresh) — use for subtle indicators. */
+  isFetching: boolean;
   isError: boolean;
   refetch: () => Promise<unknown>;
 }
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 12_000;
 
 interface TopPlayersResponse {
   status: 'SUCCESS' | 'ERROR';
@@ -82,15 +85,23 @@ async function fetchTopPlayers(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(url, { method: 'GET', headers });
-  if (!res.ok) {
-    throw new Error(`Top players request failed: ${res.status}`);
+  // Client-side timeout so a hung request never leaves the Rank screen
+  // spinning forever — surfaces as an error/retry instead.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`Top players request failed: ${res.status}`);
+    }
+    const json: TopPlayersResponse = await res.json();
+    if (json.status !== 'SUCCESS' || !json.data) {
+      throw new Error(json.message ?? 'Failed to load top players');
+    }
+    return json.data.players ?? [];
+  } finally {
+    clearTimeout(timeout);
   }
-  const json: TopPlayersResponse = await res.json();
-  if (json.status !== 'SUCCESS' || !json.data) {
-    throw new Error(json.message ?? 'Failed to load top players');
-  }
-  return json.data.players ?? [];
 }
 
 export function useTopPlayers(options: UseTopPlayersOptions = {}): UseTopPlayersResult {
@@ -118,6 +129,7 @@ export function useTopPlayers(options: UseTopPlayersOptions = {}): UseTopPlayers
   return {
     players: query.data ?? [],
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     isError: query.isError,
     refetch: query.refetch,
   };

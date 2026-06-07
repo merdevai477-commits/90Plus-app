@@ -19,13 +19,53 @@ const LEAGUE_ALIASES: Array<{ pattern: RegExp; id: number; label: string }> = [
 ];
 
 function isPlayerQuery(message: string): boolean {
-  return /player|لاعب|إحصائيات|احصائيات|أهداف|اهداف|goals?|assists?|stats?|trophies|جوائز|ألقاب|القاب|top\s*scorer|هداف|who\s+is|من\s+هو|مين\s+هو/i.test(
+  return /player|لاعب|إحصائيات|احصائيات|أهداف|اهداف|goals?|assists?|stats?|trophies|جوائز|ألقاب|القاب|who\s+is|من\s+هو|مين\s+هو/i.test(
     message,
   );
 }
 
 function isStandingsQuery(message: string): boolean {
   return /standings?|table|ترتيب|جدول|classification|league\s*table|top\s*\d+/i.test(message);
+}
+
+function isTopScorerQuery(message: string): boolean {
+  return /top\s*scorer|top\s*scorers|golden\s*boot|most\s+goals|هداف|الهداف|الهدافين|أكثر.*(تسجيل|أهداف|اهداف)/i.test(
+    message,
+  );
+}
+
+function isLiveMatchesQuery(message: string): boolean {
+  return /live\s*match|matches?\s+(?:now|today|live)|who(?:'s|\s+is)\s+playing|playing\s+now|currently\s+playing|live\s+score|مباريات\s*(?:اليوم|دلوقتي|الان|الآن|مباشرة|الحية)|مين\s*بيلعب|مين\s*يلعب|يلعب\s*(?:دلوقتي|الان|الآن)|النتيجة\s*(?:دلوقتي|الان|الآن|المباشرة)/i.test(
+    message,
+  );
+}
+
+/** API-Football season for the current European campaign (Aug→May). */
+function currentFootballSeason(): number {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  return now.getUTCMonth() >= 6 ? year : year - 1;
+}
+
+// Lightweight in-memory cache so repeated chat data lookups don't re-hit
+// API-Football within the same window (cuts latency + cost).
+const ctxCache = new Map<string, { value: string | null; expires: number }>();
+
+async function cachedLookup(
+  key: string,
+  ttlMs: number,
+  fn: () => Promise<string | null>,
+): Promise<string | null> {
+  const hit = ctxCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  const value = await fn();
+  ctxCache.set(key, { value, expires: Date.now() + ttlMs });
+  // Bound the cache so it can't grow unbounded across many queries.
+  if (ctxCache.size > 200) {
+    const firstKey = ctxCache.keys().next().value;
+    if (firstKey) ctxCache.delete(firstKey);
+  }
+  return value;
 }
 
 function extractNameCandidates(message: string): string[] {
@@ -148,42 +188,111 @@ async function fetchStandingsContext(message: string): Promise<string | null> {
   }
 }
 
+async function fetchTopScorersContext(message: string): Promise<string | null> {
+  if (!footballService.isConfigured()) return null;
+  const league = detectLeague(message);
+  if (!league) return null;
+
+  const season = currentFootballSeason();
+  return cachedLookup(`topscorers:${league.id}:${season}`, 30 * 60_000, async () => {
+    try {
+      const scorers = await footballService.getTopScorers(league.id, season);
+      const top = (scorers ?? []).slice(0, 10);
+      if (!top.length) return null;
+
+      const rows = top.map((p: any, i: number) => {
+        const name = p.player?.name ?? '—';
+        const st = p.statistics?.[0] ?? {};
+        const goals = st.goals?.total ?? 0;
+        const assists = st.goals?.assists ?? 0;
+        const team = st.team?.name ?? '—';
+        return `${i + 1}. ${name} (${team}) — ${goals} goals, ${assists} assists`;
+      });
+
+      return `${league.label} top scorers (${season}/${season + 1}):\n${rows.join('\n')}`;
+    } catch (err) {
+      logger.warn('[ChatFootball] top scorers lookup failed:', err);
+      return null;
+    }
+  });
+}
+
+async function fetchLiveMatchesContext(): Promise<string | null> {
+  if (!footballService.isConfigured()) return null;
+
+  // Short TTL — live scores move fast.
+  return cachedLookup('live:all', 25_000, async () => {
+    try {
+      const fixtures = await footballService.getLiveFixtures();
+      if (!Array.isArray(fixtures) || fixtures.length === 0) {
+        return 'No football matches are being played live right now.';
+      }
+
+      const rows = fixtures.slice(0, 25).map((f: any) => {
+        const home = f.teams?.home?.name ?? '—';
+        const away = f.teams?.away?.name ?? '—';
+        const gh = f.goals?.home ?? 0;
+        const ga = f.goals?.away ?? 0;
+        const elapsed = f.fixture?.status?.elapsed;
+        const league = f.league?.name ?? '';
+        return `${home} ${gh}-${ga} ${away} (${elapsed != null ? elapsed + "'" : 'LIVE'}${
+          league ? `, ${league}` : ''
+        })`;
+      });
+
+      return `Live matches right now (${rows.length}):\n${rows.join('\n')}`;
+    } catch (err) {
+      logger.warn('[ChatFootball] live matches lookup failed:', err);
+      return null;
+    }
+  });
+}
+
 export interface FootballChatContext {
   block: string;
   usedApi: boolean;
+  /** False when the block includes volatile live data that must not be cached. */
+  cacheable: boolean;
 }
 
 /**
  * Build optional live-data context for the user's message.
- * Returns null when no football API lookup applies.
+ * Returns null when no football API lookup applies. Lookups run in parallel to
+ * minimise the delay before the first LLM token.
  */
 export async function buildFootballChatContext(
   message: string,
 ): Promise<FootballChatContext | null> {
   if (!footballService.isConfigured()) return null;
 
-  const blocks: string[] = [];
-  let usedApi = false;
+  const wantsLive = isLiveMatchesQuery(message);
+  const wantsTopScorers = isTopScorerQuery(message);
+  const wantsStandings = isStandingsQuery(message);
+  // Top-scorer queries also match the broad player regex; skip name extraction
+  // for them so we don't waste a player search that can't resolve a name.
+  const wantsPlayer = isPlayerQuery(message) && !wantsTopScorers;
 
-  if (isPlayerQuery(message)) {
-    const names = extractNameCandidates(message);
-    for (const name of names) {
-      const block = await fetchPlayerContext(name);
-      if (block) {
-        blocks.push(block);
-        usedApi = true;
-      }
+  const tasks: Array<Promise<string | null>> = [];
+
+  if (wantsLive) tasks.push(fetchLiveMatchesContext());
+  if (wantsTopScorers) tasks.push(fetchTopScorersContext(message));
+  if (wantsStandings) {
+    tasks.push(
+      cachedLookup(`standings:${message.slice(0, 64)}`, 10 * 60_000, () =>
+        fetchStandingsContext(message),
+      ),
+    );
+  }
+  if (wantsPlayer) {
+    for (const name of extractNameCandidates(message)) {
+      tasks.push(cachedLookup(`player:${name.toLowerCase()}`, 30 * 60_000, () => fetchPlayerContext(name)));
     }
   }
 
-  if (isStandingsQuery(message)) {
-    const block = await fetchStandingsContext(message);
-    if (block) {
-      blocks.push(block);
-      usedApi = true;
-    }
-  }
+  if (tasks.length === 0) return null;
 
+  const results = await Promise.all(tasks);
+  const blocks = results.filter((b): b is string => !!b);
   if (blocks.length === 0) return null;
 
   const header =
@@ -191,10 +300,17 @@ export async function buildFootballChatContext(
   return {
     block: `${header}\n\n${blocks.join('\n\n---\n\n')}`,
     usedApi: true,
+    // Live scores change minute to minute — never persist those answers.
+    cacheable: !wantsLive,
   };
 }
 
-export function shouldUsePrimaryModel(
+/**
+ * Route heavier work to the complex model (Gemini 3): factual/data-backed
+ * questions and explicitly long answers. Simple/short chit-chat stays on the
+ * fast model (Qwen) for snappy, cheap replies.
+ */
+export function shouldUseComplexModel(
   lengthMode: 'short' | 'medium' | 'detailed',
   hasFootballContext: boolean,
 ): boolean {

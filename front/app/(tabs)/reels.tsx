@@ -63,7 +63,10 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /** iOS: mount one inline AVPlayer with a brief swap gap on scroll. */
 const USE_IOS_PLAYER_SWAP = Platform.OS === 'ios';
-const IOS_PLAYER_SWAP_MS = 280;
+// Gap between unmounting the old AVPlayer and mounting the next one. 280ms was
+// long enough to read as a visible freeze on every swipe; 110ms still lets the
+// native player tear down cleanly while feeling near-instant.
+const IOS_PLAYER_SWAP_MS = 110;
 const REEL_PLAYER_MOUNT_DISTANCE = 0;
 const REEL_LIST_WINDOW_SIZE = USE_IOS_PLAYER_SWAP ? 3 : 5;
 const REEL_INITIAL_RENDER = USE_IOS_PLAYER_SWAP ? 1 : 2;
@@ -337,6 +340,9 @@ const ReelsFeed: React.FC = () => {
   const pendingViewsRef = useRef<Set<string>>(new Set());
   const VIEWED_REELS_STORAGE_KEY = '@viewed_reels';
   const MAX_VIEWED_REELS_STORED = 500; // Cap to prevent unbounded AsyncStorage growth
+  // Debounce disk persistence of the viewed-set so fast scrolling doesn't
+  // JSON.stringify + write the whole array on every single view (caused hitches).
+  const persistViewedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoRefs = useRef<Map<string, any>>(new Map());
   const reelsRef = useRef<ReelData[]>([]);
@@ -840,7 +846,24 @@ const ReelsFeed: React.FC = () => {
     };
   }, [params.startFrom, reels]);
 
-  // Load viewed reels from AsyncStorage on mount
+  // Debounced persistence of the viewed-set. Flushes ~1.2s after the last view
+  // so a burst of scrolls collapses into a single disk write.
+  const persistViewedReels = useCallback(() => {
+    if (persistViewedTimerRef.current) clearTimeout(persistViewedTimerRef.current);
+    persistViewedTimerRef.current = setTimeout(() => {
+      persistViewedTimerRef.current = null;
+      try {
+        const viewedArray = Array.from(viewedReelsRef.current);
+        AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray)).catch(
+          (e) => logger.error('Error saving viewed reels:', e),
+        );
+      } catch (e) {
+        logger.error('Error saving viewed reels:', e);
+      }
+    }, 1200);
+  }, []);
+
+  // Load viewed reels from AsyncStorage on mount; flush any pending write on unmount.
   useEffect(() => {
     const loadViewedReels = async () => {
       try {
@@ -854,6 +877,17 @@ const ReelsFeed: React.FC = () => {
       }
     };
     loadViewedReels();
+    return () => {
+      // Flush immediately so a debounced write isn't lost on unmount.
+      if (persistViewedTimerRef.current) {
+        clearTimeout(persistViewedTimerRef.current);
+        persistViewedTimerRef.current = null;
+        const viewedArray = Array.from(viewedReelsRef.current);
+        AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray)).catch(
+          () => {},
+        );
+      }
+    };
   }, []);
 
   // Restore feed-level mute preference
@@ -927,13 +961,9 @@ const ReelsFeed: React.FC = () => {
         }
       }
 
-      // Persist the (possibly trimmed) viewed set.
-      try {
-        const viewedArray = Array.from(viewedReelsRef.current);
-        await AsyncStorage.setItem(VIEWED_REELS_STORAGE_KEY, JSON.stringify(viewedArray));
-      } catch (storageErr) {
-        logger.error('Error saving viewed reels:', storageErr);
-      }
+      // Persist the (possibly trimmed) viewed set — debounced so rapid scrolling
+      // coalesces many writes into one.
+      persistViewedReels();
 
       // Optimistic UI bump — only when the server actually counted.
       if (result.counted) {
@@ -959,7 +989,7 @@ const ReelsFeed: React.FC = () => {
     } finally {
       pendingViewsRef.current.delete(reelId);
     }
-  }, [getToken]);
+  }, [getToken, persistViewedReels]);
 
   // Load more reels when reaching end
   const loadMoreReels = useCallback(async () => {
@@ -1607,7 +1637,9 @@ const ReelsFeed: React.FC = () => {
           initialNumToRender={REEL_INITIAL_RENDER}
           maxToRenderPerBatch={REEL_MAX_BATCH}
           updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
-          removeClippedSubviews={false}
+          // Android: detach off-screen reel cells to cut memory growth on long
+          // sessions. iOS keeps them mounted (single AVPlayer model relies on it).
+          removeClippedSubviews={Platform.OS === 'android'}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}

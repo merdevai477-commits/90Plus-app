@@ -89,6 +89,29 @@ router.post('/answer', requireAuth, async (req: Request, res: Response): Promise
       sendError(req, res, ErrorCode.NOT_FOUND, 'Question not found');
       return;
     }
+    // Answer arrived after the per-question time limit. Don't 500 — treat it as
+    // a timeout (mark the question timed out) and return a coherent result so
+    // the client can advance the quiz gracefully.
+    if (err.message === 'TIME_LIMIT_EXCEEDED') {
+      const clerkUserId = req.auth?.userId;
+      const { questionId, language } = req.body ?? {};
+      if (clerkUserId && questionId) {
+        try {
+          const timeoutData = await timeoutQuizQuestion(
+            clerkUserId,
+            String(questionId),
+            getTimezone(req),
+            language,
+          );
+          res.json({ status: 'SUCCESS', data: { ...timeoutData, timedOut: true } });
+          return;
+        } catch (timeoutErr) {
+          logger.error('[Quiz] timeout-after-answer fallback failed', timeoutErr);
+        }
+      }
+      sendError(req, res, ErrorCode.VALIDATION, 'Time limit exceeded');
+      return;
+    }
     logger.error('[Quiz] POST /answer error', err);
     sendError(req, res, ErrorCode.INTERNAL, 'Failed to submit answer');
   }

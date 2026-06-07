@@ -836,8 +836,13 @@ const MatchDetailsScreen = () => {
     }
 
     if (!hasLineupData(lineups)) {
+      // Only keep showing the spinner while auto-retry is actually running:
+      // live matches always poll; non-finished matches retry until the cap.
+      // Finished matches with no data must fall through to the empty state
+      // immediately so the user never gets stuck on an infinite spinner.
       const stillRetrying =
-        isLive() || lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES;
+        isLive() ||
+        (!isFinishedMatch() && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES);
       if (stillRetrying) {
         return (
           <View style={styles.emptyState}>
@@ -848,11 +853,16 @@ const MatchDetailsScreen = () => {
           </View>
         );
       }
+      // Finished matches with no provider data get a clear "missing data" copy;
+      // not-yet-started matches keep the "not available yet / retry" wording.
+      const subtext = isFinishedMatch()
+        ? t.matchDetails.lineupsNoData
+        : t.matchDetails.lineupsUnavailable;
       return (
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={64} color="#333" />
           <Text style={styles.emptyStateText}>{t.matchDetails.noLineups}</Text>
-          <Text style={styles.emptyStateSubtext}>{t.matchDetails.lineupsUnavailable}</Text>
+          <Text style={styles.emptyStateSubtext}>{subtext}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={retryLineups}>
             <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
           </TouchableOpacity>

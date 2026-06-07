@@ -2033,6 +2033,24 @@ model ChatLimit {
   @@map("chat_limits")
 }
 
+// Cache of factual, data-backed answers (player stats, standings, top scorers).
+// Keyed by a hash of the normalized question + language so identical questions
+// from any user are served from the DB instead of re-calling the LLM.
+model ChatAnswerCache {
+  id           String   @id @default(uuid())
+  questionHash String   @unique // sha256(language + '|' + normalizedQuestion)
+  language     String // "ar" | "en"
+  question     String   @db.Text
+  answer       String   @db.Text
+  usedModel    String?
+  hits         Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([language])
+  @@map("chat_answer_cache")
+}
+
 // ============================================
 // XP & LEVEL SYSTEM
 // ============================================

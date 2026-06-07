@@ -13,7 +13,8 @@ import * as Haptics from 'expo-haptics';
 import {
   TAB_BLOB_SPAWN_SPRING,
   TAB_BUBBLE_HEIGHT,
-  TAB_BUBBLE_WIDTH,
+  TAB_BUBBLE_VERTICAL_OFFSET,
+  TAB_BUBBLE_WIDTH_BY_INDEX,
   TAB_FLOAT_OFFSET,
   TAB_LONG_PRESS_MS,
   TAB_SPRING,
@@ -46,6 +47,11 @@ function tabCenterForIndexWorklet(
   'worklet';
   const tabWidth = tabWidthWorklet(navWidth, paddingHorizontal, tabCount);
   return paddingHorizontal + index * tabWidth + tabWidth / 2;
+}
+
+function bubbleWidthForIndexWorklet(index: number): number {
+  'worklet';
+  return TAB_BUBBLE_WIDTH_BY_INDEX[index] ?? TAB_BUBBLE_HEIGHT + 20;
 }
 
 function clampCenterXWorklet(
@@ -85,6 +91,22 @@ function layoutFromMetrics(layout: TabBarLayoutMetrics) {
   };
 }
 
+function springToTab(
+  index: number,
+  navWidth: number,
+  paddingHorizontal: number,
+  tabCount: number,
+  blobCenterX: { value: number },
+  blobWidth: { value: number },
+) {
+  'worklet';
+  blobCenterX.value = withSpring(
+    tabCenterForIndexWorklet(index, navWidth, paddingHorizontal, tabCount),
+    TAB_SPRING,
+  );
+  blobWidth.value = withSpring(bubbleWidthForIndexWorklet(index), TAB_SPRING);
+}
+
 export function useLiquidTabBarGesture({
   layout,
   activeIndex,
@@ -97,29 +119,36 @@ export function useLiquidTabBarGesture({
   const blobCenterX = useSharedValue(
     tabCenterForIndexWorklet(activeIndex, navWidth, paddingHorizontal, tabCount),
   );
-  const blobWidth = useSharedValue(TAB_BUBBLE_WIDTH);
+  const blobWidth = useSharedValue(bubbleWidthForIndexWorklet(activeIndex));
   const blobScale = useSharedValue(1);
   const blobLift = useSharedValue(0);
-  const labelOpacity = useSharedValue(0);
   const isDragging = useSharedValue(false);
   const dragIndex = useSharedValue(activeIndex);
   const dragOriginCenterX = useSharedValue(0);
 
-  const bubbleTop = (layout.navHeight - TAB_BUBBLE_HEIGHT) / 2;
+  const bubbleTop =
+    (layout.navHeight - TAB_BUBBLE_HEIGHT) / 2 + TAB_BUBBLE_VERTICAL_OFFSET;
   const bubbleRadius = TAB_BUBBLE_HEIGHT / 2;
 
-  const collapseBubble = useCallback(() => {
-    blobWidth.value = withSpring(TAB_BUBBLE_WIDTH, TAB_SPRING);
-    labelOpacity.value = withTiming(0, { duration: 160 });
-  }, [blobWidth, labelOpacity]);
-
   useEffect(() => {
-    blobCenterX.value = withSpring(
-      tabCenterForIndexWorklet(activeIndex, navWidth, paddingHorizontal, tabCount),
-      TAB_SPRING,
+    springToTab(
+      activeIndex,
+      navWidth,
+      paddingHorizontal,
+      tabCount,
+      blobCenterX,
+      blobWidth,
     );
     dragIndex.value = activeIndex;
-  }, [activeIndex, navWidth, paddingHorizontal, tabCount, blobCenterX, dragIndex]);
+  }, [
+    activeIndex,
+    navWidth,
+    paddingHorizontal,
+    tabCount,
+    blobCenterX,
+    blobWidth,
+    dragIndex,
+  ]);
 
   const triggerSelectionHaptic = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -162,25 +191,13 @@ export function useLiquidTabBarGesture({
 
   const blobAnimatedStyle = useAnimatedStyle(() => {
     'worklet';
-    const width = blobWidth.value;
     return {
-      left: blobCenterX.value - width / 2,
+      left: blobCenterX.value - blobWidth.value / 2,
       top: bubbleTop + blobLift.value,
-      width,
+      width: blobWidth.value,
       height: TAB_BUBBLE_HEIGHT,
       borderRadius: bubbleRadius,
       transform: [{ scale: blobScale.value }],
-    };
-  });
-
-  const labelAnimatedStyle = useAnimatedStyle(() => {
-    'worklet';
-    const extraWidth = Math.max(0, blobWidth.value - TAB_BUBBLE_WIDTH);
-    return {
-      opacity: labelOpacity.value,
-      width: extraWidth,
-      marginLeft: labelOpacity.value > 0.05 ? 8 : 0,
-      overflow: 'hidden',
     };
   });
 
@@ -192,8 +209,6 @@ export function useLiquidTabBarGesture({
           'worklet';
           isDragging.value = true;
           dragIndex.value = index;
-          blobWidth.value = withSpring(TAB_BUBBLE_WIDTH, TAB_SPRING);
-          labelOpacity.value = withTiming(0, { duration: 100 });
           const origin = tabCenterForIndexWorklet(
             index,
             navWidth,
@@ -202,7 +217,8 @@ export function useLiquidTabBarGesture({
           );
           dragOriginCenterX.value = origin;
           blobCenterX.value = origin;
-          blobScale.value = 0.9;
+          blobWidth.value = bubbleWidthForIndexWorklet(index);
+          blobScale.value = 0.94;
           blobScale.value = withSpring(1, TAB_BLOB_SPAWN_SPRING);
           blobLift.value = withSpring(TAB_FLOAT_OFFSET, TAB_SPRING);
           runOnJS(triggerImpactHaptic)();
@@ -225,20 +241,20 @@ export function useLiquidTabBarGesture({
           );
           if (nearest !== dragIndex.value) {
             dragIndex.value = nearest;
+            blobWidth.value = withSpring(bubbleWidthForIndexWorklet(nearest), TAB_SPRING);
             runOnJS(triggerSelectionHaptic)();
           }
         })
         .onEnd(() => {
           'worklet';
           const targetIndex = dragIndex.value;
-          blobCenterX.value = withSpring(
-            tabCenterForIndexWorklet(
-              targetIndex,
-              navWidth,
-              paddingHorizontal,
-              tabCount,
-            ),
-            TAB_SPRING,
+          springToTab(
+            targetIndex,
+            navWidth,
+            paddingHorizontal,
+            tabCount,
+            blobCenterX,
+            blobWidth,
           );
           blobLift.value = withSpring(0, TAB_SPRING);
           blobScale.value = withSpring(1, TAB_SPRING);
@@ -251,14 +267,13 @@ export function useLiquidTabBarGesture({
             isDragging.value = false;
             blobLift.value = withTiming(0, { duration: 180 });
             blobScale.value = withSpring(1, TAB_SPRING);
-            blobCenterX.value = withSpring(
-              tabCenterForIndexWorklet(
-                activeIndex,
-                navWidth,
-                paddingHorizontal,
-                tabCount,
-              ),
-              TAB_SPRING,
+            springToTab(
+              activeIndex,
+              navWidth,
+              paddingHorizontal,
+              tabCount,
+              blobCenterX,
+              blobWidth,
             );
           }
         });
@@ -271,17 +286,17 @@ export function useLiquidTabBarGesture({
         })
         .onEnd(() => {
           'worklet';
+          runOnJS(notifyHighlight)(index);
           runOnJS(triggerSelectionHaptic)();
-          runOnJS(finishDrag)(index);
-          blobCenterX.value = withSpring(
-            tabCenterForIndexWorklet(
-              index,
-              navWidth,
-              paddingHorizontal,
-              tabCount,
-            ),
-            TAB_SPRING,
+          springToTab(
+            index,
+            navWidth,
+            paddingHorizontal,
+            tabCount,
+            blobCenterX,
+            blobWidth,
           );
+          runOnJS(finishDrag)(index);
         });
 
       return Gesture.Exclusive(tap, panAfterLongPress);
@@ -289,14 +304,13 @@ export function useLiquidTabBarGesture({
     [
       activeIndex,
       blobCenterX,
+      blobWidth,
       blobLift,
       blobScale,
-      blobWidth,
       dragIndex,
       dragOriginCenterX,
       finishDrag,
       isDragging,
-      labelOpacity,
       navWidth,
       paddingHorizontal,
       tabCount,
@@ -310,23 +324,10 @@ export function useLiquidTabBarGesture({
   return useMemo(
     () => ({
       blobAnimatedStyle,
-      labelAnimatedStyle,
-      blobWidth,
-      labelOpacity,
       createTabGesture,
       isDragging,
       dragIndex,
-      collapseBubble,
     }),
-    [
-      blobAnimatedStyle,
-      labelAnimatedStyle,
-      blobWidth,
-      labelOpacity,
-      createTabGesture,
-      dragIndex,
-      isDragging,
-      collapseBubble,
-    ],
+    [blobAnimatedStyle, createTabGesture, dragIndex, isDragging],
   );
 }

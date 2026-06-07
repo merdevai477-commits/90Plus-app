@@ -55,6 +55,12 @@ export interface PredictionRemaining {
   used: number;
   coins: number;
   predictionCost: number;
+  /**
+   * False when the value is a fallback because the request failed or returned
+   * an unexpected shape. Callers must NOT overwrite a known-good ticket count
+   * with an `ok: false` result (avoids showing phantom tickets).
+   */
+  ok?: boolean;
 }
 
 /**
@@ -122,13 +128,14 @@ export const PredictionsService = {
         }
 
         const result = await response.json();
-        if (result.success && result.data) return result.data;
-        // Return safe defaults instead of crashing
+        if (result.success && result.data) return { ...result.data, ok: true } as PredictionRemaining;
+        // Unexpected shape — flag as not-ok so callers keep their cached value
+        // instead of showing a fabricated ticket count.
         logger.warn('Predictions remaining: invalid response format, using defaults');
-        return { remaining: 10, total: 10, coins: 0 } as PredictionRemaining;
+        return { remaining: 0, total: 0, used: 0, coins: 0, predictionCost: 5, ok: false };
       } catch (error) {
         logger.error('Error getting remaining predictions:', error);
-        return { remaining: 10, total: 10, coins: 0 } as PredictionRemaining;
+        return { remaining: 0, total: 0, used: 0, coins: 0, predictionCost: 5, ok: false };
       } finally {
         _inFlightRemaining = null;
       }

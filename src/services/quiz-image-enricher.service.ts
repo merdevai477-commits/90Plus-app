@@ -280,7 +280,28 @@ export async function enrichQuizImages(
     const targetNames = matchNames.map(normalizeName);
     const correctAnswerText =
       q.options.find((o) => o.key === q.correctKey)?.text?.trim() ?? '';
-    
+
+    // Internal consistency: for player photos the correct answer option MUST be
+    // the same person as the image entity. If the model wired the correctKey to
+    // a different option than imageBinding.entityName, the question is broken —
+    // discard it rather than ship a photo that doesn't match the right answer.
+    if (binding.kind === 'player' && correctAnswerText && binding.entityName) {
+      const consistency = scoreEntityNameMatch(correctAnswerText, binding.entityName);
+      if (consistency < 0.7) {
+        logger.warn(
+          `[QuizImage] Discarded ${q.id}: correct answer "${correctAnswerText}" doesn't match image entity "${binding.entityName}" (${consistency.toFixed(2)})`,
+        );
+        out.push(null);
+        continue;
+      }
+    }
+
+    // Track whether a team was named but we could NOT confirm it — used to
+    // tighten the homonym guard (a global player search may hit a same-named
+    // player on a different club).
+    const teamSpecified = binding.kind === 'player' && !!binding.teamName?.trim();
+    let teamResolved = false;
+
     let bestMatchUrl: string | null = null;
     let bestMatchId: number | undefined;
     let bestMatchPlayerName: string | null = null;
@@ -291,7 +312,8 @@ export async function enrichQuizImages(
       switch (binding.kind) {
         case 'player': {
           const teamId = await resolveTeamId(binding.teamName);
-          
+          teamResolved = !!teamId;
+
           if (!teamId) {
              logger.warn(`[QuizImages] Could not resolve team "${binding.teamName}" for player "${binding.entityName}". Attempting global search.`);
           }
@@ -431,9 +453,12 @@ export async function enrichQuizImages(
         }
         if (correctAnswerText && bestMatchPlayerName) {
           const answerMatch = scoreEntityNameMatch(correctAnswerText, bestMatchPlayerName);
-          if (answerMatch < 0.82) {
+          // Tighten the bar when a club was named but unconfirmed: a global
+          // search can surface a same-named player from another team.
+          const requiredAnswerMatch = teamSpecified && !teamResolved ? 0.9 : 0.82;
+          if (answerMatch < requiredAnswerMatch) {
             logger.warn(
-              `[QuizImage] Rejected ${q.id}: photo is "${bestMatchPlayerName}" but answer is "${correctAnswerText}" (${answerMatch.toFixed(2)})`,
+              `[QuizImage] Rejected ${q.id}: photo is "${bestMatchPlayerName}" but answer is "${correctAnswerText}" (${answerMatch.toFixed(2)}, required ${requiredAnswerMatch})`,
             );
             out.push(handleUnresolvedImageQuestion(q, binding, maxScore));
             continue;

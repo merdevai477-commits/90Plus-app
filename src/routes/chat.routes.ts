@@ -49,8 +49,16 @@ import {
 } from '../services/chat.service';
 import {
     buildFootballChatContext,
-    shouldUsePrimaryModel,
+    shouldUseComplexModel,
 } from '../services/chat-football-tools.service';
+import {
+    getCachedAnswer,
+    saveCachedAnswer,
+} from '../services/chat-answer-cache.service';
+
+// Data-backed factual answers stay valid for a few hours; live data is excluded
+// from caching upstream (see FootballChatContext.cacheable).
+const CHAT_ANSWER_CACHE_TTL_MS = 6 * 60 * 60_000;
 
 const router = Router();
 
@@ -105,12 +113,13 @@ function buildClient(apiKey: string, baseURL: string): OpenAI {
     });
 }
 
-const PRIMARY: ProviderConfig | null = (() => {
+// FAST model (Qwen): cheap + snappy for simple / short chit-chat.
+const FAST: ProviderConfig | null = (() => {
     const apiKey = process.env.AI_API_KEY ?? process.env.OPENROUTER_API_KEY ?? '';
     if (!apiKey) return null;
     const baseURL = process.env.AI_BASE_URL ?? process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
     return {
-        name: 'primary',
+        name: 'fast',
         apiKey,
         baseURL,
         model: process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.6-flash',
@@ -118,15 +127,32 @@ const PRIMARY: ProviderConfig | null = (() => {
     };
 })();
 
+// COMPLEX model (Gemini 3): used for football-data questions and detailed
+// answers where reasoning/accuracy matters most.
+const COMPLEX: ProviderConfig | null = (() => {
+    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
+    if (!apiKey) return null;
+    const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
+    const model =
+        process.env.OPENROUTER_CHAT_COMPLEX_MODEL ??
+        process.env.OPENROUTER_CHAT_SIMPLE_MODEL ??
+        process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
+        'google/gemini-3-flash-preview';
+    return {
+        name: 'complex',
+        apiKey,
+        baseURL,
+        model,
+        client: buildClient(apiKey, baseURL),
+    };
+})();
+
+// FALLBACK model (Gemini 2.5): last resort if the chosen model errors.
 const FALLBACK: ProviderConfig | null = (() => {
     const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
     if (!apiKey) return null;
     const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    // Use a different model as fallback (Gemini via OpenRouter)
     const fallbackModel = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
-    const primaryModel = process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.6-flash';
-    // Only create fallback if we have a different model to fall back to
-    if (fallbackModel === primaryModel) return null;
     return {
         name: 'fallback',
         apiKey,
@@ -136,24 +162,7 @@ const FALLBACK: ProviderConfig | null = (() => {
     };
 })();
 
-const SIMPLE: ProviderConfig | null = (() => {
-    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
-    if (!apiKey) return null;
-    const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    const model =
-        process.env.OPENROUTER_CHAT_SIMPLE_MODEL ??
-        process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
-        'google/gemini-3-flash-preview';
-    return {
-        name: 'simple',
-        apiKey,
-        baseURL,
-        model,
-        client: buildClient(apiKey, baseURL),
-    };
-})();
-
-const PROVIDERS: ProviderConfig[] = [PRIMARY, FALLBACK].filter(
+const PROVIDERS: ProviderConfig[] = [FAST, COMPLEX, FALLBACK].filter(
     (p): p is ProviderConfig => p !== null,
 );
 
@@ -162,12 +171,16 @@ const DAILY_LIMIT = getDailyMessageLimit();
 if (PROVIDERS.length === 0) {
     logger.warn('[chat] ⚠️ no AI provider configured — /api/chat/stream will return 503');
 } else {
-    const summary = PROVIDERS.map((p) => `${p.name}=${p.model}`).join(' → ');
-    const simpleNote = SIMPLE ? ` | simple=${SIMPLE.model}` : '';
-    logger.info(`[chat] 🤖 providers: ${summary}${simpleNote}`);
+    const summary = PROVIDERS.map((p) => `${p.name}=${p.model}`).join(' | ');
+    logger.info(`[chat] 🤖 providers: ${summary}`);
 }
 
-function providersForRequest(usePrimary: boolean): ProviderConfig[] {
+/**
+ * Build the provider attempt chain. When `useComplex` is true (data / detailed
+ * questions) Gemini 3 leads; otherwise the fast Qwen model leads. Each option
+ * is followed by the others so a provider error still yields an answer.
+ */
+function providersForRequest(useComplex: boolean): ProviderConfig[] {
     const chain: ProviderConfig[] = [];
     const seen = new Set<string>();
 
@@ -177,11 +190,15 @@ function providersForRequest(usePrimary: boolean): ProviderConfig[] {
         chain.push(p);
     };
 
-    if (!usePrimary && SIMPLE) {
-        push(SIMPLE);
+    if (useComplex) {
+        push(COMPLEX);
+        push(FALLBACK);
+        push(FAST);
+    } else {
+        push(FAST);
+        push(COMPLEX);
+        push(FALLBACK);
     }
-    push(PRIMARY);
-    push(FALLBACK);
 
     return chain.length > 0 ? chain : PROVIDERS;
 }
@@ -532,13 +549,55 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         const footballCtx = !isResume
             ? await buildFootballChatContext(trimmedMessage)
             : null;
-        const usePrimaryModel = shouldUsePrimaryModel(lengthMode, !!footballCtx?.usedApi);
-        const activeProviders = providersForRequest(usePrimaryModel);
+        const useComplexModel = shouldUseComplexModel(lengthMode, !!footballCtx?.usedApi);
+        const activeProviders = providersForRequest(useComplexModel);
 
         const sanitizedSuffix =
             typeof systemPromptSuffix === 'string' && systemPromptSuffix.trim().length > 0
                 ? systemPromptSuffix.trim().slice(0, 1500)
                 : '';
+
+        // ─── DB answer cache (stable, data-backed questions only) ─────────────
+        // Serve identical factual questions from Postgres to skip the LLM.
+        // Excluded: resumes, live data, and personalized (suffix) prompts.
+        const cacheLang = /[\u0600-\u06FF]/.test(trimmedMessage) ? 'ar' : 'en';
+        const cacheEligible =
+            !isResume &&
+            !!footballCtx?.usedApi &&
+            footballCtx?.cacheable === true &&
+            !sanitizedSuffix;
+
+        if (cacheEligible) {
+            const cached = await getCachedAnswer(
+                cacheLang,
+                trimmedMessage,
+                CHAT_ANSWER_CACHE_TTL_MS,
+            );
+            if (cached?.answer && !clientClosed) {
+                sendToken(cached.answer);
+                await appendMessage(
+                    userId,
+                    targetConversation.id,
+                    'assistant',
+                    cached.answer,
+                    cached.usedModel ?? undefined,
+                );
+                const conversationTitle = await maybeAutoTitleConversation(
+                    userId,
+                    targetConversation.id,
+                    trimmedMessage,
+                );
+                sendDone({
+                    remaining,
+                    limit: DAILY_LIMIT,
+                    resetAt: await getResetTimeForUser(userId),
+                    cached: true,
+                    ...(conversationTitle ? { conversationTitle } : {}),
+                });
+                return;
+            }
+        }
+
         let systemPrompt = sanitizedSuffix
             ? `${baseSystemPrompt}\n\n${sanitizedSuffix}`
             : baseSystemPrompt;
@@ -645,6 +704,12 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 fullText,
                 usedProvider.model,
             );
+
+            // Cache stable, data-backed answers so identical questions skip the
+            // LLM next time (best-effort, never blocks the response).
+            if (cacheEligible && fullText.trim().length > 0) {
+                void saveCachedAnswer(cacheLang, trimmedMessage, fullText, usedProvider.model);
+            }
 
             // Auto-title on first exchange (≤ 2 messages total in the convo
             // after we just saved the assistant reply — meaning we're finishing
