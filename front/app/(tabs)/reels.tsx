@@ -356,6 +356,7 @@ const ReelsFeed: React.FC = () => {
   // We introduce a tiny "gap" where no player is mounted, then mount the next one.
   const [safePlayerIndex, setSafePlayerIndex] = useState(0);
   const safeIndexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentIndexRef = useRef(0);
   const haptic = useHaptic();
   const { t } = useTranslation();
   const { getToken } = useAuth();
@@ -637,20 +638,52 @@ const ReelsFeed: React.FC = () => {
   const FOCUS_REFRESH_THROTTLE = 10000; // 10 seconds instead of 30
   const isRefreshingRef = useRef(false);
 
-  // Tear down the single iOS player when leaving the tab; remount only after blur (not on focus).
+  const scheduleSafePlayerMount = useCallback((index: number, reason = 'scroll') => {
+    if (safeIndexTimerRef.current) {
+      clearTimeout(safeIndexTimerRef.current);
+      safeIndexTimerRef.current = null;
+    }
+
+    if (!USE_IOS_PLAYER_SWAP) {
+      setSafePlayerIndex(index);
+      return;
+    }
+
+    setSafePlayerIndex(-1);
+    safeIndexTimerRef.current = setTimeout(() => {
+      setSafePlayerIndex(index);
+      safeIndexTimerRef.current = null;
+      const reel = reelsRef.current[index];
+      if (reel?.id) {
+        addReelsBreadcrumb('reel_active', {
+          reelId: reel.id,
+          index,
+          player: 'ios-single',
+          reason,
+        });
+      }
+    }, IOS_PLAYER_SWAP_MS);
+  }, []);
+
+  // Tear down the single iOS player when leaving the tab; remount on tab return.
   useFocusEffect(
     useCallback(() => {
       setIsReelsScreenFocused(true);
+      scheduleSafePlayerMount(currentIndexRef.current, 'tab-focus');
 
       return () => {
         setIsReelsScreenFocused(false);
         setSafePlayerIndex(-1);
+        if (safeIndexTimerRef.current) {
+          clearTimeout(safeIndexTimerRef.current);
+          safeIndexTimerRef.current = null;
+        }
         pauseAllVideos();
         videoRefs.current.clear();
         clearLoadedVideos();
         setPlayerGeneration((g) => g + 1);
       };
-    }, [pauseAllVideos]),
+    }, [pauseAllVideos, scheduleSafePlayerMount]),
   );
 
   // Reload when screen comes into focus (e.g., after uploading a reel)
@@ -1005,42 +1038,19 @@ const ReelsFeed: React.FC = () => {
 
   const activeReelId = filteredReels[currentIndex]?.id;
   activeReelIdRef.current = activeReelId ?? null;
+  currentIndexRef.current = currentIndex;
 
   // Keep a "safe" index used for mounting/playing the native player.
   // On iOS we briefly unmount on index changes to prevent AVPlayer overlap crashes.
   useEffect(() => {
-    if (safeIndexTimerRef.current) {
-      clearTimeout(safeIndexTimerRef.current);
-      safeIndexTimerRef.current = null;
-    }
-
-    if (!USE_IOS_PLAYER_SWAP) {
-      setSafePlayerIndex(currentIndex);
-      return;
-    }
-
-    // Unmount the inline iOS player, then mount the next reel after native teardown.
-    setSafePlayerIndex(-1);
-    safeIndexTimerRef.current = setTimeout(() => {
-      setSafePlayerIndex(currentIndex);
-      safeIndexTimerRef.current = null;
-      const reel = reelsRef.current[currentIndex];
-      if (reel?.id) {
-        addReelsBreadcrumb('reel_active', {
-          reelId: reel.id,
-          index: currentIndex,
-          player: 'ios-single',
-        });
-      }
-    }, IOS_PLAYER_SWAP_MS);
-
+    scheduleSafePlayerMount(currentIndex, 'scroll');
     return () => {
       if (safeIndexTimerRef.current) {
         clearTimeout(safeIndexTimerRef.current);
         safeIndexTimerRef.current = null;
       }
     };
-  }, [currentIndex]);
+  }, [currentIndex, scheduleSafePlayerMount]);
 
   const handleWsLike = useCallback((payload: { reelId: string; likesCount: number }) => {
     setReels((prev) =>

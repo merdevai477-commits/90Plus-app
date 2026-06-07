@@ -28,12 +28,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  type AppStateStatus,
 } from 'react-native';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
@@ -289,7 +291,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   }, [player, disableReplayLimit, isActive, onVideoEnd]);
 
   // -------- Playback control (play/pause on isActive change) --------
-  useEffect(() => {
+  const attemptPlay = useCallback(() => {
     if (!player || invalidSource) return;
     const shouldPlay = isActive && !isPausedByLimit && VIDEO_DEFAULTS.autoplay;
     try {
@@ -303,13 +305,34 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         return;
       }
       if (!player.playing) player.play();
-    } catch (err: any) {
-      const msg = err?.message || '';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       if (!msg.includes('released') && !msg.includes('already')) {
         logger.debug(`[UnifiedVideoPlayer] play/pause for ${reel.id}:`, msg);
       }
     }
-  }, [player, isActive, isPausedByLimit, reel.id, invalidSource, status]);
+  }, [player, isActive, isPausedByLimit, invalidSource, status, reel.id]);
+
+  useEffect(() => {
+    attemptPlay();
+  }, [attemptPlay]);
+
+  // AVPlayer on iOS often misses the first play() after mount, tab return, or foreground.
+  useEffect(() => {
+    if (!isActive || invalidSource) return;
+    const delays = Platform.OS === 'ios' ? [150, 400, 900] : [200];
+    const timers = delays.map((ms) => setTimeout(() => attemptPlay(), ms));
+    return () => timers.forEach(clearTimeout);
+  }, [isActive, player, reel.id, invalidSource, attemptPlay]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') {
+        setTimeout(() => attemptPlay(), 100);
+      }
+    });
+    return () => sub.remove();
+  }, [attemptPlay]);
 
   // Pause promptly on unmount / swap so iOS releases AVPlayer before the next source mounts.
   useEffect(() => {

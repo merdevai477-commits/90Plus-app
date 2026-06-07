@@ -17,7 +17,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "110",
+      "buildNumber": "111",
       "requireFullScreen": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -73,7 +73,7 @@
         "monochromeImage": "./assets/images/90Plus.png"
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
-      "versionCode": 101,
+      "versionCode": 102,
       "softwareKeyboardLayoutMode": "pan",
       "intentFilters": [
         {
