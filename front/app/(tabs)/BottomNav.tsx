@@ -62,6 +62,8 @@ const BottomNav = () => {
 
   const handleNavigate = useCallback(
     (index: number) => {
+      if (index === activeIndex) return;
+
       const tab = LIQUID_TAB_ITEMS[index];
       if (!tab) return;
 
@@ -78,10 +80,12 @@ const BottomNav = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       router.replace(tab.route as any);
     },
-    [pathname, router],
+    [activeIndex, pathname, router],
   );
 
-  const handleTabPressIn = useCallback((index: number) => {
+  const handleTabPressIn = useCallback(
+    (index: number) => {
+      if (index === activeIndex) return;
     const tab = LIQUID_TAB_ITEMS[index];
     if (!tab) return;
 
@@ -90,7 +94,9 @@ const BottomNav = () => {
       .filter(Boolean)
       .map((t) => String(t!.route));
     if (adjacent.length > 0) prefetchRoutes(adjacent).catch(() => {});
-  }, []);
+  },
+    [activeIndex],
+  );
 
   if (hidden) return null;
 

@@ -390,15 +390,27 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     return convs;
   }, [getAuthHeaders]);
 
-  const createConversation = useCallback(async (): Promise<Conversation> => {
-    const res = await fetch(`${BACKEND_URL}/api/conversations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-      body: JSON.stringify({}),
-    });
-    if (!res.ok) throw new Error('Failed to create conversation');
-    const data = await res.json() as { conversation: Conversation };
-    return data.conversation;
+  const createConversation = useCallback(async (): Promise<Conversation | null> => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/conversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({}),
+      });
+      if (res.status === 401) {
+        logger.warn('[AIChat] createConversation 401 — session not ready');
+        return null;
+      }
+      if (!res.ok) {
+        logger.warn('[AIChat] createConversation failed:', res.status);
+        return null;
+      }
+      const data = await res.json() as { conversation: Conversation };
+      return data.conversation ?? null;
+    } catch (err) {
+      logger.warn('[AIChat] createConversation error:', err);
+      return null;
+    }
   }, [getAuthHeaders]);
 
   const loadConversationMessages = useCallback(async (conversationId: string) => {
@@ -440,20 +452,24 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
       // No conversations exist yet — create the first one.
       const created = await createConversation();
+      if (!created) {
+        setError(getLabels().streamRetryFailed);
+        return;
+      }
       setCurrentConversationId(created.id);
       setConversations([created]);
       setMessages(getInitialMessages());
       await Storage.saveLastConversationId(created.id);
     } catch (err) {
       logger.warn('[AIChat] bootstrapConversation failed:', err);
-      try {
-        const created = await createConversation();
+      const created = await createConversation();
+      if (created) {
         setCurrentConversationId(created.id);
         setConversations([created]);
         setMessages(getInitialMessages());
         await Storage.saveLastConversationId(created.id);
         setError(null);
-      } catch {
+      } else {
         setError(getLabels().streamRetryFailed);
       }
     }
@@ -884,14 +900,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
     let convId = currentConversationId;
     if (!convId) {
-      try {
-        const created = await createConversation();
-        convId = created.id;
-        setCurrentConversationId(created.id);
-        setConversations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
-        await Storage.saveLastConversationId(created.id);
-      } catch (err) {
-        logger.warn('[AIChat] auto-create conversation failed:', err);
+      const created = await createConversation();
+      if (!created) {
         setError(getLabels().noActiveConversation);
         setIsLoading(false);
         setIsThinking(false);
@@ -901,6 +911,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setMessages((prev) => prev.filter((m) => m.id !== aiMessageId && m.id !== userMsg.id));
         return;
       }
+      convId = created.id;
+      setCurrentConversationId(created.id);
+      setConversations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+      await Storage.saveLastConversationId(created.id);
     }
 
     const history = toHistoryFormat(base.slice(1));
@@ -1044,11 +1058,15 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   const startNewConversation = useCallback(async () => {
     const created = await createConversation();
+    if (!created) {
+      setError(getLabels().streamRetryFailed);
+      return;
+    }
     await fetchConversations();
     setCurrentConversationId(created.id);
     setMessages(getInitialMessages());
     await Storage.saveLastConversationId(created.id);
-  }, [createConversation, fetchConversations]);
+  }, [createConversation, fetchConversations, getLabels]);
 
   const togglePinConversation = useCallback(async (
     conversationId: string,
@@ -1100,20 +1118,28 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           await loadConversationMessages(next.id);
         } else {
           const created = await createConversation();
-          setConversations([created]);
-          setCurrentConversationId(created.id);
-          setMessages(getInitialMessages());
+          if (created) {
+            setConversations([created]);
+            setCurrentConversationId(created.id);
+            setMessages(getInitialMessages());
+          } else {
+            setError(getLabels().streamRetryFailed);
+          }
         }
       } else {
         const created = await createConversation();
-        setConversations([created]);
-        setCurrentConversationId(created.id);
-        setMessages(getInitialMessages());
+        if (created) {
+          setConversations([created]);
+          setCurrentConversationId(created.id);
+          setMessages(getInitialMessages());
+        } else {
+          setError(getLabels().streamRetryFailed);
+        }
       }
     }
   }, [
     currentConversationId, fetchConversations,
-    loadConversationMessages, createConversation, getAuthHeaders,
+    loadConversationMessages, createConversation, getAuthHeaders, getLabels,
   ]);
 
   const dismissError = useCallback(() => setError(null), []);

@@ -282,10 +282,15 @@ export function useLiquidTabBarGesture({
         .maxDuration(TAB_LONG_PRESS_MS - 20)
         .onBegin(() => {
           'worklet';
-          runOnJS(prefetchTab)(index);
+          if (index !== activeIndex) {
+            runOnJS(prefetchTab)(index);
+          }
         })
         .onEnd(() => {
           'worklet';
+          if (index === activeIndex) {
+            return;
+          }
           runOnJS(notifyHighlight)(index);
           runOnJS(triggerSelectionHaptic)();
           springToTab(
