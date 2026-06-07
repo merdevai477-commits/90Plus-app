@@ -41,6 +41,17 @@ router.get('/daily', requireAuth, async (req: Request, res: Response): Promise<v
       sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
       return;
     }
+    if (err.message === 'PACK_GENERATING') {
+      sendError(
+        req,
+        res,
+        ErrorCode.EXTERNAL_SERVICE,
+        'Daily quiz pack is being prepared',
+        { code: 'PACK_GENERATING' },
+        503,
+      );
+      return;
+    }
     logger.error('[Quiz] GET /daily error', err);
     sendError(req, res, ErrorCode.INTERNAL, 'Failed to load daily quiz');
   }

@@ -181,6 +181,72 @@ async function savePack(
   return row;
 }
 
+function dailyPackLockKey(dateStr: string, language: QuizLanguage): string {
+  return `quiz:daily:lock:${dateStr}:${language}`;
+}
+
+/** Read a complete pack from Redis/DB only — never triggers AI generation. */
+async function loadReadyDailyPack(
+  language: QuizLanguage,
+  packDate = todayPackDate(),
+  timezone?: string,
+): Promise<StoredQuizQuestion[] | null> {
+  const dateStr = packDateYmd(packDate, timezone);
+  const cacheKey = `quiz:daily:${dateStr}:${language}`;
+
+  const cached = await redisCacheService.get<StoredQuizQuestion[]>(cacheKey);
+  if (cached?.length === QUIZ_PACK_SIZE) return cached;
+
+  const existing = await loadPackFromDb(packDate, language);
+  if (existing) {
+    const questions = existing.questions as unknown as StoredQuizQuestion[];
+    await redisCacheService.set(cacheKey, questions, PACK_CACHE_TTL);
+    return questions;
+  }
+
+  return null;
+}
+
+async function isPackGenerationInProgress(
+  dateStr: string,
+  language: QuizLanguage,
+): Promise<boolean> {
+  if (!isRedisConnected()) return false;
+  try {
+    const redis = getRedisClient();
+    if (!redis) return false;
+    const exists = await redis.exists(dailyPackLockKey(dateStr, language));
+    return exists === 1;
+  } catch {
+    return false;
+  }
+}
+
+const backgroundPackGenKeys = new Set<string>();
+
+/** Fire-and-forget pack build for cron/warmup or when a user hits GET /daily before packs exist. */
+export function scheduleDailyPackGeneration(
+  language: QuizLanguage,
+  packDate = todayPackDate(),
+  timezone?: string,
+): void {
+  const dateStr = packDateYmd(packDate, timezone);
+  const dedupeKey = `${dateStr}:${language}`;
+  if (backgroundPackGenKeys.has(dedupeKey)) return;
+  backgroundPackGenKeys.add(dedupeKey);
+
+  void getOrCreateDailyPack(language, packDate, timezone)
+    .then(() => {
+      logger.info(`[QuizDaily] Background pack ready: ${dedupeKey}`);
+    })
+    .catch((err) => {
+      logger.error(`[QuizDaily] Background pack failed (${dedupeKey})`, err);
+    })
+    .finally(() => {
+      backgroundPackGenKeys.delete(dedupeKey);
+    });
+}
+
 async function withRedisLock<T>(
   lockKey: string,
   ttlMs: number,
@@ -238,19 +304,13 @@ export async function getOrCreateDailyPack(
 ): Promise<StoredQuizQuestion[]> {
   const dateStr = packDateYmd(packDate, timezone);
   const cacheKey = `quiz:daily:${dateStr}:${language}`;
-  const lockKey = `quiz:daily:lock:${dateStr}:${language}`;
-  
-  const cached = await redisCacheService.get<StoredQuizQuestion[]>(cacheKey);
-  if (cached?.length === QUIZ_PACK_SIZE) return cached;
+  const lockKey = dailyPackLockKey(dateStr, language);
 
-  const existing = await loadPackFromDb(packDate, language);
-  if (existing) {
-    const questions = existing.questions as unknown as StoredQuizQuestion[];
-    await redisCacheService.set(cacheKey, questions, PACK_CACHE_TTL);
-    return questions;
-  }
+  const ready = await loadReadyDailyPack(language, packDate, timezone);
+  if (ready) return ready;
 
-  return withRedisLock(lockKey, 30000, async () => {
+  // AI + image enrichment can exceed 30s — hold the lock long enough to prevent duplicate builds.
+  return withRedisLock(lockKey, 180_000, async () => {
     // Double-check cache and DB inside lock
     const doubleCached = await redisCacheService.get<StoredQuizQuestion[]>(cacheKey);
     if (doubleCached?.length === QUIZ_PACK_SIZE) return doubleCached;
@@ -389,7 +449,17 @@ export async function getDailyQuizForUser(
   const language = normalizeLang(languageInput ?? settingsLang ?? 'ar');
 
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate, timezone);
+  const dateStr = packDateYmd(packDate, timezone);
+  let pack = await loadReadyDailyPack(language, packDate, timezone);
+
+  if (!pack?.length) {
+    const generating = await isPackGenerationInProgress(dateStr, language);
+    if (!generating) {
+      scheduleDailyPackGeneration(language, packDate, timezone);
+    }
+    throw new Error('PACK_GENERATING');
+  }
+
   const session = await getOrCreateSession(user.id, packDate, language);
   const progress = parseProgress(session.progress);
 
@@ -440,7 +510,8 @@ export async function submitQuizAnswer(
 ) {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate, timezone);
+  const pack = await loadReadyDailyPack(language, packDate, timezone);
+  if (!pack?.length) throw new Error('QUESTION_NOT_FOUND');
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
@@ -742,8 +813,8 @@ export async function skipQuizQuestion(
 ) {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate, timezone);
-  if (!findQuestion(pack, questionId)) throw new Error('QUESTION_NOT_FOUND');
+  const pack = await loadReadyDailyPack(language, packDate, timezone);
+  if (!pack?.length || !findQuestion(pack, questionId)) throw new Error('QUESTION_NOT_FOUND');
 
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
@@ -831,7 +902,8 @@ export async function useQuizHint(
 ) {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate, timezone);
+  const pack = await loadReadyDailyPack(language, packDate, timezone);
+  if (!pack?.length) throw new Error('QUESTION_NOT_FOUND');
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
@@ -914,7 +986,8 @@ export async function timeoutQuizQuestion(
 ): Promise<QuizTimeoutResult> {
   const language = normalizeLang(languageInput);
   const packDate = todayPackDate(timezone);
-  const pack = await getOrCreateDailyPack(language, packDate, timezone);
+  const pack = await loadReadyDailyPack(language, packDate, timezone);
+  if (!pack?.length) throw new Error('QUESTION_NOT_FOUND');
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 

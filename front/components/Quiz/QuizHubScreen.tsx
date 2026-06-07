@@ -971,13 +971,39 @@ export default function QuizHubScreen() {
     );
   }
 
-  if (loadingQuestions && !dailyData) {
+  if (errorMessage === 'PACK_GENERATING' || (loadingQuestions && !dailyData)) {
     return (
       <View style={[styles.root, styles.centered]}>
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <ActivityIndicator size="large" color={ACCENT_SOFT} />
-        <Text style={styles.loadingText}>{t.quiz.loadingQuestions}</Text>
+        <Text style={styles.loadingText}>
+          {errorMessage === 'PACK_GENERATING'
+            ? t.quiz.packPreparing
+            : t.quiz.loadingQuestions}
+        </Text>
+      </View>
+    );
+  }
+
+  if (errorMessage === 'REQUEST_TIMEOUT') {
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <QuizBackground />
+        <QuizHeader topInset={insets.top} />
+        <Text style={styles.noQuestionsText}>{t.quiz.requestTimeout}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => void refetch()}
+          disabled={isFetching}
+          activeOpacity={0.85}
+        >
+          {isFetching ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.retryButtonText}>{t.quiz.retryLoad}</Text>
+          )}
+        </TouchableOpacity>
       </View>
     );
   }
@@ -1009,7 +1035,9 @@ export default function QuizHubScreen() {
             ? t.quiz.noQuestionsAvailable
             : errorMessage === 'AUTH_REQUIRED'
               ? t.quiz.signInRequired
-              : t.quiz.loadFailed}
+              : errorMessage === 'REQUEST_TIMEOUT'
+                ? t.quiz.requestTimeout
+                : t.quiz.loadFailed}
         </Text>
         <TouchableOpacity
           style={styles.retryButton}

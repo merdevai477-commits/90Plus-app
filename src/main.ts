@@ -798,6 +798,19 @@ async function startServer() {
                         logger.warn('Failed to initialise notification queues (non-fatal):', queueErr);
                     }
 
+                    // Daily quiz packs are independent of Football API plan — always warm + cron.
+                    const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
+                    ensureDailyPacksForToday().catch((err) =>
+                        logger.error('Quiz pack warmup failed:', err),
+                    );
+                    cron.schedule('0 0 * * *', () => {
+                        logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
+                        ensureDailyPacksForToday().catch((err) =>
+                            logger.error('Daily quiz pack cron error:', err),
+                        );
+                    });
+                    logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
+
                     if (isFreePlan) {
                         logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined — heavy watchers (league preloader, preload, etc.) disabled to preserve quota. Match + prediction watchers still run with circuit-breaker protection.');
                     } else {
@@ -822,18 +835,6 @@ async function startServer() {
                         // ✅ Start AI coach 12-hour check-in (opt-in, twice daily)
                         const { startAICheckinNotifier } = await import('./services/ai-checkin-notifier.service');
                         startAICheckinNotifier();
-
-                        const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
-                        ensureDailyPacksForToday().catch((err) =>
-                            logger.error('Quiz pack warmup failed:', err),
-                        );
-                        cron.schedule('0 0 * * *', () => {
-                            logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
-                            ensureDailyPacksForToday().catch((err) =>
-                                logger.error('Daily quiz pack cron error:', err),
-                            );
-                        });
-                        logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
                     }
                     
                     // ✅ Start football background service for API optimization

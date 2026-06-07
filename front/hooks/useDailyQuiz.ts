@@ -135,11 +135,15 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     queryKey: dailyQuizQueryKey(lang, dateKey),
     queryFn: () => fetchAndCacheDaily(getToken, lang, dateKey),
     enabled: Boolean(lang) && isLoaded === true && isSignedIn === true,
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
     gcTime: 30 * 60 * 1000,
-    refetchOnMount: 'always',
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    refetchInterval: (q) =>
+      q.state.error instanceof Error && q.state.error.message === 'PACK_GENERATING'
+        ? 5000
+        : false,
     placeholderData:
       cachedData?.packDate === dateKey && cachedData.questions?.length
         ? cachedData
@@ -147,9 +151,12 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     retry: (failureCount, err) => {
       if (err instanceof Error && err.message === 'AUTH_REQUIRED') return false;
       if (err instanceof Error && err.message === 'RATE_LIMIT') return false;
+      if (err instanceof Error && err.message === 'PACK_GENERATING') return false;
+      if (err instanceof Error && err.message === 'REQUEST_TIMEOUT') return failureCount < 2;
       if (err instanceof Error && err.message === 'STALE_PACK') return failureCount < 1;
-      return failureCount < 2;
+      return failureCount < 1;
     },
+    retryDelay: (attempt) => Math.min(1000 * (attempt + 1), 4000),
   });
 
   return { ...query, dateKey };
@@ -170,9 +177,18 @@ export async function prefetchDailyQuiz(
   const token = await getClerkBearerToken(getToken);
   if (!token) return;
 
-  await queryClient.prefetchQuery({
-    queryKey: dailyQuizQueryKey(lang, dateKey),
-    queryFn: () => fetchAndCacheDaily(getToken, lang, dateKey),
-    staleTime: 5 * 60 * 1000,
-  });
+  const existing = queryClient.getQueryData<QuizDailyPayload>(
+    dailyQuizQueryKey(lang, dateKey),
+  );
+  if (existing?.questions?.length) return;
+
+  try {
+    await queryClient.prefetchQuery({
+      queryKey: dailyQuizQueryKey(lang, dateKey),
+      queryFn: () => fetchAndCacheDaily(getToken, lang, dateKey),
+      staleTime: 5 * 60 * 1000,
+    });
+  } catch {
+    // PACK_GENERATING / timeout — useDailyQuiz will poll when user opens quiz tab.
+  }
 }

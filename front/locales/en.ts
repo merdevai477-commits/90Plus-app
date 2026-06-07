@@ -625,6 +625,8 @@ export const en = {
     consecutiveAnswers: 'consecutive answers!',
     // New additions from quiz.tsx
     loadingQuestions: 'Loading questions...',
+    packPreparing: 'Preparing today\'s quiz… it will be ready in a moment',
+    requestTimeout: 'Loading took too long. Please try again.',
     noQuestionsAvailable: 'No questions available',
     imageQuiz: 'Image Quiz',
     footballQuiz: 'Football Quiz',

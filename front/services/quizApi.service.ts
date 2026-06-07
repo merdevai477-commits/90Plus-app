@@ -93,26 +93,40 @@ function getTimezone(): string {
   }
 }
 
+const QUIZ_FETCH_TIMEOUT_MS = 25_000;
+
 async function authFetch(
   path: string,
   token: string,
   init?: RequestInit,
 ): Promise<Response> {
-  const res = await fetch(`${getApiUrl()}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'x-user-timezone': getTimezone(),
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache',
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (res.status === 429) {
-    throw new Error('RATE_LIMIT');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), QUIZ_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${getApiUrl()}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'x-user-timezone': getTimezone(),
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+        ...(init?.headers ?? {}),
+      },
+    });
+    if (res.status === 429) {
+      throw new Error('RATE_LIMIT');
+    }
+    return res;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('REQUEST_TIMEOUT');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return res;
 }
 
 export const QuizApiService = {
@@ -126,11 +140,27 @@ export const QuizApiService = {
     );
     if (res.status === 401) throw new Error('AUTH_REQUIRED');
     if (res.status === 404) throw new Error('USER_NOT_FOUND');
-    if (res.status === 429) throw new Error('RATE_LIMIT');
-    const json = await safeJsonParse<{ status: string; data: QuizDailyPayload }>(
+
+    type DailyResponse = {
+      status?: string;
+      data?: QuizDailyPayload;
+      error?: string;
+      message?: string;
+      details?: { code?: string };
+    };
+
+    const json = await safeJsonParse<DailyResponse>(
       res,
-      { status: 'ERROR', data: null as unknown as QuizDailyPayload },
+      { status: 'ERROR' },
     );
+
+    const detailCode =
+      typeof json.details?.code === 'string' ? json.details.code : undefined;
+
+    if (res.status === 503 && detailCode === 'PACK_GENERATING') {
+      throw new Error('PACK_GENERATING');
+    }
+
     if (!res.ok || json?.status !== 'SUCCESS' || !json.data) {
       throw new Error(`API_ERROR_${res.status}`);
     }

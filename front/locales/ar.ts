@@ -716,6 +716,8 @@ export const ar = {
     consecutiveAnswers: 'إجابات متتالية!',
     // New additions from quiz.tsx
     loadingQuestions: 'جاري تحميل الأسئلة...',
+    packPreparing: 'جاري تجهيز أسئلة اليوم… سيظهر الكويز خلال لحظات',
+    requestTimeout: 'استغرق التحميل وقتاً طويلاً. حاول مرة أخرى.',
     noQuestionsAvailable: 'لا توجد أسئلة متاحة',
     imageQuiz: 'اختبار الصور',
     footballQuiz: 'كويز كرة القدم',
