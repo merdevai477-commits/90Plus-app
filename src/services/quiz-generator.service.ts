@@ -382,7 +382,7 @@ function parseQuestionsFromAi(
     });
   }
 
-  return out.map((q) => alignCorrectKeyWithBinding(q)).filter((q): q is StoredQuizQuestion => q !== null);
+  return out.map((q) => alignCorrectKeyWithBinding(q, language)).filter((q): q is StoredQuizQuestion => q !== null);
 }
 
 function validateDistribution(questions: StoredQuizQuestion[]): boolean {
@@ -458,11 +458,12 @@ function formatAvoidSample(questions: StoredQuizQuestion[], max = 24): string {
 async function enrichAndFilterValid(
   questions: StoredQuizQuestion[],
   packDate: string,
+  language: QuizLanguage,
 ): Promise<StoredQuizQuestion[]> {
   const enriched = await enrichQuizImages(questions, packDate);
   return enriched
     .filter((q): q is StoredQuizQuestion => q !== null)
-    .map((q) => verifyQuestionConsistency(q))
+    .map((q) => verifyQuestionConsistency(q, language))
     .filter((q): q is StoredQuizQuestion => {
       if (q === null) return false;
       if (q.type === 'guess_player' && !q.imageUrl?.trim()) {
@@ -667,7 +668,7 @@ async function buildPackWithReplacements(
     questions = await generateInitialQuestionsInBatches(language, packDate, avoidFromHistory);
   }
   questions = excludeHistoricalQuestions(
-    await enrichAndFilterValid(questions, packDate),
+    await enrichAndFilterValid(questions, packDate, language),
     avoidFromHistory,
   );
 
@@ -677,7 +678,7 @@ async function buildPackWithReplacements(
     );
     const batched = await generateInitialQuestionsInBatches(language, packDate, avoidFromHistory);
     const batchedValid = excludeHistoricalQuestions(
-      await enrichAndFilterValid(batched, packDate),
+      await enrichAndFilterValid(batched, packDate, language),
       avoidFromHistory,
     );
     questions = mergeUniqueQuestions(questions, batchedValid);
@@ -704,7 +705,7 @@ async function buildPackWithReplacements(
       avoidFromHistory,
     );
     const validReplacements = excludeHistoricalQuestions(
-      await enrichAndFilterValid(replacements, packDate),
+      await enrichAndFilterValid(replacements, packDate, language),
       avoidFromHistory,
     );
     questions = mergeUniqueQuestions(questions, validReplacements);
@@ -767,7 +768,7 @@ async function buildPackWithReplacements(
       avoidFromHistory,
     );
     const validReplacements = excludeHistoricalQuestions(
-      await enrichAndFilterValid(replacements, packDate),
+      await enrichAndFilterValid(replacements, packDate, language),
       avoidFromHistory,
     );
     questions = mergeUniqueQuestions(questions, validReplacements).slice(0, QUIZ_PACK_SIZE);

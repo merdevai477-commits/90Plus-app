@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import type { StoredQuizQuestion } from '../types/quiz.types';
+import type { StoredQuizQuestion, QuizLanguage } from '../types/quiz.types';
 import {
   scoreEntityNameMatch,
   isCrossScriptNamePair,
@@ -13,15 +13,22 @@ import {
 const MIN_OPTION_MATCH = 0.8;
 const MIN_CROSS_SCRIPT_MATCH = 0.55;
 
+function inferQuizLanguage(q: StoredQuizQuestion): QuizLanguage | null {
+  const match = q.id.match(/daily-\d{4}-\d{2}-\d{2}-(ar|en)-/);
+  return match ? (match[1] as QuizLanguage) : null;
+}
+
+function isArabicLanguagePack(q: StoredQuizQuestion, language?: QuizLanguage): boolean {
+  if (language === 'ar') return true;
+  if (language === 'en') return false;
+  if (inferQuizLanguage(q) === 'ar') return true;
+  return q.options.filter((o) => containsArabicScript(o.text)).length >= 2;
+}
+
 function matchThreshold(entityName: string, optionText: string): number {
   return isCrossScriptNamePair(entityName, optionText)
     ? MIN_CROSS_SCRIPT_MATCH
     : MIN_OPTION_MATCH;
-}
-
-function isArabicQuizQuestion(q: StoredQuizQuestion): boolean {
-  const arabicOptions = q.options.filter((o) => containsArabicScript(o.text)).length;
-  return arabicOptions >= 2;
 }
 
 function isLatinEntityName(entityName: string): boolean {
@@ -52,6 +59,7 @@ function bestMatchingOptionKey(
  */
 export function alignCorrectKeyWithBinding(
   q: StoredQuizQuestion,
+  language?: QuizLanguage,
 ): StoredQuizQuestion | null {
   const binding = q.imageBinding;
   if (!binding?.entityName?.trim()) return q;
@@ -65,23 +73,23 @@ export function alignCorrectKeyWithBinding(
 
   if (!needsAlignment) return q;
 
+  // Arabic daily packs keep imageBinding.entityName in English (for API lookup).
+  // Option text may be Arabic OR Latin — EN↔option fuzzy match is unreliable.
+  // correctKey was already validated at parse time; trust it for ar packs.
+  if (
+    isArabicLanguagePack(q, language) &&
+    isLatinEntityName(entityName) &&
+    hasValidCorrectKey(q)
+  ) {
+    return q;
+  }
+
   const best = bestMatchingOptionKey(q, entityName);
   const current = q.options.find((o) => o.key === q.correctKey);
   const threshold = matchThreshold(
     entityName,
     current?.text ?? q.options[0]?.text ?? entityName,
   );
-
-  // Arabic daily packs keep imageBinding.entityName in English (for API lookup)
-  // while options are Arabic — trust correctKey when we can't align cross-script.
-  if (isArabicQuizQuestion(q) && isLatinEntityName(entityName) && hasValidCorrectKey(q)) {
-    if (!best || best.score < MIN_CROSS_SCRIPT_MATCH) {
-      logger.info(
-        `[QuizValidate] Cross-script quiz ${q.id}: keeping correctKey ${q.correctKey} (entity "${entityName}", best ${best?.score.toFixed(2) ?? '0'})`,
-      );
-      return q;
-    }
-  }
 
   if (!best || best.score < threshold) {
     logger.warn(
@@ -113,8 +121,9 @@ export function alignCorrectKeyWithBinding(
 /** Final consistency check after image enrichment. */
 export function verifyQuestionConsistency(
   q: StoredQuizQuestion,
+  language?: QuizLanguage,
 ): StoredQuizQuestion | null {
-  const aligned = alignCorrectKeyWithBinding(q);
+  const aligned = alignCorrectKeyWithBinding(q, language);
   if (!aligned) return null;
 
   const binding = aligned.imageBinding;
@@ -122,6 +131,15 @@ export function verifyQuestionConsistency(
 
   const correctText =
     aligned.options.find((o) => o.key === aligned.correctKey)?.text ?? '';
+
+  if (
+    isArabicLanguagePack(aligned, language) &&
+    isLatinEntityName(binding.entityName) &&
+    hasValidCorrectKey(aligned)
+  ) {
+    return aligned;
+  }
+
   const matchScore = scoreEntityNameMatch(binding.entityName, correctText);
   const threshold = matchThreshold(binding.entityName, correctText);
 
