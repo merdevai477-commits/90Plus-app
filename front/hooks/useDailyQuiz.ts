@@ -23,6 +23,15 @@ import {
 
 const DATE_ROLLOVER_MS = 30_000;
 
+function isPackPreparingError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.message === 'PACK_GENERATING' ||
+    err.message === 'API_ERROR_503' ||
+    err.message === 'SERVER_WARMING'
+  );
+}
+
 export async function readCachedDailyQuiz(
   lang: QuizApiLanguage,
   dateKey = todayQuizDateKey(),
@@ -140,10 +149,7 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    refetchInterval: (q) =>
-      q.state.error instanceof Error && q.state.error.message === 'PACK_GENERATING'
-        ? 5000
-        : false,
+    refetchInterval: (q) => (isPackPreparingError(q.state.error) ? 5000 : false),
     placeholderData:
       cachedData?.packDate === dateKey && cachedData.questions?.length
         ? cachedData
@@ -151,7 +157,7 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     retry: (failureCount, err) => {
       if (err instanceof Error && err.message === 'AUTH_REQUIRED') return false;
       if (err instanceof Error && err.message === 'RATE_LIMIT') return false;
-      if (err instanceof Error && err.message === 'PACK_GENERATING') return false;
+      if (isPackPreparingError(err)) return false;
       if (err instanceof Error && err.message === 'REQUEST_TIMEOUT') return failureCount < 2;
       if (err instanceof Error && err.message === 'STALE_PACK') return failureCount < 1;
       return failureCount < 1;

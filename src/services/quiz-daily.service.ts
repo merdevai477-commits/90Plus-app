@@ -185,6 +185,29 @@ function dailyPackLockKey(dateStr: string, language: QuizLanguage): string {
   return `quiz:daily:lock:${dateStr}:${language}`;
 }
 
+function isCompletePack(questions: unknown): questions is StoredQuizQuestion[] {
+  return Array.isArray(questions) && questions.length === QUIZ_PACK_SIZE;
+}
+
+const PACK_READY_POLL_MS = 1_500;
+/** Short wait on GET /daily so warmup/background gen can finish before 503. */
+const PACK_READY_MAX_WAIT_MS = 20_000;
+
+async function waitForReadyDailyPack(
+  language: QuizLanguage,
+  packDate: Date,
+  timezone: string,
+  maxWaitMs = PACK_READY_MAX_WAIT_MS,
+): Promise<StoredQuizQuestion[] | null> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const pack = await loadReadyDailyPack(language, packDate, timezone);
+    if (pack) return pack;
+    await new Promise((r) => setTimeout(r, PACK_READY_POLL_MS));
+  }
+  return null;
+}
+
 /** Read a complete pack from Redis/DB only — never triggers AI generation. */
 async function loadReadyDailyPack(
   language: QuizLanguage,
@@ -195,13 +218,18 @@ async function loadReadyDailyPack(
   const cacheKey = `quiz:daily:${dateStr}:${language}`;
 
   const cached = await redisCacheService.get<StoredQuizQuestion[]>(cacheKey);
-  if (cached?.length === QUIZ_PACK_SIZE) return cached;
+  if (isCompletePack(cached)) return cached;
 
   const existing = await loadPackFromDb(packDate, language);
   if (existing) {
     const questions = existing.questions as unknown as StoredQuizQuestion[];
-    await redisCacheService.set(cacheKey, questions, PACK_CACHE_TTL);
-    return questions;
+    if (isCompletePack(questions)) {
+      await redisCacheService.set(cacheKey, questions, PACK_CACHE_TTL);
+      return questions;
+    }
+    logger.warn(
+      `[QuizDaily] Ignoring incomplete pack ${dateStr}/${language}: ${questions?.length ?? 0}/${QUIZ_PACK_SIZE}`,
+    );
   }
 
   return null;
@@ -313,13 +341,15 @@ export async function getOrCreateDailyPack(
   return withRedisLock(lockKey, 180_000, async () => {
     // Double-check cache and DB inside lock
     const doubleCached = await redisCacheService.get<StoredQuizQuestion[]>(cacheKey);
-    if (doubleCached?.length === QUIZ_PACK_SIZE) return doubleCached;
-    
+    if (isCompletePack(doubleCached)) return doubleCached;
+
     const again = await loadPackFromDb(packDate, language);
     if (again) {
       const q = again.questions as unknown as StoredQuizQuestion[];
-      await redisCacheService.set(cacheKey, q, PACK_CACHE_TTL);
-      return q;
+      if (isCompletePack(q)) {
+        await redisCacheService.set(cacheKey, q, PACK_CACHE_TTL);
+        return q;
+      }
     }
 
     const avoidFromHistory = await loadRecentPackQuestions(packDate, language);
@@ -452,12 +482,15 @@ export async function getDailyQuizForUser(
   const dateStr = packDateYmd(packDate, timezone);
   let pack = await loadReadyDailyPack(language, packDate, timezone);
 
-  if (!pack?.length) {
+  if (!pack) {
     const generating = await isPackGenerationInProgress(dateStr, language);
     if (!generating) {
       scheduleDailyPackGeneration(language, packDate, timezone);
     }
-    throw new Error('PACK_GENERATING');
+    pack = await waitForReadyDailyPack(language, packDate, timezone);
+    if (!pack) {
+      throw new Error('PACK_GENERATING');
+    }
   }
 
   const session = await getOrCreateSession(user.id, packDate, language);

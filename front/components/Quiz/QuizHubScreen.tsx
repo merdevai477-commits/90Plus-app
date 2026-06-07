@@ -951,6 +951,10 @@ export default function QuizHubScreen() {
   const HEADER_H = insets.top + 10 + 44 + 12;
   const errorMessage =
     error instanceof Error ? error.message : error ? String(error) : '';
+  const isPackPreparing =
+    errorMessage === 'PACK_GENERATING' ||
+    errorMessage === 'API_ERROR_503' ||
+    errorMessage === 'SERVER_WARMING';
 
   if (isSignedIn === false) {
     return (
@@ -971,16 +975,14 @@ export default function QuizHubScreen() {
     );
   }
 
-  if (errorMessage === 'PACK_GENERATING' || (loadingQuestions && !dailyData)) {
+  if (isPackPreparing || (loadingQuestions && !dailyData)) {
     return (
       <View style={[styles.root, styles.centered]}>
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <ActivityIndicator size="large" color={ACCENT_SOFT} />
         <Text style={styles.loadingText}>
-          {errorMessage === 'PACK_GENERATING'
-            ? t.quiz.packPreparing
-            : t.quiz.loadingQuestions}
+          {isPackPreparing ? t.quiz.packPreparing : t.quiz.loadingQuestions}
         </Text>
       </View>
     );

@@ -95,6 +95,25 @@ function getTimezone(): string {
 
 const QUIZ_FETCH_TIMEOUT_MS = 25_000;
 
+type DailyErrorResponse = {
+  status?: string;
+  data?: QuizDailyPayload;
+  error?: string;
+  message?: string;
+  details?: { code?: string };
+};
+
+function isPackGeneratingResponse(
+  res: Response,
+  json: DailyErrorResponse | null,
+): boolean {
+  if (res.status === 503) return true;
+  if (res.status === 502 && json?.error === 'E008') return true;
+  if (json?.details?.code === 'PACK_GENERATING') return true;
+  const msg = typeof json?.message === 'string' ? json.message.toLowerCase() : '';
+  return msg.includes('pack is being prepared') || msg.includes('being prepared');
+}
+
 async function authFetch(
   path: string,
   token: string,
@@ -141,24 +160,17 @@ export const QuizApiService = {
     if (res.status === 401) throw new Error('AUTH_REQUIRED');
     if (res.status === 404) throw new Error('USER_NOT_FOUND');
 
-    type DailyResponse = {
-      status?: string;
-      data?: QuizDailyPayload;
-      error?: string;
-      message?: string;
-      details?: { code?: string };
-    };
-
-    const json = await safeJsonParse<DailyResponse>(
+    const json = await safeJsonParse<DailyErrorResponse>(
       res,
       { status: 'ERROR' },
     );
 
-    const detailCode =
-      typeof json.details?.code === 'string' ? json.details.code : undefined;
-
-    if (res.status === 503 && detailCode === 'PACK_GENERATING') {
+    if (isPackGeneratingResponse(res, json)) {
       throw new Error('PACK_GENERATING');
+    }
+
+    if (res.status === 502 || res.status === 503) {
+      throw new Error('SERVER_WARMING');
     }
 
     if (!res.ok || json?.status !== 'SUCCESS' || !json.data) {
