@@ -11,6 +11,7 @@ import {
   getSimilarity,
   scorePlayerMatch,
   scoreEntityNameMatch,
+  isCrossScriptNamePair,
 } from './quiz-name-match.util';
 
 function getAliases(name: string): string[] {
@@ -282,10 +283,14 @@ export async function enrichQuizImages(
       q.options.find((o) => o.key === q.correctKey)?.text?.trim() ?? '';
 
     // Internal consistency: for player photos the correct answer option MUST be
-    // the same person as the image entity. If the model wired the correctKey to
-    // a different option than imageBinding.entityName, the question is broken —
-    // discard it rather than ship a photo that doesn't match the right answer.
-    if (binding.kind === 'player' && correctAnswerText && binding.entityName) {
+    // the same person as the image entity. Skip when cross-script (ar options +
+    // English entityName) — API photo resolution is the guard instead.
+    if (
+      binding.kind === 'player' &&
+      correctAnswerText &&
+      binding.entityName &&
+      !isCrossScriptNamePair(correctAnswerText, binding.entityName)
+    ) {
       const consistency = scoreEntityNameMatch(correctAnswerText, binding.entityName);
       if (consistency < 0.7) {
         logger.warn(
@@ -453,10 +458,12 @@ export async function enrichQuizImages(
         }
         if (correctAnswerText && bestMatchPlayerName) {
           const answerMatch = scoreEntityNameMatch(correctAnswerText, bestMatchPlayerName);
+          const crossScript = isCrossScriptNamePair(correctAnswerText, bestMatchPlayerName);
           // Tighten the bar when a club was named but unconfirmed: a global
           // search can surface a same-named player from another team.
-          const requiredAnswerMatch = teamSpecified && !teamResolved ? 0.9 : 0.82;
-          if (answerMatch < requiredAnswerMatch) {
+          const requiredAnswerMatch =
+            crossScript ? 0.5 : teamSpecified && !teamResolved ? 0.9 : 0.82;
+          if (!crossScript && answerMatch < requiredAnswerMatch) {
             logger.warn(
               `[QuizImage] Rejected ${q.id}: photo is "${bestMatchPlayerName}" but answer is "${correctAnswerText}" (${answerMatch.toFixed(2)}, required ${requiredAnswerMatch})`,
             );
