@@ -2051,6 +2051,46 @@ model ChatAnswerCache {
   @@map("chat_answer_cache")
 }
 
+// Persistent, structured cache of a single player's stats for a given
+// season/competition/statType. Survives restarts (unlike the in-memory ctx
+// cache) so repeated questions about the same player are instant and cheap.
+model PlayerStatsCache {
+  id            String   @id @default(uuid())
+  playerName    String
+  playerAliases String[]
+  apiPlayerId   Int?
+  competition   String?
+  season        String
+  statType      String
+  statValue     Json
+  aiResponse    String   @db.Text
+  questionAsked String   @db.Text
+  fetchedAt     DateTime @default(now())
+  expiresAt     DateTime
+
+  @@index([playerName])
+  @@index([expiresAt])
+  @@map("player_stats_cache")
+}
+
+// Arabic <-> English player name mapping with aliases. Lets the chat resolve
+// Arabic player queries (e.g. "محمد صلاح") to the English name API-Football
+// expects. Self-learns: once a name resolves via API, its apiPlayerId is
+// upserted here for instant future lookups.
+model PlayerNameMapping {
+  id          String   @id @default(uuid())
+  arabicName  String
+  englishName String
+  aliases     String[]
+  apiPlayerId Int      @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([arabicName])
+  @@index([englishName])
+  @@map("player_name_mapping")
+}
+
 // ============================================
 // XP & LEVEL SYSTEM
 // ============================================

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { seedCommonPlayerMappings } from '../src/services/player-name-resolver.service';
 
 /**
  * ⚠️ IMPORTANT COPYRIGHT WARNING ⚠️
@@ -450,6 +451,11 @@ async function main() {
     // Note: Sample data for users (coin transactions, follows, notifications)
     // are not created because seed.ts doesn't create users
     // All users must register fresh through the app
+
+    // Arabic <-> English player name mappings for the AI chat resolver.
+    // Idempotent (upsert on apiPlayerId) so this is safe in any environment.
+    console.log('🔤 Seeding player name mappings (AR↔EN)...');
+    await seedCommonPlayerMappings();
 
     console.log('✅ Database seeded successfully!');
     console.log('📊 Summary:');

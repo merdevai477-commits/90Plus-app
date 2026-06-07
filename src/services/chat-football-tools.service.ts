@@ -5,7 +5,9 @@
 
 import { footballService } from './football.service';
 import { logger } from '../utils/logger';
-import { scoreEntityNameMatch } from './quiz-name-match.util';
+import { scoreEntityNameMatch, containsArabicScript } from './quiz-name-match.util';
+import { resolvePlayerName, learnPlayerMapping } from './player-name-resolver.service';
+import { getCachedOrFetch } from './player-stats-cache.service';
 
 const LEAGUE_ALIASES: Array<{ pattern: RegExp; id: number; label: string }> = [
   { pattern: /premier\s*league|بريمير|الدوري\s*الإنجليزي|الانجليزي/i, id: 39, label: 'Premier League' },
@@ -68,6 +70,32 @@ async function cachedLookup(
   return value;
 }
 
+// Arabic stop-words that are never part of a player name — stripped from
+// Arabic-script name candidates so "كام هدف لمحمد صلاح" yields "محمد صلاح".
+const ARABIC_NAME_STOPWORDS = new Set([
+  'كام', 'كم', 'هدف', 'اهداف', 'أهداف', 'سجل', 'لعب', 'مباريات', 'مباراة',
+  'اسيست', 'تمريرات', 'حاسمة', 'بطاقات', 'صفراء', 'حمراء', 'تقييم', 'في',
+  'مع', 'من', 'عن', 'هو', 'مين', 'كان', 'هذا', 'هذه', 'الموسم', 'لاعب',
+  'إحصائيات', 'احصائيات', 'معلومات', 'كرة', 'القدم', 'دوري', 'الدوري', 'و',
+  'يا', 'ال', 'علي', 'على', 'عند', 'له', 'ل',
+]);
+
+function extractArabicNameSpans(message: string): string[] {
+  const out: string[] = [];
+  // Grab runs of Arabic words, then drop stop-words to isolate the name.
+  for (const m of message.matchAll(/[\u0600-\u06FF]+(?:\s+[\u0600-\u06FF]+){0,4}/g)) {
+    const tokens = m[0]
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const nameTokens = tokens.filter((t) => !ARABIC_NAME_STOPWORDS.has(t));
+    if (nameTokens.length >= 1 && nameTokens.length <= 3) {
+      out.push(nameTokens.join(' '));
+    }
+  }
+  return out;
+}
+
 function extractNameCandidates(message: string): string[] {
   const out = new Set<string>();
 
@@ -86,10 +114,44 @@ function extractNameCandidates(message: string): string[] {
     if (cleaned.length >= 3) out.add(cleaned);
   }
 
+  // Arabic-script name spans (e.g. "محمد صلاح") — the patterns above mostly
+  // capture Latin/quoted text, so Arabic queries need their own extraction.
+  for (const span of extractArabicNameSpans(message)) {
+    out.add(span);
+  }
+
   return Array.from(out)
     .map((n) => n.replace(/[؟?!.,،]+$/g, '').trim())
-    .filter((n) => n.length >= 3 && n.split(/\s+/).length <= 5)
-    .slice(0, 3);
+    // Allow 2-char Arabic names (e.g. "حكيمي" is longer, but short last names);
+    // keep Latin >= 3 to avoid noise.
+    .filter((n) => {
+      if (!n) return false;
+      const minLen = containsArabicScript(n) ? 2 : 3;
+      return n.length >= minLen && n.split(/\s+/).length <= 5;
+    })
+    .slice(0, 4);
+}
+
+type PlayerStatType =
+  | 'goals'
+  | 'assists'
+  | 'appearances'
+  | 'yellow_cards'
+  | 'red_cards'
+  | 'rating'
+  | 'general';
+
+function detectStatType(message: string): PlayerStatType {
+  const m = message.toLowerCase();
+  if (/بطاقات?\s*حمراء|red\s*cards?/i.test(message)) return 'red_cards';
+  if (/بطاقات?\s*صفراء|yellow\s*cards?/i.test(message)) return 'yellow_cards';
+  if (/اسيست|أسيست|تمريرات?\s*حاسمة|assists?/i.test(message)) return 'assists';
+  if (/مباريات|لعب\s*كام|appearances?|games?|matches\s*played/i.test(message)) {
+    return 'appearances';
+  }
+  if (/تقييم|rating/i.test(m)) return 'rating';
+  if (/هدف|اهداف|أهداف|goals?|scored/i.test(message)) return 'goals';
+  return 'general';
 }
 
 function detectLeague(message: string): { id: number; label: string } | null {
@@ -146,21 +208,102 @@ function formatPlayerBlock(name: string, row: any): string {
   return lines.join('\n');
 }
 
-async function fetchPlayerContext(name: string): Promise<string | null> {
+interface PlayerStatsRow {
+  aiResponse: string;
+  statValue: unknown;
+  apiPlayerId?: number;
+  aliases?: string[];
+}
+
+const PLAYER_SEASON = currentFootballSeason();
+
+/**
+ * Resolve a raw player name (AR/EN) and fetch its stats block. Uses the
+ * name-mapping resolver to (a) translate Arabic → English and (b) skip the
+ * expensive league-scan search when a known apiPlayerId exists.
+ */
+export async function fetchPlayerStatsRow(rawName: string): Promise<PlayerStatsRow | null> {
   if (!footballService.isConfigured()) return null;
   try {
-    const results = await footballService.searchPlayers(name);
-    const match = pickBestPlayerMatch(name, results);
-    if (!match) return null;
+    const resolved = await resolvePlayerName(rawName);
+    const searchName = resolved?.english ?? rawName;
 
-    const playerId = match.player.id;
-    const detailed = await footballService.getPlayerStatistics(playerId);
-    const row = detailed?.[0] ?? match;
-    return formatPlayerBlock(name, row);
+    let row: any = null;
+    let apiPlayerId = resolved?.apiPlayerId;
+
+    // Fast path: known API id → fetch stats directly, no search needed.
+    if (apiPlayerId) {
+      const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
+      row = detailed?.[0] ?? null;
+    }
+
+    // Fallback: search by (English) name across top leagues.
+    if (!row) {
+      const results = await footballService.searchPlayers(searchName);
+      const match = pickBestPlayerMatch(searchName, results);
+      if (!match) return null;
+      apiPlayerId = match.player?.id ?? apiPlayerId;
+      if (apiPlayerId) {
+        const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
+        row = detailed?.[0] ?? match;
+      } else {
+        row = match;
+      }
+
+      // Self-learn: persist the discovered mapping for instant future lookups.
+      if (apiPlayerId && row?.player?.name) {
+        void learnPlayerMapping({
+          rawQuery: rawName,
+          englishName: row.player.name,
+          apiPlayerId,
+        });
+      }
+    }
+
+    if (!row) return null;
+
+    return {
+      aiResponse: formatPlayerBlock(searchName, row),
+      statValue: row,
+      apiPlayerId,
+      aliases: Array.from(
+        new Set([rawName, searchName, row?.player?.name].filter(Boolean) as string[]),
+      ),
+    };
   } catch (err) {
     logger.warn('[ChatFootball] player lookup failed:', err);
     return null;
   }
+}
+
+/**
+ * Player context with two cache layers: L1 in-memory (ctxCache, per-process,
+ * fast) in front of L2 Postgres (PlayerStatsCache, persistent across restarts).
+ */
+async function fetchPlayerContextCached(
+  rawName: string,
+  message: string,
+): Promise<string | null> {
+  const statType = detectStatType(message);
+  const league = detectLeague(message);
+  const isLive = isLiveMatchesQuery(message);
+
+  return cachedLookup(
+    `player:${rawName.toLowerCase()}:${statType}:${league?.id ?? 'all'}`,
+    30 * 60_000,
+    async () => {
+      const result = await getCachedOrFetch({
+        playerName: rawName,
+        statType,
+        competition: league?.label ?? null,
+        season: String(PLAYER_SEASON),
+        questionAsked: message,
+        isLive,
+        fetcher: () => fetchPlayerStatsRow(rawName),
+      });
+      return result?.aiResponse ?? null;
+    },
+  );
 }
 
 async function fetchStandingsContext(message: string): Promise<string | null> {
@@ -285,7 +428,7 @@ export async function buildFootballChatContext(
   }
   if (wantsPlayer) {
     for (const name of extractNameCandidates(message)) {
-      tasks.push(cachedLookup(`player:${name.toLowerCase()}`, 30 * 60_000, () => fetchPlayerContext(name)));
+      tasks.push(fetchPlayerContextCached(name, message));
     }
   }
 
