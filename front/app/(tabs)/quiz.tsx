@@ -4,12 +4,14 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
 
 import QuizHubScreen from '../../components/Quiz/QuizHubScreen';
+import { useHideTabBarOnFocus } from '../../contexts/TabBarContext';
 import { prefetchDailyQuiz, dailyQuizQueryKey } from '../../hooks/useDailyQuiz';
 import { todayQuizDateKey } from '../../utils/quizDateKey';
 import { useLanguageStore } from '../../src/i18n/store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function QuizTabScreen() {
+  useHideTabBarOnFocus();
   const queryClient = useQueryClient();
   const { getToken } = useAuth();
   const appLanguage = useLanguageStore((s) => s.language);

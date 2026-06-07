@@ -236,7 +236,7 @@ export const reelUploadNotification = {
                 content: {
                     title: tpl.reelUploadSuccessTitle,
                     body: message ?? tpl.reelUploadSuccessBody,
-                    sound: 'default',      // ✅ YES sound on success
+                    sound: true,
                     data: { type: 'reel_upload_ok' },
                     ...(Platform.OS === 'android' ? {
                         android: {
@@ -274,7 +274,7 @@ export const reelUploadNotification = {
                 content: {
                     title: tpl.reelUploadFailedTitle,
                     body: message,
-                    sound: 'default',       // ✅ YES sound on failure
+                    sound: true,
                     data: { type: 'reel_upload_error' },
                     ...(Platform.OS === 'android' ? {
                         android: {

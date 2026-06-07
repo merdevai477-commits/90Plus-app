@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
-import BottomNav from './BottomNav';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
@@ -1761,8 +1760,6 @@ export default function MatchesHubScreenV2() {
           </View>
         </View>
       </Modal>
-
-      <BottomNav />
     </View>
   );
 }

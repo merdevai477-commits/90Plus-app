@@ -75,7 +75,6 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#32cd32',
-        sound: 'default',
     });
 
     await Notifications.setNotificationChannelAsync('match-updates', {
@@ -83,7 +82,6 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 500, 250, 500],
         lightColor: '#22c55e',
-        sound: 'default',
     });
 
     await Notifications.setNotificationChannelAsync('social', {
@@ -91,7 +89,6 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#a855f7',
-        sound: 'default',
     });
 
     await Notifications.setNotificationChannelAsync('general', {
@@ -99,7 +96,6 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         importance: Notifications.AndroidImportance.DEFAULT,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#32cd32',
-        sound: 'default',
     });
 }
 

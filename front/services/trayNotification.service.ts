@@ -90,7 +90,7 @@ export async function presentTrayNotification(params: {
             content: {
                 title: params.title,
                 body: params.body,
-                sound: 'default',
+                sound: true,
                 data: params.data ?? {},
                 ...(Platform.OS === 'android'
                     ? {

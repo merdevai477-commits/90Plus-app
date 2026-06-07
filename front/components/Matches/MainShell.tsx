@@ -4,7 +4,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
-import BottomNav from '../../app/(tabs)/BottomNav';
 import {
   BG_BASE,
   TEXT_PRIMARY,
@@ -69,7 +68,6 @@ export function MainShell({ title, subtitle, children, onBackPress, headerRight 
         </View>
         {children}
       </ScrollView>
-      <BottomNav />
     </View>
   );
 }

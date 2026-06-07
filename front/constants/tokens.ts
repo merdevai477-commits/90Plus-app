@@ -48,13 +48,14 @@ export const RATING_TEAL  = '#11998E';
 
 // ── Tab colors ────────────────────────────────────────────────────────────────
 export const TAB_COLORS = {
-  Home:       '#f59e0b',
-  Leagues:    '#3B82F6',
+  Home:       '#FFFFFF',
+  Leagues:    '#22C55E',
+  Matches:    '#22C55E',
   Quiz:       '#3B82F6',
-  AI:         '#a855f7',
-  Profile:    '#a855f7',
+  AI:         '#A855F7',
+  Profile:    '#3B82F6',
   Highlights: '#ef4444',
-  Rank:       '#ec4899',
+  Rank:       '#F97316',
 } as const;
 
 // ── Unified radii (hubs, cards, chips) ────────────────────────────────────────
