@@ -65,12 +65,17 @@ export function alignCorrectKeyWithBinding(
 
   if (!needsAlignment) return q;
 
+  const best = bestMatchingOptionKey(q, entityName);
+  const current = q.options.find((o) => o.key === q.correctKey);
+  const threshold = matchThreshold(
+    entityName,
+    current?.text ?? q.options[0]?.text ?? entityName,
+  );
+
   // Arabic daily packs keep imageBinding.entityName in English (for API lookup)
   // while options are Arabic — trust correctKey when we can't align cross-script.
   if (isArabicQuizQuestion(q) && isLatinEntityName(entityName) && hasValidCorrectKey(q)) {
-    const best = bestMatchingOptionKey(q, entityName);
-    const threshold = MIN_CROSS_SCRIPT_MATCH;
-    if (!best || best.score < threshold) {
+    if (!best || best.score < MIN_CROSS_SCRIPT_MATCH) {
       logger.info(
         `[QuizValidate] Cross-script quiz ${q.id}: keeping correctKey ${q.correctKey} (entity "${entityName}", best ${best?.score.toFixed(2) ?? '0'})`,
       );
@@ -78,8 +83,6 @@ export function alignCorrectKeyWithBinding(
     }
   }
 
-  const best = bestMatchingOptionKey(q, entityName);
-  const threshold = matchThreshold(entityName, q.options[0]?.text ?? entityName);
   if (!best || best.score < threshold) {
     logger.warn(
       `[QuizValidate] No option matches "${entityName}" for ${q.id} (best ${best?.score.toFixed(2) ?? '0'})`,
@@ -87,11 +90,9 @@ export function alignCorrectKeyWithBinding(
     return null;
   }
 
-  const current = q.options.find((o) => o.key === q.correctKey);
   const currentScore = current
     ? scoreEntityNameMatch(entityName, current.text)
     : 0;
-  const threshold = matchThreshold(entityName, current?.text ?? entityName);
 
   if (currentScore >= threshold && best.key === q.correctKey) {
     return q;
