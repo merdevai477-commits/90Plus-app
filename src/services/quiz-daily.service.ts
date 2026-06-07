@@ -222,13 +222,13 @@ async function loadReadyDailyPack(
 
   const existing = await loadPackFromDb(packDate, language);
   if (existing) {
-    const questions = existing.questions as unknown as StoredQuizQuestion[];
+    const questions = existing.questions as unknown;
     if (isCompletePack(questions)) {
       await redisCacheService.set(cacheKey, questions, PACK_CACHE_TTL);
       return questions;
     }
     logger.warn(
-      `[QuizDaily] Ignoring incomplete pack ${dateStr}/${language}: ${questions?.length ?? 0}/${QUIZ_PACK_SIZE}`,
+      `[QuizDaily] Ignoring incomplete pack ${dateStr}/${language}: ${Array.isArray(questions) ? questions.length : 0}/${QUIZ_PACK_SIZE}`,
     );
   }
 
