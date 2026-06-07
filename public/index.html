@@ -3,15 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="description" content="90Plus — نتائج مباشرة، كويزات، تنبؤات، ريلز، ومجتمع كروي في تطبيق واحد. حمّل الآن مجاناً." />
+    <meta name="description" content="90Plus — نتائج مباشرة، كويزات، تنبؤات، ريلز، ومجتمع كروي في تطبيق واحد. حمّل مجاناً على iOS و Android." />
     <meta name="theme-color" content="#030208" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://90plus.pro/" />
     <meta property="og:title" content="90Plus — عالمك الكروي في جيبك" />
     <meta property="og:description" content="نتائج مباشرة، كويزات يومية، تنبؤات، ريلز، وذكاء اصطناعي كروي — كل ما يحتاجه المشجع الحقيقي." />
     <meta property="og:url" content="https://90plus.pro/" />
     <meta property="og:image" content="https://90plus.pro/90Plus.png" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ar_EG" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="90Plus — عالمك الكروي في جيبك" />
+    <meta name="twitter:description" content="حمّل تطبيق 90Plus مجاناً — نتائج مباشرة، كويزات، تنبؤات، وريلز." />
+    <meta name="twitter:image" content="https://90plus.pro/90Plus.png" />
     <title>90Plus — عالمك الكروي في جيبك</title>
     <link rel="icon" href="/90Plus.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/90Plus.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -22,14 +30,13 @@
         --bg-2: #080612;
         --purple: #7c3aed;
         --purple-soft: #a78bfa;
-        --blue: #3b82f6;
         --gold: #f5c518;
-        --gold-dark: #d4a017;
         --ink: rgba(255, 255, 255, 0.94);
         --muted: rgba(255, 255, 255, 0.58);
         --glass: rgba(255, 255, 255, 0.04);
         --glass-border: rgba(255, 255, 255, 0.08);
         --shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+        --header-h: 72px;
       }
 
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,17 +55,12 @@
           radial-gradient(700px 400px at 12% -5%, rgba(124, 58, 237, 0.1), transparent 55%),
           radial-gradient(560px 320px at 88% 0%, rgba(59, 130, 246, 0.06), transparent 52%),
           linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
-        background-attachment: scroll;
         min-height: 100vh;
         min-height: 100dvh;
         overflow-x: hidden;
       }
 
-      img {
-        max-width: 100%;
-        height: auto;
-        display: block;
-      }
+      img { max-width: 100%; height: auto; display: block; }
 
       .grain {
         position: fixed;
@@ -75,50 +77,28 @@
         z-index: 0;
       }
 
-      .page {
-        position: relative;
-        z-index: 1;
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        background: rgba(3, 2, 8, 0.72);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .header-inner {
         width: 100%;
         max-width: 1120px;
         margin: 0 auto;
         padding:
-          max(16px, env(safe-area-inset-top))
-          max(16px, env(safe-area-inset-right))
-          max(40px, env(safe-area-inset-bottom))
-          max(16px, env(safe-area-inset-left));
-      }
-
-      /* Header */
-      header {
+          14px max(16px, env(safe-area-inset-right))
+          14px max(16px, env(safe-area-inset-left));
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        padding: 4px 0 28px;
-      }
-
-      .header-links {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 8px;
-      }
-
-      @media (max-width: 599px) {
-        header {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 14px;
-          padding-bottom: 22px;
-        }
-
-        .header-links {
-          align-items: stretch;
-        }
-
-        header nav {
-          justify-content: center;
-        }
+        gap: 16px;
+        min-height: var(--header-h);
       }
 
       .brand {
@@ -127,166 +107,83 @@
         gap: 12px;
         text-decoration: none;
         color: inherit;
+        flex-shrink: 0;
       }
 
       .brand img {
-        width: 44px;
-        height: 44px;
+        width: 40px;
+        height: 40px;
         object-fit: contain;
       }
 
       .brand span {
         font-family: "Fraunces", serif;
         font-weight: 700;
-        font-size: 1.25rem;
+        font-size: 1.2rem;
         letter-spacing: -0.02em;
       }
 
-      nav {
+      .site-nav {
         display: flex;
-        gap: 6px;
-        flex-wrap: nowrap;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
         justify-content: flex-end;
       }
 
-      @media (max-width: 599px) {
-        .brand { justify-content: center; }
-        nav {
-          justify-content: center;
-          flex-wrap: wrap;
-        }
-      }
-
-      nav a {
+      .site-nav a {
         color: var(--muted);
         text-decoration: none;
         font-size: 0.8125rem;
         font-weight: 500;
-        padding: 8px 12px;
+        padding: 8px 14px;
         border-radius: 999px;
         border: 1px solid transparent;
         white-space: nowrap;
+        transition: color 0.2s, background 0.2s, border-color 0.2s;
         -webkit-tap-highlight-color: transparent;
       }
 
-      @media (max-width: 359px) {
-        nav a {
-          font-size: 0.75rem;
-          padding: 7px 10px;
-        }
-      }
-
       @media (hover: hover) {
-        nav a:hover {
+        .site-nav a:hover {
           color: var(--ink);
           border-color: var(--glass-border);
           background: var(--glass);
         }
       }
 
-      nav.auth-nav a.nav-primary {
-        color: var(--ink);
-        background: rgba(124, 58, 237, 0.2);
-        border-color: rgba(167, 139, 250, 0.35);
-        font-weight: 600;
-      }
-
-      .auth-row {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+      .page {
+        position: relative;
+        z-index: 1;
         width: 100%;
-        margin-bottom: 20px;
+        max-width: 1120px;
+        margin: 0 auto;
+        padding:
+          0
+          max(16px, env(safe-area-inset-right))
+          max(48px, env(safe-area-inset-bottom))
+          max(16px, env(safe-area-inset-left));
       }
 
-      @media (min-width: 520px) {
-        .auth-row {
-          flex-direction: row;
-          flex-wrap: wrap;
-        }
-      }
-
-      .auth-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        width: 100%;
-        padding: 14px 20px;
-        border-radius: 16px;
-        text-decoration: none;
-        font-weight: 700;
-        font-size: 1rem;
-        -webkit-tap-highlight-color: transparent;
-      }
-
-      @media (min-width: 520px) {
-        .auth-btn { width: auto; min-width: 180px; }
-      }
-
-      .auth-btn.sign-in {
-        color: #fff;
-        background: linear-gradient(135deg, #7c3aed, #5b21b6);
-        border: 1px solid rgba(167, 139, 250, 0.4);
-        box-shadow: 0 10px 32px rgba(124, 58, 237, 0.35);
-      }
-
-      .auth-btn.sign-up {
-        color: var(--ink);
-        background: var(--glass);
-        border: 1px solid var(--glass-border);
-      }
-
-      .auth-btn.account {
-        color: var(--purple-soft);
-        background: transparent;
-        border: 1px solid rgba(167, 139, 250, 0.25);
-        font-weight: 600;
-        font-size: 0.9375rem;
-        padding: 12px 18px;
-      }
-
-      .section-divider {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 8px 0 20px;
-        color: var(--muted);
-        font-size: 0.8125rem;
-        font-weight: 500;
-      }
-
-      .section-divider::before,
-      .section-divider::after {
-        content: "";
-        flex: 1;
-        height: 1px;
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      /* Hero */
       .hero {
         display: flex;
         flex-direction: column;
-        gap: 32px;
+        gap: 40px;
         align-items: stretch;
-        padding: 8px 0 40px;
+        padding: 32px 0 48px;
       }
 
       @media (min-width: 900px) {
         .hero {
           display: grid;
-          grid-template-columns: 1.1fr 0.9fr;
-          gap: 48px;
+          grid-template-columns: 1.05fr 0.95fr;
+          gap: 56px;
           align-items: center;
-          padding: 40px 0 72px;
+          padding: 56px 0 80px;
         }
       }
 
-      .hero-copy {
-        width: 100%;
-        min-width: 0;
-      }
+      .hero-copy { width: 100%; min-width: 0; }
 
       .eyebrow {
         display: inline-flex;
@@ -306,18 +203,17 @@
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #ef4444;
-        box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+        background: #22c55e;
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
       }
 
       h1 {
-        font-family: "Fraunces", Georgia, "Times New Roman", serif;
-        font-size: clamp(1.85rem, 8vw, 3.4rem);
+        font-family: "Fraunces", Georgia, serif;
+        font-size: clamp(2rem, 7vw, 3.5rem);
         font-weight: 700;
-        line-height: 1.2;
+        line-height: 1.15;
         letter-spacing: -0.03em;
-        margin-bottom: 16px;
-        word-wrap: break-word;
+        margin-bottom: 18px;
       }
 
       h1 .gold {
@@ -328,11 +224,11 @@
       }
 
       .lead {
-        font-size: clamp(0.9375rem, 3.8vw, 1.15rem);
+        font-size: clamp(1rem, 3.5vw, 1.125rem);
         line-height: 1.75;
         color: var(--muted);
-        max-width: 34rem;
-        margin-bottom: 28px;
+        max-width: 36rem;
+        margin-bottom: 32px;
       }
 
       .store-row {
@@ -342,7 +238,7 @@
         width: 100%;
       }
 
-      @media (min-width: 520px) {
+      @media (min-width: 480px) {
         .store-row {
           flex-direction: row;
           flex-wrap: wrap;
@@ -355,28 +251,31 @@
         justify-content: center;
         gap: 12px;
         width: 100%;
-        padding: 14px 20px;
-        border-radius: 16px;
+        padding: 14px 22px;
+        border-radius: 14px;
         text-decoration: none;
         color: #fff;
         border: 1px solid var(--glass-border);
-        background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
         min-width: 0;
+        transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
         -webkit-tap-highlight-color: transparent;
       }
 
-      @media (min-width: 520px) {
+      @media (min-width: 480px) {
         .store-badge {
           width: auto;
-          min-width: 200px;
+          min-width: 210px;
           justify-content: flex-start;
         }
       }
 
       @media (hover: hover) {
         .store-badge:hover {
-          border-color: rgba(245, 197, 24, 0.35);
+          transform: translateY(-2px);
+          border-color: rgba(245, 197, 24, 0.4);
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
         }
       }
 
@@ -393,73 +292,82 @@
         font-size: 0.68rem;
         opacity: 0.75;
         font-weight: 500;
+        letter-spacing: 0.02em;
       }
 
       .store-badge .big {
-        font-size: 1rem;
+        font-size: 1.05rem;
         font-weight: 700;
       }
 
-      .store-badge.gold {
-        background: linear-gradient(135deg, rgba(245,197,24,0.14), rgba(0,0,0,0.2));
-        border-color: rgba(245, 197, 24, 0.22);
+      .store-badge.primary {
+        background: linear-gradient(135deg, rgba(245,197,24,0.18), rgba(124,58,237,0.12));
+        border-color: rgba(245, 197, 24, 0.28);
       }
 
-      /* Phone mockup */
+      .hero-note {
+        margin-top: 16px;
+        font-size: 0.8125rem;
+        color: rgba(255, 255, 255, 0.42);
+        line-height: 1.5;
+      }
+
       .hero-visual {
         position: relative;
         display: flex;
         justify-content: center;
         width: 100%;
-        overflow: hidden;
       }
 
       .phone-frame {
         position: relative;
         width: min(100%, 280px);
         max-width: 72vw;
-        aspect-ratio: 9 / 18.5;
-        border-radius: 32px;
-        padding: 10px;
-        background: linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+        aspect-ratio: 9 / 19;
+        border-radius: 36px;
+        padding: 11px;
+        background: linear-gradient(160deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.1);
       }
 
       @media (min-width: 900px) {
         .phone-frame {
-          width: min(100%, 320px);
+          width: min(100%, 300px);
           max-width: none;
-          border-radius: 36px;
-          padding: 12px;
         }
+      }
+
+      .phone-notch {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 88px;
+        height: 24px;
+        border-radius: 999px;
+        background: #030208;
+        z-index: 2;
       }
 
       .phone-screen {
         height: 100%;
         border-radius: 28px;
         background:
-          radial-gradient(circle at 50% 20%, rgba(124,58,237,0.22), transparent 55%),
+          radial-gradient(circle at 50% 18%, rgba(124,58,237,0.28), transparent 55%),
           linear-gradient(180deg, #0d0018 0%, #030208 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 16px;
+        gap: 14px;
         overflow: hidden;
         position: relative;
       }
 
-      .phone-screen::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: radial-gradient(circle at 50% 30%, rgba(123,47,190,0.18), transparent 60%);
-      }
-
       .phone-screen img {
-        width: 88px;
-        height: 88px;
+        width: 80px;
+        height: 80px;
         object-fit: contain;
         position: relative;
         z-index: 1;
@@ -469,10 +377,10 @@
       .phone-tagline {
         position: relative;
         z-index: 1;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         color: rgba(255,255,255,0.45);
-        letter-spacing: 0.12em;
-        font-weight: 500;
+        letter-spacing: 0.14em;
+        font-weight: 600;
       }
 
       .phone-chips {
@@ -483,16 +391,15 @@
         gap: 8px;
         justify-content: center;
         padding: 0 16px;
-        margin-top: 8px;
       }
 
       .chip {
-        font-size: 0.68rem;
+        font-size: 0.65rem;
         padding: 5px 10px;
         border-radius: 999px;
-        background: rgba(124, 58, 237, 0.25);
-        border: 1px solid rgba(167, 139, 250, 0.3);
-        color: rgba(255,255,255,0.85);
+        background: rgba(124, 58, 237, 0.28);
+        border: 1px solid rgba(167, 139, 250, 0.32);
+        color: rgba(255,255,255,0.9);
         font-weight: 600;
       }
 
@@ -504,93 +411,82 @@
         .phone-glow {
           display: block;
           position: absolute;
-          width: 140%;
-          height: 60%;
-          bottom: -20%;
-          left: -20%;
-          background: radial-gradient(ellipse, rgba(124,58,237,0.12), transparent 70%);
+          width: 130%;
+          height: 55%;
+          bottom: -18%;
+          left: -15%;
+          background: radial-gradient(ellipse, rgba(124,58,237,0.14), transparent 70%);
           pointer-events: none;
         }
       }
 
-      /* Stats */
       .stats {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
-        margin-bottom: 40px;
+        margin-bottom: 56px;
       }
 
       @media (min-width: 640px) {
         .stats {
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-          margin-bottom: 56px;
+          gap: 14px;
         }
       }
 
       .stat {
-        padding: 16px 12px;
+        padding: 18px 14px;
         border-radius: 16px;
         background: var(--glass);
         border: 1px solid var(--glass-border);
         text-align: center;
-        min-width: 0;
-      }
-
-      @media (min-width: 640px) {
-        .stat { padding: 18px 16px; border-radius: 18px; }
       }
 
       .stat strong {
         display: block;
-        font-family: "Fraunces", Georgia, serif;
-        font-size: clamp(1.15rem, 4vw, 1.5rem);
+        font-family: "Fraunces", serif;
+        font-size: clamp(1.2rem, 4vw, 1.45rem);
         font-weight: 700;
         color: var(--gold);
         margin-bottom: 4px;
       }
 
       .stat span {
-        font-size: clamp(0.7rem, 2.8vw, 0.78rem);
+        font-size: 0.78rem;
         color: var(--muted);
         font-weight: 500;
         line-height: 1.4;
       }
 
-      /* Features */
       .section-head {
         text-align: center;
-        margin-bottom: 32px;
+        margin-bottom: 36px;
       }
 
       .section-head h2 {
         font-family: "Fraunces", serif;
-        font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+        font-size: clamp(1.65rem, 3.5vw, 2.25rem);
         font-weight: 700;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
       }
 
       .section-head p {
         color: var(--muted);
-        max-width: 32rem;
+        max-width: 34rem;
         margin: 0 auto;
-        line-height: 1.65;
+        line-height: 1.7;
+        font-size: 1rem;
       }
 
       .features {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
-        gap: 12px;
-        margin-bottom: 40px;
+        gap: 14px;
+        margin-bottom: 56px;
       }
 
       @media (min-width: 640px) {
-        .features {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 16px;
-          margin-bottom: 56px;
-        }
+        .features { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
       }
 
       @media (min-width: 960px) {
@@ -598,21 +494,15 @@
       }
 
       .feature {
-        padding: 20px 18px;
-        border-radius: 18px;
+        padding: 24px 22px;
+        border-radius: 20px;
         background: var(--glass);
         border: 1px solid var(--glass-border);
-        min-width: 0;
-      }
-
-      @media (min-width: 640px) {
-        .feature { padding: 24px 22px; border-radius: 20px; }
+        transition: border-color 0.2s;
       }
 
       @media (hover: hover) {
-        .feature:hover {
-          border-color: rgba(167, 139, 250, 0.22);
-        }
+        .feature:hover { border-color: rgba(167, 139, 250, 0.24); }
       }
 
       .feature-icon {
@@ -622,7 +512,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.4rem;
+        font-size: 1.35rem;
         margin-bottom: 16px;
         background: rgba(124, 58, 237, 0.12);
         border: 1px solid rgba(167, 139, 250, 0.18);
@@ -640,167 +530,126 @@
         color: var(--muted);
       }
 
-      /* CTA */
       .cta {
         text-align: center;
-        padding: 28px 18px;
-        border-radius: 22px;
+        padding: 40px 24px;
+        border-radius: 28px;
         background:
-          linear-gradient(135deg, rgba(124,58,237,0.12), rgba(0,0,0,0.35)),
+          linear-gradient(135deg, rgba(124,58,237,0.14), rgba(0,0,0,0.35)),
           var(--glass);
-        border: 1px solid rgba(167, 139, 250, 0.18);
+        border: 1px solid rgba(167, 139, 250, 0.2);
         box-shadow: var(--shadow);
-        margin-bottom: 32px;
-      }
-
-      @media (min-width: 640px) {
-        .cta {
-          padding: 40px 28px;
-          border-radius: 28px;
-          margin-bottom: 40px;
-        }
-      }
-
-      .cta .store-row {
-        justify-content: center;
-        align-items: stretch;
-      }
-
-      @media (min-width: 520px) {
-        .cta .store-row {
-          align-items: center;
-        }
+        margin-bottom: 48px;
       }
 
       .cta h2 {
-        font-family: "Fraunces", Georgia, serif;
-        font-size: clamp(1.35rem, 5vw, 2rem);
+        font-family: "Fraunces", serif;
+        font-size: clamp(1.5rem, 4.5vw, 2rem);
         margin-bottom: 12px;
       }
 
       .cta p {
         color: var(--muted);
-        margin-bottom: 24px;
-        line-height: 1.65;
-        font-size: clamp(0.9rem, 3.5vw, 1rem);
+        margin-bottom: 28px;
+        line-height: 1.7;
+        max-width: 28rem;
+        margin-left: auto;
+        margin-right: auto;
       }
 
-      /* Footer */
-      footer {
-        text-align: center;
-        padding-top: 16px;
+      .cta .store-row { justify-content: center; }
+
+      .site-footer {
+        padding-top: 24px;
         border-top: 1px solid rgba(255,255,255,0.08);
-        color: rgba(255,255,255,0.38);
-        font-size: 0.82rem;
+        text-align: center;
       }
 
-      footer nav {
-        justify-content: center;
-        margin-bottom: 12px;
+      .footer-nav {
+        display: flex;
         flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px 4px;
+        margin-bottom: 16px;
       }
 
-      footer a {
+      .footer-nav a {
         color: var(--purple-soft);
+        text-decoration: none;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        padding: 6px 12px;
+        border-radius: 999px;
         -webkit-tap-highlight-color: transparent;
       }
 
-      /* Small phones (iPhone SE, narrow Android) */
-      @media (max-width: 374px) {
-        .eyebrow {
-          font-size: 0.72rem;
-          padding: 5px 12px;
-        }
-
-        .phone-screen img {
-          width: 72px;
-          height: 72px;
-        }
-
-        .chip {
-          font-size: 0.62rem;
-          padding: 4px 8px;
-        }
+      @media (hover: hover) {
+        .footer-nav a:hover { color: var(--ink); }
       }
 
-      /* Landscape phones */
+      .footer-copy {
+        color: rgba(255,255,255,0.38);
+        font-size: 0.8125rem;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 599px) {
+        .header-inner { flex-wrap: wrap; }
+        .site-nav { width: 100%; justify-content: center; }
+      }
+
       @media (max-height: 520px) and (orientation: landscape) {
-        .hero {
-          padding: 8px 0 24px;
-          gap: 20px;
-        }
-
         .hero-visual { display: none; }
-
-        .stats { margin-bottom: 24px; }
-        .features { margin-bottom: 24px; }
+        .hero { padding: 24px 0; }
       }
     </style>
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>
 
-    <div class="page">
-      <header>
-        <a class="brand" href="/">
-          <img src="/90Plus.png" width="44" height="44" alt="" />
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="90Plus — الصفحة الرئيسية">
+          <img src="/90Plus.png" width="40" height="40" alt="" />
           <span>90Plus</span>
         </a>
-        <div class="header-links">
-        <nav aria-label="تسجيل الدخول والحساب">
-          <a href="https://accounts.90plus.pro/sign-in">تسجيل الدخول</a>
-          <a href="https://accounts.90plus.pro/sign-up" class="nav-primary">إنشاء حساب</a>
-          <a href="https://accounts.90plus.pro/user">حسابي</a>
-        </nav>
-        <nav aria-label="روابط قانونية">
+        <nav class="site-nav" aria-label="روابط الموقع">
           <a href="/support">الدعم</a>
           <a href="/privacy">الخصوصية</a>
           <a href="/terms">الشروط</a>
         </nav>
-        </div>
-      </header>
+      </div>
+    </header>
 
-      <section class="hero">
+    <main class="page">
+      <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <div class="eyebrow">
             <span class="dot" aria-hidden="true"></span>
-            متاح الآن على iOS و Android
+            متاح على App Store و Google Play
           </div>
-          <h1>
+          <h1 id="hero-title">
             عالمك الكروي<br />
             <span class="gold">في جيبك</span>
           </h1>
           <p class="lead">
-            90Plus — منصة كروية متكاملة: نتائج مباشرة، كويزات يومية، تنبؤات، ريلز،
-            ذكاء اصطناعي، ومجتمع مشجعين. كل ما تحتاجه كمشجع حقيقي في تطبيق واحد.
+            90Plus منصة كروية متكاملة: نتائج مباشرة، كويزات يومية، تنبؤات، ريلز،
+            ذكاء اصطناعي، ومجتمع مشجعين — كل ما تحتاجه في تطبيق واحد.
           </p>
-
-          <div class="auth-row">
-            <a class="auth-btn sign-in" href="https://accounts.90plus.pro/sign-in">
-              تسجيل الدخول
-            </a>
-            <a class="auth-btn sign-up" href="https://accounts.90plus.pro/sign-up">
-              إنشاء حساب جديد
-            </a>
-            <a class="auth-btn account" href="https://accounts.90plus.pro/user">
-              إدارة الحساب
-            </a>
-          </div>
-
-          <p class="section-divider">أو حمّل التطبيق</p>
 
           <div class="store-row">
             <a
-              class="store-badge gold"
+              class="store-badge primary"
               href="https://apps.apple.com/us/app/90plus/id6758296989"
               rel="noopener noreferrer"
               target="_blank"
+              aria-label="حمّل 90Plus من App Store"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
               </svg>
               <span class="label">
-                <span class="small">حمّل من</span>
+                <span class="small">Download on the</span>
                 <span class="big">App Store</span>
               </span>
             </a>
@@ -809,22 +658,24 @@
               href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp"
               rel="noopener noreferrer"
               target="_blank"
+              aria-label="حمّل 90Plus من Google Play"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
               </svg>
               <span class="label">
-                <span class="small">حمّل من</span>
+                <span class="small">Get it on</span>
                 <span class="big">Google Play</span>
               </span>
             </a>
           </div>
         </div>
 
-        <div class="hero-visual">
+        <div class="hero-visual" aria-hidden="true">
           <div class="phone-frame">
+            <div class="phone-notch"></div>
             <div class="phone-screen">
-              <img src="/90Plus.png" width="88" height="88" alt="90Plus" />
+              <img src="/90Plus.png" width="80" height="80" alt="" />
               <p class="phone-tagline">YOUR FOOTBALL WORLD</p>
               <div class="phone-chips">
                 <span class="chip">⚽ LIVE</span>
@@ -834,11 +685,11 @@
               </div>
             </div>
           </div>
-          <div class="phone-glow" aria-hidden="true"></div>
+          <div class="phone-glow"></div>
         </div>
       </section>
 
-      <section class="stats" aria-label="مميزات سريعة">
+      <section class="stats" aria-label="لمحة سريعة">
         <div class="stat">
           <strong>LIVE</strong>
           <span>نتائج مباشرة</span>
@@ -848,7 +699,7 @@
           <span>مساعد كروي ذكي</span>
         </div>
         <div class="stat">
-          <strong>AR/EN</strong>
+          <strong>AR / EN</strong>
           <span>عربي وإنجليزي</span>
         </div>
         <div class="stat">
@@ -862,45 +713,45 @@
         <p>من أول صافرة البداية لحد آخر دقيقة — تابع، العب، توقّع، وشارك مع مجتمع 90Plus.</p>
       </div>
 
-      <section class="features">
+      <section class="features" aria-label="المميزات">
         <article class="feature">
-          <div class="feature-icon">⚽</div>
+          <div class="feature-icon" aria-hidden="true">⚽</div>
           <h3>نتائج وإحصائيات مباشرة</h3>
           <p>تابع المباريات لحظة بلحظة — أهداف، تشكيلات، أحداث، وإحصائيات تفصيلية.</p>
         </article>
         <article class="feature">
-          <div class="feature-icon">🧠</div>
+          <div class="feature-icon" aria-hidden="true">🧠</div>
           <h3>كويزات يومية</h3>
           <p>اختبر معلوماتك الكروية بأسئلة يومية، مستويات صعوبة، وترتيب عالمي.</p>
         </article>
         <article class="feature">
-          <div class="feature-icon">🎯</div>
+          <div class="feature-icon" aria-hidden="true">🎯</div>
           <h3>تنبؤات ومكافآت</h3>
           <p>توقّع نتائج المباريات، اجمع نقاط، وتنافس على قمة الليدربورد.</p>
         </article>
         <article class="feature">
-          <div class="feature-icon">🎬</div>
+          <div class="feature-icon" aria-hidden="true">🎬</div>
           <h3>ريلز ومجتمع</h3>
           <p>شاهد وشارك لحظات كروية، تفاعل مع المبدعين، وتابع مشجعين آخرين.</p>
         </article>
         <article class="feature">
-          <div class="feature-icon">🤖</div>
+          <div class="feature-icon" aria-hidden="true">🤖</div>
           <h3>90Plus AI</h3>
           <p>مساعدك الرياضي الذكي — اسأل عن كرة القدم، التدريب، والتغذية الرياضية.</p>
         </article>
         <article class="feature">
-          <div class="feature-icon">🔔</div>
+          <div class="feature-icon" aria-hidden="true">🔔</div>
           <h3>تنبيهات ذكية</h3>
           <p>تذكيرات مباريات، تحديثات نتائج، مواعيد الكويز، ونشاط اجتماعي — في الوقت المناسب.</p>
         </article>
       </section>
 
-      <section class="cta">
-        <h2>جاهز تدخل عالم 90Plus؟</h2>
-        <p>حمّل التطبيق مجاناً وابدأ رحلتك الكروية — توقعات، كويزات، ريلز، ومجتمع في مكان واحد.</p>
+      <section class="cta" aria-labelledby="cta-title">
+        <h2 id="cta-title">حمّل 90Plus الآن</h2>
+        <p>انضم لآلاف المشجعين — مجاني على iOS و Android.</p>
         <div class="store-row">
           <a
-            class="store-badge gold"
+            class="store-badge primary"
             href="https://apps.apple.com/us/app/90plus/id6758296989"
             rel="noopener noreferrer"
             target="_blank"
@@ -909,7 +760,7 @@
               <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
             </svg>
             <span class="label">
-              <span class="small">حمّل من</span>
+              <span class="small">Download on the</span>
               <span class="big">App Store</span>
             </span>
           </a>
@@ -923,23 +774,24 @@
               <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
             </svg>
             <span class="label">
-              <span class="small">حمّل من</span>
+              <span class="small">Get it on</span>
               <span class="big">Google Play</span>
             </span>
           </a>
         </div>
       </section>
+    </main>
 
-      <footer>
-        <nav aria-label="روابط">
-          <a href="https://accounts.90plus.pro/sign-in">تسجيل الدخول</a>
-          <a href="https://accounts.90plus.pro/user">حسابي</a>
+    <footer class="site-footer">
+      <div class="page">
+        <nav class="footer-nav" aria-label="روابط قانونية">
           <a href="/support">الدعم</a>
-          <a href="/privacy">الخصوصية</a>
-          <a href="/terms">الشروط</a>
+          <a href="/privacy">سياسة الخصوصية</a>
+          <a href="/terms">شروط الاستخدام</a>
+          <a href="/delete-account">حذف الحساب</a>
         </nav>
-        <p>© 2026 90Plus. جميع الحقوق محفوظة.</p>
-      </footer>
-    </div>
+        <p class="footer-copy">© 2026 90Plus. جميع الحقوق محفوظة.</p>
+      </div>
+    </footer>
   </body>
 </html>
