@@ -39,7 +39,6 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
-  renderCount: number;
   isInfiniteLoop: boolean;
   errorTimestamp: number | null;
 }
@@ -50,6 +49,8 @@ interface State {
 
 export class ProfileErrorBoundary extends Component<Props, State> {
   private renderCountResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private renderCountRef = 0;
+  private loopReportedRef = false;
   private readonly MAX_RENDER_COUNT: number;
   private readonly RENDER_COUNT_RESET_INTERVAL = 5000; // 5 seconds
 
@@ -62,7 +63,6 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       hasError: false,
       error: null,
       errorInfo: null,
-      renderCount: 0,
       isInfiniteLoop: false,
       errorTimestamp: null,
     };
@@ -112,28 +112,31 @@ export class ProfileErrorBoundary extends Component<Props, State> {
   }
 
   componentDidUpdate(): void {
-    // Increment render count
-    const newRenderCount = this.state.renderCount + 1;
-    
-    // Check for infinite loop
-    if (newRenderCount > this.MAX_RENDER_COUNT && !this.state.isInfiniteLoop) {
+    if (this.state.hasError) return;
+
+    this.renderCountRef += 1;
+
+    if (
+      this.renderCountRef > this.MAX_RENDER_COUNT &&
+      !this.loopReportedRef &&
+      !this.state.isInfiniteLoop
+    ) {
+      this.loopReportedRef = true;
+      const count = this.renderCountRef;
+
       logger.error('[ProfileErrorBoundary] 🚨 INFINITE LOOP DETECTED!', {
-        renderCount: newRenderCount,
+        renderCount: count,
         maxRenderCount: this.MAX_RENDER_COUNT,
       });
-      
+
       this.setState({
         hasError: true,
         isInfiniteLoop: true,
-        error: new Error(`Infinite render loop detected (${newRenderCount} renders)`),
+        error: new Error(`Infinite render loop detected (${count} renders)`),
         errorTimestamp: Date.now(),
       });
-      
-      // Send infinite loop report
-      this.sendInfiniteLoopReport(newRenderCount);
-    } else if (!this.state.hasError) {
-      // Update render count only if no error
-      this.setState({ renderCount: newRenderCount });
+
+      this.sendInfiniteLoopReport(count);
     }
   }
 
@@ -149,10 +152,9 @@ export class ProfileErrorBoundary extends Component<Props, State> {
   // ============================================================================
 
   private startRenderCountReset(): void {
-    // Reset render count periodically to avoid false positives
     this.renderCountResetTimer = setInterval(() => {
       if (!this.state.hasError) {
-        this.setState({ renderCount: 0 });
+        this.renderCountRef = 0;
       }
     }, this.RENDER_COUNT_RESET_INTERVAL);
   }
@@ -215,10 +217,11 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       hasError: false,
       error: null,
       errorInfo: null,
-      renderCount: 0,
       isInfiniteLoop: false,
       errorTimestamp: null,
     });
+    this.renderCountRef = 0;
+    this.loopReportedRef = false;
   };
 
   private handleGoHome = (): void => {

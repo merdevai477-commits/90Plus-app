@@ -13,10 +13,18 @@ export async function getClerkBearerToken(
   const baseDelayMs = options?.baseDelayMs ?? 200;
 
   for (let attempt = 0; attempt < retries; attempt++) {
-    const token = await getToken(
-      attempt === retries - 1 ? { skipCache: true } : undefined,
-    );
-    if (token) return token;
+    try {
+      const token = await getToken(
+        attempt === retries - 1 ? { skipCache: true } : undefined,
+      );
+      if (token) return token;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/signed out/i.test(msg)) {
+        return null;
+      }
+      throw err;
+    }
     if (attempt < retries - 1) {
       await new Promise((r) => setTimeout(r, baseDelayMs * (attempt + 1)));
     }

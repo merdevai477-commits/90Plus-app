@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +6,7 @@ import { Trophy } from 'lucide-react-native';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 import { useTranslation } from '../../src/i18n';
+import { runSafeModalClose } from '../../utils/safeModalClose';
 
 const ACCENT = '#A855F7';
 
@@ -20,8 +21,19 @@ export function LevelInfoModal({
 }) {
   const { t } = useTranslation();
 
+  const safeClose = useCallback(() => {
+    runSafeModalClose(onClose);
+  }, [onClose]);
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={safeClose}
+    >
       <View
         style={[
           s.overlay,
@@ -29,7 +41,7 @@ export function LevelInfoModal({
         ]}
       >
         <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={safeClose} />
 
         <View style={s.outer}>
           <View style={s.inner}>
@@ -61,7 +73,7 @@ export function LevelInfoModal({
 
             <Pressable
               style={({ pressed }) => [s.btn, pressed && { opacity: 0.9 }]}
-              onPress={onClose}
+              onPress={safeClose}
               accessibilityRole="button"
             >
               <LinearGradient colors={['#a855f7', '#7e22ce']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -86,4 +98,3 @@ const s = StyleSheet.create({
   btn: { marginTop: 18, width: '100%', height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   btnTxt: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });
-

@@ -287,6 +287,23 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
                 ? platform
                 : (req.headers['x-platform'] as string | undefined) ?? 'unknown';
 
+        const existingUser = await prisma.user.findUnique({
+            where: { clerkUserId },
+            select: { id: true },
+        });
+
+        if (!existingUser) {
+            pushApiTrace('[PUSH API] EXIT → reason: USER_NOT_SYNCED (no user row)');
+            sendError(
+                req,
+                res,
+                ErrorCode.NOT_FOUND,
+                'User profile not synced yet',
+                { code: 'USER_NOT_SYNCED' },
+            );
+            return;
+        }
+
         await prisma.user.updateMany({
             where: {
                 expoPushToken: token,
@@ -295,13 +312,32 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             data: { expoPushToken: null },
         });
 
-        await prisma.user.update({
-            where: { clerkUserId },
-            data: {
-                expoPushToken: token,
-                pushNotificationsConsent: true,
-            },
-        });
+        try {
+            await prisma.user.update({
+                where: { clerkUserId },
+                data: {
+                    expoPushToken: token,
+                    pushNotificationsConsent: true,
+                },
+            });
+        } catch (updateErr: unknown) {
+            const prismaCode =
+                updateErr && typeof updateErr === 'object' && 'code' in updateErr
+                    ? String((updateErr as { code?: string }).code)
+                    : undefined;
+            if (prismaCode === 'P2025') {
+                pushApiTrace('[PUSH API] EXIT → reason: USER_NOT_SYNCED (P2025 on update)');
+                sendError(
+                    req,
+                    res,
+                    ErrorCode.NOT_FOUND,
+                    'User profile not synced yet',
+                    { code: 'USER_NOT_SYNCED' },
+                );
+                return;
+            }
+            throw updateErr;
+        }
 
         const verify = await prisma.user.findUnique({
             where: { clerkUserId },

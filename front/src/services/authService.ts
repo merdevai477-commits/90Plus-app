@@ -2477,7 +2477,16 @@ export class MatchesService {
     static async registerPushToken(
         token: string,
         pushToken: string,
-    ): Promise<{ success: boolean; rateLimited?: boolean; unauthorized?: boolean; dbVerified?: boolean }> {
+    ): Promise<{
+        success: boolean;
+        rateLimited?: boolean;
+        unauthorized?: boolean;
+        userNotSynced?: boolean;
+        dbVerified?: boolean;
+        statusCode?: number;
+        errorCode?: string;
+        reason?: string;
+    }> {
         try {
             const response = await fetch(`${API_URL}/matches/push-token`, {
                 method: 'POST',
@@ -2492,32 +2501,67 @@ export class MatchesService {
             });
 
             if (response.status === 429) {
-                return { success: false, rateLimited: true };
+                return { success: false, rateLimited: true, statusCode: 429 };
             }
 
             if (response.status === 401) {
-                return { success: false, unauthorized: true };
+                return { success: false, unauthorized: true, statusCode: 401 };
             }
 
-            let data: { status?: string; data?: { dbVerified?: boolean } } = {};
+            type PushTokenResponse = {
+                status?: string;
+                data?: { dbVerified?: boolean };
+                error?: string;
+                message?: string;
+                details?: { code?: string };
+            };
+
+            let data: PushTokenResponse = {};
             try {
                 data = await response.json();
             } catch {
-                return { success: false };
+                return {
+                    success: false,
+                    statusCode: response.status,
+                    reason: 'Invalid JSON response',
+                };
+            }
+
+            const detailCode =
+                typeof data.details?.code === 'string' ? data.details.code : undefined;
+            const apiErrorCode = detailCode ?? data.error;
+
+            if (response.status === 404 && detailCode === 'USER_NOT_SYNCED') {
+                return {
+                    success: false,
+                    userNotSynced: true,
+                    statusCode: 404,
+                    errorCode: 'USER_NOT_SYNCED',
+                    reason: data.message ?? 'User profile not synced yet',
+                };
             }
 
             if (!response.ok || data.status !== 'SUCCESS') {
-                return { success: false };
+                return {
+                    success: false,
+                    statusCode: response.status,
+                    errorCode: apiErrorCode,
+                    reason: data.message ?? `HTTP ${response.status}`,
+                };
             }
 
             const dbVerified = data.data?.dbVerified;
             return {
                 success: dbVerified !== false,
                 dbVerified: dbVerified !== false,
+                statusCode: response.status,
             };
         } catch (error) {
             console.error('Register push token error:', error);
-            return { success: false };
+            return {
+                success: false,
+                reason: error instanceof Error ? error.message : String(error),
+            };
         }
     }
 }

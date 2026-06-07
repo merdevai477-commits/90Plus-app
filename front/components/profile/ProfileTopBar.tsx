@@ -7,7 +7,7 @@
  * Glass matches Matches / Quiz via glassProps.header.
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Zap } from 'lucide-react-native';
 import { BlurView, type BlurTint } from 'expo-blur';
@@ -32,70 +32,79 @@ const ProfileTopBar: React.FC<ProfileTopBarProps> = ({ topInset, level }) => {
   const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
   const [showLevelInfo, setShowLevelInfo] = React.useState(false);
 
+  const openLevelInfo = useCallback(() => setShowLevelInfo(true), []);
+  const closeLevelInfo = useCallback(() => setShowLevelInfo(false), []);
+  const openCoinsInfo = useCallback(() => setShowCoinsInfo(true), []);
+  const closeCoinsInfo = useCallback(() => setShowCoinsInfo(false), []);
+
   const display: string = loading ? '—' : String(coins);
+  const levelLabel =
+    level != null
+      ? t.levelInfo.youAreLevel.replace('{level}', String(level))
+      : undefined;
 
   const shellStyle = [
     s.container,
     { paddingTop: Math.max(topInset, 10) + 10 },
   ];
 
-  const content = (
+  const barContent = (
     <>
       {level != null ? (
-        <>
-          <Pressable
-            style={s.lvlBadge}
-            onPress={() => setShowLevelInfo(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t.levelInfo.youAreLevel.replace('{level}', String(level))}
-          >
-            <Text style={s.lvlLabel}>LVL</Text>
-            <Text style={s.lvlNumber}>{level}</Text>
-          </Pressable>
-
-          <LevelInfoModal
-            visible={showLevelInfo}
-            onClose={() => setShowLevelInfo(false)}
-            level={level}
-          />
-        </>
+        <Pressable
+          style={s.lvlBadge}
+          onPress={openLevelInfo}
+          accessibilityRole="button"
+          accessibilityLabel={levelLabel}
+        >
+          <Text style={s.lvlLabel}>LVL</Text>
+          <Text style={s.lvlNumber}>{level}</Text>
+        </Pressable>
       ) : (
         <View style={s.lvlPlaceholder} />
       )}
 
       <Pressable
         style={s.coinChip}
-        onPress={() => setShowCoinsInfo(true)}
+        onPress={openCoinsInfo}
         accessibilityRole="button"
         accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
       >
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={s.coinTxt}>{display}</Text>
       </Pressable>
-
-      <CoinsInfoModal
-        visible={showCoinsInfo}
-        onClose={() => setShowCoinsInfo(false)}
-      />
     </>
   );
 
-  if (isLiquidGlassSupported) {
-    return (
-      <LiquidGlassView {...glassProps.header} style={shellStyle}>
-        {content}
-      </LiquidGlassView>
-    );
-  }
-
   return (
-    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
-      {content}
-    </BlurView>
+    <>
+      {isLiquidGlassSupported ? (
+        <LiquidGlassView {...glassProps.header} style={shellStyle}>
+          {barContent}
+        </LiquidGlassView>
+      ) : (
+        <BlurView intensity={15} tint={blurTint} style={shellStyle}>
+          {barContent}
+        </BlurView>
+      )}
+
+      {level != null && (
+        <LevelInfoModal
+          visible={showLevelInfo}
+          onClose={closeLevelInfo}
+          level={level}
+        />
+      )}
+
+      <CoinsInfoModal
+        visible={showCoinsInfo}
+        onClose={closeCoinsInfo}
+      />
+    </>
   );
 };
 
-export default ProfileTopBar;
+export default React.memo(ProfileTopBar);
 
 const s = StyleSheet.create({
   container: {

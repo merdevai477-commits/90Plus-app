@@ -14,6 +14,7 @@ import { MatchesService } from '../src/services/authService';
 import { logger } from './logger';
 import { getApiUrl } from '../config/api.config';
 import { pushTrace } from '../utils/pushTrace';
+import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
 type NotificationsModule = typeof import('expo-notifications');
 
@@ -30,16 +31,8 @@ export const NOTIFICATION_PERMISSION_REQUESTED_KEY = 'notification_permission_re
 /** Wait for Clerk JWT — avoids race where token is generated before auth is ready. */
 async function resolveAuthToken(
     getAuthToken: () => Promise<string | null>,
-    maxAttempts = 5,
 ): Promise<string | null> {
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const authToken = await getAuthToken();
-        if (authToken) return authToken;
-        if (attempt < maxAttempts - 1) {
-            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-        }
-    }
-    return null;
+    return getClerkBearerToken(getAuthToken, { retries: 5, baseDelayMs: 400 });
 }
 
 function ownershipLabel(): string {
@@ -288,12 +281,49 @@ async function registerTokenWithBackend(
             await persistPendingPushToken(pushToken);
             return false;
         }
-        pushTrace('[PUSH TRACE] registerPushToken response=failed (non-SUCCESS body)');
-        throw new Error('Backend rejected token sync');
+        if (result.userNotSynced) {
+            pushTrace('[PUSH TRACE] registerPushToken response=404 USER_NOT_SYNCED — will persist pending');
+            await persistPendingPushToken(pushToken);
+            return false;
+        }
+
+        pushTrace(
+            `[PUSH TRACE] registerPushToken response=failed status=${result.statusCode ?? '?'} code=${result.errorCode ?? '?'}`,
+        );
+        logger.warn('Push token sync rejected by backend', {
+            attempt,
+            statusCode: result.statusCode,
+            errorCode: result.errorCode,
+            reason: result.reason,
+        });
+
+        if (attempt < 2) {
+            const delay = Math.pow(2, attempt) * 2000;
+            await new Promise((r) => setTimeout(r, delay));
+            return registerTokenWithBackend(authToken, pushToken, attempt + 1);
+        }
+
+        try {
+            const Sentry = await import('@sentry/react-native');
+            Sentry.captureMessage('Push token sync failed after retries', {
+                level: 'warning',
+                tags: { component: 'PushNotifications', action: 'syncToken' },
+                extra: {
+                    tokenPrefix: pushToken.substring(0, 20),
+                    statusCode: result.statusCode,
+                    errorCode: result.errorCode,
+                    reason: result.reason,
+                },
+            });
+        } catch {
+            /* Sentry may not be initialized */
+        }
+        pushTrace('[PUSH TRACE] EXIT → reason: registerPushToken failed after retries');
+        return false;
     } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         pushTrace(`[PUSH TRACE] registerPushToken response=error:${msg}`);
-        logger.error(`❌ Push token sync failed (attempt ${attempt}):`, err);
+        logger.warn(`Push token sync network error (attempt ${attempt}):`, err);
         if (attempt < 2) {
             const delay = Math.pow(2, attempt) * 2000;
             await new Promise((r) => setTimeout(r, delay));
@@ -301,9 +331,13 @@ async function registerTokenWithBackend(
         }
         try {
             const Sentry = await import('@sentry/react-native');
-            Sentry.captureException(err, {
+            Sentry.captureMessage('Push token sync failed after retries', {
+                level: 'warning',
                 tags: { component: 'PushNotifications', action: 'syncToken' },
-                extra: { tokenPrefix: pushToken.substring(0, 20) },
+                extra: {
+                    tokenPrefix: pushToken.substring(0, 20),
+                    reason: msg,
+                },
             });
         } catch {
             /* Sentry may not be initialized */

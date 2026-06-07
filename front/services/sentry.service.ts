@@ -19,6 +19,11 @@ import { logger } from './logger';
  * Validate DSN format
  * DSN should be in format: https://<key>@<host>/<project-id>
  */
+function isSignedOutClerkError(value: string | undefined): boolean {
+  if (!value) return false;
+  return /you are signed out/i.test(value) || /\bsigned out\b/i.test(value);
+}
+
 function validateDSN(dsn: string): boolean {
   if (!dsn || typeof dsn !== 'string') {
     return false;
@@ -132,6 +137,11 @@ export function initSentry(): void {
           }
         });
       }
+
+      const exceptionValue = event.exception?.values?.[0]?.value;
+      if (isSignedOutClerkError(exceptionValue)) {
+        return null;
+      }
       
       return event;
     },
@@ -154,6 +164,10 @@ export function initSentry(): void {
       'Not found',
       '401',
       '404',
+
+      // Clerk session ended (expected on logout / expiry)
+      'You are signed out',
+      'signed out',
     ],
   });
   
