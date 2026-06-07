@@ -1486,6 +1486,7 @@ export const en = {
     nameUpdatedTo: 'Name updated to {name}',
     bioUpdatedSuccess: 'Bio updated successfully.',
     socialLinksUpdatedSuccess: 'Social links updated successfully.',
+    profileSaveFailed: 'Could not save changes. Please try again.',
     noProfileChanges: 'No changes were made to your profile.',
     videoSelectedTitle: 'Video selected',
     videoSelectedMessage: 'Video has been added and upload started.',

@@ -887,9 +887,11 @@ function ProfileScreen() {
   // Initialize to now so the first useFocusEffect call is suppressed — the hook's
   // own useEffect already fires refresh() on mount.
   const lastUiRefreshAtRef = useRef<number>(Date.now());
+  const profileSaveInFlightRef = useRef(false);
   const maybeRefreshProfile = useCallback((reason: 'focus' | 'app_active') => {
     const now = Date.now();
     if (isOffline) return;
+    if (profileSaveInFlightRef.current) return;
     if (isLoading || isRefreshing) return;
     if (now - lastUiRefreshAtRef.current < PROFILE_UI_REFRESH_INTERVAL_MS) return;
     lastUiRefreshAtRef.current = now;
@@ -2131,8 +2133,10 @@ function ProfileScreen() {
           
           // Send updates if there are any changes
           if (Object.keys(updates).length > 0) {
+            profileSaveInFlightRef.current = true;
             toastManager.showInfo(t.profile.updating, t.profile.savingProfileChanges);
             
+            try {
             if (updates.username) {
               // Update UI immediately before sending to backend
               updateCachedUserData({ username: updates.username });
@@ -2172,29 +2176,29 @@ function ProfileScreen() {
             }
             
             if (Object.prototype.hasOwnProperty.call(updates, 'bio')) {
-              // Update UI immediately before sending to backend
+              const previousBio = userData?.bio || '';
               updateCachedUserData({ bio: updates.bio });
               const result = await updateBio(updates.bio);
               if (result.success) {
                 toastManager.showSuccess(t.profile.updated, t.profile.bioUpdatedSuccess);
-                // Mark bio step as completed
                 await markStepCompleted('bio');
+              } else {
+                updateCachedUserData({ bio: previousBio });
+                toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
               }
               delete updates.bio;
             }
             
             if (Object.prototype.hasOwnProperty.call(updates, 'socialLinks')) {
-              // Update UI immediately before sending to backend
+              const previousSocialLinks = (socialLinks as any[]) || [];
               const newSocialLinks = (updates.socialLinks as Array<{ platform: string; url: string }>).map((link) => ({
                 platform: link.platform,
                 url: link.url,
                 username: typeof link.url === 'string' ? link.url.replace(/.*\//, '').replace('@', '') : undefined
               }));
               
-              // Update cached data immediately (synchronous now)
               updateCachedUserData({ socialLinks: newSocialLinks });
               
-              // Also update global state for immediate UI refresh
               if (globalState.userProfile) {
                 globalState.setUserProfile({
                   ...globalState.userProfile,
@@ -2205,9 +2209,20 @@ function ProfileScreen() {
               const result = await updateSocialLinks(newSocialLinks);
               if (result.success) {
                 toastManager.showSuccess(t.profile.updated, t.profile.socialLinksUpdatedSuccess);
-                // Mark socialLinks step as completed
                 await markStepCompleted('socialLinks');
+              } else {
+                updateCachedUserData({ socialLinks: previousSocialLinks });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    socialLinks: previousSocialLinks
+                  });
+                }
+                toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
               }
+            }
+            } finally {
+              profileSaveInFlightRef.current = false;
             }
           } else {
             toastManager.showInfo(t.profile.noChanges, t.profile.noProfileChanges);

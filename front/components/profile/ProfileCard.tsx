@@ -14,7 +14,9 @@ import {
   Animated,
   Easing,
   ImageSourcePropType,
+  Platform,
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
@@ -122,16 +124,20 @@ const ProfileCard = memo(function ProfileCard({
   clubLogo,
   onClubPress,
 }: ProfileCardProps) {
-  // Animations
+  // Animations — only while profile tab is focused (reduces scroll jank on iOS/Android)
+  const isFocused = useIsFocused();
   const shimmer  = useSafeLoop(0, 1, 3800);
   const holo     = useSafeLoop(0, 1, 4200, Easing.linear);
   const [flagFailed, setFlagFailed] = useState(false);
 
   useEffect(() => {
+    if (!isFocused) return;
+    // Lighter motion on Android — card still looks premium without continuous loops
+    if (Platform.OS === 'android') return;
     shimmer.start();
     holo.start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isFocused]);
 
   useEffect(() => { setFlagFailed(false); }, [countryFlag]);
 

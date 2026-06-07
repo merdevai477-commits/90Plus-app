@@ -168,6 +168,11 @@ export function initSentry(): void {
       // Clerk session ended (expected on logout / expiry)
       'You are signed out',
       'signed out',
+
+      // Handled gracefully in current builds (legacy events from older releases)
+      'Failed to create conversation',
+      'Backend rejected token sync',
+      'Infinite render loop',
     ],
   });
   

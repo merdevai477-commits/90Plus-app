@@ -17,7 +17,6 @@ import {
     updatePushNotificationsConsent,
     shouldPromptForNotificationPermission,
     requestOsNotificationPermission,
-    ensureAndroidNotificationChannels,
     NOTIFICATION_PERMISSION_REQUESTED_KEY,
 } from '../../services/pushTokenRegistration.service';
 import { markTrayNotificationPresented } from '../../services/trayNotification.service';
@@ -296,9 +295,12 @@ export function usePushNotifications(): PushNotificationState {
                 } else if (shouldPromptForNotificationPermission(status)) {
                     const alreadyAsked = await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY);
                     if (!alreadyAsked && isMounted && isSignedIn) {
-                        setTimeout(() => {
-                            if (isMounted && isSignedInRef.current) setShowPermissionModal(true);
-                        }, 2500);
+                        // Android: system dialog is handled by PushTokenSyncBootstrap.
+                        if (Platform.OS === 'ios') {
+                            setTimeout(() => {
+                                if (isMounted && isSignedInRef.current) setShowPermissionModal(true);
+                            }, 2500);
+                        }
                     }
                 }
             } catch (err: any) {
@@ -373,8 +375,9 @@ export function usePushNotifications(): PushNotificationState {
         };
     }, [isLoaded, isSignedIn]);
 
-    // Show permission modal after sign-in if OS permission still undetermined
+    // iOS only: in-app permission modal. Android uses PushTokenSyncBootstrap + system dialog.
     useEffect(() => {
+        if (Platform.OS !== 'ios') return;
         if (!isLoaded || !isSignedIn || !loadNotifications()) return;
 
         let cancelled = false;
@@ -382,7 +385,6 @@ export function usePushNotifications(): PushNotificationState {
         (async () => {
             const Notifications = loadNotifications();
             if (!Notifications) return;
-            await ensureAndroidNotificationChannels();
             const { status } = await Notifications.getPermissionsAsync();
             if (!shouldPromptForNotificationPermission(status) || cancelled) return;
             const alreadyAsked = await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY);
@@ -424,7 +426,7 @@ export function PushNotificationSetup() {
 
     return (
         <NotificationPermissionModal
-            visible={showPermissionModal && isSignedIn}
+            visible={showPermissionModal && isSignedIn && Platform.OS === 'ios'}
             onClose={() => setShowPermissionModal(false)}
             onConfirm={async () => {
                 try {

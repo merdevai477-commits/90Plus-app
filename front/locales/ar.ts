@@ -1461,6 +1461,7 @@ export const ar = {
     nameUpdatedTo: 'تم تحديث الاسم إلى {name}',
     bioUpdatedSuccess: 'تم تحديث النبذة الشخصية بنجاح',
     socialLinksUpdatedSuccess: 'تم تحديث الروابط الاجتماعية بنجاح',
+    profileSaveFailed: 'تعذّر حفظ التغييرات. حاول مرة أخرى.',
     noProfileChanges: 'لم يتم إجراء أي تغييرات على الملف الشخصي',
     videoSelectedTitle: 'تم اختيار الفيديو',
     videoSelectedMessage: 'تم إضافة الفيديو وجاري الرفع...',

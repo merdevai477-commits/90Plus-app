@@ -49,7 +49,8 @@ interface State {
 
 export class ProfileErrorBoundary extends Component<Props, State> {
   private renderCountResetTimer: ReturnType<typeof setTimeout> | null = null;
-  private renderCountRef = 0;
+  private burstRenderCount = 0;
+  private lastBurstAt = 0;
   private loopReportedRef = false;
   private readonly MAX_RENDER_COUNT: number;
   private readonly RENDER_COUNT_RESET_INTERVAL = 5000; // 5 seconds
@@ -114,29 +115,38 @@ export class ProfileErrorBoundary extends Component<Props, State> {
   componentDidUpdate(): void {
     if (this.state.hasError) return;
 
-    this.renderCountRef += 1;
+    const now = Date.now();
+    // Count bursts of updates (true infinite loops), not normal tab revisits over 5s.
+    if (now - this.lastBurstAt > 1000) {
+      this.burstRenderCount = 0;
+      this.lastBurstAt = now;
+    }
+    this.burstRenderCount += 1;
 
     if (
-      this.renderCountRef > this.MAX_RENDER_COUNT &&
+      this.burstRenderCount > 35 &&
       !this.loopReportedRef &&
       !this.state.isInfiniteLoop
     ) {
       this.loopReportedRef = true;
-      const count = this.renderCountRef;
+      const count = this.burstRenderCount;
 
       logger.error('[ProfileErrorBoundary] 🚨 INFINITE LOOP DETECTED!', {
         renderCount: count,
         maxRenderCount: this.MAX_RENDER_COUNT,
       });
 
-      this.setState({
-        hasError: true,
-        isInfiniteLoop: true,
-        error: new Error(`Infinite render loop detected (${count} renders)`),
-        errorTimestamp: Date.now(),
+      // Defer state update so RN Modal unmount does not collide with this commit.
+      queueMicrotask(() => {
+        if (this.state.hasError) return;
+        this.setState({
+          hasError: true,
+          isInfiniteLoop: true,
+          error: new Error(`Infinite render loop detected (${count} renders)`),
+          errorTimestamp: Date.now(),
+        });
+        this.sendInfiniteLoopReport(count);
       });
-
-      this.sendInfiniteLoopReport(count);
     }
   }
 
@@ -152,9 +162,10 @@ export class ProfileErrorBoundary extends Component<Props, State> {
   // ============================================================================
 
   private startRenderCountReset(): void {
+    // Legacy timer kept for compatibility; burst counter resets per-second in didUpdate.
     this.renderCountResetTimer = setInterval(() => {
       if (!this.state.hasError) {
-        this.renderCountRef = 0;
+        this.burstRenderCount = 0;
       }
     }, this.RENDER_COUNT_RESET_INTERVAL);
   }
@@ -213,6 +224,10 @@ export class ProfileErrorBoundary extends Component<Props, State> {
   private handleRetry = (): void => {
     logger.info('[ProfileErrorBoundary] User triggered retry');
     
+    this.burstRenderCount = 0;
+    this.lastBurstAt = 0;
+    this.loopReportedRef = false;
+    
     this.setState({
       hasError: false,
       error: null,
@@ -220,8 +235,6 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       isInfiniteLoop: false,
       errorTimestamp: null,
     });
-    this.renderCountRef = 0;
-    this.loopReportedRef = false;
   };
 
   private handleGoHome = (): void => {

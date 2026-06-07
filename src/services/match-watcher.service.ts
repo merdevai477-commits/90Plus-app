@@ -36,6 +36,19 @@ interface ApiFootballEvent {
 // In-memory store for last-seen event count per match (resets on server restart)
 const seenEventCounts = new Map<number, number>();
 
+/** Minutes elapsed in the match when the user favorited/subscribed (0 = before kickoff). */
+function favoriteSubscriptionMinute(favorite: { createdAt: Date; matchDate: Date }): number {
+    const kickoffMs = new Date(favorite.matchDate).getTime();
+    if (!Number.isFinite(kickoffMs)) return 0;
+    const diffMs = new Date(favorite.createdAt).getTime() - kickoffMs;
+    if (diffMs <= 0) return 0;
+    return Math.floor(diffMs / 60_000);
+}
+
+function isLiveStatus(status: string): boolean {
+    return ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(status);
+}
+
 // Deduplicate lineup-announcement notifications across cron drift. Lineups
 // are not in /fixtures/events; we infer "lineup announced" from the lineup
 // being available for a fixture and emit once per fixture.
@@ -190,7 +203,7 @@ export class MatchWatcherService {
         const status = matchData.fixture.status.short;
         const homeScore = matchData.goals.home ?? 0;
         const awayScore = matchData.goals.away ?? 0;
-        const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(status);
+        const isLive = isLiveStatus(status);
 
         // Get all favorites for this match
         const matchFavorites = favoriteMatches.filter(f => f.apiMatchId === matchId);
@@ -206,8 +219,27 @@ export class MatchWatcherService {
             // The user explicitly tapped the bell icon for this match, so we bypass global pushNotificationsConsent.
             const effectivePushToken = pushToken ? pushToken : null;
 
-            const lastHomeScore = favorite.lastHomeScore ?? 0;
-            const lastAwayScore = favorite.lastAwayScore ?? 0;
+            const isUnbaselined =
+                favorite.lastHomeScore === null && favorite.lastAwayScore === null;
+
+            // First poll after favorite/subscribe: record current score/status only —
+            // no retroactive goal/start notifications for events before this moment.
+            if (isUnbaselined) {
+                const alreadyStarted = isLive || ['HT', '2H', 'ET', 'BT', 'P'].includes(status);
+                await prisma.favoriteMatch.update({
+                    where: { id: favorite.id },
+                    data: {
+                        lastHomeScore: homeScore,
+                        lastAwayScore: awayScore,
+                        lastStatus: status,
+                        notifiedStart: alreadyStarted ? true : favorite.notifiedStart,
+                    },
+                });
+                continue;
+            }
+
+            const lastHomeScore = favorite.lastHomeScore as number;
+            const lastAwayScore = favorite.lastAwayScore as number;
             const lastStatus = favorite.lastStatus;
 
             // STATUSES IN API-FOOTBALL:
@@ -514,6 +546,13 @@ export class MatchWatcherService {
         // Fan-out with idempotency so retries can't double-notify.
         for (const favorite of matchFavorites) {
             if (optedOut.has(favorite.userId)) continue;
+
+            const eventMinute = Number(event.time?.elapsed ?? 0);
+            const subscribedFromMinute = favoriteSubscriptionMinute(favorite);
+            if (eventMinute > 0 && eventMinute <= subscribedFromMinute) {
+                continue;
+            }
+
             try {
                 await notifyUser({
                     userId: favorite.userId,

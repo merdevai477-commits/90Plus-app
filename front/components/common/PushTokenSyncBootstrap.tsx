@@ -55,6 +55,7 @@ export function PushTokenSyncBootstrap() {
     const getTokenRef = useRef(getToken);
     getTokenRef.current = getToken;
     const permissionPromptStarted = useRef(false);
+    const lastPermissionStatus = useRef<string | null>(null);
 
     useEffect(() => {
         if (!isLoaded || !isSignedIn) return;
@@ -62,9 +63,29 @@ export function PushTokenSyncBootstrap() {
         const sync = async () => {
             await logPushRegistrationReport('signed-in-sync-start');
 
+            const Notifications = loadNotifications();
+            let currentStatus: string | null = null;
+            if (Notifications) {
+                const perm = await Notifications.getPermissionsAsync();
+                currentStatus = perm.status;
+            }
+
+            const wasNotGranted = lastPermissionStatus.current != null
+                && lastPermissionStatus.current !== 'granted';
+            const nowGranted = currentStatus === 'granted';
+            if (wasNotGranted && nowGranted) {
+                await capturePushTokenAfterPermission(() => getTokenRef.current());
+            }
+            if (currentStatus) {
+                lastPermissionStatus.current = currentStatus;
+            }
+
             if (!permissionPromptStarted.current) {
                 permissionPromptStarted.current = true;
                 await ensureAndroidNotificationPermission(() => getTokenRef.current());
+            } else if (nowGranted) {
+                // User may have enabled notifications in system settings after denying once.
+                await syncExpoPushTokenIfGranted(() => getTokenRef.current());
             }
 
             await flushPendingPushToken(() => getTokenRef.current());

@@ -337,6 +337,10 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
                 // Re-arming after a previous notification means the user must have
                 // re-subscribed for a re-scheduled fixture (e.g. postponed).
                 notifiedStart: false,
+                // Re-baseline on re-subscribe so mid-match bell does not replay old events.
+                lastHomeScore: null,
+                lastAwayScore: null,
+                lastStatus: null,
             },
             create: {
                 userId: user.id,

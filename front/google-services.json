@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "452059434334",
+    "project_id": "plus-63a27",
+    "storage_bucket": "plus-63a27.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:452059434334:android:0ac17bc5f34e9871df93cf",
+        "android_client_info": {
+          "package_name": "com.mhmdsh1892.ninetyplusapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDgLV-JYDbXJv6z4nA7mneofsEzoRfWZZI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

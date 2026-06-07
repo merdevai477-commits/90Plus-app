@@ -581,13 +581,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setCooldowns(null);
           hasLoadedRef.current = true;
           setError(null);
-          await saveToCache({
-            userData: fd,
-            followStats: null,
-            videos: [],
-            analytics: null,
-            cooldowns: null,
-          });
+          // Do NOT persist Clerk fallback — it has empty bio/socialLinks and would wipe real cache.
         } else {
           setError(err.message || 'Failed to load profile data');
         }
@@ -601,13 +595,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
           setCooldowns(null);
           hasLoadedRef.current = true;
           setError(null);
-          await saveToCache({
-            userData: fd,
-            followStats: null,
-            videos: [],
-            analytics: null,
-            cooldowns: null,
-          });
+          // Do NOT persist Clerk fallback — it has empty bio/socialLinks and would wipe real cache.
         } else {
           setError(err.message || 'Failed to load profile data');
         }
@@ -672,13 +660,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
             setCooldowns(null);
             hasLoadedRef.current = true;
             setError(null);
-            await saveToCache({
-              userData: fd,
-              followStats: null,
-              videos: [],
-              analytics: null,
-              cooldowns: null,
-            });
+            // Do NOT persist Clerk fallback — it has empty bio/socialLinks and would wipe real cache.
           } else {
             setError(err.message || 'Failed to refresh profile');
           }
@@ -693,13 +675,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
             setCooldowns(null);
             hasLoadedRef.current = true;
             setError(null);
-            await saveToCache({
-              userData: fd,
-              followStats: null,
-              videos: [],
-              analytics: null,
-              cooldowns: null,
-            });
+            // Do NOT persist Clerk fallback — it has empty bio/socialLinks and would wipe real cache.
           } else {
             setError(err.message || 'Failed to refresh profile');
           }

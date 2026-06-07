@@ -33,6 +33,8 @@ export function CoinsInfoModal({
     }
   }, [onPrimaryAction, safeClose]);
 
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}

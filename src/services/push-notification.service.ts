@@ -169,6 +169,29 @@ export interface PushNotificationPayload {
     channelId?: string; // Android notification channel
 }
 
+/** Android 8+ requires a channelId — default when callers omit it. */
+function resolvePushChannelId(
+    data?: Record<string, unknown>,
+    explicit?: string,
+): string {
+    if (explicit) return explicit;
+    const type = typeof data?.type === 'string' ? data.type : undefined;
+    if (!type) return 'default';
+    if (type.includes('MATCH')) return 'match-updates';
+    if (
+        type === 'LIKE' ||
+        type === 'COMMENT' ||
+        type === 'REPLY' ||
+        type === 'MENTION' ||
+        type === 'FOLLOW' ||
+        type === 'SHARE' ||
+        type === 'COMMENT_LIKE'
+    ) {
+        return 'social';
+    }
+    return 'default';
+}
+
 /**
  * Schedule a Bull job to check receipts after 30 seconds
  */
@@ -228,6 +251,7 @@ export class PushNotificationService {
                     priority: 'normal', // Android: normal priority = no heads-up notification
                 };
             } else {
+                const channelId = resolvePushChannelId(payload.data, payload.channelId);
                 message = {
                     to: payload.to,
                     sound: payload.sound || 'default',
@@ -236,8 +260,8 @@ export class PushNotificationService {
                     data: payload.data || {},
                     badge: payload.badge,
                     priority: 'high', // Ensures immediate delivery for match events
+                    channelId,
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
-                    ...(payload.channelId ? { channelId: payload.channelId } : {}),
                 };
             }
 
@@ -329,6 +353,8 @@ export class PushNotificationService {
                 body: payload.body,
                 data: payload.data || {},
                 badge: payload.badge,
+                priority: 'high',
+                channelId: resolvePushChannelId(payload.data, payload.channelId),
             });
         }
 

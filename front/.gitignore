@@ -29,4 +29,9 @@ __tests__/*.test.ts
 
 # Sentry
 sentry.properties
+
+# Firebase / signing secrets (never commit)
+*-firebase-adminsdk-*.json
+credentials.json
+@*.jks
 node_modules

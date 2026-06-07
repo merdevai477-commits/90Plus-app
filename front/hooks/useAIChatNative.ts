@@ -414,24 +414,31 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   }, [getAuthHeaders]);
 
   const loadConversationMessages = useCallback(async (conversationId: string) => {
-    const res = await fetch(
-      `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
-      { headers: await getAuthHeaders() },
-    );
-    if (!res.ok) throw new Error('Failed to load messages');
-    const data = await res.json() as {
-      messages: Array<{ id: string; role: 'user' | 'ai'; text: string; createdAt: string }>;
-    };
-    const loaded: Message[] = [
-      ...getInitialMessages(),
-      ...(data.messages ?? []).map(m => ({
-        id: m.id,
-        role: m.role,
-        text: m.text,
-        time: formatTime(m.createdAt),
-      })),
-    ];
-    setMessages(loaded);
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
+        { headers: await getAuthHeaders() },
+      );
+      if (!res.ok) {
+        logger.warn('[AIChat] loadConversationMessages failed:', res.status);
+        return;
+      }
+      const data = await res.json() as {
+        messages: Array<{ id: string; role: 'user' | 'ai'; text: string; createdAt: string }>;
+      };
+      const loaded: Message[] = [
+        ...getInitialMessages(),
+        ...(data.messages ?? []).map(m => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          time: formatTime(m.createdAt),
+        })),
+      ];
+      setMessages(loaded);
+    } catch (err) {
+      logger.warn('[AIChat] loadConversationMessages error:', err);
+    }
   }, [getAuthHeaders, getInitialMessages]);
 
   const bootstrapConversation = useCallback(async () => {

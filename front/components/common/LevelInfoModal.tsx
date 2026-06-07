@@ -25,6 +25,8 @@ export function LevelInfoModal({
     runSafeModalClose(onClose);
   }, [onClose]);
 
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}
