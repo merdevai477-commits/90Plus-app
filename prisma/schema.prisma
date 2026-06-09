@@ -2091,6 +2091,32 @@ model PlayerNameMapping {
   @@map("player_name_mapping")
 }
 
+// Full Captain AI answers keyed by player + query type + language.
+// Serves repeat questions instantly from Postgres; refreshes when API data changes.
+model PlayerInfo {
+  id             String   @id @default(uuid())
+  playerName     String
+  displayName    String?
+  apiPlayerId    Int?
+  queryType      String
+  language       String
+  questionSample String   @db.Text
+  answer         String   @db.Text
+  apiFingerprint String
+  apiContext     String   @db.Text
+  usedModel      String?
+  answeredOn     DateTime @default(now())
+  refreshedAt    DateTime @default(now())
+  expiresAt      DateTime
+  hits           Int      @default(0)
+
+  @@unique([playerName, queryType, language])
+  @@index([playerName])
+  @@index([answeredOn])
+  @@index([expiresAt])
+  @@map("player_info")
+}
+
 // ============================================
 // XP & LEVEL SYSTEM
 // ============================================

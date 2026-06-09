@@ -20,8 +20,17 @@ const LEAGUE_ALIASES: Array<{ pattern: RegExp; id: number; label: string }> = [
   { pattern: /egyptian\s*premier|الدوري\s*المصري/i, id: 233, label: 'Egyptian Premier League' },
 ];
 
+const UCL_LEAGUE_ID = 2;
+
 function isPlayerQuery(message: string): boolean {
-  return /player|لاعب|إحصائيات|احصائيات|أهداف|اهداف|goals?|assists?|stats?|trophies|جوائز|ألقاب|القاب|who\s+is|من\s+هو|مين\s+هو/i.test(
+  return /player|لاعب|إحصائيات|احصائيات|أهداف|اهداف|goals?|assists?|stats?|trophies|جوائز|ألقاب|القاب|أبطال|ابطال|بطولات|titles?|who\s+is|من\s+هو|مين\s+هو|جاب|فاز|كسب/i.test(
+    message,
+  );
+}
+
+/** Player + Champions League career / titles (e.g. "حكيمي جاب كام دوري أبطال"). */
+function isUclCareerQuery(message: string): boolean {
+  return /ucl|champions\s*league|دوري\s*(?:ال)?[اأأ]?بطال|[اأأ]?بطال\s*(?:أ|ا)?وروبا|كاس\s*(?:ال)?[اأأ]?بطال|champions\s*league\s*titles?/i.test(
     message,
   );
 }
@@ -78,6 +87,8 @@ const ARABIC_NAME_STOPWORDS = new Set([
   'مع', 'من', 'عن', 'هو', 'مين', 'كان', 'هذا', 'هذه', 'الموسم', 'لاعب',
   'إحصائيات', 'احصائيات', 'معلومات', 'كرة', 'القدم', 'دوري', 'الدوري', 'و',
   'يا', 'ال', 'علي', 'على', 'عند', 'له', 'ل',
+  'جاب', 'فاز', 'كسب', 'خد', 'أخذ', 'اخذ', 'ابطال', 'أبطال', 'ابطال', 'اوروبا', 'أوروبا',
+  'بطولات', 'بطولة', 'كام', 'كم', 'قد', 'ايه', 'إيه',
 ]);
 
 function extractArabicNameSpans(message: string): string[] {
@@ -120,16 +131,30 @@ function extractNameCandidates(message: string): string[] {
     out.add(span);
   }
 
-  return Array.from(out)
-    .map((n) => n.replace(/[؟?!.,،]+$/g, '').trim())
-    // Allow 2-char Arabic names (e.g. "حكيمي" is longer, but short last names);
-    // keep Latin >= 3 to avoid noise.
+  const sanitized = Array.from(out)
+    .map((n) => sanitizePlayerNameCandidate(n.replace(/[؟?!.,،]+$/g, '').trim()))
     .filter((n) => {
       if (!n) return false;
       const minLen = containsArabicScript(n) ? 2 : 3;
       return n.length >= minLen && n.split(/\s+/).length <= 5;
-    })
-    .slice(0, 4);
+    });
+
+  return [...new Set(sanitized)].slice(0, 4);
+}
+
+/** Strip trophy/competition tokens accidentally glued to a player name. */
+function sanitizePlayerNameCandidate(name: string): string {
+  const noise = new Set([
+    ...ARABIC_NAME_STOPWORDS,
+    'أبطال', 'ابطال', 'الأبطال', 'الابطال', 'اوروبا', 'أوروبا', 'أوروبا',
+    'champions', 'league', 'ucl', 'titles', 'trophies', 'winner', 'winners',
+  ]);
+  const tokens = name
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !noise.has(t.toLowerCase()) && !noise.has(t));
+  return tokens.slice(0, 3).join(' ').trim();
 }
 
 type PlayerStatType =
@@ -360,6 +385,204 @@ async function fetchTopScorersContext(message: string): Promise<string | null> {
   });
 }
 
+function isUclTrophyEntry(league: string): boolean {
+  return /champions\s*league|uefa\s*champions/i.test(league);
+}
+
+function isWinnerPlace(place: string): boolean {
+  return /winner|بطل|فائز/i.test(place);
+}
+
+/** Map API trophy season label → API-Football `season` year param. */
+function parseTrophySeasonToApiYear(season: unknown): number | null {
+  if (season == null || season === '') return null;
+  const s = String(season).trim();
+  const range = s.match(/^(\d{4})\s*[/\-–]\s*(\d{2,4})$/);
+  if (range) return Number(range[1]);
+  const year = s.match(/^(\d{4})$/);
+  if (year) return Number(year[1]);
+  return null;
+}
+
+async function resolvePlayerApiId(
+  rawName: string,
+): Promise<{ apiPlayerId: number; displayName: string; searchName: string } | null> {
+  const row = await fetchPlayerStatsRow(rawName);
+  if (row?.apiPlayerId) {
+    const name =
+      (row.statValue as { player?: { name?: string } })?.player?.name ??
+      row.aliases?.[0] ??
+      rawName;
+    return {
+      apiPlayerId: row.apiPlayerId,
+      displayName: name,
+      searchName: rawName,
+    };
+  }
+
+  const resolved = await resolvePlayerName(rawName);
+  const searchName = resolved?.english ?? rawName;
+  if (resolved?.apiPlayerId) {
+    return {
+      apiPlayerId: resolved.apiPlayerId,
+      displayName: searchName,
+      searchName,
+    };
+  }
+
+  const results = await footballService.searchPlayers(searchName);
+  const match = pickBestPlayerMatch(searchName, results);
+  const apiPlayerId = match?.player?.id;
+  if (!apiPlayerId) return null;
+
+  if (match?.player?.name) {
+    void learnPlayerMapping({
+      rawQuery: rawName,
+      englishName: match.player.name,
+      apiPlayerId,
+    });
+  }
+
+  return {
+    apiPlayerId,
+    displayName: match.player.name ?? searchName,
+    searchName,
+  };
+}
+
+function formatUclSeasonStatBlock(
+  seasonLabel: string,
+  place: string,
+  stats: { statistics: any } | null,
+): string {
+  const lines = [`=== ${seasonLabel} — ${place} ===`];
+  if (!stats?.statistics) {
+    lines.push('UCL campaign stats: not available in API feed for this season.');
+    return lines.join('\n');
+  }
+
+  const st = stats.statistics;
+  const team = st.team?.name ?? '—';
+  const games = st.games ?? {};
+  const goals = st.goals ?? {};
+  const cards = st.cards ?? {};
+
+  lines.push(`Club in UCL: ${team}`);
+  lines.push(
+    `Appearances: ${games.appearences ?? games.appearances ?? 0} | Minutes: ${games.minutes ?? 0}`,
+  );
+  lines.push(`Goals: ${goals.total ?? 0} | Assists: ${goals.assists ?? 0}`);
+  lines.push(`Cards: Y ${cards.yellow ?? 0} / R ${cards.red ?? 0}`);
+  if (games.rating) lines.push(`Avg rating: ${games.rating}`);
+  return lines.join('\n');
+}
+
+/**
+ * Rich UCL dossier: titles from /trophies + per-winning-season UCL stats from /players.
+ * Injected into the LLM prompt; the model writes the professional narrative.
+ */
+export async function fetchPlayerUclCareerDossier(rawName: string): Promise<string | null> {
+  if (!footballService.isConfigured()) return null;
+
+  try {
+    const player = await resolvePlayerApiId(rawName);
+    if (!player) return null;
+
+    const trophies = await footballService.getPlayerTrophies(player.apiPlayerId);
+    const uclWinners = (trophies ?? []).filter((t: any) => {
+      const league = String(t.league ?? t.name ?? '');
+      const place = String(t.place ?? '');
+      return isUclTrophyEntry(league) && isWinnerPlace(place);
+    });
+
+    const seenSeasons = new Set<string>();
+    const uniqueWins: Array<{ seasonLabel: string; place: string; apiYear: number | null }> =
+      [];
+
+    for (const t of uclWinners) {
+      const seasonLabel = String(t.season ?? '—');
+      const dedupeKey = `${seasonLabel}|${t.place ?? 'Winner'}`;
+      if (seenSeasons.has(dedupeKey)) continue;
+      seenSeasons.add(dedupeKey);
+      uniqueWins.push({
+        seasonLabel,
+        place: String(t.place ?? 'Winner'),
+        apiYear: parseTrophySeasonToApiYear(t.season),
+      });
+    }
+
+    uniqueWins.sort((a, b) => (b.apiYear ?? 0) - (a.apiYear ?? 0));
+
+    const currentSeasonRow = await footballService.getPlayerStatisticsInLeague(
+      player.apiPlayerId,
+      UCL_LEAGUE_ID,
+      PLAYER_SEASON,
+    );
+
+    const seasonBlocks: string[] = [];
+    for (const win of uniqueWins) {
+      let stats: { statistics: any } | null = null;
+      if (win.apiYear != null) {
+        stats = await footballService.getPlayerStatisticsInLeague(
+          player.apiPlayerId,
+          UCL_LEAGUE_ID,
+          win.apiYear,
+        );
+      }
+      seasonBlocks.push(formatUclSeasonStatBlock(win.seasonLabel, win.place, stats));
+    }
+
+    const header = [
+      `PLAYER: ${player.displayName} (API id ${player.apiPlayerId})`,
+      `UCL TITLES (Winner, deduped): ${uniqueWins.length}`,
+      uniqueWins.length
+        ? uniqueWins.map((w, i) => `  ${i + 1}. ${w.seasonLabel} (${w.place})`).join('\n')
+        : '  (none listed as Winner in API trophies feed)',
+    ].join('\n');
+
+    let currentBlock = '';
+    if (currentSeasonRow) {
+      currentBlock = `\nCURRENT UCL SEASON (${PLAYER_SEASON}/${PLAYER_SEASON + 1}):\n${formatUclSeasonStatBlock(
+        `${PLAYER_SEASON}/${PLAYER_SEASON + 1}`,
+        'in progress',
+        currentSeasonRow,
+      )}`;
+    }
+
+    const coachNotes = `
+MODEL COACHING (follow strictly):
+- Answer in the user's language with a professional tone (coach/analyst style).
+- Start with total UCL titles won, then dedicate a short paragraph per winning season.
+- For each season, cite appearances/goals/assists/minutes/rating from the UCL stat blocks below.
+- Use ONLY numbers from this dossier; never invent stats or titles.
+- If API lists a dubious title without matching UCL stats, mention it cautiously and rely on stat-backed seasons.
+- Prefer a Markdown table when comparing multiple UCL campaigns.`.trim();
+
+    return [
+      header,
+      '',
+      'PER-WINNING-SEASON UCL STATS:',
+      seasonBlocks.length ? seasonBlocks.join('\n\n') : '(no per-season UCL stat rows)',
+      currentBlock,
+      '',
+      coachNotes,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  } catch (err) {
+    logger.warn('[ChatFootball] UCL career dossier failed:', err);
+    return null;
+  }
+}
+
+async function fetchPlayerUclCareerContextCached(rawName: string): Promise<string | null> {
+  return cachedLookup(
+    `ucl-career:${rawName.toLowerCase()}`,
+    60 * 60_000,
+    () => fetchPlayerUclCareerDossier(rawName),
+  );
+}
+
 async function fetchLiveMatchesContext(): Promise<string | null> {
   if (!footballService.isConfigured()) return null;
 
@@ -411,9 +634,12 @@ export async function buildFootballChatContext(
   const wantsLive = isLiveMatchesQuery(message);
   const wantsTopScorers = isTopScorerQuery(message);
   const wantsStandings = isStandingsQuery(message);
+  const wantsUclCareer = isUclCareerQuery(message);
+  const nameCandidates = extractNameCandidates(message);
   // Top-scorer queries also match the broad player regex; skip name extraction
   // for them so we don't waste a player search that can't resolve a name.
-  const wantsPlayer = isPlayerQuery(message) && !wantsTopScorers;
+  const wantsPlayer =
+    isPlayerQuery(message) && !wantsTopScorers && !wantsUclCareer;
 
   const tasks: Array<Promise<string | null>> = [];
 
@@ -426,8 +652,12 @@ export async function buildFootballChatContext(
       ),
     );
   }
-  if (wantsPlayer) {
-    for (const name of extractNameCandidates(message)) {
+  if (wantsUclCareer && nameCandidates.length > 0) {
+    for (const name of nameCandidates) {
+      tasks.push(fetchPlayerUclCareerContextCached(name));
+    }
+  } else if (wantsPlayer) {
+    for (const name of nameCandidates) {
       tasks.push(fetchPlayerContextCached(name, message));
     }
   }
@@ -438,8 +668,9 @@ export async function buildFootballChatContext(
   const blocks = results.filter((b): b is string => !!b);
   if (blocks.length === 0) return null;
 
-  const header =
-    'LIVE FOOTBALL API DATA (authoritative — use these numbers in your answer; do not invent stats):';
+  const header = wantsUclCareer
+    ? 'LIVE FOOTBALL API DATA — PLAYER UCL CAREER DOSSIER (authoritative; model: write a professional per-season breakdown using ONLY this data):'
+    : 'LIVE FOOTBALL API DATA (authoritative — use these numbers in your answer; do not invent stats):';
   return {
     block: `${header}\n\n${blocks.join('\n\n---\n\n')}`,
     usedApi: true,
@@ -460,4 +691,31 @@ export function shouldUseComplexModel(
   if (hasFootballContext) return true;
   if (lengthMode === 'detailed') return true;
   return false;
+}
+
+export type PlayerInfoQueryType = 'ucl_career' | 'season_stats';
+
+/**
+ * Detect player-centric chat questions suitable for the player_info DB cache.
+ */
+export function detectPlayerInfoQuery(
+  message: string,
+): { playerName: string; queryType: PlayerInfoQueryType } | null {
+  const names = extractNameCandidates(message);
+  if (!names.length) return null;
+
+  if (isUclCareerQuery(message)) {
+    return { playerName: names[0], queryType: 'ucl_career' };
+  }
+
+  if (
+    isPlayerQuery(message) &&
+    !isTopScorerQuery(message) &&
+    !isStandingsQuery(message) &&
+    !isLiveMatchesQuery(message)
+  ) {
+    return { playerName: names[0], queryType: 'season_stats' };
+  }
+
+  return null;
 }

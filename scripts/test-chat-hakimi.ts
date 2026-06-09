@@ -111,19 +111,19 @@ async function main() {
   if (!ctx) {
     console.log('   Result       : null (no football context injected)');
     console.log(
-      '   Note         : question may not match player/stats keywords —',
-    );
-    console.log(
-      '                  model would answer from memory only (may be wrong).',
+      '   Note         : chat would answer from model memory only (no API).',
     );
   } else {
     console.log(`   usedApi      : ${ctx.usedApi}`);
     console.log(`   cacheable    : ${ctx.cacheable}`);
     console.log(`   elapsed      : ${elapsed}ms`);
-    console.log('\n   Injected block:');
+    console.log('\n   Injected block (this is what the LLM + API cooperation uses):');
     console.log('─'.repeat(64));
     console.log(ctx.block);
     console.log('─'.repeat(64));
+    console.log(
+      '\n   Note         : Step 1 = API data fed to the model before streaming.',
+    );
   }
 
   // ─── 2. Player lookup (season stats — what chat injects today) ────────────

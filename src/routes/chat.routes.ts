@@ -55,6 +55,11 @@ import {
     getCachedAnswer,
     saveCachedAnswer,
 } from '../services/chat-answer-cache.service';
+import {
+    detectPlayerInfoQuery,
+    resolvePlayerInfoAnswer,
+    savePlayerInfoAnswer,
+} from '../services/player-info-cache.service';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -541,6 +546,48 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
         }
 
+        const sanitizedSuffix =
+            typeof systemPromptSuffix === 'string' && systemPromptSuffix.trim().length > 0
+                ? systemPromptSuffix.trim().slice(0, 1500)
+                : '';
+
+        const cacheLang = /[\u0600-\u06FF]/.test(trimmedMessage) ? 'ar' : 'en';
+        const playerInfoQuery =
+            !isResume && !sanitizedSuffix ? detectPlayerInfoQuery(trimmedMessage) : null;
+
+        // ─── player_info cache (by player name — instant, no API / no LLM) ───
+        if (playerInfoQuery && !clientClosed) {
+            const playerCached = await resolvePlayerInfoAnswer({
+                ...playerInfoQuery,
+                language: cacheLang,
+            });
+            if (playerCached?.answer) {
+                sendToken(playerCached.answer);
+                await appendMessage(
+                    userId,
+                    targetConversation.id,
+                    'assistant',
+                    playerCached.answer,
+                    playerCached.usedModel ?? undefined,
+                );
+                const conversationTitle = await maybeAutoTitleConversation(
+                    userId,
+                    targetConversation.id,
+                    trimmedMessage,
+                );
+                sendDone({
+                    remaining,
+                    limit: DAILY_LIMIT,
+                    resetAt: await getResetTimeForUser(userId),
+                    cached: true,
+                    playerInfo: true,
+                    playerInfoSource: playerCached.source,
+                    ...(conversationTitle ? { conversationTitle } : {}),
+                });
+                return;
+            }
+        }
+
         // ─── Build prompt ────────────────────────────────────────────────────
         const category = detectCategory(trimmedMessage);
         const lengthMode = detectLengthMode(trimmedMessage);
@@ -552,15 +599,9 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         const useComplexModel = shouldUseComplexModel(lengthMode, !!footballCtx?.usedApi);
         const activeProviders = providersForRequest(useComplexModel);
 
-        const sanitizedSuffix =
-            typeof systemPromptSuffix === 'string' && systemPromptSuffix.trim().length > 0
-                ? systemPromptSuffix.trim().slice(0, 1500)
-                : '';
-
         // ─── DB answer cache (stable, data-backed questions only) ─────────────
         // Serve identical factual questions from Postgres to skip the LLM.
         // Excluded: resumes, live data, and personalized (suffix) prompts.
-        const cacheLang = /[\u0600-\u06FF]/.test(trimmedMessage) ? 'ar' : 'en';
         const cacheEligible =
             !isResume &&
             !!footballCtx?.usedApi &&
@@ -709,6 +750,16 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             // LLM next time (best-effort, never blocks the response).
             if (cacheEligible && fullText.trim().length > 0) {
                 void saveCachedAnswer(cacheLang, trimmedMessage, fullText, usedProvider.model);
+            }
+
+            if (playerInfoQuery && footballCtx?.block && fullText.trim().length > 0) {
+                void savePlayerInfoAnswer({
+                    lookup: { ...playerInfoQuery, language: cacheLang },
+                    question: trimmedMessage,
+                    answer: fullText,
+                    apiContext: footballCtx.block,
+                    usedModel: usedProvider.model,
+                });
             }
 
             // Auto-title on first exchange (≤ 2 messages total in the convo

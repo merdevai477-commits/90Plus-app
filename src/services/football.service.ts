@@ -942,6 +942,35 @@ class FootballService {
 
 
   /**
+   * Get player trophies (career honours).
+   */
+  async getPlayerTrophies(playerId: number): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/trophies', {
+      player: playerId,
+    });
+  }
+
+  /**
+   * Player stats for one competition in a given API season year.
+   */
+  async getPlayerStatisticsInLeague(
+    playerId: number,
+    leagueId: number,
+    season: number,
+  ): Promise<{ player: any; statistics: any } | null> {
+    const rows = await this.getPlayerStatistics(playerId, season);
+    for (const row of rows ?? []) {
+      const match = (row.statistics ?? []).find(
+        (s: any) => s.league?.id === leagueId,
+      );
+      if (match) {
+        return { player: row.player, statistics: match };
+      }
+    }
+    return null;
+  }
+
+  /**
    * Get team trophies
    */
   async getTeamTrophies(teamId: number): Promise<any[]> {
