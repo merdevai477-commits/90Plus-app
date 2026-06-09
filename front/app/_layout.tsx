@@ -57,7 +57,7 @@ import { cacheService, CACHE_KEYS } from "../services/cacheService";
 // JS thread. Must be called once at module scope before any OAuth flow runs.
 WebBrowser.maybeCompleteAuthSession();
 import { AuthService } from "../src/services/authService";
-import { getClerkBearerToken } from "../utils/clerkAuthToken";
+import { createClerkTokenGetter, getClerkBearerToken } from "../utils/clerkAuthToken";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import * as Sentry from '@sentry/react-native';
 import { captureException } from "../services/sentry.service";
@@ -410,7 +410,9 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
         try {
           const token = await getClerkBearerToken(getTokenRef.current);
           if (token && !cancelled) {
-            await AuthService.syncUserWithBackend(token).catch((e) =>
+            await AuthService.syncUserWithBackend(token, {
+              getToken: getTokenRef.current,
+            }).catch((e) =>
               logger.warn('[PreloadInitializer] Early profile sync failed (non-critical):', e)
             );
           }
@@ -440,9 +442,13 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
       });
 
       if (isSignedIn) {
-        preloadManager.initialize(() => getTokenRef.current()).catch(err => {
-          logger.warn('[PreloadInitializer] Failed to initialize preloading:', err);
-        });
+        const tokenGetter = createClerkTokenGetter(getTokenRef.current);
+        const token = await tokenGetter();
+        if (token && !cancelled) {
+          preloadManager.initialize(tokenGetter).catch((err) =>
+            logger.warn('[PreloadInitializer] Failed to initialize preloading:', err),
+          );
+        }
       }
     };
 

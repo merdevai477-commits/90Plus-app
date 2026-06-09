@@ -14,12 +14,65 @@ import {
   isCrossScriptNamePair,
 } from './quiz-name-match.util';
 
+/** Known API-Football team IDs for names that search often misses. */
+const KNOWN_TEAM_IDS: Readonly<Record<string, number>> = {
+  'bayer leverkusen': 168,
+  'bayer 04 leverkusen': 168,
+  'leverkusen': 168,
+  'bayern munich': 157,
+  'bayern munchen': 157,
+  'fc bayern': 157,
+  'borussia dortmund': 165,
+  'dortmund': 165,
+  'rb leipzig': 173,
+  'borussia monchengladbach': 163,
+  'monchengladbach': 163,
+  'fc schalke 04': 174,
+  'schalke': 174,
+  'real madrid': 541,
+  'barcelona': 529,
+  'liverpool': 40,
+  'manchester city': 50,
+  'manchester united': 33,
+  'arsenal': 42,
+  'chelsea': 49,
+  'tottenham': 47,
+  'juventus': 496,
+  'inter milan': 505,
+  'ac milan': 489,
+  'psg': 85,
+  'paris saint germain': 85,
+};
+
+const KNOWN_VENUE_SEARCH_TERMS: Readonly<Record<string, string[]>> = {
+  'veltins arena': ['Veltins Arena', 'Arena AufSchalke', 'VELTINS-Arena'],
+  'veltins-arena': ['Veltins Arena', 'Arena AufSchalke', 'VELTINS-Arena'],
+  'allianz arena': ['Allianz Arena'],
+  'signal iduna park': ['Signal Iduna Park', 'Westfalenstadion'],
+  'olympiastadion berlin': ['Olympiastadion Berlin', 'Olympiastadion'],
+  'emirates stadium': ['Emirates Stadium'],
+  'old trafford': ['Old Trafford'],
+  'anfield': ['Anfield'],
+  'camp nou': ['Camp Nou'],
+  'santiago bernabeu': ['Santiago Bernabeu', 'Bernabeu'],
+  'san siro': ['San Siro', 'Giuseppe Meazza'],
+};
+
 function getAliases(name: string): string[] {
   const aliases = new Set<string>();
   aliases.add(name);
-  
-  let cleaned = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  
+
+  const ascii = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (ascii !== name) aliases.add(ascii);
+
+  let cleaned = ascii.toLowerCase();
+
+  const withoutNumbers = cleaned.replace(/\b\d{2,4}\b/g, ' ').replace(/\s+/g, ' ').trim();
+  if (withoutNumbers && withoutNumbers !== cleaned) {
+    aliases.add(withoutNumbers.replace(/\b\w/g, (c) => c.toUpperCase()));
+    aliases.add(withoutNumbers);
+  }
+
   const stopWords = ['fc', 'cf', 'sc', 'afc', 'national football team', 'national team', 'football club'];
   let shortName = cleaned;
   for (const word of stopWords) {
@@ -27,7 +80,7 @@ function getAliases(name: string): string[] {
     shortName = shortName.replace(regex, '');
   }
   shortName = shortName.trim().replace(/\s+/g, ' ');
-  
+
   if (shortName && shortName !== cleaned && shortName.length > 0) {
     aliases.add(shortName);
     aliases.add(shortName.replace(/\b\w/g, (c) => c.toUpperCase()));
@@ -39,12 +92,48 @@ function getAliases(name: string): string[] {
   if (withoutPrefix && withoutPrefix !== name) {
     aliases.add(withoutPrefix);
   }
-  
+
+  const hyphenAsSpace = name.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+  if (hyphenAsSpace && hyphenAsSpace !== name) aliases.add(hyphenAsSpace);
+
   return Array.from(aliases);
 }
 
+function expandKnownEntityAliases(kind: string, name: string): string[] {
+  const key = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const out = new Set(getAliases(name));
+
+  if (kind === 'team') {
+    const teamId = KNOWN_TEAM_IDS[key];
+    if (teamId) {
+      for (const [label, id] of Object.entries(KNOWN_TEAM_IDS)) {
+        if (id === teamId) out.add(label.replace(/\b\w/g, (c) => c.toUpperCase()));
+      }
+    }
+    for (const [label, id] of Object.entries(KNOWN_TEAM_IDS)) {
+      if (key.includes(label) || label.includes(key)) {
+        for (const [aliasLabel, aliasId] of Object.entries(KNOWN_TEAM_IDS)) {
+          if (aliasId === id) out.add(aliasLabel.replace(/\b\w/g, (c) => c.toUpperCase()));
+        }
+      }
+    }
+  }
+
+  if (kind === 'venue') {
+    const venueTerms = KNOWN_VENUE_SEARCH_TERMS[key];
+    if (venueTerms) venueTerms.forEach((t) => out.add(t));
+    for (const [label, terms] of Object.entries(KNOWN_VENUE_SEARCH_TERMS)) {
+      if (key.includes(label.replace(/-/g, ' ')) || label.replace(/-/g, ' ').includes(key)) {
+        terms.forEach((t) => out.add(t));
+      }
+    }
+  }
+
+  return Array.from(out).filter((a) => a.trim().length >= 2);
+}
+
 function getPlayerSearchAliases(name: string): string[] {
-  const aliases = new Set(getAliases(name));
+  const aliases = new Set(expandKnownEntityAliases('player', name));
   const noSuffix = name
     .replace(/\s+jr\.?\s*$/i, '')
     .replace(/\s+sr\.?\s*$/i, '')
@@ -128,15 +217,23 @@ function scoreVenueMatch(entityName: string, venueName: string, targetNames: str
 }
 
 function resolveMatchThreshold(kind: StoredQuizQuestion['type'], bindingKind: string): number {
-  if (bindingKind === 'player') return 0.88;
-  if (bindingKind === 'venue') return 0.68;
-  if (bindingKind === 'team' && kind === 'logo') return 0.8;
+  if (bindingKind === 'player') return kind === 'guess_player' ? 0.82 : 0.88;
+  if (bindingKind === 'venue') return 0.62;
+  if (bindingKind === 'team' && kind === 'logo') return 0.75;
   return 0.85;
 }
 
 async function resolveTeamId(teamName: string | undefined): Promise<number | undefined> {
   if (!teamName?.trim()) return undefined;
-  const teamAliases = getAliases(teamName);
+
+  const teamKey = teamName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const knownId = KNOWN_TEAM_IDS[teamKey];
+  if (knownId) return knownId;
+  for (const [label, id] of Object.entries(KNOWN_TEAM_IDS)) {
+    if (teamKey.includes(label) || label.includes(teamKey)) return id;
+  }
+
+  const teamAliases = expandKnownEntityAliases('team', teamName);
   let bestTeamId: number | undefined;
   let bestTeamScore = 0;
 
@@ -177,6 +274,12 @@ function handleUnresolvedImageQuestion(
     logger.warn(
       `[QuizImage] Player image unavailable for "${binding.entityName}", likely retired/legend or not in API-Football.`,
     );
+    if (hasGuessPlayerClue(q.question)) {
+      logger.info(
+        `[QuizImage] Degraded ${q.id} guess_player to normal text (clue-rich, no photo): "${binding.entityName}"`,
+      );
+      return degradeToNormalTextQuestion(q);
+    }
     if (imageDependent) {
       logger.info(
         `[QuizImage] Discarded ${q.id} guess_player — image required but unavailable for "${binding.entityName}"`,
@@ -271,13 +374,15 @@ export async function enrichQuizImages(
     const aliases =
       binding.kind === 'player'
         ? getPlayerSearchAliases(binding.entityName)
-        : getAliases(binding.entityName);
+        : expandKnownEntityAliases(binding.kind, binding.entityName);
     const lastToken = binding.entityName.split(/\s+/).pop();
     if (binding.kind === 'player' && lastToken && lastToken.length >= 4) {
       aliases.push(lastToken.replace(/\./g, ''));
     }
     const matchNames =
-      binding.kind === 'venue' ? getVenueSearchAliases(binding.entityName) : aliases;
+      binding.kind === 'venue'
+        ? [...new Set([...getVenueSearchAliases(binding.entityName), ...expandKnownEntityAliases('venue', binding.entityName)])]
+        : aliases;
     const targetNames = matchNames.map(normalizeName);
     const correctAnswerText =
       q.options.find((o) => o.key === q.correctKey)?.text?.trim() ?? '';

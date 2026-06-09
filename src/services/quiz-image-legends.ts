@@ -65,6 +65,10 @@ export function isRetiredLegendPlayerName(entityName: string): boolean {
 }
 
 export function isImageDependentQuestionText(question: string): boolean {
+  // Clue-rich guess_player questions (e.g. "مهاجم بايرن — من هو؟") are answerable
+  // without the photo — degrade to text instead of discarding when image lookup fails.
+  if (hasGuessPlayerClue(question)) return false;
+
   return /who is this|what is this|identify this|name this|which player is shown|which team is shown|guess the player|guess this player|من\s+ه(?:و|ذا)|من\s+اللاعب|من\s+في\s+الصورة|تعرف\s+هذا|خمن\s+اللاعب|هذا\s+اللاعب/i.test(
     question,
   );

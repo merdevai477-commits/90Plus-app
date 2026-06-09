@@ -5,6 +5,7 @@ import { logger } from './logger';
 import { safeJsonParse } from '../../utils/safeJsonParse';
 import { EnhancedApiClient } from '../../utils/enhancedNetworkService';
 import { monitorSearchPerformance } from '../../utils/searchPerformanceMonitor';
+import { getClerkBearerToken } from '../../utils/clerkAuthToken';
 
 const API_URL = getApiUrl();
 
@@ -202,7 +203,10 @@ export class AuthService {
      * ✅ TIMEOUT: 15-second overall timeout with proper error handling
      * ✅ VALIDATION: Validates response data for required fields
      */
-    static async syncUserWithBackend(token: string): Promise<UserProfile | null> {
+    static async syncUserWithBackend(
+        token: string,
+        options?: { getToken?: (opts?: { skipCache?: boolean }) => Promise<string | null> },
+    ): Promise<UserProfile | null> {
         const startTime = Date.now();
         
         // ✅ STABLE KEY: Use clerkUserId from JWT instead of token substring.
@@ -252,6 +256,7 @@ export class AuthService {
         // Create the actual sync operation promise
         const syncPromise = new Promise<UserProfile>(async (resolve, reject) => {
             let lastError: Error | null = null;
+            let authToken = token;
             
             // Retry logic with reduced delays
             for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
@@ -261,7 +266,7 @@ export class AuthService {
                     const response = await fetchWithTimeout(`${API_URL}/clerk/me`, {
                         method: 'GET',
                         headers: {
-                            'Authorization': `Bearer ${token}`,
+                            'Authorization': `Bearer ${authToken}`,
                             'Content-Type': 'application/json',
                             'X-Request-Priority': 'high',
                             'X-Retry-Attempt': `${attempt}`,
@@ -313,6 +318,24 @@ export class AuthService {
                         error.message?.includes('network') ||
                         error.message?.includes('fetch') ||
                         error.message?.includes('ECONNREFUSED');
+
+                    if (
+                        error.name === 'SyncServerError' &&
+                        error.statusCode === 401 &&
+                        options?.getToken &&
+                        attempt < MAX_RETRY_ATTEMPTS
+                    ) {
+                        const fresh = await getClerkBearerToken(options.getToken, {
+                            retries: 4,
+                            baseDelayMs: 300,
+                            forceRefresh: true,
+                        });
+                        if (fresh) {
+                            authToken = fresh;
+                            logger.debug('🔄 /clerk/me 401 — retrying with refreshed Clerk token');
+                            continue;
+                        }
+                    }
 
                     // If not retryable or last attempt, reject immediately
                     if (!isRetryable || attempt === MAX_RETRY_ATTEMPTS) {

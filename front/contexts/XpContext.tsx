@@ -6,7 +6,7 @@ import { queueLevelUpCelebration } from '../utils/levelUpCelebration.storage';
 import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUpCelebration';
 import { syncNextPendingCelebration } from '../utils/levelUpCelebration.sync';
 import { setXpEventsHandler } from '../utils/xpEventsBridge';
-import { getClerkBearerToken, authHeaders } from '../utils/clerkAuthToken';
+import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken';
 import { AuthService } from '../src/services/authService';
 
 export interface XpEvent {
@@ -226,13 +226,15 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
 
       await AuthService.syncUserWithBackend(token).catch(() => null);
 
-      let res = await fetch(`${getApiUrl()}/xp/me`, {
-        headers: authHeaders(token),
-      });
+      let res = await fetchWithClerkAuth(getTokenRef.current, `${getApiUrl()}/xp/me`);
+      if (!res) return;
 
       if (res.status === 404) {
-        await AuthService.syncUserWithBackend(token).catch(() => null);
-        res = await fetch(`${getApiUrl()}/xp/me`, { headers: authHeaders(token) });
+        await AuthService.syncUserWithBackend(token, { getToken: getTokenRef.current }).catch(
+          () => null,
+        );
+        res = await fetchWithClerkAuth(getTokenRef.current, `${getApiUrl()}/xp/me`);
+        if (!res) return;
       }
 
       if (!res.ok) return;

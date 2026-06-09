@@ -18,6 +18,7 @@ import { useLanguageStore, Language } from '../src/i18n';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
 import { logger } from '../services/logger';
+import { canMakeAuthenticatedRequests, fetchWithClerkAuth } from '../utils/clerkAuthToken';
 import { ensureNotificationForegroundHandler } from '../services/notificationForegroundSetup';
 import {
   syncExpoPushToken,
@@ -123,7 +124,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [loading, setLoading] = useState(true);
   
   // Get Clerk auth for API calls
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   
   // Get language from the new i18n store
   const i18nLanguage = useLanguageStore((state) => state.language);
@@ -154,18 +155,12 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const syncSettingsToBackend = async (currentSettings: SettingsState) => {
     try {
-      if (!isSignedIn) return;
-      
-      const token = await getToken();
-      if (!token) return;
+      if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
 
-      await fetch(`${API_BASE_URL}/users/settings`, {
+      await fetchWithClerkAuth(getToken, `${API_BASE_URL}/users/settings`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(currentSettings)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentSettings),
       });
     } catch (e) {
       logger.warn('Failed to sync settings', e);
@@ -174,15 +169,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const loadSettingsFromBackend = async () => {
     try {
-      if (!isSignedIn) return null;
-      
-      const token = await getToken();
-      if (!token) return null;
+      if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return null;
 
-      const res = await fetch(`${API_BASE_URL}/users/settings`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchWithClerkAuth(getToken, `${API_BASE_URL}/users/settings`);
+      if (!res) return null;
       const json = await res.json();
       if (json.status === 'SUCCESS' && json.data) {
         return json.data;

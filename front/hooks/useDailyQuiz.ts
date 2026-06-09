@@ -93,12 +93,12 @@ async function fetchDailyWithAuthRetry(
         baseDelayMs: 400,
       });
       if (!freshToken) throw err;
-      await AuthService.syncUserWithBackend(freshToken);
+      await AuthService.syncUserWithBackend(freshToken, { getToken });
       return QuizApiService.fetchDaily(freshToken, lang);
     }
 
     if (err.message === 'USER_NOT_FOUND') {
-      await AuthService.syncUserWithBackend(token);
+      await AuthService.syncUserWithBackend(token, { getToken });
       return QuizApiService.fetchDaily(token, lang);
     }
 
@@ -115,7 +115,7 @@ async function fetchAndCacheDaily(
   if (!token) throw new Error('AUTH_REQUIRED');
 
   try {
-    await AuthService.syncUserWithBackend(token);
+    await AuthService.syncUserWithBackend(token, { getToken });
   } catch {
     // Cold start / transient sync failure — quiz fetch retries auth below.
   }

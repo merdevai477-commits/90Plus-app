@@ -18,6 +18,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+import { canMakeAuthenticatedRequests, getClerkBearerToken } from '../utils/clerkAuthToken';
 import { ProfileService, ProfileCompletionStatus } from '../src/services/authService';
 import { logger } from '../utils/logger';
 
@@ -74,7 +75,7 @@ function debounce<T extends (...args: any[]) => any>(
 // ============================================================================
 
 export function useProfileCompletion(): UseProfileCompletionReturn {
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   
   // ============================================================================
   // STATE
@@ -135,10 +136,12 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
     }
     
     // Check authentication
-    if (!isSignedIn) {
-      setCompletionStatus(null);
-      setIsLoading(false);
-      setError(null);
+    if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) {
+      if (isLoaded && !isSignedIn) {
+        setCompletionStatus(null);
+        setIsLoading(false);
+        setError(null);
+      }
       return;
     }
     
@@ -172,10 +175,8 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
       setError(null);
       setLastFetchTime(now);
       
-      const token = await getToken();
-      if (!token) {
-        throw new Error('No authentication token');
-      }
+      const token = await getClerkBearerToken(getToken);
+      if (!token) return;
       
       // Check if aborted
       if (abortController.signal.aborted) {
@@ -251,7 +252,7 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
         abortControllerRef.current = null;
       }
     }
-  }, [isSignedIn, getToken, retryCount, lastFetchTime, checkLoopSafeguard]);
+  }, [isSignedIn, isLoaded, getToken, retryCount, lastFetchTime, checkLoopSafeguard]);
   
   // ============================================================================
   // DEBOUNCED FETCH (Prevent Rapid Calls)
@@ -277,10 +278,8 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
     }
     
     try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error('No authentication token');
-      }
+      const token = await getClerkBearerToken(getToken);
+      if (!token) return false;
       
       logger.debug('[useProfileCompletion] Marking step as completed:', stepId);
       const result = await ProfileService.markStepCompleted(token, stepId);

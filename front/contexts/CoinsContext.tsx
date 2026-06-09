@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { CoinsService } from '../services/coins.service';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { canMakeAuthenticatedRequests, getClerkBearerToken } from '../utils/clerkAuthToken';
 
 const INITIAL_COINS = 50;
 
@@ -19,7 +20,7 @@ const CoinsContext = createContext<CoinsContextType | undefined>(undefined);
 export const CoinsProvider = ({ children }: { children: ReactNode }) => {
   const [coins, setCoins] = useState<number>(INITIAL_COINS);
   const [loading, setLoading] = useState(true);
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
 
   // Clerk's `getToken` returns a NEW function reference on every render. Don't
@@ -31,31 +32,30 @@ export const CoinsProvider = ({ children }: { children: ReactNode }) => {
 
   // تحميل الكوينات عند تغيير المستخدم
   useEffect(() => {
-    if (isSignedIn && user?.id) {
-      // Set the current user and token in CoinsService
+    if (canMakeAuthenticatedRequests(isLoaded, !!isSignedIn) && user?.id) {
       const setupCoins = async () => {
-        const token = await getTokenRef.current();
+        const token = await getClerkBearerToken(getTokenRef.current);
+        if (!token) return;
         CoinsService.setCurrentUser(user.id, token);
         CoinsService.setToken(token);
         await loadCoins();
       };
       setupCoins();
-    } else {
+    } else if (isLoaded && !isSignedIn) {
       // Clear user and reset to initial coins
       CoinsService.clearCurrentUser();
       setCoins(INITIAL_COINS);
       setLoading(false);
     }
-  }, [isSignedIn, user?.id]);
+  }, [isSignedIn, isLoaded, user?.id]);
 
   const loadCoins = useCallback(async () => {
     try {
       setLoading(true);
       // Update token before loading
-      const token = await getTokenRef.current();
-      if (token) {
-        CoinsService.setToken(token);
-      }
+      const token = await getClerkBearerToken(getTokenRef.current);
+      if (!token) return;
+      CoinsService.setToken(token);
       const balance = await CoinsService.getBalance();
       setCoins(balance);
     } catch (error) {

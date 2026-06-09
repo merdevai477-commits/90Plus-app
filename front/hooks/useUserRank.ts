@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
+import { canMakeAuthenticatedRequests, fetchWithClerkAuth } from '../utils/clerkAuthToken';
 
 export interface UserRankData {
   views: number | null;
@@ -22,30 +23,25 @@ interface UserRankResponse {
   data?: UserRankData;
 }
 
-async function fetchUserRank(token: string): Promise<UserRankData> {
-  const res = await fetch(`${getApiUrl()}/reels/rankings/user-rank`, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-  });
-  if (!res.ok) throw new Error(`User rank request failed: ${res.status}`);
-  const json: UserRankResponse = await res.json();
-  if (json.status !== 'SUCCESS' || !json.data) {
-    throw new Error('Failed to load user rank');
-  }
-  return json.data;
-}
-
 export function useUserRank(enabled = true) {
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
 
   const query = useQuery({
     queryKey: ['rank', 'user-rank'],
     queryFn: async () => {
-      const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
-      return fetchUserRank(token);
+      const res = await fetchWithClerkAuth(getToken, `${getApiUrl()}/reels/rankings/user-rank`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res) throw new Error('Not authenticated');
+      if (!res.ok) throw new Error(`User rank request failed: ${res.status}`);
+      const json: UserRankResponse = await res.json();
+      if (json.status !== 'SUCCESS' || !json.data) {
+        throw new Error('Failed to load user rank');
+      }
+      return json.data;
     },
     staleTime: 5 * 60 * 1000,
-    enabled: enabled && !!isSignedIn,
+    enabled: enabled && canMakeAuthenticatedRequests(isLoaded, !!isSignedIn),
   });
 
   return {

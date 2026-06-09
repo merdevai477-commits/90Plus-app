@@ -50,6 +50,11 @@ import { useScreenFont } from '../../utils/fontSetup';
 import { useTranslation } from '../../src/i18n';
 import { QuizApiService } from '../../services/quizApi.service';
 import { dailyQuizQueryKey, todayQuizDateKey } from '../../utils/quizDateKey';
+import {
+    canMakeAuthenticatedRequests,
+    fetchWithClerkAuth,
+    getClerkBearerToken,
+} from '../../utils/clerkAuthToken';
 
 const API_URL = getApiUrl();
 
@@ -85,7 +90,7 @@ export default function HomeScreen() {
 
     // ── Persisted video likes ─────────────────────────────────────────────────
     const { user } = useUser();
-    const { isSignedIn, getToken } = useAuth();
+    const { isSignedIn, isLoaded, getToken } = useAuth();
     const queryClient = useQueryClient();
     const quizPreloadDone = useRef(false);
     const { likedIds, toggleLike } = useHomeLikes(user?.id);
@@ -104,11 +109,8 @@ export default function HomeScreen() {
 
     const fetchSpinWheelStatus = useCallback(async () => {
         try {
-            const token = await getToken();
-            if (!token) return;
-            const response = await fetch(`${API_URL}/daily-spin/status`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await fetchWithClerkAuth(getToken, `${API_URL}/daily-spin/status`);
+            if (!response) return;
             const data = await response.json();
             if (data.status === 'SUCCESS') {
                 setUserInfo((prev) => ({
@@ -134,11 +136,12 @@ export default function HomeScreen() {
     // either a 1-10 rank or null. We pick the best (lowest number = best rank).
     const fetchUserRank = useCallback(async () => {
         try {
-            const token = await getToken();
-            if (!token || !isSignedIn) return;
-            const response = await fetch(`${API_URL}/reels/rankings/user-rank`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+            const response = await fetchWithClerkAuth(
+                getToken,
+                `${API_URL}/reels/rankings/user-rank`,
+            );
+            if (!response) return;
             if (response.ok) {
                 const data = await response.json();
                 if (data.status === 'SUCCESS' && data.data) {
@@ -169,7 +172,7 @@ export default function HomeScreen() {
             logger.error('Error fetching user rank:', error);
             setUserInfo((prev) => ({ ...prev, rank: null }));
         }
-    }, [getToken, isSignedIn]);
+    }, [getToken, isSignedIn, isLoaded]);
 
     const fetchUserProfile = useCallback(async () => {
         const applyClerkHomeFallback = () => {
@@ -194,11 +197,12 @@ export default function HomeScreen() {
         };
 
         try {
-            const token = await getToken();
-            if (!token || !isSignedIn) return;
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+            const token = await getClerkBearerToken(getToken);
+            if (!token) return;
 
             try {
-                const userData = await AuthService.syncUserWithBackend(token);
+                const userData = await AuthService.syncUserWithBackend(token, { getToken });
                 setUserInfo((prev) => ({
                     ...prev,
                     username: userData.username || prev.username,
@@ -219,12 +223,13 @@ export default function HomeScreen() {
             logger.error('Error fetching user profile:', error);
             applyClerkHomeFallback();
         }
-    }, [getToken, isSignedIn, user]);
+    }, [getToken, isSignedIn, isLoaded, user]);
 
     const preloadProfileData = useCallback(async () => {
         try {
-            const token = await getToken();
-            if (!token || !isSignedIn) return;
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+            const token = await getClerkBearerToken(getToken);
+            if (!token) return;
 
             ProfileCompletionService.getCompletionStatus(token)
                 .then((status) => {
@@ -234,9 +239,9 @@ export default function HomeScreen() {
                 })
                 .catch(() => {});
 
-            fetch(`${API_URL}/clerk/me`, { headers: { Authorization: `Bearer ${token}` } })
+            fetchWithClerkAuth(getToken, `${API_URL}/clerk/me`)
                 .then(async (response) => {
-                    if (response.ok) {
+                    if (response?.ok) {
                         const data = await response.json();
                         if (data.status === 'SUCCESS' && data.data?.user) {
                             await cacheService.set(
@@ -251,12 +256,15 @@ export default function HomeScreen() {
         } catch {
             // silent
         }
-    }, [getToken, isSignedIn]);
+    }, [getToken, isSignedIn, isLoaded]);
 
     const preloadQuizData = useCallback(async () => {
         try {
-            const token = await getToken();
-            if (!token || !isSignedIn || quizPreloadDone.current) return;
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn) || quizPreloadDone.current) {
+                return;
+            }
+            const token = await getClerkBearerToken(getToken);
+            if (!token) return;
             quizPreloadDone.current = true;
             
             const dateKey = todayQuizDateKey();
@@ -275,19 +283,20 @@ export default function HomeScreen() {
         } catch {
             // silent
         }
-    }, [getToken, isSignedIn, queryClient]);
+    }, [getToken, isSignedIn, isLoaded, queryClient]);
 
     // ── Fetch subscribed fixture IDs (pinned matches) ─────────────────────────
     const fetchSubscribedIds = useCallback(async () => {
         try {
-            const token = await getToken();
-            if (!token || !isSignedIn) return;
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+            const token = await getClerkBearerToken(getToken);
+            if (!token) return;
             const ids = await MatchSubscriptionsService.listIds(token);
             setSubscribedIds(ids);
         } catch {
             // silent — bell state just won't show
         }
-    }, [getToken, isSignedIn]);
+    }, [getToken, isSignedIn, isLoaded]);
 
     const {
         userMode,
@@ -416,6 +425,8 @@ export default function HomeScreen() {
 
     useFocusEffect(
         useCallback(() => {
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+
             const now = Date.now();
             if (now - lastLoadTimeRef.current < LOAD_THROTTLE_MS) return;
             if (isLoadingRef.current) return;
@@ -428,43 +439,43 @@ export default function HomeScreen() {
             const loadData = async () => {
                 if (!isMounted || abortController.signal.aborted) return;
                 try {
-                    const token = await getTokenRef.current();
+                    const token = await getClerkBearerToken(getTokenRef.current);
                     if (abortController.signal.aborted) {
+                        if (isMounted) isLoadingRef.current = false;
+                        return;
+                    }
+                    if (!token) {
                         if (isMounted) isLoadingRef.current = false;
                         return;
                     }
 
                     // Critical — matches load from cache without auth; rankings need token
                     const criticalPromises = [
-                        fetchHomeDataRef.current(token ?? null).catch((err: unknown) => {
+                        fetchHomeDataRef.current(token).catch((err: unknown) => {
                             logger.error('Error fetching home data:', err);
                             if (isMounted) setMatchesError(String(err));
                             return null;
                         }),
                     ];
 
-                    if (token) {
-                        criticalPromises.push(
-                            fetchUserProfileRef.current().catch((err: unknown) => {
-                                logger.error('Error fetching user profile:', err);
-                                return null;
-                            }),
-                        );
-                    }
+                    criticalPromises.push(
+                        fetchUserProfileRef.current().catch((err: unknown) => {
+                            logger.error('Error fetching user profile:', err);
+                            return null;
+                        }),
+                    );
 
-                    const secondaryPromises = token
-                        ? [
-                            fetchRankingsDataRef.current(token).catch((err: unknown) => {
-                                logger.error('Error fetching rankings:', err);
-                                if (isMounted) setRankingsError(String(err));
-                                return null;
-                            }),
-                            fetchSpinWheelStatusRef.current().catch(() => null),
-                            fetchPredictionsDataRef.current(token).catch(() => null),
-                            fetchUserRankRef.current().catch(() => null),
-                            fetchSubscribedIdsRef.current().catch(() => null),
-                        ]
-                        : [];
+                    const secondaryPromises = [
+                        fetchRankingsDataRef.current(token).catch((err: unknown) => {
+                            logger.error('Error fetching rankings:', err);
+                            if (isMounted) setRankingsError(String(err));
+                            return null;
+                        }),
+                        fetchSpinWheelStatusRef.current().catch(() => null),
+                        fetchPredictionsDataRef.current(token).catch(() => null),
+                        fetchUserRankRef.current().catch(() => null),
+                        fetchSubscribedIdsRef.current().catch(() => null),
+                    ];
 
                     await Promise.all(criticalPromises);
 
@@ -490,7 +501,7 @@ export default function HomeScreen() {
                 abortController.abort();
                 isLoadingRef.current = false;
             };
-        }, []),
+        }, [isLoaded, isSignedIn]),
     );
 
     const onRefresh = useCallback(async () => {
@@ -498,7 +509,9 @@ export default function HomeScreen() {
         setMatchesError(null);
         setRankingsError(null);
         try {
-            const token = await getToken();
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+            const token = await getClerkBearerToken(getToken);
+            if (!token) return;
             await Promise.all([
                 fetchHomeDataRef.current(token).catch(() => null),
                 fetchRankingsDataRef.current(token).catch(() => null),
@@ -513,7 +526,7 @@ export default function HomeScreen() {
         } finally {
             setRefreshing(false);
         }
-    }, [getToken]);
+    }, [getToken, isLoaded, isSignedIn]);
 
     const handleSearchPress = useCallback(() => {
         setSearchVisible(true);
@@ -554,10 +567,11 @@ export default function HomeScreen() {
 
     const handleFavoritePress = useCallback(
         async (matchId: string) => {
-            const token = await getToken();
+            if (!canMakeAuthenticatedRequests(isLoaded, !!isSignedIn)) return;
+            const token = await getClerkBearerToken(getToken);
             await toggleFavorite(matchId, token);
         },
-        [getToken, toggleFavorite],
+        [getToken, isLoaded, isSignedIn, toggleFavorite],
     );
 
     const handleViewAllMatches = useCallback(
@@ -794,7 +808,9 @@ export default function HomeScreen() {
                             isOffline={!isOnline}
                             onRetry={() => {
                                 setMatchesError(null);
-                                getToken().then((t) => fetchHomeData(t)).catch(() => {});
+                                getClerkBearerToken(getToken)
+                                    .then((t) => t && fetchHomeData(t))
+                                    .catch(() => {});
                             }}
                         />
                     ) : (
@@ -818,7 +834,9 @@ export default function HomeScreen() {
                             isOffline={!isOnline}
                             onRetry={() => {
                                 setRankingsError(null);
-                                getToken().then((t) => fetchRankingsData(t)).catch(() => {});
+                                getClerkBearerToken(getToken)
+                                    .then((t) => t && fetchRankingsData(t))
+                                    .catch(() => {});
                             }}
                         />
                     ) : (
@@ -843,7 +861,9 @@ export default function HomeScreen() {
                             isOffline={!isOnline}
                             onRetry={() => {
                                 setRankingsError(null);
-                                getToken().then((t) => fetchRankingsData(t)).catch(() => {});
+                                getClerkBearerToken(getToken)
+                                    .then((t) => t && fetchRankingsData(t))
+                                    .catch(() => {});
                             }}
                         />
                     ) : (

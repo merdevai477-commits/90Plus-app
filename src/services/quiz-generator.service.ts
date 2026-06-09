@@ -177,9 +177,11 @@ function hashQuestion(q: string): string {
 }
 
 const QUIZ_COMPLETION_OPTS = {
-  max_tokens: 12_000,
+  max_tokens: 16_000,
   response_format: { type: 'json_object' as const },
 };
+
+const AI_PARSE_MAX_RETRIES = 2;
 
 function stripMarkdownFences(text: string): string {
   return text
@@ -478,10 +480,6 @@ async function attemptOpenRouterCall(
   packDate: string,
   avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
-  const client = buildClient();
-  if (!client) throw new Error('OpenRouter API key not configured');
-
-  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
 
   const system = `You are a world football trivia writer for the 90Plus app.
@@ -526,25 +524,57 @@ Never generate text-input or essay questions. Exactly ${QUIZ_PACK_SIZE} question
 
   const user = `Generate today's (${packDate}) daily football quiz in ${langLabel}. Topic focus: ${topicFocus}. Ensure no duplicates, exactly 4 options per question, correctKey exists, and the exact type mix above.${historyAvoid}`;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.85,
-    messages: [
-      { role: 'system', content: systemWithTopic },
-      { role: 'user', content: user },
-    ],
-    ...QUIZ_COMPLETION_OPTS,
-  });
-
-  const content = completion.choices[0]?.message?.content ?? '{}';
-  const parsed = parseAiJsonContent(content);
+  const parsed = await callQuizAiJson(systemWithTopic, user, 0.85);
   const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate);
   if (parsedQuestions.length === 0) {
-    logger.warn(
-      `[QuizGen] Initial AI call returned 0 parseable questions (${content.length} chars)`,
-    );
+    logger.warn('[QuizGen] Initial AI call returned 0 parseable questions after retries');
   }
   return parsedQuestions;
+}
+
+async function callQuizAiJson(
+  system: string,
+  user: string,
+  temperature: number,
+): Promise<unknown> {
+  const client = buildClient();
+  if (!client) throw new Error('OpenRouter API key not configured');
+
+  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
+  let lastContent = '{}';
+
+  for (let attempt = 1; attempt <= AI_PARSE_MAX_RETRIES; attempt += 1) {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: attempt === 1 ? temperature : Math.min(temperature, 0.7),
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      ...QUIZ_COMPLETION_OPTS,
+    });
+
+    const content = completion.choices[0]?.message?.content ?? '{}';
+    lastContent = content;
+    const finishReason = completion.choices[0]?.finish_reason;
+    const parsed = parseAiJsonContent(content);
+    const questionCount = Array.isArray((parsed as { questions?: unknown[] })?.questions)
+      ? (parsed as { questions: unknown[] }).questions.length
+      : Array.isArray(parsed)
+        ? parsed.length
+        : 0;
+
+    if (questionCount > 0) return parsed;
+
+    logger.warn('[QuizGen] AI returned unparsable or empty JSON', {
+      attempt,
+      finishReason,
+      length: content.length,
+      preview: content.slice(0, 120).replace(/\s+/g, ' '),
+    });
+  }
+
+  return parseAiJsonContent(lastContent);
 }
 
 async function generateReplacementQuestions(
@@ -554,36 +584,22 @@ async function generateReplacementQuestions(
   existing: StoredQuizQuestion[],
   avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
-  const client = buildClient();
-  if (!client) throw new Error('OpenRouter API key not configured');
-
-  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
   const avoidSample = formatAvoidSample([...avoidFromHistory, ...existing].slice(0, 24));
+  const requestCount = Math.min(count, 4);
 
   const system = `You are a football trivia writer for 90Plus.
-Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW multiple-choice questions.
+Return ONLY valid JSON: {"questions":[...]} with exactly ${requestCount} NEW multiple-choice questions.
+CRITICAL: Output MUST be complete valid JSON. Never truncate mid-object.
 Each question: question, type (normal|image|guess_player|logo|stadium), options (4x A-D), correctKey, difficulty (EASY|MEDIUM|HARD), imageBinding when not normal, imageLayout, hint.
 ${GUESS_PLAYER_PROMPT_RULES}
 For guess_player: ONLY active 2024-2026 players with real club photos (Salah, Haaland, Mbappe, Vinicius Junior, Bellingham, Kane, etc.).
 Use type "normal" for legend/history trivia without images.
 Language: ${langLabel}. No duplicates.`;
 
-  const user = `Generate ${count} replacement questions for pack ${packDate}. Do NOT repeat or paraphrase: ${avoidSample}`;
+  const user = `Generate ${requestCount} replacement questions for pack ${packDate}. Do NOT repeat or paraphrase: ${avoidSample}`;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.9,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    ...QUIZ_COMPLETION_OPTS,
-  });
-
-  const content = completion.choices[0]?.message?.content ?? '{}';
-  const parsed = parseAiJsonContent(content);
-
+  const parsed = await callQuizAiJson(system, user, 0.85);
   return parseQuestionsFromAi(parsed, language, packDate);
 }
 
@@ -594,32 +610,19 @@ async function generateNormalOnlyReplacements(
   existing: StoredQuizQuestion[],
   avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
-  const client = buildClient();
-  if (!client) throw new Error('OpenRouter API key not configured');
-
-  const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
   const avoidSample = formatAvoidSample([...avoidFromHistory, ...existing].slice(0, 20));
+  const requestCount = Math.min(count, 4);
 
   const system = `You are a football trivia writer for 90Plus.
-Return ONLY valid JSON: {"questions":[...]} with exactly ${count} NEW text-only multiple-choice questions.
+Return ONLY valid JSON: {"questions":[...]} with exactly ${requestCount} NEW text-only multiple-choice questions.
+CRITICAL: Output MUST be complete valid JSON. Never truncate mid-object.
 Every question MUST use type "normal" with NO imageBinding.
 Language: ${langLabel}. Mix EASY/MEDIUM/HARD. No duplicates.`;
 
-  const user = `Generate ${count} normal football trivia questions for ${packDate}. Avoid: ${avoidSample}`;
+  const user = `Generate ${requestCount} normal football trivia questions for ${packDate}. Avoid: ${avoidSample}`;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.85,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    ...QUIZ_COMPLETION_OPTS,
-  });
-
-  const content = completion.choices[0]?.message?.content ?? '{}';
-  const parsed = parseAiJsonContent(content);
+  const parsed = await callQuizAiJson(system, user, 0.85);
   const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate);
   return parsedQuestions.map((q) => ({
     ...q,
@@ -692,7 +695,7 @@ async function buildPackWithReplacements(
     fillRound++;
     const beforeCount = questions.length;
     const needed = QUIZ_PACK_SIZE - questions.length;
-    const buffer = Math.min(needed + 2, 6);
+    const buffer = Math.min(needed + 1, 4);
     logger.info(
       `[QuizGen] Pack has ${questions.length}/${QUIZ_PACK_SIZE} — generating ${buffer} replacement question(s) (round ${fillRound})`,
     );
