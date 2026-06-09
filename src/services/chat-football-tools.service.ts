@@ -5,9 +5,37 @@
 
 import { footballService } from './football.service';
 import { logger } from '../utils/logger';
-import { scoreEntityNameMatch, containsArabicScript } from './quiz-name-match.util';
+import {
+  scoreEntityNameMatch,
+  containsArabicScript,
+  normalizeName,
+  transliterateArabicToLatin,
+} from './quiz-name-match.util';
 import { resolvePlayerName, learnPlayerMapping } from './player-name-resolver.service';
 import { getCachedOrFetch } from './player-stats-cache.service';
+import { fetchTeamDossierContext } from './team-dossier.service';
+import { resolveTeamFromDictionary } from './team-name-resolver.service';
+import { footballMetrics } from '../utils/football-metrics';
+import { redisCacheService } from './redis-cache.service';
+
+// Dossier-level Redis TTLs (separate namespaces from the football:* proxy keys
+// so clearCache() can't wipe them mid-session).
+const PLAYER_DOSSIER_TTL_MS = 6 * 60 * 60_000; // ~6h
+const PLAYER_DOSSIER_NS = 'football:player:';
+
+/** Provenance of an injected context sub-block. */
+export type DataSource = 'api' | 'cache' | 'unavailable';
+
+interface ContextPiece {
+  block: string;
+  source: DataSource;
+}
+
+/** Prefix a raw block with a `source:` line, or drop it when null/empty. */
+function tagPiece(block: string | null, source: DataSource): ContextPiece | null {
+  if (!block) return null;
+  return { block: `source: ${source}\n${block}`, source };
+}
 
 const LEAGUE_ALIASES: Array<{ pattern: RegExp; id: number; label: string }> = [
   { pattern: /premier\s*league|بريمير|الدوري\s*الإنجليزي|الانجليزي/i, id: 39, label: 'Premier League' },
@@ -41,6 +69,16 @@ function isStandingsQuery(message: string): boolean {
 
 function isTopScorerQuery(message: string): boolean {
   return /top\s*scorer|top\s*scorers|golden\s*boot|most\s+goals|هداف|الهداف|الهدافين|أكثر.*(تسجيل|أهداف|اهداف)/i.test(
+    message,
+  );
+}
+
+/**
+ * Club/team-centric question (e.g. "أخبار ريال مدريد", "Liverpool standings").
+ * Broad on purpose; team extraction + resolver decide if it actually resolves.
+ */
+function isTeamQuery(message: string): boolean {
+  return /نادي|فريق|الفريق|club|team|أخبار|اخبار|news|ترتيب|standing|coach|مدرب|squad|تشكيل/i.test(
     message,
   );
 }
@@ -188,7 +226,24 @@ function detectLeague(message: string): { id: number; label: string } | null {
   return null;
 }
 
+/** Strong threshold aligned with the resolver (0.82) to stop cross-script
+ * mismatches like "فينيسيوس" → "Giroud". An exact normalized-name match wins
+ * outright. */
+const PLAYER_MATCH_THRESHOLD = 0.82;
+
 function pickBestPlayerMatch(name: string, results: any[]): any | null {
+  const normTarget = normalizeName(name);
+
+  // 1. Exact normalized-name match first — never lose to a fuzzy near-miss.
+  if (normTarget) {
+    for (const row of results ?? []) {
+      const player = row?.player;
+      if (!player?.id) continue;
+      if (normalizeName(player.name ?? '') === normTarget) return row;
+    }
+  }
+
+  // 2. Best fuzzy score, gated by a strong threshold.
   let best: any | null = null;
   let bestScore = 0;
   for (const row of results ?? []) {
@@ -200,34 +255,137 @@ function pickBestPlayerMatch(name: string, results: any[]): any | null {
       best = row;
     }
   }
-  return bestScore >= 0.72 ? best : null;
+  return bestScore >= PLAYER_MATCH_THRESHOLD ? best : null;
 }
 
-function formatPlayerBlock(name: string, row: any): string {
+function num(v: unknown): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Per-competition stat figures pulled from one API `statistics[]` entry. */
+interface CompetitionStat {
+  competition: string;
+  team: string;
+  appearances: number;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+  rating: number | null;
+}
+
+function extractCompetitionStat(entry: any): CompetitionStat {
+  const games = entry?.games ?? {};
+  const goals = entry?.goals ?? {};
+  const cards = entry?.cards ?? {};
+  const ratingRaw = games.rating != null ? Number(games.rating) : NaN;
+  return {
+    competition: entry?.league?.name ?? '—',
+    team: entry?.team?.name ?? '—',
+    appearances: num(games.appearences ?? games.appearances),
+    minutes: num(games.minutes),
+    goals: num(goals.total),
+    assists: num(goals.assists),
+    yellow: num(cards.yellow),
+    red: num(cards.red),
+    rating: Number.isFinite(ratingRaw) ? ratingRaw : null,
+  };
+}
+
+/**
+ * Build a player stat block.
+ *
+ * Default = full-season aggregate across ALL competitions (sum of apps/minutes/
+ * goals/assists/cards; minutes-weighted average rating) plus a per-competition
+ * breakdown. When `competitionLabel` is given, show only that competition row.
+ * Stats Type is always labeled so the model never conflates league vs season.
+ */
+function formatPlayerBlock(
+  name: string,
+  row: any,
+  opts?: { competitionLabel?: string },
+): string {
   const player = row.player ?? {};
-  const stats = row.statistics?.[0] ?? {};
-  const team = stats.team?.name ?? '—';
-  const league = stats.league?.name ?? '—';
-  const games = stats.games ?? {};
-  const goals = stats.goals ?? {};
-  const cards = stats.cards ?? {};
-  const passes = stats.passes ?? {};
+  const allStats: any[] = Array.isArray(row.statistics) ? row.statistics : [];
+  const comps = allStats.map(extractCompetitionStat).filter((c) => c.competition !== '—' || c.appearances > 0 || c.minutes > 0);
+
+  const seasonLabel = `${PLAYER_SEASON}/${PLAYER_SEASON + 1}`;
+
+  // Primary club = entry with most minutes (fallback first entry).
+  const primary =
+    comps.slice().sort((a, b) => b.minutes - a.minutes)[0] ??
+    extractCompetitionStat(allStats[0] ?? {});
+
+  // ── Single-competition mode ──────────────────────────────────────────────
+  if (opts?.competitionLabel) {
+    const target = normalizeName(opts.competitionLabel);
+    const one =
+      comps.find((c) => normalizeName(c.competition) === target) ??
+      comps.find((c) => normalizeName(c.competition).includes(target));
+    if (one) {
+      return [
+        `Player: ${player.name ?? name}`,
+        `Age: ${player.age ?? '—'} | Nationality: ${player.nationality ?? '—'}`,
+        `Stats Type: ${one.competition} ${seasonLabel}`,
+        `Team: ${one.team} | Position: ${primary && primary.team === one.team ? '—' : '—'}`,
+        `Appearances: ${one.appearances} | Minutes: ${one.minutes}`,
+        `Goals: ${one.goals} | Assists: ${one.assists}`,
+        `Cards: Y ${one.yellow} / R ${one.red}`,
+        one.rating != null ? `Rating: ${one.rating.toFixed(2)}` : 'Rating: —',
+      ].join('\n');
+    }
+  }
+
+  // ── Default: season aggregate across all competitions ────────────────────
+  const agg = comps.reduce(
+    (acc, c) => {
+      acc.appearances += c.appearances;
+      acc.minutes += c.minutes;
+      acc.goals += c.goals;
+      acc.assists += c.assists;
+      acc.yellow += c.yellow;
+      acc.red += c.red;
+      if (c.rating != null && c.minutes > 0) {
+        acc.ratingWeighted += c.rating * c.minutes;
+        acc.ratingMinutes += c.minutes;
+      }
+      return acc;
+    },
+    {
+      appearances: 0,
+      minutes: 0,
+      goals: 0,
+      assists: 0,
+      yellow: 0,
+      red: 0,
+      ratingWeighted: 0,
+      ratingMinutes: 0,
+    },
+  );
+  const avgRating = agg.ratingMinutes > 0 ? agg.ratingWeighted / agg.ratingMinutes : null;
 
   const lines = [
     `Player: ${player.name ?? name}`,
     `Age: ${player.age ?? '—'} | Nationality: ${player.nationality ?? '—'}`,
-    `Position: ${games.position ?? '—'} | Team: ${team} | League: ${league}`,
-    `Appearances: ${games.appearences ?? games.appearances ?? 0} | Minutes: ${games.minutes ?? 0}`,
-    `Goals: ${goals.total ?? 0} (home ${goals.home ?? 0}, away ${goals.away ?? 0})`,
-    `Assists: ${goals.assists ?? 0}`,
-    `Cards: Y ${cards.yellow ?? 0} / R ${cards.red ?? 0}`,
+    `Stats Type: Season ${seasonLabel} (all competitions combined)`,
+    `Primary club: ${primary?.team ?? '—'}`,
+    `Total Appearances: ${agg.appearances} | Minutes: ${agg.minutes}`,
+    `Total Goals: ${agg.goals} | Total Assists: ${agg.assists}`,
+    `Cards: Y ${agg.yellow} / R ${agg.red}`,
+    avgRating != null ? `Avg rating (minutes-weighted): ${avgRating.toFixed(2)}` : 'Avg rating: —',
   ];
 
-  if (passes.total != null) {
-    lines.push(`Passes: ${passes.total} (accuracy ${passes.accuracy ?? '—'}%)`);
-  }
-  if (games.rating) {
-    lines.push(`Rating: ${games.rating}`);
+  if (comps.length > 1) {
+    lines.push('Per-competition breakdown:');
+    for (const c of comps.slice().sort((a, b) => b.goals - a.goals)) {
+      lines.push(
+        `  • ${c.competition} (${c.team}): ${c.appearances} apps, ${c.goals} G, ${c.assists} A, ${c.minutes} min`,
+      );
+    }
+  } else if (comps.length === 1) {
+    lines.push(`Competition: ${comps[0].competition} (${comps[0].team})`);
   }
 
   return lines.join('\n');
@@ -247,7 +405,10 @@ const PLAYER_SEASON = currentFootballSeason();
  * name-mapping resolver to (a) translate Arabic → English and (b) skip the
  * expensive league-scan search when a known apiPlayerId exists.
  */
-export async function fetchPlayerStatsRow(rawName: string): Promise<PlayerStatsRow | null> {
+export async function fetchPlayerStatsRow(
+  rawName: string,
+  opts?: { competitionLabel?: string },
+): Promise<PlayerStatsRow | null> {
   if (!footballService.isConfigured()) return null;
   try {
     const resolved = await resolvePlayerName(rawName);
@@ -256,17 +417,39 @@ export async function fetchPlayerStatsRow(rawName: string): Promise<PlayerStatsR
     let row: any = null;
     let apiPlayerId = resolved?.apiPlayerId;
 
-    // Fast path: known API id → fetch stats directly, no search needed.
-    if (apiPlayerId) {
+    // ── Fast path: trusted seeded/fuzzy id → fetch stats directly. We do NOT
+    //    fall back to a name search when this id resolves nothing, because that
+    //    fallback is exactly what produced Vinicius→Giroud. An empty stat feed
+    //    for a known id means "no verified data this season", not "wrong id".
+    if (apiPlayerId && (resolved?.source === 'mapping' || resolved?.source === 'fuzzy')) {
+      const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
+      row = detailed?.[0] ?? null;
+      footballMetrics.recordResolver(true);
+      if (!row) {
+        logger.info(
+          `[Resolve] "${rawName}" -> ${resolved.source} -> ${searchName} (id ${apiPlayerId}) — no stats this season (unavailable)`,
+        );
+        return null;
+      }
+    } else if (apiPlayerId) {
+      // Raw-source id (rare) — try it, but allow a search fallback below.
       const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
       row = detailed?.[0] ?? null;
     }
 
-    // Fallback: search by (English) name across top leagues.
-    if (!row) {
-      const results = await footballService.searchPlayers(searchName);
-      const match = pickBestPlayerMatch(searchName, results);
-      if (!match) return null;
+    // ── Fallback search: only for names with NO trusted id. Transliterate
+    //    Arabic so unmapped Arabic names can still hit the (Latin-only) API.
+    if (!row && !apiPlayerId) {
+      const searchQuery = containsArabicScript(searchName)
+        ? transliterateArabicToLatin(searchName)
+        : searchName;
+      const results = await footballService.searchPlayers(searchQuery);
+      const match = pickBestPlayerMatch(searchQuery, results);
+      if (!match) {
+        footballMetrics.recordResolver(false);
+        logger.info(`[Resolve] "${rawName}" -> search "${searchQuery}" -> no confident match`);
+        return null;
+      }
       apiPlayerId = match.player?.id ?? apiPlayerId;
       if (apiPlayerId) {
         const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
@@ -274,21 +457,33 @@ export async function fetchPlayerStatsRow(rawName: string): Promise<PlayerStatsR
       } else {
         row = match;
       }
+      footballMetrics.recordResolver(!!apiPlayerId);
 
-      // Self-learn: persist the discovered mapping for instant future lookups.
-      if (apiPlayerId && row?.player?.name) {
-        void learnPlayerMapping({
-          rawQuery: rawName,
-          englishName: row.player.name,
-          apiPlayerId,
-        });
+      // Self-learn ONLY on a high-confidence match (exact normalized name or
+      // fuzzy score >= 0.88) to prevent alias pollution that misroutes names.
+      const matchedName: string = match.player?.name ?? '';
+      const isExact =
+        !!matchedName && normalizeName(matchedName) === normalizeName(searchQuery);
+      const score = scoreEntityNameMatch(searchQuery, matchedName);
+      if (apiPlayerId && matchedName && (isExact || score >= 0.88)) {
+        logger.info(
+          `[Resolve] "${rawName}" -> search -> ${matchedName} (id ${apiPlayerId}, score ${score.toFixed(2)}) [learned]`,
+        );
+        void learnPlayerMapping({ rawQuery: rawName, englishName: matchedName, apiPlayerId });
+      } else if (apiPlayerId) {
+        logger.info(
+          `[Resolve] "${rawName}" -> search -> ${matchedName} (id ${apiPlayerId}, score ${score.toFixed(2)}) [not learned — low confidence]`,
+        );
       }
     }
 
-    if (!row) return null;
+    if (!row) {
+      footballMetrics.recordResolver(false);
+      return null;
+    }
 
     return {
-      aiResponse: formatPlayerBlock(searchName, row),
+      aiResponse: formatPlayerBlock(searchName, row, opts),
       statValue: row,
       apiPlayerId,
       aliases: Array.from(
@@ -313,10 +508,24 @@ async function fetchPlayerContextCached(
   const league = detectLeague(message);
   const isLive = isLiveMatchesQuery(message);
 
+  const redisKey = `${PLAYER_DOSSIER_NS}${normalizeName(rawName)}:${statType}:${league?.id ?? 'all'}`;
+
   return cachedLookup(
     `player:${rawName.toLowerCase()}:${statType}:${league?.id ?? 'all'}`,
     30 * 60_000,
     async () => {
+      // Redis dossier layer (skipped for volatile live queries).
+      if (!isLive) {
+        const cached = await redisCacheService.get<string>(redisKey);
+        if (cached != null) {
+          footballMetrics.recordCacheHit();
+          logger.info(`[DossierCache] player HIT ${redisKey}`);
+          return cached;
+        }
+        footballMetrics.recordCacheMiss();
+        logger.info(`[DossierCache] player MISS ${redisKey}`);
+      }
+
       const result = await getCachedOrFetch({
         playerName: rawName,
         statType,
@@ -324,9 +533,13 @@ async function fetchPlayerContextCached(
         season: String(PLAYER_SEASON),
         questionAsked: message,
         isLive,
-        fetcher: () => fetchPlayerStatsRow(rawName),
+        fetcher: () => fetchPlayerStatsRow(rawName, { competitionLabel: league?.label }),
       });
-      return result?.aiResponse ?? null;
+      const out = result?.aiResponse ?? null;
+      if (!isLive && out) {
+        await redisCacheService.set(redisKey, out, PLAYER_DOSSIER_TTL_MS);
+      }
+      return out;
     },
   );
 }
@@ -430,17 +643,21 @@ async function resolvePlayerApiId(
     };
   }
 
-  const results = await footballService.searchPlayers(searchName);
-  const match = pickBestPlayerMatch(searchName, results);
+  const searchQuery = containsArabicScript(searchName)
+    ? transliterateArabicToLatin(searchName)
+    : searchName;
+  const results = await footballService.searchPlayers(searchQuery);
+  const match = pickBestPlayerMatch(searchQuery, results);
   const apiPlayerId = match?.player?.id;
   if (!apiPlayerId) return null;
 
-  if (match?.player?.name) {
-    void learnPlayerMapping({
-      rawQuery: rawName,
-      englishName: match.player.name,
-      apiPlayerId,
-    });
+  // Only persist a learned alias on a high-confidence match (prevents the
+  // alias pollution that previously misrouted names).
+  const matchedName: string = match.player?.name ?? '';
+  const isExact = !!matchedName && normalizeName(matchedName) === normalizeName(searchQuery);
+  const score = scoreEntityNameMatch(searchQuery, matchedName);
+  if (matchedName && (isExact || score >= 0.88)) {
+    void learnPlayerMapping({ rawQuery: rawName, englishName: matchedName, apiPlayerId });
   }
 
   return {
@@ -619,12 +836,16 @@ export interface FootballChatContext {
   usedApi: boolean;
   /** False when the block includes volatile live data that must not be cached. */
   cacheable: boolean;
+  /** Provenance of each injected sub-block (additive; safe to ignore). */
+  sources?: DataSource[];
 }
 
 /**
  * Build optional live-data context for the user's message.
- * Returns null when no football API lookup applies. Lookups run in parallel to
- * minimise the delay before the first LLM token.
+ * Returns null when no football lookup applies. When a player/team data query
+ * IS detected but nothing resolves, returns an explicit `unavailable` guard
+ * block (usedApi=false) so the model is told not to invent numbers.
+ * Lookups run in parallel to minimise the delay before the first LLM token.
  */
 export async function buildFootballChatContext(
   message: string,
@@ -638,44 +859,102 @@ export async function buildFootballChatContext(
   const nameCandidates = extractNameCandidates(message);
   // Top-scorer queries also match the broad player regex; skip name extraction
   // for them so we don't waste a player search that can't resolve a name.
-  const wantsPlayer =
-    isPlayerQuery(message) && !wantsTopScorers && !wantsUclCareer;
+  const wantsPlayer = isPlayerQuery(message) && !wantsTopScorers && !wantsUclCareer;
+  const wantsTeam = isTeamQuery(message) && !wantsTopScorers && !wantsStandings;
 
-  const tasks: Array<Promise<string | null>> = [];
+  const tasks: Array<Promise<ContextPiece | null>> = [];
 
-  if (wantsLive) tasks.push(fetchLiveMatchesContext());
-  if (wantsTopScorers) tasks.push(fetchTopScorersContext(message));
+  if (wantsLive) tasks.push(fetchLiveMatchesContext().then((b) => tagPiece(b, 'api')));
+  if (wantsTopScorers) {
+    tasks.push(fetchTopScorersContext(message).then((b) => tagPiece(b, 'api')));
+  }
   if (wantsStandings) {
     tasks.push(
       cachedLookup(`standings:${message.slice(0, 64)}`, 10 * 60_000, () =>
         fetchStandingsContext(message),
-      ),
+      ).then((b) => tagPiece(b, 'api')),
     );
   }
+
+  // ── Team dossier takes precedence over player search for the SAME candidate,
+  //    so clubs (ريال مدريد / PSG) stop being mis-resolved as players. We
+  //    classify candidates SYNCHRONOUSLY via the alias dictionary so the
+  //    player path can be skipped reliably (parallel tasks can't coordinate
+  //    via a shared set after they've started).
+  const dictTeamNames = new Set<string>();
+  if ((wantsTeam || wantsPlayer) && !wantsUclCareer) {
+    for (const name of nameCandidates) {
+      if (resolveTeamFromDictionary(name)) dictTeamNames.add(name);
+    }
+  }
+
+  if ((wantsTeam || wantsPlayer) && !wantsUclCareer) {
+    for (const name of nameCandidates) {
+      const isDictTeam = dictTeamNames.has(name);
+      // Dictionary hit → free dossier. Explicit team query → allow an API search
+      // for non-dict names. Pure stats intent on a non-dict name → skip (it's a
+      // player, handled below) to avoid wasting quota on a team search.
+      if (!isDictTeam && !wantsTeam) continue;
+      tasks.push(
+        fetchTeamDossierContext(name, { allowSearch: wantsTeam }).then((res) =>
+          res ? { block: res.block, source: res.source } : null,
+        ),
+      );
+    }
+  }
+
   if (wantsUclCareer && nameCandidates.length > 0) {
     for (const name of nameCandidates) {
-      tasks.push(fetchPlayerUclCareerContextCached(name));
+      tasks.push(fetchPlayerUclCareerContextCached(name).then((b) => tagPiece(b, 'api')));
     }
   } else if (wantsPlayer) {
     for (const name of nameCandidates) {
-      tasks.push(fetchPlayerContextCached(name, message));
+      // Skip the player path for dictionary-confirmed clubs (precedence).
+      if (dictTeamNames.has(name)) continue;
+      tasks.push(fetchPlayerContextCached(name, message).then((b) => tagPiece(b, 'api')));
     }
   }
 
   if (tasks.length === 0) return null;
 
-  const results = await Promise.all(tasks);
-  const blocks = results.filter((b): b is string => !!b);
-  if (blocks.length === 0) return null;
+  const pieces = (await Promise.all(tasks)).filter((p): p is ContextPiece => !!p);
+
+  // ── No verified data resolved for a data query → inject an explicit guard
+  //    so the LLM is told NOT to fabricate stats (anti-hallucination).
+  if (pieces.length === 0) {
+    const isStatsIntent = wantsPlayer || wantsTeam || wantsUclCareer;
+    if (isStatsIntent && nameCandidates.length > 0) {
+      const subject = nameCandidates.join('", "');
+      const guard = [
+        'NO-VERIFIED-DATA GUARD (authoritative):',
+        `No verified statistics were found for "${subject}".`,
+        'Do NOT state any numbers (goals, assists, appearances, ratings, titles, positions).',
+        'Reply that up-to-date verified data is unavailable right now; you may give only',
+        'general, non-numeric descriptive context. Never invent figures.',
+      ].join('\n');
+      return {
+        block: `${tagPiece(guard, 'unavailable')!.block}`,
+        usedApi: false,
+        cacheable: false,
+        sources: ['unavailable'],
+      };
+    }
+    return null;
+  }
+
+  const sources = pieces.map((p) => p.source);
+  const sourceSummary = `DATA SOURCES: ${sources.join(', ')} (api=live API-Football, cache=our DB, unavailable=no verified data)`;
 
   const header = wantsUclCareer
     ? 'LIVE FOOTBALL API DATA — PLAYER UCL CAREER DOSSIER (authoritative; model: write a professional per-season breakdown using ONLY this data):'
-    : 'LIVE FOOTBALL API DATA (authoritative — use these numbers in your answer; do not invent stats):';
+    : 'LIVE FOOTBALL DATA (authoritative — use ONLY these numbers; never invent stats. Items tagged "source: unavailable" have NO data):';
+
   return {
-    block: `${header}\n\n${blocks.join('\n\n---\n\n')}`,
+    block: `${header}\n\n${pieces.map((p) => p.block).join('\n\n---\n\n')}\n\n${sourceSummary}`,
     usedApi: true,
     // Live scores change minute to minute — never persist those answers.
     cacheable: !wantsLive,
+    sources,
   };
 }
 

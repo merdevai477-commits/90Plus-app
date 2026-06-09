@@ -57,7 +57,7 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
     arabicName: 'كريم بنزيمة',
     englishName: 'Karim Benzema',
     aliases: ['بنزيمة', 'بنزيما', 'Benzema', 'Karim Benzema'],
-    apiPlayerId: 762,
+    apiPlayerId: 759,
   },
   {
     arabicName: 'كيليان مبابي',
@@ -87,7 +87,43 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
     arabicName: 'فينيسيوس جونيور',
     englishName: 'Vinicius Junior',
     aliases: ['فينيسيوس', 'فينيسوس', 'Vinicius', 'Vini Jr', 'Vinicius Junior'],
-    apiPlayerId: 2295,
+    apiPlayerId: 762,
+  },
+  {
+    arabicName: 'جود بيلينغهام',
+    englishName: 'Jude Bellingham',
+    aliases: ['بيلينغهام', 'بيلنغهام', 'بيلينجهام', 'Bellingham', 'Jude Bellingham'],
+    apiPlayerId: 129718,
+  },
+  {
+    arabicName: 'لامين يامال',
+    englishName: 'Lamine Yamal',
+    aliases: ['يامال', 'لامين يامال', 'Yamal', 'Lamine Yamal'],
+    apiPlayerId: 386828,
+  },
+  {
+    arabicName: 'روبرت ليفاندوفسكي',
+    englishName: 'Robert Lewandowski',
+    aliases: ['ليفاندوفسكي', 'ليفاندوسكي', 'ليفا', 'Lewandowski', 'Robert Lewandowski'],
+    apiPlayerId: 521,
+  },
+  {
+    arabicName: 'كيفين دي بروين',
+    englishName: 'Kevin De Bruyne',
+    aliases: ['دي بروين', 'دي بروينه', 'De Bruyne', 'KDB', 'Kevin De Bruyne'],
+    apiPlayerId: 629,
+  },
+  {
+    arabicName: 'فيل فودن',
+    englishName: 'Phil Foden',
+    aliases: ['فودن', 'فودين', 'Foden', 'Phil Foden'],
+    apiPlayerId: 631,
+  },
+  {
+    arabicName: 'رودري',
+    englishName: 'Rodri',
+    aliases: ['رودري', 'Rodri', 'Rodrigo Hernandez', 'Rodrigo Hernández'],
+    apiPlayerId: 44,
   },
 ];
 
@@ -123,10 +159,19 @@ function buildNormalizedKeys(
  * production works without a separate seed step.
  */
 export async function seedCommonPlayerMappings(): Promise<void> {
-  // Drop stale Hakimi row (wrong apiPlayerId 22197) so alias "حكيمي" resolves to id 9.
+  // Self-heal: drop any stale rows that collide with a seed entry by NAME but
+  // carry a different apiPlayerId (e.g. an old wrong Vinicius id, or a learned
+  // alias that misrouted a seeded star). The authoritative create/update below
+  // then re-establishes the verified id. Keyed only on seed names so unrelated
+  // learned mappings are preserved.
   try {
+    const seedNames = COMMON_PLAYER_MAPPINGS.map((m) => m.englishName);
+    const seedIds = COMMON_PLAYER_MAPPINGS.map((m) => m.apiPlayerId);
     await prisma.playerNameMapping.deleteMany({
-      where: { englishName: 'Achraf Hakimi', apiPlayerId: { not: 9 } },
+      where: {
+        englishName: { in: seedNames },
+        apiPlayerId: { notIn: seedIds },
+      },
     });
   } catch {
     // non-fatal
@@ -219,6 +264,9 @@ export async function resolvePlayerName(raw: string): Promise<ResolvedPlayer | n
   // 1. Exact / alias match (normalized).
   for (const m of mappings) {
     if (m.normalizedKeys.includes(normalizedInput)) {
+      logger.info(
+        `[Resolve] "${trimmed}" -> mapping -> ${m.englishName} (id ${m.apiPlayerId})`,
+      );
       return {
         english: m.englishName,
         arabic: m.arabicName,
@@ -242,6 +290,9 @@ export async function resolvePlayerName(raw: string): Promise<ResolvedPlayer | n
     }
   }
   if (best && bestScore >= FUZZY_THRESHOLD) {
+    logger.info(
+      `[Resolve] "${trimmed}" -> fuzzy -> ${best.englishName} (id ${best.apiPlayerId}, score ${bestScore.toFixed(2)})`,
+    );
     return {
       english: best.englishName,
       arabic: best.arabicName,
@@ -249,6 +300,8 @@ export async function resolvePlayerName(raw: string): Promise<ResolvedPlayer | n
       source: 'fuzzy',
     };
   }
+
+  logger.info(`[Resolve] "${trimmed}" -> raw (no mapping, score ${bestScore.toFixed(2)})`);
 
   // 3. Passthrough: Latin input goes to API search as-is. Arabic input we
   // couldn't map can't be searched on API-Football (Latin only) — return the

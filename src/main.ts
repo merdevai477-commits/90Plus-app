@@ -954,6 +954,17 @@ async function startServer() {
                     startDataRefreshWorker();
                     logger.info('✅ Data refresh worker scheduled (weekly/monthly/100-day)');
 
+                    // ✅ Idempotently sync player name mappings (upsert) so new
+                    // seed entries land on deploy even when the table isn't empty.
+                    void import('./services/player-name-resolver.service')
+                        .then(({ seedCommonPlayerMappings, invalidateMappingCache }) =>
+                            seedCommonPlayerMappings().then(() => invalidateMappingCache()),
+                        )
+                        .then(() => logger.info('✅ Player name mappings synced'))
+                        .catch((err) =>
+                            logger.warn('Player name mapping sync failed:', err?.message ?? err),
+                        );
+
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
                 }

@@ -6,6 +6,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { metricsCollector } from '../utils/metrics';
+import { getFootballMetrics } from '../utils/football-metrics';
 
 /**
  * Middleware to track request metrics
@@ -61,12 +62,13 @@ export function getMetricsHandler(req: Request, res: Response): void {
   } else {
     const allMetrics = metricsCollector.getAllMetrics();
     const summary = metricsCollector.getSummary();
-    
+
     res.json({
       status: 'SUCCESS',
       data: {
         summary,
         endpoints: allMetrics,
+        football: getFootballMetrics(),
       },
     });
   }

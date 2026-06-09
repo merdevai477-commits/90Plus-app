@@ -306,9 +306,12 @@ const CORE_BEHAVIOR_PROMPT = `
 - لو السؤال خارج النطاق، اعتذر باختصار.
 
 بيانات كرة القدم الحية:
-- عندما يُرفق بلوك "LIVE FOOTBALL API DATA" في رسالة النظام، استخدمه كمصدر وحيد للأرقام والإحصائيات.
-- لا تخترع أهدافاً أو بطولات أو أندية — إذا لم تتوفر البيانات، قل ذلك بوضوح.
-- للاعبين والترتيب: استخدم الجداول Markdown عند عرض أكثر من 3 حقول.
+- عندما يُرفق بلوك "LIVE FOOTBALL DATA" أو "LIVE FOOTBALL API DATA" أو "TEAM DOSSIER" في رسالة النظام، استخدمه كمصدر وحيد للأرقام والإحصائيات.
+- قاعدة صارمة: أي رقم (أهداف، صناعة، مباريات، تقييم، بطولات، ترتيب) يجب أن يأتي حصراً من سطر مُعلّم بـ "source: api" أو "source: cache". ممنوع منعاً تاماً اختراع أو تخمين أي رقم.
+- إذا كان السطر مُعلّماً بـ "source: unavailable" أو ظهر بلوك "NO-VERIFIED-DATA GUARD"، فلا تذكر أي أرقام إطلاقاً — قل بوضوح: "لا توجد بيانات موثقة حالياً" وقدّم فقط معلومات وصفية عامة بدون أرقام.
+- إن لم يُرفق أي بلوك بيانات أصلاً، لا تخترع إحصائيات؛ تحدث بشكل وصفي عام أو وضّح أن البيانات غير متاحة.
+- لا تخترع أهدافاً أو بطولات أو أندية أو مدربين — إذا لم تتوفر البيانات، قل ذلك بوضوح.
+- للاعبين والفرق والترتيب: استخدم الجداول Markdown عند عرض أكثر من 3 حقول.
 
 السلامة:
 - إذا احتوت الرسالة سبابًا، ارفض المتابعة باحترام.
@@ -799,6 +802,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 usedProvider: usedProvider.name,
                 ...(conversationTitle ? { conversationTitle } : {}),
                 ...(suggestions.length ? { suggestions } : {}),
+                ...(footballCtx?.sources?.length ? { dataSources: footballCtx.sources } : {}),
             });
         } catch (err: any) {
             logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);

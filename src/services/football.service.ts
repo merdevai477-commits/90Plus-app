@@ -7,6 +7,7 @@
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
 import { convertFixturePlayersToLineups, hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
+import { footballMetrics } from '../utils/football-metrics';
 
 interface ApiResponse<T> {
   get: string;
@@ -330,8 +331,10 @@ class FootballService {
     // ✅ Check Redis cache first
     const cached = await this.getCachedData(cacheKey);
     if (cached) {
+      footballMetrics.recordCacheHit();
       return cached;
     }
+    footballMetrics.recordCacheMiss();
 
     // ✅ If we already hit the daily quota, skip the API entirely and return
     // an empty array so upstream code uses the DB fallback instead of burning
@@ -348,6 +351,7 @@ class FootballService {
 
     logger.debug('🔍 Football API Request:', cacheKey);
 
+    const apiStartTime = Date.now();
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -372,6 +376,7 @@ class FootballService {
           const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined;
           markQuotaExhausted(isNaN(retryAfterSec as number) ? undefined : retryAfterSec);
           logger.warn(`⚠️ API-Football 429 Too Many Requests — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`);
+          footballMetrics.recordApiFailure(Date.now() - apiStartTime);
           // Cache empty so upstream returns a usable value instead of throwing
           await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
           return [] as T;
@@ -390,6 +395,7 @@ class FootballService {
         const errorMessage = (data.errors as any).plan || (data.errors as any).message || '';
         if (typeof errorMessage === 'string' && errorMessage.includes('Free plans do not have access')) {
           logger.debug('📅 Free Plan date restriction:', errorMessage);
+          footballMetrics.recordApiSuccess(Date.now() - apiStartTime);
           // Return empty array for date restrictions instead of throwing error
           await this.setCachedData(cacheKey, [], ttl);
           return [] as T;
@@ -407,12 +413,14 @@ class FootballService {
       }
 
       logger.debug(`✅ Football API Response: ${data.results} results`);
+      footballMetrics.recordApiSuccess(Date.now() - apiStartTime);
 
       // ✅ Save to Redis cache
       await this.setCachedData(cacheKey, data.response, ttl);
 
       return data.response;
     } catch (error: any) {
+      footballMetrics.recordApiFailure(Date.now() - apiStartTime);
       if (error.name === 'AbortError') {
         throw new FootballApiError('Request timed out');
       }
