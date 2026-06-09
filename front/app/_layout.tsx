@@ -111,14 +111,14 @@ const queryClient = new QueryClient();
 
 // Get Clerk publishable key.
 // Priority order:
-//   1) EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY env var (works everywhere including
-//      production builds where `Constants.expoConfig` can return null)
-//   2) `extra.clerkPublishableKey` from app.json (used by default in dev)
+//   1) `extra.clerkPublishableKey` from app.json — survives OTA when EAS env
+//      omits EXPO_PUBLIC_* at publish time
+//   2) EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY env var (native EAS builds)
 // If both are missing we render ClerkKeyMissingScreen instead of silently
 // crashing `useAuth` later.
 const clerkPublishableKey =
-  (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined) ||
-  (Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined);
+  (Constants.expoConfig?.extra?.clerkPublishableKey as string | undefined) ||
+  (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined);
 
 // Fix 2: Guard — if key is missing, show error instead of silently failing
 function ClerkKeyMissingScreen() {

@@ -1126,9 +1126,11 @@ export default function QuizHubScreen() {
         <QuizBackground />
         <QuizHeader topInset={insets.top} />
         <Text style={styles.noQuestionsText}>
-          {errorMessage === 'USER_NOT_FOUND'
-            ? t.quiz.loadFailed
-            : t.quiz.noQuestionsAvailable}
+          {errorMessage === 'AUTH_REQUIRED'
+            ? t.quiz.signInRequired
+            : errorMessage === 'USER_NOT_FOUND'
+              ? t.quiz.loadFailed
+              : t.quiz.noQuestionsAvailable}
         </Text>
         <TouchableOpacity
           style={styles.retryButton}

@@ -17,7 +17,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "112",
+      "buildNumber": "113",
       "requireFullScreen": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -86,7 +86,10 @@
               "pathPrefix": "/reels"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -98,7 +101,10 @@
               "pathPrefix": "/@"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -110,7 +116,10 @@
               "path": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -213,18 +222,24 @@
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/254843d8-c368-4507-9a58-033539c77298"
+      "url": "https://u.expo.dev/17b8b105-8756-4a9b-a2ff-b7a831eb946b"
     },
     "extra": {
       "apiUrl": "https://90plus.pro/api",
+      "clerkPublishableKey": "pk_live_Y2xlcmsuOTBwbHVzLnBybyQ",
       "sentryDsn": "https://831af4046cdbdb59624730ca3b7d158d@o4511496375566336.ingest.de.sentry.io/4511496395096144",
       "router": {
         "origin": false
       },
+      "quizUseMatchesApi": false,
+      "quizUseDirectFootballApi": false,
+      "footballApiKey": "",
+      "footballApiBase": "https://v3.football.api-sports.io",
+      "shareBaseUrl": "https://90plus.pro",
       "eas": {
-        "projectId": "254843d8-c368-4507-9a58-033539c77298"
+        "projectId": "17b8b105-8756-4a9b-a2ff-b7a831eb946b"
       }
     },
-    "owner": "90-plus-app1"
+    "owner": "90-plus-app"
   }
 }

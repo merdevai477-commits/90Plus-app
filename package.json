@@ -32,6 +32,7 @@
     "delete:users": "ts-node scripts/delete-all-users.ts",
     "delete-all-users": "ts-node scripts/delete-all-users.ts",
     "test:player-stats": "ts-node scripts/testPlayerStats.ts",
+    "test:chat-hakimi": "ts-node scripts/test-chat-hakimi.ts",
     "export:questions": "ts-node scripts/export-questions.ts",
     "export:answers": "ts-node scripts/export-answers.ts",
     "verify:user": "ts-node src/scripts/verify-user.ts",

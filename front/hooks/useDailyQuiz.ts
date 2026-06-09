@@ -75,27 +75,52 @@ export function prefetchQuizImages(
     });
 }
 
+type GetTokenFn = () => Promise<string | null>;
+
+async function fetchDailyWithAuthRetry(
+  getToken: GetTokenFn,
+  lang: QuizApiLanguage,
+  token: string,
+): Promise<QuizDailyPayload> {
+  try {
+    return await QuizApiService.fetchDaily(token, lang);
+  } catch (err) {
+    if (!(err instanceof Error)) throw err;
+
+    if (err.message === 'AUTH_REQUIRED') {
+      const freshToken = await getClerkBearerToken(getToken, {
+        retries: 5,
+        baseDelayMs: 400,
+      });
+      if (!freshToken) throw err;
+      await AuthService.syncUserWithBackend(freshToken);
+      return QuizApiService.fetchDaily(freshToken, lang);
+    }
+
+    if (err.message === 'USER_NOT_FOUND') {
+      await AuthService.syncUserWithBackend(token);
+      return QuizApiService.fetchDaily(token, lang);
+    }
+
+    throw err;
+  }
+}
+
 async function fetchAndCacheDaily(
-  getToken: () => Promise<string | null>,
+  getToken: GetTokenFn,
   lang: QuizApiLanguage,
   expectedDateKey: string,
 ): Promise<QuizDailyPayload> {
   const token = await getClerkBearerToken(getToken);
   if (!token) throw new Error('AUTH_REQUIRED');
 
-  await AuthService.syncUserWithBackend(token).catch(() => null);
-
-  let data: QuizDailyPayload;
   try {
-    data = await QuizApiService.fetchDaily(token, lang);
-  } catch (err) {
-    if (err instanceof Error && err.message === 'USER_NOT_FOUND') {
-      await AuthService.syncUserWithBackend(token);
-      data = await QuizApiService.fetchDaily(token, lang);
-    } else {
-      throw err;
-    }
+    await AuthService.syncUserWithBackend(token);
+  } catch {
+    // Cold start / transient sync failure — quiz fetch retries auth below.
   }
+
+  const data = await fetchDailyWithAuthRetry(getToken, lang, token);
 
   if (!data?.questions?.length) throw new Error('EMPTY_PACK');
   if (data.packDate && data.packDate !== expectedDateKey) {

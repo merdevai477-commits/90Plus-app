@@ -42,6 +42,7 @@ import { useTranslation } from '@/src/i18n';
 import { confirmMinimumAgeWithBackend } from '@/hooks/useAgeVerification';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 import { waitForClerkToken } from '@/src/utils/authSession';
+import { completeOAuthMissingRequirements } from '@/src/utils/oauthSignUpCompletion';
 
 const OTP_LENGTH = 6;
 
@@ -158,6 +159,7 @@ export default function RegisterScreen() {
         password,
         firstName: name.trim().split(' ')[0],
         lastName: name.trim().split(' ').slice(1).join(' ') || undefined,
+        legalAccepted: true,
       });
 
       if (result.status === 'complete' && result.createdSessionId) {
@@ -275,6 +277,7 @@ export default function RegisterScreen() {
         visible={showVerification}
         email={email}
         signUp={signUp}
+        legalAccepted={terms}
         onClose={() => setShowVerification(false)}
         onVerified={async (sessionId) => {
           setShowVerification(false);
@@ -562,12 +565,14 @@ const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationMo
   visible,
   email,
   signUp,
+  legalAccepted,
   onClose,
   onVerified,
 }: {
   visible: boolean;
   email: string;
   signUp: ReturnType<typeof useSignUp>['signUp'];
+  legalAccepted: boolean;
   onClose: () => void;
   onVerified: (sessionId: string) => Promise<void>;
 }) {
@@ -628,11 +633,31 @@ const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationMo
     setIsVerifying(true);
     try {
       const result = await signUp.attemptEmailAddressVerification({ code: otp });
-      if (result.status === 'complete' && result.createdSessionId) {
-        await onVerified(result.createdSessionId);
-      } else {
-        Alert.alert('Error', 'Verification incomplete. Please try again.');
+      const sessionId =
+        result.createdSessionId ?? signUp.createdSessionId ?? null;
+
+      if (result.status === 'complete' && sessionId) {
+        await onVerified(sessionId);
+        return;
       }
+
+      if (
+        result.status === 'missing_requirements' ||
+        signUp.status === 'missing_requirements'
+      ) {
+        const completion = await completeOAuthMissingRequirements(signUp, {
+          legalAccepted,
+        });
+        if (completion.kind === 'session') {
+          await onVerified(completion.sessionId);
+          return;
+        }
+      } else if (sessionId) {
+        await onVerified(sessionId);
+        return;
+      }
+
+      Alert.alert('Error', 'Verification incomplete. Please try again.');
     } catch (err: unknown) {
       const e = err as { errors?: Array<{ longMessage?: string }>; message?: string };
       const msg = e?.errors?.[0]?.longMessage || e?.message || 'Invalid code';

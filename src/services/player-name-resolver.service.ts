@@ -51,7 +51,7 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
     arabicName: 'أشرف حكيمي',
     englishName: 'Achraf Hakimi',
     aliases: ['حكيمي', 'اشرف حكيمي', 'Hakimi', 'Achraf Hakimi'],
-    apiPlayerId: 22197,
+    apiPlayerId: 9,
   },
   {
     arabicName: 'كريم بنزيمة',
@@ -123,6 +123,15 @@ function buildNormalizedKeys(
  * production works without a separate seed step.
  */
 export async function seedCommonPlayerMappings(): Promise<void> {
+  // Drop stale Hakimi row (wrong apiPlayerId 22197) so alias "حكيمي" resolves to id 9.
+  try {
+    await prisma.playerNameMapping.deleteMany({
+      where: { englishName: 'Achraf Hakimi', apiPlayerId: { not: 9 } },
+    });
+  } catch {
+    // non-fatal
+  }
+
   for (const m of COMMON_PLAYER_MAPPINGS) {
     try {
       await prisma.playerNameMapping.upsert({
