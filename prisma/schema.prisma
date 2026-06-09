@@ -2110,11 +2110,62 @@ model PlayerInfo {
   expiresAt      DateTime
   hits           Int      @default(0)
 
+  // Proactive background refresh metadata (additive)
+  teamId          Int? // FK → TeamInfo.id (nullable: not all players are linked yet)
+  teamInfo        TeamInfo? @relation(fields: [teamId], references: [id])
+  lastRefreshType String? // audit tag of the last cron that touched this row: "weekly" | "monthly" | "100day"
+  refreshPriority Int       @default(1) // 1 = star (refresh first), 2 = normal
+  accessCount     Int       @default(0) // user-query counter, mirrors `hits` for the refresh scheduler
+
   @@unique([playerName, queryType, language])
   @@index([playerName])
   @@index([answeredOn])
   @@index([expiresAt])
+  @@index([teamId])
+  @@index([lastRefreshType])
+  @@index([apiPlayerId])
   @@map("player_info")
+}
+
+// ============================================
+// PROACTIVE DATA REFRESH (TeamInfo / TeamPlayer / RefreshControl)
+// ============================================
+
+model TeamInfo {
+  id          Int          @id @default(autoincrement())
+  apiTeamId   Int          @unique
+  teamName    String
+  season      Int
+  lastFetched DateTime
+  expiresAt   DateTime // monthly
+  players     TeamPlayer[]
+  playerInfos PlayerInfo[]
+
+  @@index([expiresAt])
+  @@map("team_info")
+}
+
+model TeamPlayer {
+  id           Int      @id @default(autoincrement())
+  teamInfoId   Int
+  teamInfo     TeamInfo @relation(fields: [teamInfoId], references: [id], onDelete: Cascade)
+  apiPlayerId  Int
+  playerName   String
+  position     String
+  jerseyNumber Int?
+
+  @@index([teamInfoId])
+  @@index([apiPlayerId])
+  @@map("team_player")
+}
+
+model RefreshControl {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique // e.g. "transfers_last_run"
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("refresh_control")
 }
 
 // ============================================

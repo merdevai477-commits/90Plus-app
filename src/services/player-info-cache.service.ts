@@ -9,6 +9,7 @@
  */
 
 import { createHash } from 'crypto';
+import OpenAI from 'openai';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 import {
@@ -121,7 +122,7 @@ export async function resolvePlayerInfoAnswer(
       prisma.playerInfo
         .update({
           where: { id: row.id },
-          data: { hits: { increment: 1 } },
+          data: { hits: { increment: 1 }, accessCount: { increment: 1 } },
         })
         .catch(() => {});
 
@@ -157,6 +158,7 @@ export async function resolvePlayerInfoAnswer(
           refreshedAt: now,
           expiresAt,
           hits: { increment: 1 },
+          accessCount: { increment: 1 },
           apiContext: freshApi.context.slice(0, 120_000),
         },
       });
@@ -234,6 +236,96 @@ export async function savePlayerInfoAnswer(params: {
     });
   } catch (err) {
     logger.warn('[PlayerInfo] save failed:', err);
+  }
+}
+
+/**
+ * Self-contained OpenAI client for background answer regeneration. Mirrors the
+ * pattern used by quiz-generator.service so the worker never depends on the
+ * chat route's module-level provider chain.
+ */
+function buildRegenClient(): { client: OpenAI; model: string } | null {
+  const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
+  if (!apiKey) return null;
+  const baseURL =
+    process.env.OPENROUTER_BASE_URL ??
+    process.env.AI_BASE_URL ??
+    'https://openrouter.ai/api/v1';
+  const model =
+    process.env.OPENROUTER_CHAT_COMPLEX_MODEL ??
+    process.env.OPENROUTER_CHAT_SIMPLE_MODEL ??
+    process.env.OPENROUTER_QUIZ_MODEL ??
+    'google/gemini-2.5-flash';
+  return {
+    client: new OpenAI({
+      apiKey,
+      baseURL,
+      defaultHeaders: {
+        'HTTP-Referer': 'https://90plus.pro',
+        'X-Title': '90Plus Data Refresh',
+      },
+    }),
+    model,
+  };
+}
+
+function regenSystemPrompt(language: string, queryType: PlayerInfoQueryType): string {
+  const arabic = language === 'ar';
+  const langLine = arabic
+    ? 'اكتب الإجابة بالعربية الفصحى بأسلوب احترافي وواضح.'
+    : 'Write the answer in clear, professional English.';
+  const focus =
+    queryType === 'ucl_career'
+      ? arabic
+        ? 'لخّص مسيرة اللاعب في دوري أبطال أوروبا (الألقاب والإحصائيات لكل موسم).'
+        : "Summarize the player's UEFA Champions League career (titles and per-season stats)."
+      : arabic
+        ? 'لخّص إحصائيات اللاعب لهذا الموسم.'
+        : "Summarize the player's statistics for the current season.";
+  return [
+    'You are Captain AI, a football data assistant for the 90Plus app.',
+    focus,
+    'Use ONLY the authoritative API data provided. Do NOT invent numbers or facts.',
+    langLine,
+  ].join('\n');
+}
+
+/**
+ * Regenerate a player_info answer from a fresh API context block (background
+ * refresh only — never throws; returns null on any failure so callers skip).
+ */
+export async function regeneratePlayerInfoAnswer(
+  lookup: PlayerInfoLookup,
+  apiContext: string,
+): Promise<string | null> {
+  if (!apiContext?.trim()) return null;
+
+  const built = buildRegenClient();
+  if (!built) {
+    logger.warn('[PlayerInfo] regenerate skipped — no AI provider configured');
+    return null;
+  }
+
+  try {
+    const completion = await built.client.chat.completions.create({
+      model: built.model,
+      temperature: 0.4,
+      max_tokens: 1200,
+      messages: [
+        { role: 'system', content: regenSystemPrompt(lookup.language, lookup.queryType) },
+        {
+          role: 'user',
+          content: `Player: ${lookup.playerName}\n\nAUTHORITATIVE API DATA:\n${apiContext}`,
+        },
+      ],
+    });
+
+    const answer = completion.choices[0]?.message?.content?.trim() ?? '';
+    if (answer.length < 16) return null;
+    return answer;
+  } catch (err) {
+    logger.warn('[PlayerInfo] regenerate failed:', err);
+    return null;
   }
 }
 

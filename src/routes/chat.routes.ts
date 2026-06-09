@@ -60,6 +60,7 @@ import {
     resolvePlayerInfoAnswer,
     savePlayerInfoAnswer,
 } from '../services/player-info-cache.service';
+import { getTeamSuggestions } from '../services/chat-suggestions.service';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -575,6 +576,10 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     targetConversation.id,
                     trimmedMessage,
                 );
+                const suggestions = await getTeamSuggestions({
+                    playerName: playerInfoQuery.playerName,
+                    language: cacheLang,
+                });
                 sendDone({
                     remaining,
                     limit: DAILY_LIMIT,
@@ -583,6 +588,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     playerInfo: true,
                     playerInfoSource: playerCached.source,
                     ...(conversationTitle ? { conversationTitle } : {}),
+                    ...(suggestions.length ? { suggestions } : {}),
                 });
                 return;
             }
@@ -778,6 +784,13 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 titleSource,
             );
 
+            const suggestions = playerInfoQuery
+                ? await getTeamSuggestions({
+                      playerName: playerInfoQuery.playerName,
+                      language: cacheLang,
+                  })
+                : [];
+
             sendDone({
                 remaining: await getRemaining(userId, tz),
                 limit: DAILY_LIMIT,
@@ -785,6 +798,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 usedModel: usedProvider.model,
                 usedProvider: usedProvider.name,
                 ...(conversationTitle ? { conversationTitle } : {}),
+                ...(suggestions.length ? { suggestions } : {}),
             });
         } catch (err: any) {
             logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);

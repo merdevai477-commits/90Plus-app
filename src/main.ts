@@ -948,7 +948,11 @@ async function startServer() {
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();
                     logger.info('✅ Background preload service started');
-                    
+
+                    // ✅ Proactive data refresh worker (weekly/monthly/100-day)
+                    const { startDataRefreshWorker } = await import('./workers/dataRefreshWorker');
+                    startDataRefreshWorker();
+                    logger.info('✅ Data refresh worker scheduled (weekly/monthly/100-day)');
 
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
