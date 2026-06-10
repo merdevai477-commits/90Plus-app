@@ -28,6 +28,10 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { logger } from '../utils/logger';
 import { sanitizeTimezone } from '../utils/chat-timezone';
 import {
+    buildLanguageLockPrompt,
+    detectMessageLanguage,
+} from '../utils/message-language.util';
+import {
     listConversations,
     createConversation,
     findConversation,
@@ -511,40 +515,50 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             });
         };
 
+        const messageLanguage = detectMessageLanguage(trimmedMessage);
+
         // ─── Fast-path short-circuits (skipped on resume) ────────────────────
         if (!isResume) {
             if (containsProfanity(trimmedMessage)) {
                 await finishCannedReply(
-                    'اعتذر، لا يمكنني متابعة المحادثة بهذه اللغة. ابدأ محادثة جديدة بصياغة محترمة.',
+                    messageLanguage === 'en'
+                        ? 'Sorry, I cannot continue with that language. Please start a new conversation with respectful wording.'
+                        : 'اعتذر، لا يمكنني متابعة المحادثة بهذه اللغة. ابدأ محادثة جديدة بصياغة محترمة.',
                 );
                 return;
             }
 
             if (isIdentityQuestion(trimmedMessage)) {
-                const isEnglish =
-                    /[a-zA-Z]{3,}/.test(trimmedMessage) &&
-                    !/[\u0600-\u06FF]/.test(trimmedMessage);
-                const identityText = isEnglish
-                    ? "I'm 90Plus AI — your smart football & sports assistant, developed by mr.dev ai. I help with football info, training plans, sports nutrition, and recovery advice."
-                    : 'أنا 90Plus AI ⚽ — مساعدك الرياضي الذكي، طوّرني mr.dev ai. أقدر أساعدك في كرة القدم، خطط التدريب، التغذية الرياضية، ونصائح الاستشفاء.';
+                const identityText =
+                    messageLanguage === 'en'
+                        ? "I'm 90Plus AI — your smart football & sports assistant, developed by mr.dev ai. I help with football info, training plans, sports nutrition, and recovery advice."
+                        : 'أنا 90Plus AI ⚽ — مساعدك الرياضي الذكي، طوّرني mr.dev ai. أقدر أساعدك في كرة القدم، خطط التدريب، التغذية الرياضية، ونصائح الاستشفاء.';
                 await finishCannedReply(identityText);
                 return;
             }
 
             if (isGreeting(trimmedMessage)) {
                 await finishCannedReply(
-                    'أهلًا بك! جاهز أساعدك في كرة القدم، التمارين، الاستشفاء، والإعداد الغذائي.',
+                    messageLanguage === 'en'
+                        ? 'Welcome! I can help with football, training, recovery, and sports nutrition.'
+                        : 'أهلًا بك! جاهز أساعدك في كرة القدم، التمارين، الاستشفاء، والإعداد الغذائي.',
                 );
                 return;
             }
 
             if (isSportsNewsRequest(trimmedMessage)) {
                 await finishCannedReply(
-                    'الأخبار اللحظية مش في نطاقي، بس تقدر تتابعها على:\n\n' +
-                    '• **BBC Sport Arabic** — bbc.com/arabic/sports\n' +
-                    '• **Goal بالعربي** — goal.com/ar\n' +
-                    '• **يلا كورة** — yallakora.com\n\n' +
-                    'عندك أي سؤال تاني عن كرة القدم أو التمارين أو التغذية؟ 🎯',
+                    messageLanguage === 'en'
+                        ? 'Live news is outside my scope, but you can follow it on:\n\n' +
+                          '• **BBC Sport** — bbc.com/sport\n' +
+                          '• **Goal** — goal.com\n' +
+                          '• **ESPN** — espn.com/soccer\n\n' +
+                          'Any other football, training, or nutrition questions?'
+                        : 'الأخبار اللحظية مش في نطاقي، بس تقدر تتابعها على:\n\n' +
+                          '• **BBC Sport Arabic** — bbc.com/arabic/sports\n' +
+                          '• **Goal بالعربي** — goal.com/ar\n' +
+                          '• **يلا كورة** — yallakora.com\n\n' +
+                          'عندك أي سؤال تاني عن كرة القدم أو التمارين أو التغذية؟ 🎯',
                 );
                 return;
             }
@@ -555,7 +569,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 ? systemPromptSuffix.trim().slice(0, 1500)
                 : '';
 
-        const cacheLang = /[\u0600-\u06FF]/.test(trimmedMessage) ? 'ar' : 'en';
+        const cacheLang = messageLanguage;
         const playerInfoQuery =
             !isResume && !sanitizedSuffix ? detectPlayerInfoQuery(trimmedMessage) : null;
 
@@ -603,7 +617,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         const baseSystemPrompt = buildSystemPrompt(category, lengthMode);
 
         const footballCtx = !isResume
-            ? await buildFootballChatContext(trimmedMessage)
+            ? await buildFootballChatContext(trimmedMessage, { language: messageLanguage })
             : null;
         const useComplexModel = shouldUseComplexModel(lengthMode, !!footballCtx?.usedApi);
         const activeProviders = providersForRequest(useComplexModel);
@@ -648,16 +662,20 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
         }
 
-        let systemPrompt = sanitizedSuffix
-            ? `${baseSystemPrompt}\n\n${sanitizedSuffix}`
-            : baseSystemPrompt;
+        let systemPrompt = [
+            buildLanguageLockPrompt(messageLanguage),
+            sanitizedSuffix ? `${baseSystemPrompt}\n\n${sanitizedSuffix}` : baseSystemPrompt,
+        ].join('\n\n');
 
         if (footballCtx?.block) {
             systemPrompt += `\n\n${footballCtx.block}`;
         }
 
         if (isResume && resumeFromToken) {
-            systemPrompt += `\n\nملاحظة نظام: الرد السابق انقطع بعد ${resumeFromToken} حرف. أكمل من حيث توقفت بدون تكرار ما سبق.`;
+            systemPrompt +=
+                messageLanguage === 'en'
+                    ? `\n\nSystem note: The previous reply was cut off after ${resumeFromToken} characters. Continue from where you stopped without repeating earlier content.`
+                    : `\n\nملاحظة نظام: الرد السابق انقطع بعد ${resumeFromToken} حرف. أكمل من حيث توقفت بدون تكرار ما سبق.`;
         }
 
         const trimmedHistory = buildHistoryWindow(Array.isArray(history) ? history : []);

@@ -17,6 +17,17 @@ import { fetchTeamDossierContext } from './team-dossier.service';
 import { resolveTeamFromDictionary } from './team-name-resolver.service';
 import { footballMetrics } from '../utils/football-metrics';
 import { resolveFootballSeason } from '../utils/football-season.util';
+import {
+  buildLanguageLockPrompt,
+  type MessageLanguage,
+} from '../utils/message-language.util';
+import {
+  seasonStatusLabel,
+  selectBestSeasonStats,
+  selectBestUclSeasonStats,
+  type SeasonStatsSelection,
+  type SeasonStatus,
+} from '../utils/player-season-stats.util';
 import { redisCacheService } from './redis-cache.service';
 
 // Dossier-level Redis TTLs (separate namespaces from the football:* proxy keys
@@ -310,13 +321,21 @@ function extractCompetitionStat(entry: any): CompetitionStat {
 function formatPlayerBlock(
   name: string,
   row: any,
-  opts?: { competitionLabel?: string },
+  opts?: {
+    competitionLabel?: string;
+    seasonYear?: number;
+    seasonStatus?: SeasonStatus;
+  },
 ): string {
   const player = row.player ?? {};
   const allStats: any[] = Array.isArray(row.statistics) ? row.statistics : [];
   const comps = allStats.map(extractCompetitionStat).filter((c) => c.competition !== '—' || c.appearances > 0 || c.minutes > 0);
 
-  const seasonLabel = `${playerSeason()}/${playerSeason() + 1}`;
+  const seasonYear = opts?.seasonYear ?? playerSeason();
+  const seasonLabel = `${seasonYear}/${seasonYear + 1}`;
+  const statusSuffix = opts?.seasonStatus
+    ? ` — ${seasonStatusLabel(opts.seasonStatus)}`
+    : '';
 
   // Primary club = entry with most minutes (fallback first entry).
   const primary =
@@ -333,7 +352,7 @@ function formatPlayerBlock(
       return [
         `Player: ${player.name ?? name}`,
         `Age: ${player.age ?? '—'} | Nationality: ${player.nationality ?? '—'}`,
-        `Stats Type: ${one.competition} ${seasonLabel}`,
+        `Stats Type: ${one.competition} ${seasonLabel}${statusSuffix}`,
         `Team: ${one.team} | Position: ${primary && primary.team === one.team ? '—' : '—'}`,
         `Appearances: ${one.appearances} | Minutes: ${one.minutes}`,
         `Goals: ${one.goals} | Assists: ${one.assists}`,
@@ -374,7 +393,7 @@ function formatPlayerBlock(
   const lines = [
     `Player: ${player.name ?? name}`,
     `Age: ${player.age ?? '—'} | Nationality: ${player.nationality ?? '—'}`,
-    `Stats Type: Season ${seasonLabel} (all competitions combined)`,
+    `Stats Type: Season ${seasonLabel} (all competitions combined)${statusSuffix}`,
     `Primary club: ${primary?.team ?? '—'}`,
     `Total Appearances: ${agg.appearances} | Minutes: ${agg.minutes}`,
     `Total Goals: ${agg.goals} | Total Assists: ${agg.assists}`,
@@ -401,10 +420,20 @@ interface PlayerStatsRow {
   statValue: unknown;
   apiPlayerId?: number;
   aliases?: string[];
+  seasonYear?: number;
 }
 
 function playerSeason(): number {
   return resolveFootballSeason();
+}
+
+async function loadBestPlayerSeasonRow(
+  apiPlayerId: number,
+): Promise<SeasonStatsSelection | null> {
+  return selectBestSeasonStats(async (year) => {
+    const rows = await footballService.getPlayerStatisticsExact(apiPlayerId, year);
+    return rows[0] ?? null;
+  });
 }
 
 /**
@@ -421,6 +450,7 @@ export async function fetchPlayerStatsRow(
     const resolved = await resolvePlayerName(rawName);
     const searchName = resolved?.english ?? rawName;
 
+    let selection: SeasonStatsSelection | null = null;
     let row: any = null;
     let apiPlayerId = resolved?.apiPlayerId;
 
@@ -429,8 +459,8 @@ export async function fetchPlayerStatsRow(
     //    fallback is exactly what produced Vinicius→Giroud. An empty stat feed
     //    for a known id means "no verified data this season", not "wrong id".
     if (apiPlayerId && resolved && resolved.resolvedBy !== 'raw') {
-      const detailed = await footballService.getPlayerStatistics(apiPlayerId, playerSeason());
-      row = detailed?.[0] ?? null;
+      selection = await loadBestPlayerSeasonRow(apiPlayerId);
+      row = selection?.row ?? null;
       footballMetrics.recordResolver(true);
       if (!row) {
         logger.info(
@@ -440,8 +470,8 @@ export async function fetchPlayerStatsRow(
       }
     } else if (apiPlayerId) {
       // Raw-source id (rare) — try it, but allow a search fallback below.
-      const detailed = await footballService.getPlayerStatistics(apiPlayerId, playerSeason());
-      row = detailed?.[0] ?? null;
+      selection = await loadBestPlayerSeasonRow(apiPlayerId);
+      row = selection?.row ?? null;
     }
 
     // ── Fallback search: only for names with NO trusted id. Transliterate
@@ -459,8 +489,8 @@ export async function fetchPlayerStatsRow(
       }
       apiPlayerId = match.player?.id ?? apiPlayerId;
       if (apiPlayerId) {
-        const detailed = await footballService.getPlayerStatistics(apiPlayerId, playerSeason());
-        row = detailed?.[0] ?? match;
+        selection = await loadBestPlayerSeasonRow(apiPlayerId);
+        row = selection?.row ?? match;
       } else {
         row = match;
       }
@@ -490,9 +520,14 @@ export async function fetchPlayerStatsRow(
     }
 
     return {
-      aiResponse: formatPlayerBlock(searchName, row, opts),
+      aiResponse: formatPlayerBlock(searchName, row, {
+        ...opts,
+        seasonYear: selection?.seasonYear,
+        seasonStatus: selection?.status,
+      }),
       statValue: row,
       apiPlayerId,
+      seasonYear: selection?.seasonYear,
       aliases: Array.from(
         new Set([rawName, searchName, row?.player?.name].filter(Boolean) as string[]),
       ),
@@ -540,7 +575,13 @@ async function fetchPlayerContextCached(
         season: String(playerSeason()),
         questionAsked: message,
         isLive,
-        fetcher: () => fetchPlayerStatsRow(rawName, { competitionLabel: league?.label }),
+        fetcher: async () => {
+          const row = await fetchPlayerStatsRow(rawName, {
+            competitionLabel: league?.label,
+          });
+          if (!row) return null;
+          return row;
+        },
       });
       const out = result?.aiResponse ?? null;
       if (!isLive && out) {
@@ -705,7 +746,10 @@ function formatUclSeasonStatBlock(
  * Rich UCL dossier: titles from /trophies + per-winning-season UCL stats from /players.
  * Injected into the LLM prompt; the model writes the professional narrative.
  */
-export async function fetchPlayerUclCareerDossier(rawName: string): Promise<string | null> {
+export async function fetchPlayerUclCareerDossier(
+  rawName: string,
+  language: MessageLanguage = 'en',
+): Promise<string | null> {
   if (!footballService.isConfigured()) return null;
 
   try {
@@ -737,11 +781,14 @@ export async function fetchPlayerUclCareerDossier(rawName: string): Promise<stri
 
     uniqueWins.sort((a, b) => (b.apiYear ?? 0) - (a.apiYear ?? 0));
 
-    const currentSeasonRow = await footballService.getPlayerStatisticsInLeague(
-      player.apiPlayerId,
-      UCL_LEAGUE_ID,
-      playerSeason(),
-    );
+    const currentUclSelection = await selectBestUclSeasonStats(async (year) => {
+      const row = await footballService.getPlayerStatisticsInLeague(
+        player.apiPlayerId,
+        UCL_LEAGUE_ID,
+        year,
+      );
+      return row?.statistics ?? null;
+    });
 
     const seasonBlocks: string[] = [];
     for (const win of uniqueWins) {
@@ -765,17 +812,24 @@ export async function fetchPlayerUclCareerDossier(rawName: string): Promise<stri
     ].join('\n');
 
     let currentBlock = '';
-    if (currentSeasonRow) {
-      currentBlock = `\nCURRENT UCL SEASON (${playerSeason()}/${playerSeason() + 1}):\n${formatUclSeasonStatBlock(
-        `${playerSeason()}/${playerSeason() + 1}`,
-        'in progress',
-        currentSeasonRow,
+    if (currentUclSelection) {
+      const { seasonYear, stats, status } = currentUclSelection;
+      const seasonLabel = `${seasonYear}/${seasonYear + 1}`;
+      const placeLabel =
+        status === 'current_in_progress'
+          ? `in progress — ${seasonStatusLabel(status)}`
+          : seasonStatusLabel(status);
+      currentBlock = `\nCURRENT UCL SEASON (${seasonLabel}):\n${formatUclSeasonStatBlock(
+        seasonLabel,
+        placeLabel,
+        { statistics: stats },
       )}`;
     }
 
     const coachNotes = `
 MODEL COACHING (follow strictly):
-- Answer in the user's language with a professional tone (coach/analyst style).
+${buildLanguageLockPrompt(language)}
+- Use a professional coach/analyst tone.
 - Start with total UCL titles won, then dedicate a short paragraph per winning season.
 - For each season, cite appearances/goals/assists/minutes/rating from the UCL stat blocks below.
 - Use ONLY numbers from this dossier; never invent stats or titles.
@@ -799,11 +853,14 @@ MODEL COACHING (follow strictly):
   }
 }
 
-async function fetchPlayerUclCareerContextCached(rawName: string): Promise<string | null> {
+async function fetchPlayerUclCareerContextCached(
+  rawName: string,
+  language: MessageLanguage,
+): Promise<string | null> {
   return cachedLookup(
     `ucl-career:${rawName.toLowerCase()}`,
     60 * 60_000,
-    () => fetchPlayerUclCareerDossier(rawName),
+    () => fetchPlayerUclCareerDossier(rawName, language),
   );
 }
 
@@ -856,7 +913,9 @@ export interface FootballChatContext {
  */
 export async function buildFootballChatContext(
   message: string,
+  opts?: { language?: MessageLanguage },
 ): Promise<FootballChatContext | null> {
+  const language = opts?.language ?? 'en';
   if (!footballService.isConfigured()) return null;
 
   const wantsLive = isLiveMatchesQuery(message);
@@ -912,7 +971,9 @@ export async function buildFootballChatContext(
 
   if (wantsUclCareer && nameCandidates.length > 0) {
     for (const name of nameCandidates) {
-      tasks.push(fetchPlayerUclCareerContextCached(name).then((b) => tagPiece(b, 'api')));
+      tasks.push(
+        fetchPlayerUclCareerContextCached(name, language).then((b) => tagPiece(b, 'api')),
+      );
     }
   } else if (wantsPlayer) {
     for (const name of nameCandidates) {

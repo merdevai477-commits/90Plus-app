@@ -11,6 +11,7 @@
 import { createHash } from 'crypto';
 import OpenAI from 'openai';
 import { prisma } from '../lib/prisma';
+import { buildLanguageLockPrompt } from '../utils/message-language.util';
 import { logger } from '../utils/logger';
 import {
   detectPlayerInfoQuery,
@@ -271,22 +272,19 @@ function buildRegenClient(): { client: OpenAI; model: string } | null {
 
 function regenSystemPrompt(language: string, queryType: PlayerInfoQueryType): string {
   const arabic = language === 'ar';
-  const langLine = arabic
-    ? 'اكتب الإجابة بالعربية الفصحى بأسلوب احترافي وواضح.'
-    : 'Write the answer in clear, professional English.';
   const focus =
     queryType === 'ucl_career'
       ? arabic
         ? 'لخّص مسيرة اللاعب في دوري أبطال أوروبا (الألقاب والإحصائيات لكل موسم).'
         : "Summarize the player's UEFA Champions League career (titles and per-season stats)."
       : arabic
-        ? 'لخّص إحصائيات اللاعب لهذا الموسم.'
-        : "Summarize the player's statistics for the current season.";
+        ? 'لخّص إحصائيات اللاعب للموسم الموضح في البيانات (قد يكون الموسم الحالي أو آخر موسم مكتمل).'
+        : "Summarize the player's statistics for the season shown in the data (current in progress or latest completed).";
   return [
     'You are Captain AI, a football data assistant for the 90Plus app.',
+    buildLanguageLockPrompt(language === 'ar' ? 'ar' : 'en'),
     focus,
     'Use ONLY the authoritative API data provided. Do NOT invent numbers or facts.',
-    langLine,
   ].join('\n');
 }
 

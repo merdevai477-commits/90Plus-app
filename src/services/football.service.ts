@@ -678,13 +678,17 @@ class FootballService {
   /**
    * Get player statistics
    */
+  async getPlayerStatisticsExact(playerId: number, season: number): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/players', {
+      id: playerId,
+      season,
+    });
+  }
+
   async getPlayerStatistics(playerId: number, season?: number): Promise<any[]> {
     const seasons = footballSeasonFallbackChain(season);
     for (const s of seasons) {
-      const rows = await this.fetchFromApi<any[]>('/players', {
-        id: playerId,
-        season: s,
-      });
+      const rows = await this.getPlayerStatisticsExact(playerId, s);
       if (rows?.length) return rows;
     }
     return [];
@@ -978,7 +982,7 @@ class FootballService {
     leagueId: number,
     season: number,
   ): Promise<{ player: any; statistics: any } | null> {
-    const rows = await this.getPlayerStatistics(playerId, season);
+    const rows = await this.getPlayerStatisticsExact(playerId, season);
     for (const row of rows ?? []) {
       const match = (row.statistics ?? []).find(
         (s: any) => s.league?.id === leagueId,
