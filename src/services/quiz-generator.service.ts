@@ -14,7 +14,7 @@ import type {
   StoredQuizQuestion,
   QuizQuestionType,
 } from '../types/quiz.types';
-import type { QuizEntitySlice } from '../types/quiz-entity.types';
+import type { QuizEntitySlice, QuizPackValidationContext } from '../types/quiz-entity.types';
 import { enrichQuizImages } from './quiz-image-enricher.service';
 import {
   alignCorrectKeyWithBinding,
@@ -35,6 +35,7 @@ import {
 } from './quiz-entity-dataset.service';
 import { buildQuizSystemPrompt, buildQuizUserPrompt } from './quiz-prompt.builder';
 import {
+  getDefaultTypeTargets,
   getQuizThemeCampaign,
   resolveQuizTheme,
   resolveTopicFocus,
@@ -191,19 +192,48 @@ export function parseAiQuizResponse(content: string): AiQuizResponse {
   return { questions, status: 'OK' };
 }
 
+type SlotBudget = {
+  diffNeeded: Record<QuizDifficulty, number>;
+  typeNeeded: Record<QuizQuestionType, number>;
+};
+
+function initSlotBudget(theme: QuizTheme): SlotBudget {
+  const campaign = getQuizThemeCampaign(theme);
+  const targets = campaign?.typeTargets ?? getDefaultTypeTargets();
+  return {
+    diffNeeded: {
+      EASY: DIFFICULTY_COUNTS.EASY,
+      MEDIUM: DIFFICULTY_COUNTS.MEDIUM,
+      HARD: DIFFICULTY_COUNTS.HARD,
+    },
+    typeNeeded: { ...targets },
+  };
+}
+
+function hasSlot(budget: SlotBudget, q: Pick<StoredQuizQuestion, 'difficulty' | 'type'>): boolean {
+  return budget.diffNeeded[q.difficulty] > 0 && (budget.typeNeeded[q.type] ?? 0) > 0;
+}
+
+function consumeSlot(budget: SlotBudget, q: Pick<StoredQuizQuestion, 'difficulty' | 'type'>): void {
+  budget.diffNeeded[q.difficulty] -= 1;
+  budget.typeNeeded[q.type] = (budget.typeNeeded[q.type] ?? 0) - 1;
+}
+
 function parseQuestionsFromAi(
   raw: AiQuizResponse,
   language: QuizLanguage,
   packDate: string,
   slice: QuizEntitySlice,
   theme: QuizTheme = resolveQuizTheme(),
+  packContext: QuizPackValidationContext = createPackValidationContext(),
+  slotBudget?: SlotBudget,
+  seenHashes: Set<string> = new Set<string>(),
 ): StoredQuizQuestion[] {
   if (raw.status === 'INSUFFICIENT_DATA') return [];
 
   const arr = raw.questions;
   const out: StoredQuizQuestion[] = [];
-  const seenHashes = new Set<string>();
-  const packContext = createPackValidationContext();
+  const seenInBatch = new Set<string>();
 
   for (let i = 0; i < arr.length; i++) {
     const item = arr[i] as Record<string, unknown>;
@@ -221,8 +251,7 @@ function parseQuestionsFromAi(
     }
 
     const hash = hashQuestion(question);
-    if (seenHashes.has(hash)) continue;
-    seenHashes.add(hash);
+    if (seenHashes.has(hash) || seenInBatch.has(hash)) continue;
 
     const optionsRaw = item.options;
     const options: StoredQuizQuestion['options'] = [];
@@ -296,9 +325,14 @@ function parseQuestionsFromAi(
     const aligned = alignCorrectKeyWithBinding(candidate, language);
     if (!aligned) continue;
 
+    if (slotBudget && !hasSlot(slotBudget, aligned)) continue;
+
     const validated = validateQuestionAgainstDataset(aligned, slice, packContext, confidence);
     if (!validated) continue;
 
+    if (slotBudget) consumeSlot(slotBudget, validated);
+    seenHashes.add(hash);
+    seenInBatch.add(hash);
     out.push({ ...validated, confidence });
   }
 
@@ -437,6 +471,9 @@ async function attemptOpenRouterCall(
   slice: QuizEntitySlice,
   avoidFromHistory: StoredQuizQuestion[] = [],
   theme: QuizTheme = resolveQuizTheme(),
+  packContext?: QuizPackValidationContext,
+  slotBudget?: SlotBudget,
+  seenHashes?: Set<string>,
 ): Promise<{ questions: StoredQuizQuestion[]; insufficient: boolean }> {
   const topicFocus = resolveTopicFocus(theme, dailyTopicFocus(packDate, language));
   const system = buildQuizSystemPrompt({ language, topicFocus, theme });
@@ -454,7 +491,16 @@ async function attemptOpenRouterCall(
     return { questions: [], insufficient: true };
   }
 
-  const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate, slice, theme);
+  const parsedQuestions = parseQuestionsFromAi(
+    parsed,
+    language,
+    packDate,
+    slice,
+    theme,
+    packContext,
+    slotBudget,
+    seenHashes,
+  );
   return { questions: parsedQuestions, insufficient: false };
 }
 
@@ -477,14 +523,18 @@ async function buildPackFromDataset(
   }
 
   const maxAttempts = campaign ? MAX_THEMED_GENERATION_ATTEMPTS : MAX_GENERATION_ATTEMPTS;
+  const packContext = createPackValidationContext();
+  const slotBudget = initSlotBudget(theme);
+  const seenHashes = historyQuestionHashes(avoidFromHistory);
+  const accumulated: StoredQuizQuestion[] = [];
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts && accumulated.length < QUIZ_PACK_SIZE; attempt += 1) {
     const slice = enrichSliceForTheme(
       selectDailyEntitySlice(datasetResult.dataset, packDate, language, attempt),
       theme,
     );
     logger.info(
-      `[QuizGen] Attempt ${attempt + 1}/${maxAttempts} slice: ${slice.players.length} players, ${slice.clubs.length} clubs, ${slice.stadiums.length} stadiums, nations=${slice.nations?.length ?? 0}`,
+      `[QuizGen] Attempt ${attempt + 1}/${maxAttempts} slice: ${slice.players.length} players, ${slice.clubs.length} clubs, ${slice.stadiums.length} stadiums, nations=${slice.nations?.length ?? 0} (pack ${accumulated.length}/${QUIZ_PACK_SIZE})`,
     );
 
     const { questions: raw, insufficient } = await attemptOpenRouterCall(
@@ -493,6 +543,9 @@ async function buildPackFromDataset(
       slice,
       avoidFromHistory,
       theme,
+      packContext,
+      slotBudget,
+      seenHashes,
     );
 
     if (insufficient) {
@@ -500,34 +553,32 @@ async function buildPackFromDataset(
       continue;
     }
 
-    let questions = excludeHistoricalQuestions(
-      await enrichAndFilterValid(raw, packDate, language),
-      avoidFromHistory,
+    const enriched = await enrichAndFilterValid(raw, packDate, language);
+    for (const q of enriched) {
+      if (accumulated.length >= QUIZ_PACK_SIZE) break;
+      accumulated.push(q);
+    }
+
+    logger.info(
+      `[QuizGen] Accumulated ${accumulated.length}/${QUIZ_PACK_SIZE} after attempt ${attempt + 1}`,
     );
-
-    if (questions.length !== QUIZ_PACK_SIZE) {
-      logger.warn(
-        `[QuizGen] Post-validation yield ${questions.length}/${QUIZ_PACK_SIZE} on attempt ${attempt + 1}`,
-      );
-      continue;
-    }
-
-    if (!validateDistribution(questions)) {
-      logger.warn(`[QuizGen] Invalid difficulty distribution on attempt ${attempt + 1}`);
-      continue;
-    }
-
-    if (!validateTypeMix(questions, theme)) {
-      logger.warn(`[QuizGen] Invalid type mix for theme ${theme} on attempt ${attempt + 1}`);
-      continue;
-    }
-
-    return renumberQuestionIds(questions, language, packDate);
   }
 
-  throw new Error(
-    `Failed to generate valid ${QUIZ_PACK_SIZE}-question pack after ${maxAttempts} attempts`,
-  );
+  if (accumulated.length !== QUIZ_PACK_SIZE) {
+    throw new Error(
+      `Failed to generate valid ${QUIZ_PACK_SIZE}-question pack after ${maxAttempts} attempts (got ${accumulated.length})`,
+    );
+  }
+
+  if (!validateDistribution(accumulated)) {
+    throw new Error('Generated pack has invalid difficulty distribution');
+  }
+
+  if (!validateTypeMix(accumulated, theme)) {
+    throw new Error(`Generated pack has invalid type mix for theme ${theme}`);
+  }
+
+  return renumberQuestionIds(accumulated, language, packDate);
 }
 
 export async function generateDailyQuizPack(
