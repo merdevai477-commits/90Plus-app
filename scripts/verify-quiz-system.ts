@@ -43,6 +43,8 @@ import {
   QUIZ_DATASET_VERSION,
 } from '../src/constants/quiz-generation.constants';
 import { buildQuizSystemPrompt, buildQuizUserPrompt } from '../src/services/quiz-prompt.builder';
+import { QuizTheme } from '../src/types/quiz-theme.types';
+import { resolveQuizTheme, resolveTopicFocus } from '../src/constants/quiz-theme.config';
 import { QUIZ_PACK_SIZE, QUIZ_MIN_CONFIDENCE } from '../src/constants/quiz.constants';
 import type { QuizLanguage } from '../src/types/quiz.types';
 
@@ -182,6 +184,23 @@ function checkPureLogic() {
     pass('buildQuizSystemPrompt');
   } else {
     fail('buildQuizSystemPrompt');
+  }
+
+  const activeTheme = resolveQuizTheme();
+  pass('resolveQuizTheme', activeTheme);
+
+  const wcSystem = buildQuizSystemPrompt({
+    language: 'en',
+    topicFocus: resolveTopicFocus(QuizTheme.WORLD_CUP, 'daily'),
+    theme: QuizTheme.WORLD_CUP,
+  });
+  if (
+    wcSystem.includes('Generate only FIFA World Cup related questions') &&
+    wcSystem.includes('5× "normal"')
+  ) {
+    pass('WORLD_CUP theme prompt injection');
+  } else {
+    fail('WORLD_CUP theme prompt injection');
   }
 }
 

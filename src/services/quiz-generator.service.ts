@@ -34,6 +34,12 @@ import {
 } from './quiz-entity-dataset.service';
 import { buildQuizSystemPrompt, buildQuizUserPrompt } from './quiz-prompt.builder';
 import {
+  getQuizThemeCampaign,
+  resolveQuizTheme,
+  resolveTopicFocus,
+} from '../constants/quiz-theme.config';
+import type { QuizTheme } from '../types/quiz-theme.types';
+import {
   buildPackGenerationMeta,
   type QuizPackGenerationMeta,
 } from '../constants/quiz-generation.constants';
@@ -185,6 +191,7 @@ function parseQuestionsFromAi(
   language: QuizLanguage,
   packDate: string,
   slice: QuizEntitySlice,
+  theme: QuizTheme = resolveQuizTheme(),
 ): StoredQuizQuestion[] {
   if (raw.status === 'INSUFFICIENT_DATA') return [];
 
@@ -236,6 +243,10 @@ function parseQuestionsFromAi(
 
     const difficulty = normalizeDifficulty(String(item.difficulty ?? 'EASY'));
     const type = normalizeType(String(item.type ?? 'normal'));
+    if (!isTypeAllowedForTheme(type, theme)) {
+      logger.info(`[QuizGen] Dropped question: type "${type}" not allowed for theme ${theme}`);
+      continue;
+    }
 
     let imageBinding: StoredQuizQuestion['imageBinding'] = null;
 
@@ -297,6 +308,33 @@ function validateDistribution(questions: StoredQuizQuestion[]): boolean {
     counts.MEDIUM === DIFFICULTY_COUNTS.MEDIUM &&
     counts.HARD === DIFFICULTY_COUNTS.HARD
   );
+}
+
+function validateTypeMix(questions: StoredQuizQuestion[], theme: QuizTheme): boolean {
+  const campaign = getQuizThemeCampaign(theme);
+  if (!campaign) return true;
+
+  const counts: Partial<Record<QuizQuestionType, number>> = {};
+  for (const q of questions) {
+    counts[q.type] = (counts[q.type] ?? 0) + 1;
+  }
+
+  for (const [type, expected] of Object.entries(campaign.typeTargets)) {
+    const actual = counts[type as QuizQuestionType] ?? 0;
+    if (actual !== expected) return false;
+  }
+
+  for (const q of questions) {
+    if (!campaign.allowedTypes.includes(q.type)) return false;
+  }
+
+  return true;
+}
+
+function isTypeAllowedForTheme(type: QuizQuestionType, theme: QuizTheme): boolean {
+  const campaign = getQuizThemeCampaign(theme);
+  if (!campaign) return true;
+  return campaign.allowedTypes.includes(type);
 }
 
 function renumberQuestionIds(
@@ -393,14 +431,16 @@ async function attemptOpenRouterCall(
   packDate: string,
   slice: QuizEntitySlice,
   avoidFromHistory: StoredQuizQuestion[] = [],
+  theme: QuizTheme = resolveQuizTheme(),
 ): Promise<{ questions: StoredQuizQuestion[]; insufficient: boolean }> {
-  const topicFocus = dailyTopicFocus(packDate, language);
-  const system = buildQuizSystemPrompt({ language, topicFocus });
+  const topicFocus = resolveTopicFocus(theme, dailyTopicFocus(packDate, language));
+  const system = buildQuizSystemPrompt({ language, topicFocus, theme });
   const user = buildQuizUserPrompt({
     language,
     packDate,
     topicFocus,
     slice,
+    theme,
     avoidQuestionSamples: formatAvoidSample(avoidFromHistory),
   });
 
@@ -409,7 +449,7 @@ async function attemptOpenRouterCall(
     return { questions: [], insufficient: true };
   }
 
-  const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate, slice);
+  const parsedQuestions = parseQuestionsFromAi(parsed, language, packDate, slice, theme);
   return { questions: parsedQuestions, insufficient: false };
 }
 
@@ -418,6 +458,12 @@ async function buildPackFromDataset(
   packDate: string,
   avoidFromHistory: StoredQuizQuestion[] = [],
 ): Promise<StoredQuizQuestion[]> {
+  const theme = resolveQuizTheme();
+  const campaign = getQuizThemeCampaign(theme);
+  if (campaign) {
+    logger.info(`[QuizGen] Active campaign theme: ${theme}`);
+  }
+
   const datasetResult = await buildQuizEntityDataset();
   if (!datasetResult.ok) {
     throw new Error(
@@ -436,6 +482,7 @@ async function buildPackFromDataset(
       packDate,
       slice,
       avoidFromHistory,
+      theme,
     );
 
     if (insufficient) {
@@ -460,6 +507,11 @@ async function buildPackFromDataset(
       continue;
     }
 
+    if (!validateTypeMix(questions, theme)) {
+      logger.warn(`[QuizGen] Invalid type mix for theme ${theme} on attempt ${attempt + 1}`);
+      continue;
+    }
+
     return renumberQuestionIds(questions, language, packDate);
   }
 
@@ -481,8 +533,9 @@ export async function generateDailyQuizPack(
 }> {
   const packDate = packDateInput ?? todayPackDate(timezone);
   const dateStr = packDateYmd(packDate, timezone);
+  const theme = resolveQuizTheme();
   logger.info(
-    `[QuizGen] Generating pack ${dateStr} (${language}), avoiding ${avoidFromHistory.length} prior question(s)`,
+    `[QuizGen] Generating pack ${dateStr} (${language}), theme=${theme}, avoiding ${avoidFromHistory.length} prior question(s)`,
   );
 
   const questions = await buildPackFromDataset(language, dateStr, avoidFromHistory);

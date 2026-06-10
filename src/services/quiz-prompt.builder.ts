@@ -4,19 +4,17 @@
 
 import type { QuizLanguage } from '../types/quiz.types';
 import type { QuizEntitySlice } from '../types/quiz-entity.types';
+import type { QuizTheme } from '../types/quiz-theme.types';
+import {
+  getDefaultTypeTargets,
+  getQuizThemeCampaign,
+  resolveQuizTheme,
+} from '../constants/quiz-theme.config';
 import {
   QUIZ_DIFFICULTY_COUNTS,
   QUIZ_MIN_CONFIDENCE,
   QUIZ_PACK_SIZE,
 } from '../constants/quiz.constants';
-
-const TYPE_TARGETS: Record<string, number> = {
-  normal: 3,
-  guess_player: 3,
-  logo: 3,
-  stadium: 3,
-  image: 3,
-};
 
 export interface QuizPromptParams {
   language: QuizLanguage;
@@ -24,15 +22,32 @@ export interface QuizPromptParams {
   topicFocus: string;
   slice: QuizEntitySlice;
   avoidQuestionSamples?: string[];
+  theme?: QuizTheme;
 }
 
-function typeMixLine(): string {
-  return Object.entries(TYPE_TARGETS)
+function typeMixLine(theme: QuizTheme): string {
+  const campaign = getQuizThemeCampaign(theme);
+  const targets = campaign?.typeTargets ?? getDefaultTypeTargets();
+  return Object.entries(targets)
+    .filter(([, count]) => count > 0)
     .map(([type, count]) => `${count}× "${type}"`)
     .join(', ');
 }
 
-export function buildQuizSystemPrompt(params: Pick<QuizPromptParams, 'language' | 'topicFocus'>): string {
+function themeSystemBlock(theme: QuizTheme): string {
+  const campaign = getQuizThemeCampaign(theme);
+  if (!campaign) return '';
+  const avoid =
+    campaign.avoidTopics.length > 0 ?
+      `\nAvoid: ${campaign.avoidTopics.join('; ')}.`
+    : '';
+  return `\n\n${campaign.systemPromptBlock}${avoid}`;
+}
+
+export function buildQuizSystemPrompt(
+  params: Pick<QuizPromptParams, 'language' | 'topicFocus' | 'theme'>,
+): string {
+  const theme = params.theme ?? resolveQuizTheme();
   const langLabel = params.language === 'ar' ? 'Arabic' : 'English';
 
   return `You are a football trivia writer for the 90Plus daily quiz app.
@@ -83,8 +98,8 @@ Target: exactly ${QUIZ_PACK_SIZE} questions OR:
 Never return partial packs.
 
 Distribution MUST BE EXACTLY: ${QUIZ_DIFFICULTY_COUNTS.EASY} EASY, ${QUIZ_DIFFICULTY_COUNTS.MEDIUM} MEDIUM, ${QUIZ_DIFFICULTY_COUNTS.HARD} HARD.
-TYPE MIX: ${typeMixLine()}.
-Topic focus today: ${params.topicFocus}.
+TYPE MIX: ${typeMixLine(theme)}.
+Topic focus today: ${params.topicFocus}.${themeSystemBlock(theme)}
 
 ## IMAGE BINDING VALIDATION
 entityName and entityId must exist in dataset. kind must match type. teamName must match dataset for players.
@@ -104,11 +119,15 @@ Use only entity kinds present in the dataset (players, clubs, stadiums). Do not 
 }
 
 export function buildQuizUserPrompt(params: QuizPromptParams): string {
+  const theme = params.theme ?? resolveQuizTheme();
+  const campaign = getQuizThemeCampaign(theme);
   const langLabel = params.language === 'ar' ? 'Arabic' : 'English';
   const avoid =
     params.avoidQuestionSamples?.length ?
       `\nDo NOT repeat or paraphrase these recent questions: ${params.avoidQuestionSamples.join(' | ')}`
     : '';
+
+  const themeLine = campaign?.userPromptLine ? `\n${campaign.userPromptLine}` : '';
 
   const datasetJson = JSON.stringify(
     {
@@ -121,7 +140,7 @@ export function buildQuizUserPrompt(params: QuizPromptParams): string {
   );
 
   return `Generate the daily football quiz for ${params.packDate} in ${langLabel}.
-Topic focus: ${params.topicFocus}.
+Topic focus: ${params.topicFocus}.${themeLine}
 
 ENTITY DATASET (only source of truth — use these entities exclusively):
 ${datasetJson}
