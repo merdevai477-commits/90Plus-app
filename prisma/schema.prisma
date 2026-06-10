@@ -2110,16 +2110,19 @@ model PlayerStatsCache {
 // expects. Self-learns: once a name resolves via API, its apiPlayerId is
 // upserted here for instant future lookups.
 model PlayerNameMapping {
-  id          String   @id @default(uuid())
-  arabicName  String
-  englishName String
-  aliases     String[]
-  apiPlayerId Int      @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  arabicName     String
+  englishName    String
+  /// Diacritic-stripped, lowercased key used for accent-insensitive matching.
+  normalizedName String
+  aliases        String[]
+  apiPlayerId    Int      @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([arabicName])
   @@index([englishName])
+  @@index([normalizedName])
   @@map("player_name_mapping")
 }
 

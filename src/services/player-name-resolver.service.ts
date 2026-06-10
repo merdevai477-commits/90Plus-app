@@ -3,10 +3,11 @@
  * API-Football expects, plus a known apiPlayerId when available.
  *
  * Resolution order:
- *   1. Exact / alias match against PlayerNameMapping (normalized, diacritics
- *      stripped) — covers seeded common names instantly.
- *   2. Fuzzy match (scoreEntityNameMatch) for typos and partial names.
- *   3. null — caller falls back to API search + normal chat flow.
+ *   1. Exact match on canonical englishName / arabicName.
+ *   2. Normalized match (diacritics stripped via normalizedName column).
+ *   3. Alias match (normalized alias keys).
+ *   4. Fuzzy match (scoreEntityNameMatch on normalized strings).
+ *   5. Raw passthrough — caller falls back to API search.
  *
  * The map self-learns: call `learnPlayerMapping()` after a successful API
  * resolution to upsert the discovered apiPlayerId for instant future lookups.
@@ -20,11 +21,15 @@ import {
   scoreEntityNameMatch,
 } from './quiz-name-match.util';
 
+export type ResolveMethod = 'exact' | 'normalized' | 'alias' | 'fuzzy' | 'raw';
+
 export interface ResolvedPlayer {
   english: string;
   arabic?: string;
   apiPlayerId?: number;
-  /** "mapping" = exact/alias hit, "fuzzy" = approximate, "raw" = passthrough. */
+  resolvedBy: ResolveMethod;
+  confidenceScore: number;
+  /** @deprecated Prefer resolvedBy — kept for existing fast-path checks. */
   source: 'mapping' | 'fuzzy' | 'raw';
 }
 
@@ -34,6 +39,20 @@ interface SeedMapping {
   aliases: string[];
   apiPlayerId: number;
 }
+
+export interface CachedMapping {
+  arabicName: string;
+  englishName: string;
+  apiPlayerId: number;
+  normalizedName: string;
+  normalizedAliasKeys: string[];
+}
+
+const EXACT_CONFIDENCE = 1;
+const NORMALIZED_CONFIDENCE = 0.98;
+const ALIAS_CONFIDENCE = 0.95;
+const EXACT_MATCH_MIN_LEN = 2;
+const FUZZY_THRESHOLD = 0.82;
 
 /**
  * Seed list of common players. apiPlayerId values are API-Football player IDs.
@@ -61,9 +80,27 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
   },
   {
     arabicName: 'كيليان مبابي',
-    englishName: 'Kylian Mbappe',
-    aliases: ['مبابي', 'امبابي', 'Mbappe', 'Mbappé', 'Kylian Mbappe'],
+    englishName: 'Kylian Mbappé',
+    aliases: ['مبابي', 'امبابي', 'Mbappe', 'Mbappé', 'Kylian Mbappe', 'Kylian Mbappé'],
     apiPlayerId: 278,
+  },
+  {
+    arabicName: 'ديزيري دويه',
+    englishName: 'Désiré Doué',
+    aliases: ['دويه', 'Desire Doue', 'Désiré Doué', 'Doue', 'Doué'],
+    apiPlayerId: 343027,
+  },
+  {
+    arabicName: 'جواو فيليكس',
+    englishName: 'João Félix',
+    aliases: ['فيليكس', 'Joao Felix', 'João Félix', 'Felix', 'Félix'],
+    apiPlayerId: 583,
+  },
+  {
+    arabicName: 'أنخيل دي ماريا',
+    englishName: 'Ángel Di María',
+    aliases: ['دي ماريا', 'Angel Di Maria', 'Ángel Di María', 'Di Maria', 'Di María'],
+    apiPlayerId: 266,
   },
   {
     arabicName: 'كريستيانو رونالدو',
@@ -127,30 +164,87 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
   },
 ];
 
-interface CachedMapping {
-  arabicName: string;
-  englishName: string;
-  apiPlayerId: number;
-  /** Normalized alias keys for matching. */
-  normalizedKeys: string[];
-}
-
 let mappingCache: CachedMapping[] | null = null;
 let mappingCacheLoadedAt = 0;
 const MAPPING_CACHE_TTL_MS = 10 * 60_000;
 let seedAttempted = false;
 
-function buildNormalizedKeys(
-  arabicName: string,
+export function buildNormalizedAliasKeys(
   englishName: string,
   aliases: string[],
 ): string[] {
+  const canonical = normalizeName(englishName);
   const keys = new Set<string>();
-  for (const raw of [arabicName, englishName, ...aliases]) {
+  for (const raw of aliases) {
     const norm = normalizeName(raw);
-    if (norm) keys.add(norm);
+    if (norm && norm !== canonical) keys.add(norm);
   }
   return Array.from(keys);
+}
+
+export function toCachedMapping(row: {
+  arabicName: string;
+  englishName: string;
+  aliases: string[];
+  apiPlayerId: number;
+  normalizedName?: string | null;
+}): CachedMapping {
+  const normalizedName = row.normalizedName?.trim()
+    ? row.normalizedName
+    : normalizeName(row.englishName);
+  return {
+    arabicName: row.arabicName,
+    englishName: row.englishName,
+    apiPlayerId: row.apiPlayerId,
+    normalizedName,
+    normalizedAliasKeys: buildNormalizedAliasKeys(row.englishName, row.aliases),
+  };
+}
+
+export function resolveMethodToSource(
+  resolvedBy: ResolveMethod,
+): ResolvedPlayer['source'] {
+  if (resolvedBy === 'fuzzy') return 'fuzzy';
+  if (resolvedBy === 'raw') return 'raw';
+  return 'mapping';
+}
+
+export function matchPlayerMapping(
+  trimmed: string,
+  normalizedInput: string,
+  mapping: CachedMapping,
+): { resolvedBy: Exclude<ResolveMethod, 'fuzzy' | 'raw'>; confidenceScore: number } | null {
+  const trimmedLower = trimmed.toLowerCase();
+  const englishLower = mapping.englishName.toLowerCase();
+
+  if (trimmedLower === englishLower || trimmed === mapping.arabicName) {
+    return { resolvedBy: 'exact', confidenceScore: EXACT_CONFIDENCE };
+  }
+
+  if (normalizedInput === mapping.normalizedName) {
+    return { resolvedBy: 'normalized', confidenceScore: NORMALIZED_CONFIDENCE };
+  }
+
+  if (mapping.normalizedAliasKeys.includes(normalizedInput)) {
+    return { resolvedBy: 'alias', confidenceScore: ALIAS_CONFIDENCE };
+  }
+
+  return null;
+}
+
+function toResolvedPlayer(
+  mapping: CachedMapping,
+  resolvedBy: Exclude<ResolveMethod, 'raw'>,
+  confidenceScore: number,
+): ResolvedPlayer {
+  return {
+    english: mapping.englishName,
+    arabic: mapping.arabicName,
+    apiPlayerId: mapping.apiPlayerId,
+    resolvedBy,
+    confidenceScore,
+    source: resolveMethodToSource(resolvedBy),
+  };
 }
 
 /**
@@ -159,11 +253,6 @@ function buildNormalizedKeys(
  * production works without a separate seed step.
  */
 export async function seedCommonPlayerMappings(): Promise<void> {
-  // Self-heal: drop any stale rows that collide with a seed entry by NAME but
-  // carry a different apiPlayerId (e.g. an old wrong Vinicius id, or a learned
-  // alias that misrouted a seeded star). The authoritative create/update below
-  // then re-establishes the verified id. Keyed only on seed names so unrelated
-  // learned mappings are preserved.
   try {
     const seedNames = COMMON_PLAYER_MAPPINGS.map((m) => m.englishName);
     const seedIds = COMMON_PLAYER_MAPPINGS.map((m) => m.apiPlayerId);
@@ -178,18 +267,21 @@ export async function seedCommonPlayerMappings(): Promise<void> {
   }
 
   for (const m of COMMON_PLAYER_MAPPINGS) {
+    const normalizedName = normalizeName(m.englishName);
     try {
       await prisma.playerNameMapping.upsert({
         where: { apiPlayerId: m.apiPlayerId },
         create: {
           arabicName: m.arabicName,
           englishName: m.englishName,
+          normalizedName,
           aliases: m.aliases,
           apiPlayerId: m.apiPlayerId,
         },
         update: {
           arabicName: m.arabicName,
           englishName: m.englishName,
+          normalizedName,
           aliases: m.aliases,
         },
       });
@@ -199,6 +291,22 @@ export async function seedCommonPlayerMappings(): Promise<void> {
         err instanceof Error ? err.message : err,
       );
     }
+  }
+
+  // Backfill normalizedName for learned rows missing the column value.
+  try {
+    const stale = await prisma.playerNameMapping.findMany({
+      where: { normalizedName: '' },
+      select: { id: true, englishName: true },
+    });
+    for (const row of stale) {
+      await prisma.playerNameMapping.update({
+        where: { id: row.id },
+        data: { normalizedName: normalizeName(row.englishName) },
+      });
+    }
+  } catch {
+    // non-fatal
   }
 }
 
@@ -211,20 +319,13 @@ async function loadMappings(): Promise<CachedMapping[]> {
   try {
     let rows = await prisma.playerNameMapping.findMany();
 
-    // Lazy one-time seed if the table is empty (covers prod where seed.ts
-    // is never run). Guarded so we only attempt it once per process.
     if (rows.length === 0 && !seedAttempted) {
       seedAttempted = true;
       await seedCommonPlayerMappings();
       rows = await prisma.playerNameMapping.findMany();
     }
 
-    mappingCache = rows.map((r) => ({
-      arabicName: r.arabicName,
-      englishName: r.englishName,
-      apiPlayerId: r.apiPlayerId,
-      normalizedKeys: buildNormalizedKeys(r.arabicName, r.englishName, r.aliases),
-    }));
+    mappingCache = rows.map((r) => toCachedMapping(r));
     mappingCacheLoadedAt = now;
     return mappingCache;
   } catch (err) {
@@ -242,9 +343,6 @@ export function invalidateMappingCache(): void {
   mappingCacheLoadedAt = 0;
 }
 
-const EXACT_MATCH_MIN_LEN = 2;
-const FUZZY_THRESHOLD = 0.82;
-
 /**
  * Resolve a raw player name (Arabic or English) to an English name + optional
  * apiPlayerId. Returns null only when the input clearly isn't a usable name.
@@ -255,28 +353,23 @@ export async function resolvePlayerName(raw: string): Promise<ResolvedPlayer | n
 
   const normalizedInput = normalizeName(trimmed);
   if (!normalizedInput) {
-    // Non-alphanumeric junk — but if it's Latin, still let the caller search.
-    return containsArabicScript(trimmed) ? null : { english: trimmed, source: 'raw' };
+    return containsArabicScript(trimmed)
+      ? null
+      : { english: trimmed, resolvedBy: 'raw', confidenceScore: 0, source: 'raw' };
   }
 
   const mappings = await loadMappings();
 
-  // 1. Exact / alias match (normalized).
   for (const m of mappings) {
-    if (m.normalizedKeys.includes(normalizedInput)) {
+    const hit = matchPlayerMapping(trimmed, normalizedInput, m);
+    if (hit) {
       logger.info(
-        `[Resolve] "${trimmed}" -> mapping -> ${m.englishName} (id ${m.apiPlayerId})`,
+        `[Resolve] "${trimmed}" -> ${hit.resolvedBy} -> ${m.englishName} (id ${m.apiPlayerId}, confidence ${hit.confidenceScore.toFixed(2)})`,
       );
-      return {
-        english: m.englishName,
-        arabic: m.arabicName,
-        apiPlayerId: m.apiPlayerId,
-        source: 'mapping',
-      };
+      return toResolvedPlayer(m, hit.resolvedBy, hit.confidenceScore);
     }
   }
 
-  // 2. Fuzzy match (typos / partial names). Score against each known name.
   let best: CachedMapping | null = null;
   let bestScore = 0;
   for (const m of mappings) {
@@ -291,22 +384,23 @@ export async function resolvePlayerName(raw: string): Promise<ResolvedPlayer | n
   }
   if (best && bestScore >= FUZZY_THRESHOLD) {
     logger.info(
-      `[Resolve] "${trimmed}" -> fuzzy -> ${best.englishName} (id ${best.apiPlayerId}, score ${bestScore.toFixed(2)})`,
+      `[Resolve] "${trimmed}" -> fuzzy -> ${best.englishName} (id ${best.apiPlayerId}, confidence ${bestScore.toFixed(2)})`,
     );
     return {
       english: best.englishName,
       arabic: best.arabicName,
       apiPlayerId: best.apiPlayerId,
+      resolvedBy: 'fuzzy',
+      confidenceScore: bestScore,
       source: 'fuzzy',
     };
   }
 
-  logger.info(`[Resolve] "${trimmed}" -> raw (no mapping, score ${bestScore.toFixed(2)})`);
+  logger.info(
+    `[Resolve] "${trimmed}" -> raw (no mapping, bestScore ${bestScore.toFixed(2)})`,
+  );
 
-  // 3. Passthrough: Latin input goes to API search as-is. Arabic input we
-  // couldn't map can't be searched on API-Football (Latin only) — return the
-  // raw string anyway so the caller can attempt transliteration via search.
-  return { english: trimmed, source: 'raw' };
+  return { english: trimmed, resolvedBy: 'raw', confidenceScore: bestScore, source: 'raw' };
 }
 
 /**
@@ -329,14 +423,15 @@ export async function learnPlayerMapping(params: {
       ),
     ),
   );
+  const normalizedName = normalizeName(englishName);
 
   try {
     await prisma.playerNameMapping.upsert({
       where: { apiPlayerId },
-      create: { arabicName, englishName, aliases, apiPlayerId },
+      create: { arabicName, englishName, normalizedName, aliases, apiPlayerId },
       update: {
         englishName,
-        // Append new aliases without clobbering existing ones (deduped on read).
+        normalizedName,
         aliases: { push: aliases },
       },
     });

@@ -1,9 +1,9 @@
 /**
- * Test harness: "حكيمي جاب كام دوري أبطال؟" — same path as Captain AI chat.
+ * Test harness: player UCL titles via Captain AI chat path.
  *
  * Usage:
  *   npm run test:chat-hakimi
- *   npx ts-node scripts/test-chat-hakimi.ts "حكيمي جاب كام دوري أبطال؟"
+ *   npx ts-node scripts/test-chat-hakimi.ts "How many UEFA Champions League titles has Désiré Doué won"
  *
  * Requires FOOTBALL_API_KEY in .env (or environment).
  */
@@ -22,7 +22,8 @@ import {
   fetchPlayerStatsRow,
 } from '../src/services/chat-football-tools.service';
 
-const DEFAULT_QUESTION = 'حكيمي جاب كام دوري أبطال؟';
+const DEFAULT_QUESTION =
+  'How many UEFA Champions League titles has Désiré Doué won';
 
 const UCL_PATTERNS = [
   /champions\s*league/i,
@@ -35,6 +36,17 @@ const UCL_PATTERNS = [
 
 function isUclTrophy(name: string): boolean {
   return UCL_PATTERNS.some((p) => p.test(name));
+}
+
+/** Pull player name from common EN/AR UCL question shapes. */
+function extractPlayerName(question: string): string {
+  const en = question.match(/titles?\s+has\s+(.+?)\s+won/i);
+  if (en) return en[1].trim();
+
+  const ar = question.match(/^(.+?)\s+جاب/i);
+  if (ar) return ar[1].trim();
+
+  return 'Désiré Doué';
 }
 
 async function fetchPlayerTrophies(playerId: number): Promise<any[]> {
@@ -58,39 +70,45 @@ async function fetchPlayerTrophies(playerId: number): Promise<any[]> {
   return json.response ?? [];
 }
 
-async function resolveHakimiPlayerId(): Promise<{
+async function resolveTestPlayerId(rawName: string): Promise<{
   raw: string;
   english: string;
   apiPlayerId: number | null;
 }> {
-  const raw = 'حكيمي';
-  const resolved = await resolvePlayerName(raw);
-  const english = resolved?.english ?? 'Achraf Hakimi';
+  const resolved = await resolvePlayerName(rawName);
+  const english = resolved?.english ?? rawName;
 
   if (resolved?.apiPlayerId) {
-    return { raw, english, apiPlayerId: resolved.apiPlayerId };
+    return { raw: rawName, english, apiPlayerId: resolved.apiPlayerId };
   }
 
-  const results = await footballService.searchPlayers(english);
-  const hit =
-    results.find((r: any) =>
-      /hakimi/i.test(r?.player?.name ?? ''),
-    ) ?? results[0];
+  const searchTerms = [english, 'Desire Doue', 'Désiré Doué'];
+  for (const term of searchTerms) {
+    const results = await footballService.searchPlayers(term);
+    const hit =
+      results.find((r: any) => /dou[eé]/i.test(r?.player?.name ?? '')) ??
+      results[0];
+    if (hit?.player?.id) {
+      return {
+        raw: rawName,
+        english: hit.player.name ?? english,
+        apiPlayerId: hit.player.id,
+      };
+    }
+  }
 
-  return {
-    raw,
-    english: hit?.player?.name ?? english,
-    apiPlayerId: hit?.player?.id ?? null,
-  };
+  return { raw: rawName, english, apiPlayerId: null };
 }
 
 async function main() {
   const question = process.argv[2]?.trim() || DEFAULT_QUESTION;
+  const playerName = extractPlayerName(question);
 
   console.log('═'.repeat(64));
-  console.log('Captain AI — Hakimi UCL test');
+  console.log('Captain AI — Player UCL titles test');
   console.log('═'.repeat(64));
   console.log(`Question     : "${question}"`);
+  console.log(`Player       : "${playerName}"`);
   console.log(`API ready    : ${footballService.isConfigured()}`);
   console.log('═'.repeat(64));
 
@@ -127,8 +145,8 @@ async function main() {
   }
 
   // ─── 2. Player lookup (season stats — what chat injects today) ────────────
-  console.log('\n▶ Step 2 — fetchPlayerStatsRow("حكيمي")');
-  const statsRow = await fetchPlayerStatsRow('حكيمي');
+  console.log(`\n▶ Step 2 — fetchPlayerStatsRow("${playerName}")`);
+  const statsRow = await fetchPlayerStatsRow(playerName);
   if (!statsRow) {
     console.log('   (no season stats block)');
   } else {
@@ -143,11 +161,11 @@ async function main() {
 
   // ─── 3. Direct trophies API (authoritative for UCL count) ─────────────────
   console.log('\n▶ Step 3 — API-Football /trophies?player=…');
-  const player = await resolveHakimiPlayerId();
+  const player = await resolveTestPlayerId(playerName);
   console.log(`   resolved     : ${player.english} (id ${player.apiPlayerId ?? '—'})`);
 
   if (!player.apiPlayerId) {
-    console.log('   ❌ Could not resolve Hakimi player id');
+    console.log(`   ❌ Could not resolve player id for "${playerName}"`);
     return;
   }
 
@@ -175,7 +193,7 @@ async function main() {
 
   console.log('\n▶ Expected chat answer (if trophies were wired in):');
   console.log(
-    `   حكيمي (${player.english}) فاز بـ ${ucl.length} دوري أبطال أوروبا حسب API-Football.`,
+    `   ${player.english} has won ${ucl.length} UEFA Champions League title(s) per API-Football.`,
   );
   console.log('═'.repeat(64));
 }

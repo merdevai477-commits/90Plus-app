@@ -152,7 +152,18 @@ function extractNameCandidates(message: string): string[] {
     out.add(m[1].trim());
   }
 
-  for (const m of message.matchAll(/\b([A-Z][a-zÀ-ÿ]+(?:\s+[A-Z][a-zÀ-ÿ'.-]+){1,3})\b/g)) {
+  // Unicode letter boundaries — JS \b breaks on accented names (e.g. "Doué" → "Dou").
+  const latinNameRe = new RegExp(
+    String.raw`(?:^|[^\p{L}\p{M}])([\p{Lu}][\p{L}\p{M}'.-]*(?:\s+[\p{Lu}][\p{L}\p{M}'.-]+){1,3})(?=[^\p{L}\p{M}]|$)`,
+    'gu',
+  );
+  for (const m of message.matchAll(latinNameRe)) {
+    out.add(m[1].trim());
+  }
+
+  for (const m of message.matchAll(
+    /(?:titles?\s+has|has)\s+(.+?)\s+won\b/gi,
+  )) {
     out.add(m[1].trim());
   }
 
@@ -421,13 +432,13 @@ export async function fetchPlayerStatsRow(
     //    fall back to a name search when this id resolves nothing, because that
     //    fallback is exactly what produced Vinicius→Giroud. An empty stat feed
     //    for a known id means "no verified data this season", not "wrong id".
-    if (apiPlayerId && (resolved?.source === 'mapping' || resolved?.source === 'fuzzy')) {
+    if (apiPlayerId && resolved?.resolvedBy !== 'raw') {
       const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
       row = detailed?.[0] ?? null;
       footballMetrics.recordResolver(true);
       if (!row) {
         logger.info(
-          `[Resolve] "${rawName}" -> ${resolved.source} -> ${searchName} (id ${apiPlayerId}) — no stats this season (unavailable)`,
+          `[Resolve] "${rawName}" -> ${resolved.resolvedBy} (${resolved.confidenceScore.toFixed(2)}) -> ${searchName} (id ${apiPlayerId}) — no stats this season (unavailable)`,
         );
         return null;
       }
