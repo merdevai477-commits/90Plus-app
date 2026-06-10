@@ -16,6 +16,7 @@ import {
     resolveAndroidSha256Fingerprints,
     buildAssetLinksJson,
 } from './config/androidAppLinks';
+import { buildAppleAppSiteAssociation } from './config/appleAppSite';
 
 // Fix: BigInt cannot be serialized by JSON.stringify by default
 // This adds a global toJSON so any BigInt field is safely converted to Number
@@ -389,6 +390,15 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.json(buildAssetLinksJson(fingerprints));
 });
+
+// iOS Universal Links — Apple App Site Association (no auth, no redirect)
+const sendAppleAppSiteAssociation = (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.status(200).json(buildAppleAppSiteAssociation());
+};
+app.get('/.well-known/apple-app-site-association', sendAppleAppSiteAssociation);
+app.get('/apple-app-site-association', sendAppleAppSiteAssociation);
 
 // Serve static files for privacy and terms (Apple compliance)
 // Determine public path based on environment

@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["337M3TRC5C.com.mhmdsh1892.ninetyplusapp"],
+        "components": [
+          { "/": "/reels/*" },
+          { "/": "/@*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["337M3TRC5C.com.mhmdsh1892.ninetyplusapp"]
+  }
+}
